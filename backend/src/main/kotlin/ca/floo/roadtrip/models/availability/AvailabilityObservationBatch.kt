@@ -12,5 +12,5 @@ data class AvailabilityObservationBatch(
     val campgroundId: String? = null,
     val host: String? = null,
     val mapId: String? = null,
-    val reservableId: String? = null,
+    val campsiteId: Long? = null,
 )

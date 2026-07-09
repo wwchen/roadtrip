@@ -11,7 +11,7 @@ import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.routes.slackInteractivityRoute
-import ca.floo.roadtrip.service.reservation.ProviderRefParser
+import ca.floo.roadtrip.service.availability.PoiAvailabilitySupport
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
 import io.github.smiley4.ktorswaggerui.routing.swaggerUI
@@ -87,6 +87,11 @@ internal fun Application.installRoadtripPlugins() {
 }
 
 internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
+    val poiAvailabilitySupport =
+        PoiAvailabilitySupport(
+            providerRefs = runtime.campsiteProviders,
+            availabilityProviders = runtime.availabilityProviderRegistry,
+        )
     routing {
         route("/api/docs") {
             swaggerUI("/api/docs/openapi.json")
@@ -99,16 +104,7 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
             ctx = runtime.ctx,
             registry = runtime.poiRegistry,
             dateResolver = runtime.availabilityDateResolver,
-            availabilitySupport = { row ->
-                val providerRefJson = row.providerRefJson
-                providerRefJson != null &&
-                    ProviderRefParser.parse(providerRefJson) != null &&
-                    row.providerSource != null &&
-                    runtime.reservationProviderRegistry
-                        .forSource(row.providerSource)
-                        ?.capabilities
-                        ?.supportsAvailability == true
-            },
+            availabilitySupport = poiAvailabilitySupport::supports,
         )
         availabilityWatchRoutes(
             runtime.ctx,
@@ -118,7 +114,7 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
         )
         campsiteRoutes(
             ctx = runtime.ctx,
-            reservationProviders = runtime.reservationProviderRegistry,
+            availabilityProviders = runtime.availabilityProviderRegistry,
             dateResolver = runtime.availabilityDateResolver,
         )
         // Inbound Slack interactivity is only registered when the app is

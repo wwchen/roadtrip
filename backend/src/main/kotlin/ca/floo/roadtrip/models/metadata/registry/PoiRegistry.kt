@@ -23,7 +23,7 @@ private const val CAMPSITE_DATA_SECTION = "campsite_data"
 //     (campsites aren't map pins).
 //   - poi_reservable_joiner: N:M-link discovery (RFC 0008). Each entry
 //     names an adapter that reads the current state of `pois` +
-//     `reservables` and writes the (reservable_id, poi_id) link rows
+//     canonical campsite catalog rows and writes the POI/campsite link rows
 //     into `reservable_pois`. No etl chain — joiners don't transform raw
 //     data, they query DB tables.
 //
@@ -325,10 +325,10 @@ data class PoiRegistry(
      * Aspira upstream host keyed by terminal etl slug (== pois.source).
      * Returns the `host` arg from the terminal AspiraJoinByNameEtl row.
      *
-     * Used by [ca.floo.roadtrip.service.reservation.ReservationProviderRegistry]
-     * to construct one [ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraReservationProvider]
+     * Used by [ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry]
+     * to construct one [ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraAvailabilityProvider]
      * instance per host (Parks Canada / BC / WA). Routes never see this map
-     * directly — they go through the reservation-provider registry.
+     * directly — they go through the availability-provider registry.
      */
     fun aspiraHostBySource(): Map<String, String> {
         val out = mutableMapOf<String, String>()
@@ -343,12 +343,19 @@ data class PoiRegistry(
 
     /**
      * Sources whose terminal ETL produces rec.gov-keyed campgrounds. Used
-     * by the reservation-provider registry to map `pois.source` → `RECGOV`.
+     * by the availability-provider registry to map `pois.source` → `RECGOV`.
      */
     fun recgovSources(): Set<String> =
         poiData
             .mapNotNull { row -> row.etls.lastOrNull() }
             .filter { it.adapter == "RecGovCampgroundsEtl" }
+            .map { it.slug }
+            .toSet()
+
+    fun campflareSources(): Set<String> =
+        poiData
+            .mapNotNull { row -> row.etls.lastOrNull() }
+            .filter { it.adapter == "CampflareCampgroundsEtl" }
             .map { it.slug }
             .toSet()
 
@@ -529,8 +536,8 @@ data class CampsiteDataEntry(
 /**
  * Row in the `poi_reservable_joiner` section. Names a single adapter
  * (registered in EtlOrchestrator's joiner registry) that reads the
- * current state of `pois` + `reservables` and writes (reservable_id,
- * poi_id) link rows into `reservable_pois`. No etl chain; joiners
+ * current state of `pois` + canonical campsite catalog rows and writes
+ * POI/campsite link rows into `reservable_pois`. No etl chain; joiners
  * don't transform raw data, they query DB tables.
  *
  * `args` follows the same shape as [EtlEntry.args]: free-form

@@ -2,7 +2,7 @@
 
 Aspira NextGen (camis.com) is the booking platform behind:
 
-| Tenant | Host | `ReservationProviderId` today | `pois.source` |
+| Tenant | Host | `AvailabilityProviderId` today | `pois.source` |
 |---|---|---|---|
 | Parks Canada | `reservation.pc.gc.ca` | `ASPIRA` | `aspira-pc-pins` |
 | BC Provincial Parks | `camping.bcparks.ca` | `ASPIRA` | `aspira-bc-pins` |
@@ -760,7 +760,7 @@ a tenant.
 
 - [reservation-providers.md](../reservation-providers.md) — architecture
   contract: ports, capabilities, registry shape.
-- `service/reservation/adapters/aspira/AspiraReservationProvider.kt` — the
+- `service/availability/provider/adapters/aspira/AspiraAvailabilityProvider.kt` — the
   current adapter (availability only).
 - `service/etl/aspira/AspiraResourcesEtl.kt` — emits reservable rows
   emits one reservable per inventory record; reads the `/api/maps`

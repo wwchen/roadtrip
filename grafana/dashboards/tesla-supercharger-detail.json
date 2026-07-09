@@ -535,12 +535,21 @@
     "list": [
       {
         "allowCustomValue": true,
+        "current": {
+          "text": "",
+          "value": ""
+        },
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "definition": "SELECT\n  ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n  p.id::text AS __value\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\nORDER BY ts.common_site_name ASC, p.id ASC\nLIMIT 5000;",
+        "hide": 0,
+        "includeAll": false,
         "label": "Supercharger id",
+        "multi": false,
         "name": "supercharger_id",
+        "options": [],
         "query": {
           "query": "SELECT\n  ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n  p.id::text AS __value\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\nORDER BY ts.common_site_name ASC, p.id ASC\nLIMIT 5000;",
           "rawQuery": true,
@@ -548,20 +557,11 @@
           "refId": "SQLVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
-        "type": "query",
-        "current": {
-          "text": "",
-          "value": ""
-        },
-        "definition": "SELECT\n  ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n  p.id::text AS __value\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\nORDER BY ts.common_site_name ASC, p.id ASC\nLIMIT 5000;",
-        "hide": 0,
-        "includeAll": false,
-        "multi": false,
-        "options": [],
         "regex": "",
         "regexApplyTo": "value",
         "skipUrlSync": false,
-        "sort": 0
+        "sort": 0,
+        "type": "query"
       }
     ]
   },

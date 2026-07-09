@@ -13,10 +13,10 @@ import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
-import ca.floo.roadtrip.service.reservation.ReservationProvider
-import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
-import ca.floo.roadtrip.service.reservation.ReservationProviderId
-import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
@@ -73,12 +73,12 @@ class PollerBackfillTest : SharedDbTest() {
 
     private fun membership(): AvailabilityPollerMembership {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = ReservationProviderRegistry(mapOf("test" to FakeProvider))
+        val registry = AvailabilityProviderRegistry(mapOf("test" to FakeProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                reservationProviders = registry,
+                availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
             )
         return AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets)
@@ -108,10 +108,10 @@ class PollerBackfillTest : SharedDbTest() {
         assertEquals(1, pollers.count(active = true))
     }
 
-    private object FakeProvider : ReservationProvider {
-        override val id = ReservationProviderId.RECGOV
+    private object FakeProvider : AvailabilityProvider {
+        override val id = AvailabilityProviderId.RECGOV
         override val capabilities =
-            ReservationProviderCapabilities(
+            AvailabilityProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = true,
                 bookingHorizonDays = 180,

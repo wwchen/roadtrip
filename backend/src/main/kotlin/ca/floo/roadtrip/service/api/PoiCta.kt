@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.api
 
 import ca.floo.roadtrip.models.api.PoiCtaSchema
 import ca.floo.roadtrip.repo.PoiDetailRow
-import ca.floo.roadtrip.service.reservation.ProviderRefParser
+import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
 import java.time.Clock
 
 // Backend-computed primary action for a POI pin. The drawer button reads

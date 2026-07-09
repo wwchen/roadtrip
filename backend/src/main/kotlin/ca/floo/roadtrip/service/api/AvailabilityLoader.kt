@@ -24,7 +24,6 @@ class AvailabilityLoader(
 ) {
     data class TargetReservable(
         val dbId: Long,
-        val rid: String,
     )
 
     data class Metadata(
@@ -32,7 +31,7 @@ class AvailabilityLoader(
         val campgroundId: String? = null,
         val host: String? = null,
         val mapId: String? = null,
-        val reservableId: String? = null,
+        val campsiteId: Long? = null,
     )
 
     data class Request(
@@ -94,7 +93,7 @@ class AvailabilityLoader(
         request: Request,
         batch: AvailabilityObservationBatch,
     ) {
-        val targetByRid = request.targets.associateBy { it.rid }
+        val targetIds = request.targets.mapTo(mutableSetOf()) { it.dbId }
         val dates = datesInWindow(batch.startDate, batch.endDate)
         val observedAtByDate =
             batch.observations.groupBy { it.date }.mapValues { (_, observations) -> observations.maxOf { it.observedAt } }
@@ -102,9 +101,9 @@ class AvailabilityLoader(
         val covered = mutableSetOf<Pair<Long, LocalDate>>()
         val observations = mutableListOf<AvailabilityRepo.Observation>()
         for (observation in batch.observations) {
-            val target = targetByRid[observation.reservableId] ?: continue
-            covered += target.dbId to observation.date
-            observations += AvailabilityRepo.Observation(target.dbId, observation.date, observation.status, observation.observedAt)
+            val campsiteId = observation.campsiteId?.takeIf { it in targetIds } ?: continue
+            covered += campsiteId to observation.date
+            observations += AvailabilityRepo.Observation(campsiteId, observation.date, observation.status, observation.observedAt)
         }
         for (target in request.targets) {
             for (date in dates) {
@@ -127,7 +126,6 @@ class AvailabilityLoader(
         hit: Boolean,
         seasonBlock: AvailabilitySeasonBlock? = null,
     ): AvailabilityObservationBatch {
-        val ridByDbId = request.targets.associate { it.dbId to it.rid }
         val now = Instant.now(clock)
         return AvailabilityObservationBatch(
             provider = request.metadata.provider,
@@ -136,7 +134,7 @@ class AvailabilityLoader(
             observations =
                 rows.map { row ->
                     ReservableDayObservation(
-                        reservableId = ridByDbId[row.reservableId] ?: row.reservableId.toString(),
+                        campsiteId = row.reservableId,
                         date = row.targetDate,
                         observedAt = row.observedAt.toInstant(),
                         status = row.status,
@@ -147,7 +145,7 @@ class AvailabilityLoader(
             campgroundId = request.metadata.campgroundId,
             host = request.metadata.host,
             mapId = request.metadata.mapId,
-            reservableId = request.metadata.reservableId,
+            campsiteId = request.metadata.campsiteId,
         )
     }
 
@@ -160,7 +158,7 @@ class AvailabilityLoader(
             campgroundId = batch.campgroundId ?: fallback.campgroundId,
             host = batch.host ?: fallback.host,
             mapId = batch.mapId ?: fallback.mapId,
-            reservableId = batch.reservableId ?: fallback.reservableId,
+            campsiteId = batch.campsiteId ?: fallback.campsiteId,
         )
 
     private fun maxAgeSeconds(

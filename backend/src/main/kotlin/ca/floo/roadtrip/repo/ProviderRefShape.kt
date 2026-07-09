@@ -10,6 +10,7 @@ internal fun providerRefShapeSql(payloadExpression: String): String =
     """
     (
       jsonb_exists($payloadExpression, 'recgov_id')
+      OR jsonb_exists($payloadExpression, 'campflare_id')
       OR (jsonb_exists($payloadExpression, 'mapId') AND jsonb_exists($payloadExpression, 'transactionLocationId'))
       OR jsonb_exists($payloadExpression, 'park_id')
       OR jsonb_exists($payloadExpression, 'facility_id')

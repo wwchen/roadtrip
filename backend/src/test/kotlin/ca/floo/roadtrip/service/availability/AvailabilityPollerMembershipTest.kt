@@ -4,7 +4,6 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
-import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -12,9 +11,10 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
-import ca.floo.roadtrip.service.reservation.ReservationProvider
-import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
-import ca.floo.roadtrip.service.reservation.ReservationProviderId
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -124,11 +124,11 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
 
     private fun watch(id: Long): AvailabilityWatchRepo.Watch = AvailabilityWatchRepo(ctx).findById(id)!!
 
-    /** Minimal ReservationProvider stub — only `id` is consumed by the membership. */
+    /** Minimal AvailabilityProvider stub — only `id` is consumed by the membership. */
     private class FakeProvider(
-        override val id: ReservationProviderId,
-    ) : ReservationProvider {
-        override val capabilities: ReservationProviderCapabilities = ReservationProviderCapabilities.UNSUPPORTED
+        override val id: AvailabilityProviderId,
+    ) : AvailabilityProvider {
+        override val capabilities: AvailabilityProviderCapabilities = AvailabilityProviderCapabilities.UNSUPPORTED
 
         override suspend fun availability(
             ref: ProviderRef,
@@ -140,34 +140,36 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
     private val fakeDateContext = PoiDateContext(timeZone = ZoneId.of("UTC"), earliestDate = LocalDate.now())
 
     /**
-     * In-memory fake keyed by reservable id, so a test can control exactly
-     * which (provider, parentRef, parentPoiId) each reservable resolves to
+     * In-memory fake keyed by campsite id, so a test can control exactly
+     * which (provider, parentRef, parentPoiId) each campsite resolves to
      * without seeding real provider-ref rows.
      */
     private class FakeTargetResolver : AvailabilityTargetResolver {
-        val byReservableId = mutableMapOf<Long, ResolvedAvailabilityTarget>()
+        val byCampsiteId = mutableMapOf<Long, ResolvedAvailabilityTarget>()
 
         fun stub(
             reservable: Reservable,
-            provider: ReservationProviderId,
+            provider: AvailabilityProviderId,
             parentRef: ProviderRef,
             parentPoiId: Long,
             dateContext: PoiDateContext,
         ) {
-            byReservableId[reservable.id] =
+            byCampsiteId[reservable.id] =
                 ResolvedAvailabilityTarget(
                     reservable = reservable,
                     provider = FakeProvider(provider),
                     parentRef = parentRef,
+                    catalogRef =
+                        CatalogReservableRef(
+                            campsiteId = reservable.id,
+                            vendorId = reservable.vendorId,
+                        ),
                     parentPoiId = parentPoiId,
                     dateContext = dateContext,
                 )
         }
 
-        override fun requireByRid(rid: ca.floo.roadtrip.models.domain.ReservableId): ResolvedAvailabilityTarget =
-            throw UnsupportedOperationException("not used by AvailabilityPollerMembershipTest")
-
-        override fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? = byReservableId[reservable.id]
+        override fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? = byCampsiteId[reservable.id]
     }
 
     @Test
@@ -179,14 +181,14 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val targets = FakeTargetResolver()
         targets.stub(
             campsiteRepo.findById(reservableA)!!,
-            ReservationProviderId.RECGOV,
+            AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("232447"),
             poi,
             fakeDateContext,
         )
         targets.stub(
             campsiteRepo.findById(reservableB)!!,
-            ReservationProviderId.RECGOV,
+            AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("232447"),
             poi,
             fakeDateContext,
@@ -219,14 +221,14 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val targets = FakeTargetResolver()
         targets.stub(
             campsiteRepo.findById(reservableX)!!,
-            ReservationProviderId.RECGOV,
+            AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("999000"),
             poiX,
             fakeDateContext,
         )
         targets.stub(
             campsiteRepo.findById(reservableY)!!,
-            ReservationProviderId.RECGOV,
+            AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("999000"),
             poiY,
             fakeDateContext,
@@ -255,14 +257,14 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val targets = FakeTargetResolver()
         targets.stub(
             campsiteRepo.findById(reservableA)!!,
-            ReservationProviderId.RECGOV,
+            AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("111111"),
             poi,
             fakeDateContext,
         )
         targets.stub(
             campsiteRepo.findById(reservableB)!!,
-            ReservationProviderId.RECGOV,
+            AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("222222"),
             poi,
             fakeDateContext,
@@ -286,7 +288,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val targets = FakeTargetResolver()
         targets.stub(
             campsiteRepo.findById(reservableA)!!,
-            ReservationProviderId.RECGOV,
+            AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("333333"),
             poi,
             fakeDateContext,
@@ -304,7 +306,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         // (e.g. the campground's provider ref was corrected).
         targets.stub(
             campsiteRepo.findById(reservableA)!!,
-            ReservationProviderId.RECGOV,
+            AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("444444"),
             poi,
             fakeDateContext,
@@ -326,7 +328,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val targets = FakeTargetResolver()
         targets.stub(
             campsiteRepo.findById(reservableA)!!,
-            ReservationProviderId.RECGOV,
+            AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("555555"),
             poi,
             fakeDateContext,
@@ -354,7 +356,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val targets = FakeTargetResolver()
         targets.stub(
             campsiteRepo.findById(reservableA)!!,
-            ReservationProviderId.RECGOV,
+            AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("666666"),
             poi,
             fakeDateContext,

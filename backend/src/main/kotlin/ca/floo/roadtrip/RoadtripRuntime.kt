@@ -1,6 +1,7 @@
 package ca.floo.roadtrip
 
 import ca.floo.roadtrip.clients.aspira.HttpAspiraAvailabilityClient
+import ca.floo.roadtrip.clients.campflare.HttpCampflareAvailabilityClient
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
 import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.clients.recgov.HttpRecgovAvailabilityClient
@@ -31,6 +32,9 @@ import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistryFactory
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
@@ -41,9 +45,6 @@ import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
-import ca.floo.roadtrip.service.reservation.ReservationProviderClients
-import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
-import ca.floo.roadtrip.service.reservation.ReservationProviderRegistryFactory
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.scheduler.PollerBackfill
 import ca.floo.roadtrip.service.scheduler.WatchReaper
@@ -72,7 +73,7 @@ internal data class RoadtripBootContext(
     val appConfig: AppConfig,
     val dataSource: DataSource,
     val ctx: DSLContext,
-    val reservationProviderClients: ReservationProviderClients,
+    val availabilityProviderClients: AvailabilityProviderClients,
     val staticDir: File,
     val mapboxGeocoder: MapboxGeocoder,
     val routeCache: RouteCache,
@@ -82,7 +83,8 @@ internal data class RoadtripBootContext(
 
 internal class RoadtripRuntime(
     val boot: RoadtripBootContext,
-    val reservationProviderRegistry: ReservationProviderRegistry,
+    val availabilityProviderRegistry: AvailabilityProviderRegistry,
+    val campsiteProviders: CampsiteProviderRepo,
     val availabilityDateResolver: AvailabilityDateResolver,
     val availabilityWatchService: AvailabilityWatchService,
     val watchAlertDispatcher: WatchAlertDispatcher,
@@ -100,7 +102,7 @@ internal class RoadtripRuntime(
 
     fun close() {
         schedulerScope.cancel()
-        boot.reservationProviderClients.close()
+        boot.availabilityProviderClients.close()
         slackNotifications.close()
     }
 }
@@ -110,12 +112,17 @@ internal fun createRoadtripBootContext(): RoadtripBootContext {
     val ds = dataSourceFor(DbConfig.fromEnv())
     migrate(ds)
     val ctx = dsl(ds)
-    val reservationProviderClients =
-        ReservationProviderClients(
+    val availabilityProviderClients =
+        AvailabilityProviderClients(
             recgovClient = HttpRecgovAvailabilityClient(),
             aspiraClient = HttpAspiraAvailabilityClient(),
             reserveAmericaClient = HttpReserveAmericaAvailabilityClient(),
             reserveCaliforniaClient = HttpReserveCaliforniaAvailabilityClient(),
+            campflareClient =
+                HttpCampflareAvailabilityClient(
+                    apiBaseUrl = appConfig.campflare.apiBaseUrl,
+                    apiKey = appConfig.campflare.apiKey,
+                ),
         )
 
     val staticDir = File(System.getenv("ROADTRIP_STATIC_DIR") ?: ".")
@@ -149,7 +156,7 @@ internal fun createRoadtripBootContext(): RoadtripBootContext {
         appConfig = appConfig,
         dataSource = ds,
         ctx = ctx,
-        reservationProviderClients = reservationProviderClients,
+        availabilityProviderClients = availabilityProviderClients,
         staticDir = staticDir,
         mapboxGeocoder = mapboxGeocoder,
         routeCache = routeCache,
@@ -159,10 +166,11 @@ internal fun createRoadtripBootContext(): RoadtripBootContext {
 }
 
 internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
-    val reservationProviderRegistry =
-        ReservationProviderRegistryFactory.build(
+    val availabilityProviderRegistry =
+        AvailabilityProviderRegistryFactory.build(
             registry = boot.poiRegistry,
-            clients = boot.reservationProviderClients,
+            clients = boot.availabilityProviderClients,
+            campflareApiKeyConfigured = boot.appConfig.campflare.apiKey != null,
         )
 
     val campsitesRepo = CampsiteRepo(boot.ctx)
@@ -174,7 +182,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         DbAvailabilityTargetResolver(
             providerRefs = campsiteProviders,
             campsitesRepo = campsitesRepo,
-            reservationProviders = reservationProviderRegistry,
+            availabilityProviders = availabilityProviderRegistry,
             dateResolver = availabilityDateResolver,
         )
     val availabilityWatchService = AvailabilityWatchService(boot.ctx, campsitesRepo, availabilityTargets)
@@ -259,7 +267,8 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
 
     return RoadtripRuntime(
         boot = boot,
-        reservationProviderRegistry = reservationProviderRegistry,
+        availabilityProviderRegistry = availabilityProviderRegistry,
+        campsiteProviders = campsiteProviders,
         availabilityDateResolver = availabilityDateResolver,
         availabilityWatchService = availabilityWatchService,
         watchAlertDispatcher = watchAlertDispatcher,

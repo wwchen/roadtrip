@@ -26,6 +26,13 @@ import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.availability.provider.BookingUrlTemplate
+import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
 import ca.floo.roadtrip.service.notification.SlackContentAvailabilityRenderer
 import ca.floo.roadtrip.service.notification.SlackContentWatchStatusRenderer
 import ca.floo.roadtrip.service.notification.SlackNotificationService
@@ -34,13 +41,6 @@ import ca.floo.roadtrip.service.notification.WatchOpening
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
-import ca.floo.roadtrip.service.reservation.BookingUrlTemplate
-import ca.floo.roadtrip.service.reservation.CatalogReservableRef
-import ca.floo.roadtrip.service.reservation.ReservationProvider
-import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
-import ca.floo.roadtrip.service.reservation.ReservationProviderError
-import ca.floo.roadtrip.service.reservation.ReservationProviderId
-import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -156,14 +156,14 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         return watchId
     }
 
-    private fun membershipFor(provider: ReservationProvider): AvailabilityPollerMembership {
+    private fun membershipFor(provider: AvailabilityProvider): AvailabilityPollerMembership {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = ReservationProviderRegistry(mapOf("test" to provider))
+        val registry = AvailabilityProviderRegistry(mapOf("test" to provider))
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                reservationProviders = registry,
+                availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
             )
         return AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets)
@@ -172,7 +172,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     /** Links [watchId] onto its (provider, parentRef) poller via the production
      *  membership path, then returns the single resulting poller. */
     private fun linkWatch(
-        provider: ReservationProvider,
+        provider: AvailabilityProvider,
         watchId: Long,
     ): AvailabilityPollerRepo.Poller {
         val watch = AvailabilityWatchRepo(ctx).findById(watchId)!!
@@ -267,11 +267,11 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         ): Boolean = result
     }
 
-    private fun targetsFor(provider: ReservationProvider): DbAvailabilityTargetResolver =
+    private fun targetsFor(provider: AvailabilityProvider): DbAvailabilityTargetResolver =
         DbAvailabilityTargetResolver(
             providerRefs = CampsiteProviderRepo(ctx),
             campsitesRepo = CampsiteRepo(ctx),
-            reservationProviders = ReservationProviderRegistry(mapOf("test" to provider)),
+            availabilityProviders = AvailabilityProviderRegistry(mapOf("test" to provider)),
             dateResolver = AvailabilityDateResolver(),
         )
 
@@ -286,7 +286,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 DbAvailabilityTargetResolver(
                     providerRefs = CampsiteProviderRepo(ctx),
                     campsitesRepo = CampsiteRepo(ctx),
-                    reservationProviders = ReservationProviderRegistry(emptyMap()),
+                    availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
                     dateResolver = AvailabilityDateResolver(),
                 ),
             pois = PoiServingRepo(ctx),
@@ -296,7 +296,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         )
 
     private fun dispatcherWith(
-        provider: ReservationProvider,
+        provider: AvailabilityProvider,
         notifications: RecordingSlackNotifications,
         grafanaRootUrl: String? = GRAFANA_ROOT_URL,
         appRootUrl: String? = APP_ROOT_URL,
@@ -313,18 +313,18 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         )
 
     private fun executorFor(
-        provider: ReservationProvider,
+        provider: AvailabilityProvider,
         limiter: VendorRateLimiter = RecordingLimiter(grant = true),
         alertDispatcher: WatchAlertDispatcher = disabledDispatcher(),
     ): AvailabilityPollExecutor {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = ReservationProviderRegistry(mapOf("test" to provider))
+        val registry = AvailabilityProviderRegistry(mapOf("test" to provider))
         val dateResolver = AvailabilityDateResolver()
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                reservationProviders = registry,
+                availabilityProviders = registry,
                 dateResolver = dateResolver,
             )
         return AvailabilityPollExecutor(
@@ -352,16 +352,16 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         // (the only way a supported provider yields a null window now that the
         // window is vendor-derived, not watch-derived).
         maxPollWindowDays: Int = 60,
-    ) : ReservationProvider {
+    ) : AvailabilityProvider {
         var calls: Int = 0
         var lastStart: LocalDate? = null
         var lastEnd: LocalDate? = null
         var lastReservableCount: Int = 0
         var mdcRunIdDuringCall: String? = null
 
-        override val id: ReservationProviderId = ReservationProviderId.RECGOV
-        override val capabilities: ReservationProviderCapabilities =
-            ReservationProviderCapabilities(
+        override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
+        override val capabilities: AvailabilityProviderCapabilities =
+            AvailabilityProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = true,
                 bookingHorizonDays = 3650,
@@ -389,7 +389,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val observations =
                 reservables.map { reservable ->
                     ReservableDayObservation(
-                        reservableId = reservable.rid,
+                        campsiteId = reservable.campsiteId,
                         date = observationDate ?: startDate,
                         observedAt = observedAt,
                         status = status,
@@ -407,13 +407,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         override fun bookingUrlTemplate(
             reservable: Reservable,
             parentRef: ProviderRef,
-        ): String = "https://example.test/book/${reservable.rid.vendorId}?d=${BookingUrlTemplate.START_DATE}"
+        ): String = "https://example.test/book/${reservable.vendorId}?d=${BookingUrlTemplate.START_DATE}"
     }
 
-    private class RateLimitedProvider : ReservationProvider {
-        override val id: ReservationProviderId = ReservationProviderId.RECGOV
-        override val capabilities: ReservationProviderCapabilities =
-            ReservationProviderCapabilities(
+    private class RateLimitedProvider : AvailabilityProvider {
+        override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
+        override val capabilities: AvailabilityProviderCapabilities =
+            AvailabilityProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = true,
                 bookingHorizonDays = 3650,
@@ -431,7 +431,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             reservables: List<CatalogReservableRef>,
             startDate: LocalDate,
             endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw ReservationProviderError.RateLimited(RuntimeException("429"))
+        ): AvailabilityObservationBatch = throw AvailabilityProviderError.RateLimited(RuntimeException("429"))
     }
 
     // A window well in the future so both watches are fully live under the

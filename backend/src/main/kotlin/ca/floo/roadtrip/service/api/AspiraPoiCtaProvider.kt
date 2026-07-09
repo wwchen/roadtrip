@@ -2,9 +2,9 @@ package ca.floo.roadtrip.service.api
 
 import ca.floo.roadtrip.models.api.PoiCtaSchema
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.reservation.BookingUrlTemplate
-import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraBookingDisplay
-import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraBookingUrl
+import ca.floo.roadtrip.service.availability.provider.BookingUrlTemplate
+import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraBookingDisplay
+import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraBookingUrl
 import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneId

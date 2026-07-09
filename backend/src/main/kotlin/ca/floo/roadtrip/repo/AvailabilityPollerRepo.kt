@@ -309,10 +309,11 @@ class AvailabilityPollerRepo(
      * for that run, not a correctness bug.
      *
      * Delegates the watch row mapping to [AvailabilityWatchRepo] rather than
-     * re-deriving it, so the two repos can't drift on shape. PR2 dropped the
-     * single-scope `reservable_id` column, so this select no longer joins
-     * `reservables` directly — [AvailabilityWatchRepo.fromRecord] loads each
-     * watch's target set (POIs and/or reservables) itself.
+     * re-deriving it, so the two repos can't drift on shape. The watch now
+     * stores target-set rows instead of a single direct campsite column, so
+     * this select no longer joins the campsite catalog directly —
+     * [AvailabilityWatchRepo.fromRecord] loads each watch's target set
+     * itself.
      */
     fun liveWatchesForPoller(pollerId: Long): List<AvailabilityWatchRepo.Watch> =
         ctx

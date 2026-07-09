@@ -16,8 +16,8 @@ import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
-import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.patch
@@ -51,7 +51,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     /**
      * Builds the watch service the routes take. The target resolver is real
      * but backed by an empty provider registry, so POIs without a resolvable
-     * reservation provider produce no poller links — which is fine for the
+     * availability provider produce no poller links — which is fine for the
      * CRUD assertions here (poller membership is exercised in the membership
      * and executor tests).
      */
@@ -61,7 +61,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                reservationProviders = ReservationProviderRegistry(emptyMap()),
+                availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
                 dateResolver = AvailabilityDateResolver(),
             )
         return AvailabilityWatchService(ctx, campsitesRepo, targets)
@@ -75,12 +75,12 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
      */
     private fun watchServiceWithRecgov(): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = ReservationProviderRegistry(mapOf("test" to FakeRecgovProvider))
+        val registry = AvailabilityProviderRegistry(mapOf("test" to FakeRecgovProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                reservationProviders = registry,
+                availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
             )
         return AvailabilityWatchService(ctx, campsitesRepo, targets)
@@ -101,7 +101,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 DbAvailabilityTargetResolver(
                     providerRefs = CampsiteProviderRepo(ctx),
                     campsitesRepo = campsitesRepo,
-                    reservationProviders = ReservationProviderRegistry(emptyMap()),
+                    availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
                     dateResolver = AvailabilityDateResolver(),
                 ),
             pois = PoiServingRepo(ctx),
@@ -356,11 +356,11 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
             }
             val poiId = seedPoi(sourceId = "p-bad-target", name = "Bad Target")
-            val rid = seedReservable("bad-target-1")
-            linkReservableToPoi(rid, poiId)
+            val campsiteId = seedReservable("bad-target-1")
+            linkReservableToPoi(campsiteId, poiId)
             val body =
                 """
-                {"targets": [{"poi_id": $poiId, "campsite_id": $rid}], "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"targets": [{"poi_id": $poiId, "campsite_id": $campsiteId}], "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val resp =
                 client.post("/api/availability/watches") {
@@ -596,8 +596,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
             }
             val poiId = seedPoi(sourceId = "p-patch-bad-target", name = "Patch Bad Target")
-            val rid = seedReservable("patch-bad-target-1")
-            linkReservableToPoi(rid, poiId)
+            val campsiteId = seedReservable("patch-bad-target-1")
+            linkReservableToPoi(campsiteId, poiId)
             val body =
                 """
                 {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
@@ -617,7 +617,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             val resp =
                 client.patch("/api/availability/watches/$id") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"targets": [{"poi_id": $poiId, "campsite_id": $rid}]}""")
+                    setBody("""{"targets": [{"poi_id": $poiId, "campsite_id": $campsiteId}]}""")
                 }
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
@@ -849,12 +849,12 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
             }
             val poiId = seedPoi(sourceId = "p1", name = "Upper Pines")
-            val rid = seedReservable("100", name = "A12", loop = "Loop A")
-            linkReservableToPoi(rid, poiId)
+            val campsiteId = seedReservable("100", name = "A12", loop = "Loop A")
+            linkReservableToPoi(campsiteId, poiId)
 
             val createBody =
                 """
-                {"campsite_id": $rid, "start_date": "2026-07-04", "end_date": "2026-07-06", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"campsite_id": $campsiteId, "start_date": "2026-07-04", "end_date": "2026-07-06", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
                 client.post("/api/availability/watches") {
@@ -869,7 +869,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonPrimitive.long
 
             val now = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
-            insertCell(rid, "2026-07-04", now.minusMinutes(1), available = true)
+            insertCell(campsiteId, "2026-07-04", now.minusMinutes(1), available = true)
 
             val resp = client.get("/api/availability/watches/$watchId/heatmap")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -945,10 +945,10 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
  * never fetches (the watch service only resolves targets, it does not poll),
  * so the availability methods are unsupported.
  */
-private object FakeRecgovProvider : ca.floo.roadtrip.service.reservation.ReservationProvider {
-    override val id = ca.floo.roadtrip.service.reservation.ReservationProviderId.RECGOV
+private object FakeRecgovProvider : ca.floo.roadtrip.service.availability.provider.AvailabilityProvider {
+    override val id = ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId.RECGOV
     override val capabilities =
-        ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities(
+        ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities(
             supportsAvailability = true,
             supportsAlerts = true,
             bookingHorizonDays = 180,

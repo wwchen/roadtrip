@@ -33,7 +33,7 @@ export function renderSiteMatrix({
   selectedDate,
   siteColumnWidth,
   filters = DEFAULT_FILTERS,
-  selectedSiteRid = null,
+  selectedSiteId = null,
   weekStart = null,
   showToday = true,
   armedBook = null,
@@ -71,7 +71,7 @@ export function renderSiteMatrix({
 
   const activeFilters = normalizeFilters(filters);
   const availabilityByDate = new Map(
-    visibleDays.map((day) => [day.date, new Set(availableReservableIds(day))]),
+    visibleDays.map((day) => [day.date, new Set(availableCampsiteIds(day))]),
   );
   const rows = sortReservables(filterReservables(allRows, activeFilters), activeFilters.sort, {
     availabilityByDate,
@@ -99,7 +99,7 @@ export function renderSiteMatrix({
       rowHtml(row, {
         availabilityByDate,
         selectedDate,
-        selectedSiteRid,
+        selectedSiteId,
         visibleDays,
         armedBook,
         watchedDates,
@@ -343,7 +343,7 @@ function dateHeaderHtml(day) {
 function rowHtml(row, context) {
   const siteLabel = siteName(row);
   const siteTitle = siteTitleText(row, siteLabel);
-  const isSelected = String(row.rid) === String(context.selectedSiteRid);
+  const isSelected = rowId(row) === String(context.selectedSiteId);
   const rowClass = isSelected ? ' class="cg-site-matrix-row-selected"' : '';
   const cells = context.visibleDays
     .map((day) =>
@@ -386,7 +386,7 @@ function siteLabelHtml(row, siteLabel, siteTitle, isSelected) {
     <button
       type="button"
       class="cg-site-matrix-site-button"
-      data-site-header-rid="${escapeHtml(row.rid)}"
+      data-site-header-campsite-id="${escapeHtml(rowId(row))}"
       title="${escapeHtml(siteTitle)}"
       aria-label="View details for ${escapeHtml(siteTitle)}"
       aria-expanded="${isSelected ? 'true' : 'false'}"
@@ -438,7 +438,7 @@ function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook, 
   }
 
   const armed = !!armedBook
-    && String(armedBook.rid) === rowRid(row)
+    && String(armedBook.campsiteId) === rowId(row)
     && armedBook.date === day.date;
   const label = armed ? 'Book' : state.label;
   const armedClass = armed ? ' is-armed' : '';
@@ -451,7 +451,7 @@ function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook, 
       <button
         type="button"
         class="cg-site-matrix-cell-button${armedClass}"
-        data-book-rid="${escapeHtml(rowRid(row))}"
+        data-book-campsite-id="${escapeHtml(rowId(row))}"
         data-book-date="${escapeHtml(day.date)}"
         aria-label="${escapeHtml(ariaLabel)}"
       >
@@ -467,25 +467,25 @@ function siteTitleText(row, siteLabel) {
 }
 
 function cellState(row, day, availableIds) {
-  const rid = rowRid(row);
-  const directStatus = reservableStatus(day, rid);
+  const campsiteId = rowId(row);
+  const directStatus = campsiteStatus(day, campsiteId);
   if (directStatus) return availabilityStatusMeta(directStatus);
-  if (availableIds?.has(rid)) return availabilityStatusMeta('available');
+  if (availableIds?.has(campsiteId)) return availabilityStatusMeta('available');
 
   const status = normalizeAvailabilityStatus(day.status);
   if (status === 'available' && availableIds) return availabilityStatusMeta('reserved');
   return availabilityStatusMeta(status);
 }
 
-function reservableStatus(day, rid) {
-  const statuses = day?.reservable_statuses ?? day?.reservableStatuses;
+function campsiteStatus(day, campsiteId) {
+  const statuses = day?.campsite_statuses ?? day?.campsiteStatuses;
   if (!statuses || typeof statuses !== 'object') return null;
-  if (!Object.prototype.hasOwnProperty.call(statuses, rid)) return null;
-  return normalizeAvailabilityStatus(statuses[rid]);
+  if (!Object.prototype.hasOwnProperty.call(statuses, campsiteId)) return null;
+  return normalizeAvailabilityStatus(statuses[campsiteId]);
 }
 
-function availableReservableIds(day) {
-  const ids = day?.available_reservable_ids ?? day?.availableReservableIds;
+function availableCampsiteIds(day) {
+  const ids = day?.available_campsite_ids ?? day?.availableCampsiteIds;
   return Array.isArray(ids) ? ids.map(String) : [];
 }
 
@@ -498,21 +498,19 @@ function sortedReservables(reservables, days = []) {
 function fallbackReservablesFromDays(days) {
   const ids = new Set();
   for (const day of Array.isArray(days) ? days : []) {
-    const statuses = day?.reservable_statuses ?? day?.reservableStatuses;
+    const statuses = day?.campsite_statuses ?? day?.campsiteStatuses;
     if (statuses && typeof statuses === 'object') {
-      Object.keys(statuses).forEach((rid) => ids.add(String(rid)));
+      Object.keys(statuses).forEach((id) => ids.add(String(id)));
     }
-    availableReservableIds(day).forEach((rid) => ids.add(String(rid)));
+    availableCampsiteIds(day).forEach((id) => ids.add(String(id)));
   }
   return [...ids].sort().map(fallbackReservable);
 }
 
-function fallbackReservable(rid) {
-  const parts = String(rid).split(':');
+function fallbackReservable(id) {
   return {
-    rid: String(rid),
-    vendor: parts[1] || '',
-    vendor_id: parts.slice(2).join(':') || String(rid),
+    id: String(id),
+    vendor_id: String(id),
   };
 }
 
@@ -539,7 +537,7 @@ function filterReservables(rows, filters) {
       row.site_type,
       row.vendor_id,
       row.vendorId,
-      row.rid,
+      row.id,
     ]
       .filter(Boolean)
       .join(' ')
@@ -564,12 +562,12 @@ function sortReservables(rows, sortKey, context) {
 }
 
 function availableDateCount(row, availabilityByDate, days = []) {
-  const rid = rowRid(row);
+  const campsiteId = rowId(row);
   let count = 0;
   for (const day of days) {
-    const status = reservableStatus(day, rid);
+    const status = campsiteStatus(day, campsiteId);
     if (status === 'available') count += 1;
-    else if (!status && availabilityByDate.get(day.date)?.has(rid)) count += 1;
+    else if (!status && availabilityByDate.get(day.date)?.has(campsiteId)) count += 1;
   }
   return count;
 }
@@ -582,11 +580,11 @@ function filterOptions(rows, key) {
 function siteName(row) {
   if (row.name) return row.name;
   if (row.vendor_id) return `Site #${row.vendor_id}`;
-  return row.rid || '(unknown)';
+  return row.id != null ? `Site #${row.id}` : '(unknown)';
 }
 
-function rowRid(row) {
-  return String(row.rid);
+function rowId(row) {
+  return String(row.id);
 }
 
 function compareReservable(a, b) {

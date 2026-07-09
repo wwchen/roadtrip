@@ -180,7 +180,7 @@ internal class WatchAlertDispatcher(
             val r = reservablesById.getValue(t.reservableId)
             val target = targets.resolve(r)
             WatchOpening(
-                label = r.name ?: r.rid.encode(),
+                label = r.name ?: "Site #${r.vendorId}",
                 loop = r.loop,
                 siteType = r.siteType,
                 date = t.targetDate,
@@ -217,7 +217,7 @@ internal class WatchAlertDispatcher(
             watchId = watch.id,
             state = state,
             siteCount = reservables.size,
-            siteName = single?.let { it.name ?: it.rid.encode() },
+            siteName = single?.let { it.name ?: "Site #${it.vendorId}" },
             siteLoop = single?.loop,
             campgroundName = poiIds.singleOrNull()?.let { pois.fetchPoiById(it)?.name },
             startDate = watch.startDate,

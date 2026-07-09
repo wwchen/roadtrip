@@ -1,10 +1,10 @@
-# Reservation providers
+# Availability providers
 
 Campsite availability and watches are dispatched through one abstraction:
-`ReservationProvider`. Every upstream reservation system (rec.gov, Aspira
-NextGen, ReserveAmerica, future regional vendors) is an adapter behind this port.
-Routes never call this port directly. Availability services resolve a POI or
-reservable into provider-ready targets, then call the adapter.
+`AvailabilityProvider`. Every upstream booking or availability system (rec.gov,
+Aspira NextGen, ReserveAmerica, future regional vendors) is an adapter behind
+this port. Routes never call this port directly. Availability services resolve
+a POI or reservable into provider-ready targets, then call the adapter.
 
 ## Why an abstraction
 
@@ -14,9 +14,9 @@ per-provider helper functions. Adding a third provider meant editing several
 files; forgetting one was a silent bug. The current shape collapses that into
 one registry lookup behind `AvailabilityTargetResolver`.
 
-This doc is the contract. **A new reservation provider is a new file under
-`service/reservation/adapters/<vendor>/` and one row in the registry — nothing
-else outside that directory should change.** That rule is the test of
+This doc is the contract. **A new availability provider is a new file under
+`service/availability/provider/adapters/<vendor>/` and one row in the registry;
+nothing else outside that directory should change.** That rule is the test of
 whether the abstraction is right.
 
 For the implementation checklist, use
@@ -27,39 +27,47 @@ tests, and operational wiring for a new provider.
 ## Layout
 
 ```
-service/reservation/
+service/availability/provider/
 ├── AvailabilityClient.kt           # normalized availability operations
-├── ReservationProviderClients.kt   # boot-time vendor client set + lifecycle
-├── ReservationProvider.kt          # availability + provider metadata port
-├── ReservationProviderId.kt        # enum/provider identity
-├── ReservationProviderRegistry.kt  # forPoi(row) → adapter
-├── ReservationProviderCapabilities.kt
+├── AvailabilityProviderClients.kt   # boot-time vendor client set + lifecycle
+├── AvailabilityProvider.kt          # availability + provider metadata port
+├── AvailabilityProviderId.kt        # enum/provider identity
+├── AvailabilityProviderRegistry.kt  # forPoi(row, ref) → adapter that can handle it
+├── AvailabilityProviderCapabilities.kt
 ├── ProviderRefParser.kt            # JSONB → models.ProviderRef (single source)
 └── adapters/
-    ├── recgov/                 # availability
+    ├── recgov/                 # availability + watches
+    ├── campflare/              # availability
     ├── aspira/                 # availability
     ├── reserveamerica/         # availability
     └── reservecalifornia/      # availability
 ```
 
-`models.ProviderRef` (sealed class with `RecGov` / `Aspira` / `ReserveAmerica`
-variants) is the wire shape. Adapters take a `ProviderRef` of their
+`models.ProviderRef` (sealed class with `RecGov` / `Campflare` / `Aspira` /
+`ReserveAmerica` / `ReserveCalifornia` variants) is the wire shape. Adapters take a `ProviderRef` of their
 matching variant and the registry guarantees the dispatch is correct.
 
 Every vendor adapter class implements both `AvailabilityClient` and
-`ReservationProvider`: `AvailabilityClient` is the shared normalized
-availability contract, while `ReservationProvider` adds identity,
-capabilities, and booking-link metadata. Raw HTTP clients under `clients/`
-stay vendor-specific because their upstream request and response shapes are
-genuinely different. The adapter boundary is where those shapes become
-provider-neutral `AvailabilityObservationBatch` values.
+`AvailabilityProvider`: `AvailabilityClient` is the shared normalized
+availability contract, while `AvailabilityProvider` adds identity,
+capabilities, ref handling, and booking-link metadata. Raw HTTP clients under
+`clients/` stay vendor-specific because their upstream request and response
+shapes are genuinely different. The adapter boundary is where those shapes
+become provider-neutral `AvailabilityObservationBatch` values.
+
+The registry does not hardcode fallback modes. Availability services enumerate
+candidate provider refs from the catalog/registry, and the registry asks the
+mapped provider whether it `canHandle(ref)`. If one provider declines a ref
+because it is unconfigured in this process, the resolver continues to the next
+linked candidate ref. This is how a Campflare catalog row can naturally fall
+through to a linked rec.gov alias without a Campflare-specific service branch.
 
 Boot wiring passes those vendor-specific HTTP clients as one
-`ReservationProviderClients` set. Every vendor client interface is
+`AvailabilityProviderClients` set. Every vendor client interface is
 `AutoCloseable` with a default no-op close; implementations that actually own
 closeable resources, such as RecGov's Ktor client, override it. `Main` closes
 the set, not an individual vendor, so transport lifecycle does not leak through
-the reservation-provider abstraction.
+the availability-provider abstraction.
 
 The availability orchestration that consumes this port lives one layer above:
 
@@ -77,7 +85,7 @@ Not every provider supports every monitoring action. The capability flags
 on each provider drive what the FE shows.
 
 ```kotlin
-data class ReservationProviderCapabilities(
+data class AvailabilityProviderCapabilities(
     /** Can we serve per-day availability for a window? */
     val supportsAvailability: Boolean,
     /** Can we poll for openings and notify on match? */
@@ -95,14 +103,14 @@ drawer can hide affordances the provider doesn't support.
 | Action | Required interface | Notes |
 |---|---|---|
 | Per-day availability for a window | `AvailabilityClient.availability(ref, startDate, endDate)` | Drives provider-level availability. Adapters fetch upstream directly; the decision to serve stored data or call the adapter live is handled above it by `AvailabilityLoader`, reading current state from the `availability` interval table. |
-| Catalog availability for linked reservables | `AvailabilityClient.catalogAvailability(ref, reservables, startDate, endDate)` | POI/rids path uses this so the returned availability is narrowed to known catalog rows. |
+| Catalog availability for linked campsites | `AvailabilityClient.catalogAvailability(ref, reservables, startDate, endDate)` | The POI/campsite catalog path uses this so returned availability is narrowed to known catalog rows. |
 | Reservable availability | `AvailabilityClient.reservableAvailability(ref, vendorId, startDate, endDate)` | Narrow projection for a single reservable. Currently unused: availability is always requested by collection (POI), so the port method has no live caller since the single-reservable endpoint was retired. Kept as a capability; remove if it stays dead. |
-| Capability probe | `ReservationProvider.capabilities` | Static per adapter; cheap. |
+| Capability probe | `AvailabilityProvider.capabilities` | Static per adapter; cheap. |
 | Watch evaluation on poll | watch evaluator | `same_site` requires one site bookable across all N nights; `any_combination` succeeds if at least one site is open per night. |
 | Record availability history | poller writes status-run rows to the `availability` interval table | Provider-agnostic; uses `AvailabilityObservationBatch` observations. |
 | Notify on match | poller dispatches via Slack (`slack_notify`; push future) | Channels are not provider-specific. See `docs/superpowers/specs/2026-07-03-availability-alerts-design.md`. |
 
-Reservation providers do not model cart automation, payment, or booking on
+Availability providers do not model cart automation, payment, or booking on
 the user's behalf. Watch flows produce matches, notifications, and
 availability history only.
 
@@ -111,13 +119,14 @@ availability history only.
 | Provider | Availability | Watches | Notes |
 |---|---|---|---|
 | RecGov (rec.gov) | ✓ | ✓ | Availability and generic watch polling. |
+| Campflare | ✓ | ✗ | Availability uses v2 bulk campground availability for Campflare-owned US catalog rows. Alerts stay off until cadence/load limits are validated. |
 | Aspira NextGen (BC Parks, Washington, Pennsylvania) | ✓ | planned | Availability ships now; watch dispatch still needs work. |
 | ReserveAmerica / Active Network (Alberta Parks, New York State Parks) | ✓ | ✗ | Availability reads the live campsite-calendar matrix; sites are cataloged from that same calendar roster (see `reserveamerica.md`). Alerts stay off until upstream cadence/load limits are validated. |
 | ReserveCalifornia / Tyler | ✓ | ✗ | Availability reads standard facility grids. Catalog import uses the public Search All Parks `search/place` flow. |
 
 When a row is added here, it should match a real file in
-`service/reservation/adapters/<vendor>/`. If the table promises a capability
-the adapter doesn't implement, that's a doc bug; fix the doc, not the
+`service/availability/provider/adapters/<vendor>/`. If the table promises a
+capability the adapter doesn't implement, that's a doc bug; fix the doc, not the
 adapter.
 
 ## Polling is watch-driven
@@ -210,7 +219,7 @@ the fetch-call row it produced.
 ## Availability history
 
 History is a side effect of the watch poller, not a separate ETL, and it is
-not a separate table. Each `(reservable_id, target_date)` cell has a chain of
+not a separate table. Each `(campsite_id, target_date)` cell has a chain of
 status-run rows in the `availability` interval table: an unchanged poll bumps
 the current row's `last_observed_at` in place, and a status change inserts a
 new row linked to its predecessor by `previous_id`. History is that chain —
@@ -248,7 +257,7 @@ GET /api/poi/{poi_id}/reservables/availability
   ↓                                AvailabilityService
 week pages                         ↓
   ↓                                AvailabilityTargetResolver
-  ↓                                ReservationProvider.catalogAvailability
+  ↓                                AvailabilityProvider.catalogAvailability
                                    ↓
                                    watch evaluator
   ↓                                  ↓ (match)
@@ -265,17 +274,17 @@ The drawer captures **intent only**. The poller is the only thing that
 produces matches and snapshots. The watches UI surfaces everything the
 poller has produced.
 
-## Adding a new reservation provider
+## Adding a new availability provider
 
-1. Add a row to `ReservationProviderId` (enum) if this is a new upstream
+1. Add a row to `AvailabilityProviderId` (enum) if this is a new upstream
    platform.
 2. Add a `ProviderRef.<Vendor>` variant if the wire shape isn't already
    covered.
-3. Create `service/reservation/adapters/<vendor>/<Vendor>ReservationProvider.kt`
-   implementing `ReservationProvider`. Capabilities default conservatively
+3. Create `service/availability/provider/adapters/<vendor>/<Vendor>AvailabilityProvider.kt`
+   implementing `AvailabilityProvider`. Capabilities default conservatively
    (`supportsAlerts = false`); flip them on as features land.
 4. Ensure the terminal ETL emits the right `provider_ref` JSON and that its
-   `pois.source` maps to the adapter in `ReservationProviderRegistryFactory`.
+   `pois.source` maps to the adapter in `AvailabilityProviderRegistryFactory`.
 5. Update the matrix table above.
 
 Steps 1–5 should be the entire provider-registration diff. If you find
@@ -291,6 +300,8 @@ Each adapter's upstream API is documented separately under
 - [aspira.md](reservation-providers/aspira.md) — Aspira NextGen
   (`reservation.pc.gc.ca`, `camping.bcparks.ca`,
   `washington.goingtocamp.com`).
+- [campflare.md](reservation-providers/campflare.md) — Campflare v2 bulk
+  campground availability.
 - [reservecalifornia.md](reservation-providers/reservecalifornia.md) —
   ReserveCalifornia / Tyler Technologies.
 - [reserveamerica.md](reservation-providers/reserveamerica.md) — ReserveAmerica /
@@ -307,7 +318,7 @@ per-vendor docs own the wire details.
 ## See also
 
 - [backend-architecture.md](backend-architecture.md) — overall layer
-  rules. Adapters live under `service/reservation/`; routes consume
+  rules. Adapters live under `service/availability/provider/`; routes consume
   availability services, not provider adapters or the provider registry.
 - `rfcs/0007-availability-search-and-alerts.md` — the RFC that introduced
   this abstraction and the monitoring lifecycle it enables.

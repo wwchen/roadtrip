@@ -50,21 +50,22 @@ fun dayClassificationsFromObservations(
     val days = ChronoUnit.DAYS.between(startDate, endDate).toInt()
     return (0 until days).map { offset ->
         val date = startDate.plusDays(offset.toLong())
-        val latestByReservable = linkedMapOf<String, ReservableDayObservation>()
+        val latestByCampsite = linkedMapOf<Long, ReservableDayObservation>()
         for (observation in byDate[date].orEmpty()) {
-            val current = latestByReservable[observation.reservableId]
+            val campsiteId = observation.campsiteId ?: continue
+            val current = latestByCampsite[campsiteId]
             if (current == null || !observation.observedAt.isBefore(current.observedAt)) {
-                latestByReservable[observation.reservableId] = observation
+                latestByCampsite[campsiteId] = observation
             }
         }
-        val statuses = latestByReservable.mapValues { (_, observation) -> observation.status }
-        dayClassificationFromReservableStatuses(date.toString(), statuses)
+        val statuses = latestByCampsite.mapValues { (_, observation) -> observation.status }
+        dayClassificationFromCampsiteStatuses(date.toString(), statuses)
     }
 }
 
 fun availabilityDatesFromObservations(batch: AvailabilityObservationBatch): List<String> =
     dayClassificationsFromObservations(batch.startDate, batch.endDate, batch.observations)
-        .filter { it.availableReservableIds.orEmpty().isNotEmpty() }
+        .filter { it.availableCampsiteIds.orEmpty().isNotEmpty() }
         .map { it.date }
 
 fun availabilityResponseFromObservations(batch: AvailabilityObservationBatch): AvailabilityResponseDto {
@@ -81,13 +82,13 @@ fun availabilityResponseFromObservations(batch: AvailabilityObservationBatch): A
         campgroundId = batch.campgroundId,
         host = batch.host,
         mapId = batch.mapId,
-        reservableId = batch.reservableId,
+        campsiteId = batch.campsiteId,
     )
 }
 
-fun dayClassificationFromReservableStatuses(
+fun dayClassificationFromCampsiteStatuses(
     date: String,
-    statuses: Map<String, AvailabilityStatus>,
+    statuses: Map<Long, AvailabilityStatus>,
 ): DayClassification {
     val sorted = statuses.toSortedMap()
     val availableIds =
@@ -98,8 +99,8 @@ fun dayClassificationFromReservableStatuses(
     return DayClassification(
         date = date,
         status = rollupStatus(sorted.values),
-        availableReservableIds = availableIds,
-        reservableStatuses = sorted,
+        availableCampsiteIds = availableIds,
+        campsiteStatuses = sorted,
     )
 }
 
@@ -109,9 +110,9 @@ fun dayClassificationFromStatuses(
 ): DayClassification {
     val keyedStatuses =
         statuses
-            .mapIndexed { index, status -> index.toString() to status }
+            .mapIndexed { index, status -> index.toLong() to status }
             .toMap()
-    return dayClassificationFromReservableStatuses(
+    return dayClassificationFromCampsiteStatuses(
         date = date,
         statuses = keyedStatuses,
     )
@@ -132,15 +133,15 @@ fun rollupStatus(statuses: Iterable<AvailabilityStatus>): AvailabilityStatus {
 
 /** Roll up per-day classifications into a single window-level state. */
 fun classifyWindowState(days: List<DayClassification>): String {
-    if (days.none { it.reservableStatuses.orEmpty().isNotEmpty() }) return "empty"
-    val allClosed = days.all { it.reservableStatuses.orEmpty().isNotEmpty() && it.status == AvailabilityStatus.CLOSED }
+    if (days.none { it.campsiteStatuses.orEmpty().isNotEmpty() }) return "empty"
+    val allClosed = days.all { it.campsiteStatuses.orEmpty().isNotEmpty() && it.status == AvailabilityStatus.CLOSED }
     val anySuccess =
         days.any {
             it.status == AvailabilityStatus.AVAILABLE ||
                 it.status == AvailabilityStatus.FIRST_COME ||
                 it.status == AvailabilityStatus.UNKNOWN
         }
-    val allReserved = days.all { it.reservableStatuses.orEmpty().isNotEmpty() && it.status == AvailabilityStatus.RESERVED }
+    val allReserved = days.all { it.campsiteStatuses.orEmpty().isNotEmpty() && it.status == AvailabilityStatus.RESERVED }
     return when {
         allClosed -> "closed_for_season"
         anySuccess -> "success"
@@ -168,14 +169,14 @@ fun availabilityResponseDto(
     campgroundId: String? = null,
     host: String? = null,
     mapId: String? = null,
-    reservableId: String? = null,
+    campsiteId: Long? = null,
 ): AvailabilityResponseDto =
     AvailabilityResponseDto(
         provider = provider,
         campgroundId = campgroundId,
         host = host,
         mapId = mapId,
-        reservableId = reservableId,
+        campsiteId = campsiteId,
         checkedAt = Instant.now().toString(),
         startDate = startDate.toString(),
         endDate = endDate.toString(),
@@ -186,8 +187,8 @@ fun availabilityResponseDto(
                 AvailabilityDayDto(
                     date = day.date,
                     status = day.status,
-                    availableReservableIds = day.availableReservableIds,
-                    reservableStatuses = day.reservableStatuses,
+                    availableCampsiteIds = day.availableCampsiteIds,
+                    campsiteStatuses = day.campsiteStatuses,
                 )
             },
         cache = cacheBlock,

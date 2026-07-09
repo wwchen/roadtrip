@@ -98,7 +98,7 @@ function makeContext(host, feature, signal) {
       type: '',
       sort: 'available',
     },
-    selectedSiteRid: null,
+    selectedSiteId: null,
     selectedSiteDate: null,
     armedBook: null,
     cacheBlock: null,
@@ -183,7 +183,7 @@ function renderAvailabilitySurface(ctx) {
     selectedDate: null,
     siteColumnWidth: ctx.siteColumnWidth,
     filters: ctx.matrixFilters,
-    selectedSiteRid: ctx.selectedSiteRid,
+    selectedSiteId: ctx.selectedSiteId,
     weekStart: localYmd(ctx.weekStart),
     showToday: shouldShowEarliestButton(ctx),
     armedBook: ctx.armedBook,
@@ -245,7 +245,7 @@ function wireRoot(ctx) {
 function onRootPointerDown(ctx, e) {
   const tgt = e.target;
   if (!(tgt instanceof Element)) return;
-  const bookBtn = tgt.closest('[data-book-rid]');
+  const bookBtn = tgt.closest('[data-book-campsite-id]');
   if (bookBtn) {
     captureBookTapScroll(ctx, e.pointerType === 'touch');
   }
@@ -258,7 +258,7 @@ function onRootPointerDown(ctx, e) {
 function onRootTouchStart(ctx, e) {
   const tgt = e.target;
   if (!(tgt instanceof Element)) return;
-  if (tgt.closest('[data-book-rid]')) {
+  if (tgt.closest('[data-book-campsite-id]')) {
     captureBookTapScroll(ctx, true);
   }
 }
@@ -274,18 +274,18 @@ function onRootClick(ctx, e) {
   const tgt = e.target;
   if (!(tgt instanceof Element)) return;
 
-  const bookBtn = tgt.closest('[data-book-rid]');
+  const bookBtn = tgt.closest('[data-book-campsite-id]');
   if (bookBtn) {
     e.preventDefault();
     const tapScroll = ctx.pendingBookTapScroll || captureMatrixScroll(ctx);
     const tapWasTouch = !!ctx.pendingBookTapWasTouch;
     ctx.pendingBookTapScroll = null;
     ctx.pendingBookTapWasTouch = false;
-    const rid = bookBtn.getAttribute('data-book-rid');
+    const campsiteId = bookBtn.getAttribute('data-book-campsite-id');
     const date = bookBtn.getAttribute('data-book-date');
-    if (!rid || !date) return;
-    const armed = ctx.armedBook && String(ctx.armedBook.rid) === String(rid) && ctx.armedBook.date === date;
-    const site = ctx.sites.find((s) => String(s.rid) === String(rid));
+    if (!campsiteId || !date) return;
+    const armed = ctx.armedBook && String(ctx.armedBook.campsiteId) === String(campsiteId) && ctx.armedBook.date === date;
+    const site = ctx.sites.find((s) => String(s.id) === String(campsiteId));
     if (armed) {
       const url = site
         ? reservationUrlFromTemplate(site, { startDate: date, endDate: stayEndDate(ctx, date) })
@@ -295,7 +295,7 @@ function onRootClick(ctx, e) {
       updateBookButtonState(bookBtn, site, date, false);
     } else {
       disarmBookButtonsInPlace(ctx);
-      ctx.armedBook = { rid: String(rid), date };
+      ctx.armedBook = { campsiteId: String(campsiteId), date };
       updateBookButtonState(bookBtn, site, date, true);
     }
     if (tapWasTouch) {
@@ -326,11 +326,11 @@ function onRootClick(ctx, e) {
     rerender(ctx);
     return;
   }
-  const siteHeaderBtn = tgt.closest('[data-site-header-rid]');
+  const siteHeaderBtn = tgt.closest('[data-site-header-campsite-id]');
   if (siteHeaderBtn) {
-    const rid = siteHeaderBtn.getAttribute('data-site-header-rid');
-    if (!rid) return;
-    ctx.selectedSiteRid = String(ctx.selectedSiteRid) === String(rid) ? null : rid;
+    const campsiteId = siteHeaderBtn.getAttribute('data-site-header-campsite-id');
+    if (!campsiteId) return;
+    ctx.selectedSiteId = String(ctx.selectedSiteId) === String(campsiteId) ? null : campsiteId;
     ctx.selectedSiteDate = null;
     rerender(ctx);
     return;
@@ -452,9 +452,9 @@ function onRootScroll(ctx, e) {
 function disarmBookButtonsInPlace(ctx) {
   for (const button of ctx.host.querySelectorAll('.cg-site-matrix-cell-button.is-armed')) {
     if (!(button instanceof HTMLElement)) continue;
-    const rid = button.getAttribute('data-book-rid');
+    const campsiteId = button.getAttribute('data-book-campsite-id');
     const date = button.getAttribute('data-book-date');
-    const site = ctx.sites.find((s) => String(s.rid) === String(rid));
+    const site = ctx.sites.find((s) => String(s.id) === String(campsiteId));
     updateBookButtonState(button, site, date, false);
   }
 }
@@ -477,7 +477,7 @@ function siteLabel(site) {
   if (!site) return 'Site';
   if (site.name) return site.name;
   if (site.vendor_id) return `Site #${site.vendor_id}`;
-  return site.rid || 'Site';
+  return site.id != null ? `Site #${site.id}` : 'Site';
 }
 
 const AVAIL_ERROR_LABELS = {
@@ -658,7 +658,7 @@ function jumpMatrixToToday(ctx) {
 
 function resetWeekViewState(ctx) {
   ctx.selectedDate = null;
-  ctx.selectedSiteRid = null;
+  ctx.selectedSiteId = null;
   ctx.selectedSiteDate = null;
   ctx.sitesExpanded = false;
   ctx.armedBook = null;
@@ -723,8 +723,8 @@ async function fetchWeek(ctx) {
 // classifications the matrix renders. The endpoint hands us the streams and
 // lets the FE decide how to combine them. Same rollup rules:
 //   - status: available > first_come > unknown > reserved > closed > unknown
-//   - reservable_statuses: { rid → status } for the matrix tooltip
-//   - available_reservable_ids: rids that are bookable that day
+//   - campsite_statuses: { campsite_id → status } for the matrix tooltip
+//   - available_campsite_ids: campsite ids that are bookable that day
 //
 // state shortcut:
 //   - campsites: []          → 'empty' (POI has no online-bookable sites)
@@ -732,8 +732,8 @@ async function fetchWeek(ctx) {
 //     block from the first campsite that has one)
 //   - else                     → 'success'
 function fusePoiCampsitesAvailability(json, startDate, endDate) {
-  const reservables = Array.isArray(json?.campsites) ? json.campsites : [];
-  if (reservables.length === 0) {
+  const campsites = Array.isArray(json?.campsites) ? json.campsites : [];
+  if (campsites.length === 0) {
     return {
       state: 'empty',
       days: [],
@@ -741,47 +741,47 @@ function fusePoiCampsitesAvailability(json, startDate, endDate) {
       cacheBlock: null,
     };
   }
-  const closedForSeason = reservables.every((r) => r?.state === 'closed_for_season');
+  const closedForSeason = campsites.every((r) => r?.state === 'closed_for_season');
   if (closedForSeason) {
-    const seasonHint = reservables.find((r) => r?.season && r.season.reopens_on)?.season ?? null;
+    const seasonHint = campsites.find((r) => r?.season && r.season.reopens_on)?.season ?? null;
     return {
       state: 'closed_for_season',
       days: [],
       season: seasonHint,
-      cacheBlock: oldestCacheBlock(reservables),
+      cacheBlock: oldestCacheBlock(campsites),
     };
   }
 
   const dates = enumerateDates(startDate, endDate);
-  const days = dates.map((date) => fuseDay(date, reservables));
+  const days = dates.map((date) => fuseDay(date, campsites));
   return {
     state: 'success',
     days,
     season: null,
-    cacheBlock: oldestCacheBlock(reservables),
+    cacheBlock: oldestCacheBlock(campsites),
   };
 }
 
-function fuseDay(date, reservables) {
-  // reservable_statuses: { rid → status } across all reservables for that date.
+function fuseDay(date, campsites) {
+  // campsite_statuses: { campsite_id → status } across all campsites for that date.
   const statuses = {};
-  for (const r of reservables) {
-    const rid = r?.reservable_id;
-    if (!rid) continue;
+  for (const r of campsites) {
+    const campsiteId = r?.campsite_id ?? r?.campsiteId;
+    if (campsiteId == null) continue;
     const day = (Array.isArray(r.availability) ? r.availability : []).find((d) => d?.date === date);
-    statuses[rid] = day?.status || 'unknown';
+    statuses[String(campsiteId)] = day?.status || 'unknown';
   }
-  const ridsSorted = Object.keys(statuses).sort();
+  const idsSorted = Object.keys(statuses).sort((a, b) => Number(a) - Number(b));
   const orderedStatuses = {};
-  for (const rid of ridsSorted) orderedStatuses[rid] = statuses[rid];
+  for (const id of idsSorted) orderedStatuses[id] = statuses[id];
 
-  const availableIds = ridsSorted.filter((rid) => statuses[rid] === 'available');
-  const status = rollupStatus(ridsSorted.map((rid) => statuses[rid]));
+  const availableIds = idsSorted.filter((id) => statuses[id] === 'available').map((id) => Number(id));
+  const status = rollupStatus(idsSorted.map((id) => statuses[id]));
   return {
     date,
     status,
-    available_reservable_ids: availableIds,
-    reservable_statuses: orderedStatuses,
+    available_campsite_ids: availableIds,
+    campsite_statuses: orderedStatuses,
   };
 }
 

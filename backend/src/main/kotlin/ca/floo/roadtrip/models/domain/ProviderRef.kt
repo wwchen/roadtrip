@@ -12,6 +12,10 @@ sealed interface ProviderRef {
         val recgovId: String,
     ) : ProviderRef
 
+    data class Campflare(
+        val campgroundId: String,
+    ) : ProviderRef
+
     data class Aspira(
         val transactionLocationId: Long,
         val mapId: Long,

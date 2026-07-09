@@ -3,7 +3,7 @@ package ca.floo.roadtrip.service.ratelimit
 import java.time.Duration
 
 /**
- * Token-bucket parameters for one vendor (reservation provider).
+ * Token-bucket parameters for one vendor (availability provider).
  *
  * - [capacity]: max tokens the bucket holds (the burst ceiling).
  * - [refillTokens]: tokens added each [refillPeriod].

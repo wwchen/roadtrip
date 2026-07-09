@@ -1,65 +1,114 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
-import ca.floo.roadtrip.models.domain.ReservableId
+import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
-import ca.floo.roadtrip.service.reservation.ProviderRefParser
-import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
+import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
+import ca.floo.roadtrip.service.availability.provider.availabilityProviderId
 
 /**
- * Resolves a reservable (by rid, or from an already-loaded [Reservable]) to the
- * provider adapter, parent provider ref, and date context needed to fetch its
- * availability. A port so the request path can be unit-tested with an in-memory
- * fake; [DbAvailabilityTargetResolver] is the production, DB-backed implementation.
+ * Resolves an already-loaded [Reservable] to the provider adapter, parent
+ * provider ref, and date context needed to fetch its availability. A port so
+ * the request path can be unit-tested with an in-memory fake;
+ * [DbAvailabilityTargetResolver] is the production, DB-backed implementation.
  */
 internal interface AvailabilityTargetResolver {
-    /** Resolve by rid, throwing [AvailabilityServiceError.NotFound] when the
-     *  reservable is unknown and [AvailabilityServiceError.UnknownCampground]
-     *  when it has no resolvable reservation provider. */
-    fun requireByRid(rid: ReservableId): ResolvedAvailabilityTarget
-
     /** Resolve an already-loaded reservable, or null when it has no resolvable
-     *  reservation provider. */
+     *  availability provider. */
     fun resolve(reservable: Reservable): ResolvedAvailabilityTarget?
 }
 
 internal class DbAvailabilityTargetResolver(
     private val providerRefs: CampsiteProviderRepo,
     private val campsitesRepo: CampsiteRepo,
-    private val reservationProviders: ReservationProviderRegistry,
+    private val availabilityProviders: AvailabilityProviderRegistry,
     private val dateResolver: AvailabilityDateResolver,
 ) : AvailabilityTargetResolver {
-    override fun requireByRid(rid: ReservableId): ResolvedAvailabilityTarget {
-        val reservable =
-            campsitesRepo.findByRid(rid)
-                ?: throw AvailabilityServiceError.NotFound
-        return resolve(reservable)
-            ?: throw AvailabilityServiceError.UnknownCampground
-    }
+    private data class ParentCandidate(
+        val poiId: Long,
+        val row: CampsiteProviderRefRow,
+        val provider: AvailabilityProvider,
+        val ref: ProviderRef,
+    )
 
     override fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? {
         val poiIds = campsitesRepo.poiIdsForCampsite(reservable.id)
         if (poiIds.isEmpty()) return null
 
-        val providerRefsByPoiId = providerRefs.findProviderRefs(poiIds)
+        val providerRefsByPoiId = providerRefs.findProviderRefCandidates(poiIds)
         val parent =
             poiIds
                 .asSequence()
-                .mapNotNull { poiId -> providerRefsByPoiId[poiId]?.let { poiId to it } }
-                .firstOrNull { (_, row) ->
-                    reservationProviders.forPoi(row) != null && ProviderRefParser.parse(row.providerRefJson) != null
-                } ?: return null
-        val (parentPoiId, parentRow) = parent
+                .flatMap { poiId -> providerRefsByPoiId[poiId].orEmpty().asSequence().map { row -> poiId to row } }
+                .mapNotNull { (poiId, row) -> parentCandidate(poiId, row) }
+                .firstOrNull() ?: return null
 
-        val provider = reservationProviders.forPoi(parentRow) ?: return null
-        val parentRef = ProviderRefParser.parse(parentRow.providerRefJson) ?: return null
         return ResolvedAvailabilityTarget(
             reservable = reservable,
-            provider = provider,
-            parentRef = parentRef,
-            parentPoiId = parentPoiId,
-            dateContext = dateResolver.context(lat = parentRow.lat, lng = parentRow.lng),
+            provider = parent.provider,
+            parentRef = parent.ref,
+            catalogRef = catalogRefFor(reservable, parent.provider.id),
+            parentPoiId = parent.poiId,
+            dateContext = dateResolver.context(lat = parent.row.lat, lng = parent.row.lng),
         )
     }
+
+    private fun parentCandidate(
+        poiId: Long,
+        row: CampsiteProviderRefRow,
+    ): ParentCandidate? {
+        val ref = ProviderRefParser.parse(row.providerRefJson) ?: return null
+        val provider = availabilityProviders.forPoi(row, ref) ?: return null
+        return ParentCandidate(
+            poiId = poiId,
+            row = row,
+            provider = provider,
+            ref = ref,
+        )
+    }
+
+    private fun catalogRefFor(
+        reservable: Reservable,
+        providerId: AvailabilityProviderId,
+    ): CatalogReservableRef {
+        val fallback = reservable.toCatalogReservableRef()
+        val ref =
+            providerRefs
+                .findCampsiteProviderRefs(reservable.id)
+                .asSequence()
+                .mapNotNull { ProviderRefParser.parse(it.providerRefJson) }
+                .firstOrNull { it.availabilityProviderId() == providerId }
+                ?: return fallback
+        return ref.toCatalogReservableRef(campsiteId = reservable.id, fallback = fallback)
+    }
+
+    private fun ProviderRef.toCatalogReservableRef(
+        campsiteId: Long,
+        fallback: CatalogReservableRef,
+    ): CatalogReservableRef =
+        when (this) {
+            is ProviderRef.RecGov ->
+                CatalogReservableRef(
+                    campsiteId = campsiteId,
+                    vendorId = recgovId,
+                )
+            is ProviderRef.Campflare ->
+                CatalogReservableRef(
+                    campsiteId = campsiteId,
+                    vendorId = campgroundId,
+                )
+            is ProviderRef.Aspira ->
+                fallback.copy(
+                    campsiteId = campsiteId,
+                    mapId = mapId,
+                    resourceLocationId = resourceLocationId,
+                )
+            else -> fallback.copy(campsiteId = campsiteId)
+        }
 }

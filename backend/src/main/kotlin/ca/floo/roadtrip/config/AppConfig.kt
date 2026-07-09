@@ -4,6 +4,7 @@ import java.time.Duration
 
 data class AppConfig(
     val cache: ApiCacheConfig,
+    val campflare: CampflareConfig,
     /** Slack alerting config, or null when unconfigured (alerts disabled). */
     val slack: SlackConfig?,
     /** Grafana host for dashboard deep links in alerts, or null when unset
@@ -17,6 +18,7 @@ data class AppConfig(
         fun fromEnv(env: Map<String, String> = System.getenv()): AppConfig =
             AppConfig(
                 cache = ApiCacheConfig.fromEnv(env),
+                campflare = CampflareConfig.fromEnv(env),
                 slack = SlackConfig.fromEnv(env),
                 grafana = GrafanaConfig.fromEnv(env),
                 webApp = WebAppConfig.fromEnv(env),
@@ -37,6 +39,11 @@ enum class ApiCacheEntity(
     RECGOV_AVAILABILITY(
         namespace = "recgov_availability",
         envKey = "ROADTRIP_CACHE_RECGOV_AVAILABILITY_TTL",
+        defaultTtl = Duration.ofHours(2),
+    ),
+    CAMPFLARE_AVAILABILITY(
+        namespace = "campflare_availability",
+        envKey = "ROADTRIP_CACHE_CAMPFLARE_AVAILABILITY_TTL",
         defaultTtl = Duration.ofHours(2),
     ),
     ASPIRA_AVAILABILITY(
@@ -74,6 +81,31 @@ data class ApiCacheConfig(
                                 key = entity.envKey,
                             )
                         },
+            )
+    }
+}
+
+data class CampflareConfig(
+    val apiKey: String?,
+    val apiBaseUrl: String,
+) {
+    companion object {
+        private const val DEFAULT_API_BASE_URL = "https://api.campflare.com/v2"
+
+        fun fromEnv(env: Map<String, String> = System.getenv()): CampflareConfig =
+            CampflareConfig(
+                apiKey =
+                    env["CAMPFLARE_API_KEY"]
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                        ?: env["CAMPFLARE_TOKEN"]
+                            ?.trim()
+                            ?.takeIf { it.isNotEmpty() },
+                apiBaseUrl =
+                    env["CAMPFLARE_API_BASE"]
+                        ?.trim()
+                        ?.takeIf { it.isNotEmpty() }
+                        ?: DEFAULT_API_BASE_URL,
             )
     }
 }

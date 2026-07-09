@@ -8,6 +8,6 @@ import kotlinx.serialization.Serializable
 data class AvailabilityDayDto(
     val date: String,
     val status: AvailabilityStatus,
-    @SerialName("available_reservable_ids") val availableReservableIds: List<String>? = null,
-    @SerialName("reservable_statuses") val reservableStatuses: Map<String, AvailabilityStatus>? = null,
+    @SerialName("available_campsite_ids") val availableCampsiteIds: List<Long>? = null,
+    @SerialName("campsite_statuses") val campsiteStatuses: Map<Long, AvailabilityStatus>? = null,
 )

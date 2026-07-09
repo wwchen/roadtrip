@@ -8,7 +8,7 @@ import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
-import ca.floo.roadtrip.service.reservation.ReservationProviderId
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -21,7 +21,7 @@ internal class CampsiteAvailabilityComposer(
     private val targets: AvailabilityTargetResolver,
     private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     availability: AvailabilityRepo? = null,
-    private val snapshotFreshnessTtl: (ReservationProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
+    private val snapshotFreshnessTtl: (AvailabilityProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
 ) {
     private val availabilityLoader = AvailabilityLoader(availability)
 
@@ -32,7 +32,7 @@ internal class CampsiteAvailabilityComposer(
     ): List<AvailabilityResponseDto> {
         if (campsites.isEmpty()) return emptyList()
         val resolved = campsites.map { targets.resolve(it) ?: throw AvailabilityServiceError.UnknownCampground }
-        val byRid = linkedMapOf<String, AvailabilityResponseDto>()
+        val byCampsiteId = linkedMapOf<Long, AvailabilityResponseDto>()
         val batcher = CatalogAvailabilityBatcher()
         val results =
             batcher.fetchByGroup(
@@ -68,7 +68,7 @@ internal class CampsiteAvailabilityComposer(
                     ) {
                         provider.catalogAvailability(
                             ref = parentRef,
-                            reservables = rows.map { it.toCatalogReservableRef() },
+                            reservables = rows.map { it.catalogRef },
                             startDate = windows.fetch.startDate,
                             endDate = windows.fetch.endDate,
                         )
@@ -79,56 +79,60 @@ internal class CampsiteAvailabilityComposer(
         results.forEach { result ->
             val batch = result.batch ?: return@forEach
             result.reservables.forEach { campsite ->
-                val rid = campsite.rid.encode()
                 val ref = campsite.providerRefForCampsite(result.parentRef)
-                val metadata = availabilityMetadata(result.provider.id, ref, reservableId = rid)
-                byRid[rid] =
+                val metadata = availabilityMetadata(result.provider.id, ref, campsiteId = campsite.id)
+                byCampsiteId[campsite.id] =
                     availabilityResponseFromObservations(
                         batch.copy(
-                            observations = batch.observations.filter { it.reservableId == rid },
+                            observations = batch.observations.filter { it.campsiteId == campsite.id },
                             campgroundId = metadata.campgroundId ?: batch.campgroundId,
                             host = metadata.host ?: batch.host,
                             mapId = metadata.mapId ?: batch.mapId,
-                            reservableId = rid,
+                            campsiteId = campsite.id,
                         ),
                     )
             }
         }
         return campsites.map { campsite ->
-            byRid[campsite.rid.encode()] ?: throw AvailabilityServiceError.NotFound
+            byCampsiteId[campsite.id] ?: throw AvailabilityServiceError.NotFound
         }
     }
 }
 
-internal fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Duration =
+internal fun defaultSnapshotFreshnessTtl(providerId: AvailabilityProviderId): Duration =
     when (providerId) {
-        ReservationProviderId.RECGOV -> ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl
-        ReservationProviderId.ASPIRA -> ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl
-        ReservationProviderId.RESERVEAMERICA -> ApiCacheEntity.RESERVEAMERICA_AVAILABILITY.defaultTtl
-        ReservationProviderId.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl
+        AvailabilityProviderId.RECGOV -> ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl
+        AvailabilityProviderId.CAMPFLARE -> ApiCacheEntity.CAMPFLARE_AVAILABILITY.defaultTtl
+        AvailabilityProviderId.ASPIRA -> ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl
+        AvailabilityProviderId.RESERVEAMERICA -> ApiCacheEntity.RESERVEAMERICA_AVAILABILITY.defaultTtl
+        AvailabilityProviderId.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl
     }
 
-private fun Reservable.toAvailabilityTarget(): AvailabilityLoader.TargetReservable =
+private fun ResolvedAvailabilityTarget.toAvailabilityTarget(): AvailabilityLoader.TargetReservable =
     AvailabilityLoader.TargetReservable(
-        dbId = id,
-        rid = rid.encode(),
+        dbId = reservable.id,
     )
 
 private fun availabilityMetadata(
-    providerId: ReservationProviderId,
+    providerId: AvailabilityProviderId,
     ref: ProviderRef,
-    reservableId: String? = null,
+    campsiteId: Long? = null,
 ): AvailabilityLoader.Metadata =
     AvailabilityLoader.Metadata(
         provider = providerId.name.lowercase(),
-        campgroundId = (ref as? ProviderRef.RecGov)?.recgovId,
+        campgroundId =
+            when (ref) {
+                is ProviderRef.RecGov -> ref.recgovId
+                is ProviderRef.Campflare -> ref.campgroundId
+                else -> null
+            },
         mapId =
             when (ref) {
                 is ProviderRef.Aspira -> ref.mapId.toString()
                 is ProviderRef.ReserveCalifornia -> ref.facilityIds.joinToString(",")
                 else -> null
             },
-        reservableId = reservableId,
+        campsiteId = campsiteId,
     )
 
 private fun Reservable.providerRefForCampsite(parentRef: ProviderRef): ProviderRef =

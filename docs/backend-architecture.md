@@ -48,13 +48,13 @@ ca.floo.roadtrip
 ├── service/
 │   ├── api/
 │   ├── availability/
+│   │   └── provider/
+│   │       └── adapters/<vendor>/
 │   ├── etl/
 │   │   ├── framework/
 │   │   └── vendors/<vendor>/
 │   ├── notification/
 │   ├── ratelimit/
-│   ├── reservation/
-│   │   └── adapters/<vendor>/
 │   ├── routing/
 │   └── scheduler/
 └── routes/
@@ -63,7 +63,7 @@ ca.floo.roadtrip
 Prefer these generic forms in docs and reviews:
 
 - `clients/<vendor-or-api>/*Client.kt` for outbound HTTP clients.
-- `service/reservation/adapters/<vendor>/*` for reservation-provider adapters.
+- `service/availability/provider/adapters/<vendor>/*` for availability-provider adapters.
 - `service/etl/vendors/<vendor>/*Etl.kt` for ETL transforms.
 - `models/<area>/*Dto.kt` for API and upstream wire shapes.
 - `repo/*Repo.kt` for persistence boundaries.
@@ -121,7 +121,7 @@ polling must resolve the same provider targets.
 routes
   -> service.availability
   -> target resolver
-  -> service.reservation provider port
+  -> service.availability.provider
   -> provider adapter
   -> provider-neutral availability observations
   -> API DTO mapper
@@ -129,7 +129,7 @@ routes
 
 Route code never parses provider references and never calls vendor adapters
 directly. Provider-specific richness stays inside the adapter or in explicit
-extension points owned by the reservation-provider layer.
+extension points owned by the availability-provider layer.
 
 ## ETL Flow
 
@@ -154,9 +154,9 @@ When adding a new upstream API call, put the transport client under
 `clients/<vendor-or-api>/`. Convert upstream-specific responses into domain
 or provider-neutral models at the adapter/service boundary.
 
-When adding a new reservation provider, add an adapter under
-`service/reservation/adapters/<vendor>/` and wire it through the provider
-registry. No route should branch on that vendor.
+When adding a new availability provider, add an adapter under
+`service/availability/provider/adapters/<vendor>/` and wire it through the
+provider registry. No route should branch on that vendor.
 
 When adding an ETL source, add transform code under
 `service/etl/vendors/<vendor>/` and pure DTOs under `models/` when they are

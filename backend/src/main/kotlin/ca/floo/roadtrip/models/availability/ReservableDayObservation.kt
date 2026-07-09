@@ -4,7 +4,7 @@ import java.time.Instant
 import java.time.LocalDate
 
 data class ReservableDayObservation(
-    val reservableId: String,
+    val campsiteId: Long?,
     val date: LocalDate,
     val observedAt: Instant,
     val status: AvailabilityStatus,

@@ -11,7 +11,7 @@ data class AvailabilityResponseDto(
     @SerialName("campground_id") val campgroundId: String? = null,
     val host: String? = null,
     @SerialName("map_id") val mapId: String? = null,
-    @SerialName("reservable_id") val reservableId: String? = null,
+    @SerialName("campsite_id") val campsiteId: Long? = null,
     @SerialName("checked_at") val checkedAt: String,
     @SerialName("start_date") val startDate: String,
     @SerialName("end_date") val endDate: String,

@@ -2810,7 +2810,7 @@
       "type": "row"
     },
     {
-      "collapsed": true,
+      "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -2818,522 +2818,533 @@
         "y": 19
       },
       "id": 41,
-      "panels": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "fixedColor": "#ad46ff",
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "failed runs",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "green",
-                          "value": 0
-                        },
-                        {
-                          "color": "red",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "stuck runs",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "green",
-                          "value": 0
-                        },
-                        {
-                          "color": "red",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 24,
-            "x": 0,
-            "y": 20
-          },
-          "id": 3,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "postgres",
-                "uid": "roadtrip-postgres"
-              },
-              "editorMode": "code",
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "SELECT\n(\n  SELECT count(DISTINCT target)\n  FROM ingest_runs\n  WHERE phase_kind = 'target'\n    AND $__timeFilter(started_at)\n) AS targets,\n\n(\n  SELECT count(*)\n  FROM ingest_runs\n  WHERE phase_kind = 'target'\n    AND status = 'completed'\n    AND $__timeFilter(started_at)\n) AS \"completed runs\",\n\n(\n  SELECT count(*)\n  FROM ingest_runs\n  WHERE phase_kind = 'target'\n    AND status IN ('failed', 'aborted')\n    AND $__timeFilter(started_at)\n) AS \"failed runs\",\n\n(\n  SELECT count(*)\n  FROM ingest_runs\n  WHERE phase_kind = 'target'\n    AND status = 'started'\n    AND $__timeFilter(started_at)\n) AS \"stuck runs\",\n\n(\n  SELECT max(completed_at)\n  FROM ingest_runs\n  WHERE phase_kind = 'target'\n    AND status = 'completed'\n) AS \"Last Completed\";",
-              "refId": "A",
-              "sql": {
-                "columns": [
-                  {
-                    "parameters": [],
-                    "type": "function"
-                  }
-                ],
-                "groupBy": [
-                  {
-                    "property": {
-                      "type": "string"
-                    },
-                    "type": "groupBy"
-                  }
-                ],
-                "limit": 50
-              }
-            }
-          ],
-          "title": "Ingest health",
-          "type": "stat"
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "auto",
-                "cellOptions": {
-                  "type": "auto"
-                },
-                "filterable": true,
-                "footer": {
-                  "reducers": []
-                },
-                "inspect": false
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "status"
-                },
-                "properties": [
-                  {
-                    "id": "mappings",
-                    "value": [
-                      {
-                        "options": {
-                          "aborted": {
-                            "color": "red",
-                            "index": 4
-                          },
-                          "active": {
-                            "color": "green",
-                            "index": 2
-                          },
-                          "blocked": {
-                            "color": "red",
-                            "index": 5
-                          },
-                          "completed": {
-                            "color": "green",
-                            "index": 0
-                          },
-                          "done": {
-                            "color": "blue",
-                            "index": 9
-                          },
-                          "failed": {
-                            "color": "red",
-                            "index": 3
-                          },
-                          "noop": {
-                            "color": "text",
-                            "index": 10
-                          },
-                          "ok": {
-                            "color": "green",
-                            "index": 1
-                          },
-                          "paused": {
-                            "color": "yellow",
-                            "index": 7
-                          },
-                          "rate_limited": {
-                            "color": "yellow",
-                            "index": 8
-                          },
-                          "started": {
-                            "color": "yellow",
-                            "index": 6
-                          }
-                        },
-                        "type": "value"
-                      }
-                    ]
-                  },
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "color-text"
-                    }
-                  },
-                  {
-                    "id": "custom.width",
-                    "value": 520
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "target"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 393
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byRegexp",
-                  "options": "/(duration|age)/",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "ms"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byRegexp",
-                  "options": "/(_at|age)/",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "dateTimeFromNow"
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 9,
-            "w": 24,
-            "x": 0,
-            "y": 24
-          },
-          "id": 4,
-          "options": {
-            "cellHeight": "sm",
-            "showHeader": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "postgres",
-                "uid": "roadtrip-postgres"
-              },
-              "editorMode": "code",
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "WITH ranked AS (\n  SELECT ir.*, row_number() OVER (\n    PARTITION BY ir.target, ir.phase\n    ORDER BY ir.started_at DESC, ir.id DESC) AS rn\n  FROM ingest_runs ir\n  WHERE ir.phase_kind = 'import'\n)\nSELECT target, --phase AS run_kind,\n       started_at as age, -- completed_at,\n       extract(epoch FROM completed_at - started_at) * 1000 AS duration,\n       (counts::jsonb ->> 'seen')::int AS count,\n       notes,\n       status\nFROM ranked WHERE rn = 1\nORDER BY started_at DESC;",
-              "refId": "A",
-              "sql": {
-                "columns": [
-                  {
-                    "parameters": [],
-                    "type": "function"
-                  }
-                ],
-                "groupBy": [
-                  {
-                    "property": {
-                      "type": "string"
-                    },
-                    "type": "groupBy"
-                  }
-                ],
-                "limit": 50
-              }
-            }
-          ],
-          "title": "Latest fetch / import by target",
-          "type": "table"
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "auto",
-                "cellOptions": {
-                  "type": "auto"
-                },
-                "filterable": true,
-                "footer": {
-                  "reducers": []
-                },
-                "inspect": false
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "status"
-                },
-                "properties": [
-                  {
-                    "id": "mappings",
-                    "value": [
-                      {
-                        "options": {
-                          "aborted": {
-                            "color": "red",
-                            "index": 4
-                          },
-                          "active": {
-                            "color": "green",
-                            "index": 2
-                          },
-                          "blocked": {
-                            "color": "red",
-                            "index": 5
-                          },
-                          "completed": {
-                            "color": "green",
-                            "index": 0
-                          },
-                          "done": {
-                            "color": "blue",
-                            "index": 9
-                          },
-                          "failed": {
-                            "color": "red",
-                            "index": 3
-                          },
-                          "noop": {
-                            "color": "text",
-                            "index": 10
-                          },
-                          "ok": {
-                            "color": "green",
-                            "index": 1
-                          },
-                          "paused": {
-                            "color": "yellow",
-                            "index": 7
-                          },
-                          "rate_limited": {
-                            "color": "yellow",
-                            "index": 8
-                          },
-                          "started": {
-                            "color": "yellow",
-                            "index": 6
-                          }
-                        },
-                        "type": "value"
-                      }
-                    ]
-                  },
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "color-text"
-                    }
-                  },
-                  {
-                    "id": "custom.width",
-                    "value": 520
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "target"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 393
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byRegexp",
-                  "options": "/(duration|age)/",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "ms"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byRegexp",
-                  "options": "/(_at|age)/",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "dateTimeFromNow"
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 24,
-            "x": 0,
-            "y": 33
-          },
-          "id": 20,
-          "options": {
-            "cellHeight": "sm",
-            "showHeader": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "postgres",
-                "uid": "roadtrip-postgres"
-              },
-              "editorMode": "code",
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "SELECT\n  child.id,\n  child.parent_run_id,\n  parent.target,\n  parent.phase AS run_kind,\n  child.phase,\n  child.phase_kind,\n  child.status,\n  child.started_at,\n  child.completed_at,\n  EXTRACT(EPOCH FROM (COALESCE(child.completed_at, now()) - child.started_at)) * 1000 AS duration,\n  child.exit_code,\n  child.counts,\n  child.notes\nFROM ingest_runs child\nLEFT JOIN ingest_runs parent ON parent.id = child.parent_run_id\nWHERE $__timeFilter(child.started_at)\n  AND child.phase_kind <> 'target'\n  AND (\n    child.status IN ('failed', 'aborted')\n    OR (child.status = 'started' AND child.started_at < now() - interval '30 minutes')\n  )\nORDER BY child.started_at DESC, child.id DESC\nLIMIT 300;",
-              "refId": "A",
-              "sql": {
-                "columns": [
-                  {
-                    "parameters": [],
-                    "type": "function"
-                  }
-                ],
-                "groupBy": [
-                  {
-                    "property": {
-                      "type": "string"
-                    },
-                    "type": "groupBy"
-                  }
-                ],
-                "limit": 50
-              }
-            }
-          ],
-          "title": "Failed or stuck ingest phases",
-          "type": "table"
-        }
-      ],
       "title": "⑤ Data ingest (ETL) — when & what was fetched",
       "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "#ad46ff",
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failed runs",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "stuck runs",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": 0
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n(\n  SELECT count(DISTINCT target)\n  FROM ingest_runs\n  WHERE phase_kind = 'target'\n    AND $__timeFilter(started_at)\n) AS targets,\n\n(\n  SELECT count(*)\n  FROM ingest_runs\n  WHERE phase_kind = 'target'\n    AND status = 'completed'\n    AND $__timeFilter(started_at)\n) AS \"completed runs\",\n\n(\n  SELECT count(*)\n  FROM ingest_runs\n  WHERE phase_kind = 'target'\n    AND status IN ('failed', 'aborted')\n    AND $__timeFilter(started_at)\n) AS \"failed runs\",\n\n(\n  SELECT count(*)\n  FROM ingest_runs\n  WHERE phase_kind = 'target'\n    AND status = 'started'\n    AND $__timeFilter(started_at)\n) AS \"stuck runs\",\n\n(\n  SELECT max(completed_at)\n  FROM ingest_runs\n  WHERE phase_kind = 'target'\n    AND status = 'completed'\n) AS \"Last Completed\";",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Ingest health",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "aborted": {
+                        "color": "red",
+                        "index": 4
+                      },
+                      "active": {
+                        "color": "green",
+                        "index": 2
+                      },
+                      "blocked": {
+                        "color": "red",
+                        "index": 5
+                      },
+                      "completed": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "done": {
+                        "color": "blue",
+                        "index": 9
+                      },
+                      "failed": {
+                        "color": "red",
+                        "index": 3
+                      },
+                      "noop": {
+                        "color": "text",
+                        "index": 10
+                      },
+                      "ok": {
+                        "color": "green",
+                        "index": 1
+                      },
+                      "paused": {
+                        "color": "yellow",
+                        "index": 7
+                      },
+                      "rate_limited": {
+                        "color": "yellow",
+                        "index": 8
+                      },
+                      "started": {
+                        "color": "yellow",
+                        "index": 6
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 520
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "target"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 393
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/(duration|age)/",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/(_at|age)/",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "notes",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.inspect",
+                "value": true
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "id": 4,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH ranked AS (\n  SELECT ir.*, row_number() OVER (\n    PARTITION BY ir.target, ir.phase\n    ORDER BY ir.started_at DESC, ir.id DESC) AS rn\n  FROM ingest_runs ir\n  WHERE ir.phase_kind = 'import'\n)\nSELECT target, --phase AS run_kind,\n       started_at as age, -- completed_at,\n       extract(epoch FROM completed_at - started_at) * 1000 AS duration,\n       (counts::jsonb ->> 'seen')::int AS count,\n       notes,\n       status\nFROM ranked WHERE rn = 1\nORDER BY started_at DESC;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Latest fetch / import by target",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "aborted": {
+                        "color": "red",
+                        "index": 4
+                      },
+                      "active": {
+                        "color": "green",
+                        "index": 2
+                      },
+                      "blocked": {
+                        "color": "red",
+                        "index": 5
+                      },
+                      "completed": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "done": {
+                        "color": "blue",
+                        "index": 9
+                      },
+                      "failed": {
+                        "color": "red",
+                        "index": 3
+                      },
+                      "noop": {
+                        "color": "text",
+                        "index": 10
+                      },
+                      "ok": {
+                        "color": "green",
+                        "index": 1
+                      },
+                      "paused": {
+                        "color": "yellow",
+                        "index": 7
+                      },
+                      "rate_limited": {
+                        "color": "yellow",
+                        "index": 8
+                      },
+                      "started": {
+                        "color": "yellow",
+                        "index": 6
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 520
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "target"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 393
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/(duration|age)/",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/(_at|age)/",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "id": 20,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  child.id,\n  child.parent_run_id,\n  parent.target,\n  parent.phase AS run_kind,\n  child.phase,\n  child.phase_kind,\n  child.status,\n  child.started_at,\n  child.completed_at,\n  EXTRACT(EPOCH FROM (COALESCE(child.completed_at, now()) - child.started_at)) * 1000 AS duration,\n  child.exit_code,\n  child.counts,\n  child.notes\nFROM ingest_runs child\nLEFT JOIN ingest_runs parent ON parent.id = child.parent_run_id\nWHERE $__timeFilter(child.started_at)\n  AND child.phase_kind <> 'target'\n  AND (\n    child.status IN ('failed', 'aborted')\n    OR (child.status = 'started' AND child.started_at < now() - interval '30 minutes')\n  )\nORDER BY child.started_at DESC, child.id DESC\nLIMIT 300;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Failed or stuck ingest phases",
+      "type": "table"
     },
     {
       "collapsed": true,
@@ -3341,7 +3352,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 20
+        "y": 41
       },
       "id": 42,
       "panels": [
@@ -3546,7 +3557,7 @@
             "h": 12,
             "w": 24,
             "x": 0,
-            "y": 21
+            "y": 42
           },
           "id": 14,
           "options": {

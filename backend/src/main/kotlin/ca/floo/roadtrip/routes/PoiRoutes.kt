@@ -17,7 +17,7 @@ import ca.floo.roadtrip.repo.PoiRow
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.service.api.PoiCta
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
-import ca.floo.roadtrip.service.reservation.ProviderRefParser
+import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType

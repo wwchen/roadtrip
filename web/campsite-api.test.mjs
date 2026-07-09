@@ -38,7 +38,7 @@ test('fetchPoiCampsites returns canonical campsite catalog rows', async () => {
     calls.push({ url, options });
     return {
       ok: true,
-      json: async () => ({ poi_id: 42, campsites: [{ id: 1, rid: 'site:recgov:100' }] }),
+      json: async () => ({ poi_id: 42, campsites: [{ id: 1, vendor: 'recgov', vendor_id: '100' }] }),
     };
   };
 
@@ -50,5 +50,5 @@ test('fetchPoiCampsites returns canonical campsite catalog rows', async () => {
   }
 
   assert.equal(calls[0].url, '/api/pois/42/campsites');
-  assert.deepEqual(json.campsites, [{ id: 1, rid: 'site:recgov:100' }]);
+  assert.deepEqual(json.campsites, [{ id: 1, vendor: 'recgov', vendor_id: '100' }]);
 });

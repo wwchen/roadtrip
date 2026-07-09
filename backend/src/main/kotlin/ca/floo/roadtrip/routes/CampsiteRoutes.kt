@@ -16,8 +16,8 @@ import ca.floo.roadtrip.service.availability.CampsiteAvailabilityComposer
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.CampsiteCatalogService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
-import ca.floo.roadtrip.service.reservation.ReservationProviderError
-import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -36,7 +36,7 @@ private const val IP_RATE_LIMIT_PER_MINUTE = 30
 
 internal fun Route.campsiteRoutes(
     ctx: DSLContext,
-    reservationProviders: ReservationProviderRegistry,
+    availabilityProviders: AvailabilityProviderRegistry,
     dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
 ) {
     val campsitesRepo = CampsiteRepo(ctx)
@@ -45,7 +45,7 @@ internal fun Route.campsiteRoutes(
         DbAvailabilityTargetResolver(
             providerRefs = providerRefs,
             campsitesRepo = campsitesRepo,
-            reservationProviders = reservationProviders,
+            availabilityProviders = availabilityProviders,
             dateResolver = dateResolver,
         )
     val catalogService = CampsiteCatalogService(providerRefs, campsitesRepo)
@@ -170,7 +170,7 @@ internal fun Route.campsiteRoutes(
             )
         } catch (e: AvailabilityServiceError) {
             call.respondServiceAvailabilityError(e)
-        } catch (e: ReservationProviderError) {
+        } catch (e: AvailabilityProviderError) {
             val (status, error) = mapProviderError(e)
             log.info("poi campsites availability poi={} failed: {}", poiId, e.message)
             call.respondAvailabilityJson(error, status)
@@ -211,23 +211,23 @@ private class IpRateLimiter(
     }
 }
 
-internal fun mapProviderError(e: ReservationProviderError): Pair<HttpStatusCode, AvailabilityErrorDto> {
+internal fun mapProviderError(e: AvailabilityProviderError): Pair<HttpStatusCode, AvailabilityErrorDto> {
     val upstream = upstreamHttpStatus(e)
     return when (e) {
-        is ReservationProviderError.RateLimited ->
+        is AvailabilityProviderError.RateLimited ->
             HttpStatusCode.ServiceUnavailable to availabilityErrorDto("rate_limited", upstreamStatus = upstream)
-        is ReservationProviderError.UpstreamBlocked ->
+        is AvailabilityProviderError.UpstreamBlocked ->
             HttpStatusCode.ServiceUnavailable to availabilityErrorDto("upstream_blocked", upstreamStatus = upstream)
-        is ReservationProviderError.UpstreamUnavailable ->
+        is AvailabilityProviderError.UpstreamUnavailable ->
             HttpStatusCode.ServiceUnavailable to availabilityErrorDto("upstream_5xx", upstreamStatus = upstream)
-        is ReservationProviderError.Unsupported ->
+        is AvailabilityProviderError.Unsupported ->
             HttpStatusCode.NotImplemented to availabilityErrorDto("unsupported")
-        is ReservationProviderError.WrongRefType ->
+        is AvailabilityProviderError.WrongRefType ->
             HttpStatusCode.InternalServerError to availabilityErrorDto("provider_misconfigured")
     }
 }
 
-internal fun upstreamHttpStatus(e: ReservationProviderError): Int? {
+internal fun upstreamHttpStatus(e: AvailabilityProviderError): Int? {
     var t: Throwable? = e.cause
     while (t != null) {
         if (t is AspiraException) return t.httpStatus
