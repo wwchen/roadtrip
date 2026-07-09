@@ -58,7 +58,7 @@ interface AvailabilityProvider : AvailabilityClient {
      */
     override suspend fun catalogAvailability(
         ref: ProviderRef,
-        reservables: List<CatalogReservableRef>,
+        campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch = availability(ref, startDate, endDate)
@@ -113,7 +113,7 @@ interface AvailabilityProvider : AvailabilityClient {
     ): String? = bookingUrlTemplate(campsite, parentRef)?.let { BookingUrlTemplate.fill(it, date, date.plusDays(1)) }
 }
 
-data class CatalogReservableRef(
+data class CatalogCampsiteRef(
     val campsiteId: Long,
     val vendorId: String,
     val mapId: Long? = null,

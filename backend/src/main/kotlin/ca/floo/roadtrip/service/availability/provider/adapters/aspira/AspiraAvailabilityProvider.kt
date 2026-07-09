@@ -10,7 +10,7 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
+import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -73,22 +73,22 @@ class AspiraAvailabilityProvider(
                 mapId = mapId,
                 startDate = startDate,
                 endDate = endDate,
-                reservableVendor = tenant.vendorCode,
+                campsiteVendor = tenant.vendorCode,
             )
         }
     }
 
     override suspend fun catalogAvailability(
         ref: ProviderRef,
-        reservables: List<CatalogReservableRef>,
+        campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
         val aspiraRef = aspiraRefOrThrow(ref)
         val parentMapId = mapIdOrThrow(aspiraRef.mapId)
         val targets =
-            reservables.map {
-                AspiraCatalogReservable(
+            campsites.map {
+                AspiraCatalogCampsite(
                     campsiteId = it.campsiteId,
                     resourceId = it.vendorId,
                     mapId = it.mapId?.let(::mapIdOrThrow),
@@ -105,7 +105,7 @@ class AspiraAvailabilityProvider(
                     host = tenant.host,
                     parentMapId = parentMapId,
                     resourceLocationId = resourceLocationId,
-                    reservables = targets,
+                    campsites = targets,
                     today = startDate,
                     days = ChronoUnit.DAYS.between(startDate, endDate).toInt(),
                 )
@@ -114,7 +114,7 @@ class AspiraAvailabilityProvider(
                     client = client,
                     host = tenant.host,
                     parentMapId = parentMapId,
-                    reservables = targets,
+                    campsites = targets,
                     startDate = startDate,
                     endDate = endDate,
                 )
@@ -144,7 +144,7 @@ class AspiraAvailabilityProvider(
                 host = tenant.host,
                 mapId = mapId,
                 resourceId = vendorId,
-                reservableVendor = tenant.vendorCode,
+                campsiteVendor = tenant.vendorCode,
                 startDate = startDate,
                 endDate = endDate,
             )

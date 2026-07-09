@@ -3,8 +3,8 @@ package ca.floo.roadtrip.service.api
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.CampsiteDayObservation
 import ca.floo.roadtrip.models.availability.DayClassification
-import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.boolean
@@ -83,31 +83,31 @@ class AvailabilityResponseTest {
                     endDate = LocalDate.parse("2026-06-12"),
                     observations =
                         listOf(
-                            ReservableDayObservation(
+                            CampsiteDayObservation(
                                 campsiteId = 100,
                                 date = LocalDate.parse("2026-06-10"),
                                 observedAt = olderObservedAt,
                                 status = AvailabilityStatus.RESERVED,
                             ),
-                            ReservableDayObservation(
+                            CampsiteDayObservation(
                                 campsiteId = 100,
                                 date = LocalDate.parse("2026-06-10"),
                                 observedAt = observedAt,
                                 status = AvailabilityStatus.AVAILABLE,
                             ),
-                            ReservableDayObservation(
+                            CampsiteDayObservation(
                                 campsiteId = 200,
                                 date = LocalDate.parse("2026-06-10"),
                                 observedAt = observedAt,
                                 status = AvailabilityStatus.RESERVED,
                             ),
-                            ReservableDayObservation(
+                            CampsiteDayObservation(
                                 campsiteId = 100,
                                 date = LocalDate.parse("2026-06-11"),
                                 observedAt = observedAt,
                                 status = AvailabilityStatus.RESERVED,
                             ),
-                            ReservableDayObservation(
+                            CampsiteDayObservation(
                                 campsiteId = 200,
                                 date = LocalDate.parse("2026-06-11"),
                                 observedAt = observedAt,
@@ -139,7 +139,7 @@ class AvailabilityResponseTest {
                     endDate = LocalDate.parse("2026-06-12"),
                     observations =
                         listOf(
-                            ReservableDayObservation(
+                            CampsiteDayObservation(
                                 campsiteId = 100,
                                 date = LocalDate.parse("2026-06-10"),
                                 observedAt = observedAt,

@@ -74,7 +74,7 @@ class AvailabilityClientContractTest {
             val catalog =
                 client.catalogAvailability(
                     ref = ProviderRef.RecGov("232447"),
-                    reservables = emptyList(),
+                    campsites = emptyList(),
                     startDate = startDate,
                     endDate = endDate,
                 )

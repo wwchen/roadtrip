@@ -8,7 +8,7 @@ import ca.floo.roadtrip.service.etl.framework.DEFAULT_CAMPSITE_KIND
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
-import ca.floo.roadtrip.service.etl.framework.reservableTagKey
+import ca.floo.roadtrip.service.etl.framework.campsiteTagKey
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -137,7 +137,7 @@ class RecGovCampsitesEtl(
             for (rawAttribute in attributes) {
                 val attr = rawAttribute as? JsonObject ?: continue
                 val name = attr["attribute_name"]?.jsonPrimitive?.contentOrNull ?: continue
-                val key = reservableTagKey(name)
+                val key = campsiteTagKey(name)
                 if (key.isEmpty()) continue
                 val value = attr["attribute_value"]?.jsonPrimitive?.contentOrNull ?: continue
                 put(key, value)

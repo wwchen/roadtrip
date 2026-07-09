@@ -9,7 +9,7 @@ import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
-import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
+import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -25,7 +25,7 @@ internal data class GroupFetchResult(
     val provider: AvailabilityProvider,
     val parentRef: ProviderRef,
     val dateContext: PoiDateContext,
-    val reservables: List<Campsite>,
+    val campsites: List<Campsite>,
     val window: ResolvedDateWindow?,
     val batch: AvailabilityObservationBatch?,
     val outcome: FetchOutcome,
@@ -34,8 +34,8 @@ internal data class GroupFetchResult(
     val providerError: AvailabilityProviderError? = null,
 )
 
-internal fun Campsite.toCatalogReservableRef(): CatalogReservableRef =
-    CatalogReservableRef(
+internal fun Campsite.toCatalogCampsiteRef(): CatalogCampsiteRef =
+    CatalogCampsiteRef(
         campsiteId = id,
         vendorId = vendorId,
         mapId = aspiraProviderRefLong("mapId"),
@@ -95,14 +95,14 @@ internal class CatalogAvailabilityBatcher {
         targets
             .groupBy { GroupKey(it.provider, it.parentRef, it.dateContext) }
             .map { (key, groupTargets) ->
-                val reservables = groupTargets.map { it.campsite }
+                val campsites = groupTargets.map { it.campsite }
                 val windows = windowFor(key.dateContext, key.provider.capabilities)
                 if (windows == null) {
                     return@map GroupFetchResult(
                         provider = key.provider,
                         parentRef = key.parentRef,
                         dateContext = key.dateContext,
-                        reservables = reservables,
+                        campsites = campsites,
                         window = null,
                         batch = null,
                         outcome = FetchOutcome.OK,
@@ -117,7 +117,7 @@ internal class CatalogAvailabilityBatcher {
                         provider = key.provider,
                         parentRef = key.parentRef,
                         dateContext = key.dateContext,
-                        reservables = reservables,
+                        campsites = campsites,
                         window = windows.fetch,
                         batch = batch,
                         outcome = FetchOutcome.OK,
@@ -129,7 +129,7 @@ internal class CatalogAvailabilityBatcher {
                         provider = key.provider,
                         parentRef = key.parentRef,
                         dateContext = key.dateContext,
-                        reservables = reservables,
+                        campsites = campsites,
                         window = windows.fetch,
                         batch = null,
                         outcome = e.toFetchOutcome(),

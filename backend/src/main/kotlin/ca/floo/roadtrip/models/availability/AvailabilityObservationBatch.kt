@@ -6,7 +6,7 @@ data class AvailabilityObservationBatch(
     val provider: String,
     val startDate: LocalDate,
     val endDate: LocalDate,
-    val observations: List<ReservableDayObservation>,
+    val observations: List<CampsiteDayObservation>,
     val cacheBlock: AvailabilityCacheBlock,
     val seasonBlock: AvailabilitySeasonBlock? = null,
     val campgroundId: String? = null,

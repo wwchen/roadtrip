@@ -7,9 +7,9 @@ import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
-import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.models.availability.CampsiteDayObservation
 import ca.floo.roadtrip.service.api.availabilityErrorDto
-import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
+import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -93,7 +93,7 @@ internal suspend fun fetchRecgovAvailabilityObservations(
 internal suspend fun fetchRecgovCatalogObservations(
     client: RecGovAvailabilityClient,
     recgovId: String,
-    reservables: List<CatalogReservableRef>,
+    campsites: List<CatalogCampsiteRef>,
     startDate: LocalDate,
     endDate: LocalDate,
 ): AvailabilityObservationBatch =
@@ -107,9 +107,9 @@ internal suspend fun fetchRecgovCatalogObservations(
                 .awaitAll()
 
         val merged = mergeCampsites(payloads)
-        val campsiteIds = reservables.map { it.vendorId }.toSet()
+        val campsiteIds = campsites.map { it.vendorId }.toSet()
         val catalogSites = campsiteIds.associateWith { siteId -> merged[siteId].orEmpty() }
-        val campsiteIdsBySiteId = reservables.associate { it.vendorId to it.campsiteId }
+        val campsiteIdsBySiteId = campsites.associate { it.vendorId to it.campsiteId }
         val observedAtByDate = dates.associateWith { observedAt }
 
         AvailabilityObservationBatch(
@@ -186,10 +186,10 @@ private fun observationsFromCampsites(
     dates: List<LocalDate>,
     observedAtByDate: Map<LocalDate, Instant>,
     campsiteIdsBySiteId: Map<String, Long> = emptyMap(),
-): List<ReservableDayObservation> =
+): List<CampsiteDayObservation> =
     merged.flatMap { (siteId, byDate) ->
         dates.map { date ->
-            ReservableDayObservation(
+            CampsiteDayObservation(
                 campsiteId = campsiteIdsBySiteId[siteId],
                 date = date,
                 observedAt = observedAtByDate[date] ?: Instant.EPOCH,

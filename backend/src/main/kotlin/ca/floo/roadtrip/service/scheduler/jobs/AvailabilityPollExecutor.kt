@@ -176,7 +176,7 @@ internal class AvailabilityPollExecutor(
                         fetch = { parentRef, provider, rows, windows ->
                             provider.catalogAvailability(
                                 ref = parentRef,
-                                reservables = rows.map { it.catalogRef },
+                                campsites = rows.map { it.catalogRef },
                                 startDate = windows.fetch.startDate,
                                 endDate = windows.fetch.endDate,
                             )
@@ -189,7 +189,7 @@ internal class AvailabilityPollExecutor(
                 // their terminal 'past' state here (belt-and-suspenders alongside PR1's
                 // window-clamp retirement, which stops polling but does not flip the cell).
                 val observedCampsiteIds =
-                    results.flatMap { r -> r.reservables.map { it.id } }.distinct()
+                    results.flatMap { r -> r.campsites.map { it.id } }.distinct()
                 availability.markElapsedAsPast(observedCampsiteIds, LocalDate.now(ZoneOffset.UTC))
                 recordFetchCalls(results, runId)
                 val completedAt = OffsetDateTime.now()
@@ -242,7 +242,7 @@ internal class AvailabilityPollExecutor(
         runId: Long,
     ): List<CellTransition> {
         val batch = result.batch ?: return emptyList()
-        val campsiteIds = result.reservables.mapTo(mutableSetOf()) { it.id }
+        val campsiteIds = result.campsites.mapTo(mutableSetOf()) { it.id }
         val observations =
             batch.observations.mapNotNull { obs ->
                 val dbId = obs.campsiteId?.takeIf { it in campsiteIds } ?: return@mapNotNull null
@@ -272,7 +272,7 @@ internal class AvailabilityPollExecutor(
                     runId = runId,
                     provider = providerId.lowercase(),
                     parentRef = parentRefKey(r.parentRef),
-                    campsiteCount = r.reservables.size,
+                    campsiteCount = r.campsites.size,
                     windowStart = r.window!!.startDate,
                     windowEnd = r.window.endDate,
                     outcome = r.outcome.name.lowercase(),

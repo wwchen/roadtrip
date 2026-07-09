@@ -7,8 +7,8 @@ import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.CampsiteDayObservation
 import ca.floo.roadtrip.models.availability.DayClassification
-import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -40,7 +40,7 @@ inline fun <reified T> encodeAvailabilityJson(value: T): String = availabilityRe
 fun dayClassificationsFromObservations(
     startDate: LocalDate,
     endDate: LocalDate,
-    observations: List<ReservableDayObservation>,
+    observations: List<CampsiteDayObservation>,
 ): List<DayClassification> {
     val byDate =
         observations
@@ -50,7 +50,7 @@ fun dayClassificationsFromObservations(
     val days = ChronoUnit.DAYS.between(startDate, endDate).toInt()
     return (0 until days).map { offset ->
         val date = startDate.plusDays(offset.toLong())
-        val latestByCampsite = linkedMapOf<Long, ReservableDayObservation>()
+        val latestByCampsite = linkedMapOf<Long, CampsiteDayObservation>()
         for (observation in byDate[date].orEmpty()) {
             val campsiteId = observation.campsiteId ?: continue
             val current = latestByCampsite[campsiteId]

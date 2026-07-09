@@ -9,7 +9,7 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
+import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import java.time.LocalDate
 
 /**
@@ -51,11 +51,11 @@ class RecGovAvailabilityProvider(
 
     override suspend fun catalogAvailability(
         ref: ProviderRef,
-        reservables: List<CatalogReservableRef>,
+        campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        if (reservables.isEmpty()) {
+        if (campsites.isEmpty()) {
             return availability(ref, startDate, endDate)
         }
         val recgovId = recgovIdOrThrow(ref)
@@ -63,7 +63,7 @@ class RecGovAvailabilityProvider(
             fetchRecgovCatalogObservations(
                 client = client,
                 recgovId = recgovId,
-                reservables = reservables,
+                campsites = campsites,
                 startDate = startDate,
                 endDate = endDate,
             )

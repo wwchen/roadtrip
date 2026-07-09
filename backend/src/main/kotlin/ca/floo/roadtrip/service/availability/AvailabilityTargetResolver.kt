@@ -8,7 +8,7 @@ import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
-import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
+import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
 import ca.floo.roadtrip.service.availability.provider.availabilityProviderId
 
@@ -76,8 +76,8 @@ internal class DbAvailabilityTargetResolver(
     private fun catalogRefFor(
         campsite: Campsite,
         providerId: AvailabilityProviderId,
-    ): CatalogReservableRef {
-        val fallback = campsite.toCatalogReservableRef()
+    ): CatalogCampsiteRef {
+        val fallback = campsite.toCatalogCampsiteRef()
         val ref =
             providerRefs
                 .findCampsiteProviderRefs(campsite.id)
@@ -85,21 +85,21 @@ internal class DbAvailabilityTargetResolver(
                 .mapNotNull { ProviderRefParser.parse(it.providerRefJson) }
                 .firstOrNull { it.availabilityProviderId() == providerId }
                 ?: return fallback
-        return ref.toCatalogReservableRef(campsiteId = campsite.id, fallback = fallback)
+        return ref.toCatalogCampsiteRef(campsiteId = campsite.id, fallback = fallback)
     }
 
-    private fun ProviderRef.toCatalogReservableRef(
+    private fun ProviderRef.toCatalogCampsiteRef(
         campsiteId: Long,
-        fallback: CatalogReservableRef,
-    ): CatalogReservableRef =
+        fallback: CatalogCampsiteRef,
+    ): CatalogCampsiteRef =
         when (this) {
             is ProviderRef.RecGov ->
-                CatalogReservableRef(
+                CatalogCampsiteRef(
                     campsiteId = campsiteId,
                     vendorId = recgovId,
                 )
             is ProviderRef.Campflare ->
-                CatalogReservableRef(
+                CatalogCampsiteRef(
                     campsiteId = campsiteId,
                     vendorId = campgroundId,
                 )

@@ -14,7 +14,7 @@ import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
+import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -160,7 +160,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
                     provider = FakeProvider(provider),
                     parentRef = parentRef,
                     catalogRef =
-                        CatalogReservableRef(
+                        CatalogCampsiteRef(
                             campsiteId = campsite.id,
                             vendorId = campsite.vendorId,
                         ),

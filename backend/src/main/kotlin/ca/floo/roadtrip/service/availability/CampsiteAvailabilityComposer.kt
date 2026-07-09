@@ -68,7 +68,7 @@ internal class CampsiteAvailabilityComposer(
                     ) {
                         provider.catalogAvailability(
                             ref = parentRef,
-                            reservables = rows.map { it.catalogRef },
+                            campsites = rows.map { it.catalogRef },
                             startDate = windows.fetch.startDate,
                             endDate = windows.fetch.endDate,
                         )
@@ -78,7 +78,7 @@ internal class CampsiteAvailabilityComposer(
         results.firstOrNull { it.providerError != null }?.let { throw it.providerError!! }
         results.forEach { result ->
             val batch = result.batch ?: return@forEach
-            result.reservables.forEach { campsite ->
+            result.campsites.forEach { campsite ->
                 val ref = campsite.providerRefForCampsite(result.parentRef)
                 val metadata = availabilityMetadata(result.provider.id, ref, campsiteId = campsite.id)
                 byCampsiteId[campsite.id] =
@@ -108,8 +108,8 @@ internal fun defaultSnapshotFreshnessTtl(providerId: AvailabilityProviderId): Du
         AvailabilityProviderId.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl
     }
 
-private fun ResolvedAvailabilityTarget.toAvailabilityTarget(): AvailabilityLoader.TargetReservable =
-    AvailabilityLoader.TargetReservable(
+private fun ResolvedAvailabilityTarget.toAvailabilityTarget(): AvailabilityLoader.CampsiteTarget =
+    AvailabilityLoader.CampsiteTarget(
         dbId = campsite.id,
     )
 

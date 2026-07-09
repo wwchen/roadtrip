@@ -62,9 +62,9 @@ class ReserveCaliforniaAvailabilityProviderTest {
             val batch =
                 provider.catalogAvailability(
                     ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611, 612)),
-                    reservables =
+                    campsites =
                         listOf(
-                            CatalogReservableRef(campsiteId = 43793, vendorId = "43793"),
+                            CatalogCampsiteRef(campsiteId = 43793, vendorId = "43793"),
                         ),
                     startDate = LocalDate.parse("2026-12-15"),
                     endDate = LocalDate.parse("2026-12-18"),
@@ -118,7 +118,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
 
             provider.catalogAvailability(
                 ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611, 612)),
-                reservables = emptyList(),
+                campsites = emptyList(),
                 startDate = LocalDate.parse("2026-12-15"),
                 endDate = LocalDate.parse("2026-12-16"),
             )
@@ -140,9 +140,9 @@ class ReserveCaliforniaAvailabilityProviderTest {
             val batch =
                 provider.catalogAvailability(
                     ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = emptyList()),
-                    reservables =
+                    campsites =
                         listOf(
-                            CatalogReservableRef(campsiteId = 43793, vendorId = "43793"),
+                            CatalogCampsiteRef(campsiteId = 43793, vendorId = "43793"),
                         ),
                     startDate = LocalDate.parse("2026-12-15"),
                     endDate = LocalDate.parse("2026-12-17"),

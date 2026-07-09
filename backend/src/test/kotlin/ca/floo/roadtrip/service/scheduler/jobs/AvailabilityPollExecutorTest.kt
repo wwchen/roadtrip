@@ -5,7 +5,7 @@ import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
-import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.models.availability.CampsiteDayObservation
 import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
@@ -32,7 +32,7 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.BookingUrlTemplate
-import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
+import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import ca.floo.roadtrip.service.notification.SlackContentAvailabilityRenderer
 import ca.floo.roadtrip.service.notification.SlackContentWatchStatusRenderer
 import ca.floo.roadtrip.service.notification.SlackNotificationService
@@ -376,7 +376,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
         override suspend fun catalogAvailability(
             ref: ProviderRef,
-            reservables: List<CatalogReservableRef>,
+            reservables: List<CatalogCampsiteRef>,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch {
@@ -388,7 +388,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val observedAt = Instant.now()
             val observations =
                 reservables.map { reservable ->
-                    ReservableDayObservation(
+                    CampsiteDayObservation(
                         campsiteId = reservable.campsiteId,
                         date = observationDate ?: startDate,
                         observedAt = observedAt,
@@ -428,7 +428,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
         override suspend fun catalogAvailability(
             ref: ProviderRef,
-            reservables: List<CatalogReservableRef>,
+            reservables: List<CatalogCampsiteRef>,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw AvailabilityProviderError.RateLimited(RuntimeException("429"))

@@ -7,7 +7,7 @@ import ca.floo.roadtrip.service.etl.framework.CampsiteEtlRecord
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
-import ca.floo.roadtrip.service.etl.framework.reservableTagKey
+import ca.floo.roadtrip.service.etl.framework.campsiteTagKey
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -437,7 +437,7 @@ class AspiraResourcesEtl(
                 val definitionId = a["attributeDefinitionId"]?.jsonPrimitive?.intOrNull ?: continue
                 val definition = dictionaries.attributes[definitionId] ?: continue
                 val name = definition.name ?: continue
-                val key = reservableTagKey(name)
+                val key = campsiteTagKey(name)
                 if (key.isEmpty()) continue
                 attributeTagValue(a, definition)?.let { put(key, it) }
             }

@@ -56,9 +56,9 @@ class ReserveAmericaAvailabilityProviderTest {
             val batch =
                 adapter.catalogAvailability(
                     ref = ProviderRef.ReserveAmerica(contractCode = "NY", parkId = "489"),
-                    reservables =
+                    campsites =
                         listOf(
-                            CatalogReservableRef(campsiteId = 253488, vendorId = "253488"),
+                            CatalogCampsiteRef(campsiteId = 253488, vendorId = "253488"),
                         ),
                     startDate = LocalDate.parse("2026-06-22"),
                     endDate = LocalDate.parse("2026-06-24"),

@@ -65,15 +65,15 @@ class AspiraAvailabilityProviderTest {
                             mapId = -2147483388,
                             resourceLocationId = -2147483624,
                         ),
-                    reservables =
+                    campsites =
                         listOf(
-                            CatalogReservableRef(
+                            CatalogCampsiteRef(
                                 campsiteId = 100,
                                 vendorId = "100",
                                 mapId = -2147483615,
                                 resourceLocationId = -2147483624,
                             ),
-                            CatalogReservableRef(
+                            CatalogCampsiteRef(
                                 campsiteId = 200,
                                 vendorId = "200",
                                 mapId = -2147483615,
@@ -135,15 +135,15 @@ class AspiraAvailabilityProviderTest {
                             mapId = -2147483388,
                             resourceLocationId = -2147483624,
                         ),
-                    reservables =
+                    campsites =
                         listOf(
-                            CatalogReservableRef(
+                            CatalogCampsiteRef(
                                 campsiteId = 100,
                                 vendorId = "100",
                                 mapId = -2147483615,
                                 resourceLocationId = -2147483624,
                             ),
-                            CatalogReservableRef(
+                            CatalogCampsiteRef(
                                 campsiteId = 200,
                                 vendorId = "200",
                                 mapId = -2147483615,
@@ -197,9 +197,9 @@ class AspiraAvailabilityProviderTest {
                             mapId = -2147483388,
                             resourceLocationId = null,
                         ),
-                    reservables =
+                    campsites =
                         listOf(
-                            CatalogReservableRef(
+                            CatalogCampsiteRef(
                                 campsiteId = 100,
                                 vendorId = "100",
                                 mapId = -2147483615,
@@ -300,10 +300,10 @@ class AspiraAvailabilityProviderTest {
                             mapId = -2147483388,
                             resourceLocationId = null,
                         ),
-                    reservables =
+                    campsites =
                         listOf(
-                            CatalogReservableRef(campsiteId = 100, vendorId = "100", mapId = -2147483388),
-                            CatalogReservableRef(campsiteId = 101, vendorId = "101", mapId = -2147483388),
+                            CatalogCampsiteRef(campsiteId = 100, vendorId = "100", mapId = -2147483388),
+                            CatalogCampsiteRef(campsiteId = 101, vendorId = "101", mapId = -2147483388),
                         ),
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-03"),

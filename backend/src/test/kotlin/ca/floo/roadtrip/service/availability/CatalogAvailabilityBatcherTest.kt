@@ -11,7 +11,7 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
+import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -50,7 +50,7 @@ class CatalogAvailabilityBatcherTest {
             assertEquals(1, calls)
             assertEquals(1, results.size)
             assertEquals(FetchOutcome.OK, results[0].outcome)
-            assertEquals(2, results[0].reservables.size)
+            assertEquals(2, results[0].campsites.size)
         }
 
     @Test
@@ -130,7 +130,7 @@ class CatalogAvailabilityBatcherTest {
         runBlocking {
             val provider = fakeProvider()
             val catalogRef =
-                CatalogReservableRef(
+                CatalogCampsiteRef(
                     campsiteId = 1L,
                     vendorId = "100",
                 )
@@ -200,8 +200,8 @@ class CatalogAvailabilityBatcherTest {
         parentPoiId: Long = 1L,
         vendor: String = "recgov",
         vendorId: String = campsiteId.toString(),
-        catalogRef: CatalogReservableRef =
-            CatalogReservableRef(
+        catalogRef: CatalogCampsiteRef =
+            CatalogCampsiteRef(
                 campsiteId = campsiteId,
                 vendorId = vendorId,
             ),
