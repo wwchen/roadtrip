@@ -18,7 +18,7 @@ const campflareDetail = {
   properties: {
     source: 'campground',
     source_id: 'cold-creek-869',
-    data_source: 'campflare',
+    sources: ['campflare', 'recgov'],
     availability_provider: 'recgov',
     booking_site: 'recreation.gov',
     category: 'campground',
@@ -191,7 +191,7 @@ test('structuredCampgroundDetailsHTML renders Campflare campground fields', () =
   assert.match(html, /Official page/);
   assert.match(html, /Water unavailable/);
   assert.match(html, /Data source/);
-  assert.match(html, /campflare/);
+  assert.match(html, /campflare, recgov/);
   assert.match(html, /Availability provider/);
   assert.match(html, /recgov/);
   assert.match(html, /Booking site/);

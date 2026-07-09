@@ -22,6 +22,7 @@ class PoiServingRepoTest : SharedDbTest() {
                 providerRefJson = """{"transactionLocationId":-2147483647,"mapId":-2147483026,"resourceLocationId":-2147483640}""",
                 propertiesJson = """{"upstream":{"booking_cta_provider_ref":null}}""",
             )
+        CanonicalViewRepo(ctx).refreshCanonicalViews()
 
         val row = PoiServingRepo(ctx).fetchPoiById(poiId)
 
@@ -47,6 +48,7 @@ class PoiServingRepoTest : SharedDbTest() {
                     }}}
                     """.trimIndent(),
             )
+        CanonicalViewRepo(ctx).refreshCanonicalViews()
 
         val row = PoiServingRepo(ctx).fetchPoiById(poiId)
 
@@ -75,6 +77,7 @@ class PoiServingRepoTest : SharedDbTest() {
             """[{"url":"$link","title":"Lake of the Woods"}]""",
             fixture.catalogId,
         )
+        CanonicalViewRepo(ctx).refreshCanonicalViews()
 
         val row = PoiServingRepo(ctx).fetchPoiById(fixture.poiId)
 
@@ -83,7 +86,7 @@ class PoiServingRepoTest : SharedDbTest() {
     }
 
     @Test
-    fun `detail row keeps data source while selecting availability provider ref and booking site`() {
+    fun `detail row exposes sources and vendor refs via canonical view`() {
         val fixture =
             ctx.seedCatalogPoi(
                 sourceId = "recgov-232869",
@@ -120,6 +123,7 @@ class PoiServingRepoTest : SharedDbTest() {
             fixture.catalogId,
             recgovVendorRefId,
         )
+        CanonicalViewRepo(ctx).refreshCanonicalViews()
 
         val row = PoiServingRepo(ctx).fetchPoiById(fixture.poiId)
 
@@ -130,6 +134,9 @@ class PoiServingRepoTest : SharedDbTest() {
         assertEquals("https://www.recreation.gov/camping/campgrounds/232869", row.reserveUrl)
         val publicRef = Json.parseToJsonElement(row.providerRefJson!!).jsonObject
         assertEquals("232869", publicRef["recgov_id"]!!.jsonPrimitive.content)
+        // Ungrouped seed row (match_group_id NULL) is its own group; canonical
+        // view returns a single-element member_sources equal to etl_source.
+        assertEquals(listOf("federal-campgrounds"), row.memberSources)
     }
 
     private fun seedPoi(
