@@ -766,7 +766,7 @@ function fuseDay(date, campsites) {
   // campsite_statuses: { campsite_id → status } across all campsites for that date.
   const statuses = {};
   for (const r of campsites) {
-    const campsiteId = r?.campsite_id ?? r?.campsiteId;
+    const campsiteId = r?.campsite_id;
     if (campsiteId == null) continue;
     const day = (Array.isArray(r.availability) ? r.availability : []).find((d) => d?.date === date);
     statuses[String(campsiteId)] = day?.status || 'unknown';

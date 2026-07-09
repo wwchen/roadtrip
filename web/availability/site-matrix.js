@@ -478,14 +478,14 @@ function cellState(row, day, availableIds) {
 }
 
 function campsiteStatus(day, campsiteId) {
-  const statuses = day?.campsite_statuses ?? day?.campsiteStatuses;
+  const statuses = day?.campsite_statuses;
   if (!statuses || typeof statuses !== 'object') return null;
   if (!Object.prototype.hasOwnProperty.call(statuses, campsiteId)) return null;
   return normalizeAvailabilityStatus(statuses[campsiteId]);
 }
 
 function availableCampsiteIds(day) {
-  const ids = day?.available_campsite_ids ?? day?.availableCampsiteIds;
+  const ids = day?.available_campsite_ids;
   return Array.isArray(ids) ? ids.map(String) : [];
 }
 
@@ -498,7 +498,7 @@ function sortedCampsites(campsites, days = []) {
 function fallbackCampsitesFromDays(days) {
   const ids = new Set();
   for (const day of Array.isArray(days) ? days : []) {
-    const statuses = day?.campsite_statuses ?? day?.campsiteStatuses;
+    const statuses = day?.campsite_statuses;
     if (statuses && typeof statuses === 'object') {
       Object.keys(statuses).forEach((id) => ids.add(String(id)));
     }
