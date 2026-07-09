@@ -54,6 +54,14 @@ DROP INDEX IF EXISTS campsite_vendor_refs_primary_uidx;
 ALTER TABLE campground_vendor_refs DROP COLUMN is_primary;
 ALTER TABLE campsite_vendor_refs DROP COLUMN is_primary;
 
+-- The 1:1 constraint from V38 (one vendor_ref → one catalog row) is now wrong:
+-- Campflare's additionalVendorRefs point at recgov ids that already have their
+-- own recgov catalog rows, and the matcher wants BOTH rows linked to the same
+-- vendor_ref so shared-ref pairs light up. The PK (campground_id, vendor_ref_id)
+-- still prevents duplicate links from the same row.
+DROP INDEX IF EXISTS campground_vendor_refs_vendor_ref_uidx;
+DROP INDEX IF EXISTS campsite_vendor_refs_vendor_ref_uidx;
+
 CREATE TABLE campground_matches (
   id               BIGSERIAL PRIMARY KEY,
   campground_a_id  BIGINT NOT NULL REFERENCES campgrounds(id) ON DELETE CASCADE,

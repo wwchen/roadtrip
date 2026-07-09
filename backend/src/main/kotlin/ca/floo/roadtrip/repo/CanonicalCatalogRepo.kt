@@ -132,7 +132,10 @@ class CanonicalCatalogRepo(
                     payload = ref.payload,
                 )
             }
-        val campgroundId = firstCampgroundIdForVendorRefs(listOf(vendorRefId) + additionalVendorRefIds)
+        // Per-vendor row identity: only the primary vendor_ref (owned by this
+        // ETL's vendor) decides which row we upsert into. additionalVendorRefs
+        // become matcher input via link rows, never a lookup key.
+        val campgroundId = ownedCampgroundIdForVendorRef(vendorRefId, record.vendor)
         val persistedCampgroundId =
             if (campgroundId == null) {
                 insertCampground(record)
@@ -152,7 +155,7 @@ class CanonicalCatalogRepo(
         val parentVendor = record.parentVendor ?: return false
         val parentExternalId = record.parentVendorRefId ?: return false
         val campgroundId =
-            campgroundIdForVendor(parentVendor, parentExternalId)
+            ownedCampgroundIdForVendor(parentVendor, parentExternalId, record.vendor)
                 ?: return false
         val vendorRefId =
             upsertVendorRef(
@@ -174,7 +177,7 @@ class CanonicalCatalogRepo(
                     payload = ref.payload,
                 )
             }
-        val campsiteId = firstCampsiteIdForVendorRefs(listOf(vendorRefId) + additionalVendorRefIds)
+        val campsiteId = ownedCampsiteIdForVendorRef(vendorRefId, record.vendor)
         val persistedCampsiteId =
             if (campsiteId == null) {
                 insertCampsite(campgroundId, record)
@@ -241,23 +244,31 @@ class CanonicalCatalogRepo(
             )!!
             .get("id", Long::class.java)
 
-    private fun campgroundIdForVendorRef(vendorRefId: Long): Long? =
+    // One vendor_ref can now link to multiple campground rows (e.g. Campflare's
+    // additionalRef pointing at recgov's id lives on both the recgov row and
+    // the campflare row). Filter by data_source so an ETL only ever finds its
+    // own row.
+    private fun ownedCampgroundIdForVendorRef(
+        vendorRefId: Long,
+        dataSource: String,
+    ): Long? =
         ctx
             .fetchOne(
-                "SELECT campground_id FROM campground_vendor_refs WHERE vendor_ref_id = ?",
+                """
+                SELECT cvr.campground_id
+                FROM campground_vendor_refs cvr
+                JOIN campgrounds cg ON cg.id = cvr.campground_id
+                WHERE cvr.vendor_ref_id = ?
+                  AND cg.data_source = ?
+                """.trimIndent(),
                 vendorRefId,
+                dataSource,
             )?.get("campground_id", Long::class.java)
 
-    private fun firstCampgroundIdForVendorRefs(vendorRefIds: List<Long>): Long? {
-        for (vendorRefId in vendorRefIds.distinct()) {
-            campgroundIdForVendorRef(vendorRefId)?.let { return it }
-        }
-        return null
-    }
-
-    private fun campgroundIdForVendor(
-        vendor: String,
-        externalId: String,
+    private fun ownedCampgroundIdForVendor(
+        refVendor: String,
+        refExternalId: String,
+        dataSource: String,
     ): Long? =
         ctx
             .fetchOne(
@@ -265,29 +276,35 @@ class CanonicalCatalogRepo(
                 SELECT cvr.campground_id
                 FROM vendor_refs vr
                 JOIN campground_vendor_refs cvr ON cvr.vendor_ref_id = vr.id
+                JOIN campgrounds cg ON cg.id = cvr.campground_id
                 WHERE vr.vendor = ?
                   AND vr.entity_type = ?
                   AND vr.external_id = ?
                   AND vr.deleted_at IS NULL
+                  AND cg.data_source = ?
                 """.trimIndent(),
-                vendor,
+                refVendor,
                 CAMPGROUND_ENTITY,
-                externalId,
+                refExternalId,
+                dataSource,
             )?.get("campground_id", Long::class.java)
 
-    private fun campsiteIdForVendorRef(vendorRefId: Long): Long? =
+    private fun ownedCampsiteIdForVendorRef(
+        vendorRefId: Long,
+        dataSource: String,
+    ): Long? =
         ctx
             .fetchOne(
-                "SELECT campsite_id FROM campsite_vendor_refs WHERE vendor_ref_id = ?",
+                """
+                SELECT cvr.campsite_id
+                FROM campsite_vendor_refs cvr
+                JOIN campsites cs ON cs.id = cvr.campsite_id
+                WHERE cvr.vendor_ref_id = ?
+                  AND cs.data_source = ?
+                """.trimIndent(),
                 vendorRefId,
+                dataSource,
             )?.get("campsite_id", Long::class.java)
-
-    private fun firstCampsiteIdForVendorRefs(vendorRefIds: List<Long>): Long? {
-        for (vendorRefId in vendorRefIds.distinct()) {
-            campsiteIdForVendorRef(vendorRefId)?.let { return it }
-        }
-        return null
-    }
 
     private fun teslaSuperchargerIdForLocationSlug(locationSlug: String): Long? =
         ctx

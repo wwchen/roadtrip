@@ -35,6 +35,20 @@ fun DSLContext.cleanCanonicalCatalogFixtures() {
         RESTART IDENTITY CASCADE
         """.trimIndent(),
     )
+    refreshCanonicalCatalogViews()
+}
+
+/**
+ * Publishes the current campground/campsite state through the canonical
+ * materialized views so that read paths going through them (POI detail,
+ * campsite serving, availability lookups) see the freshly-seeded data.
+ *
+ * Seed helpers call this automatically at the end; tests that mutate rows
+ * outside the seed helpers can invoke it directly. Cheap in test-sized data.
+ */
+fun DSLContext.refreshCanonicalCatalogViews() {
+    execute("REFRESH MATERIALIZED VIEW campground_canonical")
+    execute("REFRESH MATERIALIZED VIEW campsite_canonical")
 }
 
 fun DSLContext.seedCatalogPoi(
@@ -143,6 +157,7 @@ fun DSLContext.seedCatalogPoi(
             else -> error("unsupported canonical poi type: $canonicalType")
         }
 
+    refreshCanonicalCatalogViews()
     return CatalogPoiFixture(poiId = poiId, catalogId = catalogId, poiType = canonicalType)
 }
 
@@ -192,6 +207,7 @@ fun DSLContext.seedCampground(
         campgroundId,
         vendorRefId,
     )
+    refreshCanonicalCatalogViews()
     return campgroundId
 }
 
@@ -236,6 +252,7 @@ fun DSLContext.seedCampsite(
         campsiteId,
         vendorRefId,
     )
+    refreshCanonicalCatalogViews()
     return campsiteId
 }
 

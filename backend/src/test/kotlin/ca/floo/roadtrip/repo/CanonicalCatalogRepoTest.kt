@@ -75,7 +75,11 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
     }
 
     @Test
-    fun `additional campground vendor refs attach to an existing canonical row`() {
+    fun `additional vendor refs on a Campflare import link to the Campflare row, not merge into recgov's`() {
+        // Per-vendor identity: Campflare's additionalVendorRefs (pointing at
+        // recgov's id) must NOT pull Campflare's data onto recgov's row. Both
+        // rows exist; the shared recgov vendor_ref lives on both link tables
+        // and becomes matcher input.
         val repo = CanonicalCatalogRepo(ctx)
         repo.upsertCampgrounds(
             listOf(
@@ -115,25 +119,44 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
             source = "campflare-campgrounds",
         )
 
-        assertEquals(1, tableCount("campgrounds"))
+        // Two campground rows (one per vendor); two vendor_refs (the recgov
+        // ref is reused, not duplicated); three link rows (recgov→recgov_vr,
+        // campflare→campflare_vr, campflare→recgov_vr as matcher input).
+        assertEquals(2, tableCount("campgrounds"))
         assertEquals(2, tableCount("vendor_refs"))
-        assertEquals(2, tableCount("campground_vendor_refs"))
+        assertEquals(3, tableCount("campground_vendor_refs"))
 
-        val refs =
+        val links =
             ctx
                 .fetch(
                     """
-                    SELECT vr.vendor, vr.external_id
+                    SELECT cg.data_source, vr.vendor AS ref_vendor, vr.external_id
                     FROM campground_vendor_refs cvr
+                    JOIN campgrounds cg ON cg.id = cvr.campground_id
                     JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
-                    ORDER BY vr.vendor
+                    ORDER BY cg.data_source, vr.vendor
                     """.trimIndent(),
-                ).map { "${it.get("vendor")}:${it.get("external_id")}" }
+                ).map {
+                    "${it.get("data_source")}|${it.get("ref_vendor")}:${it.get("external_id")}"
+                }
 
         assertEquals(
-            listOf("campflare:upper-pines-campground-447", "federal-campgrounds:recgov-232447"),
-            refs,
+            listOf(
+                "campflare|campflare:upper-pines-campground-447",
+                "campflare|federal-campgrounds:recgov-232447",
+                "federal-campgrounds|federal-campgrounds:recgov-232447",
+            ),
+            links,
         )
+
+        // Recgov's row is untouched by Campflare's import.
+        val recgovName =
+            ctx
+                .fetchOne(
+                    "SELECT name FROM campgrounds WHERE data_source = 'federal-campgrounds'",
+                )!!
+                .get("name", String::class.java)
+        assertEquals("Upper Pines", recgovName)
     }
 
     @Test
@@ -290,7 +313,11 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
     }
 
     @Test
-    fun `additional campsite vendor refs attach to an existing canonical row`() {
+    fun `additional campsite vendor refs on a Campflare import link to the Campflare row, not merge into recgov's`() {
+        // Per-vendor identity, campsite edition: Campflare's site with an
+        // additionalRef pointing at the recgov site must NOT overwrite recgov's
+        // site row; both rows exist and share the recgov vendor_ref as matcher
+        // input.
         val repo = CanonicalCatalogRepo(ctx)
         repo.upsertCampgrounds(
             listOf(
@@ -306,13 +333,27 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
             ),
             source = "campflare-campgrounds",
         )
+        repo.upsertCampgrounds(
+            listOf(
+                CampgroundEtlRecord(
+                    vendor = "recgov",
+                    vendorRefId = "232447",
+                    name = "Upper Pines",
+                    latitude = 37.739,
+                    longitude = -119.565,
+                    sourcePayload = json("""{"FacilityID":"232447"}"""),
+                    vendorRefPayload = json("""{"recgov_id":"232447"}"""),
+                ),
+            ),
+            source = "federal-campgrounds",
+        )
         repo.upsertCampsites(
             listOf(
                 CampsiteEtlRecord(
                     vendor = "recgov",
                     vendorRefId = "100",
-                    parentVendor = "campflare",
-                    parentVendorRefId = "upper-pines-campground-447",
+                    parentVendor = "recgov",
+                    parentVendorRefId = "232447",
                     name = "Site 100",
                     kind = "standard",
                     sourcePayload = json("""{"site":"100"}"""),
@@ -346,22 +387,41 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
             source = "campflare-campsites",
         )
 
-        assertEquals(1, tableCount("campsites"))
-        assertEquals(3, tableCount("vendor_refs"))
-        assertEquals(2, tableCount("campsite_vendor_refs"))
+        // Two campsite rows (one per vendor); two campsite vendor_refs (the
+        // recgov site ref is reused, not duplicated); three link rows.
+        assertEquals(2, tableCount("campsites"))
+        val campsiteRefCount =
+            ctx
+                .fetchOne(
+                    "SELECT COUNT(*) AS n FROM vendor_refs WHERE entity_type = 'campsite'",
+                )!!
+                .get("n", Number::class.java)
+                .toInt()
+        assertEquals(2, campsiteRefCount)
+        assertEquals(3, tableCount("campsite_vendor_refs"))
 
-        val refs =
+        val links =
             ctx
                 .fetch(
                     """
-                    SELECT vr.vendor, vr.external_id
+                    SELECT cs.data_source, vr.vendor AS ref_vendor, vr.external_id
                     FROM campsite_vendor_refs cvr
+                    JOIN campsites cs ON cs.id = cvr.campsite_id
                     JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
-                    ORDER BY vr.vendor
+                    ORDER BY cs.data_source, vr.vendor
                     """.trimIndent(),
-                ).map { "${it.get("vendor")}:${it.get("external_id")}" }
+                ).map {
+                    "${it.get("data_source")}|${it.get("ref_vendor")}:${it.get("external_id")}"
+                }
 
-        assertEquals(listOf("campflare:upper-pines-site-100", "recgov:100"), refs)
+        assertEquals(
+            listOf(
+                "campflare|campflare:upper-pines-site-100",
+                "campflare|recgov:100",
+                "recgov|recgov:100",
+            ),
+            links,
+        )
     }
 
     @Test
