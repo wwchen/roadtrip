@@ -107,5 +107,5 @@ no live render-only fallback).
 Availability reads the live matrix (`ReserveAmericaAvailabilityParser`); the
 catalog parser (`ReserveAmericaCatalogParser`) shares row-splitting via
 `siteRows`, so catalog `vendor_id` equals the availability `siteId` by
-construction. Watches stay off (`supportsAlerts = false`) pending cadence/load
+construction. Watches stay off (`pollableForAlerts = false`) pending cadence/load
 validation for Active Network.

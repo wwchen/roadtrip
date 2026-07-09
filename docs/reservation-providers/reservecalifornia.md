@@ -424,7 +424,7 @@ Minimal v1 path:
    facility grids.
 4. `ReserveCaliforniaAvailabilityProvider` fetches `search/grid` per facility
    and merges unit slices into `AvailabilityObservationBatch`.
-5. `supportsAlerts = false` until rate limits and snapshot behavior are
+5. `pollableForAlerts = false` until rate limits and snapshot behavior are
    validated.
 
 No Flyway migration should be required if the adapter uses the existing

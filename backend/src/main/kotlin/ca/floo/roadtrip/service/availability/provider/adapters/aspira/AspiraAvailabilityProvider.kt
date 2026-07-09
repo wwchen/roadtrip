@@ -16,7 +16,7 @@ import java.time.temporal.ChronoUnit
 
 /**
  * Widest single-tick poll window for Aspira. Latent until the Aspira alert
- * poller lands (see RFC 0007) — `supportsAlerts` is still false — but declared
+ * poller lands (see RFC 0007) — `pollableForAlerts` is still false — but declared
  * honestly so the capability is complete. Conservative default; tune per
  * tenant when polling turns on.
  */
@@ -55,7 +55,7 @@ class AspiraAvailabilityProvider(
             supportsAvailability = true,
             // Alert poller is rec.gov-only today; Aspira polling is planned
             // (see RFC 0007). Keep this honest until the poller adapter lands.
-            supportsAlerts = false,
+            pollableForAlerts = false,
             bookingHorizonDays = tenant.bookingHorizonDays,
             maxPollWindowDays = ASPIRA_MAX_POLL_WINDOW_DAYS,
         )

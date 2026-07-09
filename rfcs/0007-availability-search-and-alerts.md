@@ -224,8 +224,8 @@ interface BookingProvider {
 }
 
 data class BookingCapabilities(
-    /** Can we poll for openings and notify the user? */
-    val supportsAlerts: Boolean,
+    /** Can the internal poller poll this vendor for openings? */
+    val pollableForAlerts: Boolean,
     /** Can we add to cart / book on the user's behalf? */
     val supportsAutoBook: Boolean,
     /** Max days into the future the upstream exposes. */
@@ -472,7 +472,7 @@ GET /api/campsite/availability/{poi_id}/history
 → [{observed_at, available_count, total, status}, ...]
 ```
 
-Capability-gated by `supportsAlerts` — providers that don't poll have no
+Capability-gated by `pollableForAlerts` — providers that don't poll have no
 snapshots to return; this endpoint 404s.
 
 ### Poll cadence

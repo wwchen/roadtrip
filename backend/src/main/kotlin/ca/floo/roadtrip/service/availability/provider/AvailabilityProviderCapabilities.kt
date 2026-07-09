@@ -12,8 +12,8 @@ package ca.floo.roadtrip.service.availability.provider
 data class AvailabilityProviderCapabilities(
     /** Can serve per-day availability for a date window. */
     val supportsAvailability: Boolean,
-    /** Can be polled in the background to drive watches. */
-    val supportsAlerts: Boolean,
+    /** Can be polled in the background by the internal poller to drive watches. */
+    val pollableForAlerts: Boolean,
     /** Max days into the future the upstream exposes (e.g. rec.gov = 180). */
     val bookingHorizonDays: Int,
     /**
@@ -33,7 +33,7 @@ data class AvailabilityProviderCapabilities(
         val UNSUPPORTED: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsAvailability = false,
-                supportsAlerts = false,
+                pollableForAlerts = false,
                 bookingHorizonDays = 0,
                 maxPollWindowDays = 0,
             )

@@ -372,7 +372,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsAvailability = true,
-                supportsAlerts = true,
+                pollableForAlerts = true,
                 bookingHorizonDays = 3650,
                 maxPollWindowDays = maxPollWindowDays,
             )
@@ -424,7 +424,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsAvailability = true,
-                supportsAlerts = true,
+                pollableForAlerts = true,
                 bookingHorizonDays = 3650,
                 maxPollWindowDays = 60,
             )

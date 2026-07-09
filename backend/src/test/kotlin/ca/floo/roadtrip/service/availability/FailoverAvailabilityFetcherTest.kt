@@ -53,7 +53,7 @@ class FailoverAvailabilityFetcherTest {
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsAvailability = true,
-                supportsAlerts = true,
+                pollableForAlerts = true,
                 bookingHorizonDays = 180,
                 maxPollWindowDays = 60,
             )

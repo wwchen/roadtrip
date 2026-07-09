@@ -33,7 +33,7 @@ class ReserveCaliforniaAvailabilityProvider(
     override val capabilities: AvailabilityProviderCapabilities =
         AvailabilityProviderCapabilities(
             supportsAvailability = true,
-            supportsAlerts = false,
+            pollableForAlerts = false,
             bookingHorizonDays = BOOKING_HORIZON_DAYS,
             maxPollWindowDays = MAX_POLL_WINDOW_DAYS,
         )
@@ -166,7 +166,7 @@ class ReserveCaliforniaAvailabilityProvider(
 
         /**
          * Widest single-tick poll window. Latent until watches turn on for
-         * ReserveCalifornia (`supportsAlerts` is still false); declared for
+         * ReserveCalifornia (`pollableForAlerts` is still false); declared for
          * capability completeness.
          */
         const val MAX_POLL_WINDOW_DAYS = 30
