@@ -100,6 +100,32 @@ data class ErrorNotFoundSchema(
     val id: Long? = null,
 )
 
+/**
+ * Combined stats returned by `EtlOrchestrator.runCatalogMatch()` and by the
+ * admin `POST /api/admin/etl/catalog-match` route. Merges the matcher's
+ * pair/group counts with the canonical re-point counts so operators see the
+ * whole catalog-match pipeline result in one shape.
+ */
+@Serializable
+data class CatalogMatchRunStats(
+    val campgroundPairs: Int,
+    val campsitePairs: Int,
+    val groupsRecomputed: Int,
+    val poisRepointed: Int,
+    val watchTargetsRepointed: Int,
+    val availabilityRowsRepointed: Int,
+)
+
+val EXAMPLE_CATALOG_MATCH_RUN =
+    CatalogMatchRunStats(
+        campgroundPairs = 12,
+        campsitePairs = 34,
+        groupsRecomputed = 46,
+        poisRepointed = 3,
+        watchTargetsRepointed = 1,
+        availabilityRowsRepointed = 8,
+    )
+
 // Concrete examples surfaced in Swagger UI alongside the schema. Typed
 // instances so they share the same field-name contract as the schemas
 // above — drift between schema and example is a compile error, not a

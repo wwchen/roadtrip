@@ -58,7 +58,7 @@ class TargetBusyException(
 // is the default). Callers that want fire-and-forget wrap in scope.async.
 class IngestController(
     private val ctx: DSLContext,
-    private val etl: EtlOrchestrator,
+    val etl: EtlOrchestrator,
     private val fetchTargets: Map<String, Target>,
     private val importTargets: Map<String, Target>,
     private val workingDir: File,
@@ -159,6 +159,23 @@ class IngestController(
                 ingestRunRepo.failParent(parentId, "phase=${phase.label}: ${notes.take(300)}")
                 log.warn("ingest_runs id={} phase={} failed: {}", phaseId, phase.label, notes.take(300))
                 return RunOutcome(parentId, target.name, kind, "failed", phase.label)
+            }
+        }
+        // Catalog match stage runs once per target that touched campsite-data
+        // or joiner phases, AFTER the phase loop is fully drained. Running
+        // it here (rather than inside a phase callback) keeps it deterministic
+        // — the matcher/refresh/re-point sees the complete post-phase state,
+        // never a mid-loop snapshot. A failure fails the parent run (visible
+        // in the dashboard) rather than propagating and leaving the row stuck
+        // in "started".
+        if (phases.any { it is Phase.Import && it.section in CATALOG_TOUCHING_SECTIONS }) {
+            try {
+                withContext(ioDispatcher) { etl.runCatalogMatch() }
+            } catch (e: Throwable) {
+                val note = "catalog match failed: ${e.javaClass.simpleName}: ${e.message ?: ""}"
+                ingestRunRepo.failParent(parentId, note.take(300))
+                log.warn("ingest_runs id={} {}", parentId, note.take(300))
+                return RunOutcome(parentId, target.name, kind, "failed", CATALOG_MATCH_STAGE_LABEL)
             }
         }
         ingestRunRepo.completeParent(parentId)
@@ -293,6 +310,22 @@ class IngestController(
 
     companion object {
         const val STDERR_TAIL_BYTES = 4 * 1024
+
+        // Sections whose successful completion should trigger the catalog
+        // match stage. Joiner runs and campsite_data terminal imports both
+        // move rows the matcher / canonical views care about; poi_data runs
+        // (POI-only, non-campground) do not.
+        private val CATALOG_TOUCHING_SECTIONS =
+            setOf(
+                Phase.Import.Section.CAMPSITE_DATA,
+                Phase.Import.Section.CAMPSITE_PARENT_JOINER,
+            )
+
+        // Synthetic phase label used in the RunOutcome when the catalog-match
+        // post-phase stage is what actually failed. Kept distinct from any
+        // real phase.label so dashboards can flag "the match failed" vs.
+        // "an import phase failed".
+        private const val CATALOG_MATCH_STAGE_LABEL = "catalog_match"
     }
 }
 
