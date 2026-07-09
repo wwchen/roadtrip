@@ -127,7 +127,7 @@ class PoiServingRepoTest : SharedDbTest() {
         assertEquals("federal-campgrounds", row.source)
         assertEquals("recgov-232869", row.sourceId)
         assertEquals("recgov", row.providerSource)
-        assertEquals("recreation.gov", row.bookingSite)
+        assertEquals("https://www.recreation.gov/camping/campgrounds/232869", row.reserveUrl)
         val publicRef = Json.parseToJsonElement(row.providerRefJson!!).jsonObject
         assertEquals("232869", publicRef["recgov_id"]!!.jsonPrimitive.content)
     }

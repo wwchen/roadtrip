@@ -39,7 +39,6 @@ internal data class PoiDetailRow(
     val lat: Double? = null,
     val unitName: String?,
     val reserveUrl: String?,
-    val bookingSite: String? = null,
     val phone: String?,
     val infoUrl: String?,
     val addressJson: String?,
@@ -114,7 +113,6 @@ internal class PoiServingRepo(
                        ST_Y(ST_PointOnSurface(p.geom)) AS lat,
                        NULL::text AS unit_name,
                        cg.reservation_url AS reserve_url,
-                       ${bookingSiteSql("NULLIF(cg.reservation_url, '')")} AS booking_site,
                        COALESCE(cg.contact->>'phone', pf.phone) AS phone,
                        COALESCE(ts.info_url, pf.info_url, cg.links->0->>'url') AS info_url,
                        COALESCE(cg.location, ts.address, pf.address, '{}'::jsonb)::text AS address_text,
@@ -173,7 +171,6 @@ internal class PoiServingRepo(
             lat = (r.get("lat") as Number?)?.toDouble(),
             unitName = r.get("unit_name") as String?,
             reserveUrl = r.get("reserve_url") as String?,
-            bookingSite = r.get("booking_site") as String?,
             phone = r.get("phone") as String?,
             infoUrl = r.get("info_url") as String?,
             addressJson = r.get("address_text") as String?,
@@ -373,10 +370,3 @@ private fun splitPoiSearchTerms(q: String): List<String> =
         .filter { it.isNotEmpty() }
 
 private fun escapeLikePattern(s: String): String = s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-private const val BOOKING_SITE_HOST_RE: String = "^[a-z][a-z0-9+.-]*://([^/?#]+)"
-private const val BOOKING_SITE_WWW_RE: String = "^www\\."
-
-private fun bookingSiteSql(urlExpression: String): String =
-    "NULLIF(regexp_replace(split_part(substring(lower($urlExpression) from '$BOOKING_SITE_HOST_RE'), ':', 1), " +
-        "'$BOOKING_SITE_WWW_RE', ''), '')"

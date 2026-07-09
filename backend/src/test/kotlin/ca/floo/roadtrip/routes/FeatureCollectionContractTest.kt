@@ -117,7 +117,6 @@ class FeatureCollectionContractTest {
                 lat = 51.1812,
                 unitName = "Banff",
                 reserveUrl = "https://reservation.pc.gc.ca",
-                bookingSite = "reservation.pc.gc.ca",
                 phone = "1-877-737-3783",
                 infoUrl = "https://parks.canada.ca/banff",
                 addressJson = """{"city":"Banff","state":"AB"}""",
