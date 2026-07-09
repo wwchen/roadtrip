@@ -260,7 +260,7 @@ class AvailabilityRepo(
     )
 
     fun summarize(
-        reservableId: Long,
+        campsiteId: Long,
         dates: List<LocalDate>,
         now: OffsetDateTime = OffsetDateTime.now(),
         windowHours: Int = DEFAULT_SUMMARY_WINDOW_HOURS,
@@ -292,7 +292,7 @@ class AvailabilityRepo(
                     WHERE last_observed_at >= ?::timestamptz OR rn = 1
                     ORDER BY target_date, last_observed_at
                     """.trimIndent(),
-                    reservableId,
+                    campsiteId,
                     dates.toTypedArray(),
                     windowStart,
                 ).fetch { mapStatusRun(it) }

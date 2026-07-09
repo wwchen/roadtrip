@@ -72,7 +72,7 @@ class AvailabilityResponseTest {
     }
 
     @Test
-    fun `atomic reservable day observations roll up to stable dto shape`() {
+    fun `atomic campsite day observations roll up to stable dto shape`() {
         val olderObservedAt = Instant.parse("2026-06-01T00:00:00Z")
         val observedAt = Instant.parse("2026-06-01T00:05:00Z")
         val dto =
@@ -172,7 +172,7 @@ class AvailabilityResponseTest {
     }
 
     @Test
-    fun `unknown reservable status dominates reserved in day rollup`() {
+    fun `unknown campsite status dominates reserved in day rollup`() {
         val day =
             dayClassificationFromCampsiteStatuses(
                 date = "2026-06-10",
