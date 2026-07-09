@@ -13,7 +13,7 @@ import java.io.File
 //   - fetchTargets: one Target per data_sources row. Target.name is the
 //     data_source slug. Used by POST /api/admin/data/fetch/<slug> and the
 //     fan-out endpoint POST /api/admin/data/fetch.
-//   - importTargets: one Target per runnable poi_data and reservable_data row.
+//   - importTargets: one Target per runnable poi_data and campsite_data row.
 //     Joiner rows remain declared for historical context but are not runnable
 //     because canonical campsite ETLs now carry parent vendor refs directly.
 //
@@ -98,17 +98,17 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
             )
     }
 
-    // reservable_data — produces canonical campsite rows linked to parent
+    // campsite_data — produces canonical campsite rows linked to parent
     // campgrounds by vendor refs.
-    for (row in registry.reservableData) {
+    for (row in registry.campsiteData) {
         if (!row.enabled) {
-            log.info("reservable_data '{}' is disabled - omitting import target", row.name)
+            log.info("campsite_data '{}' is disabled - omitting import target", row.name)
             continue
         }
         val unwiredSlugs = row.etls.map { it.slug }.filterNot { it in implemented }
         if (unwiredSlugs.isNotEmpty()) {
             log.warn(
-                "reservable_data '{}' has disabled or unwired etl slugs {} - omitting import target",
+                "campsite_data '{}' has disabled or unwired etl slugs {} - omitting import target",
                 row.name,
                 unwiredSlugs,
             )
@@ -123,7 +123,7 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
                         Phase.Import(
                             label = "import:${row.name}",
                             name = row.name,
-                            section = Phase.Import.Section.RESERVABLE_DATA,
+                            section = Phase.Import.Section.CAMPSITE_DATA,
                         ),
                     ),
             )

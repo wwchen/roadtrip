@@ -873,6 +873,7 @@ class CanonicalCatalogRepo(
     companion object {
         private const val CAMPGROUND_ENTITY = "campground"
         private const val CAMPSITE_ENTITY = "campsite"
+
         // pois.poi_type values. Kept distinct from the *_ENTITY vendor_ref
         // discriminators — the two namespaces happen to collide today for
         // campgrounds ("campground" appears in both) but they mean different

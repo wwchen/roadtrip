@@ -14,8 +14,8 @@ import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
-import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
@@ -157,16 +157,16 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     }
 
     private fun membershipFor(provider: ReservationProvider): AvailabilityPollerMembership {
-        val reservablesRepo = ReservableRepo(ctx)
+        val campsitesRepo = CampsiteRepo(ctx)
         val registry = ReservationProviderRegistry(mapOf("test" to provider))
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
-                reservablesRepo = reservablesRepo,
+                campsitesRepo = campsitesRepo,
                 reservationProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
             )
-        return AvailabilityPollerMembership(WatchScopeResolver(reservablesRepo), targets)
+        return AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets)
     }
 
     /** Links [watchId] onto its (provider, parentRef) poller via the production
@@ -270,7 +270,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     private fun targetsFor(provider: ReservationProvider): DbAvailabilityTargetResolver =
         DbAvailabilityTargetResolver(
             providerRefs = CampsiteProviderRepo(ctx),
-            reservablesRepo = ReservableRepo(ctx),
+            campsitesRepo = CampsiteRepo(ctx),
             reservationProviders = ReservationProviderRegistry(mapOf("test" to provider)),
             dateResolver = AvailabilityDateResolver(),
         )
@@ -280,12 +280,12 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     private fun disabledDispatcher(): WatchAlertDispatcher =
         WatchAlertDispatcher(
             slack = SlackNotificationServiceImpl(config = null),
-            scopeResolver = WatchScopeResolver(ReservableRepo(ctx)),
+            scopeResolver = WatchScopeResolver(CampsiteRepo(ctx)),
             watches = AvailabilityWatchRepo(ctx),
             targets =
                 DbAvailabilityTargetResolver(
                     providerRefs = CampsiteProviderRepo(ctx),
-                    reservablesRepo = ReservableRepo(ctx),
+                    campsitesRepo = CampsiteRepo(ctx),
                     reservationProviders = ReservationProviderRegistry(emptyMap()),
                     dateResolver = AvailabilityDateResolver(),
                 ),
@@ -303,7 +303,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     ): WatchAlertDispatcher =
         WatchAlertDispatcher(
             slack = notifications,
-            scopeResolver = WatchScopeResolver(ReservableRepo(ctx)),
+            scopeResolver = WatchScopeResolver(CampsiteRepo(ctx)),
             watches = AvailabilityWatchRepo(ctx),
             targets = targetsFor(provider),
             pois = PoiServingRepo(ctx),
@@ -317,19 +317,19 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         limiter: VendorRateLimiter = RecordingLimiter(grant = true),
         alertDispatcher: WatchAlertDispatcher = disabledDispatcher(),
     ): AvailabilityPollExecutor {
-        val reservablesRepo = ReservableRepo(ctx)
+        val campsitesRepo = CampsiteRepo(ctx)
         val registry = ReservationProviderRegistry(mapOf("test" to provider))
         val dateResolver = AvailabilityDateResolver()
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
-                reservablesRepo = reservablesRepo,
+                campsitesRepo = campsitesRepo,
                 reservationProviders = registry,
                 dateResolver = dateResolver,
             )
         return AvailabilityPollExecutor(
             pollers = AvailabilityPollerRepo(ctx),
-            reservablesRepo = reservablesRepo,
+            campsitesRepo = campsitesRepo,
             batcher = CatalogAvailabilityBatcher(),
             availability = AvailabilityRepo(ctx),
             runs = AvailabilityRunRepo(ctx),

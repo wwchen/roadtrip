@@ -58,7 +58,7 @@ class ReserveCaliforniaEtl(
                             kind = bucket,
                             mediumDescription = place.description,
                             location = locationPayload(place.latitude, place.longitude),
-                            amenities = stringArrayPayload(place.amenities),
+                            amenities = amenitiesPayload(place.amenities),
                             reservationUrl = parkUrl,
                             links = linksPayload(parkUrl),
                             photos = place.imageUrl?.let(::photoPayload),
@@ -152,6 +152,13 @@ private fun managementPayload(agency: String): JsonObject =
     buildJsonObject {
         put("agency", agency)
     }
+
+private fun amenitiesPayload(values: List<String>): JsonObject? {
+    if (values.isEmpty()) return null
+    return buildJsonObject {
+        values.forEach { put(it, true) }
+    }
+}
 
 private fun metadataPayload(place: ReserveCaliforniaPlace): JsonObject? {
     val payload =

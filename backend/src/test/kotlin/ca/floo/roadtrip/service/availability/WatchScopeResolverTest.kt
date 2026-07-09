@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
-import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
@@ -14,15 +14,15 @@ import java.time.LocalDate
 import kotlin.test.assertEquals
 
 class WatchScopeResolverTest : SharedDbTest() {
-    private lateinit var reservableRepo: ReservableRepo
+    private lateinit var campsiteRepo: CampsiteRepo
     private lateinit var watchRepo: AvailabilityWatchRepo
     private lateinit var resolver: WatchScopeResolver
 
     @BeforeEach
     fun setUp() {
-        reservableRepo = ReservableRepo(ctx)
+        campsiteRepo = CampsiteRepo(ctx)
         watchRepo = AvailabilityWatchRepo(ctx)
-        resolver = WatchScopeResolver(reservableRepo)
+        resolver = WatchScopeResolver(campsiteRepo)
         ctx.cleanCanonicalCatalogFixtures()
     }
 

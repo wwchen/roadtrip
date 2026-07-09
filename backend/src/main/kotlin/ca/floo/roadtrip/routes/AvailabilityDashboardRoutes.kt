@@ -15,6 +15,7 @@ import ca.floo.roadtrip.models.api.CheckNowResponseDto
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
@@ -57,9 +58,7 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
     val pollers = AvailabilityPollerRepo(ctx)
     val runs = AvailabilityRunRepo(ctx)
     val availability = AvailabilityRepo(ctx)
-    val reservablesRepo =
-        ca.floo.roadtrip.repo
-            .ReservableRepo(ctx)
+    val campsitesRepo = CampsiteRepo(ctx)
 
     get("/api/availability/pollers", {
         tags = listOf("availability")
@@ -237,7 +236,7 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
                 .coerceIn(1, SNAPSHOT_MAX_LIMIT)
         val rows =
             if (campsiteId != null) {
-                reservablesRepo.findById(campsiteId)
+                campsitesRepo.findById(campsiteId)
                     ?: return@get call.respondError(
                         "campsite_not_found",
                         HttpStatusCode.NotFound,
@@ -275,7 +274,7 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
                     HttpStatusCode.BadRequest,
                     "campsite_id is required",
                 )
-        reservablesRepo.findById(campsiteId)
+        campsitesRepo.findById(campsiteId)
             ?: return@get call.respondError(
                 "campsite_not_found",
                 HttpStatusCode.NotFound,

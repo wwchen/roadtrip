@@ -17,7 +17,7 @@ import kotlinx.serialization.json.long
  * Two callers today:
  *   - [AspiraLeavesEtl] (intermediate ETL: maps → leaves payload for the
  *     join-by-name campground emitter).
- *   - [AspiraResourcesEtl] (reservable_data terminal: needs leaf names
+ *   - [AspiraResourcesEtl] (campsite_data terminal: needs leaf names
  *     and parent context to label resources).
  *
  * Both read the same `/api/maps` raw capture, so the walk lives here as

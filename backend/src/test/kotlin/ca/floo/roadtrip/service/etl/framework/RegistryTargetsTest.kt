@@ -1,19 +1,18 @@
 package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.models.metadata.ingest.RunKind
+import ca.floo.roadtrip.models.metadata.registry.CampsiteDataEntry
 import ca.floo.roadtrip.models.metadata.registry.DataSourceEntry
 import ca.floo.roadtrip.models.metadata.registry.EtlEntry
 import ca.floo.roadtrip.models.metadata.registry.Fetcher
 import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.models.metadata.registry.PoiReservableJoinerEntry
-import ca.floo.roadtrip.models.metadata.registry.ReservableDataEntry
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 
 class RegistryTargetsTest {
     @Test
@@ -100,13 +99,13 @@ class RegistryTargetsTest {
                             etls = listOf(EtlEntry(slug = "campflare-campgrounds", adapter = "CampflareCampgroundsEtl")),
                         ),
                     ),
-                reservableData =
+                campsiteData =
                     listOf(
-                        ReservableDataEntry(
+                        CampsiteDataEntry(
                             name = "Runnable Campsites",
                             etls = listOf(EtlEntry(slug = "campflare-campsites", adapter = "CampflareCampsitesEtl")),
                         ),
-                        ReservableDataEntry(
+                        CampsiteDataEntry(
                             name = "Legacy Federal Campsites",
                             etls = listOf(EtlEntry(slug = "legacy-federal-campsites", adapter = "LegacyFederalSitesEtl")),
                         ),
@@ -155,13 +154,13 @@ class RegistryTargetsTest {
                 "California State Park Sites",
                 "Alberta Provincial Park Sites",
                 "New York State Park Sites",
+                "Federal Campsites → Federal Campgrounds",
+                "Aspira Resources → Aspira Pins",
+                "ReserveCalifornia Sites → California State Parks",
+                "ReserveAmerica Sites → Alberta + NY Parks",
             ),
             importTargetsFromRegistry(registry).keys.toList(),
         )
-        assertFalse("Federal Campsites → Federal Campgrounds" in importTargetsFromRegistry(registry).keys)
-        assertFalse("Aspira Resources → Aspira Pins" in importTargetsFromRegistry(registry).keys)
-        assertFalse("ReserveCalifornia Sites → California State Parks" in importTargetsFromRegistry(registry).keys)
-        assertFalse("ReserveAmerica Sites → Alberta + NY Parks" in importTargetsFromRegistry(registry).keys)
     }
 
     private fun source(

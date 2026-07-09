@@ -4,7 +4,7 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
@@ -72,16 +72,16 @@ class PollerBackfillTest : SharedDbTest() {
     }
 
     private fun membership(): AvailabilityPollerMembership {
-        val reservablesRepo = ReservableRepo(ctx)
+        val campsitesRepo = CampsiteRepo(ctx)
         val registry = ReservationProviderRegistry(mapOf("test" to FakeProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
-                reservablesRepo = reservablesRepo,
+                campsitesRepo = campsitesRepo,
                 reservationProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
             )
-        return AvailabilityPollerMembership(WatchScopeResolver(reservablesRepo), targets)
+        return AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets)
     }
 
     @Test

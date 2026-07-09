@@ -227,7 +227,7 @@ class IngestController(
     // -- Import phases (data/raw/ + data/etl-out/ → Postgres) -----------------
     //
     // The phase carries a row's display name + which YAML section it
-    // came from. poi_data / reservable_data walk an ETL chain and write
+    // came from. poi_data / campsite_data walk an ETL chain and write
     // canonical rows; poi_reservable_joiner runs a vendor-scoped
     // reconciliation pass that reparents campsites via runJoiner.
     //
@@ -250,8 +250,8 @@ class IngestController(
                         ),
                     )
                 }
-                Phase.Import.Section.RESERVABLE_DATA -> {
-                    val stats = etl.runReservableData(phase.name)
+                Phase.Import.Section.CAMPSITE_DATA -> {
+                    val stats = etl.runCampsiteData(phase.name)
                     JSONB.valueOf(
                         ingestControllerJson.encodeToString(
                             ImportPhaseCountsDto(
@@ -259,8 +259,8 @@ class IngestController(
                                 seen = stats.parsed,
                                 swept = stats.swept,
                                 terminalEtl = stats.terminalEtlSlug,
-                                upsertedReservables = stats.upserted,
-                                skippedReservables = stats.skipped,
+                                upsertedCampsites = stats.upserted,
+                                skippedCampsites = stats.skipped,
                             ),
                         ),
                     )
@@ -305,7 +305,7 @@ private data class FetchPhaseCountsDto(
  * Counts written into `ingest_runs.counts` (JSONB) for one import phase.
  * Section-specific fields are nullable; readers ignore the ones they
  * don't care about. Existing dashboards keyed off `seen`/`swept`/
- * `import_run_id` keep working. Reservable phases carry their campsite
+ * `import_run_id` keep working. Campsite phases carry their campsite
  * import run id; joiner phases carry created_links / stale_links_deleted.
  */
 @Serializable
@@ -314,8 +314,8 @@ private data class ImportPhaseCountsDto(
     val seen: Int,
     val swept: Int,
     @SerialName("terminal_etl") val terminalEtl: String,
-    @SerialName("upserted_reservables") val upsertedReservables: Int? = null,
-    @SerialName("skipped_reservables") val skippedReservables: Int? = null,
+    @SerialName("upserted_campsites") val upsertedCampsites: Int? = null,
+    @SerialName("skipped_campsites") val skippedCampsites: Int? = null,
     @SerialName("created_links") val createdLinks: Int? = null,
     @SerialName("stale_links_deleted") val staleLinksDeleted: Int? = null,
 )

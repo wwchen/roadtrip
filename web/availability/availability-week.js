@@ -15,7 +15,7 @@
 
 import { escapeHtml } from '../core.js';
 import { requestPoiCampsitesAvailability } from '../api/availability-api.js';
-import { fetchPoiCampsites } from '../api/reservable-api.js';
+import { fetchPoiCampsites } from '../api/campsite-api.js';
 import { createWatch, deleteWatch, listWatches } from '../api/watches-api.js';
 import { renderDayDetail } from './day-detail.js';
 import { renderSiteMatrix, renderSiteMatrixSkeleton } from './site-matrix.js';

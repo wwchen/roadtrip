@@ -20,7 +20,7 @@ sealed interface Phase {
      * Run one row from the registry. The [section] field tells the
      * orchestrator which dispatch path to take:
      *   - POI_DATA              → runPoiData(name)
-     *   - RESERVABLE_DATA       → runReservableData(name)
+     *   - CAMPSITE_DATA         → runCampsiteData(name)
      *   - POI_RESERVABLE_JOINER → runJoiner(name), a reconciler that
      *                             reparents campsites whose canonical
      *                             campground_id disagrees with the joiner's
@@ -40,7 +40,7 @@ sealed interface Phase {
             val rowValue: String,
         ) {
             POI_DATA("poi_data"),
-            RESERVABLE_DATA("reservable_data"),
+            CAMPSITE_DATA("campsite_data"),
             POI_RESERVABLE_JOINER("poi_reservable_joiner"),
         }
     }
@@ -48,7 +48,7 @@ sealed interface Phase {
 
 // A unit of refresh.
 //   - Fetch targets: one per data_sources row. Target.name = data_source slug.
-//   - Import targets: one per runnable poi_data/reservable_data row.
+//   - Import targets: one per runnable poi_data/campsite_data row.
 //     Target.name = row display name.
 // Per-target mutex serializes concurrent runs of the same target.
 data class Target(

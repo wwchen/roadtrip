@@ -7,7 +7,7 @@ import ca.floo.roadtrip.models.api.PoiCampsitesAvailabilityResponseDto
 import ca.floo.roadtrip.models.api.PoiCampsitesResponseSchema
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
@@ -39,12 +39,12 @@ internal fun Route.campsiteRoutes(
     reservationProviders: ReservationProviderRegistry,
     dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
 ) {
-    val campsitesRepo = ReservableRepo(ctx)
+    val campsitesRepo = CampsiteRepo(ctx)
     val providerRefs = CampsiteProviderRepo(ctx)
     val targets =
         DbAvailabilityTargetResolver(
             providerRefs = providerRefs,
-            reservablesRepo = campsitesRepo,
+            campsitesRepo = campsitesRepo,
             reservationProviders = reservationProviders,
             dateResolver = dateResolver,
         )

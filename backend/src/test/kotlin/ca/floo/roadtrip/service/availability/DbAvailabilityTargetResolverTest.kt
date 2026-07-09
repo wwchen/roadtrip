@@ -3,7 +3,7 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
@@ -76,10 +76,10 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
     }
 
-    private fun resolverFor(reservablesRepo: ReservableRepo): DbAvailabilityTargetResolver =
+    private fun resolverFor(campsitesRepo: CampsiteRepo): DbAvailabilityTargetResolver =
         DbAvailabilityTargetResolver(
             providerRefs = CampsiteProviderRepo(ctx),
-            reservablesRepo = reservablesRepo,
+            campsitesRepo = campsitesRepo,
             reservationProviders =
                 ReservationProviderRegistry(
                     mapOf(
@@ -95,11 +95,11 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         runBlocking {
             val poiA = seedPoi(campgroundId = null)
             val poiB = seedPoi(campgroundId = "232447")
-            val reservablesRepo = ReservableRepo(ctx)
+            val campsitesRepo = CampsiteRepo(ctx)
             val reservableId = seedReservable("100", poiB)
-            val reservable = reservablesRepo.findById(reservableId)!!
+            val reservable = campsitesRepo.findById(reservableId)!!
 
-            val resolver = resolverFor(reservablesRepo)
+            val resolver = resolverFor(campsitesRepo)
             val t = resolver.resolve(reservable)!!
 
             assertEquals(poiB, t.parentPoiId)
@@ -141,9 +141,9 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 payloadJson = """{"recgov_id":"100"}""",
             )
 
-            val reservablesRepo = ReservableRepo(ctx)
-            val reservable = reservablesRepo.findById(campsiteId)!!
-            val target = resolverFor(reservablesRepo).resolve(reservable)!!
+            val campsitesRepo = CampsiteRepo(ctx)
+            val reservable = campsitesRepo.findById(campsiteId)!!
+            val target = resolverFor(campsitesRepo).resolve(reservable)!!
 
             assertEquals("site:recgov:100", reservable.rid.encode())
             assertEquals(poi, target.parentPoiId)

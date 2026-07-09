@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { requestPoiCampsitesAvailability } from './api/availability-api.js';
-import { fetchPoiCampsites } from './api/reservable-api.js';
+import { fetchPoiCampsites } from './api/campsite-api.js';
 
 test('requestPoiCampsitesAvailability calls the canonical campsite endpoint', async () => {
   const previousFetch = globalThis.fetch;

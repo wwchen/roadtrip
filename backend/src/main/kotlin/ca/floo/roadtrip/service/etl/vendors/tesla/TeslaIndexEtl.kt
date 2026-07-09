@@ -148,10 +148,10 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerEtlOutput> {
             region = region,
             country = country,
             timeZone = detail?.timeZone?.takeIf { it.isNotBlank() },
-            amenities = rawDetail?.get(AMENITIES_KEY),
+            amenities = rawDetail?.jsonArrayField(AMENITIES_KEY),
             infoUrl = "https://www.tesla.com/findus?location=$slug",
             pricebooks = JsonArray(detail?.effectivePricebooks ?: emptyList()),
-            availabilityProfile = rawDetail?.get(AVAILABILITY_PROFILE_KEY),
+            availabilityProfile = rawDetail?.jsonObjectField(AVAILABILITY_PROFILE_KEY),
             indexPayload = rawIndex,
             detailPayload = rawDetail,
         )
@@ -223,6 +223,10 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerEtlOutput> {
             address.country?.let { put("country", it) }
         }
     }
+
+    private fun JsonObject.jsonArrayField(key: String): JsonArray? = this[key] as? JsonArray
+
+    private fun JsonObject.jsonObjectField(key: String): JsonObject? = this[key] as? JsonObject
 
     // location_url_slug values include slashes and uppercase ('AmsterdamNL')
     // that the source_id CHECK constraint (^[a-z0-9:_-]+$) rejects.

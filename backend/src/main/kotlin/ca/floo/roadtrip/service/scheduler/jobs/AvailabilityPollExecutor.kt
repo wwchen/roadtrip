@@ -6,7 +6,7 @@ import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
-import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
@@ -67,7 +67,7 @@ import java.time.ZoneOffset
  */
 internal class AvailabilityPollExecutor(
     private val pollers: AvailabilityPollerRepo,
-    private val reservablesRepo: ReservableRepo,
+    private val campsitesRepo: CampsiteRepo,
     private val batcher: CatalogAvailabilityBatcher,
     private val availability: AvailabilityRepo,
     private val runs: AvailabilityRunRepo,
@@ -110,7 +110,7 @@ internal class AvailabilityPollExecutor(
         // no watch to decide *what* to fetch — only whether to run (above) and
         // how often (cadence).
         val resolved =
-            reservablesRepo
+            campsitesRepo
                 .findByPoi(poller.poiId, type = ReservableType.SITE)
                 .mapNotNull { targets.resolve(it) }
                 .filter {

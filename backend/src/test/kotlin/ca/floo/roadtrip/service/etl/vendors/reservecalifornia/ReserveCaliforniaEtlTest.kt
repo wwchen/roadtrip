@@ -40,6 +40,8 @@ class ReserveCaliforniaEtlTest {
         assertEquals("US", location["country"]!!.jsonPrimitive.content)
         val management = campground.management!!.jsonObject
         assertEquals("California State Parks", management["agency"]!!.jsonPrimitive.content)
+        val amenities = campground.amenities!!.jsonObject
+        assertEquals("true", amenities["Restrooms"]!!.jsonPrimitive.content)
         val providerRef = campground.vendorRefPayload!!.jsonObject
         assertEquals("690", providerRef["place_id"]!!.jsonPrimitive.content)
         assertEquals("611", providerRef["facility_ids"]!!.jsonArray[0].jsonPrimitive.content)

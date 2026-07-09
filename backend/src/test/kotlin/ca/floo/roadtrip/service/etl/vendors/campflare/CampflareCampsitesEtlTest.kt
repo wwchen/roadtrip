@@ -63,7 +63,7 @@ class CampflareCampsitesEtlTest {
     }
 
     @Test
-    fun `skips campsite rows without id parent name or kind`() {
+    fun `skips campsite rows without id parent or name and defaults missing kind`() {
         val etl = CampflareCampsitesEtl()
         val out =
             etl.transform(
@@ -82,7 +82,8 @@ class CampflareCampsitesEtlTest {
                 transformCtx(),
             )
 
-        assertEquals(listOf("ok"), out.campsites.map { it.vendorRefId })
+        assertEquals(listOf("missing-kind", "ok"), out.campsites.map { it.vendorRefId })
+        assertEquals("site", out.campsites.single { it.vendorRefId == "missing-kind" }.kind)
     }
 
     @Test

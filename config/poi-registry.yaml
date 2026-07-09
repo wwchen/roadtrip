@@ -15,7 +15,7 @@
 #    `etls:` siblings in the SAME row via `inputs:`. Cycles, forward
 #    references, and cross-row etl refs are rejected at boot. `enabled: false`
 #    omits the row from admin import targets until the row is re-enabled.
-# 3. reservable_data — canonical campsite datasets linked to campgrounds by
+# 3. campsite_data — canonical campsite datasets linked to campgrounds by
 #    vendor refs.
 # 4. poi_reservable_joiner — retired parent resolver declarations kept only as
 #    registry history.
@@ -137,9 +137,9 @@ data_sources:
   # for unique resourceLocationIds and calls /api/resourcelocation/resources
   # per park. The response carries the human label ("OFC13"), description
   # ("C13 Phantom RV Pad"), allowed equipment, capacity, attribute IDs, and
-  # mapIds[] (parent leaf reference) for every reservable site at that park.
+  # mapIds[] (parent leaf reference) for every campsite at that park.
   # AspiraResourcesEtl reads this catalog as the source of truth for both
-  # the reservable set and per-site enrichment.
+  # the campsite set and per-site enrichment.
   #
   # ~120-170 calls per tenant at our 1.5s throttle, ~3-5 min wall-clock.
   - slug: aspira-inventory-wa
@@ -182,7 +182,7 @@ data_sources:
   # One capture per tenant for small lookup tables used as in-memory ETL side
   # inputs: /api/equipment, /api/resourcecategory, and
   # /api/attribute/filterable. These are not stored as DB tables; the
-  # resources ETL resolves names into reservables.raw during transform.
+  # resources ETL resolves names into campsite source payloads during transform.
   - slug: aspira-dictionaries-wa
     name: Aspira dictionaries (Washington State Parks)
     fetcher:
@@ -440,10 +440,10 @@ poi_data:
         inputs: [tesla-index]
 
 # ============================================================================
-# reservable_data — campsite catalog declarations. These vendor adapters write
+# campsite_data — campsite catalog declarations. These vendor adapters write
 # canonical campsite rows and resolve parents through campground vendor refs.
 # ============================================================================
-reservable_data:
+campsite_data:
   - name: Campflare Campsites
     etls:
       - slug: campflare-campsites
@@ -456,15 +456,15 @@ reservable_data:
         adapter: RecGovCampsitesEtl
         inputs: [recgov-campsites]
 
-  # Aspira per-tenant reservable catalogs. Each row's terminal reads two
+  # Aspira per-tenant campsite catalogs. Each row's terminal reads two
   # data_sources:
   #   1. per-park inventory capture (multi-part) — named-site catalog from
   #      /api/resourcelocation/resources. The source of truth for both the
-  #      reservable set AND per-site enrichment (name, description,
+  #      campsite set AND per-site enrichment (name, description,
   #      allowedEquipment, definedAttributes, capacity, mapIds[]).
   #   2. tenant dictionaries — small lookup tables for resource category,
   #      allowed equipment, and defined attribute labels. They stay
-  #      in-memory during ETL and enrich each reservable.raw object.
+  #      in-memory during ETL and enrich each campsite source payload.
   #   3. /api/maps capture — leaf metadata. Each inventory record carries
   #      mapIds[] referencing parent leaves; AspiraLeavesWalk turns the
   #      maps tree into a mapId-keyed leaf index for loop labeling.

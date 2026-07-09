@@ -24,7 +24,7 @@ import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 
 /**
- * Terminal ETL for the `reservable_data` section. Reads the per-park
+ * Terminal ETL for the `campsite_data` section. Reads the per-park
  * `/api/resourcelocation/resources` envelopes captured by
  * `scripts/fetch_aspira_inventory.py` and emits one reservable per
  * Aspira resource (per-individual-site).

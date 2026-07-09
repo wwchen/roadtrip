@@ -17,9 +17,9 @@ import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.DbConfig
 import ca.floo.roadtrip.repo.PoiServingRepo
-import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.dataSourceFor
 import ca.floo.roadtrip.repo.dsl
 import ca.floo.roadtrip.repo.migrate
@@ -165,7 +165,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             clients = boot.reservationProviderClients,
         )
 
-    val reservablesRepo = ReservableRepo(boot.ctx)
+    val campsitesRepo = CampsiteRepo(boot.ctx)
     val campsiteProviders = CampsiteProviderRepo(boot.ctx)
     val availability = AvailabilityRepo(boot.ctx)
     val availabilityDateResolver = AvailabilityDateResolver()
@@ -173,21 +173,21 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
     val availabilityTargets =
         DbAvailabilityTargetResolver(
             providerRefs = campsiteProviders,
-            reservablesRepo = reservablesRepo,
+            campsitesRepo = campsitesRepo,
             reservationProviders = reservationProviderRegistry,
             dateResolver = availabilityDateResolver,
         )
-    val availabilityWatchService = AvailabilityWatchService(boot.ctx, reservablesRepo, availabilityTargets)
+    val availabilityWatchService = AvailabilityWatchService(boot.ctx, campsitesRepo, availabilityTargets)
 
     val schedulerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     val availabilityPollers = AvailabilityPollerRepo(boot.ctx)
-    PollerBackfill(boot.ctx, AvailabilityPollerMembership(WatchScopeResolver(reservablesRepo), availabilityTargets)).run()
+    PollerBackfill(boot.ctx, AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), availabilityTargets)).run()
 
     val slackNotifications = SlackNotificationServiceImpl(boot.appConfig.slack)
     val watchAlertDispatcher =
         WatchAlertDispatcher(
             slack = slackNotifications,
-            scopeResolver = WatchScopeResolver(reservablesRepo),
+            scopeResolver = WatchScopeResolver(campsitesRepo),
             watches = AvailabilityWatchRepo(boot.ctx),
             targets = availabilityTargets,
             pois = PoiServingRepo(boot.ctx),
@@ -243,7 +243,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         handler =
             AvailabilityPollExecutor(
                 pollers = availabilityPollers,
-                reservablesRepo = reservablesRepo,
+                campsitesRepo = campsitesRepo,
                 batcher = CatalogAvailabilityBatcher(),
                 availability = availability,
                 runs = AvailabilityRunRepo(boot.ctx),

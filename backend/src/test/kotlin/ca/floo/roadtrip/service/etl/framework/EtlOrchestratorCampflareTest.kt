@@ -1,11 +1,11 @@
 package ca.floo.roadtrip.service.etl.framework
 
+import ca.floo.roadtrip.models.metadata.registry.CampsiteDataEntry
 import ca.floo.roadtrip.models.metadata.registry.DataSourceEntry
 import ca.floo.roadtrip.models.metadata.registry.EtlEntry
 import ca.floo.roadtrip.models.metadata.registry.Fetcher
 import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
-import ca.floo.roadtrip.models.metadata.registry.ReservableDataEntry
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import org.junit.jupiter.api.BeforeEach
@@ -59,7 +59,7 @@ class EtlOrchestratorCampflareTest : SharedDbTest() {
         val orchestrator = EtlOrchestrator(ctx, rawDir, registry())
 
         val campgrounds = orchestrator.runPoiData("Campflare Campgrounds")
-        val campsites = orchestrator.runReservableData("Campflare Campsites")
+        val campsites = orchestrator.runCampsiteData("Campflare Campsites")
 
         assertEquals(1, campgrounds.upsertResult.upsertedCount)
         assertEquals(1, campsites.upserted)
@@ -114,9 +114,9 @@ class EtlOrchestratorCampflareTest : SharedDbTest() {
                             ),
                     ),
                 ),
-            reservableData =
+            campsiteData =
                 listOf(
-                    ReservableDataEntry(
+                    CampsiteDataEntry(
                         name = "Campflare Campsites",
                         etls =
                             listOf(

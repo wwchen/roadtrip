@@ -108,6 +108,64 @@ class EtlExtrasDtoTest {
     }
 
     @Test
+    fun `tesla canonical output treats explicit null amenities as missing`() {
+        val rawDir = Files.createTempDirectory("tesla-null-amenities-etl-test").toFile()
+        val slug = "test-slug"
+        val slugDir = rawDir.resolve("tesla-locations").resolve(slug)
+        slugDir.mkdirs()
+        slugDir.resolve("2026-01-01T00-00-00Z.json").writeText(
+            Json.encodeToString(
+                Envelope.serializer(),
+                Envelope(
+                    fetcher = "fixture",
+                    fetcherVersion = "1",
+                    fetchedAt = FETCHED_AT.toString(),
+                    request = RequestMeta(url = "https://example.test/tesla/$slug", method = "GET"),
+                    response = ResponseMeta(status = 200),
+                    payload =
+                        Json.parseToJsonElement(
+                            """
+                            {
+                              "data": {
+                                "data": {
+                                  "name": "Test Supercharger",
+                                  "amenities": null,
+                                  "availabilityProfile": null
+                                }
+                              }
+                            }
+                            """.trimIndent(),
+                        ),
+                ),
+            ),
+        )
+        val rawIndex = Json.parseToJsonElement("""{"location_url_slug":"$slug","title":"locations"}""").jsonObject
+        val record =
+            TeslaIndexEtl()
+                .transform(
+                    TeslaIndexDto(
+                        rows =
+                            listOf(
+                                TeslaIndexRow(
+                                    latitude = 49.0,
+                                    longitude = -123.0,
+                                    title = "locations",
+                                    locationUrlSlug = slug,
+                                    superchargerFunction = TeslaSuperchargerFunction(showOnFindUs = "1"),
+                                ),
+                            ),
+                        rawBySlug = mapOf(slug to rawIndex),
+                        fetchedAt = FETCHED_AT,
+                    ),
+                    transformCtx(rawDir),
+                ).superchargers
+                .single()
+
+        assertNull(record.amenities)
+        assertNull(record.availabilityProfile)
+    }
+
+    @Test
     fun `tesla canonical output promotes enriched detail fields`() {
         val rawDir = Files.createTempDirectory("tesla-detail-etl-test").toFile()
         val slug = "test-slug"

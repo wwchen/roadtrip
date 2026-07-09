@@ -17,7 +17,7 @@ import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
-import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchStatus
 import io.github.smiley4.ktorswaggerui.dsl.routing.delete
@@ -65,9 +65,9 @@ internal fun Route.availabilityWatchRoutes(
     notifyScope: CoroutineScope,
 ) {
     val watches = AvailabilityWatchRepo(ctx)
-    val reservablesRepo = ReservableRepo(ctx)
+    val campsitesRepo = CampsiteRepo(ctx)
     val availability = AvailabilityRepo(ctx)
-    val scopeResolver = WatchScopeResolver(reservablesRepo)
+    val scopeResolver = WatchScopeResolver(campsitesRepo)
 
     // The "first message": on create/update, post the current window state to
     // Slack so an already-open site isn't stranded behind the edge-triggered
@@ -126,7 +126,7 @@ internal fun Route.availabilityWatchRoutes(
                 total = total,
                 limit = limit,
                 offset = offset,
-                watches = rows.map { it.toSchema(reservablesRepo) },
+                watches = rows.map { it.toSchema(campsitesRepo) },
             ),
         )
     }
@@ -148,7 +148,7 @@ internal fun Route.availabilityWatchRoutes(
         val watch =
             watches.findById(id)
                 ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
-        call.respondJson(AvailabilityWatchResponse(watch.toSchema(reservablesRepo)))
+        call.respondJson(AvailabilityWatchResponse(watch.toSchema(campsitesRepo)))
     }
 
     post("/api/availability/watches", {
@@ -191,7 +191,7 @@ internal fun Route.availabilityWatchRoutes(
                 ),
             )
         scheduleInitialNotify(watch)
-        call.respondJson(AvailabilityWatchResponse(watch.toSchema(reservablesRepo)), HttpStatusCode.Created)
+        call.respondJson(AvailabilityWatchResponse(watch.toSchema(campsitesRepo)), HttpStatusCode.Created)
     }
 
     patch("/api/availability/watches/{id}", {
@@ -264,7 +264,7 @@ internal fun Route.availabilityWatchRoutes(
             )
         if (updated == null) return@patch call.respondError("not_found", HttpStatusCode.NotFound)
         scheduleInitialNotify(updated)
-        call.respondJson(AvailabilityWatchResponse(updated.toSchema(reservablesRepo)))
+        call.respondJson(AvailabilityWatchResponse(updated.toSchema(campsitesRepo)))
     }
 
     delete("/api/availability/watches/{id}", {
@@ -451,13 +451,13 @@ private fun datesInWindow(
     endDate: LocalDate,
 ): List<LocalDate> = generateSequence(startDate) { d -> d.plusDays(1).takeIf { it.isBefore(endDate) } }.toList()
 
-private fun Watch.toSchema(reservablesRepo: ReservableRepo): AvailabilityWatchSchema {
+private fun Watch.toSchema(campsitesRepo: CampsiteRepo): AvailabilityWatchSchema {
     val firstTarget = targets.firstOrNull()
     val singleCampsite =
         firstTarget
             ?.reservableId
             ?.takeIf { targets.size == 1 }
-            ?.let { reservablesRepo.findById(it) }
+            ?.let { campsitesRepo.findById(it) }
             ?.let { r ->
                 CampsiteSummarySchema(
                     id = r.id,
