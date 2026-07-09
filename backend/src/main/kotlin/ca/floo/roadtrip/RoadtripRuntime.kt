@@ -1,6 +1,7 @@
 package ca.floo.roadtrip
 
 import ca.floo.roadtrip.clients.aspira.HttpAspiraAvailabilityClient
+import ca.floo.roadtrip.clients.campflare.HttpCampflareAvailabilityClient
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
 import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.clients.recgov.HttpRecgovAvailabilityClient
@@ -116,6 +117,11 @@ internal fun createRoadtripBootContext(): RoadtripBootContext {
             aspiraClient = HttpAspiraAvailabilityClient(),
             reserveAmericaClient = HttpReserveAmericaAvailabilityClient(),
             reserveCaliforniaClient = HttpReserveCaliforniaAvailabilityClient(),
+            campflareClient =
+                HttpCampflareAvailabilityClient(
+                    apiBaseUrl = appConfig.campflare.apiBaseUrl,
+                    apiKey = appConfig.campflare.apiKey,
+                ),
         )
 
     val staticDir = File(System.getenv("ROADTRIP_STATIC_DIR") ?: ".")

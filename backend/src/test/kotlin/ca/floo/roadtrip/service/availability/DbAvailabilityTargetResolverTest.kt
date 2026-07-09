@@ -76,6 +76,23 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
     }
 
+    private class NoopCampflareProvider : ReservationProvider {
+        override val id: ReservationProviderId = ReservationProviderId.CAMPFLARE
+        override val capabilities: ReservationProviderCapabilities =
+            ReservationProviderCapabilities(
+                supportsAvailability = true,
+                supportsAlerts = false,
+                bookingHorizonDays = 365,
+                maxPollWindowDays = 60,
+            )
+
+        override suspend fun availability(
+            ref: ProviderRef,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
+    }
+
     private fun resolverFor(campsitesRepo: CampsiteRepo): DbAvailabilityTargetResolver =
         DbAvailabilityTargetResolver(
             providerRefs = CampsiteProviderRepo(ctx),
@@ -85,6 +102,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                     mapOf(
                         "test" to NoopRecgovProvider(),
                         "federal-campgrounds" to NoopRecgovProvider(),
+                        "campflare" to NoopCampflareProvider(),
                     ),
                 ),
             dateResolver = AvailabilityDateResolver(),
@@ -107,7 +125,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         }
 
     @Test
-    fun `resolve prefers provider-shaped secondary refs for campflare catalog rows`() =
+    fun `resolve uses primary campflare refs for campflare catalog rows`() =
         runBlocking {
             val poi =
                 ctx
@@ -145,9 +163,10 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val reservable = campsitesRepo.findById(campsiteId)!!
             val target = resolverFor(campsitesRepo).resolve(reservable)!!
 
-            assertEquals("site:recgov:100", reservable.rid.encode())
+            assertEquals("site:campflare:upper-pines-site-100", reservable.rid.encode())
             assertEquals(poi, target.parentPoiId)
-            assertEquals("232447", parentRefKey(target.parentRef))
+            assertEquals(ReservationProviderId.CAMPFLARE, target.provider.id)
+            assertEquals("upper-pines-campground-447", parentRefKey(target.parentRef))
         }
 
     private fun linkCampgroundRef(

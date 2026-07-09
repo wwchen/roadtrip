@@ -352,6 +352,13 @@ data class PoiRegistry(
             .map { it.slug }
             .toSet()
 
+    fun campflareSources(): Set<String> =
+        poiData
+            .mapNotNull { row -> row.etls.lastOrNull() }
+            .filter { it.adapter == "CampflareCampgroundsEtl" }
+            .map { it.slug }
+            .toSet()
+
     /**
      * ReserveAmerica terminal ETL sources with their Active Network tenant
      * config. Unlike Aspira, these tenants are fully config-driven because the

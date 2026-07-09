@@ -111,6 +111,7 @@ availability history only.
 | Provider | Availability | Watches | Notes |
 |---|---|---|---|
 | RecGov (rec.gov) | ✓ | ✓ | Availability and generic watch polling. |
+| Campflare | ✓ | ✗ | Availability uses v2 bulk campground availability for Campflare-owned US catalog rows. Alerts stay off until cadence/load limits are validated. |
 | Aspira NextGen (BC Parks, Washington, Pennsylvania) | ✓ | planned | Availability ships now; watch dispatch still needs work. |
 | ReserveAmerica / Active Network (Alberta Parks, New York State Parks) | ✓ | ✗ | Availability reads the live campsite-calendar matrix; sites are cataloged from that same calendar roster (see `reserveamerica.md`). Alerts stay off until upstream cadence/load limits are validated. |
 | ReserveCalifornia / Tyler | ✓ | ✗ | Availability reads standard facility grids. Catalog import uses the public Search All Parks `search/place` flow. |
@@ -291,6 +292,8 @@ Each adapter's upstream API is documented separately under
 - [aspira.md](reservation-providers/aspira.md) — Aspira NextGen
   (`reservation.pc.gc.ca`, `camping.bcparks.ca`,
   `washington.goingtocamp.com`).
+- [campflare.md](reservation-providers/campflare.md) — Campflare v2 bulk
+  campground availability.
 - [reservecalifornia.md](reservation-providers/reservecalifornia.md) —
   ReserveCalifornia / Tyler Technologies.
 - [reserveamerica.md](reservation-providers/reserveamerica.md) — ReserveAmerica /

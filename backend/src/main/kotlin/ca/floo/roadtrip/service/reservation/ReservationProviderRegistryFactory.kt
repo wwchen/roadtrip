@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.reservation
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraTenants
+import ca.floo.roadtrip.service.reservation.adapters.campflare.CampflareReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.recgov.RecGovReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.reserveamerica.ReserveAmericaReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.reserveamerica.ReserveAmericaTenant
@@ -29,6 +30,11 @@ object ReservationProviderRegistryFactory {
         val recgov = RecGovReservationProvider(client = clients.recgovClient)
         for (source in registry.recgovSources()) {
             adaptersBySource[source] = recgov
+        }
+
+        val campflare = CampflareReservationProvider(client = clients.campflareClient)
+        for (source in registry.campflareSources()) {
+            adaptersBySource[source] = campflare
         }
 
         // Aspira — one adapter instance per upstream host. Sources that share

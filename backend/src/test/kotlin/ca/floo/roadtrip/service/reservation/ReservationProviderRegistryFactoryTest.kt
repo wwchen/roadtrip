@@ -3,6 +3,9 @@ package ca.floo.roadtrip.service.reservation
 import ca.floo.roadtrip.clients.aspira.AspiraAvailability
 import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.clients.aspira.AspiraOccupancy
+import ca.floo.roadtrip.clients.campflare.CampflareAvailability
+import ca.floo.roadtrip.clients.campflare.CampflareAvailabilityClient
+import ca.floo.roadtrip.clients.campflare.CampflareCampgroundAvailability
 import ca.floo.roadtrip.clients.recgov.Campsite
 import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailability
@@ -71,6 +74,7 @@ class ReservationProviderRegistryFactoryTest {
                                     )
                                 },
                             reserveCaliforniaClient = stubReserveCaliforniaClient(),
+                            campflareClient = stubCampflareClient(),
                         ),
                 )
 
@@ -91,6 +95,73 @@ class ReservationProviderRegistryFactoryTest {
                     parkId = "489",
                     startDate = LocalDate.parse("2026-06-22"),
                     endDate = LocalDate.parse("2026-06-24"),
+                ),
+                observedCall,
+            )
+        }
+
+    @Test
+    fun `campflare source maps to campflare provider`() =
+        runBlocking {
+            var observedCall: CampflareCall? = null
+
+            val registry =
+                ReservationProviderRegistryFactory.build(
+                    registry =
+                        PoiRegistry(
+                            dataSources = emptyList(),
+                            poiData =
+                                listOf(
+                                    PoiDataEntry(
+                                        name = "Campflare Campgrounds",
+                                        category = "campground",
+                                        etls =
+                                            listOf(
+                                                EtlEntry(
+                                                    slug = "campflare-campgrounds",
+                                                    adapter = "CampflareCampgroundsEtl",
+                                                ),
+                                            ),
+                                    ),
+                                ),
+                        ),
+                    clients =
+                        ReservationProviderClients(
+                            recgovClient = stubRecgovClient(),
+                            aspiraClient = stubAspiraClient(),
+                            reserveAmericaClient = stubReserveAmericaClient(),
+                            reserveCaliforniaClient = stubReserveCaliforniaClient(),
+                            campflareClient =
+                                CampflareAvailabilityClient { campgroundIds, startDate, endDate ->
+                                    observedCall = CampflareCall(campgroundIds, startDate, endDate)
+                                    CampflareAvailability(
+                                        campgrounds =
+                                            campgroundIds.associateWith {
+                                                CampflareCampgroundAvailability(
+                                                    campgroundId = it,
+                                                    campsiteAvailability = emptyList(),
+                                                )
+                                            },
+                                        observedAt = Instant.EPOCH,
+                                    )
+                                },
+                        ),
+                )
+
+            val provider = registry.forPoi(row("campflare-campgrounds"))
+
+            assertNotNull(provider)
+            assertEquals(ReservationProviderId.CAMPFLARE, provider.id)
+            provider.availability(
+                ref = ProviderRef.Campflare("upper-pines-campground-447"),
+                startDate = LocalDate.parse("2026-06-01"),
+                endDate = LocalDate.parse("2026-06-07"),
+            )
+            assertEquals(
+                CampflareCall(
+                    campgroundIds = listOf("upper-pines-campground-447"),
+                    startDate = LocalDate.parse("2026-06-01"),
+                    endDate = LocalDate.parse("2026-06-07"),
                 ),
                 observedCall,
             )
@@ -161,17 +232,35 @@ class ReservationProviderRegistryFactoryTest {
                             closed += "reservecalifornia"
                         }
                     },
+                campflareClient =
+                    object : CampflareAvailabilityClient {
+                        override suspend fun fetchAvailability(
+                            campgroundIds: List<String>,
+                            startDate: LocalDate,
+                            endDate: LocalDate,
+                        ): CampflareAvailability = error("not used")
+
+                        override fun close() {
+                            closed += "campflare"
+                        }
+                    },
             )
 
         clients.close()
 
-        assertEquals(listOf("reservecalifornia", "reserveamerica", "aspira", "recgov"), closed)
+        assertEquals(listOf("campflare", "reservecalifornia", "reserveamerica", "aspira", "recgov"), closed)
     }
 
     private data class ReserveAmericaCall(
         val host: String,
         val contractCode: String,
         val parkId: String,
+        val startDate: LocalDate,
+        val endDate: LocalDate,
+    )
+
+    private data class CampflareCall(
+        val campgroundIds: List<String>,
         val startDate: LocalDate,
         val endDate: LocalDate,
     )
@@ -203,6 +292,9 @@ class ReservationProviderRegistryFactoryTest {
             ): AspiraOccupancy = error("not used")
         }
 
+    private fun stubReserveAmericaClient(): ReserveAmericaAvailabilityClient =
+        ReserveAmericaAvailabilityClient { _, _, _, _, _ -> error("not used") }
+
     private fun stubReserveCaliforniaClient(): ReserveCaliforniaAvailabilityClient =
         object : ReserveCaliforniaAvailabilityClient {
             override suspend fun fetchGrid(
@@ -213,4 +305,6 @@ class ReservationProviderRegistryFactoryTest {
                 maxDate: LocalDate,
             ): ReserveCaliforniaGridAvailability = error("not used")
         }
+
+    private fun stubCampflareClient(): CampflareAvailabilityClient = CampflareAvailabilityClient { _, _, _ -> error("not used") }
 }

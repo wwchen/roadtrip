@@ -26,6 +26,10 @@ object ProviderRefParser {
             return ProviderRef.RecGov(recgovId = it)
         }
 
+        obj["campflare_id"]?.jsonPrimitive?.contentOrNull?.let {
+            return ProviderRef.Campflare(campgroundId = it)
+        }
+
         // Aspira: writer uses Long for both ids; reading as Long avoids the
         // 32-bit truncation that the legacy `Int` parser introduced.
         val mapId = obj["mapId"]?.jsonPrimitive?.longOrNull

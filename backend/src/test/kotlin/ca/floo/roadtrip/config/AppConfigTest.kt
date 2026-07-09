@@ -12,6 +12,7 @@ class AppConfigTest {
 
         assertEquals(Duration.ofMinutes(10), config.cache.ttlFor(ApiCacheEntity.ROUTE))
         assertEquals(Duration.ofHours(2), config.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY))
+        assertEquals(Duration.ofHours(2), config.cache.ttlFor(ApiCacheEntity.CAMPFLARE_AVAILABILITY))
         assertEquals(Duration.ofHours(2), config.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY))
         assertEquals(Duration.ofHours(2), config.cache.ttlFor(ApiCacheEntity.RESERVEAMERICA_AVAILABILITY))
         assertEquals(Duration.ofHours(2), config.cache.ttlFor(ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY))
@@ -24,6 +25,7 @@ class AppConfigTest {
                 mapOf(
                     "ROADTRIP_CACHE_ROUTE_TTL" to "PT30M",
                     "ROADTRIP_CACHE_RECGOV_AVAILABILITY_TTL" to "4h",
+                    "ROADTRIP_CACHE_CAMPFLARE_AVAILABILITY_TTL" to "20m",
                     "ROADTRIP_CACHE_ASPIRA_AVAILABILITY_TTL" to "900",
                     "ROADTRIP_CACHE_RESERVEAMERICA_AVAILABILITY_TTL" to "30m",
                     "ROADTRIP_CACHE_RESERVECALIFORNIA_AVAILABILITY_TTL" to "45m",
@@ -32,9 +34,27 @@ class AppConfigTest {
 
         assertEquals(Duration.ofMinutes(30), config.cache.ttlFor(ApiCacheEntity.ROUTE))
         assertEquals(Duration.ofHours(4), config.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY))
+        assertEquals(Duration.ofMinutes(20), config.cache.ttlFor(ApiCacheEntity.CAMPFLARE_AVAILABILITY))
         assertEquals(Duration.ofMinutes(15), config.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY))
         assertEquals(Duration.ofMinutes(30), config.cache.ttlFor(ApiCacheEntity.RESERVEAMERICA_AVAILABILITY))
         assertEquals(Duration.ofMinutes(45), config.cache.ttlFor(ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY))
+    }
+
+    @Test
+    fun `campflare config trims api key and base url with default fallback`() {
+        assertEquals(null, AppConfig.fromEnv(emptyMap()).campflare.apiKey)
+        assertEquals("https://api.campflare.com/v2", AppConfig.fromEnv(emptyMap()).campflare.apiBaseUrl)
+
+        val config =
+            AppConfig.fromEnv(
+                mapOf(
+                    "CAMPFLARE_API_KEY" to " key-123 ",
+                    "CAMPFLARE_API_BASE" to " https://campflare.test/v2 ",
+                ),
+            )
+
+        assertEquals("key-123", config.campflare.apiKey)
+        assertEquals("https://campflare.test/v2", config.campflare.apiBaseUrl)
     }
 
     @Test

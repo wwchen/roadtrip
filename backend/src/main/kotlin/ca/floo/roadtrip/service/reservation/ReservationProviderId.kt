@@ -16,6 +16,7 @@ package ca.floo.roadtrip.service.reservation
  */
 enum class ReservationProviderId {
     RECGOV,
+    CAMPFLARE,
     ASPIRA,
     RESERVEAMERICA,
     RESERVECALIFORNIA,
