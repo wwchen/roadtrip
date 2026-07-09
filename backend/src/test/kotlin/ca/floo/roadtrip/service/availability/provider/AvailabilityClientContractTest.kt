@@ -88,7 +88,7 @@ class AvailabilityClientContractTest {
 
             assertEquals("recgov", availability.provider)
             assertEquals("recgov", catalog.provider)
-            assertEquals("site:recgov:330257", reservable.reservableId)
+            assertEquals(null, reservable.campsiteId)
         }
 
     private fun assertDirectAvailabilityClient(type: Class<*>) {

@@ -57,7 +57,7 @@ class CampflareAvailabilityProviderTest {
                     ref = ProviderRef.Campflare("upper-pines-campground-447"),
                     reservables =
                         listOf(
-                            CatalogReservableRef(rid = "site:campflare:upper-pines-site-100", vendorId = "upper-pines-site-100"),
+                            CatalogReservableRef(campsiteId = 100, vendorId = "upper-pines-site-100"),
                         ),
                     startDate = LocalDate.parse("2026-06-01"),
                     endDate = LocalDate.parse("2026-06-03"),
@@ -79,7 +79,7 @@ class CampflareAvailabilityProviderTest {
             assertEquals("campflare", batch.provider)
             assertEquals("upper-pines-campground-447", batch.campgroundId)
             assertEquals(2, batch.observations.size)
-            assertEquals(setOf("site:campflare:upper-pines-site-100"), batch.observations.map { it.reservableId }.toSet())
+            assertEquals(setOf(100L), batch.observations.map { it.campsiteId }.toSet())
             assertEquals(
                 listOf(AvailabilityStatus.AVAILABLE, AvailabilityStatus.RESERVED),
                 batch.observations.sortedBy { it.date }.map { it.status },
@@ -110,7 +110,7 @@ class CampflareAvailabilityProviderTest {
                     ref = ProviderRef.Campflare("upper-pines-campground-447"),
                     reservables =
                         listOf(
-                            CatalogReservableRef(rid = "site:campflare:upper-pines-site-100", vendorId = "upper-pines-site-100"),
+                            CatalogReservableRef(campsiteId = 100, vendorId = "upper-pines-site-100"),
                         ),
                     startDate = LocalDate.parse("2026-06-01"),
                     endDate = LocalDate.parse("2026-06-03"),

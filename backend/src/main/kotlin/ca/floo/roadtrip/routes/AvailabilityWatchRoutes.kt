@@ -323,7 +323,7 @@ internal fun Route.availabilityWatchRoutes(
         for (r in children.sortedWith(
             compareBy<Reservable, String?>(nullsLast()) {
                 it.loop
-            }.thenBy { it.name ?: "" }.thenBy { it.rid.vendorId },
+            }.thenBy { it.name ?: "" }.thenBy { it.vendorId },
         )) {
             val rowCells =
                 dates.map { d ->

@@ -86,7 +86,7 @@ function renderFeatures(features) {
 function siteName(site) {
   if (site.name) return site.name;
   if (site.vendor_id) return `Site #${site.vendor_id}`;
-  return site.rid || '(unknown)';
+  return site.id != null ? `Site #${site.id}` : '(unknown)';
 }
 
 function capacityLabel(site, raw, tags = {}) {

@@ -64,7 +64,7 @@ class ReserveAmericaAvailabilityProvider(
                 // catalog-less callers still need every visible site/date cell.
                 dates(startDate, endDate).map { date ->
                     ReservableDayObservation(
-                        reservableId = rid(contractCode, siteId),
+                        campsiteId = null,
                         date = date,
                         observedAt = data.observedAt,
                         status = byDate[date] ?: AvailabilityStatus.UNKNOWN,
@@ -116,10 +116,9 @@ class ReserveAmericaAvailabilityProvider(
         val reserveAmericaRef = reserveAmericaRefOrThrow(ref)
         val contractCode = contractCode(reserveAmericaRef)
         val data = fetch(contractCode, reserveAmericaRef.parkId, startDate, endDate)
-        val target = CatalogReservableRef(rid = rid(contractCode, vendorId), vendorId = vendorId)
         val observations =
             observationsForReservable(
-                reservable = target,
+                campsiteId = null,
                 byDate = data.statuses[vendorId].orEmpty(),
                 dates = dates(startDate, endDate),
                 observedAt = data.observedAt,
@@ -130,7 +129,7 @@ class ReserveAmericaAvailabilityProvider(
             startDate = startDate,
             endDate = endDate,
             observations = observations,
-            reservableId = target.rid,
+            campsiteId = null,
         )
     }
 
@@ -156,9 +155,22 @@ class ReserveAmericaAvailabilityProvider(
         dates: List<LocalDate>,
         observedAt: Instant,
     ): List<ReservableDayObservation> =
+        observationsForReservable(
+            campsiteId = reservable.campsiteId,
+            byDate = byDate,
+            dates = dates,
+            observedAt = observedAt,
+        )
+
+    private fun observationsForReservable(
+        campsiteId: Long?,
+        byDate: Map<LocalDate, AvailabilityStatus>,
+        dates: List<LocalDate>,
+        observedAt: Instant,
+    ): List<ReservableDayObservation> =
         dates.map { date ->
             ReservableDayObservation(
-                reservableId = reservable.rid,
+                campsiteId = campsiteId,
                 date = date,
                 observedAt = observedAt,
                 status = byDate[date] ?: AvailabilityStatus.UNKNOWN,
@@ -171,7 +183,7 @@ class ReserveAmericaAvailabilityProvider(
         startDate: LocalDate,
         endDate: LocalDate,
         observations: List<ReservableDayObservation>,
-        reservableId: String? = null,
+        campsiteId: Long? = null,
     ): AvailabilityObservationBatch =
         AvailabilityObservationBatch(
             provider = "reserveamerica",
@@ -182,7 +194,7 @@ class ReserveAmericaAvailabilityProvider(
             campgroundId = parkId,
             host = tenant.host,
             mapId = contractCode,
-            reservableId = reservableId,
+            campsiteId = campsiteId,
         )
 
     private fun reserveAmericaRefOrThrow(ref: ProviderRef): ProviderRef.ReserveAmerica =
@@ -223,8 +235,3 @@ private fun dates(
 ): List<LocalDate> =
     (0 until ChronoUnit.DAYS.between(startDate, endDate).toInt())
         .map { startDate.plusDays(it.toLong()) }
-
-private fun rid(
-    contractCode: String,
-    siteId: String,
-): String = "site:reserveamerica_${contractCode.lowercase()}:$siteId"

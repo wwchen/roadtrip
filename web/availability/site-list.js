@@ -1,9 +1,9 @@
-// Selected-day available reservable list. Hidden until a day is selected,
+// Selected-day available campsite list. Hidden until a day is selected,
 // then filters the POI catalog by the week availability response's
-// available_reservable_ids so the visible rows match that day's count.
+// available_campsite_ids so the visible rows match that day's count.
 
 import { escapeHtml } from '../core.js';
-import { availableCount, availableReservableIds } from './day-fields.js';
+import { availableCount, availableCampsiteIds } from './day-fields.js';
 import { hasReservationUrlTemplate, reservationUrlFromTemplate } from './booking-links.js';
 
 /**
@@ -16,7 +16,7 @@ import { hasReservationUrlTemplate, reservationUrlFromTemplate } from './booking
  *
  * @param {object} args
  * @param {'loading'|'success'|'error'} args.state
- * @param {Array<object>}        args.reservables  Rows from BE (rid/name/loop/site_type/reservation_url_template).
+ * @param {Array<object>}        args.reservables  Rows from BE (id/name/loop/site_type/reservation_url_template).
  * @param {string|null}          args.error
  * @param {boolean}               args.expanded
  * @param {object|null}           args.selectedDay  Per-day availability row.
@@ -30,7 +30,7 @@ export function renderSiteList({
   selectedDay = null,
   selectedEndDate = null,
 }) {
-  const availableIds = availableReservableIds(selectedDay);
+  const availableIds = availableCampsiteIds(selectedDay);
   if (availableIds.length === 0) return '';
   const count = availableCount(selectedDay);
   const catalogRows = Array.isArray(reservables) ? reservables : [];
@@ -98,15 +98,12 @@ function renderRows(reservables, dateWindow) {
 }
 
 function reservablesForIds(reservables, ids) {
-  const byRid = new Map((Array.isArray(reservables) ? reservables : []).map((r) => [r.rid, r]));
-  return ids.map((rid) => byRid.get(rid) || fallbackReservable(rid));
+  const byId = new Map((Array.isArray(reservables) ? reservables : []).map((r) => [String(r.id), r]));
+  return ids.map((id) => byId.get(String(id)) || fallbackReservable(id));
 }
 
-function fallbackReservable(rid) {
-  const parts = String(rid).split(':');
-  const vendor = parts[1] || '';
-  const vendorId = parts.slice(2).join(':') || String(rid);
-  return { rid, vendor, vendor_id: vendorId };
+function fallbackReservable(id) {
+  return { id, vendor_id: String(id) };
 }
 
 function renderRow(r, dateWindow) {
@@ -135,7 +132,7 @@ function renderRow(r, dateWindow) {
     ? `<a class="cg-sites-row-link" href="${escapeHtml(url)}" target="_blank" rel="noreferrer" aria-label="Book site ${safeName}">${inner}</a>`
     : inner;
   return `
-    <li class="cg-sites-row" data-rid="${escapeHtml(r.rid)}">
+    <li class="cg-sites-row" data-campsite-id="${escapeHtml(String(r.id ?? ''))}">
       ${body}
     </li>
   `;
@@ -147,7 +144,7 @@ function renderRow(r, dateWindow) {
  */
 function formatFallbackName(r) {
   if (r.vendor_id) return `Site #${r.vendor_id}`;
-  return r.rid || '(unknown)';
+  return r.id != null ? `Site #${r.id}` : '(unknown)';
 }
 
 function renderSiteDetails(r) {

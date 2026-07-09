@@ -23,7 +23,7 @@ private const val CAMPSITE_DATA_SECTION = "campsite_data"
 //     (campsites aren't map pins).
 //   - poi_reservable_joiner: N:M-link discovery (RFC 0008). Each entry
 //     names an adapter that reads the current state of `pois` +
-//     `reservables` and writes the (reservable_id, poi_id) link rows
+//     canonical campsite catalog rows and writes the POI/campsite link rows
 //     into `reservable_pois`. No etl chain — joiners don't transform raw
 //     data, they query DB tables.
 //
@@ -536,8 +536,8 @@ data class CampsiteDataEntry(
 /**
  * Row in the `poi_reservable_joiner` section. Names a single adapter
  * (registered in EtlOrchestrator's joiner registry) that reads the
- * current state of `pois` + `reservables` and writes (reservable_id,
- * poi_id) link rows into `reservable_pois`. No etl chain; joiners
+ * current state of `pois` + canonical campsite catalog rows and writes
+ * POI/campsite link rows into `reservable_pois`. No etl chain; joiners
  * don't transform raw data, they query DB tables.
  *
  * `args` follows the same shape as [EtlEntry.args]: free-form

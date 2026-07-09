@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
 import ca.floo.roadtrip.models.availability.CellTransition
-import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -110,7 +109,7 @@ internal class AvailabilityPollExecutor(
         // how often (cadence).
         val resolved =
             campsitesRepo
-                .findByPoi(poller.poiId, type = ReservableType.SITE)
+                .findByPoi(poller.poiId)
                 .mapNotNull { targets.resolve(it) }
                 .filter {
                     parentRefKey(it.parentRef) == poller.parentRef &&
@@ -189,9 +188,9 @@ internal class AvailabilityPollExecutor(
                 // Dates that quietly aged out of a still-live poller's window reach
                 // their terminal 'past' state here (belt-and-suspenders alongside PR1's
                 // window-clamp retirement, which stops polling but does not flip the cell).
-                val observedReservableIds =
+                val observedCampsiteIds =
                     results.flatMap { r -> r.reservables.map { it.id } }.distinct()
-                availability.markElapsedAsPast(observedReservableIds, LocalDate.now(ZoneOffset.UTC))
+                availability.markElapsedAsPast(observedCampsiteIds, LocalDate.now(ZoneOffset.UTC))
                 recordFetchCalls(results, runId)
                 val completedAt = OffsetDateTime.now()
                 val durationMs = durationMs(startedAt, completedAt)
@@ -243,10 +242,10 @@ internal class AvailabilityPollExecutor(
         runId: Long,
     ): List<CellTransition> {
         val batch = result.batch ?: return emptyList()
-        val idByRid = result.reservables.associateBy({ it.rid.encode() }, { it.id })
+        val campsiteIds = result.reservables.mapTo(mutableSetOf()) { it.id }
         val observations =
             batch.observations.mapNotNull { obs ->
-                val dbId = idByRid[obs.reservableId] ?: return@mapNotNull null
+                val dbId = obs.campsiteId?.takeIf { it in campsiteIds } ?: return@mapNotNull null
                 AvailabilityRepo.Observation(
                     reservableId = dbId,
                     targetDate = obs.date,

@@ -94,7 +94,7 @@ class RecGovAvailabilityProvider(
     override fun bookingUrlTemplate(
         reservable: Reservable,
         parentRef: ProviderRef,
-    ): String = RecGovBookingUrl.template(reservable.rid.vendorId)
+    ): String = RecGovBookingUrl.template(reservable.vendorId)
 
     private fun recgovIdOrThrow(ref: ProviderRef): String =
         when (ref) {

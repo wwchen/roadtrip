@@ -31,14 +31,14 @@ class AvailabilityResponseTest {
                             DayClassification(
                                 date = "2026-06-10",
                                 status = AvailabilityStatus.AVAILABLE,
-                                availableReservableIds = listOf("site:recgov:100", "site:recgov:200", "site:recgov:300"),
-                                reservableStatuses =
+                                availableCampsiteIds = listOf(100L, 200L, 300L),
+                                campsiteStatuses =
                                     mapOf(
-                                        "site:recgov:100" to AvailabilityStatus.AVAILABLE,
-                                        "site:recgov:200" to AvailabilityStatus.AVAILABLE,
-                                        "site:recgov:300" to AvailabilityStatus.AVAILABLE,
-                                        "site:recgov:400" to AvailabilityStatus.RESERVED,
-                                        "site:recgov:500" to AvailabilityStatus.FIRST_COME,
+                                        100L to AvailabilityStatus.AVAILABLE,
+                                        200L to AvailabilityStatus.AVAILABLE,
+                                        300L to AvailabilityStatus.AVAILABLE,
+                                        400L to AvailabilityStatus.RESERVED,
+                                        500L to AvailabilityStatus.FIRST_COME,
                                     ),
                             ),
                         ),
@@ -61,11 +61,11 @@ class AvailabilityResponseTest {
         assertEquals("available", availabilityDay["status"]!!.jsonPrimitive.content)
         assertNull(availabilityDay["available_count"])
         assertNull(availabilityDay["total"])
-        assertEquals(3, availabilityDay["available_reservable_ids"]!!.jsonArray.size)
+        assertEquals(3, availabilityDay["available_campsite_ids"]!!.jsonArray.size)
         assertEquals(
             "first_come",
-            availabilityDay["reservable_statuses"]!!
-                .jsonObject["site:recgov:500"]!!
+            availabilityDay["campsite_statuses"]!!
+                .jsonObject["500"]!!
                 .jsonPrimitive.content,
         )
         assertEquals(false, json["cache"]!!.jsonObject["hit"]!!.jsonPrimitive.boolean)
@@ -84,31 +84,31 @@ class AvailabilityResponseTest {
                     observations =
                         listOf(
                             ReservableDayObservation(
-                                reservableId = "site:recgov:100",
+                                campsiteId = 100,
                                 date = LocalDate.parse("2026-06-10"),
                                 observedAt = olderObservedAt,
                                 status = AvailabilityStatus.RESERVED,
                             ),
                             ReservableDayObservation(
-                                reservableId = "site:recgov:100",
+                                campsiteId = 100,
                                 date = LocalDate.parse("2026-06-10"),
                                 observedAt = observedAt,
                                 status = AvailabilityStatus.AVAILABLE,
                             ),
                             ReservableDayObservation(
-                                reservableId = "site:recgov:200",
+                                campsiteId = 200,
                                 date = LocalDate.parse("2026-06-10"),
                                 observedAt = observedAt,
                                 status = AvailabilityStatus.RESERVED,
                             ),
                             ReservableDayObservation(
-                                reservableId = "site:recgov:100",
+                                campsiteId = 100,
                                 date = LocalDate.parse("2026-06-11"),
                                 observedAt = observedAt,
                                 status = AvailabilityStatus.RESERVED,
                             ),
                             ReservableDayObservation(
-                                reservableId = "site:recgov:200",
+                                campsiteId = 200,
                                 date = LocalDate.parse("2026-06-11"),
                                 observedAt = observedAt,
                                 status = AvailabilityStatus.UNKNOWN,
@@ -124,7 +124,7 @@ class AvailabilityResponseTest {
         assertEquals("2026-06-10", dto.startDate)
         assertEquals("2026-06-12", dto.endDate)
         assertEquals(AvailabilityStatus.AVAILABLE, dto.availability[0].status)
-        assertEquals(listOf("site:recgov:100"), dto.availability[0].availableReservableIds)
+        assertEquals(listOf(100L), dto.availability[0].availableCampsiteIds)
         assertEquals(AvailabilityStatus.UNKNOWN, dto.availability[1].status)
     }
 
@@ -140,7 +140,7 @@ class AvailabilityResponseTest {
                     observations =
                         listOf(
                             ReservableDayObservation(
-                                reservableId = "site:aspira_pc:100",
+                                campsiteId = 100,
                                 date = LocalDate.parse("2026-06-10"),
                                 observedAt = observedAt,
                                 status = AvailabilityStatus.AVAILABLE,
@@ -155,8 +155,8 @@ class AvailabilityResponseTest {
         assertEquals(2, dto.availability.size)
         assertEquals(AvailabilityStatus.AVAILABLE, dto.availability[0].status)
         assertEquals(AvailabilityStatus.UNKNOWN, dto.availability[1].status)
-        assertEquals(emptyList(), dto.availability[1].availableReservableIds)
-        assertEquals(emptyMap(), dto.availability[1].reservableStatuses)
+        assertEquals(emptyList(), dto.availability[1].availableCampsiteIds)
+        assertEquals(emptyMap(), dto.availability[1].campsiteStatuses)
     }
 
     @Test
@@ -174,12 +174,12 @@ class AvailabilityResponseTest {
     @Test
     fun `unknown reservable status dominates reserved in day rollup`() {
         val day =
-            dayClassificationFromReservableStatuses(
+            dayClassificationFromCampsiteStatuses(
                 date = "2026-06-10",
                 statuses =
                     mapOf(
-                        "site:recgov:100" to AvailabilityStatus.RESERVED,
-                        "site:recgov:200" to AvailabilityStatus.UNKNOWN,
+                        100L to AvailabilityStatus.RESERVED,
+                        200L to AvailabilityStatus.UNKNOWN,
                     ),
             )
 

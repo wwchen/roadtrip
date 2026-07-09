@@ -110,9 +110,9 @@ export async function mount(rootEl, { urlParams }) {
     `;
   }
 
-  async function refreshStats(rid) {
+  async function refreshStats(campsiteId) {
     try {
-      const data = await getSnapshotsSummary(rid);
+      const data = await getSnapshotsSummary(campsiteId);
       if (data.stats.length === 0) {
         hideStats();
         return;

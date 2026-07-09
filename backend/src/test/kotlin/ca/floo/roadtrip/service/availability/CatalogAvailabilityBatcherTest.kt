@@ -7,7 +7,6 @@ import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
-import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
@@ -34,8 +33,8 @@ class CatalogAvailabilityBatcherTest {
             val ref = ProviderRef.RecGov(recgovId = "232447")
             val targets =
                 listOf(
-                    resolvedTarget(reservableRid = "site:recgov:100", provider = provider, parentRef = ref),
-                    resolvedTarget(reservableRid = "site:recgov:101", provider = provider, parentRef = ref),
+                    resolvedTarget(campsiteId = 100L, provider = provider, parentRef = ref),
+                    resolvedTarget(campsiteId = 101L, provider = provider, parentRef = ref),
                 )
             var calls = 0
             val results =
@@ -60,8 +59,8 @@ class CatalogAvailabilityBatcherTest {
             val provider = fakeProvider()
             val targets =
                 listOf(
-                    resolvedTarget("site:recgov:1", provider, ProviderRef.RecGov("100")),
-                    resolvedTarget("site:recgov:2", provider, ProviderRef.RecGov("200")),
+                    resolvedTarget(1L, provider, ProviderRef.RecGov("100")),
+                    resolvedTarget(2L, provider, ProviderRef.RecGov("200")),
                 )
             var calls = 0
             CatalogAvailabilityBatcher().fetchByGroup(targets, { _, _ -> windows }, { _, _, _, ws ->
@@ -75,7 +74,7 @@ class CatalogAvailabilityBatcherTest {
     fun `rate limited fetch is classified, not thrown`() =
         runBlocking {
             val provider = fakeProvider()
-            val targets = listOf(resolvedTarget("site:recgov:1", provider, ProviderRef.RecGov("100")))
+            val targets = listOf(resolvedTarget(1L, provider, ProviderRef.RecGov("100")))
             val thrown = AvailabilityProviderError.RateLimited(RuntimeException("429"))
             val results =
                 CatalogAvailabilityBatcher().fetchByGroup(
@@ -94,7 +93,7 @@ class CatalogAvailabilityBatcherTest {
     fun `null window skips the group with no fetch call`() =
         runBlocking {
             val provider = fakeProvider()
-            val targets = listOf(resolvedTarget("site:recgov:1", provider, ProviderRef.RecGov("100")))
+            val targets = listOf(resolvedTarget(1L, provider, ProviderRef.RecGov("100")))
             var calls = 0
             val results =
                 CatalogAvailabilityBatcher().fetchByGroup(
@@ -116,7 +115,7 @@ class CatalogAvailabilityBatcherTest {
             val provider = fakeProvider()
             val target = ResolvedDateWindow(LocalDate.parse("2026-07-17"), LocalDate.parse("2026-07-24"))
             val fetch = ResolvedDateWindow(LocalDate.parse("2026-07-17"), LocalDate.parse("2026-08-16"))
-            val targets = listOf(resolvedTarget("site:recgov:1", provider, ProviderRef.RecGov("100")))
+            val targets = listOf(resolvedTarget(1L, provider, ProviderRef.RecGov("100")))
             val results =
                 CatalogAvailabilityBatcher().fetchByGroup(
                     targets,
@@ -132,13 +131,15 @@ class CatalogAvailabilityBatcherTest {
             val provider = fakeProvider()
             val catalogRef =
                 CatalogReservableRef(
-                    rid = "site:campflare:upper-pines-site-100",
+                    campsiteId = 1L,
                     vendorId = "100",
                 )
             val targets =
                 listOf(
                     resolvedTarget(
-                        reservableRid = "site:campflare:upper-pines-site-100",
+                        campsiteId = 1L,
+                        vendor = "campflare",
+                        vendorId = "upper-pines-site-100",
                         provider = provider,
                         parentRef = ProviderRef.RecGov("232447"),
                         catalogRef = catalogRef,
@@ -177,10 +178,15 @@ class CatalogAvailabilityBatcherTest {
             ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used by fetchByGroup tests")
         }
 
-    private fun reservable(rid: String): Reservable =
+    private fun reservable(
+        campsiteId: Long,
+        vendor: String,
+        vendorId: String,
+    ): Reservable =
         Reservable(
-            id = 1L,
-            rid = ReservableId.parse(rid)!!,
+            id = campsiteId,
+            vendor = vendor,
+            vendorId = vendorId,
             name = null,
             loop = null,
             siteType = null,
@@ -188,18 +194,20 @@ class CatalogAvailabilityBatcherTest {
         )
 
     private fun resolvedTarget(
-        reservableRid: String,
+        campsiteId: Long,
         provider: AvailabilityProvider,
         parentRef: ProviderRef,
         parentPoiId: Long = 1L,
+        vendor: String = "recgov",
+        vendorId: String = campsiteId.toString(),
         catalogRef: CatalogReservableRef =
             CatalogReservableRef(
-                rid = reservableRid,
-                vendorId = ReservableId.parse(reservableRid)!!.vendorId,
+                campsiteId = campsiteId,
+                vendorId = vendorId,
             ),
     ): ResolvedAvailabilityTarget =
         ResolvedAvailabilityTarget(
-            reservable = reservable(reservableRid),
+            reservable = reservable(campsiteId, vendor, vendorId),
             provider = provider,
             parentRef = parentRef,
             catalogRef = catalogRef,

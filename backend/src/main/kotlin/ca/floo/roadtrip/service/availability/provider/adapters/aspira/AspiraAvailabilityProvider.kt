@@ -89,7 +89,7 @@ class AspiraAvailabilityProvider(
         val targets =
             reservables.map {
                 AspiraCatalogReservable(
-                    rid = it.rid,
+                    campsiteId = it.campsiteId,
                     resourceId = it.vendorId,
                     mapId = it.mapId?.let(::mapIdOrThrow),
                     resourceLocationId = it.resourceLocationId?.let { value -> intOrThrow("resourceLocationId", value) },

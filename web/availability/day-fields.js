@@ -1,22 +1,22 @@
 import { normalizeAvailabilityStatus } from '../utils/availability-status.js';
 
-export function reservableStatuses(day) {
-  const statuses = day?.reservable_statuses ?? day?.reservableStatuses;
+export function campsiteStatuses(day) {
+  const statuses = day?.campsite_statuses ?? day?.campsiteStatuses;
   return statuses && typeof statuses === 'object' && !Array.isArray(statuses) ? statuses : {};
 }
 
-export function availableReservableIds(day) {
-  const ids = day?.available_reservable_ids ?? day?.availableReservableIds;
+export function availableCampsiteIds(day) {
+  const ids = day?.available_campsite_ids ?? day?.availableCampsiteIds;
   if (Array.isArray(ids)) return ids.map(String);
-  return Object.entries(reservableStatuses(day))
+  return Object.entries(campsiteStatuses(day))
     .filter(([, status]) => normalizeAvailabilityStatus(status) === 'available')
-    .map(([rid]) => String(rid));
+    .map(([id]) => String(id));
 }
 
 export function availableCount(day) {
-  return availableReservableIds(day).length;
+  return availableCampsiteIds(day).length;
 }
 
-export function reservableCount(day) {
-  return Object.keys(reservableStatuses(day)).length;
+export function campsiteCount(day) {
+  return Object.keys(campsiteStatuses(day)).length;
 }

@@ -1,8 +1,6 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.models.domain.Reservable
-import ca.floo.roadtrip.models.domain.ReservableId
-import ca.floo.roadtrip.models.domain.ReservableType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
@@ -19,8 +17,6 @@ class CampsiteRepo(
     private val ctx: DSLContext,
 ) {
     data class SearchFilters(
-        val rids: List<ReservableId> = emptyList(),
-        val types: List<ReservableType> = emptyList(),
         val vendors: List<String> = emptyList(),
         val vendorIds: List<String> = emptyList(),
         val names: List<String> = emptyList(),
@@ -37,37 +33,14 @@ class CampsiteRepo(
                 id,
             )?.let(::fromRecord)
 
-    fun findByRid(rid: ReservableId): Reservable? =
-        ctx
-            .fetchOne(
-                """
-                $BASE_SELECT
-                JOIN campsite_vendor_refs cvr_lookup
-                  ON cvr_lookup.campsite_id = c.id
-                JOIN vendor_refs vr_lookup
-                  ON vr_lookup.id = cvr_lookup.vendor_ref_id
-                WHERE vr_lookup.entity_type = 'campsite'
-                  AND vr_lookup.vendor = ?
-                  AND vr_lookup.external_id = ?
-                  AND vr_lookup.deleted_at IS NULL
-                  AND c.deleted_at IS NULL
-                """.trimIndent(),
-                rid.vendor,
-                rid.vendorId,
-            )?.let(::fromRecord)
-
     fun findAll(): List<Reservable> =
         ctx
             .fetch(
                 "$BASE_SELECT WHERE c.deleted_at IS NULL ORDER BY c.id",
             ).map(::fromRecord)
 
-    fun findByPoi(
-        poiId: Long,
-        type: ReservableType? = null,
-    ): List<Reservable> {
-        if (type != null && type != ReservableType.SITE) return emptyList()
-        return ctx
+    fun findByPoi(poiId: Long): List<Reservable> =
+        ctx
             .fetch(
                 """
                 $BASE_SELECT
@@ -82,7 +55,6 @@ class CampsiteRepo(
                 """.trimIndent(),
                 poiId,
             ).map(::fromRecord)
-    }
 
     fun countSearch(filters: SearchFilters): Int = search(filters, limit = 1, offset = 0).size
 
@@ -90,10 +62,8 @@ class CampsiteRepo(
         filters: SearchFilters,
         limit: Int,
         offset: Int,
-    ): List<Reservable> {
-        val rid = filters.rids.singleOrNull()
-        if (rid != null) return findByRid(rid)?.let(::listOf).orEmpty()
-        return ctx
+    ): List<Reservable> =
+        ctx
             .fetch(
                 """
                 $BASE_SELECT
@@ -104,7 +74,6 @@ class CampsiteRepo(
                 limit.coerceIn(1, MAX_SEARCH_LIMIT),
                 offset.coerceAtLeast(0),
             ).map(::fromRecord)
-    }
 
     fun poiIdsForCampsite(campsiteId: Long): List<Long> =
         ctx
@@ -152,7 +121,8 @@ class CampsiteRepo(
         val externalId = r.get("external_id", String::class.java) ?: r.get("id", Long::class.java).toString()
         return Reservable(
             id = r.get("id", Long::class.java),
-            rid = ReservableId(ReservableType.SITE, vendor, externalId),
+            vendor = vendor,
+            vendorId = externalId,
             name = r.get("name", String::class.java),
             loop = r.get("loop_name", String::class.java),
             siteType = r.get("kind", String::class.java),

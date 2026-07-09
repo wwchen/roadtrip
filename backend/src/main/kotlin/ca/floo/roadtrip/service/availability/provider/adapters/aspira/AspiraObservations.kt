@@ -68,7 +68,7 @@ internal suspend fun fetchAspiraCatalogObservations(
     val days = daysBetween(startDate, endDate)
     val targets =
         reservables
-            .distinctBy { it.rid }
+            .distinctBy { it.campsiteId }
             .map { it.copy(mapId = it.mapId ?: parentMapId) }
     if (targets.isEmpty()) {
         return fetchAspiraAvailabilityObservations(
@@ -89,7 +89,7 @@ internal suspend fun fetchAspiraCatalogObservations(
     val resourceRows =
         targets.map { target ->
             CatalogResourceDays(
-                rid = target.rid,
+                campsiteId = target.campsiteId,
                 days = dataByMap[target.mapId]?.byResource?.get(target.resourceId),
                 observedAt = observedAt,
             )
@@ -116,7 +116,7 @@ internal suspend fun fetchAspiraCatalogOccupancyObservations(
 ): AvailabilityObservationBatch {
     val targets =
         reservables
-            .distinctBy { it.rid }
+            .distinctBy { it.campsiteId }
             .map { it.copy(mapId = it.mapId ?: parentMapId) }
     if (targets.isEmpty()) {
         return AvailabilityObservationBatch(
@@ -165,16 +165,14 @@ internal suspend fun fetchAspiraResourceObservations(
     val observedAt = Instant.now()
     val data = client.fetch(host, mapId, startDate, endDate.minusDays(1))
     val resourceDays = data.byResource[resourceId].orEmpty()
-    val reservableId = "site:$reservableVendor:$resourceId"
     return AvailabilityObservationBatch(
         provider = "aspira",
         startDate = startDate,
         endDate = endDate,
-        observations = observationsFromResourceDays(resourceDays, startDate, days, reservableId, observedAt),
+        observations = observationsFromResourceDays(resourceDays, startDate, days, campsiteId = null, observedAt),
         cacheBlock = directFetchCacheBlock(),
         host = host,
         mapId = mapId.toString(),
-        reservableId = reservableId,
     )
 }
 
@@ -202,10 +200,9 @@ private fun observationsFromAspiraAvailability(
     return if (sub.isNotEmpty()) {
         observationsFromIndexedStatusRows(sub, start, days, reservableVendor ?: "aspira", "__map_link", observedAt)
     } else {
-        val id = "site:${reservableVendor ?: "aspira"}:__park__"
         (0 until days).map { d ->
             ReservableDayObservation(
-                reservableId = id,
+                campsiteId = null,
                 date = start.plusDays(d.toLong()),
                 observedAt = observedAt,
                 status = statusAt(rollup, d),
@@ -218,12 +215,12 @@ private fun observationsFromResourceDays(
     resourceDays: List<Int>,
     start: LocalDate,
     days: Int,
-    reservableId: String,
+    campsiteId: Long?,
     observedAt: Instant,
 ): List<ReservableDayObservation> =
     (0 until days).map { d ->
         ReservableDayObservation(
-            reservableId = reservableId,
+            campsiteId = campsiteId,
             date = start.plusDays(d.toLong()),
             observedAt = observedAt,
             status = resourceStatusAt(resourceDays, d),
@@ -242,7 +239,7 @@ private fun observationsFromResourceCatalog(
             resourceDays = resourceDays,
             start = start,
             days = days,
-            reservableId = "site:$reservableVendor:$resourceId",
+            campsiteId = null,
             observedAt = observedAt,
         )
     }
@@ -255,7 +252,7 @@ private fun observationsFromLinkedResourceCatalog(
     resources.flatMap { resource ->
         (0 until days).map { d ->
             ReservableDayObservation(
-                reservableId = resource.rid,
+                campsiteId = resource.campsiteId,
                 date = start.plusDays(d.toLong()),
                 observedAt = resource.observedAt,
                 status = resource.days?.let { resourceStatusAt(it, d) } ?: AvailabilityStatus.UNKNOWN,
@@ -279,7 +276,7 @@ private fun observationsFromOccupancyCatalogArrivalDay(
                 else -> AspiraResourceAvailability.classify(occupancy.availability)
             }
         ReservableDayObservation(
-            reservableId = resource.rid,
+            campsiteId = resource.campsiteId,
             date = arrival,
             observedAt = observedAt,
             status = status,
@@ -288,14 +285,14 @@ private fun observationsFromOccupancyCatalogArrivalDay(
 }
 
 internal data class AspiraCatalogReservable(
-    val rid: String,
+    val campsiteId: Long,
     val resourceId: String,
     val mapId: Int?,
     val resourceLocationId: Int? = null,
 )
 
 private data class CatalogResourceDays(
-    val rid: String,
+    val campsiteId: Long,
     val days: List<Int>?,
     val observedAt: Instant,
 )
@@ -311,7 +308,7 @@ private fun observationsFromIndexedStatusRows(
     rows.flatMapIndexed { index, statuses ->
         (0 until days).map { d ->
             ReservableDayObservation(
-                reservableId = "site:$reservableVendor:$idPrefix:$index",
+                campsiteId = null,
                 date = start.plusDays(d.toLong()),
                 observedAt = observedAt,
                 status = statusAt(statuses, d),

@@ -7,8 +7,9 @@ import kotlinx.serialization.json.JsonElement
  * upstream blob — refreshed by ETL, not request-time. Per-day availability
  * is computed live by the AvailabilityProvider; not stored here.
  *
- * `id` is the internal Postgres pk for joins (`reservables.id`). The
- * stable, externally-meaningful identity is the [ReservableId] composite.
+ * `id` is the canonical campsite pk (`campsites.id`) used for joins and API
+ * payloads. `vendor` / `vendorId` identify the selected provider-side row for
+ * adapter calls and booking URLs.
  *
  * `raw` preserves the full upstream JSON blob exactly as the vendor sent
  * it (rec.gov campsite object, Aspira resource detail). Data trust:
@@ -24,7 +25,8 @@ import kotlinx.serialization.json.JsonElement
  */
 data class Reservable(
     val id: Long,
-    val rid: ReservableId,
+    val vendor: String,
+    val vendorId: String,
     val name: String?,
     val loop: String?,
     val siteType: String?,

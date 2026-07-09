@@ -103,7 +103,7 @@ drawer can hide affordances the provider doesn't support.
 | Action | Required interface | Notes |
 |---|---|---|
 | Per-day availability for a window | `AvailabilityClient.availability(ref, startDate, endDate)` | Drives provider-level availability. Adapters fetch upstream directly; the decision to serve stored data or call the adapter live is handled above it by `AvailabilityLoader`, reading current state from the `availability` interval table. |
-| Catalog availability for linked reservables | `AvailabilityClient.catalogAvailability(ref, reservables, startDate, endDate)` | POI/rids path uses this so the returned availability is narrowed to known catalog rows. |
+| Catalog availability for linked campsites | `AvailabilityClient.catalogAvailability(ref, reservables, startDate, endDate)` | The POI/campsite catalog path uses this so returned availability is narrowed to known catalog rows. |
 | Reservable availability | `AvailabilityClient.reservableAvailability(ref, vendorId, startDate, endDate)` | Narrow projection for a single reservable. Currently unused: availability is always requested by collection (POI), so the port method has no live caller since the single-reservable endpoint was retired. Kept as a capability; remove if it stays dead. |
 | Capability probe | `AvailabilityProvider.capabilities` | Static per adapter; cheap. |
 | Watch evaluation on poll | watch evaluator | `same_site` requires one site bookable across all N nights; `any_combination` succeeds if at least one site is open per night. |
@@ -219,7 +219,7 @@ the fetch-call row it produced.
 ## Availability history
 
 History is a side effect of the watch poller, not a separate ETL, and it is
-not a separate table. Each `(reservable_id, target_date)` cell has a chain of
+not a separate table. Each `(campsite_id, target_date)` cell has a chain of
 status-run rows in the `availability` interval table: an unchanged poll bumps
 the current row's `last_observed_at` in place, and a status change inserts a
 new row linked to its predecessor by `previous_id`. History is that chain —

@@ -7,7 +7,6 @@ import kotlinx.serialization.json.JsonElement
 @Serializable
 data class CampsiteSummarySchema(
     val id: Long,
-    val rid: String? = null,
     val vendor: String? = null,
     @SerialName("vendor_id") val vendorId: String? = null,
     val name: String? = null,

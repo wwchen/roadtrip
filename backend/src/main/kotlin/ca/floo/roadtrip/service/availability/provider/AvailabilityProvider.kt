@@ -7,7 +7,7 @@ import java.time.LocalDate
 
 /**
  * Primary availability-provider port. One adapter per upstream booking or
- * availability platform (rec.gov, Aspira NextGen instance, ReserveAmerica, …).
+ * availability platform (rec.gov, Aspira NextGen instance, ReserveAmerica, ...).
  *
  * Availability services consume this interface; routes stay at the HTTP
  * boundary and never branch on `ProviderRef` variants directly. See
@@ -114,7 +114,7 @@ interface AvailabilityProvider : AvailabilityClient {
 }
 
 data class CatalogReservableRef(
-    val rid: String,
+    val campsiteId: Long,
     val vendorId: String,
     val mapId: Long? = null,
     val resourceLocationId: Long? = null,

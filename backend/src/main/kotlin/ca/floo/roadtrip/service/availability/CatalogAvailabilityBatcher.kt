@@ -36,8 +36,8 @@ internal data class GroupFetchResult(
 
 internal fun Reservable.toCatalogReservableRef(): CatalogReservableRef =
     CatalogReservableRef(
-        rid = rid.encode(),
-        vendorId = rid.vendorId,
+        campsiteId = id,
+        vendorId = vendorId,
         mapId = aspiraProviderRefLong("mapId"),
         resourceLocationId = aspiraProviderRefLong("resourceLocationId"),
     )

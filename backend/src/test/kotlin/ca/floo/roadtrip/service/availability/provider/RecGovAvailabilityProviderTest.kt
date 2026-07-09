@@ -5,7 +5,6 @@ import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
-import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovAvailabilityProvider
 import kotlinx.coroutines.runBlocking
@@ -51,7 +50,7 @@ class RecGovAvailabilityProviderTest {
                     reservables =
                         listOf(
                             CatalogReservableRef(
-                                rid = "site:recgov:330257",
+                                campsiteId = 330257,
                                 vendorId = "330257",
                             ),
                         ),
@@ -60,13 +59,13 @@ class RecGovAvailabilityProviderTest {
                 )
 
             val observation = batch.observations.single()
-            assertEquals("site:recgov:330257", observation.reservableId)
+            assertEquals(330257, observation.campsiteId)
             assertEquals(LocalDate.parse("2026-07-01"), observation.date)
             assertEquals(AvailabilityStatus.AVAILABLE, observation.status)
         }
 
     @Test
-    fun `catalog availability preserves caller rid when vendor id is a recgov alias`() =
+    fun `catalog availability preserves caller campsite id when vendor id is a recgov alias`() =
         runBlocking {
             val client =
                 fakeRecgovClient { campgroundId, _ ->
@@ -92,7 +91,7 @@ class RecGovAvailabilityProviderTest {
                     reservables =
                         listOf(
                             CatalogReservableRef(
-                                rid = "site:campflare:upper-pines-site-100",
+                                campsiteId = 1000,
                                 vendorId = "100",
                             ),
                         ),
@@ -101,7 +100,7 @@ class RecGovAvailabilityProviderTest {
                 )
 
             val observation = batch.observations.single()
-            assertEquals("site:campflare:upper-pines-site-100", observation.reservableId)
+            assertEquals(1000, observation.campsiteId)
             assertEquals(AvailabilityStatus.AVAILABLE, observation.status)
         }
 
@@ -148,8 +147,8 @@ class RecGovAvailabilityProviderTest {
                     endDate = LocalDate.parse("2026-07-02"),
                 )
 
-            assertEquals("site:recgov:330257", batch.reservableId)
-            assertEquals("site:recgov:330257", batch.observations.single().reservableId)
+            assertEquals(null, batch.campsiteId)
+            assertEquals(null, batch.observations.single().campsiteId)
             assertEquals(AvailabilityStatus.AVAILABLE, batch.observations.single().status)
         }
 
@@ -193,8 +192,13 @@ class RecGovAvailabilityProviderTest {
             val adapter = RecGovAvailabilityProvider(client)
 
             val batch =
-                adapter.availability(
+                adapter.catalogAvailability(
                     ref = ProviderRef.RecGov("232447"),
+                    reservables =
+                        listOf(
+                            CatalogReservableRef(campsiteId = 330257, vendorId = "330257"),
+                            CatalogReservableRef(campsiteId = 330258, vendorId = "330258"),
+                        ),
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-03"),
                 )
@@ -209,7 +213,8 @@ class RecGovAvailabilityProviderTest {
         val reservable =
             Reservable(
                 id = 1,
-                rid = ReservableId.parse("site:recgov:330257")!!,
+                vendor = "recgov",
+                vendorId = "330257",
                 name = null,
                 loop = null,
                 siteType = null,

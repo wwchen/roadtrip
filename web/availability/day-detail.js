@@ -1,11 +1,11 @@
 // Day-detail panel: renders the status line + CTAs for the currently
 // selected day. The action is a generic availability watch; provider-specific
-// booking links live on reservable rows.
+// booking links live on campsite rows.
 //
 // Pure renderer; click handling lives in availability-week.js.
 
 import { escapeHtml } from '../core.js';
-import { availableCount, reservableCount } from './day-fields.js';
+import { availableCount, campsiteCount } from './day-fields.js';
 import {
   availabilityStatusMeta,
   normalizeAvailabilityStatus,
@@ -39,7 +39,7 @@ export function renderDayDetail({ day, watching, canWatch }) {
 }
 
 function renderStatusLine(day) {
-  const total = reservableCount(day);
+  const total = campsiteCount(day);
   const count = availableCount(day);
   const meta = availabilityStatusMeta(day.status);
   if (meta.value === 'available') {

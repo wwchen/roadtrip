@@ -49,7 +49,7 @@ class CampflareAvailabilityProvider(
                 .orEmpty()
                 .flatMap { campsite ->
                     observationsForReservable(
-                        rid = rid(campsite.campsiteId),
+                        campsiteId = null,
                         byDate = campsite.availability,
                         dates = dates(startDate, endDate),
                         data = data,
@@ -84,7 +84,7 @@ class CampflareAvailabilityProvider(
         val observations =
             reservables.flatMap { reservable ->
                 observationsForReservable(
-                    rid = reservable.rid,
+                    campsiteId = reservable.campsiteId,
                     byDate = byCampsiteId[reservable.vendorId]?.availability.orEmpty(),
                     dates = days,
                     data = data,
@@ -104,13 +104,28 @@ class CampflareAvailabilityProvider(
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        val target = CatalogReservableRef(rid = rid(vendorId), vendorId = vendorId)
-        return catalogAvailability(
-            ref = ref,
-            reservables = listOf(target),
+        val campflareRef = campflareRefOrThrow(ref)
+        val data = fetch(campflareRef.campgroundId, startDate, endDate)
+        val byDate =
+            data
+                .campgrounds[campflareRef.campgroundId]
+                ?.campsiteAvailability
+                .orEmpty()
+                .firstOrNull { it.campsiteId == vendorId }
+                ?.availability
+                .orEmpty()
+        return batch(
+            campgroundId = campflareRef.campgroundId,
             startDate = startDate,
             endDate = endDate,
-        ).copy(reservableId = target.rid)
+            observations =
+                observationsForReservable(
+                    campsiteId = null,
+                    byDate = byDate,
+                    dates = dates(startDate, endDate),
+                    data = data,
+                ),
+        )
     }
 
     private suspend fun fetch(
@@ -127,14 +142,14 @@ class CampflareAvailabilityProvider(
         }
 
     private fun observationsForReservable(
-        rid: String,
+        campsiteId: Long?,
         byDate: Map<LocalDate, AvailabilityStatus>,
         dates: List<LocalDate>,
         data: CampflareAvailability,
     ): List<ReservableDayObservation> =
         dates.map { date ->
             ReservableDayObservation(
-                reservableId = rid,
+                campsiteId = campsiteId,
                 date = date,
                 observedAt = data.observedAt,
                 status = byDate[date] ?: AvailabilityStatus.UNKNOWN,
@@ -191,5 +206,3 @@ private fun dates(
 ): List<LocalDate> =
     (0 until ChronoUnit.DAYS.between(startDate, endDate).toInt())
         .map { startDate.plusDays(it.toLong()) }
-
-private fun rid(campsiteId: String): String = "site:campflare:$campsiteId"

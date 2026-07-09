@@ -58,7 +58,7 @@ class ReserveAmericaAvailabilityProviderTest {
                     ref = ProviderRef.ReserveAmerica(contractCode = "NY", parkId = "489"),
                     reservables =
                         listOf(
-                            CatalogReservableRef(rid = "site:reserveamerica_ny:253488", vendorId = "253488"),
+                            CatalogReservableRef(campsiteId = 253488, vendorId = "253488"),
                         ),
                     startDate = LocalDate.parse("2026-06-22"),
                     endDate = LocalDate.parse("2026-06-24"),
@@ -74,6 +74,6 @@ class ReserveAmericaAvailabilityProviderTest {
                 listOf(AvailabilityStatus.RESERVED, AvailabilityStatus.AVAILABLE),
                 batch.observations.sortedBy { it.date }.map { it.status },
             )
-            assertEquals(setOf("site:reserveamerica_ny:253488"), batch.observations.map { it.reservableId }.toSet())
+            assertEquals(setOf(253488L), batch.observations.map { it.campsiteId }.toSet())
         }
 }

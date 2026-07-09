@@ -58,6 +58,29 @@ class RecGovObservationsTest {
         client: RecGovAvailabilityClient,
         recgovId: String = "232447",
         days: Int = 7,
+        catalogSiteIds: List<String> = listOf("100"),
+    ): JsonObject {
+        val body =
+            encodeAvailabilityJson(
+                availabilityResponseFromObservations(
+                    runBlocking {
+                        fetchRecgovCatalogObservations(
+                            client = client,
+                            recgovId = recgovId,
+                            reservables = catalogSiteIds.map { CatalogReservableRef(campsiteId = it.toLong(), vendorId = it) },
+                            startDate = today,
+                            endDate = today.plusDays(days.toLong()),
+                        )
+                    },
+                ),
+            )
+        return parseJson(body)
+    }
+
+    private fun classifyRaw(
+        client: RecGovAvailabilityClient,
+        recgovId: String = "232447",
+        days: Int = 7,
     ): JsonObject {
         val body =
             encodeAvailabilityJson(
@@ -106,7 +129,7 @@ class RecGovObservationsTest {
 
     @Test
     fun `empty state when no campsites returned`() {
-        val body = classify(clientReturning(emptyMap()), days = 7)
+        val body = classifyRaw(clientReturning(emptyMap()), days = 7)
         assertEquals("empty", body["state"]!!.jsonPrimitive.content)
     }
 
@@ -124,11 +147,11 @@ class RecGovObservationsTest {
 
         assertEquals("success", body["state"]!!.jsonPrimitive.content)
         assertEquals("first_come", day["status"]!!.jsonPrimitive.content)
-        assertEquals(0, day["available_reservable_ids"]!!.jsonArray.size)
+        assertEquals(0, day["available_campsite_ids"]!!.jsonArray.size)
         assertEquals(
             "first_come",
-            day["reservable_statuses"]!!
-                .jsonObject["site:recgov:100"]!!
+            day["campsite_statuses"]!!
+                .jsonObject["100"]!!
                 .jsonPrimitive.content,
         )
     }
@@ -143,8 +166,8 @@ class RecGovObservationsTest {
         assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
         assertEquals(
             "unknown",
-            day["reservable_statuses"]!!
-                .jsonObject["site:recgov:100"]!!
+            day["campsite_statuses"]!!
+                .jsonObject["100"]!!
                 .jsonPrimitive.content,
         )
     }
@@ -159,8 +182,8 @@ class RecGovObservationsTest {
         assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
         assertEquals(
             "unknown",
-            day["reservable_statuses"]!!
-                .jsonObject["site:recgov:100"]!!
+            day["campsite_statuses"]!!
+                .jsonObject["100"]!!
                 .jsonPrimitive.content,
         )
     }
@@ -176,8 +199,8 @@ class RecGovObservationsTest {
                             recgovId = "232447",
                             reservables =
                                 listOf(
-                                    CatalogReservableRef(rid = "site:recgov:100", vendorId = "100"),
-                                    CatalogReservableRef(rid = "site:recgov:200", vendorId = "200"),
+                                    CatalogReservableRef(campsiteId = 100, vendorId = "100"),
+                                    CatalogReservableRef(campsiteId = 200, vendorId = "200"),
                                 ),
                             startDate = today,
                             endDate = today.plusDays(1),
@@ -188,18 +211,18 @@ class RecGovObservationsTest {
         val day = parseJson(body)["availability"]!!.jsonArray.single().jsonObject
 
         assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
-        assertEquals(0, day["available_reservable_ids"]!!.jsonArray.size)
-        assertEquals(2, day["reservable_statuses"]!!.jsonObject.size)
+        assertEquals(0, day["available_campsite_ids"]!!.jsonArray.size)
+        assertEquals(2, day["campsite_statuses"]!!.jsonObject.size)
         assertEquals(
             "unknown",
-            day["reservable_statuses"]!!
-                .jsonObject["site:recgov:100"]!!
+            day["campsite_statuses"]!!
+                .jsonObject["100"]!!
                 .jsonPrimitive.content,
         )
         assertEquals(
             "unknown",
-            day["reservable_statuses"]!!
-                .jsonObject["site:recgov:200"]!!
+            day["campsite_statuses"]!!
+                .jsonObject["200"]!!
                 .jsonPrimitive.content,
         )
     }
@@ -223,16 +246,10 @@ class RecGovObservationsTest {
         val json = parseJson(body)
         val day = json["availability"]!!.jsonArray.single().jsonObject
 
-        assertEquals("site:recgov:100", json["reservable_id"]!!.jsonPrimitive.content)
+        assertEquals(null, json["campsite_id"])
         assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
-        assertEquals(0, day["available_reservable_ids"]!!.jsonArray.size)
-        assertEquals(1, day["reservable_statuses"]!!.jsonObject.size)
-        assertEquals(
-            "unknown",
-            day["reservable_statuses"]!!
-                .jsonObject["site:recgov:100"]!!
-                .jsonPrimitive.content,
-        )
+        assertEquals(0, day["available_campsite_ids"]!!.jsonArray.size)
+        assertEquals(0, day["campsite_statuses"]!!.jsonObject.size)
     }
 
     @Test
@@ -294,9 +311,9 @@ class RecGovObservationsTest {
         val avail = body["availability"]!!.jsonArray
         assertEquals("available", avail[0].jsonObject["status"]!!.jsonPrimitive.content)
         assertEquals(
-            listOf("site:recgov:100"),
+            listOf("100"),
             avail[0]
-                .jsonObject["available_reservable_ids"]!!
+                .jsonObject["available_campsite_ids"]!!
                 .jsonArray
                 .map { it.jsonPrimitive.content },
         )
@@ -321,15 +338,15 @@ class RecGovObservationsTest {
                         ),
                     ),
             )
-        val body = classify(clientReturning(map), days = 1)
+        val body = classify(clientReturning(map), days = 1, catalogSiteIds = listOf("100", "200"))
         val day = body["availability"]!!.jsonArray[0].jsonObject
         assertEquals("available", day["status"]!!.jsonPrimitive.content)
-        assertEquals(2, day["available_reservable_ids"]!!.jsonArray.size)
-        assertEquals(2, day["reservable_statuses"]!!.jsonObject.size)
+        assertEquals(2, day["available_campsite_ids"]!!.jsonArray.size)
+        assertEquals(2, day["campsite_statuses"]!!.jsonObject.size)
     }
 
     @Test
-    fun `available reservable ids include all sites available on that date`() {
+    fun `available campsite ids include all sites available on that date`() {
         val map =
             mapOf(
                 "100" to
@@ -347,14 +364,14 @@ class RecGovObservationsTest {
                         ),
                     ),
             )
-        val body = classify(clientReturning(map), days = 1)
+        val body = classify(clientReturning(map), days = 1, catalogSiteIds = listOf("100", "200"))
         val day = body["availability"]!!.jsonArray[0].jsonObject
         val ids =
-            day["available_reservable_ids"]!!
+            day["available_campsite_ids"]!!
                 .jsonArray
                 .map { it.jsonPrimitive.content }
 
-        assertEquals(listOf("site:recgov:100", "site:recgov:200"), ids)
+        assertEquals(listOf("100", "200"), ids)
     }
 
     @Test

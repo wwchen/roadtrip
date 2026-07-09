@@ -4,7 +4,6 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
-import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -141,12 +140,12 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
     private val fakeDateContext = PoiDateContext(timeZone = ZoneId.of("UTC"), earliestDate = LocalDate.now())
 
     /**
-     * In-memory fake keyed by reservable id, so a test can control exactly
-     * which (provider, parentRef, parentPoiId) each reservable resolves to
+     * In-memory fake keyed by campsite id, so a test can control exactly
+     * which (provider, parentRef, parentPoiId) each campsite resolves to
      * without seeding real provider-ref rows.
      */
     private class FakeTargetResolver : AvailabilityTargetResolver {
-        val byReservableId = mutableMapOf<Long, ResolvedAvailabilityTarget>()
+        val byCampsiteId = mutableMapOf<Long, ResolvedAvailabilityTarget>()
 
         fun stub(
             reservable: Reservable,
@@ -155,25 +154,22 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
             parentPoiId: Long,
             dateContext: PoiDateContext,
         ) {
-            byReservableId[reservable.id] =
+            byCampsiteId[reservable.id] =
                 ResolvedAvailabilityTarget(
                     reservable = reservable,
                     provider = FakeProvider(provider),
                     parentRef = parentRef,
                     catalogRef =
                         CatalogReservableRef(
-                            rid = reservable.rid.encode(),
-                            vendorId = reservable.rid.vendorId,
+                            campsiteId = reservable.id,
+                            vendorId = reservable.vendorId,
                         ),
                     parentPoiId = parentPoiId,
                     dateContext = dateContext,
                 )
         }
 
-        override fun requireByRid(rid: ReservableId): ResolvedAvailabilityTarget =
-            throw UnsupportedOperationException("not used by AvailabilityPollerMembershipTest")
-
-        override fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? = byReservableId[reservable.id]
+        override fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? = byCampsiteId[reservable.id]
     }
 
     @Test

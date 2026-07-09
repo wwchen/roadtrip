@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.domain.Reservable
-import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import kotlinx.serialization.json.JsonArray
@@ -35,7 +34,7 @@ class WatchScopeResolver(
         poiId: Long,
         filters: JsonObject,
     ): List<Reservable> {
-        val all = campsitesRepo.findByPoi(poiId, type = ReservableType.SITE)
+        val all = campsitesRepo.findByPoi(poiId)
         val loops = collectStringFilter(filters, "loop")
         val siteTypes = collectStringFilter(filters, "site_type")
         return all.filter { r ->

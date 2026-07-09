@@ -4,7 +4,6 @@ import ca.floo.roadtrip.models.api.CampsiteSummarySchema
 import ca.floo.roadtrip.models.api.PoiCampsitesResponseSchema
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
-import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
@@ -24,11 +23,11 @@ internal class CampsiteCatalogService(
         val parentRef = providerRefs.findProviderRef(poiId)?.providerRefJson?.let(ProviderRefParser::parse)
         val campsites =
             campsitesRepo
-                .findByPoi(poiId, ReservableType.SITE)
+                .findByPoi(poiId)
                 .filterBySiteTypes(siteTypes)
         return PoiCampsitesResponseSchema(
             poiId = poiId,
-            type = ReservableType.SITE.encode(),
+            type = CAMPSITE_RESPONSE_TYPE,
             campsites =
                 campsites.map {
                     it.toCampsiteSchema(
@@ -46,9 +45,8 @@ internal fun Reservable.toCampsiteSchema(
 ): CampsiteSummarySchema =
     CampsiteSummarySchema(
         id = id,
-        rid = rid.encode(),
-        vendor = rid.vendor,
-        vendorId = rid.vendorId,
+        vendor = vendor,
+        vendorId = vendorId,
         name = name,
         loop = loop,
         kind = siteType,
@@ -62,9 +60,9 @@ internal fun Reservable.toCampsiteSchema(
 
 internal fun Reservable.reservationUrlTemplate(parentRef: ProviderRef?): String? =
     when {
-        rid.vendor == "recgov" -> RecGovBookingUrl.template(rid.vendorId)
-        rid.vendor.startsWith("aspira_") ->
-            AspiraTenants.byVendorCode(rid.vendor)?.host?.let { host ->
+        vendor == "recgov" -> RecGovBookingUrl.template(vendorId)
+        vendor.startsWith("aspira_") ->
+            AspiraTenants.byVendorCode(vendor)?.host?.let { host ->
                 AspiraBookingUrl.templateFor(host, providerRef, parentRef)
             }
         else -> null
@@ -75,3 +73,5 @@ internal fun List<Reservable>.filterBySiteTypes(siteTypes: Collection<String>): 
     val allowed = siteTypes.toSet()
     return filter { it.siteType != null && it.siteType in allowed }
 }
+
+private const val CAMPSITE_RESPONSE_TYPE = "campsite"

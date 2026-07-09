@@ -32,7 +32,7 @@ internal class CampsiteAvailabilityComposer(
     ): List<AvailabilityResponseDto> {
         if (campsites.isEmpty()) return emptyList()
         val resolved = campsites.map { targets.resolve(it) ?: throw AvailabilityServiceError.UnknownCampground }
-        val byRid = linkedMapOf<String, AvailabilityResponseDto>()
+        val byCampsiteId = linkedMapOf<Long, AvailabilityResponseDto>()
         val batcher = CatalogAvailabilityBatcher()
         val results =
             batcher.fetchByGroup(
@@ -79,23 +79,22 @@ internal class CampsiteAvailabilityComposer(
         results.forEach { result ->
             val batch = result.batch ?: return@forEach
             result.reservables.forEach { campsite ->
-                val rid = campsite.rid.encode()
                 val ref = campsite.providerRefForCampsite(result.parentRef)
-                val metadata = availabilityMetadata(result.provider.id, ref, reservableId = rid)
-                byRid[rid] =
+                val metadata = availabilityMetadata(result.provider.id, ref, campsiteId = campsite.id)
+                byCampsiteId[campsite.id] =
                     availabilityResponseFromObservations(
                         batch.copy(
-                            observations = batch.observations.filter { it.reservableId == rid },
+                            observations = batch.observations.filter { it.campsiteId == campsite.id },
                             campgroundId = metadata.campgroundId ?: batch.campgroundId,
                             host = metadata.host ?: batch.host,
                             mapId = metadata.mapId ?: batch.mapId,
-                            reservableId = rid,
+                            campsiteId = campsite.id,
                         ),
                     )
             }
         }
         return campsites.map { campsite ->
-            byRid[campsite.rid.encode()] ?: throw AvailabilityServiceError.NotFound
+            byCampsiteId[campsite.id] ?: throw AvailabilityServiceError.NotFound
         }
     }
 }
@@ -112,13 +111,12 @@ internal fun defaultSnapshotFreshnessTtl(providerId: AvailabilityProviderId): Du
 private fun ResolvedAvailabilityTarget.toAvailabilityTarget(): AvailabilityLoader.TargetReservable =
     AvailabilityLoader.TargetReservable(
         dbId = reservable.id,
-        rid = catalogRef.rid,
     )
 
 private fun availabilityMetadata(
     providerId: AvailabilityProviderId,
     ref: ProviderRef,
-    reservableId: String? = null,
+    campsiteId: Long? = null,
 ): AvailabilityLoader.Metadata =
     AvailabilityLoader.Metadata(
         provider = providerId.name.lowercase(),
@@ -134,7 +132,7 @@ private fun availabilityMetadata(
                 is ProviderRef.ReserveCalifornia -> ref.facilityIds.joinToString(",")
                 else -> null
             },
-        reservableId = reservableId,
+        campsiteId = campsiteId,
     )
 
 private fun Reservable.providerRefForCampsite(parentRef: ProviderRef): ProviderRef =

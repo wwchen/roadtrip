@@ -168,7 +168,8 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val reservable = campsitesRepo.findById(campsiteId)!!
             val target = resolverFor(campsitesRepo).resolve(reservable)!!
 
-            assertEquals("site:campflare:upper-pines-site-100", reservable.rid.encode())
+            assertEquals("campflare", reservable.vendor)
+            assertEquals("upper-pines-site-100", reservable.vendorId)
             assertEquals(poi, target.parentPoiId)
             assertEquals(AvailabilityProviderId.CAMPFLARE, target.provider.id)
             assertEquals("upper-pines-campground-447", parentRefKey(target.parentRef))
@@ -221,10 +222,11 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                         ),
                 ).resolve(reservable)!!
 
-            assertEquals("site:campflare:upper-pines-site-100", reservable.rid.encode())
+            assertEquals("campflare", reservable.vendor)
+            assertEquals("upper-pines-site-100", reservable.vendorId)
             assertEquals(AvailabilityProviderId.RECGOV, target.provider.id)
             assertEquals("232447", parentRefKey(target.parentRef))
-            assertEquals("site:campflare:upper-pines-site-100", target.catalogRef.rid)
+            assertEquals(campsiteId, target.catalogRef.campsiteId)
             assertEquals("100", target.catalogRef.vendorId)
         }
 

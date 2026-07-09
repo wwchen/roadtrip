@@ -109,14 +109,14 @@ internal suspend fun fetchRecgovCatalogObservations(
         val merged = mergeCampsites(payloads)
         val campsiteIds = reservables.map { it.vendorId }.toSet()
         val catalogSites = campsiteIds.associateWith { siteId -> merged[siteId].orEmpty() }
-        val reservableIdsBySiteId = reservables.associate { it.vendorId to it.rid }
+        val campsiteIdsBySiteId = reservables.associate { it.vendorId to it.campsiteId }
         val observedAtByDate = dates.associateWith { observedAt }
 
         AvailabilityObservationBatch(
             provider = "recgov",
             startDate = startDate,
             endDate = endDate,
-            observations = observationsFromCampsites(catalogSites, dates, observedAtByDate, reservableIdsBySiteId),
+            observations = observationsFromCampsites(catalogSites, dates, observedAtByDate, campsiteIdsBySiteId),
             seasonBlock = inferReopenDate(catalogSites, startDate),
             cacheBlock = directFetchCacheBlock(),
             campgroundId = recgovId,
@@ -148,7 +148,6 @@ internal suspend fun fetchRecgovReservableObservations(
         val oneSite = mapOf(campsiteId to merged[campsiteId].orEmpty())
         val observedAtByDate = dates.associateWith { observedAt }
 
-        val reservableId = "site:recgov:$campsiteId"
         AvailabilityObservationBatch(
             provider = "recgov",
             startDate = startDate,
@@ -157,7 +156,6 @@ internal suspend fun fetchRecgovReservableObservations(
             seasonBlock = inferReopenDate(oneSite, startDate),
             cacheBlock = directFetchCacheBlock(),
             campgroundId = recgovId,
-            reservableId = reservableId,
         )
     }
 
@@ -187,20 +185,18 @@ private fun observationsFromCampsites(
     merged: Map<String, Map<String, String>>,
     dates: List<LocalDate>,
     observedAtByDate: Map<LocalDate, Instant>,
-    reservableIdsBySiteId: Map<String, String> = emptyMap(),
+    campsiteIdsBySiteId: Map<String, Long> = emptyMap(),
 ): List<ReservableDayObservation> =
     merged.flatMap { (siteId, byDate) ->
         dates.map { date ->
             ReservableDayObservation(
-                reservableId = reservableIdsBySiteId[siteId] ?: recgovReservableId(siteId),
+                campsiteId = campsiteIdsBySiteId[siteId],
                 date = date,
                 observedAt = observedAtByDate[date] ?: Instant.EPOCH,
                 status = classifyRecgovStatus(byDate[date.toString()]),
             )
         }
     }
-
-private fun recgovReservableId(siteId: String): String = "site:recgov:$siteId"
 
 private fun classifyRecgovStatus(raw: String?): AvailabilityStatus {
     val status = raw?.trim()

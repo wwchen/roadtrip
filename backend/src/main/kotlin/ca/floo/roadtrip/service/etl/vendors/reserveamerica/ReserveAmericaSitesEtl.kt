@@ -17,8 +17,8 @@ import kotlinx.serialization.json.put
  * `scripts/fetch_reserveamerica_campsites.py` and emits one reservable per
  * site. The [ReserveAmericaPoiReservableJoiner] links them to POIs.
  *
- * `vendor` is per-tenant (`reserveamerica_ny`) — mandated by the availability
- * adapter's `rid()`; `vendor_id` is the scraped `siteId`, so catalog rows bind
+ * `vendor` is per-tenant (`reserveamerica_ny`) — matching the availability
+ * adapter's provider key; `vendor_id` is the scraped `siteId`, so catalog rows bind
  * to availability by construction. `loop`/`site_type` are null: the calendar's
  * loopName is a pagination bucket, not a real loop.
  */

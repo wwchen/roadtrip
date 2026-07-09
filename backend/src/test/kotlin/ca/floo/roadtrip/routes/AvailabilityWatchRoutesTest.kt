@@ -356,11 +356,11 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
             }
             val poiId = seedPoi(sourceId = "p-bad-target", name = "Bad Target")
-            val rid = seedReservable("bad-target-1")
-            linkReservableToPoi(rid, poiId)
+            val campsiteId = seedReservable("bad-target-1")
+            linkReservableToPoi(campsiteId, poiId)
             val body =
                 """
-                {"targets": [{"poi_id": $poiId, "campsite_id": $rid}], "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"targets": [{"poi_id": $poiId, "campsite_id": $campsiteId}], "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val resp =
                 client.post("/api/availability/watches") {
@@ -596,8 +596,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
             }
             val poiId = seedPoi(sourceId = "p-patch-bad-target", name = "Patch Bad Target")
-            val rid = seedReservable("patch-bad-target-1")
-            linkReservableToPoi(rid, poiId)
+            val campsiteId = seedReservable("patch-bad-target-1")
+            linkReservableToPoi(campsiteId, poiId)
             val body =
                 """
                 {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
@@ -617,7 +617,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             val resp =
                 client.patch("/api/availability/watches/$id") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"targets": [{"poi_id": $poiId, "campsite_id": $rid}]}""")
+                    setBody("""{"targets": [{"poi_id": $poiId, "campsite_id": $campsiteId}]}""")
                 }
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
@@ -849,12 +849,12 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
             }
             val poiId = seedPoi(sourceId = "p1", name = "Upper Pines")
-            val rid = seedReservable("100", name = "A12", loop = "Loop A")
-            linkReservableToPoi(rid, poiId)
+            val campsiteId = seedReservable("100", name = "A12", loop = "Loop A")
+            linkReservableToPoi(campsiteId, poiId)
 
             val createBody =
                 """
-                {"campsite_id": $rid, "start_date": "2026-07-04", "end_date": "2026-07-06", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"campsite_id": $campsiteId, "start_date": "2026-07-04", "end_date": "2026-07-06", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
                 client.post("/api/availability/watches") {
@@ -869,7 +869,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonPrimitive.long
 
             val now = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
-            insertCell(rid, "2026-07-04", now.minusMinutes(1), available = true)
+            insertCell(campsiteId, "2026-07-04", now.minusMinutes(1), available = true)
 
             val resp = client.get("/api/availability/watches/$watchId/heatmap")
             assertEquals(HttpStatusCode.OK, resp.status)

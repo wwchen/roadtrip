@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
-import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -14,17 +13,12 @@ import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
 import ca.floo.roadtrip.service.availability.provider.availabilityProviderId
 
 /**
- * Resolves a reservable (by rid, or from an already-loaded [Reservable]) to the
- * provider adapter, parent provider ref, and date context needed to fetch its
- * availability. A port so the request path can be unit-tested with an in-memory
- * fake; [DbAvailabilityTargetResolver] is the production, DB-backed implementation.
+ * Resolves an already-loaded [Reservable] to the provider adapter, parent
+ * provider ref, and date context needed to fetch its availability. A port so
+ * the request path can be unit-tested with an in-memory fake;
+ * [DbAvailabilityTargetResolver] is the production, DB-backed implementation.
  */
 internal interface AvailabilityTargetResolver {
-    /** Resolve by rid, throwing [AvailabilityServiceError.NotFound] when the
-     *  reservable is unknown and [AvailabilityServiceError.UnknownCampground]
-     *  when it has no resolvable availability provider. */
-    fun requireByRid(rid: ReservableId): ResolvedAvailabilityTarget
-
     /** Resolve an already-loaded reservable, or null when it has no resolvable
      *  availability provider. */
     fun resolve(reservable: Reservable): ResolvedAvailabilityTarget?
@@ -42,14 +36,6 @@ internal class DbAvailabilityTargetResolver(
         val provider: AvailabilityProvider,
         val ref: ProviderRef,
     )
-
-    override fun requireByRid(rid: ReservableId): ResolvedAvailabilityTarget {
-        val reservable =
-            campsitesRepo.findByRid(rid)
-                ?: throw AvailabilityServiceError.NotFound
-        return resolve(reservable)
-            ?: throw AvailabilityServiceError.UnknownCampground
-    }
 
     override fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? {
         val poiIds = campsitesRepo.poiIdsForCampsite(reservable.id)
@@ -99,30 +85,30 @@ internal class DbAvailabilityTargetResolver(
                 .mapNotNull { ProviderRefParser.parse(it.providerRefJson) }
                 .firstOrNull { it.availabilityProviderId() == providerId }
                 ?: return fallback
-        return ref.toCatalogReservableRef(canonicalRid = reservable.rid.encode(), fallback = fallback)
+        return ref.toCatalogReservableRef(campsiteId = reservable.id, fallback = fallback)
     }
 
     private fun ProviderRef.toCatalogReservableRef(
-        canonicalRid: String,
+        campsiteId: Long,
         fallback: CatalogReservableRef,
     ): CatalogReservableRef =
         when (this) {
             is ProviderRef.RecGov ->
                 CatalogReservableRef(
-                    rid = canonicalRid,
+                    campsiteId = campsiteId,
                     vendorId = recgovId,
                 )
             is ProviderRef.Campflare ->
                 CatalogReservableRef(
-                    rid = canonicalRid,
+                    campsiteId = campsiteId,
                     vendorId = campgroundId,
                 )
             is ProviderRef.Aspira ->
                 fallback.copy(
-                    rid = canonicalRid,
+                    campsiteId = campsiteId,
                     mapId = mapId,
                     resourceLocationId = resourceLocationId,
                 )
-            else -> fallback.copy(rid = canonicalRid)
+            else -> fallback.copy(campsiteId = campsiteId)
         }
 }

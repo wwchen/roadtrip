@@ -37,11 +37,10 @@ instance (see `config/poi-registry.yaml`).
 - **POI** `provider_ref` = `{contract_code, park_id}` (both strings), e.g.
   `{"contract_code": "ABPP", "park_id": "330101"}`. `park_id`/`facilityID` is
   unique only *within* a `contractCode`.
-- **Reservable** identity = `site:reserveamerica_{contract}:{siteId}` where
-  `siteId` is the numeric id in the calendar's `campsiteDetails.do` href.
+- **Campsite** identity is the canonical catalog row id. `vendor_id` is the
+  numeric `siteId` in the calendar's `campsiteDetails.do` href.
   `vendor` is **per-tenant** (`reserveamerica_abpp`, `reserveamerica_ny`), not a
-  flat `reserveamerica` — this is mandated by the availability adapter's
-  `rid()`, and it makes `vendor_id == siteId` so catalog rows bind to
+  flat `reserveamerica`, so `vendor_id == siteId` and catalog rows bind to
   availability observations directly.
 - The joiner (`ReserveAmericaPoiReservableJoiner`) links reservable → POI on the
   `(contract_code, park_id)` pair carried in `reservables.raw`

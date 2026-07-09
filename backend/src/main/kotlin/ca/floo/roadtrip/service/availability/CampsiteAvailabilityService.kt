@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.api.PoiCampsitesAvailabilityResponseDto
-import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import java.time.LocalDate
@@ -24,7 +23,7 @@ internal class CampsiteAvailabilityService(
     ): PoiCampsitesAvailabilityResponseDto {
         val campsites =
             campsitesRepo
-                .findByPoi(poiId, ReservableType.SITE)
+                .findByPoi(poiId)
                 .filterBySiteTypes(siteTypes)
         if (campsites.isEmpty()) {
             val (start, end) = displayWindow(poiId, startDate, endDate, providerRefs, dateResolver)

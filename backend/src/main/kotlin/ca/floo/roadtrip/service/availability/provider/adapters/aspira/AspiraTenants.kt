@@ -9,8 +9,8 @@ package ca.floo.roadtrip.service.availability.provider.adapters.aspira
  * adding a new tenant (Ontario, Quebec, etc.) is one row here, not a
  * new enum value, adapter, or registry branch.
  *
- * The `vendorCode` is what gets stamped into [ca.floo.roadtrip.models.domain.ReservableId.vendor]
- * for sites under that tenant. ReservableId disallows ':' in vendor, so
+ * The `vendorCode` is what gets stamped into the canonical campsite's
+ * provider `vendor` for sites under that tenant. Provider vendors disallow ':', so
  * use underscore-separated tenant codes (`aspira_pc`, `aspira_bc`, …).
  *
  * `bookingHorizonDays` is the rolling booking window the upstream

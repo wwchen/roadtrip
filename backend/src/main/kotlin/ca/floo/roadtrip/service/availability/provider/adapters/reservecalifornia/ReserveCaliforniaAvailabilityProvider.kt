@@ -50,7 +50,7 @@ class ReserveCaliforniaAvailabilityProvider(
             grids.flatMap { grid ->
                 grid.statuses.flatMap { (unitId, byDate) ->
                     observationsForReservable(
-                        rid = rid(unitId),
+                        campsiteId = null,
                         byDate = byDate,
                         dates = dates,
                         observedAt = grid.observedAt,
@@ -77,7 +77,7 @@ class ReserveCaliforniaAvailabilityProvider(
             reservables.flatMap { reservable ->
                 val found = byUnit[reservable.vendorId]
                 observationsForReservable(
-                    rid = reservable.rid,
+                    campsiteId = reservable.campsiteId,
                     byDate = found?.second.orEmpty(),
                     dates = dates,
                     observedAt = found?.first ?: observedAt(grids),
@@ -93,14 +93,22 @@ class ReserveCaliforniaAvailabilityProvider(
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
         val reserveCaliforniaRef = reserveCaliforniaRefOrThrow(ref)
-        val result =
-            catalogAvailability(
-                ref = reserveCaliforniaRef,
-                reservables = listOf(CatalogReservableRef(rid = rid(vendorId), vendorId = vendorId)),
-                startDate = startDate,
-                endDate = endDate,
-            )
-        return result.copy(reservableId = rid(vendorId))
+        val grids = fetchFacilities(reserveCaliforniaRef, startDate, endDate)
+        val found =
+            grids
+                .flatMap { grid -> grid.statuses.map { (unitId, byDate) -> unitId to (grid.observedAt to byDate) } }
+                .toMap()[vendorId]
+        return batch(
+            reserveCaliforniaRef,
+            startDate,
+            endDate,
+            observationsForReservable(
+                campsiteId = null,
+                byDate = found?.second.orEmpty(),
+                dates = dates(startDate, endDate),
+                observedAt = found?.first ?: observedAt(grids),
+            ),
+        )
     }
 
     private suspend fun fetchFacilities(
@@ -126,14 +134,14 @@ class ReserveCaliforniaAvailabilityProvider(
         }
 
     private fun observationsForReservable(
-        rid: String,
+        campsiteId: Long?,
         byDate: Map<LocalDate, AvailabilityStatus>,
         dates: List<LocalDate>,
         observedAt: Instant,
     ): List<ReservableDayObservation> =
         dates.map { date ->
             ReservableDayObservation(
-                reservableId = rid,
+                campsiteId = campsiteId,
                 date = date,
                 observedAt = observedAt,
                 status = byDate[date] ?: AvailabilityStatus.UNKNOWN,
@@ -196,5 +204,3 @@ private fun dates(
 ): List<LocalDate> =
     (0 until ChronoUnit.DAYS.between(startDate, endDate).toInt())
         .map { startDate.plusDays(it.toLong()) }
-
-private fun rid(unitId: String): String = "site:reservecalifornia:$unitId"
