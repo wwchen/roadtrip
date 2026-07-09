@@ -66,6 +66,10 @@ fun DSLContext.seedCatalogPoi(
     propertiesJson: String = """{"test":true}""",
     cadenceOverrideSec: Int? = null,
     geomGeoJson: String = """{"type":"Point","coordinates":[$lon,$lat]}""",
+    // Bulk-seed callers can pass `refresh = false` and refresh once at the end
+    // to skip N × REFRESH MATERIALIZED VIEW calls (a hot path for tests that
+    // insert hundreds of POIs to exercise pagination / truncation).
+    refresh: Boolean = true,
 ): CatalogPoiFixture {
     val canonicalType = canonicalPoiType(poiType)
     val poiId =
@@ -84,6 +88,9 @@ fun DSLContext.seedCatalogPoi(
     val catalogId =
         when (canonicalType) {
             "campground" -> {
+                // Inner refresh suppressed: this function refreshes once at
+                // the end, and we don't want the inner seedCampground call to
+                // do a redundant one on top.
                 val campgroundId =
                     seedCampground(
                         name = name,
@@ -95,6 +102,7 @@ fun DSLContext.seedCatalogPoi(
                         country = country,
                         providerRefJson = providerRefJson,
                         sourcePayloadJson = propertiesJson,
+                        refresh = false,
                     )
                 execute("INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (?, ?)", poiId, campgroundId)
                 campgroundId
@@ -157,7 +165,7 @@ fun DSLContext.seedCatalogPoi(
             else -> error("unsupported canonical poi type: $canonicalType")
         }
 
-    refreshCanonicalCatalogViews()
+    if (refresh) refreshCanonicalCatalogViews()
     return CatalogPoiFixture(poiId = poiId, catalogId = catalogId, poiType = canonicalType)
 }
 
@@ -171,6 +179,7 @@ fun DSLContext.seedCampground(
     country: String? = "US",
     providerRefJson: String? = null,
     sourcePayloadJson: String = "{}",
+    refresh: Boolean = true,
 ): Long {
     val campgroundId =
         fetchOne(
@@ -207,7 +216,7 @@ fun DSLContext.seedCampground(
         campgroundId,
         vendorRefId,
     )
-    refreshCanonicalCatalogViews()
+    if (refresh) refreshCanonicalCatalogViews()
     return campgroundId
 }
 
@@ -220,6 +229,7 @@ fun DSLContext.seedCampsite(
     loopName: String? = null,
     providerRefJson: String? = null,
     sourcePayloadJson: String = "{}",
+    refresh: Boolean = true,
 ): Long {
     val campsiteId =
         fetchOne(
@@ -252,7 +262,7 @@ fun DSLContext.seedCampsite(
         campsiteId,
         vendorRefId,
     )
-    refreshCanonicalCatalogViews()
+    if (refresh) refreshCanonicalCatalogViews()
     return campsiteId
 }
 
