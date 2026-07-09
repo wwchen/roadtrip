@@ -70,24 +70,6 @@ class RecGovAvailabilityProvider(
         }
     }
 
-    override suspend fun reservableAvailability(
-        ref: ProviderRef,
-        vendorId: String,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch {
-        val recgovId = recgovIdOrThrow(ref)
-        return runWithErrorMapping {
-            fetchRecgovReservableObservations(
-                client = client,
-                recgovId = recgovId,
-                campsiteId = vendorId,
-                startDate = startDate,
-                endDate = endDate,
-            )
-        }
-    }
-
     /** rec.gov single-site booking page; the concrete-date [bookingUrl] fills
      *  the window placeholders. [parentRef] is unused — the site id alone
      *  addresses the page. */

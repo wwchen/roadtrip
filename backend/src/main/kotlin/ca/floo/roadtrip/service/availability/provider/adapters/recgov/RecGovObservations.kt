@@ -123,42 +123,6 @@ internal suspend fun fetchRecgovCatalogObservations(
         )
     }
 
-/**
- * Same upstream fetch as [fetchRecgovAvailabilityObservations], narrowed to
- * one rec.gov campsite id. This backs the [AvailabilityProvider.reservableAvailability]
- * narrow projection.
- */
-internal suspend fun fetchRecgovReservableObservations(
-    client: RecGovAvailabilityClient,
-    recgovId: String,
-    campsiteId: String,
-    startDate: LocalDate,
-    endDate: LocalDate,
-): AvailabilityObservationBatch =
-    coroutineScope {
-        val dates = datesInWindow(startDate, endDate)
-        val months = monthsCovering(startDate, endDate.minusDays(1))
-        val observedAt = Instant.now()
-        val payloads: List<Map<String, Campsite>> =
-            months
-                .map { month -> async { client.fetchMonth(recgovId, month) } }
-                .awaitAll()
-
-        val merged = mergeCampsites(payloads)
-        val oneSite = mapOf(campsiteId to merged[campsiteId].orEmpty())
-        val observedAtByDate = dates.associateWith { observedAt }
-
-        AvailabilityObservationBatch(
-            provider = "recgov",
-            startDate = startDate,
-            endDate = endDate,
-            observations = observationsFromCampsites(oneSite, dates, observedAtByDate),
-            seasonBlock = inferReopenDate(oneSite, startDate),
-            cacheBlock = directFetchCacheBlock(),
-            campgroundId = recgovId,
-        )
-    }
-
 private fun mergeCampsites(maps: List<Map<String, Campsite>>): Map<String, Map<String, String>> {
     val out = mutableMapOf<String, MutableMap<String, String>>()
     for (m in maps) {

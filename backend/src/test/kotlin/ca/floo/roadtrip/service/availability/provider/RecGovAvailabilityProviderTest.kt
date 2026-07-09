@@ -105,54 +105,6 @@ class RecGovAvailabilityProviderTest {
         }
 
     @Test
-    fun `reservable availability narrows fetched campground data to one campsite`() =
-        runBlocking {
-            val client =
-                fakeRecgovClient { campgroundId, _ ->
-                    assertEquals("232447", campgroundId)
-                    mapOf(
-                        "330257" to
-                            RecGovCampsite(
-                                id = "330257",
-                                site = "A12",
-                                loop = "A",
-                                campsiteType = "STANDARD",
-                                maxNumPeople = 6,
-                                equipmentTypes = emptyList(),
-                                availabilities =
-                                    mapOf(
-                                        "2026-07-01" to "Available",
-                                        "2026-07-02" to "Reserved",
-                                    ),
-                            ),
-                        "999999" to
-                            RecGovCampsite(
-                                id = "999999",
-                                site = "B01",
-                                loop = "B",
-                                campsiteType = "STANDARD",
-                                maxNumPeople = 6,
-                                equipmentTypes = emptyList(),
-                                availabilities = mapOf("2026-07-01" to "Available"),
-                            ),
-                    )
-                }
-            val adapter = RecGovAvailabilityProvider(client)
-
-            val batch =
-                adapter.reservableAvailability(
-                    ref = ProviderRef.RecGov("232447"),
-                    vendorId = "330257",
-                    startDate = LocalDate.parse("2026-07-01"),
-                    endDate = LocalDate.parse("2026-07-02"),
-                )
-
-            assertEquals(null, batch.campsiteId)
-            assertEquals(null, batch.observations.single().campsiteId)
-            assertEquals(AvailabilityStatus.AVAILABLE, batch.observations.single().status)
-        }
-
-    @Test
     fun `available dates returns per-day facts without requiring a same-site stay`() =
         runBlocking {
             val client =

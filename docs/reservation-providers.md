@@ -103,8 +103,7 @@ drawer can hide affordances the provider doesn't support.
 | Action | Required interface | Notes |
 |---|---|---|
 | Per-day availability for a window | `AvailabilityClient.availability(ref, startDate, endDate)` | Drives provider-level availability. Adapters fetch upstream directly; the decision to serve stored data or call the adapter live is handled above it by `AvailabilityLoader`, reading current state from the `availability` interval table. |
-| Catalog availability for linked campsites | `AvailabilityClient.catalogAvailability(ref, reservables, startDate, endDate)` | The POI/campsite catalog path uses this so returned availability is narrowed to known catalog rows. |
-| Reservable availability | `AvailabilityClient.reservableAvailability(ref, vendorId, startDate, endDate)` | Narrow projection for a single reservable. Currently unused: availability is always requested by collection (POI), so the port method has no live caller since the single-reservable endpoint was retired. Kept as a capability; remove if it stays dead. |
+| Catalog availability for linked campsites | `AvailabilityClient.catalogAvailability(ref, campsites, startDate, endDate)` | The POI/campsite catalog path uses this so returned availability is narrowed to known catalog rows. |
 | Capability probe | `AvailabilityProvider.capabilities` | Static per adapter; cheap. |
 | Watch evaluation on poll | watch evaluator | `same_site` requires one site bookable across all N nights; `any_combination` succeeds if at least one site is open per night. |
 | Record availability history | poller writes status-run rows to the `availability` interval table | Provider-agnostic; uses `AvailabilityObservationBatch` observations. |

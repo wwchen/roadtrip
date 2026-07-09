@@ -149,34 +149,6 @@ internal suspend fun fetchAspiraCatalogOccupancyObservations(
 }
 
 /**
- * Same Aspira `/api/availability/map` response as the campground rollup,
- * narrowed to one `resourceAvailabilities` key.
- */
-internal suspend fun fetchAspiraResourceObservations(
-    client: AspiraAvailabilityClient,
-    host: String,
-    mapId: Int,
-    resourceId: String,
-    campsiteVendor: String,
-    startDate: LocalDate,
-    endDate: LocalDate,
-): AvailabilityObservationBatch {
-    val days = daysBetween(startDate, endDate)
-    val observedAt = Instant.now()
-    val data = client.fetch(host, mapId, startDate, endDate.minusDays(1))
-    val resourceDays = data.byResource[resourceId].orEmpty()
-    return AvailabilityObservationBatch(
-        provider = "aspira",
-        startDate = startDate,
-        endDate = endDate,
-        observations = observationsFromResourceDays(resourceDays, startDate, days, campsiteId = null, observedAt),
-        cacheBlock = directFetchCacheBlock(),
-        host = host,
-        mapId = mapId.toString(),
-    )
-}
-
-/**
  * Convert Aspira's per-day status arrays into the FE's day-status shape.
  *
  * For each date D, a sub-area counts as available only when its canonical

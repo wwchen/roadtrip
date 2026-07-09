@@ -107,32 +107,6 @@ class ReserveAmericaAvailabilityProvider(
         )
     }
 
-    override suspend fun reservableAvailability(
-        ref: ProviderRef,
-        vendorId: String,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch {
-        val reserveAmericaRef = reserveAmericaRefOrThrow(ref)
-        val contractCode = contractCode(reserveAmericaRef)
-        val data = fetch(contractCode, reserveAmericaRef.parkId, startDate, endDate)
-        val observations =
-            observationsForReservable(
-                campsiteId = null,
-                byDate = data.statuses[vendorId].orEmpty(),
-                dates = dates(startDate, endDate),
-                observedAt = data.observedAt,
-            )
-        return batch(
-            contractCode = contractCode,
-            parkId = reserveAmericaRef.parkId,
-            startDate = startDate,
-            endDate = endDate,
-            observations = observations,
-            campsiteId = null,
-        )
-    }
-
     private suspend fun fetch(
         contractCode: String,
         parkId: String,

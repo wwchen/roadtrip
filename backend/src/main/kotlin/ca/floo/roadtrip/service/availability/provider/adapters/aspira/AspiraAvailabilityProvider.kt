@@ -131,26 +131,6 @@ class AspiraAvailabilityProvider(
         parentRef: ProviderRef,
     ): String? = AspiraBookingUrl.templateFor(tenant.host, campsite.providerRef, parentRef)
 
-    override suspend fun reservableAvailability(
-        ref: ProviderRef,
-        vendorId: String,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch {
-        val mapId = mapIdOrThrow(ref)
-        return runWithErrorMapping {
-            fetchAspiraResourceObservations(
-                client = client,
-                host = tenant.host,
-                mapId = mapId,
-                resourceId = vendorId,
-                campsiteVendor = tenant.vendorCode,
-                startDate = startDate,
-                endDate = endDate,
-            )
-        }
-    }
-
     /**
      * Pull the map id and narrow Long → Int. Real Aspira ids fit comfortably
      * in 32 bits; rejecting an out-of-range value loudly is better than

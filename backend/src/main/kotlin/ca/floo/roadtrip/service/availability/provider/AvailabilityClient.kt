@@ -23,11 +23,4 @@ interface AvailabilityClient {
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch
-
-    suspend fun reservableAvailability(
-        ref: ProviderRef,
-        vendorId: String,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch
 }

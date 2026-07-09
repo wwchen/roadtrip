@@ -98,36 +98,6 @@ class CampflareAvailabilityProvider(
         )
     }
 
-    override suspend fun reservableAvailability(
-        ref: ProviderRef,
-        vendorId: String,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch {
-        val campflareRef = campflareRefOrThrow(ref)
-        val data = fetch(campflareRef.campgroundId, startDate, endDate)
-        val byDate =
-            data
-                .campgrounds[campflareRef.campgroundId]
-                ?.campsiteAvailability
-                .orEmpty()
-                .firstOrNull { it.campsiteId == vendorId }
-                ?.availability
-                .orEmpty()
-        return batch(
-            campgroundId = campflareRef.campgroundId,
-            startDate = startDate,
-            endDate = endDate,
-            observations =
-                observationsForReservable(
-                    campsiteId = null,
-                    byDate = byDate,
-                    dates = dates(startDate, endDate),
-                    data = data,
-                ),
-        )
-    }
-
     private suspend fun fetch(
         campgroundId: String,
         startDate: LocalDate,

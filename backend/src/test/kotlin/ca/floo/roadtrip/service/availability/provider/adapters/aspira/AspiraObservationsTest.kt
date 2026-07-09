@@ -30,38 +30,6 @@ class AspiraObservationsTest {
     }
 
     @Test
-    fun `aspira resource availability narrows fetched map response to one resource`() =
-        runBlocking {
-            val client =
-                fakeAspiraClient(
-                    onFetch = { _, mapId, _, _ ->
-                        AspiraAvailability(
-                            mapId = mapId,
-                            parkRollup = emptyList(),
-                            byMapLink = emptyMap(),
-                            byResource = mapOf("-2147478966" to listOf(0, 0, 1)),
-                        )
-                    },
-                )
-
-            val batch =
-                fetchAspiraResourceObservations(
-                    client = client,
-                    host = "camping.bcparks.ca",
-                    mapId = -2147483516,
-                    resourceId = "-2147478966",
-                    campsiteVendor = "aspira_bc",
-                    startDate = LocalDate.parse("2026-07-01"),
-                    endDate = LocalDate.parse("2026-07-03"),
-                )
-
-            assertEquals(null, batch.campsiteId)
-            assertEquals(null, batch.observations.first().campsiteId)
-            assertEquals(AvailabilityStatus.AVAILABLE, batch.observations[0].status)
-            assertEquals(AvailabilityStatus.AVAILABLE, batch.observations[1].status)
-        }
-
-    @Test
     fun `aspira campground availability stays unkeyed without catalog campsite ids`() =
         runBlocking {
             val client =

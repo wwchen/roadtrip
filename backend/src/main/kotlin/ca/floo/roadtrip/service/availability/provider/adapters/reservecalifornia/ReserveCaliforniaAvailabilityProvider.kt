@@ -86,31 +86,6 @@ class ReserveCaliforniaAvailabilityProvider(
         return batch(reserveCaliforniaRef, startDate, endDate, observations)
     }
 
-    override suspend fun reservableAvailability(
-        ref: ProviderRef,
-        vendorId: String,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch {
-        val reserveCaliforniaRef = reserveCaliforniaRefOrThrow(ref)
-        val grids = fetchFacilities(reserveCaliforniaRef, startDate, endDate)
-        val found =
-            grids
-                .flatMap { grid -> grid.statuses.map { (unitId, byDate) -> unitId to (grid.observedAt to byDate) } }
-                .toMap()[vendorId]
-        return batch(
-            reserveCaliforniaRef,
-            startDate,
-            endDate,
-            observationsForReservable(
-                campsiteId = null,
-                byDate = found?.second.orEmpty(),
-                dates = dates(startDate, endDate),
-                observedAt = found?.first ?: observedAt(grids),
-            ),
-        )
-    }
-
     private suspend fun fetchFacilities(
         ref: ProviderRef.ReserveCalifornia,
         startDate: LocalDate,

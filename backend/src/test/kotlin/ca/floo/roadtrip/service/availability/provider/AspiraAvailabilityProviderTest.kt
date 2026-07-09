@@ -216,54 +216,6 @@ class AspiraAvailabilityProviderTest {
         }
 
     @Test
-    fun `reservable availability stays unkeyed without a canonical campsite id`() =
-        runBlocking {
-            val client =
-                fakeAspiraClient(
-                    onFetch = { _, mapId, _, _ ->
-                        AspiraAvailability(
-                            mapId = mapId,
-                            parkRollup = emptyList(),
-                            byMapLink = emptyMap(),
-                            byResource = mapOf("-2147478966" to listOf(0)),
-                        )
-                    },
-                )
-
-            val cases =
-                listOf(
-                    "reservation.pc.gc.ca" to "aspira_pc",
-                    "camping.bcparks.ca" to "aspira_bc",
-                    "washington.goingtocamp.com" to "aspira_wa",
-                )
-            for ((host, vendor) in cases) {
-                val tenant =
-                    AspiraTenant(
-                        host = host,
-                        vendorCode = vendor,
-                        bookingHorizonDays = 365,
-                    )
-                val adapter = AspiraAvailabilityProvider(tenant = tenant, client = client)
-                val batch =
-                    adapter.reservableAvailability(
-                        ref =
-                            ProviderRef.Aspira(
-                                transactionLocationId = -2147483648,
-                                mapId = -2147483516,
-                                resourceLocationId = -2147483515,
-                            ),
-                        vendorId = "-2147478966",
-                        startDate = LocalDate.parse("2026-07-01"),
-                        endDate = LocalDate.parse("2026-07-02"),
-                    )
-
-                assertEquals(null, batch.campsiteId)
-                assertEquals(null, batch.observations.single().campsiteId)
-                assertEquals(AvailabilityStatus.AVAILABLE, batch.observations.single().status)
-            }
-        }
-
-    @Test
     fun `available dates returns per-day facts without requiring a same-sub-area stay`() =
         runBlocking {
             val client =

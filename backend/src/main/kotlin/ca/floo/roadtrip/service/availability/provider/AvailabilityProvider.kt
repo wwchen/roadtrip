@@ -64,24 +64,6 @@ interface AvailabilityProvider : AvailabilityClient {
     ): AvailabilityObservationBatch = availability(ref, startDate, endDate)
 
     /**
-     * Per-day availability for one reservable under a campground. Providers
-     * should share the same upstream cache as [availability]; this endpoint is
-     * a narrower projection of the same inventory window, not a second
-     * independent polling path.
-     *
-     * Default is unsupported so adapters can opt in as their upstream exposes
-     * stable per-resource status.
-     *
-     * @throws AvailabilityProviderError on upstream failure or unsupported provider.
-     */
-    override suspend fun reservableAvailability(
-        ref: ProviderRef,
-        vendorId: String,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch = throw AvailabilityProviderError.Unsupported("reservableAvailability", id)
-
-    /**
      * User-facing booking URL *template* for [reservable] under a campground
      * whose parent scope is [parentRef], or null when this provider exposes no
      * stable deep link. The template may embed the

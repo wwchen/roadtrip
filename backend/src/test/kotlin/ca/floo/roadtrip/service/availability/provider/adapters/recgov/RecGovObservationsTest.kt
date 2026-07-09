@@ -228,31 +228,6 @@ class RecGovObservationsTest {
     }
 
     @Test
-    fun `reservable availability keeps requested site omitted by upstream as unknown`() {
-        val body =
-            encodeAvailabilityJson(
-                availabilityResponseFromObservations(
-                    runBlocking {
-                        fetchRecgovReservableObservations(
-                            client = clientReturning(emptyMap()),
-                            recgovId = "232447",
-                            campsiteId = "100",
-                            startDate = today,
-                            endDate = today.plusDays(1),
-                        )
-                    },
-                ),
-            )
-        val json = parseJson(body)
-        val day = json["availability"]!!.jsonArray.single().jsonObject
-
-        assertEquals(null, json["campsite_id"])
-        assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
-        assertEquals(0, day["available_campsite_ids"]!!.jsonArray.size)
-        assertEquals(0, day["campsite_statuses"]!!.jsonObject.size)
-    }
-
-    @Test
     fun `upstream error propagates so route layer can 503`() {
         val client =
             object : RecGovAvailabilityClient {
