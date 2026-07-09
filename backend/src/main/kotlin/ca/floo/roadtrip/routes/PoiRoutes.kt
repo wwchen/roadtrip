@@ -365,6 +365,8 @@ internal fun poiDetailFeature(
             PoiDetailPropertiesSchema(
                 source = r.source,
                 sourceId = r.sourceId,
+                dataSource = r.source,
+                availabilityProvider = r.providerSource,
                 category = r.category,
                 subcategory = r.subcategory,
                 agency = r.agency,
@@ -375,6 +377,7 @@ internal fun poiDetailFeature(
                 earliestDate = dateContext?.earliestDate?.toString(),
                 unitName = r.unitName,
                 reserveUrl = r.reserveUrl,
+                bookingSite = r.bookingSite,
                 phone = r.phone,
                 infoUrl = r.infoUrl,
                 address = r.addressJson?.let { Json.parseToJsonElement(it) },

@@ -105,6 +105,7 @@ class FeatureCollectionContractTest {
             PoiDetailRow(
                 id = 42,
                 source = "uscampgrounds",
+                providerSource = "parks-canada",
                 sourceId = "abc-123",
                 category = "campground",
                 subcategory = "federal",
@@ -116,6 +117,7 @@ class FeatureCollectionContractTest {
                 lat = 51.1812,
                 unitName = "Banff",
                 reserveUrl = "https://reservation.pc.gc.ca",
+                bookingSite = "reservation.pc.gc.ca",
                 phone = "1-877-737-3783",
                 infoUrl = "https://parks.canada.ca/banff",
                 addressJson = """{"city":"Banff","state":"AB"}""",
@@ -129,12 +131,14 @@ class FeatureCollectionContractTest {
             """{"type":"Feature","id":42,""" +
                 """"geometry":{"type":"Point","coordinates":[-115.547,51.1812]},""" +
                 """"properties":{"source":"uscampgrounds","source_id":"abc-123",""" +
+                """"data_source":"uscampgrounds","availability_provider":"parks-canada",""" +
                 """"category":"campground","subcategory":"federal",""" +
                 """"agency":"Parks Canada",""" +
                 """"name":"Tunnel Mountain Village I",""" +
                 """"region":"AB","country":"CA","time_zone":"America/Edmonton",""" +
                 """"earliest_date":"2026-06-21","unit_name":"Banff",""" +
                 """"reserve_url":"https://reservation.pc.gc.ca",""" +
+                """"booking_site":"reservation.pc.gc.ca",""" +
                 """"phone":"1-877-737-3783","info_url":"https://parks.canada.ca/banff",""" +
                 """"address":{"city":"Banff","state":"AB"},""" +
                 """"description":"Camp among redwoods.",""" +

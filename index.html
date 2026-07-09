@@ -402,6 +402,28 @@
     line-height: 1.35;
     margin: 0 0 2px;
   }
+  .cg-source-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(116px, 1fr));
+    gap: 8px 12px;
+    margin: 10px 0 12px;
+  }
+  .cg-source-meta > div { min-width: 0; }
+  .cg-source-meta dt {
+    margin: 0;
+    color: var(--rt-faint);
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0;
+  }
+  .cg-source-meta dd {
+    margin: 2px 0 0;
+    color: var(--rt-text);
+    font-size: 12px;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
   .cg-verdict-row { margin-bottom: 12px; }
   .cg-pill {
     display: inline-flex; align-items: center;

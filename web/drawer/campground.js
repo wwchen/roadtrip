@@ -26,6 +26,7 @@ import {
   bookingSystemFooterHTML,
   seasonVerdictHTML,
   reserveButtonHTML,
+  sourceMetaHTML,
   structuredCampgroundDetailsHTML,
 } from '../campground-card.js';
 import { descriptionSectionHTML, upstreamDecorations } from '../upstream-html.js';
@@ -190,6 +191,7 @@ function renderShell(f, signal) {
   const footer = lastVerifiedFooterHTML(p);
   const bookingSysFooter = bookingSystemFooterHTML(p);
   const structuredDetails = structuredCampgroundDetailsHTML(p);
+  const sourceMeta = sourceMetaHTML(p);
 
   const verdict = seasonVerdictHTML(p.season, p.reservable);
 
@@ -247,6 +249,7 @@ function renderShell(f, signal) {
       ${parent ? `<div class="cg-park-subtitle">${escapeHtml(parent)}</div>` : ''}
       ${agency ? `<div class="cg-agency-subtitle">${escapeHtml(agency)}</div>` : ''}
       ${sub ? `<div class="cg-sub">${escapeHtml(sub)}</div>` : ''}
+      ${sourceMeta}
       ${verdict ? `<div class="cg-verdict-row">${verdict}</div>` : ''}
     </header>
 

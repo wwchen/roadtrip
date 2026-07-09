@@ -8,6 +8,7 @@ import {
   parseAmenities,
   parseCellCoverage,
   reserveButtonHTML,
+  sourceMetaHTML,
   structuredCampgroundDetailsHTML,
 } from './campground-card.js';
 
@@ -18,6 +19,9 @@ const campflareDetail = {
   properties: {
     source: 'campground',
     source_id: 'cold-creek-869',
+    data_source: 'campflare',
+    availability_provider: 'recgov',
+    booking_site: 'recreation.gov',
     category: 'campground',
     subcategory: 'established',
     name: 'Cold Creek',
@@ -187,6 +191,26 @@ test('structuredCampgroundDetailsHTML renders Campflare campground fields', () =
   assert.match(html, /https:\/\/www\.fs\.usda\.gov/);
   assert.match(html, /Official page/);
   assert.match(html, /Water unavailable/);
+  assert.match(html, /Data source/);
+  assert.match(html, /campflare/);
+  assert.match(html, /Availability provider/);
+  assert.match(html, /recgov/);
+  assert.match(html, /Booking site/);
+  assert.match(html, /recreation\.gov/);
   assert.match(html, /recreation_gov/);
   assert.doesNotMatch(html, /source_payload/);
+});
+
+test('sourceMetaHTML renders compact source/provider metadata', () => {
+  const p = flattenHydratedPoi(campflareDetail).properties;
+  const html = sourceMetaHTML(p);
+
+  assert.match(html, /Data source/);
+  assert.match(html, /campflare/);
+  assert.match(html, /Availability provider/);
+  assert.match(html, /recgov/);
+  assert.match(html, /Agency/);
+  assert.match(html, /USDA Forest Service/);
+  assert.match(html, /Booking site/);
+  assert.match(html, /recreation\.gov/);
 });
