@@ -123,16 +123,97 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
             ctx
                 .fetch(
                     """
-                    SELECT vr.vendor, vr.external_id, cvr.is_primary
+                    SELECT vr.vendor, vr.external_id
                     FROM campground_vendor_refs cvr
                     JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
-                    ORDER BY cvr.is_primary DESC, vr.vendor
+                    ORDER BY vr.vendor
                     """.trimIndent(),
-                ).map { "${it.get("vendor")}:${it.get("external_id")}:${it.get("is_primary")}" }
+                ).map { "${it.get("vendor")}:${it.get("external_id")}" }
 
         assertEquals(
-            listOf("campflare:upper-pines-campground-447:true", "federal-campgrounds:recgov-232447:false"),
+            listOf("campflare:upper-pines-campground-447", "federal-campgrounds:recgov-232447"),
             refs,
+        )
+    }
+
+    @Test
+    fun `different vendors for the same real-world campground land in distinct per-vendor rows`() {
+        val repo = CanonicalCatalogRepo(ctx)
+        val recgovRecord =
+            CampgroundEtlRecord(
+                vendor = "recgov",
+                vendorRefId = "232447",
+                name = "Upper Pines",
+                latitude = 37.739,
+                longitude = -119.565,
+                sourcePayload = json("""{"FacilityID":"232447"}"""),
+                vendorRefPayload = json("""{"recgov_id":"232447"}"""),
+            )
+        val campflareRecord =
+            CampgroundEtlRecord(
+                vendor = "campflare",
+                vendorRefId = "upper-pines-campground-447",
+                name = "Upper Pines",
+                latitude = 37.739,
+                longitude = -119.565,
+                sourcePayload = json("""{"id":"upper-pines-campground-447"}"""),
+                vendorRefPayload = json("""{"campflare_id":"upper-pines-campground-447"}"""),
+            )
+
+        repo.upsertCampgrounds(listOf(recgovRecord), source = "recgov-campgrounds")
+        repo.upsertCampgrounds(listOf(campflareRecord), source = "campflare-campgrounds")
+
+        // Two campground rows, each tagged with its own etl_source.
+        assertEquals(2, tableCount("campgrounds"))
+        assertEquals(2, tableCount("vendor_refs"))
+        assertEquals(2, tableCount("campground_vendor_refs"))
+
+        val rows =
+            ctx
+                .fetch(
+                    """
+                    SELECT cg.etl_source, vr.vendor AS ref_vendor, vr.external_id
+                    FROM campgrounds cg
+                    JOIN campground_vendor_refs cvr ON cvr.campground_id = cg.id
+                    JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
+                    ORDER BY cg.etl_source
+                    """.trimIndent(),
+                ).map {
+                    "${it.get("etl_source")}|${it.get("ref_vendor")}:${it.get("external_id")}"
+                }
+
+        // Each canonical row has exactly one vendor_ref pointing at its own vendor.
+        assertEquals(
+            listOf(
+                "campflare|campflare:upper-pines-campground-447",
+                "recgov|recgov:232447",
+            ),
+            rows,
+        )
+
+        // Re-running either input updates only its own row.
+        repo.upsertCampgrounds(
+            listOf(recgovRecord.copy(name = "Upper Pines (recgov update)")),
+            source = "recgov-campgrounds",
+        )
+        assertEquals(2, tableCount("campgrounds"))
+
+        val names =
+            ctx
+                .fetch(
+                    """
+                    SELECT cg.etl_source, cg.name
+                    FROM campgrounds cg
+                    ORDER BY cg.etl_source
+                    """.trimIndent(),
+                ).map { "${it.get("etl_source")}|${it.get("name")}" }
+
+        assertEquals(
+            listOf(
+                "campflare|Upper Pines",
+                "recgov|Upper Pines (recgov update)",
+            ),
+            names,
         )
     }
 
@@ -273,14 +354,14 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
             ctx
                 .fetch(
                     """
-                    SELECT vr.vendor, vr.external_id, cvr.is_primary
+                    SELECT vr.vendor, vr.external_id
                     FROM campsite_vendor_refs cvr
                     JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
-                    ORDER BY cvr.is_primary DESC, vr.vendor
+                    ORDER BY vr.vendor
                     """.trimIndent(),
-                ).map { "${it.get("vendor")}:${it.get("external_id")}:${it.get("is_primary")}" }
+                ).map { "${it.get("vendor")}:${it.get("external_id")}" }
 
-        assertEquals(listOf("campflare:upper-pines-site-100:true", "recgov:100:false"), refs)
+        assertEquals(listOf("campflare:upper-pines-site-100", "recgov:100"), refs)
     }
 
     @Test

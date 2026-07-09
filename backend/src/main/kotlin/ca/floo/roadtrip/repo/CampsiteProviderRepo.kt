@@ -43,7 +43,7 @@ class CampsiteProviderRepo(
                 JOIN campgrounds cg
                   ON cg.id = pc.campground_id
                 JOIN LATERAL (
-                  SELECT ref.vendor, ref.payload, cvr.is_primary, cvr.vendor_ref_id
+                  SELECT ref.vendor, ref.payload, cvr.vendor_ref_id
                   FROM campground_vendor_refs cvr
                   JOIN vendor_refs ref
                     ON ref.id = cvr.vendor_ref_id
@@ -52,7 +52,6 @@ class CampsiteProviderRepo(
                     AND ref.deleted_at IS NULL
                   ORDER BY
                     CASE WHEN ${providerRefShapeSql("ref.payload")} THEN 1 ELSE 0 END DESC,
-                    cvr.is_primary DESC,
                     cvr.vendor_ref_id ASC
                 ) vr ON true
                 WHERE p.id = ?
@@ -61,7 +60,6 @@ class CampsiteProviderRepo(
                   AND cg.deleted_at IS NULL
                 ORDER BY
                   CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
-                  vr.is_primary DESC,
                   vr.vendor_ref_id ASC
                 """.trimIndent(),
                 poiId,
@@ -81,7 +79,6 @@ class CampsiteProviderRepo(
                   AND vr.deleted_at IS NULL
                 ORDER BY
                   CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
-                  cvr.is_primary DESC,
                   cvr.vendor_ref_id ASC
                 """.trimIndent(),
                 campsiteId,
@@ -176,7 +173,7 @@ class CampsiteProviderRepo(
             JOIN campgrounds cg
               ON cg.id = pc.campground_id
             JOIN LATERAL (
-              SELECT ref.vendor, ref.payload, cvr.is_primary, cvr.vendor_ref_id
+              SELECT ref.vendor, ref.payload, cvr.vendor_ref_id
               FROM campground_vendor_refs cvr
               JOIN vendor_refs ref
                 ON ref.id = cvr.vendor_ref_id
@@ -185,7 +182,6 @@ class CampsiteProviderRepo(
                 AND ref.deleted_at IS NULL
               ORDER BY
                 CASE WHEN ${providerRefShapeSql("ref.payload")} THEN 1 ELSE 0 END DESC,
-                cvr.is_primary DESC,
                 cvr.vendor_ref_id ASC
             ) vr ON true
             WHERE p.id IN ($placeholders)
@@ -195,7 +191,6 @@ class CampsiteProviderRepo(
             ORDER BY
               p.id,
               CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
-              vr.is_primary DESC,
               vr.vendor_ref_id ASC
             """.trimIndent()
 
