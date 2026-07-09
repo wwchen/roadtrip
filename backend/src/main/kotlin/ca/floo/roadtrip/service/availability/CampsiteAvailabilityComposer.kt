@@ -3,12 +3,16 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.models.api.AvailabilityResponseDto
 import ca.floo.roadtrip.models.availability.AvailabilityWindows
+import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityRepo
+import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -22,6 +26,9 @@ internal class CampsiteAvailabilityComposer(
     private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     availability: AvailabilityRepo? = null,
     private val snapshotFreshnessTtl: (AvailabilityProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
+    private val failoverFetcher: FailoverAvailabilityFetcher =
+        FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromEnv()),
+    private val campsiteProviderRepo: CampsiteProviderRepo? = null,
 ) {
     private val availabilityLoader = AvailabilityLoader(availability)
 
@@ -66,12 +73,7 @@ internal class CampsiteAvailabilityComposer(
                             ttl = snapshotFreshnessTtl(provider.id),
                         ),
                     ) {
-                        provider.catalogAvailability(
-                            ref = parentRef,
-                            campsites = rows.map { it.catalogRef },
-                            startDate = windows.fetch.startDate,
-                            endDate = windows.fetch.endDate,
-                        )
+                        fetchWithFailover(rows, windows)
                     }
                 },
             )
@@ -97,7 +99,73 @@ internal class CampsiteAvailabilityComposer(
             byCampsiteId[campsite.id] ?: throw AvailabilityServiceError.NotFound
         }
     }
+
+    /**
+     * Runs the group's fetch through [failoverFetcher]: preferred candidate
+     * first (with the resolver-picked catalog refs), retryable failures fall
+     * through to sibling vendor candidates (looked up via
+     * [CampsiteProviderRepo.findCampsiteRefsForCandidate], which keeps the
+     * observations anchored to the representative campsite id).
+     */
+    private suspend fun fetchWithFailover(
+        rows: List<ResolvedAvailabilityTarget>,
+        windows: AvailabilityWindows,
+    ): ca.floo.roadtrip.models.availability.AvailabilityObservationBatch {
+        val groupCandidates = rows.first().candidates
+        val preferredRefs = rows.map { it.catalogRef }
+        val representativeIds = rows.map { it.campsite.id }
+        val result =
+            failoverFetcher.fetch(
+                candidates = groupCandidates,
+                campsites = rows.map { it.campsite },
+                window = ResolvedDateWindow(windows.fetch.startDate, windows.fetch.endDate),
+                translateRefs = { candidate ->
+                    if (candidate === groupCandidates.first()) {
+                        preferredRefs
+                    } else {
+                        siblingRefsFor(candidate, representativeIds)
+                    }
+                },
+            )
+        return result.batch ?: throw synthesizedError(result.attempts.lastOrNull())
+    }
+
+    private fun siblingRefsFor(
+        candidate: ProviderCandidate,
+        representativeIds: List<Long>,
+    ): List<CatalogCampsiteRef> {
+        val repo = campsiteProviderRepo ?: return emptyList()
+        val vendorSlug = candidate.provider.id.name.lowercase()
+        return repo
+            .findCampsiteRefsForCandidate(representativeIds, vendorSlug)
+            .map { row ->
+                // vendorId comes from the sibling row's external_id; the
+                // representative id keeps observations landing on the winner-side
+                // campsite row.
+                CatalogCampsiteRef(
+                    campsiteId = row.representativeCampsiteId,
+                    vendorId = row.externalId,
+                )
+            }
+    }
+
+    private fun synthesizedError(last: FailoverAvailabilityFetcher.AttemptRecord?): AvailabilityProviderError {
+        val message = last?.error ?: NO_CANDIDATES_ERROR
+        return when (last?.outcome) {
+            FetchOutcome.RATE_LIMITED -> AvailabilityProviderError.RateLimited(RuntimeException(message))
+            FetchOutcome.BLOCKED -> AvailabilityProviderError.UpstreamBlocked(RuntimeException(message))
+            FetchOutcome.UPSTREAM_5XX,
+            FetchOutcome.OK,
+            FetchOutcome.OTHER,
+            null,
+            -> AvailabilityProviderError.UpstreamUnavailable(RuntimeException(message))
+        }
+    }
 }
+
+// Message used when the failover fetcher returns a null batch with no
+// attempts (e.g. empty-candidates case). Not user-facing.
+private const val NO_CANDIDATES_ERROR: String = "no availability candidates available"
 
 internal fun defaultSnapshotFreshnessTtl(providerId: AvailabilityProviderId): Duration =
     when (providerId) {
