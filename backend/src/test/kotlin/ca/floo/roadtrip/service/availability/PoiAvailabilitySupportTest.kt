@@ -170,7 +170,7 @@ class PoiAvailabilitySupportTest : SharedDbTest() {
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsAvailability = true,
-                supportsAlerts = true,
+                pollableForAlerts = true,
                 bookingHorizonDays = 180,
                 maxPollWindowDays = 60,
             )
@@ -187,7 +187,7 @@ class PoiAvailabilitySupportTest : SharedDbTest() {
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsAvailability = true,
-                supportsAlerts = false,
+                pollableForAlerts = false,
                 bookingHorizonDays = 365,
                 maxPollWindowDays = 60,
             )

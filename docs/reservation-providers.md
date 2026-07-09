@@ -88,8 +88,8 @@ on each provider drive what the FE shows.
 data class AvailabilityProviderCapabilities(
     /** Can we serve per-day availability for a window? */
     val supportsAvailability: Boolean,
-    /** Can we poll for openings and notify on match? */
-    val supportsAlerts: Boolean,
+    /** Can the internal poller poll this vendor for openings? */
+    val pollableForAlerts: Boolean,
     /** Max days into the future the upstream exposes. */
     val bookingHorizonDays: Int,
 )
@@ -228,7 +228,7 @@ walk `previous_id` back from the current row. Each row is an interval
 - **History only exists for slots we polled.** No background backfill,
   no synthetic data. If a slot was never alerted on, there's no history
   for it. Capability-gate any history endpoint behind
-  `supportsAlerts`.
+  `pollableForAlerts`.
 - **Widen data per upstream call.** Upstreams return a window of
   per-day availability in one response. Record the whole window, not
   just the alerted slot. Same upstream cost; vastly more history.
@@ -281,7 +281,7 @@ poller has produced.
    covered.
 3. Create `service/availability/provider/adapters/<vendor>/<Vendor>AvailabilityProvider.kt`
    implementing `AvailabilityProvider`. Capabilities default conservatively
-   (`supportsAlerts = false`); flip them on as features land.
+   (`pollableForAlerts = false`); flip them on as features land.
 4. Ensure the terminal ETL emits the right `provider_ref` JSON and that its
    `pois.source` maps to the adapter in `AvailabilityProviderRegistryFactory`.
 5. Update the matrix table above.

@@ -179,7 +179,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         override val capabilities =
             AvailabilityProviderCapabilities(
                 supportsAvailability = true,
-                supportsAlerts = true,
+                pollableForAlerts = true,
                 bookingHorizonDays = 180,
                 maxPollWindowDays = 60,
             )
