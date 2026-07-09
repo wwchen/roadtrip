@@ -5,6 +5,7 @@ import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.CanonicalViewRepo
+import ca.floo.roadtrip.repo.CatalogPoiFixture
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
@@ -298,6 +299,139 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals(campsiteId, target.catalogRef.campsiteId)
             assertEquals("100", target.catalogRef.vendorId)
         }
+
+    @Test
+    fun `resolve returns ordered candidate list for a dual-vendor grouped POI`() =
+        runBlocking {
+            val fixture = seedDualVendorGroupedPoi()
+            val campsiteId = seedDualVendorCampsite(fixture.catalogId)
+
+            val campsitesRepo = CampsiteRepo(ctx)
+            val reservable = campsitesRepo.findById(campsiteId)!!
+            val target =
+                resolverFor(
+                    campsitesRepo = campsitesRepo,
+                    providers =
+                        mapOf(
+                            "campflare" to NoopCampflareProvider(),
+                            "recgov" to NoopRecgovProvider(),
+                        ),
+                ).resolve(reservable)!!
+
+            assertEquals(2, target.candidates.size)
+            assertEquals(AvailabilityProviderId.CAMPFLARE, target.candidates[0].provider.id)
+            assertEquals(AvailabilityProviderId.RECGOV, target.candidates[1].provider.id)
+            // Public single-provider fields mirror the first (preferred) candidate so
+            // batcher GroupKey and other unchanged call sites keep compiling.
+            assertEquals(target.candidates[0].provider, target.provider)
+            assertEquals(target.candidates[0].parentRef, target.parentRef)
+            assertEquals(target.candidates[0].catalogRef, target.catalogRef)
+            assertEquals("upper-pines-campground-447", parentRefKey(target.candidates[0].parentRef))
+            assertEquals("232447", parentRefKey(target.candidates[1].parentRef))
+        }
+
+    @Test
+    fun `resolve skips candidates whose provider cannot handle the ref`() =
+        runBlocking {
+            val fixture = seedDualVendorGroupedPoi()
+            val campsiteId = seedDualVendorCampsite(fixture.catalogId)
+
+            val campsitesRepo = CampsiteRepo(ctx)
+            val reservable = campsitesRepo.findById(campsiteId)!!
+            val target =
+                resolverFor(
+                    campsitesRepo = campsitesRepo,
+                    providers =
+                        mapOf(
+                            "campflare" to DecliningCampflareProvider(),
+                            "recgov" to NoopRecgovProvider(),
+                        ),
+                ).resolve(reservable)!!
+
+            assertEquals(1, target.candidates.size)
+            assertEquals(AvailabilityProviderId.RECGOV, target.candidates[0].provider.id)
+            assertEquals(AvailabilityProviderId.RECGOV, target.provider.id)
+            assertEquals("232447", parentRefKey(target.parentRef))
+        }
+
+    @Test
+    fun `resolve returns null when no candidate survives`() =
+        runBlocking {
+            val poi =
+                ctx
+                    .seedCatalogPoi(
+                        sourceId = "upper-pines-unknown-vendor",
+                        name = "Upper Pines",
+                        lon = -119.56,
+                        lat = 37.74,
+                        source = "not-a-vendor",
+                        providerRefJson = """{"recgov_id":"232447"}""",
+                    ).poiId
+            CanonicalViewRepo(ctx).refreshCanonicalViews()
+
+            val campsiteId =
+                ctx.seedCampsite(
+                    campgroundId = campgroundIdFor(poi),
+                    vendor = "not-a-vendor",
+                    vendorId = "site-100",
+                    name = "Site 100",
+                )
+
+            val campsitesRepo = CampsiteRepo(ctx)
+            val reservable = campsitesRepo.findById(campsiteId)!!
+            // Registry has no adapter for source "not-a-vendor", so no candidate
+            // survives forPoi() lookup and resolve returns null.
+            val target =
+                resolverFor(
+                    campsitesRepo = campsitesRepo,
+                    providers = mapOf("campflare" to NoopCampflareProvider()),
+                ).resolve(reservable)
+
+            assertEquals(null, target)
+        }
+
+    /** Winner campflare POI + recgov sibling grouped under a shared match_group_id. */
+    private fun seedDualVendorGroupedPoi(): CatalogPoiFixture {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "upper-pines-campflare",
+                name = "Upper Pines",
+                lon = -119.56,
+                lat = 37.74,
+                source = "campflare",
+                providerRefJson = """{"campflare_id":"upper-pines-campground-447"}""",
+            )
+        val siblingCampgroundId =
+            ctx.seedCampground(
+                name = "Upper Pines",
+                source = "recgov",
+                sourceId = "recgov-232447",
+                providerRefJson = """{"recgov_id":"232447"}""",
+            )
+        matchAndGroupCampgrounds(fixture.catalogId, siblingCampgroundId)
+        CanonicalViewRepo(ctx).refreshCanonicalViews()
+        return fixture
+    }
+
+    /** Seeds a campflare-primary campsite under [winnerCampgroundId] with a
+     *  recgov alias so both candidates find a matching campsite_vendor_ref. */
+    private fun seedDualVendorCampsite(winnerCampgroundId: Long): Long {
+        val campsiteId =
+            ctx.seedCampsite(
+                campgroundId = winnerCampgroundId,
+                vendor = "campflare",
+                vendorId = "upper-pines-site-100",
+                name = "Campflare Site 100",
+                providerRefJson = """{"campflare_id":"upper-pines-site-100"}""",
+            )
+        linkCampsiteRef(
+            campsiteId = campsiteId,
+            vendor = "recgov",
+            externalId = "100",
+            payloadJson = """{"recgov_id":"100"}""",
+        )
+        return campsiteId
+    }
 
     private fun linkCampgroundRef(
         campgroundId: Long,
