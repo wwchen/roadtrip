@@ -574,7 +574,18 @@ class SmokeTest {
                 drawer.locator(".cg-about").textContent().contains("Raw-only description"),
                 "drawer About should render DTO description, not raw upstream description",
             )
-            assertThat(drawer.locator(".cg-details")).hasCount(0)
+            val details = drawer.locator(".cg-details")
+            assertThat(details).hasCount(1)
+            assertThat(details).containsText("Source metadata")
+            assertThat(details).containsText("rc-629")
+            assertFalse(
+                details.textContent().contains("Raw-only description"),
+                "drawer details should not render raw upstream description",
+            )
+            assertFalse(
+                details.textContent().contains("raw-only.jpg"),
+                "drawer details should not render raw upstream media",
+            )
             val heroImage =
                 page.evaluate(
                     """
