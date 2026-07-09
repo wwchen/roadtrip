@@ -125,12 +125,13 @@ class FeatureCollectionContractTest {
                     """{"category":"federal","amenities":["showers"],"activities":["hiking"],""" +
                         """"sites":42,"description":"Camp among redwoods.","photo_url":"https://example.test/photo.jpg",""" +
                         """"season":"May-Oct","near":"Banff"}""",
+                memberSources = listOf("uscampgrounds", "recgov"),
             )
         val expected = (
             """{"type":"Feature","id":42,""" +
                 """"geometry":{"type":"Point","coordinates":[-115.547,51.1812]},""" +
                 """"properties":{"source":"uscampgrounds","source_id":"abc-123",""" +
-                """"data_source":"uscampgrounds","availability_provider":"parks-canada",""" +
+                """"sources":["uscampgrounds","recgov"],"availability_provider":"parks-canada",""" +
                 """"category":"campground","subcategory":"federal",""" +
                 """"agency":"Parks Canada",""" +
                 """"name":"Tunnel Mountain Village I",""" +

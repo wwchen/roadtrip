@@ -158,7 +158,7 @@ export function structuredCampgroundDetailsHTML(p) {
   const linkRows = linksHTML(p.links);
   const alerts = alertsHTML(p.alerts);
   const sourceRows = [
-    detailRow('Data source', firstText(p.data_source, p.source)),
+    detailRow('Data source', firstText(sourcesLabel(p.sources), p.source)),
     detailRow('Source ID', p.source_id),
     detailRow('Availability provider', firstText(p.availability_provider, p.provider_source)),
     detailRow('Booking site', firstText(p.booking_site, urlHost(firstText(p.reserve_url, p.reservation_url)))),
@@ -502,6 +502,17 @@ function firstText(...values) {
     if (trimmed) return trimmed;
   }
   return '';
+}
+
+// Render the `sources` array from /api/pois/{id} (canonical view's
+// member_sources) as a comma-separated string. Empty array (single-vendor
+// campground with no match_group_id) → '' so firstText falls back to p.source.
+function sourcesLabel(sources) {
+  if (!Array.isArray(sources)) return '';
+  const cleaned = sources
+    .map(v => (typeof v === 'string' ? v.trim() : ''))
+    .filter(Boolean);
+  return cleaned.join(', ');
 }
 
 function urlHost(url) {

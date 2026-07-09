@@ -65,7 +65,7 @@ internal class OnRoutePoiRepo(
                           COALESCE(gvr.payload, '{}'::jsonb) AS provider_ref
                         FROM pois p
                         LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
-                        LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL
+                        LEFT JOIN campground_canonical cg ON cg.id = pc.campground_id
                         LEFT JOIN LATERAL (
                           SELECT vr.vendor, vr.external_id, vr.payload
                           FROM campground_vendor_refs cvr

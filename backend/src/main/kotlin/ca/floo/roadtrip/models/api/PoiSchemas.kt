@@ -50,7 +50,9 @@ data class PoiDetailFeatureSchema(
 data class PoiDetailPropertiesSchema(
     val source: String,
     @SerialName("source_id") val sourceId: String,
-    @SerialName("data_source") val dataSource: String? = null,
+    // Vendors that contributed to this canonical row (campground_canonical.member_sources).
+    // Empty for non-campground POIs and for campgrounds not yet grouped with a peer.
+    val sources: List<String> = emptyList(),
     @SerialName("availability_provider") val availabilityProvider: String? = null,
     val category: String,
     val subcategory: String? = null,
