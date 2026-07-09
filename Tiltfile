@@ -7,7 +7,7 @@
 PORT = '8765'
 COMPOSE_PROJECT = 'roadtrip'
 COMPOSE = 'docker compose -p ' + COMPOSE_PROJECT + ' --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois'
-COMPOSE_DEV_SERVICES = 'postgres backend grafana grafana-db-setup loki alloy'
+COMPOSE_DEV_SERVICES = 'postgres backend grafana loki alloy'
 COMPOSE_DOWN = COMPOSE + ' down --timeout 10 ' + COMPOSE_DEV_SERVICES
 DETACHED_COMPOSE_DOWN = (
     "python3 -c 'import os, subprocess, sys; " +
@@ -121,11 +121,6 @@ docker_build(
 
 dc_resource('postgres', resource_deps=['compose-cleanup'], labels=['infra'])
 dc_resource(
-    'grafana-db-setup',
-    resource_deps=['backend'],
-    labels=['infra'],
-)
-dc_resource(
     'backend',
     resource_deps=['postgres', 'backend-jar'],
     labels=['app'],
@@ -133,7 +128,9 @@ dc_resource(
 )
 dc_resource(
     'grafana',
-    resource_deps=['postgres', 'grafana-db-setup'],
+    # R__grafana_reader_grants.sql runs during backend's Flyway migrate; wait
+    # for backend to be healthy before Grafana tries to connect as grafana_reader.
+    resource_deps=['postgres', 'backend'],
     labels=['infra'],
     links=['http://127.0.0.1:3000'],
 )

@@ -91,10 +91,15 @@ data-import:
 
 # Hard reset the local dev schema, including flyway_schema_history. Useful
 # when switching worktrees/branches that intentionally changed a migration.
+# Restarts backend so Flyway re-runs all migrations (including the repeatable
+# R__grafana_reader_grants.sql that re-grants grafana_reader on the fresh
+# schema); without this, Grafana panels 500 with "permission denied".
 reset-db:
 	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres
 	@echo "dropping and recreating local schema public in database $(DB_NAME)"
 	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO "$(DB_USER)"; GRANT ALL ON SCHEMA public TO public;'
+	@echo "restarting backend to replay Flyway migrations"
+	-docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois restart backend
 
 # Local-only Playwright smoke. Hits the Kotlin backend on $(PORT) (serves
 # static + all /api routes). Doesn't boot the stack — bring it up first
