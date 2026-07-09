@@ -288,12 +288,7 @@ tasks.named<JooqGenerate>("generateJooq") {
             .configure()
             .dataSource(container.jdbcUrl, container.username, container.password)
             .locations("filesystem:$migrationDirPath")
-            .placeholders(
-                mapOf(
-                    "grafana_user" to "grafana_reader",
-                    "grafana_password" to "codegen",
-                ),
-            ).load()
+            .load()
             .migrate()
 
         val cfg = jooq.configurations.getByName("main").jooqConfiguration

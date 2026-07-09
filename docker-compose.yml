@@ -35,8 +35,16 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
       - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
+      # Read by postgres-init/10-grafana-reader.sh on first init to create the
+      # grafana_reader role. Grafana's datasource provisioning uses the same
+      # env vars with the same defaults; keep both in sync. Grants against
+      # this role are owned by Flyway (R__grafana_reader_grants.sql), so this
+      # only handles the one thing schema migrations can't: the password.
+      - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
+      - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
     volumes:
       - ${POSTGRES_DATA:-$HOME/.roadtrip-map/postgres}:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-roadtrip} -d $${POSTGRES_DB:-roadtrip}"]
       interval: 5s
@@ -66,11 +74,6 @@ services:
       - ROADTRIP_DB_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-roadtrip}
       - ROADTRIP_DB_USER=${POSTGRES_USER:-roadtrip}
       - ROADTRIP_DB_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
-      # Read by Db.migrate() to substitute placeholders in
-      # R__grafana_reader_grants.sql. Defaults line up with grafana's datasource
-      # provisioning (grafana/provisioning/datasources/roadtrip-postgres.yml).
-      - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
-      - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
       # Mapbox is server-side only. /api/route (Directions) and /api/geocode
       # (forward geocoding) read this; the FE never sees the token. Both
       # endpoints return 503 when unset, so the trip planner just doesn't

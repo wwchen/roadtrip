@@ -1,56 +1,36 @@
--- Repeatable migration: grafana_reader role + read-only grants for Grafana.
+-- Repeatable migration: read-only grants for the grafana_reader role.
 --
--- Runs on every Flyway migrate. Repairs any drift automatically — after
--- `make reset-db` (which wipes public), the next backend boot re-applies
--- these grants so Grafana keeps working with no separate sidecar step.
+-- The role itself (and its password) is bootstrapped by postgres-init/, which
+-- is infra-layer. This migration only owns schema-adjacent concerns: what the
+-- role can SELECT, and the grafana_api_cache_metadata view.
 --
--- Placeholders come from Db.migrate() (GRAFANA_DB_USER/GRAFANA_DB_PASSWORD env
--- with 'grafana_reader'/'roadtrip' fallbacks). Substituted as raw text — do
--- not put a single quote in the password.
+-- Idempotent, and runs on every Flyway migrate — so drift from `make reset-db`
+-- (which DROPs and recreates public but leaves cluster-level roles intact)
+-- auto-repairs on the next backend boot. No sidecar container required.
 
+-- Safety net for environments where postgres-init hasn't run (e.g. the
+-- generateJooq testcontainer). No password is set here on purpose; passwords
+-- are infra-layer state that the schema migration must not encode.
 DO $$
-DECLARE
-  grafana_user text := '${grafana_user}';
-  grafana_password text := '${grafana_password}';
-  inherited_role text;
 BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = grafana_user) THEN
-    EXECUTE format(
-      'CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L',
-      grafana_user,
-      grafana_password
-    );
-  ELSE
-    EXECUTE format(
-      'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L',
-      grafana_user,
-      grafana_password
-    );
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'grafana_reader') THEN
+    CREATE ROLE grafana_reader LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
   END IF;
-
-  FOR inherited_role IN
-    SELECT r.rolname
-    FROM pg_auth_members m
-    JOIN pg_roles r ON r.oid = m.roleid
-    JOIN pg_roles u ON u.oid = m.member
-    WHERE u.rolname = grafana_user
-  LOOP
-    EXECUTE format('REVOKE %I FROM %I', inherited_role, grafana_user);
-  END LOOP;
-
-  EXECUTE format('REVOKE ALL PRIVILEGES ON DATABASE %I FROM %I', current_database(), grafana_user);
-  EXECUTE format('REVOKE ALL PRIVILEGES ON SCHEMA public FROM %I', grafana_user);
-  EXECUTE format('REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %I', grafana_user);
-  EXECUTE format('REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM %I', grafana_user);
-  EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM %I', grafana_user);
 END
 $$;
+
+REVOKE ALL PRIVILEGES ON SCHEMA public FROM grafana_reader;
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM grafana_reader;
+REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM grafana_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM grafana_reader;
 
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 DO $$
 BEGIN
+  EXECUTE format('REVOKE ALL PRIVILEGES ON DATABASE %I FROM grafana_reader', current_database());
   EXECUTE format('REVOKE ALL PRIVILEGES ON DATABASE %I FROM PUBLIC', current_database());
   EXECUTE format('GRANT CONNECT ON DATABASE %I TO PUBLIC', current_database());
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO grafana_reader', current_database());
 END
 $$;
 GRANT USAGE ON SCHEMA public TO PUBLIC;
@@ -66,14 +46,7 @@ SELECT
   pg_column_size(payload) AS payload_bytes
 FROM api_cache;
 
-DO $$
-DECLARE
-  grafana_user text := '${grafana_user}';
-BEGIN
-  EXECUTE format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), grafana_user);
-  EXECUTE format('GRANT USAGE ON SCHEMA public TO %I', grafana_user);
-  EXECUTE format('GRANT SELECT ON ALL TABLES IN SCHEMA public TO %I', grafana_user);
-  EXECUTE format('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO %I', grafana_user);
-  EXECUTE format('REVOKE SELECT ON api_cache FROM %I', grafana_user);
-END
-$$;
+GRANT USAGE ON SCHEMA public TO grafana_reader;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO grafana_reader;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO grafana_reader;
+REVOKE SELECT ON api_cache FROM grafana_reader;

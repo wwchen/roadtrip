@@ -56,18 +56,8 @@ fun migrate(ds: DataSource) {
         .locations("classpath:db/migration")
         .baselineOnMigrate(true)
         .baselineVersion("0")
-        .placeholders(grafanaPlaceholders())
         .load()
         .migrate()
 }
-
-// Placeholders substituted into R__grafana_reader_grants.sql. Env-driven so
-// the same defaults line up with docker-compose and grafana's datasource
-// provisioning (both fall back to grafana_reader/roadtrip locally).
-private fun grafanaPlaceholders(): Map<String, String> =
-    mapOf(
-        "grafana_user" to (System.getenv("GRAFANA_DB_USER") ?: "grafana_reader"),
-        "grafana_password" to (System.getenv("GRAFANA_DB_PASSWORD") ?: "roadtrip"),
-    )
 
 fun dsl(ds: DataSource): DSLContext = DSL.using(ds, SQLDialect.POSTGRES)
