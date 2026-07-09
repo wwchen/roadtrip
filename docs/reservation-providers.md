@@ -36,14 +36,15 @@ service/reservation/
 ├── ReservationProviderCapabilities.kt
 ├── ProviderRefParser.kt            # JSONB → models.ProviderRef (single source)
 └── adapters/
-    ├── recgov/                 # availability
+    ├── recgov/                 # availability + watches
+    ├── campflare/              # availability
     ├── aspira/                 # availability
     ├── reserveamerica/         # availability
     └── reservecalifornia/      # availability
 ```
 
-`models.ProviderRef` (sealed class with `RecGov` / `Aspira` / `ReserveAmerica`
-variants) is the wire shape. Adapters take a `ProviderRef` of their
+`models.ProviderRef` (sealed class with `RecGov` / `Campflare` / `Aspira` /
+`ReserveAmerica` / `ReserveCalifornia` variants) is the wire shape. Adapters take a `ProviderRef` of their
 matching variant and the registry guarantees the dispatch is correct.
 
 Every vendor adapter class implements both `AvailabilityClient` and
