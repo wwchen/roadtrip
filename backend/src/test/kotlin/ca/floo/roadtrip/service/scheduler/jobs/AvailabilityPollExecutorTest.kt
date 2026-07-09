@@ -29,6 +29,8 @@ import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.FetchOutcome
 import ca.floo.roadtrip.service.availability.ProviderCandidate
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
+import ca.floo.roadtrip.service.availability.SlackNotifyHandler
+import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
@@ -282,9 +284,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
     /** Dispatcher with Slack disabled — a null-config service that no-ops and
      *  returns false. Default for tests that don't exercise alerting. */
-    private fun disabledDispatcher(): WatchAlertDispatcher =
-        WatchAlertDispatcher(
-            slack = SlackNotificationServiceImpl(config = null),
+    private fun disabledDispatcher(): WatchAlertDispatcher {
+        val slack = SlackNotificationServiceImpl(config = null)
+        return WatchAlertDispatcher(
+            slack = slack,
             scopeResolver = WatchScopeResolver(CampsiteRepo(ctx)),
             watches = AvailabilityWatchRepo(ctx),
             targets =
@@ -296,9 +299,11 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 ),
             pois = PoiServingRepo(ctx),
             availability = AvailabilityRepo(ctx),
+            triggerActions = TriggerActionRegistry(listOf(SlackNotifyHandler(slack, APP_ROOT_URL))),
             grafanaRootUrl = GRAFANA_ROOT_URL,
             appRootUrl = APP_ROOT_URL,
         )
+    }
 
     private fun dispatcherWith(
         provider: AvailabilityProvider,
@@ -313,6 +318,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             targets = targetsFor(provider),
             pois = PoiServingRepo(ctx),
             availability = AvailabilityRepo(ctx),
+            triggerActions = TriggerActionRegistry(listOf(SlackNotifyHandler(notifications, appRootUrl))),
             grafanaRootUrl = grafanaRootUrl,
             appRootUrl = appRootUrl,
         )
