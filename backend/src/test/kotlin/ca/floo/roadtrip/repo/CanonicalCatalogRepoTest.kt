@@ -486,6 +486,81 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
         assertEquals(listOf("planet_fitness_location", "tesla_supercharger"), poiTypes)
     }
 
+    @Test
+    fun `bulk upsert handles a batch spanning multiple chunks in a single pass`() {
+        // Locks in the bulk-pipeline contract: one repo call persists N
+        // rows across every stage (vendor_refs, canonical rows, link table,
+        // POI wrappers) regardless of chunk boundaries. Sizing well past
+        // the internal BULK_CHUNK_SIZE (500) so at least one stage crosses
+        // multiple chunks; a regression that reintroduces the O(N)
+        // per-record loop would still pass correctness but shows up here
+        // as an execution-time smell against future benchmarking.
+        val repo = CanonicalCatalogRepo(ctx)
+        val batchSize = 1_500
+
+        val campgroundRecords =
+            (0 until batchSize).map { i ->
+                CampgroundEtlRecord(
+                    vendor = "campflare",
+                    vendorRefId = "bulk-cg-$i",
+                    name = "Bulk Campground $i",
+                    latitude = 40.0 + i * 0.0001,
+                    longitude = -120.0 - i * 0.0001,
+                    sourcePayload = json("""{"id":"bulk-cg-$i"}"""),
+                    vendorRefPayload = json("""{"campflare_id":"bulk-cg-$i"}"""),
+                )
+            }
+        val campgroundResult =
+            repo.upsertCampgrounds(campgroundRecords, source = "campflare-campgrounds")
+
+        assertEquals(batchSize, campgroundResult.seenCount)
+        assertEquals(batchSize, campgroundResult.upsertedCount)
+        assertEquals(batchSize, tableCount("campgrounds"))
+        assertEquals(batchSize, tableCount("vendor_refs"))
+        assertEquals(batchSize, tableCount("campground_vendor_refs"))
+        assertEquals(batchSize, tableCount("pois"))
+        assertEquals(batchSize, tableCount("poi_campgrounds"))
+
+        val campsiteRecords =
+            (0 until batchSize).map { i ->
+                CampsiteEtlRecord(
+                    vendor = "campflare",
+                    vendorRefId = "bulk-cs-$i",
+                    parentVendor = "campflare",
+                    parentVendorRefId = "bulk-cg-$i",
+                    name = "Bulk Campsite $i",
+                    kind = "standard",
+                    sourcePayload = json("""{"id":"bulk-cs-$i"}"""),
+                    vendorRefPayload = json("""{"campflare_id":"bulk-cs-$i"}"""),
+                )
+            }
+        val campsiteResult =
+            repo.upsertCampsites(campsiteRecords, source = "campflare-campsites")
+
+        assertEquals(batchSize, campsiteResult.seenCount)
+        assertEquals(batchSize, campsiteResult.upsertedCount)
+        assertEquals(0, campsiteResult.skippedCount)
+        assertEquals(batchSize, tableCount("campsites"))
+        assertEquals(batchSize + batchSize, tableCount("vendor_refs"))
+        assertEquals(batchSize, tableCount("campsite_vendor_refs"))
+
+        // Re-running with a mutated payload should update in place, not
+        // duplicate — sanity check for the ON CONFLICT branch across chunks.
+        val rerun =
+            repo.upsertCampsites(
+                campsiteRecords.map { it.copy(name = "${it.name} (v2)") },
+                source = "campflare-campsites",
+            )
+        assertEquals(batchSize, rerun.upsertedCount)
+        assertEquals(batchSize, tableCount("campsites"))
+        val renamed =
+            ctx
+                .fetchOne("SELECT COUNT(*) AS n FROM campsites WHERE name LIKE '% (v2)'")!!
+                .get("n", Number::class.java)
+                .toInt()
+        assertEquals(batchSize, renamed)
+    }
+
     private fun tableCount(table: String): Int =
         ctx
             .fetchOne("SELECT COUNT(*) AS n FROM $table")!!

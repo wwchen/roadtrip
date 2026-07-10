@@ -118,52 +118,94 @@ class CanonicalViewRepoTest : SharedDbTest() {
     // seeded POIs since these tests never assert on POI geometry.
     private val defaultPoiGeom = """{"type":"Point","coordinates":[-119.56,37.74]}"""
 
+    // V40 requires every campground row to have an owning vendor_ref, so
+    // the seed helpers materialize one before the canonical row and link
+    // it back via campground_vendor_refs.
     private fun seedRichCampgroundRow(
         name: String,
         dataSource: String,
-    ): Long =
-        ctx
-            .fetchOne(
-                """
-                INSERT INTO campgrounds (
-                  name, kind, data_source, status, short_description, medium_description,
-                  long_description, reservation_url,
-                  location, amenities, links, photos, price, cell_service, management, contact, connections
-                ) VALUES (
-                  ?, 'campground', ?, 'open', 'Short', 'Medium', 'Long',
-                  'https://example.test/reserve',
-                  '{"latitude":37.74,"longitude":-119.56}'::jsonb,
-                  '{"toilets":true}'::jsonb,
-                  '[{"kind":"info","url":"https://example.test"}]'::jsonb,
-                  '[{"url":"https://example.test/photo.jpg"}]'::jsonb,
-                  '{"currency":"USD"}'::jsonb,
-                  '{"verizon":"good"}'::jsonb,
-                  '{"agency":"NPS"}'::jsonb,
-                  '{"phone":"555-0100"}'::jsonb,
-                  '{"ridb_facility_id":"232447"}'::jsonb
-                )
-                RETURNING id
-                """.trimIndent(),
-                name,
-                dataSource,
-            )!!
-            .get("id", Long::class.java)
+    ): Long {
+        val primaryRefId = seedPrimaryCampgroundVendorRef(dataSource, name)
+        val campgroundId =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO campgrounds (
+                      name, kind, data_source, primary_vendor_ref_id, status,
+                      short_description, medium_description, long_description, reservation_url,
+                      location, amenities, links, photos, price, cell_service, management, contact, connections
+                    ) VALUES (
+                      ?, 'campground', ?, ?, 'open', 'Short', 'Medium', 'Long',
+                      'https://example.test/reserve',
+                      '{"latitude":37.74,"longitude":-119.56}'::jsonb,
+                      '{"toilets":true}'::jsonb,
+                      '[{"kind":"info","url":"https://example.test"}]'::jsonb,
+                      '[{"url":"https://example.test/photo.jpg"}]'::jsonb,
+                      '{"currency":"USD"}'::jsonb,
+                      '{"verizon":"good"}'::jsonb,
+                      '{"agency":"NPS"}'::jsonb,
+                      '{"phone":"555-0100"}'::jsonb,
+                      '{"ridb_facility_id":"232447"}'::jsonb
+                    )
+                    RETURNING id
+                    """.trimIndent(),
+                    name,
+                    dataSource,
+                    primaryRefId,
+                )!!
+                .get("id", Long::class.java)
+        linkCampgroundToPrimaryVendorRef(campgroundId, primaryRefId)
+        return campgroundId
+    }
 
     private fun seedLeanCampgroundRow(
         name: String,
         dataSource: String,
+    ): Long {
+        val primaryRefId = seedPrimaryCampgroundVendorRef(dataSource, name)
+        val campgroundId =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO campgrounds (name, kind, data_source, primary_vendor_ref_id)
+                    VALUES (?, 'campground', ?, ?)
+                    RETURNING id
+                    """.trimIndent(),
+                    name,
+                    dataSource,
+                    primaryRefId,
+                )!!
+                .get("id", Long::class.java)
+        linkCampgroundToPrimaryVendorRef(campgroundId, primaryRefId)
+        return campgroundId
+    }
+
+    private fun seedPrimaryCampgroundVendorRef(
+        dataSource: String,
+        name: String,
     ): Long =
         ctx
             .fetchOne(
                 """
-                INSERT INTO campgrounds (name, kind, data_source)
+                INSERT INTO vendor_refs (vendor, entity_type, external_id)
                 VALUES (?, 'campground', ?)
                 RETURNING id
                 """.trimIndent(),
-                name,
                 dataSource,
+                "seed-primary:$dataSource:$name",
             )!!
             .get("id", Long::class.java)
+
+    private fun linkCampgroundToPrimaryVendorRef(
+        campgroundId: Long,
+        vendorRefId: Long,
+    ) {
+        ctx.execute(
+            "INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id) VALUES (?, ?)",
+            campgroundId,
+            vendorRefId,
+        )
+    }
 
     private fun matchAndGroupCampgrounds(
         aId: Long,

@@ -117,18 +117,33 @@ class CatalogMatchRepoTest : SharedDbTest() {
     private fun seedCampgroundRow(
         name: String,
         dataSource: String,
-    ): Long =
-        ctx
-            .fetchOne(
-                """
-                INSERT INTO campgrounds (name, kind, data_source)
-                VALUES (?, 'campground', ?)
-                RETURNING id
-                """.trimIndent(),
-                name,
-                dataSource,
-            )!!
-            .get("id", Long::class.java)
+    ): Long {
+        // V40 requires every campground row to have an owning vendor_ref.
+        // A synthetic primary ref per seed keeps these matcher tests
+        // decoupled from the specific ref shape they exercise via
+        // seedVendorRefRow/linkCampgroundVendorRef further down.
+        val primaryRefId =
+            seedVendorRefRow(
+                vendor = dataSource,
+                entityType = "campground",
+                externalId = "seed-primary:$dataSource:$name",
+            )
+        val campgroundId =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO campgrounds (name, kind, data_source, primary_vendor_ref_id)
+                    VALUES (?, 'campground', ?, ?)
+                    RETURNING id
+                    """.trimIndent(),
+                    name,
+                    dataSource,
+                    primaryRefId,
+                )!!
+                .get("id", Long::class.java)
+        linkCampgroundVendorRef(campgroundId, primaryRefId)
+        return campgroundId
+    }
 
     private fun seedVendorRefRow(
         vendor: String,

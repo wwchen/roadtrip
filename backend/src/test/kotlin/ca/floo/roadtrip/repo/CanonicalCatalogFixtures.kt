@@ -181,28 +181,8 @@ fun DSLContext.seedCampground(
     sourcePayloadJson: String = "{}",
     refresh: Boolean = true,
 ): Long {
-    val campgroundId =
-        fetchOne(
-            """
-            INSERT INTO campgrounds (
-              name, kind, data_source, location, management, source_payload
-            ) VALUES (
-              ?, ?, ?, jsonb_strip_nulls(jsonb_build_object('region', ?::text, 'country', ?::text)),
-              jsonb_strip_nulls(jsonb_build_object('agency', ?::text)),
-              ?::jsonb
-            )
-            RETURNING id
-            """.trimIndent(),
-            name,
-            kind,
-            source,
-            region,
-            country,
-            agency,
-            sourcePayloadJson,
-        )!!
-            .get("id", Long::class.java)
-
+    // V40 introduced campgrounds.primary_vendor_ref_id NOT NULL, so the
+    // owning vendor_ref must exist before the canonical row is inserted.
     val vendorRefId =
         seedVendorRef(
             vendor = source,
@@ -211,6 +191,28 @@ fun DSLContext.seedCampground(
             externalName = name,
             payloadJson = providerRefJson ?: "{}",
         )
+    val campgroundId =
+        fetchOne(
+            """
+            INSERT INTO campgrounds (
+              name, kind, data_source, primary_vendor_ref_id, location, management, source_payload
+            ) VALUES (
+              ?, ?, ?, ?, jsonb_strip_nulls(jsonb_build_object('region', ?::text, 'country', ?::text)),
+              jsonb_strip_nulls(jsonb_build_object('agency', ?::text)),
+              ?::jsonb
+            )
+            RETURNING id
+            """.trimIndent(),
+            name,
+            kind,
+            source,
+            vendorRefId,
+            region,
+            country,
+            agency,
+            sourcePayloadJson,
+        )!!
+            .get("id", Long::class.java)
     execute(
         "INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id) VALUES (?, ?)",
         campgroundId,
@@ -231,24 +233,8 @@ fun DSLContext.seedCampsite(
     sourcePayloadJson: String = "{}",
     refresh: Boolean = true,
 ): Long {
-    val campsiteId =
-        fetchOne(
-            """
-            INSERT INTO campsites (
-              campground_id, name, kind, data_source, loop_name, source_payload
-            ) VALUES (
-              ?, ?, ?, ?, ?, ?::jsonb
-            )
-            RETURNING id
-            """.trimIndent(),
-            campgroundId,
-            name,
-            kind,
-            vendor,
-            loopName,
-            sourcePayloadJson,
-        )!!
-            .get("id", Long::class.java)
+    // V40 introduced campsites.primary_vendor_ref_id NOT NULL, so the
+    // owning vendor_ref must exist before the canonical row is inserted.
     val vendorRefId =
         seedVendorRef(
             vendor = vendor,
@@ -257,6 +243,25 @@ fun DSLContext.seedCampsite(
             externalName = name,
             payloadJson = providerRefJson ?: "{}",
         )
+    val campsiteId =
+        fetchOne(
+            """
+            INSERT INTO campsites (
+              campground_id, name, kind, data_source, primary_vendor_ref_id, loop_name, source_payload
+            ) VALUES (
+              ?, ?, ?, ?, ?, ?, ?::jsonb
+            )
+            RETURNING id
+            """.trimIndent(),
+            campgroundId,
+            name,
+            kind,
+            vendor,
+            vendorRefId,
+            loopName,
+            sourcePayloadJson,
+        )!!
+            .get("id", Long::class.java)
     execute(
         "INSERT INTO campsite_vendor_refs (campsite_id, vendor_ref_id) VALUES (?, ?)",
         campsiteId,
