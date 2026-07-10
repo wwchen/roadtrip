@@ -65,12 +65,12 @@ class CatalogMatcherService(
         matches.recomputeMatchGroups()
 
         // 5) Campsite pass: exact normalized (loop, name) within shared campground groups.
+        //    Name + loop filtering is pushed into the SQL query to avoid
+        //    materializing the full cross-product in JVM memory.
         val campsitePairs =
             matches
                 .campsiteNameCandidates()
-                .mapNotNull { candidate ->
-                    if (!equalNormalizedNames(candidate.aLoop, candidate.bLoop)) return@mapNotNull null
-                    if (!equalNormalizedNames(candidate.aName, candidate.bName)) return@mapNotNull null
+                .map { candidate ->
                     MatchPair(
                         aId = minOf(candidate.aId, candidate.bId),
                         bId = maxOf(candidate.aId, candidate.bId),
