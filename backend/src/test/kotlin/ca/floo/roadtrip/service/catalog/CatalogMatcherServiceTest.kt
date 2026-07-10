@@ -139,11 +139,13 @@ class CatalogMatcherServiceTest {
                 aName = "Site 010",
                 bName = "Site 010",
             )
+        // Name + loop filtering is now done in SQL (the repo query), so the
+        // fake repo only returns candidates that already pass the filter.
         val fake =
             FakeCatalogMatchRepo(
                 sharedCampgroundPairs = emptyList(),
                 geoNameCandidates = emptyList(),
-                campsiteCandidates = listOf(matching, differentName, differentLoop, bothLoopsNull),
+                campsiteCandidates = listOf(matching, bothLoopsNull),
             )
         val service =
             CatalogMatcherService(
