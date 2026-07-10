@@ -72,8 +72,8 @@ class CatalogMatcherService(
                     if (!equalNormalizedNames(candidate.aLoop, candidate.bLoop)) return@mapNotNull null
                     if (!equalNormalizedNames(candidate.aName, candidate.bName)) return@mapNotNull null
                     MatchPair(
-                        aId = candidate.aId,
-                        bId = candidate.bId,
+                        aId = minOf(candidate.aId, candidate.bId),
+                        bId = maxOf(candidate.aId, candidate.bId),
                         heuristic = campsiteExactHeuristic(),
                     )
                 }

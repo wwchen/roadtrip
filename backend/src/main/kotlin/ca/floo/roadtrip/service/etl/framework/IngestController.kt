@@ -170,7 +170,7 @@ class IngestController(
         // in "started".
         if (phases.any { it is Phase.Import && it.section in CATALOG_TOUCHING_SECTIONS }) {
             try {
-                withContext(ioDispatcher) { etl.runCatalogMatch() }
+                withContext(ioDispatcher) { etl.runCatalogMatchOnly() }
             } catch (e: Throwable) {
                 val note = "catalog match failed: ${e.javaClass.simpleName}: ${e.message ?: ""}"
                 ingestRunRepo.failParent(parentId, note.take(300))

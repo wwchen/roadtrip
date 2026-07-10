@@ -160,34 +160,40 @@ open class CatalogMatchRepo(
         val rows =
             ctx.fetch(
                 """
-                WITH candidates AS (
-                  SELECT
-                    cg.id,
-                    cg.name,
-                    cg.data_source,
-                    (cg.location->>'latitude')::double precision  AS lat,
-                    (cg.location->>'longitude')::double precision AS lng
-                  FROM campgrounds cg
-                  WHERE cg.deleted_at IS NULL
-                    AND (cg.location->>'latitude')  IS NOT NULL
-                    AND (cg.location->>'longitude') IS NOT NULL
-                )
                 SELECT
                   a.id   AS a_id,
                   b.id   AS b_id,
                   a.name AS a_name,
                   b.name AS b_name,
                   ST_Distance(
-                    ST_MakePoint(a.lng, a.lat)::geography,
-                    ST_MakePoint(b.lng, b.lat)::geography
+                    ST_SetSRID(ST_MakePoint(
+                      (a.location->>'longitude')::double precision,
+                      (a.location->>'latitude')::double precision
+                    ), 4326)::geography,
+                    ST_SetSRID(ST_MakePoint(
+                      (b.location->>'longitude')::double precision,
+                      (b.location->>'latitude')::double precision
+                    ), 4326)::geography
                   ) AS distance_m
-                FROM candidates a
-                JOIN candidates b
+                FROM campgrounds a
+                JOIN campgrounds b
                   ON a.id < b.id
                  AND a.data_source <> b.data_source
-                WHERE ST_DWithin(
-                        ST_MakePoint(a.lng, a.lat)::geography,
-                        ST_MakePoint(b.lng, b.lat)::geography,
+                WHERE a.deleted_at IS NULL
+                  AND b.deleted_at IS NULL
+                  AND (a.location->>'latitude')  IS NOT NULL
+                  AND (a.location->>'longitude') IS NOT NULL
+                  AND (b.location->>'latitude')  IS NOT NULL
+                  AND (b.location->>'longitude') IS NOT NULL
+                  AND ST_DWithin(
+                        ST_SetSRID(ST_MakePoint(
+                          (a.location->>'longitude')::double precision,
+                          (a.location->>'latitude')::double precision
+                        ), 4326)::geography,
+                        ST_SetSRID(ST_MakePoint(
+                          (b.location->>'longitude')::double precision,
+                          (b.location->>'latitude')::double precision
+                        ), 4326)::geography,
                         ?
                       )
                   AND NOT EXISTS (
@@ -212,29 +218,32 @@ open class CatalogMatchRepo(
         val rows =
             ctx.fetch(
                 """
+                WITH matched_cg_pairs AS (
+                  SELECT a.id AS cg_a_id, b.id AS cg_b_id
+                  FROM campgrounds a
+                  JOIN campgrounds b
+                    ON a.match_group_id = b.match_group_id
+                   AND a.data_source <> b.data_source
+                   AND a.id < b.id
+                  WHERE a.deleted_at IS NULL
+                    AND b.deleted_at IS NULL
+                    AND a.match_group_id IS NOT NULL
+                )
                 SELECT
-                  a.id        AS a_id,
-                  b.id        AS b_id,
-                  a.loop_name AS a_loop,
-                  b.loop_name AS b_loop,
-                  a.name      AS a_name,
-                  b.name      AS b_name
-                FROM campsites a
-                JOIN campgrounds cga ON cga.id = a.campground_id
-                JOIN campsites b     ON b.id > a.id
-                JOIN campgrounds cgb ON cgb.id = b.campground_id
-                WHERE a.deleted_at IS NULL
-                  AND b.deleted_at IS NULL
-                  AND cga.deleted_at IS NULL
-                  AND cgb.deleted_at IS NULL
-                  AND a.data_source <> b.data_source
-                  AND cga.match_group_id IS NOT NULL
-                  AND cgb.match_group_id IS NOT NULL
-                  AND cga.match_group_id = cgb.match_group_id
-                  AND NOT EXISTS (
-                        SELECT 1 FROM campsite_matches m
-                        WHERE m.campsite_a_id = a.id AND m.campsite_b_id = b.id
-                      )
+                  sa.id        AS a_id,
+                  sb.id        AS b_id,
+                  sa.loop_name AS a_loop,
+                  sb.loop_name AS b_loop,
+                  sa.name      AS a_name,
+                  sb.name      AS b_name
+                FROM matched_cg_pairs p
+                JOIN campsites sa ON sa.campground_id = p.cg_a_id AND sa.deleted_at IS NULL
+                JOIN campsites sb ON sb.campground_id = p.cg_b_id AND sb.deleted_at IS NULL
+                WHERE NOT EXISTS (
+                      SELECT 1 FROM campsite_matches m
+                      WHERE m.campsite_a_id = LEAST(sa.id, sb.id)
+                        AND m.campsite_b_id = GREATEST(sa.id, sb.id)
+                    )
                 """.trimIndent(),
             )
         return rows.map { record ->

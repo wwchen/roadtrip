@@ -296,6 +296,36 @@ open class EtlOrchestrator(
         return combined
     }
 
+    open fun runCatalogMatchOnly(): CatalogMatcherService.MatchRunStats {
+        val matchStats = matcher.run()
+        log.info(
+            "catalog match (matcher only): campground_pairs={} campsite_pairs={} groups_recomputed={}",
+            matchStats.campgroundPairs,
+            matchStats.campsitePairs,
+            matchStats.groupsRecomputed,
+        )
+        return matchStats
+    }
+
+    open fun refreshCanonicalAndRepoint(): CatalogMatchRunStats {
+        canonicalViews.refreshCanonicalViews()
+        val repointStats = canonicalViews.repointRepresentatives()
+        log.info(
+            "canonical refresh + repoint: pois_repointed={} watch_targets_repointed={} availability_rows_repointed={}",
+            repointStats.poisRepointed,
+            repointStats.watchTargetsRepointed,
+            repointStats.availabilityRowsRepointed,
+        )
+        return CatalogMatchRunStats(
+            campgroundPairs = 0,
+            campsitePairs = 0,
+            groupsRecomputed = 0,
+            poisRepointed = repointStats.poisRepointed,
+            watchTargetsRepointed = repointStats.watchTargetsRepointed,
+            availabilityRowsRepointed = repointStats.availabilityRowsRepointed,
+        )
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun runTerminal(
         rowName: String,
