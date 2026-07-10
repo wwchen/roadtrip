@@ -192,17 +192,9 @@ class CanonicalCatalogRepo(
         val withParent = records.filter { it.parentVendor != null && it.parentVendorRefId != null }
         val skippedForMissingParent = records.size - withParent.size
 
-        // Parent resolution is scoped by the campsite's own data_source: an
-        // ETL only ever links its campsites to its own vendor's campgrounds.
-        // Batches from the ETL framework are homogeneous by vendor today, but
-        // grouping keeps the repo robust to future heterogeneous callers
-        // without changing behaviour for the homogeneous case.
         val parentMap = HashMap<ParentKey, Long>()
-        for ((campsiteDataSource, group) in withParent.groupBy { it.vendor }) {
-            val parentKeys =
-                group.map { ParentKey(it.parentVendor!!, it.parentVendorRefId!!) }.distinct()
-            parentMap.putAll(loadParentCampgroundMap(campsiteDataSource, parentKeys))
-        }
+        val parentKeys = withParent.map { ParentKey(it.parentVendor!!, it.parentVendorRefId!!) }.distinct()
+        parentMap.putAll(loadParentCampgroundMap(parentKeys))
 
         val withResolvedParent =
             withParent.filter {
@@ -355,14 +347,10 @@ class CanonicalCatalogRepo(
 
     /**
      * Preload the campground_id for every (parentVendor, parentExternalId)
-     * pair the batch cares about, scoped to `campsites.data_source =
-     * campsiteDataSource` (an ETL only links its campsites to campgrounds
-     * written by its own vendor).
+     * pair the batch cares about. The vendor_ref join already scopes to the
+     * correct campground (vendor+entity_type+external_id is unique).
      */
-    private fun loadParentCampgroundMap(
-        campsiteDataSource: String,
-        parentKeys: List<ParentKey>,
-    ): Map<ParentKey, Long> {
+    private fun loadParentCampgroundMap(parentKeys: List<ParentKey>): Map<ParentKey, Long> {
         if (parentKeys.isEmpty()) return emptyMap()
         val result = HashMap<ParentKey, Long>(parentKeys.size)
         for (chunk in parentKeys.chunked(BULK_CHUNK_SIZE)) {
@@ -377,7 +365,7 @@ class CanonicalCatalogRepo(
                  AND vr.external_id = pk.external_id
                  AND vr.deleted_at IS NULL
                 JOIN campground_vendor_refs cvr ON cvr.vendor_ref_id = vr.id
-                JOIN campgrounds cg ON cg.id = cvr.campground_id AND cg.data_source = ?
+                JOIN campgrounds cg ON cg.id = cvr.campground_id AND cg.deleted_at IS NULL
                 """.trimIndent()
             val params = mutableListOf<Any?>()
             for (k in chunk) {
@@ -385,7 +373,6 @@ class CanonicalCatalogRepo(
                 params += k.externalId
             }
             params += CAMPGROUND_ENTITY
-            params += campsiteDataSource
             val rows = ctx.fetch(sql, *params.toTypedArray())
             for (row in rows) {
                 val key =
