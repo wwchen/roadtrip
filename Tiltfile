@@ -5,6 +5,7 @@
 # and keeps the host-side companion plus manual data resources available.
 
 PORT = '8765'
+ADMIN_PORT = '8766'
 COMPOSE_PROJECT = 'roadtrip'
 COMPOSE = 'docker compose -p ' + COMPOSE_PROJECT + ' --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois'
 COMPOSE_DEV_SERVICES = 'postgres backend grafana loki alloy'
@@ -196,7 +197,7 @@ local_resource(
 
 local_resource(
     'data-fetch',
-    cmd='curl --fail-with-body -sS --max-time 1800 -X POST http://127.0.0.1:' + PORT + '/api/admin/data/fetch',
+    cmd='curl --fail-with-body -sS --max-time 1800 -X POST http://127.0.0.1:' + ADMIN_PORT + '/api/admin/data/fetch',
     auto_init=False,
     trigger_mode=TRIGGER_MODE_MANUAL,
     resource_deps=['backend'],
@@ -205,7 +206,7 @@ local_resource(
 
 local_resource(
     'data-import',
-    cmd='curl --fail-with-body -sS --max-time 1800 -X POST http://127.0.0.1:' + PORT + '/api/admin/data/import',
+    cmd='curl --fail-with-body -sS --max-time 1800 -X POST http://127.0.0.1:' + ADMIN_PORT + '/api/admin/data/import',
     auto_init=False,
     trigger_mode=TRIGGER_MODE_MANUAL,
     resource_deps=['backend'],
