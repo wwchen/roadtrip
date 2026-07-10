@@ -65,7 +65,7 @@ services:
     image: roadtrip/backend
     restart: unless-stopped
     hostname: backend
-    mem_limit: 2g
+    mem_limit: 3g
     env_file:
       - path: .env
         required: false
