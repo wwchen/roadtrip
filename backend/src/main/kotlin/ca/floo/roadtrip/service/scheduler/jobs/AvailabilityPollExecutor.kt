@@ -27,10 +27,10 @@ import ca.floo.roadtrip.service.scheduler.framework.HandlerResult
 import kotlinx.coroutines.slf4j.MDCContext
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
+import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
 import java.time.OffsetDateTime
-import java.time.ZoneOffset
 
 /**
  * Executes one poller tick. Wired into [ca.floo.roadtrip.service.scheduler.framework.Scheduler]
@@ -86,6 +86,7 @@ internal class AvailabilityPollExecutor(
     private val failoverFetcher: FailoverAvailabilityFetcher =
         FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromEnv()),
     private val campsiteProviderRepo: CampsiteProviderRepo? = null,
+    private val clock: Clock = Clock.systemUTC(),
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -204,7 +205,7 @@ internal class AvailabilityPollExecutor(
                 // window-clamp retirement, which stops polling but does not flip the cell).
                 val observedCampsiteIds =
                     results.flatMap { r -> r.campsites.map { it.id } }.distinct()
-                availability.markElapsedAsPast(observedCampsiteIds, LocalDate.now(ZoneOffset.UTC))
+                availability.markElapsedAsPast(observedCampsiteIds, LocalDate.now(clock))
                 recordFetchCalls(results, attemptsByGroup, runId)
                 val completedAt = OffsetDateTime.now()
                 val durationMs = durationMs(startedAt, completedAt)

@@ -164,21 +164,7 @@ jobs:
       - name: Seed canonical catalog with smoke fixture
         run: |
           PGPASSWORD=roadtrip psql -h localhost -U roadtrip -d roadtrip <<'SQL'
-          WITH campground AS (
-              INSERT INTO campgrounds (
-                  name, kind, data_source, location, management, reservation_url, source_payload
-              ) VALUES (
-                  'Tunnel Mountain - Village 1',
-                  'federal',
-                  'aspira-pc-pins',
-                  '{"region":"AB","country":"CA"}'::jsonb,
-                  '{"agency":"Parks Canada"}'::jsonb,
-                  'https://reservation.pc.gc.ca/',
-                  '{"upstream":{"host":"reservation.pc.gc.ca","match_kind":"fixture"}}'::jsonb
-              )
-              RETURNING id
-          ),
-          vendor_ref AS (
+          WITH vendor_ref AS (
               INSERT INTO vendor_refs (
                   vendor, entity_type, external_id, external_name, source_url, payload
               ) VALUES (
@@ -189,6 +175,22 @@ jobs:
                   'https://reservation.pc.gc.ca/',
                   '{"transactionLocationId":-2147483648,"mapId":-2147483622,"resourceLocationId":-2147483646}'::jsonb
               )
+              RETURNING id
+          ),
+          campground AS (
+              INSERT INTO campgrounds (
+                  name, kind, data_source, primary_vendor_ref_id, location, management, reservation_url, source_payload
+              )
+              SELECT
+                  'Tunnel Mountain - Village 1',
+                  'federal',
+                  'aspira-pc-pins',
+                  vendor_ref.id,
+                  '{"region":"AB","country":"CA"}'::jsonb,
+                  '{"agency":"Parks Canada"}'::jsonb,
+                  'https://reservation.pc.gc.ca/',
+                  '{"upstream":{"host":"reservation.pc.gc.ca","match_kind":"fixture"}}'::jsonb
+              FROM vendor_ref
               RETURNING id
           ),
           linked_vendor_ref AS (

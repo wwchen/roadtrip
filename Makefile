@@ -89,17 +89,15 @@ data-fetch:
 data-import:
 	curl --fail-with-body -sS --max-time 1800 -X POST '$(ADMIN_BASE)/api/admin/data/import$(if $(TARGET),/$(shell python3 -c "import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=''))" "$(TARGET)"))'
 
-# Hard reset the local dev schema, including flyway_schema_history. Useful
-# when switching worktrees/branches that intentionally changed a migration.
-# Restarts backend so Flyway re-runs all migrations (including the repeatable
-# R__grafana_reader_grants.sql that re-grants grafana_reader on the fresh
-# schema); without this, Grafana panels 500 with "permission denied".
+# Hard reset: nuke the postgres data volume and restart the stack.
+# Postgres re-initializes from scratch; Flyway re-migrates on backend boot
+# (including R__grafana_reader_grants.sql which re-grants grafana_reader).
+POSTGRES_DATA ?= $(HOME)/.roadtrip-map/postgres
+DC := docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois
 reset-db:
-	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres
-	@echo "dropping and recreating local schema public in database $(DB_NAME)"
-	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO "$(DB_USER)"; GRANT ALL ON SCHEMA public TO public;'
-	@echo "restarting backend to replay Flyway migrations"
-	-docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois restart backend
+	$(DC) rm -sf postgres backend
+	rm -rf $(POSTGRES_DATA)
+	$(DC) up -d postgres backend
 
 # Local-only Playwright smoke. Hits the Kotlin backend on $(PORT) (serves
 # static + all /api routes). Doesn't boot the stack — bring it up first
