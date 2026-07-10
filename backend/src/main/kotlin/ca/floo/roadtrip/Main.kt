@@ -7,17 +7,40 @@ import io.ktor.server.netty.Netty
 
 fun main() {
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
-    embeddedServer(Netty, port = port, host = "0.0.0.0", module = Application::module).start(wait = true)
+    val adminPort = System.getenv("ADMIN_PORT")?.toIntOrNull() ?: 8766
+
+    val boot = createRoadtripBootContext()
+    SharedBoot.instance = boot
+
+    val adminServer =
+        embeddedServer(Netty, port = adminPort, host = "0.0.0.0") {
+            adminModule()
+        }
+    adminServer.start(wait = false)
+
+    embeddedServer(Netty, port = port, host = "0.0.0.0") {
+        module()
+    }.start(wait = true)
+}
+
+internal object SharedBoot {
+    lateinit var instance: RoadtripBootContext
 }
 
 internal fun includeInRoadtripOpenApi(path: List<String>): Boolean = path.firstOrNull() == "api" && path.getOrNull(1) != "docs"
 
 fun Application.module() {
-    val boot = createRoadtripBootContext()
+    val boot = SharedBoot.instance
     installRoadtripPlugins()
     val runtime = startRoadtripRuntime(boot)
     environment.monitor.subscribe(ApplicationStopping) {
         runtime.close()
     }
     registerRoadtripRoutes(runtime)
+}
+
+fun Application.adminModule() {
+    val boot = SharedBoot.instance
+    installAdminPlugins()
+    registerAdminRoutes(boot)
 }

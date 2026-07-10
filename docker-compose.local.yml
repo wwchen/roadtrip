@@ -13,6 +13,7 @@ services:
     restart: "no"
     ports:
       - "127.0.0.1:8765:8765"
+      - "127.0.0.1:8766:8766"
     environment:
       # Local Grafana host, so alert dashboard links point at the dev instance
       # instead of the prod default. Matches the grafana service below.

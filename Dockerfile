@@ -12,6 +12,6 @@ ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseG1GC"
 
 COPY backend/build/libs/roadtrip-backend-*-all.jar /app/app.jar
 
-EXPOSE 8765
+EXPOSE 8765 8766
 
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]

@@ -68,8 +68,11 @@ services:
     env_file:
       - path: .env
         required: false
+    ports:
+      - "127.0.0.1:8766:8766"
     environment:
       - PORT=8765
+      - ADMIN_PORT=8766
       - ROADTRIP_STATIC_DIR=/app/static
       - ROADTRIP_DB_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-roadtrip}
       - ROADTRIP_DB_USER=${POSTGRES_USER:-roadtrip}
