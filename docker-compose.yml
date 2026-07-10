@@ -31,6 +31,7 @@ services:
     # "container exists."
     restart: "no"
     hostname: postgres
+    mem_limit: 2g
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
       - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
@@ -65,7 +66,7 @@ services:
     image: roadtrip/backend
     restart: unless-stopped
     hostname: backend
-    mem_limit: 3g
+    mem_limit: 4g
     env_file:
       - path: .env
         required: false
