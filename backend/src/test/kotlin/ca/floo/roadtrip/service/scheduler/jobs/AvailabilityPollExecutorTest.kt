@@ -52,10 +52,12 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.slf4j.MDC
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
@@ -63,6 +65,17 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AvailabilityPollExecutorTest : SharedDbTest() {
+    // Pin the clock to noon UTC so the earliest-bookable-date calculation
+    // (18:00 local cutoff) never drifts across midnight for the test POI
+    // at lon=-119.56 (America/Los_Angeles). Without this, CI runs between
+    // 00:00-01:00 UTC see a UTC/local date split that causes spurious
+    // "past" transitions.
+    private val testClock: Clock =
+        Clock.fixed(
+            LocalDate.now(ZoneOffset.UTC).atTime(12, 0).toInstant(ZoneOffset.UTC),
+            ZoneId.of("UTC"),
+        )
+
     @BeforeEach
     fun cleanup() {
         ctx.cleanCanonicalCatalogFixtures()
@@ -332,7 +345,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     ): AvailabilityPollExecutor {
         val campsitesRepo = CampsiteRepo(ctx)
         val registry = AvailabilityProviderRegistry(mapOf("test" to provider))
-        val dateResolver = AvailabilityDateResolver()
+        val dateResolver = AvailabilityDateResolver(clock = testClock)
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
@@ -353,6 +366,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             alertDispatcher = alertDispatcher,
             failoverFetcher = failoverFetcher,
             campsiteProviderRepo = CampsiteProviderRepo(ctx),
+            clock = testClock,
         )
     }
 
@@ -478,7 +492,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             // Window is today-anchored and 60 days wide, independent of the
             // watches' year-out dates.
             val start = provider.lastStart!!
-            val today = LocalDate.now(ZoneOffset.UTC)
+            val today = LocalDate.now(testClock)
             assertTrue(start == today || start == today.plusDays(1), "window starts at today's earliest bookable date, not the watch start")
             assertEquals(60L, ChronoUnit.DAYS.between(start, provider.lastEnd), "window spans the vendor cap, not the watch union")
 
