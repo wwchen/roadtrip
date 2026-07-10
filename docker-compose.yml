@@ -30,6 +30,7 @@ services:
     # reboots even when Tilt is gone, drifting "Tilt running" away from
     # "container exists."
     restart: "no"
+    mem_limit: 2g
     hostname: postgres
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
@@ -65,7 +66,7 @@ services:
     image: roadtrip/backend
     restart: unless-stopped
     hostname: backend
-    mem_limit: 3g
+    mem_limit: 4g
     env_file:
       - path: .env
         required: false

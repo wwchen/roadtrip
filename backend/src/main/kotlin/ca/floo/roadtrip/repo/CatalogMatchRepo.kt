@@ -239,7 +239,9 @@ open class CatalogMatchRepo(
                 FROM matched_cg_pairs p
                 JOIN campsites sa ON sa.campground_id = p.cg_a_id AND sa.deleted_at IS NULL
                 JOIN campsites sb ON sb.campground_id = p.cg_b_id AND sb.deleted_at IS NULL
-                WHERE NOT EXISTS (
+                WHERE NULLIF(lower(trim(sa.name)), '') = NULLIF(lower(trim(sb.name)), '')
+                  AND NULLIF(lower(trim(sa.loop_name)), '') IS NOT DISTINCT FROM NULLIF(lower(trim(sb.loop_name)), '')
+                  AND NOT EXISTS (
                       SELECT 1 FROM campsite_matches m
                       WHERE m.campsite_a_id = LEAST(sa.id, sb.id)
                         AND m.campsite_b_id = GREATEST(sa.id, sb.id)
