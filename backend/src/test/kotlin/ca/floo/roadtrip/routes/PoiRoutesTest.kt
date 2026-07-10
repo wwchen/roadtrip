@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
@@ -616,5 +617,12 @@ class PoiRoutesTest : SharedDbTest() {
                 subcategory = r.unitName,
             )
         }
+        // The bbox + search + detail queries in PoiServingRepo join through
+        // campground_canonical (V39). Populate it after seeding so the LEFT
+        // JOIN sees the campground rows we just wrote — otherwise the tests
+        // that assert on kind/agency/name see nulls, and the planner picks a
+        // nested-loop plan against a stale, unanalyzed matview that blows the
+        // 60s runTest budget on the ~2000-row cases below.
+        CanonicalViewRepo(ctx).refreshCanonicalViews()
     }
 }
