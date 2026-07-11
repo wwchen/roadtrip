@@ -53,7 +53,11 @@ class Scheduler<T : Schedulable>(
         // Recover before the first claim. If the app crashed mid-run, the
         // matching row's lease has not yet expired (we'd wait the full
         // lease duration); bumping reclaim here cuts that to zero.
-        repo.reclaimExpired(now())
+        try {
+            repo.reclaimExpired(now())
+        } catch (e: Exception) {
+            log.error("scheduler {} boot recovery failed: {}", name, e.message, e)
+        }
         loop = scope.launch { runLoop() }
     }
 

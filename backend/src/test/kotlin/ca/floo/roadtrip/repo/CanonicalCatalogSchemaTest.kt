@@ -269,6 +269,36 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
     }
 
     @Test
+    fun `vendor ref link tables keep non unique lookup indexes`() {
+        val indexes =
+            ctx
+                .fetch(
+                    """
+                    SELECT tablename || '.' || indexname AS ref
+                    FROM pg_indexes
+                    WHERE schemaname = 'public'
+                      AND (
+                        (tablename = 'campground_vendor_refs'
+                         AND indexname = 'campground_vendor_refs_vendor_ref_idx')
+                        OR
+                        (tablename = 'campsite_vendor_refs'
+                         AND indexname = 'campsite_vendor_refs_vendor_ref_idx')
+                      )
+                      AND indexdef NOT ILIKE 'CREATE UNIQUE INDEX%'
+                    ORDER BY ref
+                    """.trimIndent(),
+                ).map { it.get("ref", String::class.java) }
+
+        assertEquals(
+            listOf(
+                "campground_vendor_refs.campground_vendor_refs_vendor_ref_idx",
+                "campsite_vendor_refs.campsite_vendor_refs_vendor_ref_idx",
+            ),
+            indexes,
+        )
+    }
+
+    @Test
     fun `availability watch targets reference canonical poi and campsite tables`() {
         val refs =
             ctx

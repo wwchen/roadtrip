@@ -22,6 +22,11 @@ private data class FakeJob(
 private class FakeRepo : SchedulableRepo<FakeJob> {
     val rows = mutableListOf<MutableMap<String, Any?>>()
     val released = mutableListOf<Triple<Long, OffsetDateTime, OffsetDateTime>>()
+    private val reclaimFailures = AtomicInteger(0)
+
+    fun failNextReclaims(count: Int) {
+        reclaimFailures.set(count)
+    }
 
     fun add(
         id: Long,
@@ -74,6 +79,9 @@ private class FakeRepo : SchedulableRepo<FakeJob> {
     }
 
     override fun reclaimExpired(now: OffsetDateTime): Int {
+        if (reclaimFailures.getAndUpdate { current -> if (current > 0) current - 1 else current } > 0) {
+            throw RuntimeException("db recovering")
+        }
         var count = 0
         for (row in rows) {
             val lease = row["claimed_until"] as OffsetDateTime?
@@ -177,4 +185,30 @@ class SchedulerTest {
         }
         assertNull(repo.rows[0]["claim_token"])
     }
+
+    @Test
+    fun `boot recovery failure does not prevent later ticks`() =
+        runBlocking {
+            val repo = FakeRepo()
+            repo.add(1L, OffsetDateTime.now().minusSeconds(10), "a")
+            repo.failNextReclaims(1)
+            val done = CompletableDeferred<Unit>()
+            val scheduler =
+                Scheduler(
+                    repo = repo,
+                    handler = {
+                        done.complete(Unit)
+                        HandlerResult(OffsetDateTime.now().plusMinutes(1))
+                    },
+                    tickInterval = Duration.ofMillis(20),
+                    claimBatchSize = 1,
+                    leaseDuration = Duration.ofSeconds(30),
+                )
+            coroutineScope {
+                scheduler.start(this)
+                withTimeout(2_000) { done.await() }
+                scheduler.stop()
+            }
+            assertEquals(1, repo.released.size)
+        }
 }

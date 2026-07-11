@@ -69,7 +69,12 @@ open class EtlOrchestrator(
      * [runCatalogMatch]. Defaults to a fresh instance built from `ctx`.
      */
     private val canonicalViews: CanonicalViewRepo = CanonicalViewRepo(ctx),
+    private val joinerChunkSize: Int = DEFAULT_JOINER_CHUNK_SIZE,
 ) {
+    init {
+        require(joinerChunkSize > 0) { "joinerChunkSize must be positive" }
+    }
+
     private val log = LoggerFactory.getLogger(javaClass)
     private val catalogRepo = CanonicalCatalogRepo(ctx)
 
@@ -217,21 +222,38 @@ open class EtlOrchestrator(
 
         log.info("joiner '{}' starting adapter={}", row.name, row.adapter)
         val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, args = row.args))
-        val reparented =
-            ctx.transactionResult { cfg ->
-                val tx = DSL.using(cfg)
-                var affected = 0
-                for (link in links) {
-                    affected +=
-                        tx.execute(
-                            "UPDATE campsites SET campground_id = ? WHERE id = ? AND campground_id <> ?",
-                            link.campgroundId,
-                            link.campsiteId,
-                            link.campgroundId,
-                        )
-                }
-                affected
+        var reparented = 0
+        val chunks = links.chunked(joinerChunkSize)
+        for ((chunkIndex, chunk) in chunks.withIndex()) {
+            try {
+                reparented +=
+                    ctx.transactionResult { cfg ->
+                        val tx = DSL.using(cfg)
+                        var affected = 0
+                        for (link in chunk) {
+                            affected +=
+                                tx.execute(
+                                    "UPDATE campsites SET campground_id = ? WHERE id = ? AND campground_id <> ?",
+                                    link.campgroundId,
+                                    link.campsiteId,
+                                    link.campgroundId,
+                                )
+                        }
+                        affected
+                    }
+            } catch (e: Exception) {
+                log.error(
+                    "joiner '{}' adapter={} failed at chunk {}/{} after committing {} reparent(s); retrying the joiner resumes idempotently",
+                    row.name,
+                    row.adapter,
+                    chunkIndex + 1,
+                    chunks.size,
+                    reparented,
+                    e,
+                )
+                throw e
             }
+        }
         val staleDeleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, args = row.args))
         log.info(
             "joiner '{}' adapter={} discovered={} reparented={} stale_deleted={}",
@@ -462,6 +484,8 @@ open class EtlOrchestrator(
     }
 
     companion object {
+        private const val DEFAULT_JOINER_CHUNK_SIZE = 5000
+
         // Runnable ETLs. Admin import targets use this map to decide what can
         // run; every configured campground/campsite vendor row exposed here
         // writes through the canonical catalog repo.
