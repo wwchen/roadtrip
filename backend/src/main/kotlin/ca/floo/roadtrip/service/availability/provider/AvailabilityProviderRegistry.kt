@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability.provider
 
+import ca.floo.roadtrip.models.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 
 /**
  * Holds the live availability-provider adapters and dispatches a selected
