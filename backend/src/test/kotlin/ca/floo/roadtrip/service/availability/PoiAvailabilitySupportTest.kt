@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
@@ -13,6 +14,7 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.catalog.CampgroundService
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
@@ -41,7 +43,7 @@ class PoiAvailabilitySupportTest : SharedDbTest() {
             externalId = "recgov-232447",
             payloadJson = """{"recgov_id":"232447"}""",
         )
-        val row = PoiServingRepo(ctx).fetchPoiById(fixture.poiId)!!
+        val row = CampgroundService(CampgroundRepo(ctx)).poiDetail(PoiServingRepo(ctx).findById(fixture.poiId)!!)!!
         val support =
             PoiAvailabilitySupport(
                 providerRefs = CampsiteProviderRepo(ctx),

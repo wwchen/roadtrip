@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.models.domain.Campsite
+import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import java.time.LocalDate
 
@@ -78,7 +78,7 @@ interface AvailabilityProvider : AvailabilityClient {
      * adapter — a provider without one is not a gap to fill.
      */
     fun bookingUrlTemplate(
-        campsite: Campsite,
+        campsite: CampsiteAvailabilityTarget,
         parentRef: ProviderRef,
     ): String? = null
 
@@ -89,7 +89,7 @@ interface AvailabilityProvider : AvailabilityClient {
      * an adapter only implements the template once.
      */
     fun bookingUrl(
-        campsite: Campsite,
+        campsite: CampsiteAvailabilityTarget,
         parentRef: ProviderRef,
         date: LocalDate,
     ): String? = bookingUrlTemplate(campsite, parentRef)?.let { BookingUrlTemplate.fill(it, date, date.plusDays(1)) }

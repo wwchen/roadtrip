@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.availability.PoiDateContext
-import ca.floo.roadtrip.models.domain.Campsite
+import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
@@ -14,7 +14,7 @@ import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
  * failover-aware call sites walk [candidates] in order.
  */
 internal data class ResolvedAvailabilityTarget(
-    val campsite: Campsite,
+    val campsite: CampsiteAvailabilityTarget,
     val provider: AvailabilityProvider,
     val parentRef: ProviderRef,
     val catalogRef: CatalogCampsiteRef,

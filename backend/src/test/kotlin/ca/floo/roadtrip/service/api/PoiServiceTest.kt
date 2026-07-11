@@ -1,6 +1,18 @@
-package ca.floo.roadtrip.repo
+package ca.floo.roadtrip.service.api
 
-import kotlinx.serialization.json.Json
+import ca.floo.roadtrip.models.domain.Bbox
+import ca.floo.roadtrip.models.domain.PoiDetailRow
+import ca.floo.roadtrip.repo.CampgroundRepo
+import ca.floo.roadtrip.repo.CanonicalViewRepo
+import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
+import ca.floo.roadtrip.repo.PoiServingRepo
+import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
+import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
+import ca.floo.roadtrip.repo.seedCatalogPoi
+import ca.floo.roadtrip.service.catalog.CampgroundService
+import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
+import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.BeforeEach
@@ -9,7 +21,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
-class PoiServingRepoTest : SharedDbTest() {
+class PoiServiceTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
         ctx.cleanCanonicalCatalogFixtures()
@@ -24,10 +36,11 @@ class PoiServingRepoTest : SharedDbTest() {
             )
         CanonicalViewRepo(ctx).refreshCanonicalViews()
 
-        val row = PoiServingRepo(ctx).fetchPoiById(poiId)
+        val feature = poiService().poiDetail(poiId)
+        val row = campgroundDetailRow(poiId)
 
-        assertNotNull(row)
-        val publicRef = Json.parseToJsonElement(row.providerRefJson!!).jsonObject
+        assertNotNull(feature)
+        val publicRef = feature.properties.providerRef!!.jsonObject
         assertEquals("-2147483026", publicRef["mapId"]!!.jsonPrimitive.content)
         assertEquals("-2147483647", publicRef["transactionLocationId"]!!.jsonPrimitive.content)
         assertEquals("-2147483640", publicRef["resourceLocationId"]!!.jsonPrimitive.content)
@@ -50,9 +63,8 @@ class PoiServingRepoTest : SharedDbTest() {
             )
         CanonicalViewRepo(ctx).refreshCanonicalViews()
 
-        val row = PoiServingRepo(ctx).fetchPoiById(poiId)
+        val row = campgroundDetailRow(poiId)
 
-        assertNotNull(row)
         assertNull(row.ctaProviderRefJson)
     }
 
@@ -79,10 +91,10 @@ class PoiServingRepoTest : SharedDbTest() {
         )
         CanonicalViewRepo(ctx).refreshCanonicalViews()
 
-        val row = PoiServingRepo(ctx).fetchPoiById(fixture.poiId)
+        val feature = poiService().poiDetail(fixture.poiId)
 
-        assertNotNull(row)
-        assertEquals(link, row.infoUrl)
+        assertNotNull(feature)
+        assertEquals(link, feature.properties.infoUrl)
     }
 
     @Test
@@ -125,17 +137,58 @@ class PoiServingRepoTest : SharedDbTest() {
         )
         CanonicalViewRepo(ctx).refreshCanonicalViews()
 
-        val row = PoiServingRepo(ctx).fetchPoiById(fixture.poiId)
+        val feature = poiService().poiDetail(fixture.poiId)
 
-        assertNotNull(row)
-        assertEquals("federal-campgrounds", row.source)
-        assertEquals("recgov-232869", row.sourceId)
-        assertEquals("https://www.recreation.gov/camping/campgrounds/232869", row.reserveUrl)
-        val publicRef = Json.parseToJsonElement(row.providerRefJson!!).jsonObject
+        assertNotNull(feature)
+        assertEquals("federal-campgrounds", feature.properties.source)
+        assertEquals("recgov-232869", feature.properties.sourceId)
+        assertEquals("https://www.recreation.gov/camping/campgrounds/232869", feature.properties.reserveUrl)
+        val publicRef = feature.properties.providerRef!!.jsonObject
         assertEquals("232869", publicRef["recgov_id"]!!.jsonPrimitive.content)
         // Ungrouped seed row (match_group_id NULL) is its own group; canonical
         // view returns a single-element member_sources equal to data_source.
-        assertEquals(listOf("federal-campgrounds"), row.memberSources)
+        assertEquals(listOf("federal-campgrounds"), feature.properties.sources)
+    }
+
+    @Test
+    fun `low zoom default poi request suppresses campgrounds`() {
+        ctx.seedCatalogPoi(sourceId = "cg-1", name = "Camp", lon = -123.0, lat = 49.0, poiType = "campground")
+        ctx.seedCatalogPoi(sourceId = "tesla-1", name = "Tesla", lon = -123.05, lat = 49.05, poiType = "tesla_supercharger")
+        ctx.seedCatalogPoi(
+            sourceId = "pf-1",
+            name = "Planet Fitness",
+            lon = -123.1,
+            lat = 49.1,
+            poiType = "planet_fitness_location",
+        )
+
+        val categories =
+            poiService()
+                .pois(
+                    bbox = VANCOUVER_BBOX,
+                    zoom = POI_CAMPGROUND_MIN_ZOOM - 1,
+                    categories = null,
+                ).features
+                .map { it.properties.category }
+                .toSet()
+
+        assertEquals(setOf("tesla_supercharger", "planet_fitness_location"), categories)
+    }
+
+    @Test
+    fun `low zoom campground-only request returns no pois`() {
+        ctx.seedCatalogPoi(sourceId = "cg-1", name = "Camp", lon = -123.0, lat = 49.0, poiType = "campground")
+        ctx.seedCatalogPoi(sourceId = "tesla-1", name = "Tesla", lon = -123.05, lat = 49.05, poiType = "tesla_supercharger")
+
+        val features =
+            poiService()
+                .pois(
+                    bbox = VANCOUVER_BBOX,
+                    zoom = POI_CAMPGROUND_MIN_ZOOM - 1,
+                    categories = listOf("campground"),
+                ).features
+
+        assertEquals(emptyList(), features)
     }
 
     private fun seedPoi(
@@ -157,7 +210,19 @@ class PoiServingRepoTest : SharedDbTest() {
                 propertiesJson = propertiesJson,
             ).poiId
 
+    private fun poiService(): PoiService =
+        PoiService(
+            poiRepo = PoiServingRepo(ctx),
+            campgroundService = CampgroundService(CampgroundRepo(ctx)),
+            teslaSuperchargerService = TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
+            planetFitnessLocationService = PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
+        )
+
+    private fun campgroundDetailRow(poiId: Long): PoiDetailRow =
+        CampgroundService(CampgroundRepo(ctx)).poiDetail(PoiServingRepo(ctx).findById(poiId)!!)!!
+
     private companion object {
         const val SOURCE = "poi-serving-test"
+        val VANCOUVER_BBOX = Bbox(west = -125.0, south = 47.0, east = -120.0, north = 51.0)
     }
 }

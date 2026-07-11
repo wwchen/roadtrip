@@ -4,7 +4,7 @@ import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.models.api.AvailabilityResponseDto
 import ca.floo.roadtrip.models.availability.AvailabilityWindows
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
-import ca.floo.roadtrip.models.domain.Campsite
+import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
@@ -33,7 +33,7 @@ internal class CampsiteAvailabilityComposer(
     private val availabilityLoader = AvailabilityLoader(availability)
 
     suspend fun availabilityFor(
-        campsites: List<Campsite>,
+        campsites: List<CampsiteAvailabilityTarget>,
         startDate: LocalDate?,
         endDate: LocalDate?,
     ): List<AvailabilityResponseDto> {
@@ -205,7 +205,7 @@ private fun availabilityMetadata(
         campsiteId = campsiteId,
     )
 
-private fun Campsite.providerRefForCampsite(parentRef: ProviderRef): ProviderRef =
+private fun CampsiteAvailabilityTarget.providerRefForCampsite(parentRef: ProviderRef): ProviderRef =
     when (parentRef) {
         is ProviderRef.Aspira ->
             parentRef.copy(
@@ -215,7 +215,7 @@ private fun Campsite.providerRefForCampsite(parentRef: ProviderRef): ProviderRef
         else -> parentRef
     }
 
-private fun Campsite.aspiraProviderRefLong(key: String): Long? =
+private fun CampsiteAvailabilityTarget.aspiraProviderRefLong(key: String): Long? =
     (providerRef as? JsonObject)
         ?.get(key)
         ?.jsonPrimitive

@@ -7,7 +7,7 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.CampsiteDayObservation
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
-import ca.floo.roadtrip.models.domain.Campsite
+import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
@@ -434,7 +434,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         }
 
         override fun bookingUrlTemplate(
-            campsite: Campsite,
+            campsite: CampsiteAvailabilityTarget,
             parentRef: ProviderRef,
         ): String = "https://example.test/book/${campsite.vendorId}?d=${BookingUrlTemplate.START_DATE}"
     }
@@ -1313,7 +1313,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         object : FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromEnv()) {
             override suspend fun fetch(
                 candidates: List<ProviderCandidate>,
-                campsites: List<Campsite>,
+                campsites: List<CampsiteAvailabilityTarget>,
                 window: ResolvedDateWindow,
                 translateRefs: (ProviderCandidate) -> List<CatalogCampsiteRef>,
             ): FailoverAvailabilityFetcher.FailoverResult =

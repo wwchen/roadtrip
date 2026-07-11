@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.availability.CellTransition
-import ca.floo.roadtrip.models.domain.Campsite
+import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
@@ -151,7 +151,7 @@ internal class WatchAlertDispatcher(
     private suspend fun postOpenings(
         watch: AvailabilityWatchRepo.Watch,
         covered: List<CellTransition>,
-        campsitesById: Map<Long, Campsite>,
+        campsitesById: Map<Long, CampsiteAvailabilityTarget>,
         handlers: List<TriggerActionHandler>,
     ) {
         if (handlers.isEmpty()) return
@@ -171,7 +171,7 @@ internal class WatchAlertDispatcher(
      *  and the provider booking URL — so the notification layer only formats. */
     private fun hydrateOpenings(
         covered: List<CellTransition>,
-        campsitesById: Map<Long, Campsite>,
+        campsitesById: Map<Long, CampsiteAvailabilityTarget>,
     ): List<WatchOpening> {
         val poiNames = HashMap<Long, String?>()
         return covered.map { t ->
@@ -184,7 +184,7 @@ internal class WatchAlertDispatcher(
                 siteType = r.siteType,
                 date = t.targetDate,
                 campgroundId = target?.parentPoiId,
-                campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { pois.fetchPoiById(it)?.name } },
+                campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { pois.fetchPoiName(it) } },
                 // Booking link, if the campsite's provider exposes one — the URL
                 // scheme is the adapter's, never this dispatcher's. The parent
                 // ref supplies vendor ids the per-site ref may omit (e.g. Aspira).
@@ -203,7 +203,7 @@ internal class WatchAlertDispatcher(
      *  no POI). */
     private fun statusNotice(
         watch: AvailabilityWatchRepo.Watch,
-        campsites: List<Campsite>,
+        campsites: List<CampsiteAvailabilityTarget>,
         state: WatchStatusNotice.State,
     ): WatchStatusNotice {
         val poiIds = watch.targets.mapNotNull { it.poiId }.toSet()
@@ -218,7 +218,7 @@ internal class WatchAlertDispatcher(
             siteCount = campsites.size,
             siteName = single?.let { it.name ?: "Site #${it.vendorId}" },
             siteLoop = single?.loop,
-            campgroundName = poiIds.singleOrNull()?.let { pois.fetchPoiById(it)?.name },
+            campgroundName = poiIds.singleOrNull()?.let { pois.fetchPoiName(it) },
             startDate = watch.startDate,
             endDate = watch.endDate,
             dashboardUrl = grafanaRootUrl?.let { "$it/d/$WATCH_DASHBOARD_UID?var-watch_id=${watch.id}" },

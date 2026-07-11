@@ -6,7 +6,7 @@ import ca.floo.roadtrip.service.etl.framework.DEFAULT_TESLA_SITE_STATUS
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TeslaSuperchargerEtlOutput
-import ca.floo.roadtrip.service.etl.framework.TeslaSuperchargerEtlRecord
+import ca.floo.roadtrip.service.etl.framework.TeslaSuperchargerUpsertCandidate
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -106,7 +106,7 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerEtlOutput> {
         row: TeslaIndexRow,
         rawIndex: JsonObject?,
         locationsDir: File,
-    ): TeslaSuperchargerEtlRecord? {
+    ): TeslaSuperchargerUpsertCandidate? {
         // Filter mirrors scripts/fetch_tesla_locations.py:na_supercharger_slugs.
         // Trust supercharger_function over location_type — Tesla's bulk index
         // sometimes labels real Supercharger sites with surprising types
@@ -130,7 +130,7 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerEtlOutput> {
 
         val (region, country) = regionCountryOf(detail)
 
-        return TeslaSuperchargerEtlRecord(
+        return TeslaSuperchargerUpsertCandidate(
             locationSlug = sanitizeSlug(slug),
             commonSiteName = name,
             latitude = lat,

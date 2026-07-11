@@ -5,7 +5,7 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityWindows
 import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
-import ca.floo.roadtrip.models.domain.Campsite
+import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
@@ -182,8 +182,8 @@ class CatalogAvailabilityBatcherTest {
         campsiteId: Long,
         vendor: String,
         vendorId: String,
-    ): Campsite =
-        Campsite(
+    ): CampsiteAvailabilityTarget =
+        CampsiteAvailabilityTarget(
             id = campsiteId,
             vendor = vendor,
             vendorId = vendorId,

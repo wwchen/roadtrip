@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.etl.vendors.aspira
 
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
-import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
+import ca.floo.roadtrip.service.etl.framework.CampgroundUpsertCandidate
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -144,7 +144,7 @@ class AspiraJoinByNameEtl(
         val tokenIndex: List<Pair<Set<String>, Pair<Double, Double>>> =
             byName.entries.map { (k, v) -> k.split(' ').toSet() to v }
 
-        val campgrounds = mutableListOf<CampgroundEtlRecord>()
+        val campgrounds = mutableListOf<CampgroundUpsertCandidate>()
         var exact = 0
         var fuzzy = 0
         var viaParent = 0
@@ -218,7 +218,7 @@ class AspiraJoinByNameEtl(
             val vendorRefId = aspiraVendorRefId(leaf)
             val bookingCtaRef = leaf.resourceLocationId?.let { bookingCtaRefsByResourceLocationId[it] }
             campgrounds +=
-                CampgroundEtlRecord(
+                CampgroundUpsertCandidate(
                     vendor = etlSlug,
                     vendorRefId = vendorRefId,
                     name = leaf.name,

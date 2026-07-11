@@ -3,7 +3,7 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
-import ca.floo.roadtrip.models.domain.Campsite
+import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
@@ -108,7 +108,16 @@ class FailoverAvailabilityFetcherTest {
         id: Long,
         vendor: String = "recgov",
         vendorId: String = id.toString(),
-    ): Campsite = Campsite(id = id, vendor = vendor, vendorId = vendorId, name = null, loop = null, siteType = null, raw = null)
+    ): CampsiteAvailabilityTarget =
+        CampsiteAvailabilityTarget(
+            id = id,
+            vendor = vendor,
+            vendorId = vendorId,
+            name = null,
+            loop = null,
+            siteType = null,
+            raw = null,
+        )
 
     private fun candidate(
         provider: AvailabilityProvider,

@@ -122,14 +122,14 @@ internal class AvailabilityPollExecutor(
         // how often (cadence).
         val resolved =
             campsitesRepo
-                .findByPoi(poller.poiId)
+                .findAvailabilityTargetsByPoi(poller.poiId)
                 .mapNotNull { targets.resolve(it) }
                 .filter {
                     parentRefKey(it.parentRef) == poller.parentRef &&
                         it.provider.id.name
                             .lowercase() == poller.provider
                 }
-                // findByPoi returns distinct campsites, but guard against
+                // findAvailabilityTargetsByPoi returns distinct campsites, but guard against
                 // duplicate poi links so a site is fetched once.
                 .distinctBy { it.campsite.id }
 

@@ -5,7 +5,7 @@ import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.PlanetFitnessLocationEtlOutput
-import ca.floo.roadtrip.service.etl.framework.PlanetFitnessLocationEtlRecord
+import ca.floo.roadtrip.service.etl.framework.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -65,7 +65,7 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, PlanetFitnessLocationEtl
             locations = dto.elements.mapNotNull { el -> transformElement(el) },
         )
 
-    private fun transformElement(el: OverpassElement): PlanetFitnessLocationEtlRecord? {
+    private fun transformElement(el: OverpassElement): PlanetFitnessLocationUpsertCandidate? {
         // Resolve lat/lon: nodes have it directly, ways/relations have it
         // under `center` (Overpass `out center` semantics).
         val lat = el.lat ?: el.center?.lat ?: return null
@@ -79,7 +79,7 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, PlanetFitnessLocationEtl
         // when nothing's known instead of {"street":"","city":""}.
         val address = buildAddress(tags)
 
-        return PlanetFitnessLocationEtlRecord(
+        return PlanetFitnessLocationUpsertCandidate(
             locationId = sourceId,
             name = tags["name"] ?: "Planet Fitness",
             latitude = lat,

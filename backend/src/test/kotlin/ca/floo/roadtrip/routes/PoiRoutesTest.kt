@@ -1,10 +1,18 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.repo.CampgroundRepo
+import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
+import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.refreshCanonicalCatalogViews
 import ca.floo.roadtrip.repo.seedCatalogPoi
+import ca.floo.roadtrip.service.api.POI_LIMIT
+import ca.floo.roadtrip.service.api.PoiService
+import ca.floo.roadtrip.service.catalog.CampgroundService
+import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
+import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -22,19 +30,21 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
-import java.io.File as IoFile
 
 class PoiRoutesTest : SharedDbTest() {
-    private val testRegistry: PoiRegistry by lazy {
-        // Tests live under backend/, repo root is one level up.
-        PoiRegistry.load(IoFile("../config/poi-registry.yaml"))
-    }
-
     @BeforeEach
     fun reset() {
         ctx.cleanCanonicalCatalogFixtures()
         ctx.execute("DELETE FROM import_runs")
     }
+
+    private fun poiService(): PoiService =
+        PoiService(
+            poiRepo = PoiServingRepo(ctx),
+            campgroundService = CampgroundService(CampgroundRepo(ctx)),
+            teslaSuperchargerService = TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
+            planetFitnessLocationService = PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
+        )
 
     @Test
     fun `bbox returns matching points only`() =
@@ -46,7 +56,7 @@ class PoiRoutesTest : SharedDbTest() {
                     row("outside-fl", "Miami Park", -80.0, 25.0, "campground"),
                 ),
             )
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -80,7 +90,7 @@ class PoiRoutesTest : SharedDbTest() {
                     row("vancouver", "Vancouver Park", -123.0, 49.0, "campground"),
                 ),
             )
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -104,7 +114,7 @@ class PoiRoutesTest : SharedDbTest() {
                     row("pf-1", "PF Vancouver", -123.1, 49.1, "planet_fitness_location"),
                 ),
             )
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -132,7 +142,7 @@ class PoiRoutesTest : SharedDbTest() {
                     row("pf-1", "PF Vancouver", -123.1, 49.1, "planet_fitness_location"),
                 ),
             )
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -162,7 +172,7 @@ class PoiRoutesTest : SharedDbTest() {
                     row("pf-1", "PF Vancouver", -123.1, 49.1, "planet_fitness_location"),
                 ),
             )
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -213,7 +223,7 @@ class PoiRoutesTest : SharedDbTest() {
                     )
                 }
             seed(rows)
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -249,7 +259,7 @@ class PoiRoutesTest : SharedDbTest() {
                     )
                 }
             seed(rows)
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -282,7 +292,7 @@ class PoiRoutesTest : SharedDbTest() {
                 }
             }
             seed(rows)
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
             val resp =
                 client.post("/api/pois") {
                     contentType(ContentType.Application.Json)
@@ -296,7 +306,7 @@ class PoiRoutesTest : SharedDbTest() {
     @Test
     fun `malformed body returns 400`() =
         testApplication {
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
 
             // Empty body
             assertEquals(
@@ -351,7 +361,7 @@ class PoiRoutesTest : SharedDbTest() {
             // west=170, east=-170 (the bbox wraps the antimeridian). PostGIS
             // ST_MakeEnvelope can't express a wrapping envelope without splitting,
             // so we reject at the API layer instead of returning misleading rows.
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
             assertEquals(
                 HttpStatusCode.BadRequest,
                 client
@@ -365,7 +375,7 @@ class PoiRoutesTest : SharedDbTest() {
     @Test
     fun `accidental poi health route no longer returns ok`() =
         testApplication {
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
             assertEquals(HttpStatusCode.BadRequest, client.get("/api/pois/health").status)
         }
 
@@ -378,7 +388,7 @@ class PoiRoutesTest : SharedDbTest() {
                     row("tesla-1", "Tesla", -123.05, 49.05, "tesla_supercharger"),
                 ),
             )
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
 
             // Zoom 4 < CG_MIN_ZOOM=6 → campground category dropped server-side
             // even when explicitly requested.
@@ -414,7 +424,7 @@ class PoiRoutesTest : SharedDbTest() {
                     row("banff-trailer", "Tunnel Mountain Trailer Court", -115.52, 51.18, "campground"),
                 ),
             )
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
 
             val resp = client.get("/api/pois/search?q=tunnel%20mountain%20village&limit=5")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -437,7 +447,7 @@ class PoiRoutesTest : SharedDbTest() {
                     row("upper-sc", "Upper Supercharger", -119.30, 37.80, "tesla_supercharger"),
                 ),
             )
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
 
             val resp = client.get("/api/pois/search?q=upper&categories=campground&limit=10")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -459,7 +469,7 @@ class PoiRoutesTest : SharedDbTest() {
                     row("upper-sc", "Upper Supercharger", -119.30, 37.80, "tesla_supercharger"),
                 ),
             )
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
 
             val resp = client.get("/api/pois/search?q=upper&categories=campground,tesla_supercharger&limit=10")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -488,7 +498,7 @@ class PoiRoutesTest : SharedDbTest() {
                     }
                 }
             seed(rows)
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -530,7 +540,7 @@ class PoiRoutesTest : SharedDbTest() {
                     ),
                 ),
             )
-            application { routing { poiRoutes(ctx, testRegistry) } }
+            application { routing { poiRoutes(poiService()) } }
 
             // Explicitly request campgrounds so this exercises the canonical
             // wrapper category rather than the default set.

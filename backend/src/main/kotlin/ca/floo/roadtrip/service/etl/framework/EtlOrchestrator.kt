@@ -1,15 +1,20 @@
 package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.models.api.CatalogMatchRunStats
+import ca.floo.roadtrip.models.domain.CatalogUpsertResult
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.models.metadata.registry.EtlEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
-import ca.floo.roadtrip.repo.CanonicalCatalogRepo
+import ca.floo.roadtrip.repo.CampgroundRepo
+import ca.floo.roadtrip.repo.CampsiteParentJoinerRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.CatalogMatchRepo
 import ca.floo.roadtrip.repo.NoCaptureException
+import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.RawCapture
+import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.service.catalog.CatalogMatcherService
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampsiteParentJoiner
 import ca.floo.roadtrip.service.etl.vendors.recgov.RecgovCampsiteParentJoiner
@@ -18,7 +23,6 @@ import ca.floo.roadtrip.service.etl.vendors.reservecalifornia.ReserveCaliforniaC
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
-import org.jooq.impl.DSL
 import org.slf4j.LoggerFactory
 import java.io.File
 
@@ -69,6 +73,12 @@ open class EtlOrchestrator(
      * [runCatalogMatch]. Defaults to a fresh instance built from `ctx`.
      */
     private val canonicalViews: CanonicalViewRepo = CanonicalViewRepo(ctx),
+    /**
+     * Repo for post-import campsite parent lookup and reparent writes. Kept
+     * injectable so tests can still exercise chunk retry behavior through the
+     * same repo boundary as production.
+     */
+    private val campsiteParentJoiners: CampsiteParentJoinerRepo = CampsiteParentJoinerRepo(ctx),
     private val joinerChunkSize: Int = DEFAULT_JOINER_CHUNK_SIZE,
 ) {
     init {
@@ -76,7 +86,10 @@ open class EtlOrchestrator(
     }
 
     private val log = LoggerFactory.getLogger(javaClass)
-    private val catalogRepo = CanonicalCatalogRepo(ctx)
+    private val campgroundRepo = CampgroundRepo(ctx)
+    private val campsiteRepo = CampsiteRepo(ctx)
+    private val teslaSuperchargerRepo = TeslaSuperchargerRepo(ctx)
+    private val planetFitnessLocationRepo = PlanetFitnessLocationRepo(ctx)
 
     /**
      * Per-row run summary for import rows. `poi_data` and `campsite_data`
@@ -88,7 +101,7 @@ open class EtlOrchestrator(
         val terminalEtlSlug: String,
         val parsed: Int,
         val transformed: Int,
-        val upsertResult: CanonicalCatalogRepo.Result,
+        val upsertResult: CatalogUpsertResult,
     )
 
     data class CampsiteStats(
@@ -202,7 +215,7 @@ open class EtlOrchestrator(
      * discovered pair disagrees with the current value we reparent the
      * campsite. A campsite not in the joiner's result set is out of scope
      * for that joiner and its parent is left alone — vendor scoping in
-     * each adapter's WHERE clause is what prevents one joiner from
+     * each repo query is what prevents one joiner from
      * clobbering another vendor's rows.
      *
      * This is a reconciliation pass: if `upsertCampsite` already resolved
@@ -221,26 +234,13 @@ open class EtlOrchestrator(
                 ?: error("no joiner adapter registered for '${row.adapter}'")
 
         log.info("joiner '{}' starting adapter={}", row.name, row.adapter)
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, args = row.args))
+        val joinerCtx = JoinerCtx(repo = campsiteParentJoiners, args = row.args)
+        val links = joiner.discoverLinks(joinerCtx)
         var reparented = 0
         val chunks = links.chunked(joinerChunkSize)
         for ((chunkIndex, chunk) in chunks.withIndex()) {
             try {
-                reparented +=
-                    ctx.transactionResult { cfg ->
-                        val tx = DSL.using(cfg)
-                        var affected = 0
-                        for (link in chunk) {
-                            affected +=
-                                tx.execute(
-                                    "UPDATE campsites SET campground_id = ? WHERE id = ? AND campground_id <> ?",
-                                    link.campgroundId,
-                                    link.campsiteId,
-                                    link.campgroundId,
-                                )
-                        }
-                        affected
-                    }
+                reparented += campsiteParentJoiners.reparentCampsites(chunk)
             } catch (e: Exception) {
                 log.error(
                     "joiner '{}' adapter={} failed at chunk {}/{} after committing {} reparent(s); retrying the joiner resumes idempotently",
@@ -254,7 +254,7 @@ open class EtlOrchestrator(
                 throw e
             }
         }
-        val staleDeleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, args = row.args))
+        val staleDeleted = joiner.sweepStaleLinks(joinerCtx)
         log.info(
             "joiner '{}' adapter={} discovered={} reparented={} stale_deleted={}",
             row.name,
@@ -368,13 +368,13 @@ open class EtlOrchestrator(
         val ups =
             when (output) {
                 is CampgroundEtlOutput ->
-                    catalogRepo.upsertCampgrounds(output.campgrounds, source = concrete.etlSlug)
+                    campgroundRepo.upsertCampgrounds(output.campgrounds, source = concrete.etlSlug)
                 is CampsiteEtlOutput ->
-                    catalogRepo.upsertCampsites(output.campsites, source = concrete.etlSlug)
+                    campsiteRepo.upsertCampsites(output.campsites, source = concrete.etlSlug)
                 is TeslaSuperchargerEtlOutput ->
-                    catalogRepo.upsertTeslaSuperchargers(output.superchargers, source = concrete.etlSlug)
+                    teslaSuperchargerRepo.upsertTeslaSuperchargers(output.superchargers, source = concrete.etlSlug)
                 is PlanetFitnessLocationEtlOutput ->
-                    catalogRepo.upsertPlanetFitnessLocations(output.locations, source = concrete.etlSlug)
+                    planetFitnessLocationRepo.upsertPlanetFitnessLocations(output.locations, source = concrete.etlSlug)
                 else -> error("terminal '${concrete.etlSlug}' returned unsupported output ${output::class.qualifiedName}")
             }
         val transformedCount = outputCount(output)
@@ -579,8 +579,8 @@ open class EtlOrchestrator(
 
         // Runnable joiner adapters keyed by YAML `adapter:` name. Kept
         // separate from `registry` because joiners don't emit typed ETL
-        // output; they mutate campsite parent links directly through
-        // discoverLinks + a reparent UPDATE in runJoiner.
+        // output. They select vendor-scoped parent links through the
+        // campsite-parent joiner repo; runJoiner owns sequencing and retry.
         val joinerRegistry: Map<String, CampsiteParentJoiner> =
             listOf(
                 RecgovCampsiteParentJoiner(),

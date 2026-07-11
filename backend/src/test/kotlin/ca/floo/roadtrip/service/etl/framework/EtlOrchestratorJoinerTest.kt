@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.framework
 
+import ca.floo.roadtrip.models.domain.CampsiteParentLink
 import ca.floo.roadtrip.models.metadata.registry.CampsiteParentJoinerEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.SharedDbTest
@@ -87,7 +88,7 @@ class EtlOrchestratorJoinerTest : SharedDbTest() {
         override val adapter: String = ADAPTER
         private var attempts = 0
 
-        override fun discoverLinks(ctx: JoinerCtx): List<CampsiteParentJoiner.Link> {
+        override fun discoverLinks(ctx: JoinerCtx): List<CampsiteParentLink> {
             attempts += 1
             val secondTarget =
                 if (attempts == 1) {
@@ -96,9 +97,9 @@ class EtlOrchestratorJoinerTest : SharedDbTest() {
                     targetCampgroundId
                 }
             return listOf(
-                CampsiteParentJoiner.Link(campsiteId = campsiteIds[0], campgroundId = targetCampgroundId),
-                CampsiteParentJoiner.Link(campsiteId = campsiteIds[1], campgroundId = secondTarget),
-                CampsiteParentJoiner.Link(campsiteId = campsiteIds[2], campgroundId = targetCampgroundId),
+                CampsiteParentLink(campsiteId = campsiteIds[0], campgroundId = targetCampgroundId),
+                CampsiteParentLink(campsiteId = campsiteIds[1], campgroundId = secondTarget),
+                CampsiteParentLink(campsiteId = campsiteIds[2], campgroundId = targetCampgroundId),
             )
         }
 

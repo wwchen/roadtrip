@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.api.CampsiteSummarySchema
 import ca.floo.roadtrip.models.api.PoiCampsitesResponseSchema
-import ca.floo.roadtrip.models.domain.Campsite
+import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -23,7 +23,7 @@ internal class CampsiteCatalogService(
         val parentRef = providerRefs.findProviderRef(poiId)?.providerRefJson?.let(ProviderRefParser::parse)
         val campsites =
             campsitesRepo
-                .findByPoi(poiId)
+                .findAvailabilityTargetsByPoi(poiId)
                 .filterBySiteTypes(siteTypes)
         return PoiCampsitesResponseSchema(
             poiId = poiId,
@@ -39,7 +39,7 @@ internal class CampsiteCatalogService(
     }
 }
 
-internal fun Campsite.toCampsiteSchema(
+internal fun CampsiteAvailabilityTarget.toCampsiteSchema(
     poiIds: List<Long> = emptyList(),
     reservationUrlTemplate: String? = null,
 ): CampsiteSummarySchema =
@@ -58,7 +58,7 @@ internal fun Campsite.toCampsiteSchema(
         raw = raw,
     )
 
-internal fun Campsite.reservationUrlTemplate(parentRef: ProviderRef?): String? =
+internal fun CampsiteAvailabilityTarget.reservationUrlTemplate(parentRef: ProviderRef?): String? =
     when {
         vendor == "recgov" -> RecGovBookingUrl.template(vendorId)
         vendor.startsWith("aspira_") ->
@@ -68,7 +68,7 @@ internal fun Campsite.reservationUrlTemplate(parentRef: ProviderRef?): String? =
         else -> null
     }
 
-internal fun List<Campsite>.filterBySiteTypes(siteTypes: Collection<String>): List<Campsite> {
+internal fun List<CampsiteAvailabilityTarget>.filterBySiteTypes(siteTypes: Collection<String>): List<CampsiteAvailabilityTarget> {
     if (siteTypes.isEmpty()) return this
     val allowed = siteTypes.toSet()
     return filter { it.siteType != null && it.siteType in allowed }

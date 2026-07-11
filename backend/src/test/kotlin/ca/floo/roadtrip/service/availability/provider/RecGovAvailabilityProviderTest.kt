@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
-import ca.floo.roadtrip.models.domain.Campsite
+import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovAvailabilityProvider
@@ -163,7 +163,7 @@ class RecGovAvailabilityProviderTest {
     fun `booking url points at the rec_gov campsite page for the single night`() {
         val adapter = RecGovAvailabilityProvider(fakeRecgovClient { _, _ -> emptyMap() })
         val campsite =
-            Campsite(
+            CampsiteAvailabilityTarget(
                 id = 1,
                 vendor = "recgov",
                 vendorId = "330257",

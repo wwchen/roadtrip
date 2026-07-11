@@ -12,6 +12,7 @@ import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.OnRoutePoiRepo
 import ca.floo.roadtrip.repo.OnRouteRow
 import ca.floo.roadtrip.repo.RouteCorridorRepo
+import ca.floo.roadtrip.service.api.canonicalPoiCategories
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_CORRIDOR_RADIUS_MILES
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_WAYPOINTS
 import ca.floo.roadtrip.service.routing.MIN_ROUTE_CORRIDOR_RADIUS_MILES

@@ -3,7 +3,7 @@ package ca.floo.roadtrip.service.etl.vendors.aspira
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtlOutput
-import ca.floo.roadtrip.service.etl.framework.CampsiteEtlRecord
+import ca.floo.roadtrip.service.etl.framework.CampsiteUpsertCandidate
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -143,7 +143,7 @@ class AspiraResourcesEtl(
                 .walk(dto.maps)
                 .associateBy { it.mapId }
 
-        val out = mutableListOf<CampsiteEtlRecord>()
+        val out = mutableListOf<CampsiteUpsertCandidate>()
         var unmatchedLeaf = 0
         var totalRecords = 0
         for (envelope in dto.inventory) {
@@ -158,7 +158,7 @@ class AspiraResourcesEtl(
                 if (leafMapId != null && leaf == null) unmatchedLeaf++
                 val providerRef = buildResourceProviderRef(inv = inv, leaf = leaf)
                 out +=
-                    CampsiteEtlRecord(
+                    CampsiteUpsertCandidate(
                         vendor = vendor,
                         vendorRefId = resourceId,
                         parentVendor = PARENT_CAMPGROUND_VENDOR_BY_SITE_VENDOR[vendor],

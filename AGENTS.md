@@ -26,7 +26,7 @@ Before changes that touch campsite availability, alerts, or any reservation-prov
 Backend layering rules:
 - Prefer typed Kotlin/Java DTOs (`@Serializable` data classes or existing schema classes) for request/response bodies. Do not hand-build JSON strings in routes when a DTO can represent the shape.
 - SQL, jOOQ DSL queries, table references, and persistence mapping belong in `repo` classes only. Routes and services call repo methods rather than embedding SQL.
-- Routes are the HTTP shell: parse inputs, call services/repos through established boundaries, set status codes, and return DTOs.
+- Routes are the HTTP shell: parse inputs, call controllers/services through established boundaries, set status codes, and return DTOs. Do not add route-to-repo paths; when touching one, move it behind a controller/service.
 - Keep business logic out of routes; put orchestration in `service` and persistence in `repo`.
 
 Design principles (apply to all code, all layers):

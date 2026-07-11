@@ -266,48 +266,55 @@ open class CatalogMatchRepo(
      * Runs seeded (`match_group_id = id`) then reduces until no row changes.
      * Returns the total number of rows updated across all iterations (both
      * tables); this is what the caller surfaces as "groupsRecomputed".
+     *
+     * Each step (seed chunk / propagation iteration) commits independently
+     * to avoid WAL + dirty-buffer pressure that OOM-kills Postgres on
+     * memory-constrained hosts. The algorithm is idempotent and monotone,
+     * so partial progress is safe.
      */
-    open fun recomputeMatchGroups(): Int =
-        ctx.transactionResult { cfg ->
-            val txn = DSL.using(cfg)
-            var totalUpdated = 0
-            totalUpdated +=
-                propagate(
-                    txn = txn,
-                    catalogTable = "campgrounds",
-                    matchesTable = "campground_matches",
-                    aColumn = "campground_a_id",
-                    bColumn = "campground_b_id",
-                )
-            totalUpdated +=
-                propagate(
-                    txn = txn,
-                    catalogTable = "campsites",
-                    matchesTable = "campsite_matches",
-                    aColumn = "campsite_a_id",
-                    bColumn = "campsite_b_id",
-                )
-            totalUpdated
-        }
+    open fun recomputeMatchGroups(): Int {
+        var totalUpdated = 0
+        totalUpdated +=
+            propagate(
+                catalogTable = "campgrounds",
+                matchesTable = "campground_matches",
+                aColumn = "campground_a_id",
+                bColumn = "campground_b_id",
+            )
+        totalUpdated +=
+            propagate(
+                catalogTable = "campsites",
+                matchesTable = "campsite_matches",
+                aColumn = "campsite_a_id",
+                bColumn = "campsite_b_id",
+            )
+        return totalUpdated
+    }
 
     private fun propagate(
-        txn: DSLContext,
         catalogTable: String,
         matchesTable: String,
         aColumn: String,
         bColumn: String,
     ): Int {
-        // Seed everyone to their own id — cheap, idempotent, safe to run
-        // repeatedly.
-        val seedUpdated =
-            txn.execute(
-                """
-                UPDATE $catalogTable
-                   SET match_group_id = id
-                 WHERE match_group_id IS DISTINCT FROM id
-                """.trimIndent(),
-            )
-        var totalUpdated = seedUpdated
+        var totalUpdated = 0
+        // Seed in chunks — each chunk auto-commits, limiting WAL burst.
+        while (true) {
+            val seeded =
+                ctx.execute(
+                    """
+                    UPDATE $catalogTable
+                       SET match_group_id = id
+                     WHERE id IN (
+                       SELECT id FROM $catalogTable
+                        WHERE match_group_id IS DISTINCT FROM id
+                        LIMIT $PROPAGATE_CHUNK_SIZE
+                     )
+                    """.trimIndent(),
+                )
+            totalUpdated += seeded
+            if (seeded < PROPAGATE_CHUNK_SIZE) break
+        }
         var iteration = 0
         while (true) {
             iteration += 1
@@ -317,7 +324,7 @@ open class CatalogMatchRepo(
                 )
             }
             val updated =
-                txn.execute(
+                ctx.execute(
                     """
                     WITH pairs AS (
                       SELECT $aColumn AS a, $bColumn AS b FROM $matchesTable
@@ -347,6 +354,7 @@ open class CatalogMatchRepo(
 
     companion object {
         const val MAX_LABEL_PROPAGATION_ITERATIONS = 32
+        private const val PROPAGATE_CHUNK_SIZE = 5000
         private const val CAMPGROUND_ENTITY = "campground"
         private const val CAMPSITE_ENTITY = "campsite"
 

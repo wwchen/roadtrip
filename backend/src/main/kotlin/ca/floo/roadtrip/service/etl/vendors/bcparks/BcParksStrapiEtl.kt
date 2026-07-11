@@ -3,7 +3,7 @@ package ca.floo.roadtrip.service.etl.vendors.bcparks
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
-import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
+import ca.floo.roadtrip.service.etl.framework.CampgroundUpsertCandidate
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -83,7 +83,7 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, CampgroundEtlOutput> {
         row: BcParksRow,
         raw: JsonElement?,
         bucket: String?,
-    ): CampgroundEtlRecord? {
+    ): CampgroundUpsertCandidate? {
         // ORCS (Official Records and Conservation System) is the stable
         // BC Parks identifier — survives renames and reorganizations.
         val orcs = row.orcs ?: return null
@@ -96,7 +96,7 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, CampgroundEtlOutput> {
 
         val infoUrl = row.url?.takeIf { it.isNotBlank() }
         val photoUrl = parkPhotoUrl(row.parkPhotos)
-        return CampgroundEtlRecord(
+        return CampgroundUpsertCandidate(
             vendor = etlSlug,
             vendorRefId = "$ORCS_REF_PREFIX$orcs",
             name = name,

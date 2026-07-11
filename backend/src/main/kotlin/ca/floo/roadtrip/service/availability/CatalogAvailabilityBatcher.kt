@@ -4,7 +4,7 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityWindows
 import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
-import ca.floo.roadtrip.models.domain.Campsite
+import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
@@ -25,7 +25,7 @@ internal data class GroupFetchResult(
     val provider: AvailabilityProvider,
     val parentRef: ProviderRef,
     val dateContext: PoiDateContext,
-    val campsites: List<Campsite>,
+    val campsites: List<CampsiteAvailabilityTarget>,
     val window: ResolvedDateWindow?,
     val batch: AvailabilityObservationBatch?,
     val outcome: FetchOutcome,
@@ -34,7 +34,7 @@ internal data class GroupFetchResult(
     val providerError: AvailabilityProviderError? = null,
 )
 
-internal fun Campsite.toCatalogCampsiteRef(): CatalogCampsiteRef =
+internal fun CampsiteAvailabilityTarget.toCatalogCampsiteRef(): CatalogCampsiteRef =
     CatalogCampsiteRef(
         campsiteId = id,
         vendorId = vendorId,
@@ -42,7 +42,11 @@ internal fun Campsite.toCatalogCampsiteRef(): CatalogCampsiteRef =
         resourceLocationId = aspiraProviderRefLong("resourceLocationId"),
     )
 
-private fun Campsite.aspiraProviderRefLong(key: String): Long? = (providerRef as? JsonObject)?.get(key)?.jsonPrimitive?.longOrNull
+private fun CampsiteAvailabilityTarget.aspiraProviderRefLong(key: String): Long? =
+    (providerRef as? JsonObject)
+        ?.get(key)
+        ?.jsonPrimitive
+        ?.longOrNull
 
 internal fun AvailabilityProviderError.toFetchOutcome(): FetchOutcome =
     when (this) {

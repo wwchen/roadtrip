@@ -1,6 +1,10 @@
 package ca.floo.roadtrip
 
 import ca.floo.roadtrip.http.cacheOptionsFor
+import ca.floo.roadtrip.repo.CampgroundRepo
+import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
+import ca.floo.roadtrip.repo.PoiServingRepo
+import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.routes.adminIngestRoutes
 import ca.floo.roadtrip.routes.availabilityDashboardRoutes
 import ca.floo.roadtrip.routes.availabilityWatchRoutes
@@ -11,7 +15,11 @@ import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.routes.slackInteractivityRoute
+import ca.floo.roadtrip.service.api.PoiService
 import ca.floo.roadtrip.service.availability.PoiAvailabilitySupport
+import ca.floo.roadtrip.service.catalog.CampgroundService
+import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
+import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
 import io.github.smiley4.ktorswaggerui.routing.swaggerUI
@@ -92,6 +100,16 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
             providerRefs = runtime.campsiteProviders,
             availabilityProviders = runtime.availabilityProviderRegistry,
         )
+    val poiService =
+        PoiService(
+            poiRepo = PoiServingRepo(runtime.ctx),
+            campgroundService = CampgroundService(CampgroundRepo(runtime.ctx)),
+            teslaSuperchargerService = TeslaSuperchargerService(TeslaSuperchargerRepo(runtime.ctx)),
+            planetFitnessLocationService = PlanetFitnessLocationService(PlanetFitnessLocationRepo(runtime.ctx)),
+            dateResolver = runtime.availabilityDateResolver,
+            availabilitySupport = poiAvailabilitySupport::supports,
+            availabilityProvider = { row -> poiAvailabilitySupport.preferredAvailabilityProvider(row.id) },
+        )
     routing {
         route("/api/docs") {
             swaggerUI("/api/docs/openapi.json")
@@ -100,13 +118,7 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
             openApiSpec()
         }
 
-        poiRoutes(
-            ctx = runtime.ctx,
-            registry = runtime.poiRegistry,
-            dateResolver = runtime.availabilityDateResolver,
-            availabilitySupport = poiAvailabilitySupport::supports,
-            availabilityProvider = { row -> poiAvailabilitySupport.preferredAvailabilityProvider(row.id) },
-        )
+        poiRoutes(poiService)
         availabilityWatchRoutes(
             runtime.ctx,
             runtime.availabilityWatchService,
