@@ -3,7 +3,7 @@ package ca.floo.roadtrip.repo
 import ca.floo.roadtrip.models.domain.CatalogUpsertResult
 import ca.floo.roadtrip.models.domain.PlanetFitnessLocation
 import ca.floo.roadtrip.models.domain.PlanetFitnessLocationPoiDetail
-import ca.floo.roadtrip.service.etl.framework.PlanetFitnessLocationUpsertCandidate
+import ca.floo.roadtrip.models.domain.PlanetFitnessLocationUpsertCandidate
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext

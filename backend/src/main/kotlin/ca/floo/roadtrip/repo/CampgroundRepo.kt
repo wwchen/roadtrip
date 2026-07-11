@@ -2,8 +2,8 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.models.domain.Campground
 import ca.floo.roadtrip.models.domain.CampgroundPoiDetail
+import ca.floo.roadtrip.models.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.models.domain.CatalogUpsertResult
-import ca.floo.roadtrip.service.etl.framework.CampgroundUpsertCandidate
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext

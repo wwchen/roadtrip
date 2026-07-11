@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.service.etl.framework.CampgroundUpsertCandidate
-import ca.floo.roadtrip.service.etl.framework.CampsiteUpsertCandidate
-import ca.floo.roadtrip.service.etl.framework.CatalogVendorRefUpsertCandidate
-import ca.floo.roadtrip.service.etl.framework.PlanetFitnessLocationUpsertCandidate
-import ca.floo.roadtrip.service.etl.framework.TeslaSuperchargerUpsertCandidate
+import ca.floo.roadtrip.models.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.models.domain.CampsiteUpsertCandidate
+import ca.floo.roadtrip.models.domain.CatalogVendorRefUpsertCandidate
+import ca.floo.roadtrip.models.domain.PlanetFitnessLocationUpsertCandidate
+import ca.floo.roadtrip.models.domain.TeslaSuperchargerUpsertCandidate
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test

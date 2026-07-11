@@ -1,12 +1,12 @@
 package ca.floo.roadtrip.service.etl.vendors.tesla
 
+import ca.floo.roadtrip.models.domain.DEFAULT_TESLA_SITE_STATUS
+import ca.floo.roadtrip.models.domain.TeslaSuperchargerUpsertCandidate
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
-import ca.floo.roadtrip.service.etl.framework.DEFAULT_TESLA_SITE_STATUS
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TeslaSuperchargerEtlOutput
-import ca.floo.roadtrip.service.etl.framework.TeslaSuperchargerUpsertCandidate
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
