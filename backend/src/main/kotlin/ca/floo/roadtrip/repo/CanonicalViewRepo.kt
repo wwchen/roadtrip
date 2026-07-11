@@ -25,10 +25,12 @@ class CanonicalViewRepo(
     )
 
     /**
-     * Refreshes both canonical views. `CONCURRENTLY` avoids taking an
-     * `AccessExclusiveLock`, so read traffic on the views is uninterrupted;
-     * V39 established the required unique-on-id indexes. Both refreshes must
-     * succeed — an exception from either propagates.
+     * Refreshes both canonical views. Takes an AccessExclusiveLock for the
+     * duration of each refresh, so canonical-view readers can block briefly
+     * during admin/ETL publication. That tradeoff is intentional: non-concurrent
+     * refresh avoids the memory-heavy diff path that can crash Postgres on the
+     * full campsite catalog. Both refreshes must succeed — an exception from
+     * either propagates.
      */
     fun refreshCanonicalViews() {
         ctx.execute(REFRESH_CAMPGROUND_CANONICAL_SQL)
@@ -87,7 +89,7 @@ class CanonicalViewRepo(
             if (!isCollapse) {
                 txn.execute(POI_REPOINT_UPDATE_SQL, winnerCampgroundId, srcCampgroundId)
                 repointed += 1
-            } else if (srcPoiId < existingWinnerPoiId!!) {
+            } else if (srcPoiId < existingWinnerPoiId) {
                 // src wins: drop the winner-side pc row, re-point src, soft-delete the loser poi.
                 txn.execute(POI_DELETE_LINK_BY_CAMPGROUND_SQL, winnerCampgroundId)
                 txn.execute(POI_REPOINT_UPDATE_SQL, winnerCampgroundId, srcCampgroundId)
@@ -164,9 +166,9 @@ class CanonicalViewRepo(
         private val log = LoggerFactory.getLogger(CanonicalViewRepo::class.java)
 
         private const val REFRESH_CAMPGROUND_CANONICAL_SQL =
-            "REFRESH MATERIALIZED VIEW CONCURRENTLY campground_canonical"
+            "REFRESH MATERIALIZED VIEW campground_canonical"
         private const val REFRESH_CAMPSITE_CANONICAL_SQL =
-            "REFRESH MATERIALIZED VIEW CONCURRENTLY campsite_canonical"
+            "REFRESH MATERIALIZED VIEW campsite_canonical"
 
         // POI re-point plan: every poi_campgrounds row whose campground_id is a
         // non-winner (i.e. differs from its group's canonical id). The winner
