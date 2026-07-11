@@ -88,6 +88,13 @@ service/availability/
     └── InternalPollerAlertProvider.kt   # today's poller-membership sync + orphan deactivation
 ```
 
+Availability services resolve catalog rows into `CampsiteAvailabilityTarget`
+before calling provider adapters. That type is a provider-boundary projection:
+it includes the selected vendor id, provider ref, tags, and raw payload needed
+to dispatch upstream. It is deliberately not the persisted `Campsite` table row.
+When code needs table fields, use `CampsiteRepo.findById` / query methods; when
+code needs to call a provider, use the explicit availability-target methods.
+
 ## Multi-source resolution
 
 Since Part 2, each ETL writes its own per-vendor campground row; match tables

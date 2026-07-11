@@ -6,7 +6,7 @@ import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.models.metadata.registry.AgencyConfig
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
-import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
+import ca.floo.roadtrip.service.etl.framework.CampgroundUpsertCandidate
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -114,7 +114,7 @@ class RecGovCampgroundsEtl(
         enrichment: JsonObject?,
         bucket: String?,
         agencyConfig: AgencyConfig?,
-    ): CampgroundEtlRecord? {
+    ): CampgroundUpsertCandidate? {
         // RIDB ships ORGANIZATION per row when full=true. The registry decides
         // which field becomes the user-facing agency label.
         val rawObj = raw as? JsonObject
@@ -136,7 +136,7 @@ class RecGovCampgroundsEtl(
         val rating = ratingSummary(enrichment)
         val cell = cellCoverage(enrichment)
 
-        return CampgroundEtlRecord(
+        return CampgroundUpsertCandidate(
             vendor = etlSlug,
             vendorRefId = "$CAMPGROUND_REF_PREFIX${row.FacilityID}",
             name = name,

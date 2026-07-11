@@ -3,9 +3,9 @@ package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
-import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
+import ca.floo.roadtrip.service.etl.framework.CampgroundUpsertCandidate
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtlOutput
-import ca.floo.roadtrip.service.etl.framework.CampsiteEtlRecord
+import ca.floo.roadtrip.service.etl.framework.CampsiteUpsertCandidate
 import ca.floo.roadtrip.service.etl.framework.DEFAULT_CAMPSITE_KIND
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
@@ -49,7 +49,7 @@ class ReserveCaliforniaEtl(
                     .filter { it.facilityIds.isNotEmpty() }
                     .map { place ->
                         val parkUrl = reserveCaliforniaParkUrl(place.placeId)
-                        CampgroundEtlRecord(
+                        CampgroundUpsertCandidate(
                             vendor = etlSlug,
                             vendorRefId = "$CAMPGROUND_REF_PREFIX${place.placeId}",
                             name = place.name,
@@ -101,7 +101,7 @@ class ReserveCaliforniaSitesEtl(
                     if (grid.facilityId !in place.facilityIds) return@flatMap emptyList()
                     val kind = place.unitTypeByFacilityId[grid.facilityId] ?: DEFAULT_CAMPSITE_KIND
                     grid.units.map { unit ->
-                        CampsiteEtlRecord(
+                        CampsiteUpsertCandidate(
                             vendor = RESERVECALIFORNIA_VENDOR,
                             vendorRefId = unit.unitId.toString(),
                             parentVendor = PARENT_CAMPGROUND_VENDOR,

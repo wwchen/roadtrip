@@ -2,23 +2,15 @@ package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.PoiDetailFeatureSchema
-import ca.floo.roadtrip.models.api.PoiDetailPropertiesSchema
 import ca.floo.roadtrip.models.api.PoiFeatureCollectionSchema
 import ca.floo.roadtrip.models.api.PoiSearchHitSchema
 import ca.floo.roadtrip.models.api.PoiSearchResponseSchema
-import ca.floo.roadtrip.models.api.PointGeometrySchema
 import ca.floo.roadtrip.models.api.PoisRequestSchema
-import ca.floo.roadtrip.models.api.SlimPoiFeatureSchema
-import ca.floo.roadtrip.models.api.SlimPoiPropertiesSchema
-import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
-import ca.floo.roadtrip.repo.Bbox
-import ca.floo.roadtrip.repo.PoiDetailRow
-import ca.floo.roadtrip.repo.PoiRow
-import ca.floo.roadtrip.repo.PoiServingRepo
-import ca.floo.roadtrip.service.api.PoiCta
-import ca.floo.roadtrip.service.api.UrlHosts
-import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
-import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
+import ca.floo.roadtrip.models.domain.Bbox
+import ca.floo.roadtrip.service.api.POI_CAMPGROUND_MIN_ZOOM
+import ca.floo.roadtrip.service.api.POI_LIMIT
+import ca.floo.roadtrip.service.api.PoiService
+import ca.floo.roadtrip.service.api.encodePoiFeatureJson
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
@@ -32,21 +24,6 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
-import org.jooq.DSLContext
-
-// Hard cap. The Mapbox/MapLibre frontend chokes on >5k features per source,
-// and our POIs cover all of US/CA — the user is expected to zoom in. Returning
-// truncated=true tells the client to ask the user to zoom further.
-const val POI_LIMIT: Int = 2000
-
-// Below this zoom, the campground category is suppressed regardless of what's
-// in the categories list. ~12k rows nationwide — not useful at continental
-// zoom and they crowd out the per-category limit budget.
-private const val CG_MIN_ZOOM: Int = 6
-private val DEFAULT_POI_TYPES = listOf("campground", "tesla_supercharger", "planet_fitness_location")
 
 @OptIn(ExperimentalSerializationApi::class)
 private val poiRoutesJson =
@@ -55,56 +32,31 @@ private val poiRoutesJson =
         explicitNulls = false
     }
 
-@OptIn(ExperimentalSerializationApi::class)
-private val poiFeatureJson =
-    Json {
-        encodeDefaults = true
-        explicitNulls = false
-    }
-
 // POST /api/pois
 //
 // Returns a GeoJSON FeatureCollection of POIs in the requested bbox.
-// One round-trip per pan — the FE debounces moveend by 250ms.
+// One round-trip per pan; the FE debounces moveend by 250ms.
 //
-// Categories are picked by the FE; default (when omitted) is derived from
-// enabled poi_data rows in config/poi-registry.yaml. Each requested category
-// gets its own slot budget out of POI_LIMIT so a
-// dense layer (Planet Fitness ~1.5k rows) can't starve sparser ones;
+// Categories are picked by the FE; default (when omitted) is the canonical
+// serving set owned by PoiService. Each requested category gets its own slot
+// budget out of POI_LIMIT so a dense layer cannot starve sparser ones;
 // truncated:true tells the client to ask the user to zoom in further.
 //
-// Corridor filtering moved to POST /api/pois/on-route — the trip
-// planner's "campgrounds along route" list needs the full set, not a
-// viewport slice + per-cat sample, so the two paths have different
-// truncation rules and live in different endpoints.
-internal fun Route.poiRoutes(
-    ctx: DSLContext,
-    registry: PoiRegistry,
-    dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
-    availabilitySupport: (PoiDetailRow) -> Boolean = ::providerRefShapeSupportsAvailability,
-    // Resolver-preferred vendor for the POI's availability. Default `null` keeps
-    // the field empty when the route is wired without the availability support
-    // service (e.g. unit tests / dev scaffolding); production wiring in
-    // [ca.floo.roadtrip.registerRoadtripRoutes] passes the support service's
-    // preferredAvailabilityProvider so the API mirrors what the poller/live
-    // fetcher will actually choose.
-    availabilityProvider: (PoiDetailRow) -> String? = { null },
-) {
-    // Canonical POI wrappers expose their typed domain through poi_type.
-    val defaultCategories: List<String> = DEFAULT_POI_TYPES
-    val poiRepo = PoiServingRepo(ctx)
+// Corridor filtering moved to POST /api/pois/on-route. The trip planner's
+// "campgrounds along route" list needs the full set, not a viewport slice +
+// per-category sample.
+internal fun Route.poiRoutes(poiService: PoiService) {
     post("/api/pois", {
         tags = listOf("poi")
         summary = "POIs within bbox; capped at $POI_LIMIT features (truncated:true on overflow)"
         description =
             "Body: { bbox: [w,s,e,n], zoom?, categories? }. " +
-            "categories defaults to the union of `category` values from every enabled data_source " +
-            "in config/poi-registry.yaml. " +
-            "zoom < $CG_MIN_ZOOM suppresses campgrounds even when requested. " +
+            "categories defaults to the canonical serving set. " +
+            "zoom < $POI_CAMPGROUND_MIN_ZOOM suppresses campgrounds even when requested. " +
             "Corridor filtering has moved to POST /api/pois/on-route."
         request {
             body<PoisRequestSchema> {
-                mediaTypes(io.ktor.http.ContentType.Application.Json)
+                mediaTypes(ContentType.Application.Json)
                 example("simple bbox") {
                     value =
                         PoisRequestSchema(
@@ -123,12 +75,11 @@ internal fun Route.poiRoutes(
             }
         }
         response {
-            code(io.ktor.http.HttpStatusCode.OK) {
-                description =
-                    "GeoJSON FeatureCollection. truncated:true when the bbox span exceeded the cap."
-                body<PoiFeatureCollectionSchema> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
+            code(HttpStatusCode.OK) {
+                description = "GeoJSON FeatureCollection. truncated:true when the bbox span exceeded the cap."
+                body<PoiFeatureCollectionSchema> { mediaTypes(ContentType.Application.Json) }
             }
-            code(io.ktor.http.HttpStatusCode.BadRequest) {
+            code(HttpStatusCode.BadRequest) {
                 description = "Malformed body or missing bbox."
                 body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
             }
@@ -143,40 +94,20 @@ internal fun Route.poiRoutes(
                 return@post
             }
 
-        val rawCategories = req.categories
-        // CG zoom gate: at continental zoom (z<6) the ~12k campground rows
-        // nationwide would dominate the per-category budget. The trip
-        // planner's "campgrounds along route" view bypasses this entirely
-        // by going through /api/pois/on-route, so the gate here is a pure
-        // viewport-rendering decision.
-        val categories =
-            if (rawCategories != null && req.zoom != null && req.zoom < CG_MIN_ZOOM) {
-                rawCategories.filter { it != "campground" }.takeIf { it.isNotEmpty() }
-            } else {
-                rawCategories
-            }
-
-        val result =
-            poiRepo.fetchPois(
+        call.respondPoiFeatureJson(
+            poiService.pois(
                 bbox = req.bbox,
-                categories = categories,
-                defaultCategories = defaultCategories,
-                limit = POI_LIMIT,
-            )
-
-        call.respondPoiFeatureJson(poiFeatureCollection(result.rows, result.truncated))
+                zoom = req.zoom,
+                categories = req.categories,
+            ),
+        )
     }
 
     // GET /api/pois/{id}
     //
     // Per-row detail. The bbox endpoint ships only id + lat/lng + category +
-    // subcategory + agency; this endpoint backs the popup/drawer "I clicked a pin"
-    // flow with the full feature shape (name, address, provider_ref, raw
-    // properties blob — everything the legacy bbox response carried).
-    //
-    // Cache-Control gives the browser a 5-minute fresh window plus 1h SWR.
-    // Per-row content rarely changes day-to-day; this collapses repeat-
-    // clicks of the same pin to a single network round-trip per session.
+    // subcategory + agency; this endpoint backs the popup/drawer "I clicked a
+    // pin" flow with the full feature shape.
     get("/api/pois/{id}", {
         tags = listOf("poi")
         summary = "Full per-row POI detail (the slim bbox endpoint omits these fields)"
@@ -187,11 +118,11 @@ internal fun Route.poiRoutes(
             pathParameter<Long>("id") { description = "pois.id primary key" }
         }
         response {
-            code(io.ktor.http.HttpStatusCode.OK) {
+            code(HttpStatusCode.OK) {
                 description = "GeoJSON Feature with full properties."
-                body<PoiDetailFeatureSchema> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
+                body<PoiDetailFeatureSchema> { mediaTypes(ContentType.Application.Json) }
             }
-            code(io.ktor.http.HttpStatusCode.NotFound) {
+            code(HttpStatusCode.NotFound) {
                 description = "No row with that id (or it was soft-deleted)."
                 body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
             }
@@ -200,50 +131,38 @@ internal fun Route.poiRoutes(
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@get call.respondPoiError("bad_id", HttpStatusCode.BadRequest)
-        val row =
-            poiRepo.fetchPoiById(id)
+        val feature =
+            poiService.poiDetail(id)
                 ?: return@get call.respondPoiError("not_found", HttpStatusCode.NotFound)
         call.response.headers.append(
             "Cache-Control",
             "public, max-age=300, stale-while-revalidate=3600",
         )
-        call.respondPoiFeatureJson(
-            poiDetailFeature(
-                r = row,
-                dateResolver = dateResolver,
-                availabilitySupported = availabilitySupport(row),
-                availabilityProvider = availabilityProvider(row),
-            ),
-        )
+        call.respondPoiFeatureJson(feature)
     }
 
     // GET /api/pois/search?q=...&limit=10
     //
-    // Text-search across the full pois table by name. Used by the topbar
-    // dropdown so a user can find a POI like "upper pines" without having
-    // panned to Yosemite first — the bbox endpoint only sees the current
-    // viewport, so a cross-country query needs a separate path.
-    //
-    // Ranking: prefix match wins, then name length, then alphabetical.
-    // Cheap on a 12k-row table; if pois grows we can swap in pg_trgm + GIN.
+    // Text-search across the full POI index by name. Used by the topbar
+    // dropdown so a user can find a POI without panning to it first.
     get("/api/pois/search", {
         tags = listOf("poi")
         summary = "Text search POIs by name (cross-viewport)"
         description =
-            "Returns up to `limit` matches ranked by prefix-match → name length → alphabetical. " +
+            "Returns up to `limit` matches ranked by prefix-match -> name length -> alphabetical. " +
             "Empty `q` (or shorter than 2 chars) returns an empty list. " +
             "`categories` optionally filters to one or more comma-separated POI categories. " +
             "Used by the topbar dropdown so a user can find a POI nationwide without panning to it first."
         request {
-            queryParameter<String>("q") { description = "Query string, ≥ 2 chars" }
+            queryParameter<String>("q") { description = "Query string, >= 2 chars" }
             queryParameter<Int>("limit") { description = "Max results, 1..25 (default 10)" }
             queryParameter<String>("categories") { description = "Optional comma-separated category filter, e.g. campground" }
         }
         response {
-            code(io.ktor.http.HttpStatusCode.OK) {
+            code(HttpStatusCode.OK) {
                 description = "Ranked match list."
                 body<PoiSearchResponseSchema> {
-                    mediaTypes(io.ktor.http.ContentType.Application.Json)
+                    mediaTypes(ContentType.Application.Json)
                     example("upper pines") {
                         value =
                             PoiSearchResponseSchema(
@@ -268,10 +187,6 @@ internal fun Route.poiRoutes(
             call.request.queryParameters["q"]
                 ?.trim()
                 .orEmpty()
-        if (q.length < 2) {
-            call.respondPoiJson(PoiSearchResponseSchema(results = emptyList()))
-            return@get
-        }
         val limit =
             call.request.queryParameters["limit"]
                 ?.toIntOrNull()
@@ -283,30 +198,21 @@ internal fun Route.poiRoutes(
                     .getAll("categories")
                     .orEmpty(),
             )
-        val hits =
-            poiRepo
-                .search(query = q, categories = categories, limit = limit)
-                .map {
-                    PoiSearchHitSchema(
-                        id = it.id,
-                        name = it.name,
-                        category = it.category,
-                        region = it.region,
-                        lng = it.lng,
-                        lat = it.lat,
-                    )
-                }
-        call.respondPoiJson(PoiSearchResponseSchema(results = hits))
+        call.respondPoiJson(
+            poiService.search(
+                query = q,
+                categories = categories,
+                limit = limit,
+            ),
+        )
     }
 }
 
 private fun parseSearchCategories(values: List<String>): List<String> =
-    canonicalPoiCategories(
-        values
-            .flatMap { it.split(",") }
-            .map { it.trim() }
-            .filter { it.isNotEmpty() },
-    )
+    values
+        .flatMap { it.split(",") }
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
 
 private data class PoiRequest(
     val bbox: Bbox,
@@ -327,97 +233,17 @@ private fun parseRequest(bodyText: String): PoiRequest {
     val categories =
         dto.categories
             ?.mapNotNull { it.trim().takeIf { category -> category.isNotEmpty() } }
-            ?.let(::canonicalPoiCategories)
             ?.takeIf { it.isNotEmpty() }
 
     return PoiRequest(bbox, dto.zoom, categories)
 }
 
-internal fun poiFeatureCollection(
-    rows: List<PoiRow>,
-    truncated: Boolean,
-): PoiFeatureCollectionSchema =
-    PoiFeatureCollectionSchema(
-        truncated = truncated,
-        features =
-            rows.map { row ->
-                SlimPoiFeatureSchema(
-                    id = row.id,
-                    geometry = PointGeometrySchema(coordinates = listOf(row.lng, row.lat)),
-                    properties =
-                        SlimPoiPropertiesSchema(
-                            category = row.category,
-                            subcategory = row.subcategory,
-                            agency = row.agency,
-                        ),
-                )
-            },
-    )
-
-internal fun poiDetailFeature(
-    r: PoiDetailRow,
-    dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
-    availabilitySupported: Boolean = providerRefShapeSupportsAvailability(r),
-    availabilityProvider: String? = null,
-): PoiDetailFeatureSchema {
-    val raw = Json.parseToJsonElement(r.propertiesJson)
-    val rawObject = raw as? JsonObject ?: JsonObject(emptyMap())
-    val dateContext =
-        if (r.category == "campground") {
-            dateResolver.context(lat = r.lat, lng = r.lng)
-        } else {
-            null
-        }
-    return PoiDetailFeatureSchema(
-        id = r.id,
-        geometry = Json.parseToJsonElement(r.geomJson),
-        properties =
-            PoiDetailPropertiesSchema(
-                source = r.source,
-                sourceId = r.sourceId,
-                sources = r.memberSources,
-                availabilityProvider = availabilityProvider,
-                category = r.category,
-                subcategory = r.subcategory,
-                agency = r.agency,
-                name = r.name,
-                region = r.region,
-                country = r.country,
-                timeZone = dateContext?.timeZone?.id,
-                earliestDate = dateContext?.earliestDate?.toString(),
-                unitName = r.unitName,
-                reserveUrl = r.reserveUrl,
-                bookingSite = r.reserveUrl?.let(UrlHosts::extract),
-                phone = r.phone,
-                infoUrl = r.infoUrl,
-                address = r.addressJson?.let { Json.parseToJsonElement(it) },
-                description = rawObject.stringProperty("description"),
-                photoUrl = rawObject.stringProperty("photo_url"),
-                providerRef = r.providerRefJson?.let { Json.parseToJsonElement(it) },
-                availabilitySupported = availabilitySupported.takeIf { it },
-                cta = PoiCta.Default.computeCta(r),
-                bookingSystem = PoiCta.Default.bookingSystem(r),
-                raw = raw,
-            ),
-    )
+private suspend fun ApplicationCall.respondPoiFeatureJson(value: PoiFeatureCollectionSchema) {
+    respondText(encodePoiFeatureJson(value), ContentType.Application.Json)
 }
 
-private fun JsonObject.stringProperty(key: String): String? =
-    (this[key] as? JsonPrimitive)
-        ?.contentOrNull
-        ?.trim()
-        ?.takeIf { it.isNotEmpty() }
-
-private fun providerRefShapeSupportsAvailability(r: PoiDetailRow): Boolean =
-    r.category == "campground" &&
-        r.providerRefJson?.let { ProviderRefParser.parse(it) } != null
-
-internal fun encodePoiFeatureJson(value: PoiFeatureCollectionSchema): String = poiFeatureJson.encodeToString(value)
-
-internal fun encodePoiFeatureJson(value: PoiDetailFeatureSchema): String = poiFeatureJson.encodeToString(value)
-
-private suspend inline fun <reified T> ApplicationCall.respondPoiFeatureJson(value: T) {
-    respondText(poiFeatureJson.encodeToString(value), ContentType.Application.Json)
+private suspend fun ApplicationCall.respondPoiFeatureJson(value: PoiDetailFeatureSchema) {
+    respondText(encodePoiFeatureJson(value), ContentType.Application.Json)
 }
 
 private suspend fun ApplicationCall.respondPoiError(

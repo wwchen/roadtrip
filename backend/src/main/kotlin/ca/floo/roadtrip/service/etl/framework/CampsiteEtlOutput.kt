@@ -10,22 +10,22 @@ import kotlinx.serialization.json.JsonElement
  * typed catalog tables and lean POI wrappers.
  */
 data class CampsiteEtlOutput(
-    val campsites: List<CampsiteEtlRecord>,
+    val campsites: List<CampsiteUpsertCandidate>,
 )
 
 data class CampgroundEtlOutput(
-    val campgrounds: List<CampgroundEtlRecord>,
+    val campgrounds: List<CampgroundUpsertCandidate>,
 )
 
 data class TeslaSuperchargerEtlOutput(
-    val superchargers: List<TeslaSuperchargerEtlRecord>,
+    val superchargers: List<TeslaSuperchargerUpsertCandidate>,
 )
 
 data class PlanetFitnessLocationEtlOutput(
-    val locations: List<PlanetFitnessLocationEtlRecord>,
+    val locations: List<PlanetFitnessLocationUpsertCandidate>,
 )
 
-data class CampgroundEtlRecord(
+data class CampgroundUpsertCandidate(
     val vendor: String,
     val vendorRefId: String,
     val name: String,
@@ -57,10 +57,10 @@ data class CampgroundEtlRecord(
     val sourceUrl: String? = null,
     val sourcePayload: JsonElement? = null,
     val vendorRefPayload: JsonElement? = null,
-    val additionalVendorRefs: List<CatalogVendorRefEtlRecord> = emptyList(),
+    val additionalVendorRefs: List<CatalogVendorRefUpsertCandidate> = emptyList(),
 )
 
-data class CampsiteEtlRecord(
+data class CampsiteUpsertCandidate(
     val vendor: String,
     val vendorRefId: String,
     val parentVendor: String?,
@@ -90,17 +90,17 @@ data class CampsiteEtlRecord(
     val photos: JsonElement? = null,
     val sourcePayload: JsonElement? = null,
     val vendorRefPayload: JsonElement? = null,
-    val additionalVendorRefs: List<CatalogVendorRefEtlRecord> = emptyList(),
+    val additionalVendorRefs: List<CatalogVendorRefUpsertCandidate> = emptyList(),
 )
 
-data class CatalogVendorRefEtlRecord(
+data class CatalogVendorRefUpsertCandidate(
     val vendor: String,
     val vendorRefId: String,
     val sourceUrl: String? = null,
     val payload: JsonElement? = null,
 )
 
-data class TeslaSuperchargerEtlRecord(
+data class TeslaSuperchargerUpsertCandidate(
     val locationSlug: String,
     val commonSiteName: String,
     val latitude: Double,
@@ -127,7 +127,7 @@ data class TeslaSuperchargerEtlRecord(
     val detailPayload: JsonElement? = null,
 )
 
-data class PlanetFitnessLocationEtlRecord(
+data class PlanetFitnessLocationUpsertCandidate(
     val locationId: String,
     val name: String,
     val latitude: Double,

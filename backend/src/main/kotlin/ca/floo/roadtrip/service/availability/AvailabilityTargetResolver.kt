@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.domain.Campsite
+import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
@@ -12,7 +12,7 @@ import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
 import ca.floo.roadtrip.service.availability.provider.availabilityProviderId
 
 /**
- * Resolves an already-loaded [Campsite] to the provider adapter, parent
+ * Resolves an already-loaded [CampsiteAvailabilityTarget] to the provider adapter, parent
  * provider ref, and date context needed to fetch its availability. A port so
  * the request path can be unit-tested with an in-memory fake;
  * [DbAvailabilityTargetResolver] is the production, DB-backed implementation.
@@ -20,7 +20,7 @@ import ca.floo.roadtrip.service.availability.provider.availabilityProviderId
 internal interface AvailabilityTargetResolver {
     /** Resolve an already-loaded campsite, or null when it has no resolvable
      *  availability provider. */
-    fun resolve(campsite: Campsite): ResolvedAvailabilityTarget?
+    fun resolve(campsite: CampsiteAvailabilityTarget): ResolvedAvailabilityTarget?
 }
 
 internal class DbAvailabilityTargetResolver(
@@ -35,7 +35,7 @@ internal class DbAvailabilityTargetResolver(
         val candidate: ProviderCandidate,
     )
 
-    override fun resolve(campsite: Campsite): ResolvedAvailabilityTarget? {
+    override fun resolve(campsite: CampsiteAvailabilityTarget): ResolvedAvailabilityTarget? {
         val poiIds = campsitesRepo.poiIdsForCampsite(campsite.id)
         if (poiIds.isEmpty()) return null
 
@@ -64,7 +64,7 @@ internal class DbAvailabilityTargetResolver(
 
     private fun buildCandidate(
         row: CampsiteProviderRefRow,
-        campsite: Campsite,
+        campsite: CampsiteAvailabilityTarget,
     ): ProviderCandidate? {
         val ref = ProviderRefParser.parse(row.providerRefJson) ?: return null
         val provider = availabilityProviders.forPoi(row, ref) ?: return null
@@ -77,7 +77,7 @@ internal class DbAvailabilityTargetResolver(
     }
 
     private fun catalogRefFor(
-        campsite: Campsite,
+        campsite: CampsiteAvailabilityTarget,
         providerId: AvailabilityProviderId,
     ): CatalogCampsiteRef {
         val fallback = campsite.toCatalogCampsiteRef()

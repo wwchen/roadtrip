@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.models.domain.PoiDetailRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.PoiDetailRow
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
 

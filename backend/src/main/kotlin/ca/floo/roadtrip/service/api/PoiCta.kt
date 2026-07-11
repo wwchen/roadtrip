@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.api
 
 import ca.floo.roadtrip.models.api.PoiCtaSchema
-import ca.floo.roadtrip.repo.PoiDetailRow
+import ca.floo.roadtrip.models.domain.PoiDetailRow
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
 import java.time.Clock
 

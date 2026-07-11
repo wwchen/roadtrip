@@ -15,7 +15,7 @@ import kotlinx.serialization.json.JsonElement
 //
 // Outputs: an intermediate ETL returns any @Serializable payload. A terminal
 // ETL returns one of the canonical catalog output DTOs; the orchestrator
-// persists it through CanonicalCatalogRepo.
+// persists records through the owning entity repo.
 //
 // Per RFC decision #26: one file per ETL under etl/<vendor>/, all stages
 // co-located. The interface gives a uniform shape to grep across; the

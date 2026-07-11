@@ -3,7 +3,7 @@ package ca.floo.roadtrip.service.etl.vendors.recgov
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtlOutput
-import ca.floo.roadtrip.service.etl.framework.CampsiteEtlRecord
+import ca.floo.roadtrip.service.etl.framework.CampsiteUpsertCandidate
 import ca.floo.roadtrip.service.etl.framework.DEFAULT_CAMPSITE_KIND
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
@@ -25,7 +25,7 @@ import kotlinx.serialization.json.put
  *
  * Parent linking is explicit on every emitted row: `parentVendor` is the
  * federal campground ETL slug and `parentVendorRefId` is `recgov-{FacilityID}`.
- * CanonicalCatalogRepo resolves that pair through campground vendor refs.
+ * CampsiteRepo resolves that pair through campground vendor refs.
  *
  * The full upstream campsite blob is preserved verbatim in `sourcePayload`
  * for forensic queries — RFC 0008's data trust principle.
@@ -55,7 +55,7 @@ class RecGovCampsitesEtl(
         dto: List<Envelope>,
         ctx: TransformCtx,
     ): CampsiteEtlOutput {
-        val campsites = mutableListOf<CampsiteEtlRecord>()
+        val campsites = mutableListOf<CampsiteUpsertCandidate>()
         for (envelope in dto) {
             // FacilityID lives in the captured request URL path. The
             // upstream campsite blob doesn't carry it, but parent resolution
@@ -69,7 +69,7 @@ class RecGovCampsitesEtl(
                 val siteName = raw.stringField("site") ?: campsiteId
                 val campsiteType = raw.stringField("campsite_type")
                 campsites +=
-                    CampsiteEtlRecord(
+                    CampsiteUpsertCandidate(
                         vendor = VENDOR,
                         vendorRefId = campsiteId,
                         parentVendor = PARENT_CAMPGROUND_VENDOR,

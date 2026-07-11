@@ -2,9 +2,17 @@ package ca.floo.roadtrip
 
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.repo.CampgroundRepo
+import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
+import ca.floo.roadtrip.repo.PoiServingRepo
+import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.routes.healthRoutes
 import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
+import ca.floo.roadtrip.service.api.PoiService
+import ca.floo.roadtrip.service.catalog.CampgroundService
+import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
+import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
 import ca.floo.roadtrip.service.routing.RouteCache
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
@@ -21,6 +29,7 @@ import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.jooq.DSLContext
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
 import java.io.File
@@ -79,7 +88,7 @@ class OpenApiSmokeTest {
                     ktorGet("/") { call.respondText("root") }
                     ktorGet("/web/{path...}") { call.respondText("static") }
                     healthRoutes()
-                    poiRoutes(ctx, registry)
+                    poiRoutes(testPoiService(ctx))
                     poisOnRouteRoutes(ctx, RouteCache(MapboxDirections(token = null)), registry)
                 }
             }
@@ -176,4 +185,12 @@ class OpenApiSmokeTest {
                 "example payload missing from spec; got: ${examples["happy"]}",
             )
         }
+
+    private fun testPoiService(ctx: DSLContext): PoiService =
+        PoiService(
+            poiRepo = PoiServingRepo(ctx),
+            campgroundService = CampgroundService(CampgroundRepo(ctx)),
+            teslaSuperchargerService = TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
+            planetFitnessLocationService = PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
+        )
 }

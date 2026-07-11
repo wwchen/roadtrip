@@ -3,10 +3,10 @@ package ca.floo.roadtrip.service.etl.vendors.campflare
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
-import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
+import ca.floo.roadtrip.service.etl.framework.CampgroundUpsertCandidate
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtlOutput
-import ca.floo.roadtrip.service.etl.framework.CampsiteEtlRecord
-import ca.floo.roadtrip.service.etl.framework.CatalogVendorRefEtlRecord
+import ca.floo.roadtrip.service.etl.framework.CampsiteUpsertCandidate
+import ca.floo.roadtrip.service.etl.framework.CatalogVendorRefUpsertCandidate
 import ca.floo.roadtrip.service.etl.framework.DEFAULT_CAMPSITE_KIND
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
@@ -38,13 +38,13 @@ class CampflareCampgroundsEtl : SourceEtl<List<JsonObject>, CampgroundEtlOutput>
             campgrounds = dto.mapNotNull(::campgroundRecord),
         )
 
-    private fun campgroundRecord(raw: JsonObject): CampgroundEtlRecord? {
+    private fun campgroundRecord(raw: JsonObject): CampgroundUpsertCandidate? {
         val id = raw.stringField("id") ?: return null
         val name = raw.stringField("name") ?: return null
         val location = raw.objectField("location") ?: return null
         val latitude = normalizedLatitude(location.doubleField("latitude")) ?: return null
         val longitude = normalizedLongitude(location.doubleField("longitude")) ?: return null
-        return CampgroundEtlRecord(
+        return CampgroundUpsertCandidate(
             vendor = CAMPFLARE_VENDOR,
             vendorRefId = id,
             name = name,
@@ -97,13 +97,13 @@ class CampflareCampsitesEtl : SourceEtl<List<JsonObject>, CampsiteEtlOutput> {
             campsites = dto.mapNotNull(::campsiteRecord),
         )
 
-    private fun campsiteRecord(raw: JsonObject): CampsiteEtlRecord? {
+    private fun campsiteRecord(raw: JsonObject): CampsiteUpsertCandidate? {
         val id = raw.stringField("id") ?: return null
         val campgroundId = raw.stringField("campground_id") ?: return null
         val name = raw.stringField("name") ?: return null
         val kind = raw.stringField("kind") ?: DEFAULT_CAMPSITE_KIND
         val reservationUrl = raw.stringField("reservation_url")
-        return CampsiteEtlRecord(
+        return CampsiteUpsertCandidate(
             vendor = CAMPFLARE_VENDOR,
             vendorRefId = id,
             parentVendor = CAMPFLARE_VENDOR,
@@ -145,14 +145,14 @@ class CampflareCampsitesEtl : SourceEtl<List<JsonObject>, CampsiteEtlOutput> {
 private fun recgovCampgroundVendorRef(
     raw: JsonObject,
     campflareId: String,
-): CatalogVendorRefEtlRecord? {
+): CatalogVendorRefUpsertCandidate? {
     val recgovId =
         raw
             .objectField("connections")
             ?.stringField("ridb_facility_id")
             ?: recgovCampgroundIdFromUrl(raw.stringField("reservation_url"))
             ?: return null
-    return CatalogVendorRefEtlRecord(
+    return CatalogVendorRefUpsertCandidate(
         vendor = RECGOV_CAMPGROUND_VENDOR,
         vendorRefId = "$RECGOV_CAMPGROUND_REF_PREFIX$recgovId",
         sourceUrl = raw.stringField("reservation_url"),
@@ -168,9 +168,9 @@ private fun recgovCampsiteVendorRef(
     raw: JsonObject,
     campflareId: String,
     reservationUrl: String?,
-): CatalogVendorRefEtlRecord? {
+): CatalogVendorRefUpsertCandidate? {
     val recgovId = recgovCampsiteIdFromUrl(reservationUrl) ?: return null
-    return CatalogVendorRefEtlRecord(
+    return CatalogVendorRefUpsertCandidate(
         vendor = RECGOV_CAMPSITE_VENDOR,
         vendorRefId = recgovId,
         sourceUrl = reservationUrl,

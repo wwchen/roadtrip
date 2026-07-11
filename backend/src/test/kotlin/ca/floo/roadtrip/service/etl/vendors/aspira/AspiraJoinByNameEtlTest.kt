@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.etl.vendors.aspira
 
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
-import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
+import ca.floo.roadtrip.service.etl.framework.CampgroundUpsertCandidate
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -88,7 +88,7 @@ class AspiraJoinByNameEtlTest {
             fetchedAt = Instant.parse("2026-07-05T00:00:00Z"),
         )
 
-    private fun campgrounds(dto: AspiraJoinDto): List<CampgroundEtlRecord> =
+    private fun campgrounds(dto: AspiraJoinDto): List<CampgroundUpsertCandidate> =
         AspiraJoinByNameEtl(slug)
             .transform(dto, ctx)
             .campgrounds

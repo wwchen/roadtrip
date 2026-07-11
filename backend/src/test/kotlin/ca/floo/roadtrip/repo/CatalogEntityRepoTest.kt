@@ -1,17 +1,17 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
-import ca.floo.roadtrip.service.etl.framework.CampsiteEtlRecord
-import ca.floo.roadtrip.service.etl.framework.CatalogVendorRefEtlRecord
-import ca.floo.roadtrip.service.etl.framework.PlanetFitnessLocationEtlRecord
-import ca.floo.roadtrip.service.etl.framework.TeslaSuperchargerEtlRecord
+import ca.floo.roadtrip.service.etl.framework.CampgroundUpsertCandidate
+import ca.floo.roadtrip.service.etl.framework.CampsiteUpsertCandidate
+import ca.floo.roadtrip.service.etl.framework.CatalogVendorRefUpsertCandidate
+import ca.floo.roadtrip.service.etl.framework.PlanetFitnessLocationUpsertCandidate
+import ca.floo.roadtrip.service.etl.framework.TeslaSuperchargerUpsertCandidate
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
-class CanonicalCatalogRepoTest : SharedDbTest() {
+class CatalogEntityRepoTest : SharedDbTest() {
     @BeforeEach
     fun resetCatalog() {
         ctx.cleanCanonicalCatalogFixtures()
@@ -19,9 +19,9 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
 
     @Test
     fun `upserts campgrounds through vendor refs and creates lean POI wrapper`() {
-        val repo = CanonicalCatalogRepo(ctx)
+        val repo = CampgroundRepo(ctx)
         val record =
-            CampgroundEtlRecord(
+            CampgroundUpsertCandidate(
                 vendor = "campflare",
                 vendorRefId = "upper-pines-campground-447",
                 name = "Upper Pines",
@@ -72,6 +72,37 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
         assertEquals("https://api.campflare.com/v2/campground/upper-pines-campground-447", row.get("source_url", String::class.java))
         assertEquals(-119.565, row.get("lon", Double::class.java))
         assertEquals(37.739, row.get("lat", Double::class.java))
+
+        val campgroundId = row.get("id", Long::class.java)
+        val poiId =
+            ctx
+                .fetchOne("SELECT poi_id FROM poi_campgrounds WHERE campground_id = ?", campgroundId)!!
+                .get("poi_id", Long::class.java)
+        val campground = repo.findById(campgroundId)
+        assertNotNull(campground)
+        assertEquals("Upper Pines Campground", campground.name)
+        assertEquals("campflare", campground.dataSource)
+        assertEquals(json("""{"id":"upper-pines-campground-447","name":"Upper Pines"}"""), campground.sourcePayload)
+        assertEquals(row.get("id", Long::class.java), campground.id)
+        assertEquals(
+            ctx
+                .fetchOne("SELECT primary_vendor_ref_id FROM campgrounds WHERE id = ?", campgroundId)!!
+                .get("primary_vendor_ref_id", Long::class.java),
+            campground.primaryVendorRefId,
+        )
+        assertEquals(campgroundId, repo.findByPoi(poiId)?.id)
+        assertEquals(
+            listOf(campgroundId),
+            repo
+                .search(
+                    CampgroundRepo.SearchFilters(
+                        vendors = listOf("campflare"),
+                        names = listOf("Upper Pines"),
+                    ),
+                    limit = 10,
+                    offset = 0,
+                ).map { it.id },
+        )
     }
 
     @Test
@@ -80,10 +111,10 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
         // recgov's id) must NOT pull Campflare's data onto recgov's row. Both
         // rows exist; the shared recgov vendor_ref lives on both link tables
         // and becomes matcher input.
-        val repo = CanonicalCatalogRepo(ctx)
+        val repo = CampgroundRepo(ctx)
         repo.upsertCampgrounds(
             listOf(
-                CampgroundEtlRecord(
+                CampgroundUpsertCandidate(
                     vendor = "federal-campgrounds",
                     vendorRefId = "recgov-232447",
                     name = "Upper Pines",
@@ -98,7 +129,7 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
 
         repo.upsertCampgrounds(
             listOf(
-                CampgroundEtlRecord(
+                CampgroundUpsertCandidate(
                     vendor = "campflare",
                     vendorRefId = "upper-pines-campground-447",
                     name = "Upper Pines Campflare",
@@ -108,7 +139,7 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
                     vendorRefPayload = json("""{"campflare_id":"upper-pines-campground-447"}"""),
                     additionalVendorRefs =
                         listOf(
-                            CatalogVendorRefEtlRecord(
+                            CatalogVendorRefUpsertCandidate(
                                 vendor = "federal-campgrounds",
                                 vendorRefId = "recgov-232447",
                                 payload = json("""{"recgov_id":"232447"}"""),
@@ -161,9 +192,9 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
 
     @Test
     fun `different vendors for the same real-world campground land in distinct per-vendor rows`() {
-        val repo = CanonicalCatalogRepo(ctx)
+        val repo = CampgroundRepo(ctx)
         val recgovRecord =
-            CampgroundEtlRecord(
+            CampgroundUpsertCandidate(
                 vendor = "recgov",
                 vendorRefId = "232447",
                 name = "Upper Pines",
@@ -173,7 +204,7 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
                 vendorRefPayload = json("""{"recgov_id":"232447"}"""),
             )
         val campflareRecord =
-            CampgroundEtlRecord(
+            CampgroundUpsertCandidate(
                 vendor = "campflare",
                 vendorRefId = "upper-pines-campground-447",
                 name = "Upper Pines",
@@ -242,10 +273,11 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
 
     @Test
     fun `upserts campsites by resolving parent campground vendor ref`() {
-        val repo = CanonicalCatalogRepo(ctx)
-        repo.upsertCampgrounds(
+        val campgrounds = CampgroundRepo(ctx)
+        val campsites = CampsiteRepo(ctx)
+        campgrounds.upsertCampgrounds(
             listOf(
-                CampgroundEtlRecord(
+                CampgroundUpsertCandidate(
                     vendor = "campflare",
                     vendorRefId = "upper-pines-campground-447",
                     name = "Upper Pines",
@@ -260,9 +292,9 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
         )
 
         val result =
-            repo.upsertCampsites(
+            campsites.upsertCampsites(
                 listOf(
-                    CampsiteEtlRecord(
+                    CampsiteUpsertCandidate(
                         vendor = "campflare",
                         vendorRefId = "upper-pines-site-001",
                         parentVendor = "campflare",
@@ -293,7 +325,7 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
             ctx
                 .fetchOne(
                     """
-                    SELECT c.name, c.kind, c.loop_name, c.equipment::text AS equipment,
+                    SELECT c.id, c.primary_vendor_ref_id, c.name, c.kind, c.loop_name, c.equipment::text AS equipment,
                            vr.external_id, parent_ref.external_id AS parent_external_id
                     FROM campsites c
                     JOIN campsite_vendor_refs cvr ON cvr.campsite_id = c.id
@@ -310,6 +342,23 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
         assertEquals("A", row.get("loop_name", String::class.java))
         assertEquals("upper-pines-site-001", row.get("external_id", String::class.java))
         assertEquals("upper-pines-campground-447", row.get("parent_external_id", String::class.java))
+
+        val campsiteId = row.get("id", Long::class.java)
+        val persisted = campsites.findById(campsiteId)
+        assertNotNull(persisted)
+        assertEquals(campsiteId, persisted.id)
+        assertEquals("Site 001", persisted.name)
+        assertEquals("campflare", persisted.dataSource)
+        assertEquals(row.get("primary_vendor_ref_id", Long::class.java), persisted.primaryVendorRefId)
+        assertEquals(json("""{"id":"upper-pines-site-001","campground_id":"upper-pines-campground-447"}"""), persisted.sourcePayload)
+        assertEquals(campsiteId, campsites.findByPoi(poiIdForCampground("upper-pines-campground-447")).single().id)
+
+        val availabilityTarget = campsites.findAvailabilityTargetById(campsiteId)
+        assertNotNull(availabilityTarget)
+        assertEquals(campsiteId, availabilityTarget.id)
+        assertEquals("campflare", availabilityTarget.vendor)
+        assertEquals("upper-pines-site-001", availabilityTarget.vendorId)
+        assertEquals("Site 001", availabilityTarget.name)
     }
 
     @Test
@@ -318,10 +367,11 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
         // additionalRef pointing at the recgov site must NOT overwrite recgov's
         // site row; both rows exist and share the recgov vendor_ref as matcher
         // input.
-        val repo = CanonicalCatalogRepo(ctx)
-        repo.upsertCampgrounds(
+        val campgrounds = CampgroundRepo(ctx)
+        val campsites = CampsiteRepo(ctx)
+        campgrounds.upsertCampgrounds(
             listOf(
-                CampgroundEtlRecord(
+                CampgroundUpsertCandidate(
                     vendor = "campflare",
                     vendorRefId = "upper-pines-campground-447",
                     name = "Upper Pines",
@@ -333,9 +383,9 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
             ),
             source = "campflare-campgrounds",
         )
-        repo.upsertCampgrounds(
+        campgrounds.upsertCampgrounds(
             listOf(
-                CampgroundEtlRecord(
+                CampgroundUpsertCandidate(
                     vendor = "recgov",
                     vendorRefId = "232447",
                     name = "Upper Pines",
@@ -347,9 +397,9 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
             ),
             source = "federal-campgrounds",
         )
-        repo.upsertCampsites(
+        campsites.upsertCampsites(
             listOf(
-                CampsiteEtlRecord(
+                CampsiteUpsertCandidate(
                     vendor = "recgov",
                     vendorRefId = "100",
                     parentVendor = "recgov",
@@ -363,9 +413,9 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
             source = "federal-campsites",
         )
 
-        repo.upsertCampsites(
+        campsites.upsertCampsites(
             listOf(
-                CampsiteEtlRecord(
+                CampsiteUpsertCandidate(
                     vendor = "campflare",
                     vendorRefId = "upper-pines-site-100",
                     parentVendor = "campflare",
@@ -376,7 +426,7 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
                     vendorRefPayload = json("""{"campflare_id":"upper-pines-site-100"}"""),
                     additionalVendorRefs =
                         listOf(
-                            CatalogVendorRefEtlRecord(
+                            CatalogVendorRefUpsertCandidate(
                                 vendor = "recgov",
                                 vendorRefId = "100",
                                 payload = json("""{"recgov_id":"100"}"""),
@@ -426,12 +476,13 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
 
     @Test
     fun `upserts Tesla superchargers and Planet Fitness locations through typed POI joins`() {
-        val repo = CanonicalCatalogRepo(ctx)
+        val teslaRepo = TeslaSuperchargerRepo(ctx)
+        val planetFitnessRepo = PlanetFitnessLocationRepo(ctx)
 
         val tesla =
-            repo.upsertTeslaSuperchargers(
+            teslaRepo.upsertTeslaSuperchargers(
                 listOf(
-                    TeslaSuperchargerEtlRecord(
+                    TeslaSuperchargerUpsertCandidate(
                         locationSlug = "vancouver-bc-1",
                         commonSiteName = "Vancouver, BC",
                         latitude = 49.2827,
@@ -453,9 +504,9 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
                 source = "tesla-superchargers",
             )
         val planetFitness =
-            repo.upsertPlanetFitnessLocations(
+            planetFitnessRepo.upsertPlanetFitnessLocations(
                 listOf(
-                    PlanetFitnessLocationEtlRecord(
+                    PlanetFitnessLocationUpsertCandidate(
                         locationId = "node-123",
                         name = "Planet Fitness Vancouver",
                         latitude = 49.25,
@@ -479,6 +530,37 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
         assertEquals(1, tableCount("poi_tesla_superchargers"))
         assertEquals(1, tableCount("poi_planet_fitness_locations"))
 
+        val teslaRow = teslaRepo.findByLocationSlug("vancouver-bc-1")
+        assertNotNull(teslaRow)
+        assertEquals("Vancouver, BC", teslaRow.commonSiteName)
+        assertEquals("CA", teslaRow.country)
+        assertEquals(json("""{"location_url_slug":"vancouver-bc-1"}"""), teslaRow.indexPayload)
+        assertEquals(teslaRow.id, teslaRepo.findById(teslaRow.id)?.id)
+        assertEquals(listOf(teslaRow.id), teslaRepo.findAll().map { it.id })
+        val teslaPoiId =
+            ctx
+                .fetchOne("SELECT poi_id FROM poi_tesla_superchargers WHERE tesla_supercharger_id = ?", teslaRow.id)!!
+                .get("poi_id", Long::class.java)
+        assertEquals(teslaRow.id, teslaRepo.findByPoi(teslaPoiId)?.id)
+        assertEquals(teslaRow.id, teslaRepo.findPoiDetailByPoi(teslaPoiId)?.supercharger?.id)
+
+        val planetFitnessRow = planetFitnessRepo.findByLocationId("node-123")
+        assertNotNull(planetFitnessRow)
+        assertEquals("Planet Fitness Vancouver", planetFitnessRow.name)
+        assertEquals("555-0100", planetFitnessRow.phone)
+        assertEquals(json("""{"id":123}"""), planetFitnessRow.payload)
+        assertEquals(planetFitnessRow.id, planetFitnessRepo.findById(planetFitnessRow.id)?.id)
+        assertEquals(listOf(planetFitnessRow.id), planetFitnessRepo.findAll().map { it.id })
+        val planetFitnessPoiId =
+            ctx
+                .fetchOne(
+                    "SELECT poi_id FROM poi_planet_fitness_locations WHERE planet_fitness_location_id = ?",
+                    planetFitnessRow.id,
+                )!!
+                .get("poi_id", Long::class.java)
+        assertEquals(planetFitnessRow.id, planetFitnessRepo.findByPoi(planetFitnessPoiId)?.id)
+        assertEquals(planetFitnessRow.id, planetFitnessRepo.findPoiDetailByPoi(planetFitnessPoiId)?.location?.id)
+
         val poiTypes =
             ctx
                 .fetch("SELECT poi_type FROM pois ORDER BY poi_type")
@@ -495,12 +577,13 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
         // multiple chunks; a regression that reintroduces the O(N)
         // per-record loop would still pass correctness but shows up here
         // as an execution-time smell against future benchmarking.
-        val repo = CanonicalCatalogRepo(ctx)
+        val campgrounds = CampgroundRepo(ctx)
+        val campsites = CampsiteRepo(ctx)
         val batchSize = 1_500
 
         val campgroundRecords =
             (0 until batchSize).map { i ->
-                CampgroundEtlRecord(
+                CampgroundUpsertCandidate(
                     vendor = "campflare",
                     vendorRefId = "bulk-cg-$i",
                     name = "Bulk Campground $i",
@@ -511,7 +594,7 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
                 )
             }
         val campgroundResult =
-            repo.upsertCampgrounds(campgroundRecords, source = "campflare-campgrounds")
+            campgrounds.upsertCampgrounds(campgroundRecords, source = "campflare-campgrounds")
 
         assertEquals(batchSize, campgroundResult.seenCount)
         assertEquals(batchSize, campgroundResult.upsertedCount)
@@ -523,7 +606,7 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
 
         val campsiteRecords =
             (0 until batchSize).map { i ->
-                CampsiteEtlRecord(
+                CampsiteUpsertCandidate(
                     vendor = "campflare",
                     vendorRefId = "bulk-cs-$i",
                     parentVendor = "campflare",
@@ -535,7 +618,7 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
                 )
             }
         val campsiteResult =
-            repo.upsertCampsites(campsiteRecords, source = "campflare-campsites")
+            campsites.upsertCampsites(campsiteRecords, source = "campflare-campsites")
 
         assertEquals(batchSize, campsiteResult.seenCount)
         assertEquals(batchSize, campsiteResult.upsertedCount)
@@ -547,7 +630,7 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
         // Re-running with a mutated payload should update in place, not
         // duplicate — sanity check for the ON CONFLICT branch across chunks.
         val rerun =
-            repo.upsertCampsites(
+            campsites.upsertCampsites(
                 campsiteRecords.map { it.copy(name = "${it.name} (v2)") },
                 source = "campflare-campsites",
             )
@@ -566,6 +649,20 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
             .fetchOne("SELECT COUNT(*) AS n FROM $table")!!
             .get("n", Number::class.java)
             .toInt()
+
+    private fun poiIdForCampground(vendorRefId: String): Long =
+        ctx
+            .fetchOne(
+                """
+                SELECT pc.poi_id
+                FROM poi_campgrounds pc
+                JOIN campground_vendor_refs cvr ON cvr.campground_id = pc.campground_id
+                JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
+                WHERE vr.external_id = ?
+                """.trimIndent(),
+                vendorRefId,
+            )!!
+            .get("poi_id", Long::class.java)
 
     private fun json(value: String) = Json.parseToJsonElement(value)
 }

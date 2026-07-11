@@ -29,6 +29,63 @@ models  -> stdlib + serialization only
 If code needs to cross a layer boundary in the wrong direction, reshape the
 abstraction instead of importing around it.
 
+## Boundary Rules
+
+These rules are stricter than package placement. They describe ownership.
+
+### Routes
+
+Routes are the HTTP shell. They parse request inputs, call a controller or
+service, translate known errors into HTTP status codes, and return DTOs.
+Routes do not construct persistence queries, instantiate repos for use-case
+work, parse provider refs, branch on vendors, or coordinate multi-step
+business workflows.
+
+New behavior enters through a controller/service. If a route needs a read
+facade, define that facade as service/controller code and keep repo access
+behind it. Existing route-to-repo paths are tech debt; when one is touched,
+move that path behind a service/controller instead of expanding it.
+
+### Repos
+
+Repos own SQL. If code needs SQL, jOOQ, table names, JSONB casts, materialized
+view refreshes, link-table writes, or persistence mapping, put it behind a repo
+method. Services and ETLs ask for capability through methods; they do not pass
+`DSLContext` around to make their own queries.
+
+Entity repos own the full persistence surface for their entity. A
+`CampgroundRepo` owns campground-table reads, queries, writes, and link-table
+maintenance that is part of campground persistence. A `CampsiteRepo` does the
+same for campsites. Tesla Superchargers and Planet Fitness locations follow the
+same pattern. Do not add a generic catalog writer that owns SQL for several
+entity tables when the write belongs to an entity repo.
+
+Cross-entity repos are allowed only when the query is genuinely a projection or
+workflow over multiple owners. Name them after the read/use case
+(`PoiServingRepo`, `CampsiteProviderRepo`, `CanonicalViewRepo`), not as a generic
+owner of another entity's table.
+
+### Models
+
+Model names must tell callers what kind of shape they are holding:
+
+- **Table row models** use the singular entity name (`Campground`, `Campsite`,
+  `TeslaSupercharger`, `PlanetFitnessLocation`) and map 1:1 to the table
+  schema, including database-owned fields such as ids, timestamps, source
+  columns, and soft-delete columns.
+- **Repo projections** are named for their use, not the table
+  (`CampsiteAvailabilityTarget`, `PoiDetailRow`, `PoiSearchHit`). Put a
+  projection in `models/` only when it crosses a repo boundary; otherwise keep
+  it private to the repo.
+- **ETL outputs** are not table rows. Vendor ETLs emit output envelopes such as
+  `CampgroundEtlOutput` and candidate values such as
+  `CampgroundUpsertCandidate` / `CampsiteUpsertCandidate`. Repos convert those
+  candidates into persisted rows.
+
+A model named after a table must not silently include provider-specific helper
+fields, selected vendor refs, API response convenience fields, or partially
+populated ETL input state. Those are separate projections or candidates.
+
 ## Package Patterns
 
 Use stable package names for layers and generic extension points:
@@ -192,6 +249,22 @@ provider registry. No route should branch on that vendor.
 When adding an ETL source, add transform code under
 `service/etl/vendors/<vendor>/` and pure DTOs under `models/` when they are
 large, shared, or reused by tests.
+
+Campground and campsite ETLs should stay pure: parse captured vendor payloads,
+validate them, and emit `CampgroundEtlOutput` / `CampsiteEtlOutput`. The ETL
+orchestrator persists terminal outputs through repo methods such as
+`CampgroundRepo.upsertCampgrounds` and `CampsiteRepo.upsertCampsites`.
+Those output envelopes contain `*UpsertCandidate` values, not persisted
+`Campground` or `Campsite` table rows; ids, timestamps, match groups, and
+canonical representatives are assigned by persistence and matching.
+If an ETL flow needs to read existing campground/campsite rows or mutate their
+relationships, add that read/write path to a repo instead of passing
+`DSLContext` into vendor ETLs or embedding SQL in ETL adapters.
+
+The same rule applies to other catalog entities. Tesla and Planet Fitness ETLs
+persist through `TeslaSuperchargerRepo.upsertTeslaSuperchargers` and
+`PlanetFitnessLocationRepo.upsertPlanetFitnessLocations`, not through a generic
+ETL-owned catalog writer.
 
 When adding data access, put SQL and jOOQ in `repo/`. Routes and services call
 repo methods rather than embedding persistence details.

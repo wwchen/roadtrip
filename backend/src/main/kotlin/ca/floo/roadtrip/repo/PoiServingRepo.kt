@@ -1,72 +1,11 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.models.domain.Bbox
+import ca.floo.roadtrip.models.domain.PoiIndexRow
+import ca.floo.roadtrip.models.domain.PoiResult
+import ca.floo.roadtrip.models.domain.PoiRow
+import ca.floo.roadtrip.models.domain.PoiSearchHit
 import org.jooq.DSLContext
-
-data class Bbox(
-    val west: Double,
-    val south: Double,
-    val east: Double,
-    val north: Double,
-)
-
-// Slim row shape for the bbox endpoint. Just enough for MapLibre to place
-// + color/filter a pin: id, lat/lng, category for color band, subcategory
-// for the campground sub-bucket, agency for layer filtering. Everything
-// richer lives behind GET /api/pois/{id}.
-internal data class PoiRow(
-    val id: Long,
-    val category: String,
-    val subcategory: String?,
-    val agency: String?,
-    val lng: Double,
-    val lat: Double,
-)
-
-// Wide row shape returned by GET /api/pois/{id}. Same projection the bbox
-// endpoint used to ship for every row; now paid for only on pin click.
-internal data class PoiDetailRow(
-    val id: Long,
-    val source: String,
-    val sourceId: String,
-    val category: String,
-    val subcategory: String?,
-    val agency: String? = null,
-    val name: String,
-    val region: String?,
-    val country: String? = null,
-    val lng: Double? = null,
-    val lat: Double? = null,
-    val unitName: String?,
-    val reserveUrl: String?,
-    val phone: String?,
-    val infoUrl: String?,
-    val addressJson: String?,
-    val providerRefJson: String? = null,
-    val geomJson: String,
-    val propertiesJson: String,
-    val ctaProviderRefJson: String? = null,
-    // Vendors that contributed to this canonical row (from the campground_canonical
-    // materialized view's `member_sources` TEXT[]). Empty for non-campground POIs
-    // and for campgrounds not yet grouped (single-vendor case: match_group_id NULL,
-    // the row is its own group).
-    val memberSources: List<String> = emptyList(),
-)
-
-internal data class PoiSearchHit(
-    val id: Long,
-    val name: String,
-    val category: String,
-    val region: String?,
-    val lng: Double,
-    val lat: Double,
-)
-
-// Outcome of a sampled bbox fetch. `truncated` is true whenever the raw
-// count exceeded the global cap, so the FE can show "zoom in for more".
-internal data class PoiResult(
-    val rows: List<PoiRow>,
-    val truncated: Boolean,
-)
 
 // Spatial sampling grid. 10x10 = 100 cells. row_number() PARTITION BY cell
 // + ORDER BY rn round-robins across cells so pins are spread across viewport.
@@ -99,90 +38,51 @@ internal class PoiServingRepo(
         return PoiResult(rows, truncated)
     }
 
-    fun fetchPoiById(poiId: Long): PoiDetailRow? {
-        val r =
-            ctx.fetchOne(
+    fun findById(poiId: Long): PoiIndexRow? =
+        ctx
+            .fetchOne(
                 """
-                SELECT p.id,
-                       COALESCE(primary_gvr.vendor, p.poi_type) AS source,
-                       COALESCE(primary_gvr.external_id, ts.location_slug, pf.location_id, p.id::text) AS source_id,
-                       p.poi_type AS category,
-                       cg.kind AS subcategory,
-                       cg.management->>'agency' AS agency,
-                       COALESCE(cg.name, ts.common_site_name, pf.name) AS name,
-                       COALESCE(cg.location->>'region', ts.region, pf.region) AS region,
-                       COALESCE(cg.location->>'country', ts.country, pf.country) AS country,
-                       ST_X(ST_PointOnSurface(p.geom)) AS lng,
-                       ST_Y(ST_PointOnSurface(p.geom)) AS lat,
-                       NULL::text AS unit_name,
-                       cg.reservation_url AS reserve_url,
-                       COALESCE(cg.contact->>'phone', pf.phone) AS phone,
-                       COALESCE(ts.info_url, pf.info_url, cg.links->0->>'url') AS info_url,
-                       COALESCE(cg.location, ts.address, pf.address, '{}'::jsonb)::text AS address_text,
-                       provider_gvr.payload::text AS provider_ref_text,
-                       NULLIF(cg.source_payload->'booking_cta_provider_ref', 'null'::jsonb)::text
-                           AS cta_provider_ref_text,
-                       ST_AsGeoJSON(p.geom) AS geom_json,
-                       COALESCE(to_jsonb(cg), to_jsonb(ts), to_jsonb(pf), '{}'::jsonb)::text AS properties_text,
-                       cg.member_sources AS member_sources
-                FROM pois p
-                LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
-                LEFT JOIN campground_canonical cg ON cg.id = pc.campground_id
-                LEFT JOIN LATERAL (
-                  SELECT vr.vendor, vr.external_id, vr.payload
-                  FROM campground_vendor_refs cvr
-                  JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
-                  WHERE cvr.campground_id = cg.id
-                    AND vr.entity_type = 'campground'
-                    AND vr.deleted_at IS NULL
-                  ORDER BY cvr.vendor_ref_id ASC
-                  LIMIT 1
-                ) primary_gvr ON true
-                LEFT JOIN LATERAL (
-                  SELECT vr.payload
-                  FROM campground_vendor_refs cvr
-                  JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
-                  WHERE cvr.campground_id = cg.id
-                    AND vr.entity_type = 'campground'
-                    AND vr.deleted_at IS NULL
-                  ORDER BY
-                    CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
-                    cvr.vendor_ref_id ASC
-                  LIMIT 1
-                ) provider_gvr ON true
-                LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
-                LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id
-                LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
-                LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id
-                WHERE p.id = ?
-                  AND p.deleted_at IS NULL
+                SELECT id,
+                       poi_type AS category,
+                       ST_X(ST_PointOnSurface(geom)) AS lng,
+                       ST_Y(ST_PointOnSurface(geom)) AS lat,
+                       ST_AsGeoJSON(geom) AS geom_json
+                FROM pois
+                WHERE id = ?
+                  AND deleted_at IS NULL
                 """.trimIndent(),
                 poiId,
-            ) ?: return null
-        return PoiDetailRow(
-            id = (r.get("id") as Number).toLong(),
-            source = r.get("source") as String,
-            sourceId = r.get("source_id") as String,
-            category = r.get("category") as String,
-            subcategory = r.get("subcategory") as String?,
-            agency = r.get("agency") as String?,
-            name = r.get("name") as String,
-            region = r.get("region") as String?,
-            country = r.get("country") as String?,
-            lng = (r.get("lng") as Number?)?.toDouble(),
-            lat = (r.get("lat") as Number?)?.toDouble(),
-            unitName = r.get("unit_name") as String?,
-            reserveUrl = r.get("reserve_url") as String?,
-            phone = r.get("phone") as String?,
-            infoUrl = r.get("info_url") as String?,
-            addressJson = r.get("address_text") as String?,
-            providerRefJson = r.get("provider_ref_text") as String?,
-            geomJson = r.get("geom_json") as String,
-            propertiesJson = r.get("properties_text") as String,
-            ctaProviderRefJson = r.get("cta_provider_ref_text") as String?,
-            memberSources = memberSourcesOf(r.get("member_sources")),
-        )
-    }
+            )?.let { row ->
+                PoiIndexRow(
+                    id = row.get("id", Long::class.java),
+                    category = row.get("category", String::class.java),
+                    lng = row.get("lng", Double::class.java),
+                    lat = row.get("lat", Double::class.java),
+                    geomJson = row.get("geom_json", String::class.java),
+                )
+            }
+
+    fun fetchPoiName(poiId: Long): String? =
+        ctx
+            .fetchOne(
+                """
+                SELECT name
+                FROM (
+                    SELECT p.id,
+                           COALESCE(cg.name, ts.common_site_name, pf.name) AS name
+                    FROM pois p
+                    LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
+                    LEFT JOIN campground_canonical cg ON cg.id = pc.campground_id
+                    LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
+                    LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id
+                    LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
+                    LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id
+                    WHERE p.deleted_at IS NULL
+                ) catalog
+                WHERE id = ?
+                """.trimIndent(),
+                poiId,
+            )?.get("name", String::class.java)
 
     fun search(
         query: String,
@@ -373,15 +273,3 @@ private fun splitPoiSearchTerms(q: String): List<String> =
         .filter { it.isNotEmpty() }
 
 private fun escapeLikePattern(s: String): String = s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-// jOOQ decodes Postgres TEXT[] into java.sql.Array (via Object[] payload) for
-// dynamic queries. Non-campground detail rows hit the LEFT JOIN's null side and
-// arrive here as null. Normalize both to List<String>.
-private fun memberSourcesOf(value: Any?): List<String> =
-    when (value) {
-        null -> emptyList()
-        is Array<*> -> value.mapNotNull { it?.toString() }
-        is java.sql.Array -> memberSourcesOf(value.array)
-        is Collection<*> -> value.mapNotNull { it?.toString() }
-        else -> emptyList()
-    }

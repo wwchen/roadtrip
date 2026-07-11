@@ -1,8 +1,11 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.models.domain.PoiDetailRow
+import ca.floo.roadtrip.models.domain.PoiRow
 import ca.floo.roadtrip.repo.OnRouteRow
-import ca.floo.roadtrip.repo.PoiDetailRow
-import ca.floo.roadtrip.repo.PoiRow
+import ca.floo.roadtrip.service.api.encodePoiFeatureJson
+import ca.floo.roadtrip.service.api.poiDetailFeature
+import ca.floo.roadtrip.service.api.poiFeatureCollection
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import java.time.Clock
 import java.time.Instant

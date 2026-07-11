@@ -1,36 +1,42 @@
 package ca.floo.roadtrip.models.domain
 
 import kotlinx.serialization.json.JsonElement
+import java.time.Instant
 
 /**
- * A campsite as we store it. Catalog data — names, loop, type, the raw
- * upstream blob — refreshed by ETL, not request-time. Per-day availability
- * is computed live by the AvailabilityProvider; not stored here.
- *
- * `id` is the canonical campsite pk (`campsites.id`) used for joins and API
- * payloads. `vendor` / `vendorId` identify the selected provider-side row for
- * adapter calls and booking URLs.
- *
- * `raw` preserves the full upstream JSON blob exactly as the vendor sent
- * it (rec.gov campsite object, Aspira resource detail). Data trust:
- * future audit / forensic queries see the source of truth, not what we
- * chose to project.
- *
- * `tags` is the provider-neutral projection ETLs build for common catalog
- * traits: capacity, equipment, and named attributes. It is safe for UI and
- * search code to depend on; unlike `raw`, it should not expose vendor id
- * vocabularies as its primary interface.
- *
- * RFC 0008 §"Data model".
+ * One row in the `campsites` table.
  */
 data class Campsite(
     val id: Long,
-    val vendor: String,
-    val vendorId: String,
-    val name: String?,
-    val loop: String?,
-    val siteType: String?,
-    val raw: JsonElement?,
-    val tags: JsonElement? = null,
-    val providerRef: JsonElement? = null,
+    val campgroundId: Long,
+    val name: String,
+    val kind: String,
+    val loopName: String?,
+    val latitude: Double?,
+    val longitude: Double?,
+    val reservationUrl: String?,
+    val equipment: JsonElement?,
+    val kindListed: String?,
+    val schedule: JsonElement,
+    val price: JsonElement,
+    val firepit: Boolean?,
+    val picnicTable: Boolean?,
+    val adaAccessible: Boolean?,
+    val waterHookups: Boolean?,
+    val electricHookups: Boolean?,
+    val sewerHookups: Boolean?,
+    val maxPeople: Int?,
+    val maxCars: Int?,
+    val pullThrough: Boolean?,
+    val drivewayLength: Int?,
+    val maxRvLength: Int?,
+    val maxTrailerLength: Double?,
+    val photos: JsonElement,
+    val sourcePayload: JsonElement,
+    val createdAt: Instant,
+    val updatedAt: Instant,
+    val deletedAt: Instant?,
+    val dataSource: String,
+    val matchGroupId: Long?,
+    val primaryVendorRefId: Long,
 )

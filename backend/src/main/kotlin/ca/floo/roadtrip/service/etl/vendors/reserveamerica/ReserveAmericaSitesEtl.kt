@@ -3,7 +3,7 @@ package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaCatalogParser
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtlOutput
-import ca.floo.roadtrip.service.etl.framework.CampsiteEtlRecord
+import ca.floo.roadtrip.service.etl.framework.CampsiteUpsertCandidate
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -55,7 +55,7 @@ class ReserveAmericaSitesEtl(
             dto.sites
                 .distinctBy { it.siteId }
                 .map { site ->
-                    CampsiteEtlRecord(
+                    CampsiteUpsertCandidate(
                         vendor = vendor,
                         vendorRefId = site.siteId,
                         parentVendor = parentCampgroundVendor(contractCode),

@@ -3,7 +3,7 @@ package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
-import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
+import ca.floo.roadtrip.service.etl.framework.CampgroundUpsertCandidate
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -70,7 +70,7 @@ class ReserveAmericaEtl(
                     val name = displayName(park.name, settings.titleSuffix)
                     val vendorRefId = "${settings.sourceIdPrefix}-${park.parkId}"
                     val parkExtras = parkExtras(park, name, settings.contract)
-                    CampgroundEtlRecord(
+                    CampgroundUpsertCandidate(
                         vendor = etlSlug,
                         vendorRefId = vendorRefId,
                         name = name,

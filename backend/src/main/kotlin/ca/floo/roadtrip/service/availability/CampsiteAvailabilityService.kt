@@ -23,7 +23,7 @@ internal class CampsiteAvailabilityService(
     ): PoiCampsitesAvailabilityResponseDto {
         val campsites =
             campsitesRepo
-                .findByPoi(poiId)
+                .findAvailabilityTargetsByPoi(poiId)
                 .filterBySiteTypes(siteTypes)
         if (campsites.isEmpty()) {
             val (start, end) = displayWindow(poiId, startDate, endDate, providerRefs, dateResolver)

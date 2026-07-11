@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.api
 
-import ca.floo.roadtrip.repo.PoiDetailRow
+import ca.floo.roadtrip.models.domain.PoiDetailRow
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
