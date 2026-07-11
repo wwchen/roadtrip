@@ -30,7 +30,6 @@ services:
     # reboots even when Tilt is gone, drifting "Tilt running" away from
     # "container exists."
     restart: "no"
-    mem_limit: 2g
     hostname: postgres
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
