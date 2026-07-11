@@ -155,9 +155,7 @@ class IngestController(
                 log.info("ingest_runs id={} phase={} completed", phaseId, phase.label)
             } catch (e: Throwable) {
                 val (notes, exit) = phaseFailureNotes(e)
-                ingestRunRepo.failPhase(phaseId, notes, exit)
-                ingestRunRepo.failParent(parentId, "phase=${phase.label}: ${notes.take(300)}")
-                log.warn("ingest_runs id={} phase={} failed: {}", phaseId, phase.label, notes.take(300))
+                recordPhaseFailure(parentId, phaseId, phase, notes, exit)
                 return RunOutcome(parentId, target.name, kind, "failed", phase.label)
             }
         }
@@ -173,14 +171,64 @@ class IngestController(
                 withContext(ioDispatcher) { etl.runCatalogMatchOnly() }
             } catch (e: Throwable) {
                 val note = "catalog match failed: ${e.javaClass.simpleName}: ${e.message ?: ""}"
-                ingestRunRepo.failParent(parentId, note.take(300))
-                log.warn("ingest_runs id={} {}", parentId, note.take(300))
+                recordParentFailure(parentId, note, CATALOG_MATCH_STAGE_LABEL)
+                log.warn("ingest_runs id={} {}", parentId, truncateFailureNotes(note))
                 return RunOutcome(parentId, target.name, kind, "failed", CATALOG_MATCH_STAGE_LABEL)
             }
         }
         ingestRunRepo.completeParent(parentId)
         return RunOutcome(parentId, target.name, kind, "completed", null)
     }
+
+    private fun recordPhaseFailure(
+        parentId: Long,
+        phaseId: Long,
+        phase: Phase,
+        notes: String,
+        exitCode: Int?,
+    ) {
+        val shortNotes = truncateFailureNotes(notes)
+        val phaseRecorded =
+            runCatching { ingestRunRepo.failPhase(phaseId, shortNotes, exitCode) }
+                .onFailure { failure ->
+                    log.error(
+                        "ingest_runs id={} phase={} failed but phase failure row could not be recorded: {}",
+                        phaseId,
+                        phase.label,
+                        failure.message,
+                        failure,
+                    )
+                }.isSuccess
+        val parentRecorded = recordParentFailure(parentId, "phase=${phase.label}: $notes", phase.label)
+        if (phaseRecorded && parentRecorded) {
+            log.warn("ingest_runs id={} phase={} failed: {}", phaseId, phase.label, shortNotes)
+        } else {
+            log.warn(
+                "ingest_runs id={} phase={} failed; failure persistence incomplete: {}",
+                phaseId,
+                phase.label,
+                shortNotes,
+            )
+        }
+    }
+
+    private fun recordParentFailure(
+        parentId: Long,
+        notes: String,
+        context: String,
+    ): Boolean =
+        runCatching { ingestRunRepo.failParent(parentId, truncateFailureNotes(notes)) }
+            .onFailure { failure ->
+                log.error(
+                    "ingest_runs id={} {} failed but parent failure row could not be recorded: {}",
+                    parentId,
+                    context,
+                    failure.message,
+                    failure,
+                )
+            }.isSuccess
+
+    private fun truncateFailureNotes(notes: String): String = notes.take(FAILURE_NOTES_MAX_CHARS)
 
     // -- Fetch phases (web → data/) -------------------------------------------
     private suspend fun runFetch(phase: Phase.Fetch): JSONB =
@@ -310,6 +358,7 @@ class IngestController(
 
     companion object {
         const val STDERR_TAIL_BYTES = 4 * 1024
+        private const val FAILURE_NOTES_MAX_CHARS = 300
 
         // Sections whose successful completion should trigger the catalog
         // match stage. Joiner runs and campsite_data terminal imports both
