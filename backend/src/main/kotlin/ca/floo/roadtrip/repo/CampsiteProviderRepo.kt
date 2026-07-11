@@ -1,37 +1,10 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.models.domain.CampsiteDateContextRow
+import ca.floo.roadtrip.models.domain.CampsiteProviderRefRow
+import ca.floo.roadtrip.models.domain.CampsiteVendorRefRow
+import ca.floo.roadtrip.models.domain.SiblingCampsiteRefRow
 import org.jooq.DSLContext
-
-data class CampsiteProviderRefRow(
-    val poiId: Long,
-    val source: String,
-    val providerRefJson: String,
-    val lng: Double? = null,
-    val lat: Double? = null,
-)
-
-data class CampsiteVendorRefRow(
-    val source: String,
-    val providerRefJson: String,
-)
-
-/**
- * One representative campsite row's vendor-ref payload for a specific vendor,
- * resolved by joining across the campsite's match group. Callers use this to
- * translate a sibling-vendor candidate's identity while keeping observations
- * anchored to the representative id.
- */
-data class SiblingCampsiteRefRow(
-    val representativeCampsiteId: Long,
-    val providerRefJson: String,
-    val externalId: String,
-)
-
-data class CampsiteDateContextRow(
-    val poiId: Long,
-    val lng: Double?,
-    val lat: Double?,
-)
 
 class CampsiteProviderRepo(
     private val ctx: DSLContext,

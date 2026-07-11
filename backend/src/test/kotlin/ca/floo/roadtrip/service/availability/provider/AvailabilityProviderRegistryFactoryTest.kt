@@ -12,11 +12,11 @@ import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaGridAvailability
+import ca.floo.roadtrip.models.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.metadata.registry.EtlEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
-import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.LocalDate
