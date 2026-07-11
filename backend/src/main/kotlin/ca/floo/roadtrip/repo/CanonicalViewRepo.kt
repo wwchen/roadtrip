@@ -26,9 +26,11 @@ class CanonicalViewRepo(
 
     /**
      * Refreshes both canonical views. Takes an AccessExclusiveLock for the
-     * duration of each refresh — acceptable since all callers are admin/ETL
-     * paths, not user-facing traffic. Both refreshes must succeed — an
-     * exception from either propagates.
+     * duration of each refresh, so canonical-view readers can block briefly
+     * during admin/ETL publication. That tradeoff is intentional: non-concurrent
+     * refresh avoids the memory-heavy diff path that can crash Postgres on the
+     * full campsite catalog. Both refreshes must succeed — an exception from
+     * either propagates.
      */
     fun refreshCanonicalViews() {
         ctx.execute(REFRESH_CAMPGROUND_CANONICAL_SQL)
@@ -87,7 +89,7 @@ class CanonicalViewRepo(
             if (!isCollapse) {
                 txn.execute(POI_REPOINT_UPDATE_SQL, winnerCampgroundId, srcCampgroundId)
                 repointed += 1
-            } else if (srcPoiId < existingWinnerPoiId!!) {
+            } else if (srcPoiId < existingWinnerPoiId) {
                 // src wins: drop the winner-side pc row, re-point src, soft-delete the loser poi.
                 txn.execute(POI_DELETE_LINK_BY_CAMPGROUND_SQL, winnerCampgroundId)
                 txn.execute(POI_REPOINT_UPDATE_SQL, winnerCampgroundId, srcCampgroundId)
