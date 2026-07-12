@@ -261,16 +261,16 @@ open class CatalogMatchRepo(
     }
 
     /**
-     * Iterative label propagation over the match graph: each catalog row's
-     * `match_group_id` converges on the MIN id of its connected component.
-     * Runs seeded (`match_group_id = id`) then reduces until no row changes.
+     * Iterative label propagation over the match graph: each matched catalog
+     * row's `match_group_id` converges on the MIN id of its connected
+     * component. Unmatched singleton rows keep `match_group_id` null; canonical
+     * views already group them with `COALESCE(match_group_id, id)`.
      * Returns the total number of rows updated across all iterations (both
      * tables); this is what the caller surfaces as "groupsRecomputed".
      *
-     * Each step (seed chunk / propagation iteration) commits independently
-     * to avoid WAL + dirty-buffer pressure that OOM-kills Postgres on
-     * memory-constrained hosts. The algorithm is idempotent and monotone,
-     * so partial progress is safe.
+     * Each seed and propagation chunk commits independently to limit WAL +
+     * dirty-buffer pressure on memory-constrained hosts. The algorithm is
+     * idempotent and monotone, so partial progress is safe.
      */
     open fun recomputeMatchGroups(): Int {
         var totalUpdated = 0
@@ -298,18 +298,28 @@ open class CatalogMatchRepo(
         bColumn: String,
     ): Int {
         var totalUpdated = 0
-        // Seed in chunks — each chunk auto-commits, limiting WAL burst.
+        // Seed only newly matched endpoints. Reseeding stable groups back to
+        // singleton ids rewrites the whole catalog on every matcher run.
         while (true) {
             val seeded =
                 ctx.execute(
                     """
-                    UPDATE $catalogTable
-                       SET match_group_id = id
-                     WHERE id IN (
-                       SELECT id FROM $catalogTable
-                        WHERE match_group_id IS DISTINCT FROM id
-                        LIMIT $PROPAGATE_CHUNK_SIZE
-                     )
+                    WITH endpoints AS (
+                      SELECT $aColumn AS id FROM $matchesTable
+                      UNION
+                      SELECT $bColumn AS id FROM $matchesTable
+                    ),
+                    to_seed AS (
+                      SELECT c.id
+                        FROM $catalogTable c
+                        JOIN endpoints e ON e.id = c.id
+                       WHERE c.match_group_id IS NULL
+                       LIMIT $PROPAGATE_CHUNK_SIZE
+                    )
+                    UPDATE $catalogTable AS target
+                       SET match_group_id = target.id
+                      FROM to_seed
+                     WHERE target.id = to_seed.id
                     """.trimIndent(),
                 )
             totalUpdated += seeded
@@ -323,31 +333,43 @@ open class CatalogMatchRepo(
                     "label propagation did not converge in $MAX_LABEL_PROPAGATION_ITERATIONS iterations for $catalogTable",
                 )
             }
-            val updated =
-                ctx.execute(
-                    """
-                    WITH pairs AS (
-                      SELECT $aColumn AS a, $bColumn AS b FROM $matchesTable
-                      UNION ALL
-                      SELECT $bColumn AS a, $aColumn AS b FROM $matchesTable
-                    ),
-                    new_groups AS (
-                      SELECT c.id,
-                             LEAST(c.match_group_id, MIN(o.match_group_id)) AS new_group
-                        FROM $catalogTable c
-                        JOIN pairs p ON p.a = c.id
-                        JOIN $catalogTable o ON o.id = p.b
-                       GROUP BY c.id, c.match_group_id
+            var iterationUpdated = 0
+            while (true) {
+                val updated =
+                    ctx.execute(
+                        """
+                        WITH pairs AS (
+                          SELECT $aColumn AS a, $bColumn AS b FROM $matchesTable
+                          UNION ALL
+                          SELECT $bColumn AS a, $aColumn AS b FROM $matchesTable
+                        ),
+                        new_groups AS (
+                          SELECT node.id,
+                                 node.match_group_id AS old_group,
+                                 LEAST(node.match_group_id, MIN(other.match_group_id)) AS new_group
+                            FROM $catalogTable node
+                            JOIN pairs p ON p.a = node.id
+                            JOIN $catalogTable other ON other.id = p.b
+                           GROUP BY node.id, node.match_group_id
+                        ),
+                        to_update AS (
+                          SELECT id, new_group
+                            FROM new_groups
+                           WHERE old_group <> new_group
+                           ORDER BY id
+                           LIMIT $PROPAGATE_CHUNK_SIZE
+                        )
+                        UPDATE $catalogTable AS target
+                           SET match_group_id = to_update.new_group
+                          FROM to_update
+                         WHERE target.id = to_update.id
+                        """.trimIndent(),
                     )
-                    UPDATE $catalogTable c
-                       SET match_group_id = ng.new_group
-                      FROM new_groups ng
-                     WHERE c.id = ng.id
-                       AND c.match_group_id <> ng.new_group
-                    """.trimIndent(),
-                )
-            totalUpdated += updated
-            if (updated == 0) break
+                totalUpdated += updated
+                iterationUpdated += updated
+                if (updated < PROPAGATE_CHUNK_SIZE) break
+            }
+            if (iterationUpdated == 0) break
         }
         return totalUpdated
     }

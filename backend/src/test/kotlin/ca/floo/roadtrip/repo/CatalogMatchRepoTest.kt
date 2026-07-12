@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test
 import java.time.OffsetDateTime
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -101,17 +102,45 @@ class CatalogMatchRepoTest : SharedDbTest() {
         assertEquals(aId, matchGroupOf("campgrounds", aId))
         assertEquals(aId, matchGroupOf("campgrounds", bId))
         assertEquals(aId, matchGroupOf("campgrounds", cId))
-        // The unmatched row lands in its own singleton group.
-        assertEquals(dId, matchGroupOf("campgrounds", dId))
+        // The unmatched row is grouped by COALESCE(match_group_id, id) in the
+        // canonical views; it does not need a stored singleton group.
+        assertNull(matchGroupOf("campgrounds", dId))
 
-        // A second run must land on the same final state (the seed pass
-        // re-flattens everyone to their own id, so the returned counter is
-        // non-zero — the invariant we care about is convergent group ids).
-        repo.recomputeMatchGroups()
+        val secondRowsUpdated = repo.recomputeMatchGroups()
+        assertEquals(0, secondRowsUpdated, "stable recompute should not rewrite converged groups")
         assertEquals(aId, matchGroupOf("campgrounds", aId))
         assertEquals(aId, matchGroupOf("campgrounds", bId))
         assertEquals(aId, matchGroupOf("campgrounds", cId))
-        assertEquals(dId, matchGroupOf("campgrounds", dId))
+        assertNull(matchGroupOf("campgrounds", dId))
+    }
+
+    @Test
+    fun `recomputeMatchGroups merges later bridge match without reseeding stable groups`() {
+        val aId = seedCampgroundRow(name = "A", dataSource = "recgov")
+        val bId = seedCampgroundRow(name = "B", dataSource = "campflare")
+        val cId = seedCampgroundRow(name = "C", dataSource = "aspira")
+        val dId = seedCampgroundRow(name = "D", dataSource = "reserveamerica")
+        val repo = CatalogMatchRepo(ctx)
+
+        insertCampgroundMatch(aId, bId, method = "shared_vendor_ref")
+        repo.recomputeMatchGroups()
+        assertEquals(aId, matchGroupOf("campgrounds", aId))
+        assertEquals(aId, matchGroupOf("campgrounds", bId))
+
+        insertCampgroundMatch(cId, dId, method = "shared_vendor_ref")
+        repo.recomputeMatchGroups()
+        assertEquals(cId, matchGroupOf("campgrounds", cId))
+        assertEquals(cId, matchGroupOf("campgrounds", dId))
+
+        insertCampgroundMatch(bId, cId, method = "shared_vendor_ref")
+        val bridgeRowsUpdated = repo.recomputeMatchGroups()
+
+        assertTrue(bridgeRowsUpdated > 0, "bridge match should lower the second component")
+        assertEquals(aId, matchGroupOf("campgrounds", aId))
+        assertEquals(aId, matchGroupOf("campgrounds", bId))
+        assertEquals(aId, matchGroupOf("campgrounds", cId))
+        assertEquals(aId, matchGroupOf("campgrounds", dId))
+        assertEquals(0, repo.recomputeMatchGroups(), "merged components should remain stable")
     }
 
     private fun seedCampgroundRow(
@@ -219,10 +248,10 @@ class CatalogMatchRepoTest : SharedDbTest() {
     private fun matchGroupOf(
         table: String,
         id: Long,
-    ): Long =
+    ): Long? =
         ctx
             .fetchOne("SELECT match_group_id FROM $table WHERE id = ?", id)!!
-            .get("match_group_id", Long::class.java)
+            .get("match_group_id", Long::class.javaObjectType)
 
     private fun tableCount(table: String): Int =
         ctx
