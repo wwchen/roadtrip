@@ -16,12 +16,12 @@ import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.routes.slackInteractivityRoute
-import ca.floo.roadtrip.service.api.PoiService
-import ca.floo.roadtrip.service.api.PoisOnRouteService
 import ca.floo.roadtrip.service.availability.CampgroundAvailabilitySupport
-import ca.floo.roadtrip.service.catalog.CampgroundService
-import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
-import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
+import ca.floo.roadtrip.service.poi.CampgroundService
+import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
+import ca.floo.roadtrip.service.poi.PoiService
+import ca.floo.roadtrip.service.poi.PoisOnRouteService
+import ca.floo.roadtrip.service.poi.TeslaSuperchargerService
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
@@ -106,14 +106,16 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
     val poiService =
         PoiService(
             poiRepo = PoiServingRepo(runtime.ctx),
-            campgroundService =
-                CampgroundService(
-                    repo = CampgroundRepo(runtime.ctx),
-                    dateResolver = runtime.availabilityDateResolver,
-                    availabilitySupport = campgroundAvailabilitySupport,
+            detailServices =
+                listOf(
+                    CampgroundService(
+                        repo = CampgroundRepo(runtime.ctx),
+                        dateResolver = runtime.availabilityDateResolver,
+                        availabilitySupport = campgroundAvailabilitySupport,
+                    ),
+                    TeslaSuperchargerService(TeslaSuperchargerRepo(runtime.ctx)),
+                    PlanetFitnessLocationService(PlanetFitnessLocationRepo(runtime.ctx)),
                 ),
-            teslaSuperchargerService = TeslaSuperchargerService(TeslaSuperchargerRepo(runtime.ctx)),
-            planetFitnessLocationService = PlanetFitnessLocationService(PlanetFitnessLocationRepo(runtime.ctx)),
         )
     val routeCorridorService = RouteCorridorService(RouteCorridorRepo(runtime.ctx))
     val poisOnRouteService =

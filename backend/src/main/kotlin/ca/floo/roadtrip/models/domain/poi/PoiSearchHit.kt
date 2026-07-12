@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.models.domain
+package ca.floo.roadtrip.models.domain.poi
 
 data class PoiSearchHit(
     val id: Long,

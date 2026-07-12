@@ -1,6 +1,6 @@
-package ca.floo.roadtrip.service.api
+package ca.floo.roadtrip.service.poi
 
-import ca.floo.roadtrip.models.domain.PoiRow
+import ca.floo.roadtrip.models.domain.poi.PoiRow
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import ca.floo.roadtrip.service.routing.lineStringGeoJson

@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.models.domain
+package ca.floo.roadtrip.models.domain.poi
 
 /**
  * Minimal row from the generic `pois` index used to dispatch a POI to its

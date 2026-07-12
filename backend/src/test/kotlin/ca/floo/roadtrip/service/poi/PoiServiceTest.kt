@@ -1,9 +1,9 @@
-package ca.floo.roadtrip.service.api
+package ca.floo.roadtrip.service.poi
 
-import ca.floo.roadtrip.models.api.PoiCategoryDetailSchema
-import ca.floo.roadtrip.models.api.PoiDetailFeatureSchema
-import ca.floo.roadtrip.models.domain.Bbox
-import ca.floo.roadtrip.models.domain.CampgroundPoiDetail
+import ca.floo.roadtrip.models.api.poi.PoiCategoryDetailSchema
+import ca.floo.roadtrip.models.api.poi.PoiDetailFeatureSchema
+import ca.floo.roadtrip.models.domain.poi.Bbox
+import ca.floo.roadtrip.models.domain.poi.CampgroundPoiDetail
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
@@ -12,9 +12,6 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
-import ca.floo.roadtrip.service.catalog.CampgroundService
-import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
-import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -203,7 +200,7 @@ class PoiServiceTest : SharedDbTest() {
             poiService()
                 .pois(
                     bbox = VANCOUVER_BBOX,
-                    zoom = POI_CAMPGROUND_MIN_ZOOM - 1,
+                    zoom = CampgroundService.MIN_POI_ZOOM - 1,
                     categories = null,
                 ).features
                 .map { it.properties.category }
@@ -221,7 +218,7 @@ class PoiServiceTest : SharedDbTest() {
             poiService()
                 .pois(
                     bbox = VANCOUVER_BBOX,
-                    zoom = POI_CAMPGROUND_MIN_ZOOM - 1,
+                    zoom = CampgroundService.MIN_POI_ZOOM - 1,
                     categories = listOf("campground"),
                 ).features
 
@@ -250,9 +247,12 @@ class PoiServiceTest : SharedDbTest() {
     private fun poiService(): PoiService =
         PoiService(
             poiRepo = PoiServingRepo(ctx),
-            campgroundService = CampgroundService(CampgroundRepo(ctx)),
-            teslaSuperchargerService = TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
-            planetFitnessLocationService = PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
+            detailServices =
+                listOf(
+                    CampgroundService(CampgroundRepo(ctx)),
+                    TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
+                    PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
+                ),
         )
 
     private fun campgroundDetailRow(poiId: Long): CampgroundPoiDetail = CampgroundRepo(ctx).findPoiDetailByPoi(poiId)!!

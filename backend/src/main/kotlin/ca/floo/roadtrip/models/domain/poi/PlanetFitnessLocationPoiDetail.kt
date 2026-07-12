@@ -1,4 +1,6 @@
-package ca.floo.roadtrip.models.domain
+package ca.floo.roadtrip.models.domain.poi
+
+import ca.floo.roadtrip.models.domain.PlanetFitnessLocation
 
 /**
  * Planet Fitness-owned projection for hydrating GET /api/pois/{id}.

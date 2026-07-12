@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.models.domain
+package ca.floo.roadtrip.models.domain.poi
 
 /**
  * Outcome of a sampled bbox fetch. `truncated` is true whenever the raw

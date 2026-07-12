@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.models.domain
+package ca.floo.roadtrip.models.domain.poi
 
 /**
  * Slim row shape for the bbox endpoint. Just enough for MapLibre to place

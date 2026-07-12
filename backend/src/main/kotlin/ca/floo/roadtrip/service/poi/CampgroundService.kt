@@ -1,14 +1,13 @@
-package ca.floo.roadtrip.service.catalog
+package ca.floo.roadtrip.service.poi
 
-import ca.floo.roadtrip.models.api.PoiCategoryDetailSchema
-import ca.floo.roadtrip.models.api.PoiDetailPropertiesSchema
-import ca.floo.roadtrip.models.domain.PoiIndexRow
+import ca.floo.roadtrip.models.api.poi.PoiCategoryDetailSchema
+import ca.floo.roadtrip.models.api.poi.PoiDetailPropertiesSchema
+import ca.floo.roadtrip.models.domain.poi.PoiIndexRow
 import ca.floo.roadtrip.repo.CampgroundRepo
-import ca.floo.roadtrip.service.api.CAMPGROUND_POI_TYPE
-import ca.floo.roadtrip.service.api.PoiCta
-import ca.floo.roadtrip.service.api.UrlHosts
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.CampgroundAvailabilitySupport
+import ca.floo.roadtrip.service.poi.campground.CampgroundCta
+import ca.floo.roadtrip.service.poi.campground.UrlHosts
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -28,9 +27,11 @@ internal class CampgroundService(
     private val repo: CampgroundRepo,
     private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     private val availabilitySupport: CampgroundAvailabilitySupport? = null,
-    private val cta: PoiCta = PoiCta.Default,
-) {
-    fun poiDetailProperties(poi: PoiIndexRow): PoiDetailPropertiesSchema? {
+    private val cta: CampgroundCta = CampgroundCta.Default,
+) : PoiDetailService {
+    override val poiType: String = POI_TYPE
+
+    override fun poiDetailProperties(poi: PoiIndexRow): PoiDetailPropertiesSchema? {
         val detail = repo.findPoiDetailByPoi(poi.id) ?: return null
         val campground = detail.campground
         val raw = Json.parseToJsonElement(detail.propertiesJson)
@@ -48,7 +49,7 @@ internal class CampgroundService(
         return PoiDetailPropertiesSchema(
             source = detail.source,
             sourceId = detail.sourceId,
-            category = CAMPGROUND_POI_TYPE,
+            category = POI_TYPE,
             subcategory = campground.kind,
             agency = campground.management.stringProperty(AGENCY_KEY),
             name = campground.name,
@@ -86,6 +87,11 @@ internal class CampgroundService(
                     raw = raw,
                 ),
         )
+    }
+
+    companion object {
+        const val POI_TYPE = "campground"
+        const val MIN_POI_ZOOM: Int = 6
     }
 }
 

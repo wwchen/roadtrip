@@ -2,16 +2,16 @@ package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.clients.mapbox.RoutingException
 import ca.floo.roadtrip.models.api.ApiErrorSchema
-import ca.floo.roadtrip.models.api.PointGeometrySchema
-import ca.floo.roadtrip.models.api.PoisOnRouteFeaturePropertiesSchema
-import ca.floo.roadtrip.models.api.PoisOnRouteFeatureSchema
-import ca.floo.roadtrip.models.api.PoisOnRouteRequestSchema
-import ca.floo.roadtrip.models.api.PoisOnRouteResponseSchema
-import ca.floo.roadtrip.models.api.WaypointSchema
-import ca.floo.roadtrip.models.domain.PoiRow
-import ca.floo.roadtrip.service.api.OnRouteWaypoint
-import ca.floo.roadtrip.service.api.PoisOnRouteService
-import ca.floo.roadtrip.service.api.canonicalPoiCategories
+import ca.floo.roadtrip.models.api.poi.PointGeometrySchema
+import ca.floo.roadtrip.models.api.poi.PoisOnRouteFeaturePropertiesSchema
+import ca.floo.roadtrip.models.api.poi.PoisOnRouteFeatureSchema
+import ca.floo.roadtrip.models.api.poi.PoisOnRouteRequestSchema
+import ca.floo.roadtrip.models.api.poi.PoisOnRouteResponseSchema
+import ca.floo.roadtrip.models.api.poi.WaypointSchema
+import ca.floo.roadtrip.models.domain.poi.PoiRow
+import ca.floo.roadtrip.service.poi.OnRouteWaypoint
+import ca.floo.roadtrip.service.poi.PoisOnRouteService
+import ca.floo.roadtrip.service.poi.canonicalPoiCategories
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_CORRIDOR_RADIUS_MILES
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_WAYPOINTS
 import ca.floo.roadtrip.service.routing.MIN_ROUTE_CORRIDOR_RADIUS_MILES

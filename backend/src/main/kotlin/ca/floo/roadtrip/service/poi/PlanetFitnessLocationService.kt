@@ -1,23 +1,24 @@
-package ca.floo.roadtrip.service.catalog
+package ca.floo.roadtrip.service.poi
 
-import ca.floo.roadtrip.models.api.PoiCategoryDetailSchema
-import ca.floo.roadtrip.models.api.PoiDetailPropertiesSchema
-import ca.floo.roadtrip.models.domain.PoiIndexRow
+import ca.floo.roadtrip.models.api.poi.PoiCategoryDetailSchema
+import ca.floo.roadtrip.models.api.poi.PoiDetailPropertiesSchema
+import ca.floo.roadtrip.models.domain.poi.PoiIndexRow
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
-import ca.floo.roadtrip.service.api.PLANET_FITNESS_LOCATION_POI_TYPE
 import kotlinx.serialization.json.Json
 
 internal class PlanetFitnessLocationService(
     private val repo: PlanetFitnessLocationRepo,
-) {
-    fun poiDetailProperties(poi: PoiIndexRow): PoiDetailPropertiesSchema? {
+) : PoiDetailService {
+    override val poiType: String = POI_TYPE
+
+    override fun poiDetailProperties(poi: PoiIndexRow): PoiDetailPropertiesSchema? {
         val detail = repo.findPoiDetailByPoi(poi.id) ?: return null
         val location = detail.location
         val raw = Json.parseToJsonElement(detail.propertiesJson)
         return PoiDetailPropertiesSchema(
-            source = PLANET_FITNESS_LOCATION_POI_TYPE,
+            source = POI_TYPE,
             sourceId = location.locationId,
-            category = PLANET_FITNESS_LOCATION_POI_TYPE,
+            category = POI_TYPE,
             name = location.name,
             region = location.region,
             country = location.country,
@@ -29,5 +30,9 @@ internal class PlanetFitnessLocationService(
                     raw = raw,
                 ),
         )
+    }
+
+    companion object {
+        const val POI_TYPE = "planet_fitness_location"
     }
 }

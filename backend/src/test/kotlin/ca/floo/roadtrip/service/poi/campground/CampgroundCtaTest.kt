@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.api
+package ca.floo.roadtrip.service.poi.campground
 
 import java.time.Clock
 import java.time.Instant
@@ -9,11 +9,11 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class PoiCtaTest {
+class CampgroundCtaTest {
     // Fixed clock so the dated Aspira deeplink is byte-stable. 2026-06-17
     // 14:23:45 UTC is 10:23:45 in America/New_York (no DST hop in June).
     private val fixedClock: Clock = Clock.fixed(Instant.parse("2026-06-17T14:23:45Z"), ZoneId.of("UTC"))
-    private val cta = PoiCta(clock = fixedClock)
+    private val cta = CampgroundCta(clock = fixedClock)
 
     @Test
     fun `recgov reservable provider_ref produces booking URL`() {
@@ -257,7 +257,7 @@ class PoiCtaTest {
             infoUrl = infoUrl,
         )
 
-    private fun PoiCta.computeCta(input: CtaInput) =
+    private fun CampgroundCta.computeCta(input: CtaInput) =
         computeCta(
             providerRefJson = input.providerRefJson,
             ctaProviderRefJson = input.ctaProviderRefJson,
@@ -265,7 +265,7 @@ class PoiCtaTest {
             infoUrl = input.infoUrl,
         )
 
-    private fun PoiCta.bookingSystem(input: CtaInput) =
+    private fun CampgroundCta.bookingSystem(input: CtaInput) =
         bookingSystem(
             providerRefJson = input.providerRefJson,
             reserveUrl = input.reserveUrl,

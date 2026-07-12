@@ -1,12 +1,12 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.models.api.PoiCategoryDetailSchema
-import ca.floo.roadtrip.models.api.PoiCtaSchema
-import ca.floo.roadtrip.models.api.PoiDetailFeatureSchema
-import ca.floo.roadtrip.models.api.PoiDetailPropertiesSchema
-import ca.floo.roadtrip.models.domain.PoiRow
-import ca.floo.roadtrip.service.api.encodePoiFeatureJson
-import ca.floo.roadtrip.service.api.poiFeatureCollection
+import ca.floo.roadtrip.models.api.poi.PoiCategoryDetailSchema
+import ca.floo.roadtrip.models.api.poi.PoiCtaSchema
+import ca.floo.roadtrip.models.api.poi.PoiDetailFeatureSchema
+import ca.floo.roadtrip.models.api.poi.PoiDetailPropertiesSchema
+import ca.floo.roadtrip.models.domain.poi.PoiRow
+import ca.floo.roadtrip.service.poi.encodePoiFeatureJson
+import ca.floo.roadtrip.service.poi.poiFeatureCollection
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject

@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.api
+package ca.floo.roadtrip.service.poi.campground
 
 internal object ExternalInfoLinkLabels {
     fun forUrl(url: String): String {
