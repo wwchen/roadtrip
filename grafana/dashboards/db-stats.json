@@ -99,15 +99,123 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT namespace, status, count(*) AS entries, max(fetched_at) AS latest_fetch, max(expires_at) AS latest_expiry\nFROM grafana_api_cache_metadata\nGROUP BY namespace, status\nORDER BY entries DESC;",
+          "rawSql": "WITH cache_rows AS (\n  SELECT\n    namespace,\n    CASE WHEN expires_at <= now() THEN 'expired' ELSE 'fresh' END AS status,\n    created_at,\n    expires_at,\n    payload_bytes\n  FROM grafana_api_cache_metadata\n)\nSELECT\n  namespace,\n  status,\n  count(*) AS entries,\n  max(created_at) AS latest_created,\n  max(expires_at) AS latest_expiry,\n  pg_size_pretty(sum(payload_bytes)::bigint) AS total_payload\nFROM cache_rows\nGROUP BY namespace, status\nORDER BY entries DESC;",
           "refId": "A"
         }
       ],
       "title": "API cache by namespace",
       "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 3,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  pid,\n  usename,\n  application_name,\n  client_addr::text AS client,\n  state,\n  wait_event_type,\n  wait_event,\n  pg_blocking_pids(pid) AS blocking_pids,\n  date_trunc('milliseconds', now() - COALESCE(query_start, state_change)) AS query_age,\n  date_trunc('milliseconds', now() - state_change) AS state_age,\n  left(regexp_replace(query, E'[\\n\\r\\t ]+', ' ', 'g'), 2000) AS query\nFROM pg_stat_activity\nWHERE pid <> pg_backend_pid()\nORDER BY\n  (state = 'active') DESC NULLS LAST,\n  (state IS NULL) ASC,\n  COALESCE(query_start, state_change) NULLS LAST;",
+          "refId": "A"
+        }
+      ],
+      "title": "Live database sessions",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 30
+      },
+      "id": 4,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  state,\n  COALESCE(wait_event_type, 'none') AS wait_event_type,\n  COALESCE(wait_event, 'none') AS wait_event,\n  count(*) AS sessions,\n  max(date_trunc('milliseconds', now() - COALESCE(query_start, state_change))) AS longest_query_age\nFROM pg_stat_activity\nWHERE pid <> pg_backend_pid()\nGROUP BY state, wait_event_type, wait_event\nORDER BY sessions DESC, longest_query_age DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Session states and waits",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 30
+      },
+      "id": 5,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  a.pid AS blocked_pid,\n  a.usename AS blocked_user,\n  date_trunc('milliseconds', now() - COALESCE(a.query_start, a.state_change)) AS blocked_age,\n  blocker.pid AS blocking_pid,\n  blocker.usename AS blocking_user,\n  blocker.state AS blocking_state,\n  left(regexp_replace(a.query, E'[\\n\\r\\t ]+', ' ', 'g'), 1000) AS blocked_query,\n  left(regexp_replace(blocker.query, E'[\\n\\r\\t ]+', ' ', 'g'), 1000) AS blocking_query\nFROM pg_stat_activity a\nJOIN LATERAL unnest(pg_blocking_pids(a.pid)) AS blocked_by(pid) ON true\nJOIN pg_stat_activity blocker ON blocker.pid = blocked_by.pid\nORDER BY blocked_age DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Blocked queries",
+      "type": "table"
     }
   ],
-  "refresh": false,
+  "refresh": "5s",
   "schemaVersion": 41,
   "tags": [
     "roadtrip",
@@ -123,6 +231,8 @@
   "timepicker": {
     "hidden": false,
     "refresh_intervals": [
+      "5s",
+      "10s",
       "30s",
       "1m",
       "5m",
