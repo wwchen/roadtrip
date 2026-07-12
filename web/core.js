@@ -146,7 +146,6 @@ export function flattenHydratedPoi(f) {
   const detail = parseObject(p.detail) || {};
   const raw = parseObject(p.raw) || parseObject(detail.raw) || {};
   const detailProps = { ...detail };
-  delete detailProps.type;
   delete detailProps.raw;
   const address = detailProps.address || p.address;
   const flat = p.category === 'campground'

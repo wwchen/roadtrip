@@ -10,9 +10,6 @@ import ca.floo.roadtrip.repo.refreshCanonicalCatalogViews
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.api.POI_LIMIT
 import ca.floo.roadtrip.service.api.PoiService
-import ca.floo.roadtrip.service.catalog.CampgroundService
-import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
-import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -41,9 +38,9 @@ class PoiRoutesTest : SharedDbTest() {
     private fun poiService(): PoiService =
         PoiService(
             poiRepo = PoiServingRepo(ctx),
-            campgroundService = CampgroundService(CampgroundRepo(ctx)),
-            teslaSuperchargerService = TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
-            planetFitnessLocationService = PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
+            campgroundRepo = CampgroundRepo(ctx),
+            teslaSuperchargerRepo = TeslaSuperchargerRepo(ctx),
+            planetFitnessLocationRepo = PlanetFitnessLocationRepo(ctx),
         )
 
     @Test

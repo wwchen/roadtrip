@@ -1,18 +1,16 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.models.domain.PoiDetailRow
+import ca.floo.roadtrip.models.api.PoiCategoryDetailSchema
+import ca.floo.roadtrip.models.api.PoiCtaSchema
+import ca.floo.roadtrip.models.api.PoiDetailFeatureSchema
+import ca.floo.roadtrip.models.api.PoiDetailPropertiesSchema
 import ca.floo.roadtrip.models.domain.PoiRow
 import ca.floo.roadtrip.service.api.encodePoiFeatureJson
-import ca.floo.roadtrip.service.api.poiDetailFeature
 import ca.floo.roadtrip.service.api.poiFeatureCollection
-import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import java.time.Clock
-import java.time.Instant
-import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -106,8 +104,8 @@ class FeatureCollectionContractTest {
 
     @Test
     fun `single feature detail — all optional fields populated`() {
-        val row =
-            PoiDetailRow(
+        val feature =
+            detailFeature(
                 id = 42,
                 source = "uscampgrounds",
                 sourceId = "abc-123",
@@ -117,19 +115,34 @@ class FeatureCollectionContractTest {
                 name = "Tunnel Mountain Village I",
                 region = "AB",
                 country = "CA",
-                lng = -115.547,
-                lat = 51.1812,
-                unitName = "Banff",
-                reserveUrl = "https://reservation.pc.gc.ca",
-                phone = "1-877-737-3783",
-                infoUrl = "https://parks.canada.ca/banff",
-                addressJson = """{"city":"Banff","state":"AB"}""",
-                geomJson = """{"type":"Point","coordinates":[-115.547,51.1812]}""",
-                propertiesJson =
-                    """{"category":"federal","amenities":["showers"],"activities":["hiking"],""" +
-                        """"sites":42,"description":"Camp among redwoods.","photo_url":"https://example.test/photo.jpg",""" +
-                        """"season":"May-Oct","near":"Banff"}""",
-                memberSources = listOf("uscampgrounds", "recgov"),
+                geometry = """{"type":"Point","coordinates":[-115.547,51.1812]}""",
+                detail =
+                    PoiCategoryDetailSchema(
+                        sources = listOf("uscampgrounds", "recgov"),
+                        availabilityProvider = "parks-canada",
+                        timeZone = "America/Edmonton",
+                        earliestDate = "2026-06-21",
+                        unitName = "Banff",
+                        reserveUrl = "https://reservation.pc.gc.ca",
+                        bookingSite = "reservation.pc.gc.ca",
+                        phone = "1-877-737-3783",
+                        infoUrl = "https://parks.canada.ca/banff",
+                        address = json("""{"city":"Banff","state":"AB"}"""),
+                        description = "Camp among redwoods.",
+                        photoUrl = "https://example.test/photo.jpg",
+                        cta =
+                            PoiCtaSchema(
+                                url = "https://parks.canada.ca/banff",
+                                label = "Park info on parks.canada.ca",
+                                kind = "info",
+                            ),
+                        raw =
+                            json(
+                                """{"category":"federal","amenities":["showers"],"activities":["hiking"],""" +
+                                    """"sites":42,"description":"Camp among redwoods.","photo_url":"https://example.test/photo.jpg",""" +
+                                    """"season":"May-Oct","near":"Banff"}""",
+                            ),
+                    ),
             )
         val expected = (
             """{"type":"Feature","id":42,""" +
@@ -139,7 +152,7 @@ class FeatureCollectionContractTest {
                 """"agency":"Parks Canada",""" +
                 """"name":"Tunnel Mountain Village I",""" +
                 """"region":"AB","country":"CA",""" +
-                """"detail":{"type":"campground","sources":["uscampgrounds","recgov"],""" +
+                """"detail":{"sources":["uscampgrounds","recgov"],""" +
                 """"availability_provider":"parks-canada","time_zone":"America/Edmonton",""" +
                 """"earliest_date":"2026-06-21","unit_name":"Banff",""" +
                 """"reserve_url":"https://reservation.pc.gc.ca",""" +
@@ -154,35 +167,25 @@ class FeatureCollectionContractTest {
                 """"sites":42,"description":"Camp among redwoods.","photo_url":"https://example.test/photo.jpg",""" +
                 """"season":"May-Oct","near":"Banff"}}}}"""
         )
-        val dateResolver = AvailabilityDateResolver(Clock.fixed(Instant.parse("2026-06-21T12:00:00Z"), ZoneOffset.UTC))
-        assertEquals(
-            expected,
-            encodePoiFeatureJson(
-                poiDetailFeature(row, dateResolver, availabilityProvider = "parks-canada"),
-            ),
-        )
+        assertEquals(expected, encodePoiFeatureJson(feature))
     }
 
     @Test
     fun `single feature detail — null optional fields omitted`() {
-        val row =
-            PoiDetailRow(
-                id = 1,
-                source = "osm",
-                sourceId = "node/1",
-                category = "planet-fitness",
-                subcategory = null,
-                name = "PF Vancouver",
-                region = null,
-                unitName = null,
-                reserveUrl = null,
-                phone = null,
-                infoUrl = null,
-                addressJson = null,
-                geomJson = """{"type":"Point","coordinates":[-123.0,49.0]}""",
-                propertiesJson = """{}""",
+        val out =
+            encodePoiFeatureJson(
+                detailFeature(
+                    id = 1,
+                    source = "osm",
+                    sourceId = "node/1",
+                    category = "planet-fitness",
+                    subcategory = null,
+                    name = "PF Vancouver",
+                    region = null,
+                    geometry = """{"type":"Point","coordinates":[-123.0,49.0]}""",
+                    detail = PoiCategoryDetailSchema(raw = json("""{}""")),
+                ),
             )
-        val out = encodePoiFeatureJson(poiDetailFeature(row))
         assert(!out.contains("\"subcategory\""))
         assert(!out.contains("\"agency\""))
         assert(!out.contains("\"region\""))
@@ -194,32 +197,33 @@ class FeatureCollectionContractTest {
         assert(!out.contains("\"availability_supported\""))
         assert(!out.contains("\"cta\""))
         assert(!out.contains("\"booking_system\""))
-        assert(out.contains(""""detail":{"type":"generic","raw":{}}"""))
+        assert(out.contains(""""detail":{"sources":[],"raw":{}}"""))
     }
 
     @Test
     fun `single feature detail — availability support is provider agnostic`() {
-        val row =
-            PoiDetailRow(
-                id = 117,
-                source = "new-york-state-parks",
-                sourceId = "ra-117",
-                category = "campground",
-                subcategory = "state",
-                name = "KENNETH L. WILSON",
-                region = "NY",
-                country = "US",
-                unitName = null,
-                reserveUrl = null,
-                phone = null,
-                infoUrl = "https://newyorkstateparks.reserveamerica.com/camping/x/r/campgroundDetails.do?contractCode=NY&parkId=117",
-                addressJson = null,
-                geomJson = """{"type":"Point","coordinates":[-74.2170278,42.0250833]}""",
-                propertiesJson = """{}""",
-                providerRefJson = """{"contract_code":"NY","park_id":"117"}""",
+        val out =
+            encodePoiFeatureJson(
+                detailFeature(
+                    id = 117,
+                    source = "new-york-state-parks",
+                    sourceId = "ra-117",
+                    category = "campground",
+                    subcategory = "state",
+                    name = "KENNETH L. WILSON",
+                    region = "NY",
+                    country = "US",
+                    geometry = """{"type":"Point","coordinates":[-74.2170278,42.0250833]}""",
+                    detail =
+                        PoiCategoryDetailSchema(
+                            infoUrl =
+                                "https://newyorkstateparks.reserveamerica.com/camping/x/r/campgroundDetails.do?contractCode=NY&parkId=117",
+                            providerRef = json("""{"contract_code":"NY","park_id":"117"}"""),
+                            availabilitySupported = true,
+                            raw = json("""{}"""),
+                        ),
+                ),
             )
-
-        val out = encodePoiFeatureJson(poiDetailFeature(row))
         val detail =
             Json
                 .parseToJsonElement(out)
@@ -232,26 +236,54 @@ class FeatureCollectionContractTest {
 
     @Test
     fun `single feature detail — name with quote and backslash is escaped`() {
-        val row =
-            PoiDetailRow(
-                id = 7,
-                source = "test",
-                sourceId = "x",
-                category = "campground",
-                subcategory = null,
-                name = """O'Brien "the\backslash" Park""",
-                region = null,
-                unitName = null,
-                reserveUrl = null,
-                phone = null,
-                infoUrl = null,
-                addressJson = null,
-                geomJson = """{"type":"Point","coordinates":[0,0]}""",
-                propertiesJson = """{}""",
+        val out =
+            encodePoiFeatureJson(
+                detailFeature(
+                    id = 7,
+                    source = "test",
+                    sourceId = "x",
+                    category = "campground",
+                    subcategory = null,
+                    name = """O'Brien "the\backslash" Park""",
+                    region = null,
+                    geometry = """{"type":"Point","coordinates":[0,0]}""",
+                    detail = PoiCategoryDetailSchema(raw = json("""{}""")),
+                ),
             )
-        val out = encodePoiFeatureJson(poiDetailFeature(row))
         kotlinx.serialization.json.Json
             .parseToJsonElement(out)
         assert(out.contains("""\"the\\backslash\""""))
     }
+
+    private fun detailFeature(
+        id: Long,
+        source: String,
+        sourceId: String,
+        category: String,
+        subcategory: String?,
+        agency: String? = null,
+        name: String,
+        region: String?,
+        country: String? = null,
+        geometry: String,
+        detail: PoiCategoryDetailSchema,
+    ): PoiDetailFeatureSchema =
+        PoiDetailFeatureSchema(
+            id = id,
+            geometry = json(geometry),
+            properties =
+                PoiDetailPropertiesSchema(
+                    source = source,
+                    sourceId = sourceId,
+                    category = category,
+                    subcategory = subcategory,
+                    agency = agency,
+                    name = name,
+                    region = region,
+                    country = country,
+                    detail = detail,
+                ),
+        )
+
+    private fun json(raw: String) = Json.parseToJsonElement(raw)
 }

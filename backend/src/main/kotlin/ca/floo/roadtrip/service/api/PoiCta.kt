@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.service.api
 
 import ca.floo.roadtrip.models.api.PoiCtaSchema
-import ca.floo.roadtrip.models.domain.PoiDetailRow
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
 import java.time.Clock
 
@@ -29,25 +28,38 @@ internal class PoiCta(
     // Display name for the booking system that reservations on this pin
     // flow through. Same per-vendor knowledge as computeCta, surfaced as
     // a string for the drawer footer.
-    fun bookingSystem(row: PoiDetailRow): String? {
-        val providerRef = row.providerRefJson?.let { ProviderRefParser.parse(it) }
-        val upstreamUrl = row.providerUrl()
+    fun bookingSystem(
+        providerRefJson: String?,
+        reserveUrl: String?,
+        infoUrl: String?,
+    ): String? {
+        val providerRef = providerRefJson?.let { ProviderRefParser.parse(it) }
+        val upstreamUrl = providerUrl(reserveUrl = reserveUrl, infoUrl = infoUrl)
         return providers.firstNotNullOfOrNull { it.bookingSystem(providerRef, upstreamUrl) }
     }
 
-    fun computeCta(row: PoiDetailRow): PoiCtaSchema? {
-        val providerRef = (row.ctaProviderRefJson ?: row.providerRefJson)?.let { ProviderRefParser.parse(it) }
-        return providers.firstNotNullOfOrNull { it.reserveCta(providerRef, row.providerUrl()) }
-            ?: row.infoUrl?.takeIf { it.isNotBlank() }?.let {
-                PoiCtaSchema(
-                    url = it,
-                    label = ExternalInfoLinkLabels.forUrl(it),
-                    kind = INFO_CTA_KIND,
-                )
-            }
+    fun computeCta(
+        providerRefJson: String?,
+        ctaProviderRefJson: String?,
+        reserveUrl: String?,
+        infoUrl: String?,
+    ): PoiCtaSchema? {
+        val providerRef = (ctaProviderRefJson ?: providerRefJson)?.let { ProviderRefParser.parse(it) }
+        return providers.firstNotNullOfOrNull {
+            it.reserveCta(providerRef, providerUrl(reserveUrl = reserveUrl, infoUrl = infoUrl))
+        } ?: infoUrl?.takeIf { it.isNotBlank() }?.let {
+            PoiCtaSchema(
+                url = it,
+                label = ExternalInfoLinkLabels.forUrl(it),
+                kind = INFO_CTA_KIND,
+            )
+        }
     }
 
-    private fun PoiDetailRow.providerUrl(): String? =
+    private fun providerUrl(
+        reserveUrl: String?,
+        infoUrl: String?,
+    ): String? =
         reserveUrl
             ?.takeIf { it.isNotBlank() }
             ?: infoUrl?.takeIf { it.isNotBlank() }

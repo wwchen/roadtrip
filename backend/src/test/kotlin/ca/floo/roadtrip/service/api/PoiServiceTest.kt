@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.api
 
-import ca.floo.roadtrip.models.api.CampgroundPoiDetailSchema
+import ca.floo.roadtrip.models.api.PoiCategoryDetailSchema
 import ca.floo.roadtrip.models.api.PoiDetailFeatureSchema
 import ca.floo.roadtrip.models.domain.Bbox
-import ca.floo.roadtrip.models.domain.PoiDetailRow
+import ca.floo.roadtrip.models.domain.CampgroundPoiDetail
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
@@ -12,9 +12,6 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
-import ca.floo.roadtrip.service.catalog.CampgroundService
-import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
-import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -250,15 +247,14 @@ class PoiServiceTest : SharedDbTest() {
     private fun poiService(): PoiService =
         PoiService(
             poiRepo = PoiServingRepo(ctx),
-            campgroundService = CampgroundService(CampgroundRepo(ctx)),
-            teslaSuperchargerService = TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
-            planetFitnessLocationService = PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
+            campgroundRepo = CampgroundRepo(ctx),
+            teslaSuperchargerRepo = TeslaSuperchargerRepo(ctx),
+            planetFitnessLocationRepo = PlanetFitnessLocationRepo(ctx),
         )
 
-    private fun campgroundDetailRow(poiId: Long): PoiDetailRow =
-        CampgroundService(CampgroundRepo(ctx)).poiDetail(PoiServingRepo(ctx).findById(poiId)!!)!!
+    private fun campgroundDetailRow(poiId: Long): CampgroundPoiDetail = CampgroundRepo(ctx).findPoiDetailByPoi(poiId)!!
 
-    private fun PoiDetailFeatureSchema.campgroundDetail(): CampgroundPoiDetailSchema = properties.detail as CampgroundPoiDetailSchema
+    private fun PoiDetailFeatureSchema.campgroundDetail(): PoiCategoryDetailSchema = properties.detail
 
     private companion object {
         const val SOURCE = "poi-serving-test"

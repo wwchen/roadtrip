@@ -22,7 +22,6 @@ const campflareDetail = {
     subcategory: 'established',
     name: 'Cold Creek',
     detail: {
-      type: 'campground',
       sources: ['campflare', 'recgov'],
       availability_provider: 'recgov',
       booking_site: 'recreation.gov',

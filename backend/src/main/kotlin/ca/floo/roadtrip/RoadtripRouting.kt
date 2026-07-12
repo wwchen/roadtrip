@@ -19,9 +19,6 @@ import ca.floo.roadtrip.routes.slackInteractivityRoute
 import ca.floo.roadtrip.service.api.PoiService
 import ca.floo.roadtrip.service.api.PoisOnRouteService
 import ca.floo.roadtrip.service.availability.PoiAvailabilitySupport
-import ca.floo.roadtrip.service.catalog.CampgroundService
-import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
-import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
@@ -106,12 +103,12 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
     val poiService =
         PoiService(
             poiRepo = PoiServingRepo(runtime.ctx),
-            campgroundService = CampgroundService(CampgroundRepo(runtime.ctx)),
-            teslaSuperchargerService = TeslaSuperchargerService(TeslaSuperchargerRepo(runtime.ctx)),
-            planetFitnessLocationService = PlanetFitnessLocationService(PlanetFitnessLocationRepo(runtime.ctx)),
+            campgroundRepo = CampgroundRepo(runtime.ctx),
+            teslaSuperchargerRepo = TeslaSuperchargerRepo(runtime.ctx),
+            planetFitnessLocationRepo = PlanetFitnessLocationRepo(runtime.ctx),
             dateResolver = runtime.availabilityDateResolver,
-            availabilitySupport = poiAvailabilitySupport::supports,
-            availabilityProvider = { row -> poiAvailabilitySupport.preferredAvailabilityProvider(row.id) },
+            availabilitySupport = poiAvailabilitySupport::supportsPoi,
+            availabilityProvider = poiAvailabilitySupport::preferredAvailabilityProvider,
         )
     val routeCorridorService = RouteCorridorService(RouteCorridorRepo(runtime.ctx))
     val poisOnRouteService =

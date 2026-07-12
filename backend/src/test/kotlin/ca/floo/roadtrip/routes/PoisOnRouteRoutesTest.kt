@@ -12,9 +12,6 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.api.PoiService
 import ca.floo.roadtrip.service.api.PoisOnRouteService
-import ca.floo.roadtrip.service.catalog.CampgroundService
-import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
-import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import io.ktor.client.request.get
@@ -47,9 +44,9 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     private fun poiService(): PoiService =
         PoiService(
             poiRepo = PoiServingRepo(ctx),
-            campgroundService = CampgroundService(CampgroundRepo(ctx)),
-            teslaSuperchargerService = TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
-            planetFitnessLocationService = PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
+            campgroundRepo = CampgroundRepo(ctx),
+            teslaSuperchargerRepo = TeslaSuperchargerRepo(ctx),
+            planetFitnessLocationRepo = PlanetFitnessLocationRepo(ctx),
         )
 
     private fun poisOnRouteService(routeCache: RouteCache): PoisOnRouteService =

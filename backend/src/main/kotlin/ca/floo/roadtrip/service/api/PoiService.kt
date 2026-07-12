@@ -1,8 +1,6 @@
 package ca.floo.roadtrip.service.api
 
-import ca.floo.roadtrip.models.api.CampgroundPoiDetailSchema
-import ca.floo.roadtrip.models.api.GenericPoiDetailSchema
-import ca.floo.roadtrip.models.api.PlanetFitnessLocationPoiDetailSchema
+import ca.floo.roadtrip.models.api.PoiCategoryDetailSchema
 import ca.floo.roadtrip.models.api.PoiDetailFeatureSchema
 import ca.floo.roadtrip.models.api.PoiDetailPropertiesSchema
 import ca.floo.roadtrip.models.api.PoiFeatureCollectionSchema
@@ -11,19 +9,22 @@ import ca.floo.roadtrip.models.api.PoiSearchResponseSchema
 import ca.floo.roadtrip.models.api.PointGeometrySchema
 import ca.floo.roadtrip.models.api.SlimPoiFeatureSchema
 import ca.floo.roadtrip.models.api.SlimPoiPropertiesSchema
-import ca.floo.roadtrip.models.api.TeslaSuperchargerPoiDetailSchema
 import ca.floo.roadtrip.models.domain.Bbox
-import ca.floo.roadtrip.models.domain.PoiDetailRow
+import ca.floo.roadtrip.models.domain.CampgroundPoiDetail
+import ca.floo.roadtrip.models.domain.PlanetFitnessLocationPoiDetail
+import ca.floo.roadtrip.models.domain.PoiIndexRow
 import ca.floo.roadtrip.models.domain.PoiRow
+import ca.floo.roadtrip.models.domain.TeslaSuperchargerPoiDetail
+import ca.floo.roadtrip.repo.CampgroundRepo
+import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
+import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
-import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
-import ca.floo.roadtrip.service.catalog.CampgroundService
-import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
-import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -42,6 +43,11 @@ private const val MIN_SEARCH_QUERY_LENGTH = 2
 private const val CAMPGROUND_POI_TYPE = "campground"
 private const val TESLA_SUPERCHARGER_POI_TYPE = "tesla_supercharger"
 private const val PLANET_FITNESS_LOCATION_POI_TYPE = "planet_fitness_location"
+private const val REGION_KEY = "region"
+private const val COUNTRY_KEY = "country"
+private const val AGENCY_KEY = "agency"
+private const val PHONE_KEY = "phone"
+private const val URL_KEY = "url"
 
 internal val DEFAULT_POI_TYPES =
     listOf(
@@ -72,12 +78,12 @@ internal fun canonicalPoiCategories(categories: List<String>): List<String> =
 
 internal class PoiService(
     private val poiRepo: PoiServingRepo,
-    private val campgroundService: CampgroundService,
-    private val teslaSuperchargerService: TeslaSuperchargerService,
-    private val planetFitnessLocationService: PlanetFitnessLocationService,
+    private val campgroundRepo: CampgroundRepo,
+    private val teslaSuperchargerRepo: TeslaSuperchargerRepo,
+    private val planetFitnessLocationRepo: PlanetFitnessLocationRepo,
     private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
-    private val availabilitySupport: (PoiDetailRow) -> Boolean = ::providerRefShapeSupportsAvailability,
-    private val availabilityProvider: (PoiDetailRow) -> String? = { null },
+    private val availabilitySupport: (Long) -> Boolean = { false },
+    private val availabilityProvider: (Long) -> String? = { null },
     private val limit: Int = POI_LIMIT,
     private val defaultCategories: List<String> = DEFAULT_POI_TYPES,
 ) {
@@ -127,19 +133,27 @@ internal class PoiService(
 
     fun poiDetail(id: Long): PoiDetailFeatureSchema? {
         val poi = poiRepo.findById(id) ?: return null
-        val row =
-            when (poi.category) {
-                CAMPGROUND_POI_TYPE -> campgroundService.poiDetail(poi)
-                TESLA_SUPERCHARGER_POI_TYPE -> teslaSuperchargerService.poiDetail(poi)
-                PLANET_FITNESS_LOCATION_POI_TYPE -> planetFitnessLocationService.poiDetail(poi)
-                else -> null
-            } ?: return null
-        return poiDetailFeature(
-            r = row,
-            dateResolver = dateResolver,
-            availabilitySupported = availabilitySupport(row),
-            availabilityProvider = availabilityProvider(row),
-        )
+        return when (poi.category) {
+            CAMPGROUND_POI_TYPE ->
+                campgroundRepo.findPoiDetailByPoi(poi.id)?.let { detail ->
+                    campgroundPoiDetailFeature(
+                        poi = poi,
+                        detail = detail,
+                        dateResolver = dateResolver,
+                        availabilitySupported = availabilitySupport(poi.id),
+                        availabilityProvider = availabilityProvider(poi.id),
+                    )
+                }
+            TESLA_SUPERCHARGER_POI_TYPE ->
+                teslaSuperchargerRepo.findPoiDetailByPoi(poi.id)?.let { detail ->
+                    teslaSuperchargerPoiDetailFeature(poi, detail)
+                }
+            PLANET_FITNESS_LOCATION_POI_TYPE ->
+                planetFitnessLocationRepo.findPoiDetailByPoi(poi.id)?.let { detail ->
+                    planetFitnessLocationPoiDetailFeature(poi, detail)
+                }
+            else -> null
+        }
     }
 
     fun search(
@@ -187,81 +201,119 @@ internal fun poiFeatureCollection(
             },
     )
 
-internal fun poiDetailFeature(
-    r: PoiDetailRow,
+internal fun campgroundPoiDetailFeature(
+    poi: PoiIndexRow,
+    detail: CampgroundPoiDetail,
     dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
-    availabilitySupported: Boolean = providerRefShapeSupportsAvailability(r),
+    availabilitySupported: Boolean = false,
     availabilityProvider: String? = null,
 ): PoiDetailFeatureSchema {
-    val raw = Json.parseToJsonElement(r.propertiesJson)
+    val campground = detail.campground
+    val raw = Json.parseToJsonElement(detail.propertiesJson)
     val rawObject = raw as? JsonObject ?: JsonObject(emptyMap())
-    val dateContext =
-        if (r.category == CAMPGROUND_POI_TYPE) {
-            dateResolver.context(lat = r.lat, lng = r.lng)
-        } else {
-            null
-        }
-    val address = r.addressJson?.let { Json.parseToJsonElement(it) }
+    val dateContext = dateResolver.context(lat = poi.lat, lng = poi.lng)
+    val infoUrl = campground.links.firstObjectStringProperty(URL_KEY)
     val description = rawObject.stringProperty("description")
     val photoUrl = rawObject.stringProperty("photo_url")
     return PoiDetailFeatureSchema(
-        id = r.id,
-        geometry = Json.parseToJsonElement(r.geomJson),
+        id = poi.id,
+        geometry = Json.parseToJsonElement(poi.geomJson),
         properties =
             PoiDetailPropertiesSchema(
-                source = r.source,
-                sourceId = r.sourceId,
-                category = r.category,
-                subcategory = r.subcategory,
-                agency = r.agency,
-                name = r.name,
-                region = r.region,
-                country = r.country,
+                source = detail.source,
+                sourceId = detail.sourceId,
+                category = CAMPGROUND_POI_TYPE,
+                subcategory = campground.kind,
+                agency = campground.management.stringProperty(AGENCY_KEY),
+                name = campground.name,
+                region = campground.location.stringProperty(REGION_KEY),
+                country = campground.location.stringProperty(COUNTRY_KEY),
                 detail =
-                    when (r.category) {
-                        CAMPGROUND_POI_TYPE ->
-                            CampgroundPoiDetailSchema(
-                                sources = r.memberSources,
-                                availabilityProvider = availabilityProvider,
-                                timeZone = dateContext?.timeZone?.id,
-                                earliestDate = dateContext?.earliestDate?.toString(),
-                                unitName = r.unitName,
-                                reserveUrl = r.reserveUrl,
-                                bookingSite = r.reserveUrl?.let(UrlHosts::extract),
-                                phone = r.phone,
-                                infoUrl = r.infoUrl,
-                                address = address,
-                                description = description,
-                                photoUrl = photoUrl,
-                                providerRef = r.providerRefJson?.let { Json.parseToJsonElement(it) },
-                                availabilitySupported = availabilitySupported.takeIf { it },
-                                cta = PoiCta.Default.computeCta(r),
-                                bookingSystem = PoiCta.Default.bookingSystem(r),
-                                raw = raw,
-                            )
-                        TESLA_SUPERCHARGER_POI_TYPE ->
-                            TeslaSuperchargerPoiDetailSchema(
-                                infoUrl = r.infoUrl,
-                                address = address,
-                                raw = raw,
-                            )
-                        PLANET_FITNESS_LOCATION_POI_TYPE ->
-                            PlanetFitnessLocationPoiDetailSchema(
-                                phone = r.phone,
-                                infoUrl = r.infoUrl,
-                                address = address,
-                                raw = raw,
-                            )
-                        else ->
-                            GenericPoiDetailSchema(
-                                phone = r.phone,
-                                infoUrl = r.infoUrl,
-                                address = address,
-                                description = description,
-                                photoUrl = photoUrl,
-                                raw = raw,
-                            )
-                    },
+                    PoiCategoryDetailSchema(
+                        sources = detail.memberSources,
+                        availabilityProvider = availabilityProvider,
+                        timeZone = dateContext.timeZone.id,
+                        earliestDate = dateContext.earliestDate.toString(),
+                        unitName = null,
+                        reserveUrl = campground.reservationUrl,
+                        bookingSite = campground.reservationUrl?.let(UrlHosts::extract),
+                        phone = campground.contact.stringProperty(PHONE_KEY),
+                        infoUrl = infoUrl,
+                        address = campground.location,
+                        description = description,
+                        photoUrl = photoUrl,
+                        providerRef = detail.providerRefJson?.let { Json.parseToJsonElement(it) },
+                        availabilitySupported = availabilitySupported.takeIf { it },
+                        cta =
+                            PoiCta.Default.computeCta(
+                                providerRefJson = detail.providerRefJson,
+                                ctaProviderRefJson = detail.ctaProviderRefJson,
+                                reserveUrl = campground.reservationUrl,
+                                infoUrl = infoUrl,
+                            ),
+                        bookingSystem =
+                            PoiCta.Default.bookingSystem(
+                                providerRefJson = detail.providerRefJson,
+                                reserveUrl = campground.reservationUrl,
+                                infoUrl = infoUrl,
+                            ),
+                        raw = raw,
+                    ),
+            ),
+    )
+}
+
+internal fun teslaSuperchargerPoiDetailFeature(
+    poi: PoiIndexRow,
+    detail: TeslaSuperchargerPoiDetail,
+): PoiDetailFeatureSchema {
+    val supercharger = detail.supercharger
+    val raw = Json.parseToJsonElement(detail.propertiesJson)
+    return PoiDetailFeatureSchema(
+        id = poi.id,
+        geometry = Json.parseToJsonElement(poi.geomJson),
+        properties =
+            PoiDetailPropertiesSchema(
+                source = TESLA_SUPERCHARGER_POI_TYPE,
+                sourceId = supercharger.locationSlug,
+                category = TESLA_SUPERCHARGER_POI_TYPE,
+                name = supercharger.commonSiteName,
+                region = supercharger.region,
+                country = supercharger.country,
+                detail =
+                    PoiCategoryDetailSchema(
+                        infoUrl = supercharger.infoUrl,
+                        address = supercharger.address,
+                        raw = raw,
+                    ),
+            ),
+    )
+}
+
+internal fun planetFitnessLocationPoiDetailFeature(
+    poi: PoiIndexRow,
+    detail: PlanetFitnessLocationPoiDetail,
+): PoiDetailFeatureSchema {
+    val location = detail.location
+    val raw = Json.parseToJsonElement(detail.propertiesJson)
+    return PoiDetailFeatureSchema(
+        id = poi.id,
+        geometry = Json.parseToJsonElement(poi.geomJson),
+        properties =
+            PoiDetailPropertiesSchema(
+                source = PLANET_FITNESS_LOCATION_POI_TYPE,
+                sourceId = location.locationId,
+                category = PLANET_FITNESS_LOCATION_POI_TYPE,
+                name = location.name,
+                region = location.region,
+                country = location.country,
+                detail =
+                    PoiCategoryDetailSchema(
+                        phone = location.phone,
+                        infoUrl = location.infoUrl,
+                        address = location.address,
+                        raw = raw,
+                    ),
             ),
     )
 }
@@ -272,9 +324,20 @@ private fun JsonObject.stringProperty(key: String): String? =
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
 
-private fun providerRefShapeSupportsAvailability(r: PoiDetailRow): Boolean =
-    r.category == CAMPGROUND_POI_TYPE &&
-        r.providerRefJson?.let { ProviderRefParser.parse(it) } != null
+private fun JsonElement.stringProperty(key: String): String? =
+    ((this as? JsonObject)?.get(key) as? JsonPrimitive)
+        ?.contentOrNull
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+
+private fun JsonElement.firstObjectStringProperty(key: String): String? =
+    (this as? JsonArray)
+        ?.firstNotNullOfOrNull { element ->
+            (element as? JsonObject)
+                ?.let { (it[key] as? JsonPrimitive)?.contentOrNull }
+                ?.trim()
+                ?.takeIf { value -> value.isNotEmpty() }
+        }
 
 internal fun encodePoiFeatureJson(value: PoiFeatureCollectionSchema): String = poiFeatureJson.encodeToString(value)
 

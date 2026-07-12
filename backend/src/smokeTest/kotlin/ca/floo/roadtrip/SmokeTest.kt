@@ -531,7 +531,6 @@ class SmokeTest {
                             "region": "CA",
                             "country": "US",
                             "detail": {
-                              "type": "campground",
                               "availability_supported": true,
                               "description": "Clear Lake State Park offers rental cabins near the lake.",
                               "photo_url": "https://cali-content.usedirect.com/Images/California/ParkImages/Place/629.jpg",

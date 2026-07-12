@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.api
 
-import ca.floo.roadtrip.models.domain.PoiDetailRow
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneId
@@ -250,23 +249,33 @@ class PoiCtaTest {
         ctaProviderRefJson: String? = null,
         reserveUrl: String? = null,
         infoUrl: String? = null,
-    ): PoiDetailRow =
-        PoiDetailRow(
-            id = 441L,
-            source = "federal-campgrounds",
-            sourceId = "recgov-248965",
-            category = "campground",
-            subcategory = "federal",
-            name = "Butte Meadows Campground",
-            region = "CA",
-            unitName = null,
-            reserveUrl = reserveUrl,
-            phone = null,
-            infoUrl = infoUrl,
-            addressJson = null,
+    ): CtaInput =
+        CtaInput(
             providerRefJson = providerRefJson,
-            geomJson = """{"type":"Point","coordinates":[-121.5,40.0]}""",
-            propertiesJson = "{}",
             ctaProviderRefJson = ctaProviderRefJson,
+            reserveUrl = reserveUrl,
+            infoUrl = infoUrl,
         )
+
+    private fun PoiCta.computeCta(input: CtaInput) =
+        computeCta(
+            providerRefJson = input.providerRefJson,
+            ctaProviderRefJson = input.ctaProviderRefJson,
+            reserveUrl = input.reserveUrl,
+            infoUrl = input.infoUrl,
+        )
+
+    private fun PoiCta.bookingSystem(input: CtaInput) =
+        bookingSystem(
+            providerRefJson = input.providerRefJson,
+            reserveUrl = input.reserveUrl,
+            infoUrl = input.infoUrl,
+        )
+
+    private data class CtaInput(
+        val providerRefJson: String?,
+        val ctaProviderRefJson: String?,
+        val reserveUrl: String?,
+        val infoUrl: String?,
+    )
 }
