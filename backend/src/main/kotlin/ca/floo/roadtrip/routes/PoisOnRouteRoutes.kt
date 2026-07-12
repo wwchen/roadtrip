@@ -11,14 +11,13 @@ import ca.floo.roadtrip.models.api.WaypointSchema
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.OnRoutePoiRepo
 import ca.floo.roadtrip.repo.OnRouteRow
-import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.service.api.canonicalPoiCategories
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_CORRIDOR_RADIUS_MILES
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_WAYPOINTS
 import ca.floo.roadtrip.service.routing.MIN_ROUTE_CORRIDOR_RADIUS_MILES
 import ca.floo.roadtrip.service.routing.RouteCache
+import ca.floo.roadtrip.service.routing.RouteCorridorService
 import ca.floo.roadtrip.service.routing.lineStringGeoJson
-import ca.floo.roadtrip.service.routing.routeCorridorRadiusMeters
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -53,14 +52,14 @@ private val DEFAULT_ON_ROUTE_POI_TYPES = listOf("campground", "tesla_supercharge
 // Returns every POI inside the buffered route corridor — no viewport bound,
 // no per-category cap. Drives the trip planner's "campgrounds along route"
 // card list, which the user wants to scan end-to-end instead of pan-by-pan.
-fun Route.poisOnRouteRoutes(
+internal fun Route.poisOnRouteRoutes(
     ctx: DSLContext,
     routeCache: RouteCache,
     registry: PoiRegistry,
+    routeCorridorService: RouteCorridorService,
 ) {
     val defaultCategories: List<String> = DEFAULT_ON_ROUTE_POI_TYPES
     val onRoutePoiRepo = OnRoutePoiRepo(ctx)
-    val routeCorridorRepo = RouteCorridorRepo(ctx)
 
     post("/api/pois/on-route", {
         tags = listOf("poi")
@@ -135,9 +134,9 @@ fun Route.poisOnRouteRoutes(
             } else {
                 try {
                     val corridorPolygonGeoJson =
-                        routeCorridorRepo.bufferedPolygonGeoJson(
+                        routeCorridorService.bufferedPolygonGeoJson(
                             corridorLineGeoJson,
-                            routeCorridorRadiusMeters(req.radiusMiles),
+                            req.radiusMiles,
                         )
                     onRoutePoiRepo.fetch(cats, corridorLineGeoJson, corridorPolygonGeoJson)
                 } catch (e: DataAccessException) {

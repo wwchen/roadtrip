@@ -4,6 +4,7 @@ import ca.floo.roadtrip.http.cacheOptionsFor
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
+import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.routes.adminIngestRoutes
 import ca.floo.roadtrip.routes.availabilityDashboardRoutes
@@ -20,6 +21,7 @@ import ca.floo.roadtrip.service.availability.PoiAvailabilitySupport
 import ca.floo.roadtrip.service.catalog.CampgroundService
 import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
+import ca.floo.roadtrip.service.routing.RouteCorridorService
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
 import io.github.smiley4.ktorswaggerui.routing.swaggerUI
@@ -110,6 +112,7 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
             availabilitySupport = poiAvailabilitySupport::supports,
             availabilityProvider = { row -> poiAvailabilitySupport.preferredAvailabilityProvider(row.id) },
         )
+    val routeCorridorService = RouteCorridorService(RouteCorridorRepo(runtime.ctx))
     routing {
         route("/api/docs") {
             swaggerUI("/api/docs/openapi.json")
@@ -139,8 +142,8 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
             slackInteractivityRoute(wiring.verifier, wiring.handler, runtime.schedulerScope)
         }
         availabilityDashboardRoutes(runtime.ctx)
-        poisOnRouteRoutes(runtime.ctx, runtime.routeCache, runtime.poiRegistry)
-        routeRoutes(runtime.routeCache, runtime.ctx)
+        poisOnRouteRoutes(runtime.ctx, runtime.routeCache, runtime.poiRegistry, routeCorridorService)
+        routeRoutes(runtime.routeCache, routeCorridorService)
         geocodeRoutes(runtime.mapboxGeocoder)
         healthRoutes()
         staticSiteRoutes(runtime.staticDir)

@@ -10,13 +10,12 @@ import ca.floo.roadtrip.models.api.RouteLegDto
 import ca.floo.roadtrip.models.api.RouteLineGeometryDto
 import ca.floo.roadtrip.models.api.RoutePropertiesDto
 import ca.floo.roadtrip.models.routing.RouteResponse
-import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_CORRIDOR_RADIUS_MILES
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_WAYPOINTS
 import ca.floo.roadtrip.service.routing.MIN_ROUTE_CORRIDOR_RADIUS_MILES
 import ca.floo.roadtrip.service.routing.RouteCache
+import ca.floo.roadtrip.service.routing.RouteCorridorService
 import ca.floo.roadtrip.service.routing.lineStringGeoJson
-import ca.floo.roadtrip.service.routing.routeCorridorRadiusMeters
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -27,7 +26,6 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToJsonElement
-import org.jooq.DSLContext
 import org.jooq.exception.DataAccessException
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -48,12 +46,10 @@ private val routeJson =
  *   400 for malformed coords / wrong number of waypoints
  *   503 when MAPBOX_TOKEN unset or upstream fails
  */
-fun Route.routeRoutes(
+internal fun Route.routeRoutes(
     routeCache: RouteCache,
-    ctx: DSLContext,
+    routeCorridorService: RouteCorridorService,
 ) {
-    val routeCorridorRepo = RouteCorridorRepo(ctx)
-
     get("/api/route") {
         if (!routeCache.configured) {
             call.respondRouteError(
@@ -162,9 +158,9 @@ fun Route.routeRoutes(
         val corridorPolygonGeoJson =
             corridorRadiusMiles?.let { radiusMiles ->
                 try {
-                    routeCorridorRepo.bufferedPolygonGeoJson(
+                    routeCorridorService.bufferedPolygonGeoJson(
                         routeLineGeoJson,
-                        routeCorridorRadiusMeters(radiusMiles),
+                        radiusMiles,
                     )
                 } catch (e: DataAccessException) {
                     call.respondRouteError(

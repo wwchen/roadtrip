@@ -5,6 +5,7 @@ import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
+import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.routes.healthRoutes
 import ca.floo.roadtrip.routes.poiRoutes
@@ -14,6 +15,7 @@ import ca.floo.roadtrip.service.catalog.CampgroundService
 import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
 import ca.floo.roadtrip.service.routing.RouteCache
+import ca.floo.roadtrip.service.routing.RouteCorridorService
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
@@ -89,7 +91,12 @@ class OpenApiSmokeTest {
                     ktorGet("/web/{path...}") { call.respondText("static") }
                     healthRoutes()
                     poiRoutes(testPoiService(ctx))
-                    poisOnRouteRoutes(ctx, RouteCache(MapboxDirections(token = null)), registry)
+                    poisOnRouteRoutes(
+                        ctx,
+                        RouteCache(MapboxDirections(token = null)),
+                        registry,
+                        RouteCorridorService(RouteCorridorRepo(ctx)),
+                    )
                 }
             }
 

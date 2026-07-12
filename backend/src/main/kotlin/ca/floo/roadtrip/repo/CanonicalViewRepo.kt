@@ -66,6 +66,7 @@ class CanonicalViewRepo(
 
     private fun repointPois(txn: DSLContext): Int {
         val plan = txn.fetch(POI_REPOINT_PLAN_SQL)
+        val pois = PoiRepo(txn)
         var repointed = 0
         for (record in plan) {
             val srcPoiId = record.get("src_poi_id", Long::class.java)
@@ -93,12 +94,12 @@ class CanonicalViewRepo(
                 // src wins: drop the winner-side pc row, re-point src, soft-delete the loser poi.
                 txn.execute(POI_DELETE_LINK_BY_CAMPGROUND_SQL, winnerCampgroundId)
                 txn.execute(POI_REPOINT_UPDATE_SQL, winnerCampgroundId, srcCampgroundId)
-                txn.execute(POI_SOFT_DELETE_SQL, existingWinnerPoiId)
+                pois.softDeletePoiIfActive(existingWinnerPoiId)
                 repointed += 1
             } else {
                 // winner wins: drop src's pc row and soft-delete the src poi.
                 txn.execute(POI_DELETE_LINK_BY_CAMPGROUND_SQL, srcCampgroundId)
-                txn.execute(POI_SOFT_DELETE_SQL, srcPoiId)
+                pois.softDeletePoiIfActive(srcPoiId)
             }
         }
         return repointed
@@ -194,9 +195,6 @@ class CanonicalViewRepo(
 
         private const val POI_DELETE_LINK_BY_CAMPGROUND_SQL =
             "DELETE FROM poi_campgrounds WHERE campground_id = ?"
-
-        private const val POI_SOFT_DELETE_SQL =
-            "UPDATE pois SET deleted_at = now(), updated_at = now() WHERE id = ? AND deleted_at IS NULL"
 
         // Watch target re-point plan: every availability_watch_target row whose
         // campsite_id is a non-winner. poi_id-only targets are skipped — those
