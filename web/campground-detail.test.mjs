@@ -22,8 +22,8 @@ const campflareDetail = {
     subcategory: 'established',
     name: 'Cold Creek',
     detail: {
-      sources: ['campflare', 'federal-campgrounds'],
-      availability_provider: 'federal-campgrounds',
+      sources: ['campflare', 'recgov'],
+      availability_provider: 'recgov',
       booking_site: 'recreation.gov',
       reserve_url: 'https://www.recreation.gov/camping/campgrounds/232869',
       address: {

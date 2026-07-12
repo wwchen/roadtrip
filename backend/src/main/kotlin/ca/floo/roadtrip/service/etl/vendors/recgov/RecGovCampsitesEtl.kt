@@ -24,7 +24,7 @@ import kotlinx.serialization.json.put
  * campsite per campsite.
  *
  * Parent linking is explicit on every emitted row: `parentVendor` is the
- * federal campground ETL slug and `parentVendorRefId` is `recgov-{FacilityID}`.
+ * Rec.gov campground vendor and `parentVendorRefId` is `recgov-{FacilityID}`.
  * CampsiteRepo resolves that pair through campground vendor refs.
  *
  * The full upstream campsite blob is preserved verbatim in `sourcePayload`
@@ -172,7 +172,7 @@ class RecGovCampsitesEtl(
 
     private companion object {
         const val VENDOR = "recgov"
-        const val PARENT_CAMPGROUND_VENDOR = "federal-campgrounds"
+        const val PARENT_CAMPGROUND_VENDOR = "recgov"
         const val PARENT_CAMPGROUND_REF_PREFIX = "recgov-"
     }
 }

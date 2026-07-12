@@ -136,7 +136,7 @@ class RecGovCampgroundsEtl(
         val cell = cellCoverage(enrichment)
 
         return CampgroundUpsertCandidate(
-            vendor = etlSlug,
+            vendor = VENDOR,
             vendorRefId = "$CAMPGROUND_REF_PREFIX${row.FacilityID}",
             name = name,
             latitude = lat,
@@ -440,6 +440,7 @@ class RecGovCampgroundsEtl(
         private val json = Json { ignoreUnknownKeys = true }
         private const val RIDB_INPUT = "recgov-campgrounds"
         private const val ENRICHMENT_INPUT = "recgov-campground-enrichment"
+        private const val VENDOR = "recgov"
         private const val DEFAULT_COUNTRY = "US"
         private const val CAMPGROUND_REF_PREFIX = "recgov-"
         private val CARRIER_SLUG =

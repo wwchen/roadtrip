@@ -142,7 +142,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                         lon = -122.7,
                         lat = 48.4,
                         category = "campground",
-                        source = "federal-campgrounds",
+                        source = "recgov",
                         providerRefJson = """{"recgov_id":"12345"}""",
                     ),
                     row(
@@ -158,7 +158,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                         lon = -123.05,
                         lat = 49.2,
                         category = "campground",
-                        source = "federal-campgrounds",
+                        source = "recgov",
                         providerRefJson = """{"recgov_id":"67890"}""",
                     ),
                 ),

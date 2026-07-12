@@ -35,7 +35,7 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
             )
         linkCampgroundRef(
             campgroundId = fixture.catalogId,
-            vendor = "federal-campgrounds",
+            vendor = "recgov",
             externalId = "recgov-232447",
             payloadJson = """{"recgov_id":"232447"}""",
         )
@@ -46,7 +46,7 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
                     AvailabilityProviderRegistry(
                         mapOf(
                             "campflare" to DecliningCampflareProvider(),
-                            "federal-campgrounds" to NoopRecgovProvider(),
+                            "recgov" to NoopRecgovProvider(),
                         ),
                     ),
             )
@@ -63,14 +63,14 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
     }
 
     @Test
-    fun `preferredAvailabilityProvider reports recgov for federal campgrounds catalog source`() {
+    fun `preferredAvailabilityProvider reports recgov for recgov catalog source`() {
         val fixture =
             ctx.seedCatalogPoi(
                 sourceId = "recgov-232447",
                 name = "Upper Pines",
                 lon = -119.56,
                 lat = 37.74,
-                source = "federal-campgrounds",
+                source = "recgov",
                 providerRefJson = """{"recgov_id":"232447"}""",
             )
         val support = supportFor()

@@ -105,7 +105,7 @@ class PoiServiceTest : SharedDbTest() {
                 name = "Cold Creek",
                 lon = -120.3147222,
                 lat = 39.5427778,
-                source = "federal-campgrounds",
+                source = "recgov",
                 subcategory = "established",
                 agency = "USDA Forest Service",
                 region = "CA",
@@ -140,14 +140,13 @@ class PoiServiceTest : SharedDbTest() {
         val feature = poiService().poiDetail(fixture.poiId)
 
         assertNotNull(feature)
-        assertEquals("federal-campgrounds", feature.properties.source)
+        assertEquals("recgov", feature.properties.source)
         assertEquals("recgov-232869", feature.properties.sourceId)
         val detail = feature.campgroundDetail()
         assertEquals("https://www.recreation.gov/camping/campgrounds/232869", detail.reserveUrl)
         val publicRef = detail.providerRef!!.jsonObject
         assertEquals("232869", publicRef["recgov_id"]!!.jsonPrimitive.content)
-        // The singleton canonical view returns one member source equal to data_source.
-        assertEquals(listOf("federal-campgrounds"), detail.sources)
+        assertEquals(listOf("recgov"), detail.sources)
     }
 
     @Test

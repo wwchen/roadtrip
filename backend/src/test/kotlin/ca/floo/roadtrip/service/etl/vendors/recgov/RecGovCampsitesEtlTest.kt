@@ -21,6 +21,7 @@ class RecGovCampsitesEtlTest {
         assertEquals("123456", campsite.vendorRefId)
         assertEquals("123456", campsite.name)
         assertEquals("site", campsite.kind)
+        assertEquals("recgov", campsite.parentVendor)
         assertEquals("recgov-232447", campsite.parentVendorRefId)
         assertNull(campsite.kindListed)
         assertNull(campsite.loopName)

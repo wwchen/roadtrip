@@ -158,9 +158,9 @@ export function structuredCampgroundDetailsHTML(p) {
   const linkRows = linksHTML(p.links);
   const alerts = alertsHTML(p.alerts);
   const sourceRows = [
-    detailRow('Data source', firstText(sourcesLabel(p.sources), sourceLabel(p.source))),
+    detailRow('Data source', firstText(sourcesLabel(p.sources), p.source)),
     detailRow('Source ID', p.source_id),
-    detailRow('Availability provider', sourceLabel(firstText(p.availability_provider, p.provider_source))),
+    detailRow('Availability provider', firstText(p.availability_provider, p.provider_source)),
     detailRow('Booking site', firstText(p.booking_site, urlHost(firstText(p.reserve_url, p.reservation_url)))),
     detailRow('Last updated', firstText(p.metadata?.last_updated, p.last_verified)),
     connectionsRow(p.connections),
@@ -509,22 +509,9 @@ function firstText(...values) {
 function sourcesLabel(sources) {
   if (!Array.isArray(sources)) return '';
   const cleaned = sources
-    .map(sourceLabel)
+    .map(v => (typeof v === 'string' || typeof v === 'number' ? String(v).trim() : ''))
     .filter(Boolean);
   return [...new Set(cleaned)].join(', ');
-}
-
-function sourceLabel(value) {
-  if (typeof value !== 'string' && typeof value !== 'number') return '';
-  const source = String(value).trim();
-  if (!source) return '';
-  switch (source) {
-    case 'federal-campgrounds':
-    case 'federal-campsites':
-      return 'recgov';
-    default:
-      return source;
-  }
 }
 
 function urlHost(url) {

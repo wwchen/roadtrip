@@ -37,7 +37,7 @@ class RecGovCampgroundsEtlTest {
         val campgrounds = etl.transform(etl.parse(bundle()), transformCtx).campgrounds.associateBy { it.vendorRefId }
 
         val reservable = campgrounds.getValue("recgov-232447")
-        assertEquals("federal-campgrounds", reservable.vendor)
+        assertEquals("recgov", reservable.vendor)
         assertEquals("https://www.recreation.gov/camping/campgrounds/232447", reservable.reservationUrl)
         val reservableRef = reservable.vendorRefPayload!!.jsonObject
         assertEquals("232447", reservableRef["recgov_id"]!!.jsonPrimitive.content)

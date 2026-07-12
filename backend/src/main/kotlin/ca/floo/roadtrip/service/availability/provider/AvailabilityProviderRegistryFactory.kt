@@ -29,6 +29,7 @@ object AvailabilityProviderRegistryFactory {
 
         // RecGov — single adapter instance shared across every recgov source.
         val recgov = RecGovAvailabilityProvider(client = clients.recgovClient)
+        adaptersBySource[RECGOV_VENDOR] = recgov
         for (source in registry.recgovSources()) {
             adaptersBySource[source] = recgov
         }
@@ -115,4 +116,5 @@ object AvailabilityProviderRegistryFactory {
     }
 
     private const val CAMPFLARE_VENDOR = "campflare"
+    private const val RECGOV_VENDOR = "recgov"
 }

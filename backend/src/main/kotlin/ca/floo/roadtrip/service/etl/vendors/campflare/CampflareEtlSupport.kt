@@ -101,7 +101,7 @@ internal fun normalizedCoordinate(
 }
 
 internal const val CAMPFLARE_VENDOR = "campflare"
-internal const val RECGOV_CAMPGROUND_VENDOR = "federal-campgrounds"
+internal const val RECGOV_CAMPGROUND_VENDOR = "recgov"
 internal const val RECGOV_CAMPSITE_VENDOR = "recgov"
 internal const val RECGOV_CAMPGROUND_REF_PREFIX = "recgov-"
 internal const val CAMPGROUNDS_ETL_SLUG = "campflare-campgrounds"
