@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
 import ca.floo.roadtrip.models.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.models.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.models.metadata.ValidationResult
-import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -15,10 +15,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.encodeToJsonElement
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
@@ -431,146 +428,6 @@ private data class AspiraBookingCtaRef(
     val resourceLocationId: Long,
 )
 
-// ---- DTO + per-source strategies ------------------------------------------
-
-data class AspiraJoinDto(
-    val leaves: AspiraLeavesPayload,
-    val geomSources: List<Pair<String, GeometrySource>>,
-    /** Per-park `/api/resourcelocation/resources` envelopes, empty when the tenant declares no inventory input. */
-    val inventoryEnvelopes: List<ca.floo.roadtrip.models.metadata.Envelope> = emptyList(),
-    /** Tenant `/api/resourcecategory` dictionary payload, null when not declared. */
-    val dictionaryPayload: JsonObject? = null,
-    val fetchedAt: Instant,
-)
-
-/**
- * Each geometry input knows how to extract (name → lat/lon) tuples from
- * its envelope shape and seed them into a shared index.
- */
-sealed interface GeometrySource {
-    fun indexInto(byName: MutableMap<String, Pair<Double, Double>>)
-}
-
-/** uscampgrounds.info — the payload is a CSV string. State is column 12. */
-class UsCampgroundsCsvSource(
-    private val envelopes: List<ca.floo.roadtrip.models.metadata.Envelope>,
-) : GeometrySource {
-    override fun indexInto(byName: MutableMap<String, Pair<Double, Double>>) {
-        for (env in envelopes) {
-            val text = env.payload.jsonPrimitive.contentOrNull ?: continue
-            for (line in text.lineSequence()) {
-                if (line.isBlank()) continue
-                val cols = csvSplit(line)
-                if (cols.size < 13) continue
-                val lon = cols[0].toDoubleOrNull() ?: continue
-                val lat = cols[1].toDoubleOrNull() ?: continue
-                val name = cols.getOrNull(4)?.trim().orEmpty()
-                if (name.isEmpty()) continue
-                val key = normalize(name)
-                if (key.isNotEmpty()) byName.putIfAbsent(key, lat to lon)
-            }
-        }
-    }
-}
-
-/** BC Parks Strapi — paginated JSON pages, rows under payload.data[]. */
-class BcParksStrapiSource(
-    private val envelopes: List<ca.floo.roadtrip.models.metadata.Envelope>,
-) : GeometrySource {
-    override fun indexInto(byName: MutableMap<String, Pair<Double, Double>>) {
-        for (env in envelopes) {
-            val rows = env.payload.jsonObject["data"]?.jsonArray ?: continue
-            for (row in rows) {
-                val o = row.jsonObject
-                val name = o["protectedAreaName"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: continue
-                val lat = o["latitude"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: continue
-                val lon = o["longitude"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: continue
-                val key = normalize(name)
-                if (key.isNotEmpty()) byName.putIfAbsent(key, lat to lon)
-            }
-        }
-    }
-}
-
-/** APCA Accommodation feature service — geojson features with Point geometry, attribute Name_e. */
-class ApcaAccommodationSource(
-    private val envelopes: List<ca.floo.roadtrip.models.metadata.Envelope>,
-) : GeometrySource {
-    override fun indexInto(byName: MutableMap<String, Pair<Double, Double>>) {
-        for (env in envelopes) {
-            val feats = env.payload.jsonObject["features"]?.jsonArray ?: continue
-            for (f in feats) {
-                val o = f.jsonObject
-                val props = o["properties"]?.jsonObject ?: continue
-                val name = props["Name_e"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: continue
-                val geom = o["geometry"]?.jsonObject ?: continue
-                if (geom["type"]?.jsonPrimitive?.contentOrNull != "Point") continue
-                val coords = geom["coordinates"]?.jsonArray ?: continue
-                if (coords.size < 2) continue
-                val lon = coords[0].jsonPrimitive.contentOrNull?.toDoubleOrNull() ?: continue
-                val lat = coords[1].jsonPrimitive.contentOrNull?.toDoubleOrNull() ?: continue
-                val key = normalize(name)
-                if (key.isNotEmpty()) byName.putIfAbsent(key, lat to lon)
-            }
-        }
-    }
-}
-
-/**
- * APCA Places (national parks) — centroid-mode arcgis json, features with
- * `attributes.DESC_EN` and `centroid: { x, y }`. Names are like
- * "Banff National Park of Canada"; aggressive normalization in `normalize`
- * collapses the federal-park cruft so they can match the leaf's bare name.
- */
-class ApcaPlacesCentroidSource(
-    private val envelopes: List<ca.floo.roadtrip.models.metadata.Envelope>,
-) : GeometrySource {
-    override fun indexInto(byName: MutableMap<String, Pair<Double, Double>>) {
-        for (env in envelopes) {
-            val feats = env.payload.jsonObject["features"]?.jsonArray ?: continue
-            for (f in feats) {
-                val o = f.jsonObject
-                val attrs = o["attributes"]?.jsonObject ?: continue
-                val name = attrs["DESC_EN"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: continue
-                val centroid = o["centroid"]?.jsonObject ?: continue
-                val lon = centroid["x"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: continue
-                val lat = centroid["y"]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull() ?: continue
-                val key = normalize(name)
-                if (key.isNotEmpty()) byName.putIfAbsent(key, lat to lon)
-            }
-        }
-    }
-}
-
-/** Generic GeoJSON FeatureCollection with `properties.name` (best-effort fallback). */
-class GeoJsonFeaturesSource(
-    private val envelopes: List<ca.floo.roadtrip.models.metadata.Envelope>,
-    private val slug: String,
-) : GeometrySource {
-    override fun indexInto(byName: MutableMap<String, Pair<Double, Double>>) {
-        for (env in envelopes) {
-            val feats = env.payload.jsonObject["features"]?.jsonArray ?: continue
-            for (f in feats) {
-                val o = f.jsonObject
-                val props = o["properties"]?.jsonObject ?: continue
-                val name =
-                    listOfNotNull(
-                        props["name"]?.jsonPrimitive?.contentOrNull,
-                        props["Name"]?.jsonPrimitive?.contentOrNull,
-                    ).firstOrNull { it.isNotBlank() } ?: continue
-                val geom = o["geometry"]?.jsonObject ?: continue
-                if (geom["type"]?.jsonPrimitive?.contentOrNull != "Point") continue
-                val coords = geom["coordinates"]?.jsonArray ?: continue
-                if (coords.size < 2) continue
-                val lon = coords[0].jsonPrimitive.contentOrNull?.toDoubleOrNull() ?: continue
-                val lat = coords[1].jsonPrimitive.contentOrNull?.toDoubleOrNull() ?: continue
-                val key = normalize(name)
-                if (key.isNotEmpty()) byName.putIfAbsent(key, lat to lon)
-            }
-        }
-    }
-}
-
 // ---- Helpers ---------------------------------------------------------------
 
 /**
@@ -608,7 +465,7 @@ internal fun jaccard(
     return (a intersect b).size.toDouble() / (a union b).size.toDouble()
 }
 
-private fun csvSplit(line: String): List<String> {
+internal fun csvSplit(line: String): List<String> {
     val out = mutableListOf<String>()
     val sb = StringBuilder()
     var inQuotes = false

@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.models.api.HealthResponseDto
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -8,7 +9,6 @@ import io.ktor.server.application.call
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.time.Instant
@@ -43,12 +43,6 @@ fun Route.healthRoutes() {
 internal fun healthResponseDto(now: Long): HealthResponseDto = HealthResponseDto(now = now)
 
 internal inline fun <reified T> encodeHealthJson(value: T): String = healthRouteJson.encodeToString(value)
-
-@Serializable
-internal data class HealthResponseDto(
-    val status: String = "ok",
-    val now: Long,
-)
 
 private suspend inline fun <reified T> ApplicationCall.respondHealthJson(value: T) {
     respondText(encodeHealthJson(value), ContentType.Application.Json)

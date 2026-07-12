@@ -143,10 +143,20 @@ export function reinstallOverlays() {
 // campground category-promote.
 export function flattenHydratedPoi(f) {
   const p = f.properties || {};
-  const raw = p.raw || {};
+  const detail = parseObject(p.detail) || {};
+  const raw = parseObject(p.raw) || parseObject(detail.raw) || {};
+  const detailProps = { ...detail };
+  delete detailProps.raw;
+  const address = detailProps.address || p.address;
   const flat = p.category === 'campground'
-    ? { id: f.id, ...p, upstream: p.upstream || raw.upstream || canonicalCampgroundUpstream(raw, p.address) }
-    : { id: f.id, ...raw, ...p };
+    ? {
+        id: f.id,
+        ...p,
+        ...detailProps,
+        upstream: p.upstream || detailProps.upstream || raw.upstream || canonicalCampgroundUpstream(raw, address),
+      }
+    : { id: f.id, ...raw, ...p, ...detailProps };
+  delete flat.detail;
   delete flat.raw;
 
   if (p.category === 'campground') {
@@ -156,7 +166,7 @@ export function flattenHydratedPoi(f) {
   // Address arrives as a nested object from /api/pois/{id} (the JSONB
   // column). Flatten its parts onto the top of properties for every
   // category that surfaces an address — popups read them directly.
-  const addr = p.address || {};
+  const addr = flat.address || {};
   const nestedAddr = addr.address && typeof addr.address === 'object' ? addr.address : {};
   flat.full_address = firstText(addr.full, nestedAddr.full, flat.full_address);
   flat.street = firstText(addr.street, addr.street1, addr.address_line, nestedAddr.street, nestedAddr.street1, nestedAddr.address_line);
@@ -168,8 +178,8 @@ export function flattenHydratedPoi(f) {
   // info_url is the BE's canonical "open this in upstream" link
   // (Tesla findus, planetfitness.com gym page, BC Parks page, …).
   // Popups read p.website / p.infoUrl — keep both names alive.
-  flat.website = firstText(p.info_url, p.website, flat.website);
-  flat.infoUrl = firstText(p.info_url);
+  flat.website = firstText(flat.info_url, p.info_url, p.website, flat.website);
+  flat.infoUrl = firstText(flat.info_url, p.info_url);
 
   if (p.category === 'campground' && p.subcategory) {
     flat.category = p.subcategory;
@@ -239,16 +249,17 @@ function promoteCanonicalCampgroundFields(flat, p, raw) {
 
   flat.description = firstText(
     p.description,
+    flat.description,
     raw.description,
   );
-  flat.photo_url = firstText(p.photo_url, campgroundPhotoUrl(raw.photos));
-  flat.agency = firstText(p.agency, management.agency_name, management.agency, management.name);
-  flat.phone = firstText(p.phone, contact.primary_phone, contact.phone);
+  flat.photo_url = firstText(p.photo_url, flat.photo_url, campgroundPhotoUrl(raw.photos));
+  flat.agency = firstText(p.agency, flat.agency, management.agency_name, management.agency, management.name);
+  flat.phone = firstText(p.phone, flat.phone, contact.primary_phone, contact.phone);
   flat.email = firstText(p.email, contact.email, contact.primary_email);
-  flat.reserve_url = firstText(p.reserve_url, raw.reservation_url);
-  flat.status = firstText(p.status, raw.status, flat.status);
+  flat.reserve_url = firstText(p.reserve_url, flat.reserve_url, raw.reservation_url);
+  flat.status = firstText(p.status, flat.status, raw.status);
   flat.status_description = firstText(p.status_description, flat.status_description);
-  flat.kind = firstText(p.kind, raw.kind, flat.kind);
+  flat.kind = firstText(p.kind, flat.kind, raw.kind);
   flat.price = p.price ?? raw.price ?? flat.price;
   flat.schedule = p.schedule ?? raw.default_campsite_schedule ?? flat.schedule;
   flat.default_campsite_schedule = flat.schedule;
@@ -322,6 +333,17 @@ function objectValue(...values) {
     if (value && typeof value === 'object' && !Array.isArray(value)) return value;
   }
   return null;
+}
+
+function parseObject(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function arrayValue(...values) {

@@ -2,8 +2,8 @@ package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaCatalogParser
 import ca.floo.roadtrip.models.domain.CampsiteUpsertCandidate
+import ca.floo.roadtrip.models.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.models.metadata.ValidationResult
-import ca.floo.roadtrip.service.etl.framework.CampsiteEtlOutput
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx

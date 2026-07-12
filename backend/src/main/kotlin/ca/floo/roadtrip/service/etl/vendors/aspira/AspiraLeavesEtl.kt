@@ -4,8 +4,6 @@ import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonArray
 
 // Aspira /api/maps tree → flat list of bookable leaves.
@@ -52,27 +50,3 @@ class AspiraLeavesEtl(
             leaves = AspiraLeavesWalk.walk(dto.maps),
         )
 }
-
-/** Just-parsed envelope, before we walk the tree. */
-data class AspiraMapsDto(
-    val maps: JsonArray,
-) {
-    val isEmpty: Boolean get() = maps.isEmpty()
-}
-
-/** Materialized intermediate output. Downstream join-by-name ETL consumes this. */
-@Serializable
-data class AspiraLeavesPayload(
-    val slug: String,
-    val leaves: List<AspiraLeaf>,
-)
-
-@Serializable
-data class AspiraLeaf(
-    val name: String,
-    @kotlinx.serialization.SerialName("transaction_location_id") val transactionLocationId: Long,
-    @kotlinx.serialization.SerialName("map_id") val mapId: Long,
-    @kotlinx.serialization.SerialName("resource_location_id") val resourceLocationId: Long? = null,
-    /** Title of the parent map node, when the leaf is a sub-area (PC backcountry). */
-    @kotlinx.serialization.SerialName("parent_name") val parentName: String? = null,
-)

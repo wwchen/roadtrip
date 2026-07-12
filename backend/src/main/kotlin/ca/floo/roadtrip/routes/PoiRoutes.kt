@@ -1,16 +1,16 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.models.api.ApiErrorSchema
-import ca.floo.roadtrip.models.api.PoiDetailFeatureSchema
-import ca.floo.roadtrip.models.api.PoiFeatureCollectionSchema
-import ca.floo.roadtrip.models.api.PoiSearchHitSchema
-import ca.floo.roadtrip.models.api.PoiSearchResponseSchema
-import ca.floo.roadtrip.models.api.PoisRequestSchema
-import ca.floo.roadtrip.models.domain.Bbox
-import ca.floo.roadtrip.service.api.POI_CAMPGROUND_MIN_ZOOM
-import ca.floo.roadtrip.service.api.POI_LIMIT
-import ca.floo.roadtrip.service.api.PoiService
-import ca.floo.roadtrip.service.api.encodePoiFeatureJson
+import ca.floo.roadtrip.models.api.poi.PoiDetailFeatureSchema
+import ca.floo.roadtrip.models.api.poi.PoiFeatureCollectionSchema
+import ca.floo.roadtrip.models.api.poi.PoiSearchHitSchema
+import ca.floo.roadtrip.models.api.poi.PoiSearchResponseSchema
+import ca.floo.roadtrip.models.api.poi.PoisRequestSchema
+import ca.floo.roadtrip.models.domain.poi.Bbox
+import ca.floo.roadtrip.service.poi.CampgroundService
+import ca.floo.roadtrip.service.poi.POI_LIMIT
+import ca.floo.roadtrip.service.poi.PoiService
+import ca.floo.roadtrip.service.poi.encodePoiFeatureJson
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
@@ -52,7 +52,7 @@ internal fun Route.poiRoutes(poiService: PoiService) {
         description =
             "Body: { bbox: [w,s,e,n], zoom?, categories? }. " +
             "categories defaults to the canonical serving set. " +
-            "zoom < $POI_CAMPGROUND_MIN_ZOOM suppresses campgrounds even when requested. " +
+            "zoom < ${CampgroundService.MIN_POI_ZOOM} suppresses campgrounds even when requested. " +
             "Corridor filtering has moved to POST /api/pois/on-route."
         request {
             body<PoisRequestSchema> {

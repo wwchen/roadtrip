@@ -65,7 +65,7 @@ private fun installOptionalShutdownThreadDump() {
     )
 }
 
-internal object SharedBoot {
+private object SharedBoot {
     lateinit var instance: RoadtripBootContext
 }
 

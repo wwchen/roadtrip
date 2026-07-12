@@ -64,29 +64,8 @@ import kotlinx.coroutines.cancel
 import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
 import java.io.File
-import javax.sql.DataSource
 
 private val log = LoggerFactory.getLogger("ca.floo.roadtrip.RoadtripRuntime")
-
-/** Pair of the signature verifier + the handler; wired only when the Slack
- *  app is configured with a signing secret. Null on a Slack-disabled install
- *  so the interactivity endpoint is absent (404) rather than answering 401. */
-internal data class SlackInteractivityWiring(
-    val verifier: SlackSignatureVerifier,
-    val handler: SlackInteractivityHandler,
-)
-
-internal data class RoadtripBootContext(
-    val appConfig: AppConfig,
-    val dataSource: DataSource,
-    val ctx: DSLContext,
-    val availabilityProviderClients: AvailabilityProviderClients,
-    val staticDir: File,
-    val mapboxGeocoder: MapboxGeocoder,
-    val routeCache: RouteCache,
-    val poiRegistry: PoiRegistry,
-    val ingestController: IngestController,
-)
 
 internal class RoadtripRuntime(
     val boot: RoadtripBootContext,

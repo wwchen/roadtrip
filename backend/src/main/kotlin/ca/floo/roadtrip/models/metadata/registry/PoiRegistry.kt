@@ -400,13 +400,6 @@ data class PoiRegistry(
             .toSet()
 }
 
-data class ReserveAmericaSourceConfig(
-    val source: String,
-    val host: String,
-    val contractCode: String,
-    val bookingHorizonDays: Int,
-)
-
 private fun detectCycles(edges: Map<String, Set<String>>): List<List<String>> {
     val visited = mutableSetOf<String>()
     val onStack = mutableSetOf<String>()
@@ -437,58 +430,7 @@ private fun detectCycles(edges: Map<String, Set<String>>): List<List<String>> {
     return cycles
 }
 
-@Serializable
-data class DataSourceEntry(
-    val slug: String,
-    val name: String,
-    val fetcher: Fetcher,
-    @kotlinx.serialization.SerialName("depends_on")
-    val dependsOn: List<String> = emptyList(),
-)
-
-@Serializable
-data class Fetcher(
-    val executor: String,
-    val filename: String,
-    val args: Map<String, String> = emptyMap(),
-    @kotlinx.serialization.SerialName("timeout_sec")
-    val timeoutSec: Long = 30 * 60,
-    @kotlinx.serialization.SerialName("output_dir_prefix")
-    val outputDirPrefix: String,
-)
-
-@Serializable
-data class PoiDataEntry(
-    val name: String,
-    val enabled: Boolean = true,
-    val category: String,
-    // FE sub-bucket for legend toggles + circle-color (e.g. campground →
-    // federal | state | local | provincial). Null when the category has
-    // no sub-bucket (planet-fitness, supercharger).
-    val subcategory: String? = null,
-    @SerialName("agency")
-    val agencyNode: YamlNode? = null,
-    val etls: List<EtlEntry>,
-) {
-    val agency: AgencyConfig?
-        get() = agencyNode?.toAgencyConfig()
-}
-
-sealed interface AgencyConfig {
-    data class Constant(
-        val value: String,
-    ) : AgencyConfig
-
-    data class DerivedFromField(
-        val field: String,
-    ) : AgencyConfig
-
-    companion object {
-        const val DERIVED_FROM_FIELD_KEY = "derived_from_field"
-    }
-}
-
-private fun YamlNode.toAgencyConfig(): AgencyConfig =
+internal fun YamlNode.toAgencyConfig(): AgencyConfig =
     when (this) {
         is YamlScalar -> {
             val value = content.takeIf { it.isNotBlank() }
@@ -510,42 +452,3 @@ private fun YamlNode.toAgencyConfig(): AgencyConfig =
         }
         else -> throw IllegalArgumentException("agency must be a scalar string or mapping")
     }
-
-@Serializable
-data class EtlEntry(
-    val slug: String,
-    val adapter: String,
-    val inputs: List<String> = emptyList(),
-    val args: Map<String, String> = emptyMap(),
-)
-
-/**
- * Row in the `campsite_data` section. Same shape as [PoiDataEntry] minus
- * `category` / `subcategory` — campsites aren't map pins, so the FE
- * legend metadata doesn't apply. The terminal etl emits campsite rows
- * via [ca.floo.roadtrip.repo.CampsiteRepo]; the orchestrator dispatches
- * by section, not by etl marker interface.
- */
-@Serializable
-data class CampsiteDataEntry(
-    val name: String,
-    val enabled: Boolean = true,
-    val etls: List<EtlEntry>,
-)
-
-/**
- * Row in the `campsite_parent_joiner` section. Names a single adapter that
- * recomputes each campsite's campground parent from vendor refs and
- * reparents rows whose current `campsites.campground_id` disagrees. No etl
- * chain; joiners don't transform raw data, they query DB tables.
- *
- * `args` follows the same shape as [EtlEntry.args]: free-form
- * adapter-specific config (e.g. which provider source to scope to).
- */
-@Serializable
-data class CampsiteParentJoinerEntry(
-    val name: String,
-    val enabled: Boolean = true,
-    val adapter: String,
-    val args: Map<String, String> = emptyMap(),
-)

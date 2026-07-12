@@ -75,7 +75,7 @@ export function openCampgroundDrawer(f) {
   attachDragHandlers(root);
 
   // Slim /api/pois doesn't ship the wide property set the campground shell
-  // needs (name, region, photo_url, parent_name, recgov_id, raw upstream).
+  // needs (name, region, detail payload, parent_name, recgov_id, raw upstream).
   // If we got a slim feature, render a loading placeholder, fetch the wide
   // row, and then re-render with availability. If the feature is already
   // wide (legacy paths / tests / map-click with full data), render

@@ -530,27 +530,29 @@ class SmokeTest {
                             "name": "Clear Lake SP Cabins",
                             "region": "CA",
                             "country": "US",
-                            "description": "Clear Lake State Park offers rental cabins near the lake.",
-                            "photo_url": "https://cali-content.usedirect.com/Images/California/ParkImages/Place/629.jpg",
-                            "availability_supported": true,
-                            "cta": {
-                              "url": "https://reservecalifornia.com/park/629",
-                              "label": "Reserve on ReserveCalifornia",
-                              "kind": "reserve"
-                            },
-                            "provider_ref": { "place_id": 629, "facility_ids": [889] },
-                            "raw": {
-                              "amenities": ["Restrooms", "Showers"],
-                              "activities": ["Fishing", "Hiking"],
-                              "upstream": {
-                                "Name": "Clear Lake SP Cabins",
-                                "FacilityDescription": "<p>Raw-only description should not render.</p>",
-                                "MEDIA": [
-                                  {
-                                    "URL": "https://example.test/raw-only.jpg",
-                                    "IsPrimary": true
-                                  }
-                                ]
+                            "detail": {
+                              "availability_supported": true,
+                              "description": "Clear Lake State Park offers rental cabins near the lake.",
+                              "photo_url": "https://cali-content.usedirect.com/Images/California/ParkImages/Place/629.jpg",
+                              "cta": {
+                                "url": "https://reservecalifornia.com/park/629",
+                                "label": "Reserve on ReserveCalifornia",
+                                "kind": "reserve"
+                              },
+                              "provider_ref": { "place_id": 629, "facility_ids": [889] },
+                              "raw": {
+                                "amenities": ["Restrooms", "Showers"],
+                                "activities": ["Fishing", "Hiking"],
+                                "upstream": {
+                                  "Name": "Clear Lake SP Cabins",
+                                  "FacilityDescription": "<p>Raw-only description should not render.</p>",
+                                  "MEDIA": [
+                                    {
+                                      "URL": "https://example.test/raw-only.jpg",
+                                      "IsPrimary": true
+                                    }
+                                  ]
+                                }
                               }
                             }
                           }

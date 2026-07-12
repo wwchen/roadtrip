@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 
 import ca.floo.roadtrip.models.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.models.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
-import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -301,20 +301,4 @@ private data class ReserveAmericaParkExtrasDto(
     val description: String? = null,
     @SerialName("photo_url") val photoUrl: String? = null,
     @SerialName("info_url") val infoUrl: String? = null,
-)
-
-data class ParsedPark(
-    val parkId: Long,
-    val name: String,
-    val lat: Double,
-    val lon: Double,
-    val phone: String?,
-    val description: String?,
-    val photoUrl: String?,
-    val infoUrl: String?,
-)
-
-data class ReserveAmericaDto(
-    val parks: List<ParsedPark>,
-    val fetchedAt: Instant,
 )

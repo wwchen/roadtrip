@@ -1,12 +1,9 @@
 package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 
 import ca.floo.roadtrip.models.domain.CampgroundUpsertCandidate
-import ca.floo.roadtrip.models.domain.CampsiteUpsertCandidate
-import ca.floo.roadtrip.models.domain.DEFAULT_CAMPSITE_KIND
+import ca.floo.roadtrip.models.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
-import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
-import ca.floo.roadtrip.service.etl.framework.CampsiteEtlOutput
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -73,53 +70,7 @@ class ReserveCaliforniaEtl(
     }
 }
 
-class ReserveCaliforniaSitesEtl(
-    override val etlSlug: String = "california-state-park-sites",
-) : SourceEtl<ReserveCaliforniaCatalog, CampsiteEtlOutput> {
-    override val multiPart: Boolean = true
-
-    override fun parse(inputs: InputBundle): ReserveCaliforniaCatalog = parseCatalog(inputs.soleEnvelopes(), etlSlug)
-
-    override fun validate(dto: ReserveCaliforniaCatalog): ValidationResult<ReserveCaliforniaCatalog> =
-        if (dto.grids.values.none { it.units.isNotEmpty() }) {
-            ValidationResult.Bad(null, listOf("$etlSlug: no ReserveCalifornia grid payloads with units parsed"))
-        } else {
-            ValidationResult.Ok(dto)
-        }
-
-    override fun transform(
-        dto: ReserveCaliforniaCatalog,
-        ctx: TransformCtx,
-    ): CampsiteEtlOutput =
-        CampsiteEtlOutput(
-            campsites =
-                dto.grids.values.flatMap { grid ->
-                    val facility = dto.facilities[grid.facilityId]
-                    if (facility?.isStandardBookable == false) return@flatMap emptyList()
-                    val placeId = grid.placeId ?: facility?.placeId ?: return@flatMap emptyList()
-                    val place = dto.places[placeId] ?: return@flatMap emptyList()
-                    if (grid.facilityId !in place.facilityIds) return@flatMap emptyList()
-                    val kind = place.unitTypeByFacilityId[grid.facilityId] ?: DEFAULT_CAMPSITE_KIND
-                    grid.units.map { unit ->
-                        CampsiteUpsertCandidate(
-                            vendor = RESERVECALIFORNIA_VENDOR,
-                            vendorRefId = unit.unitId.toString(),
-                            parentVendor = PARENT_CAMPGROUND_VENDOR,
-                            parentVendorRefId = "$CAMPGROUND_REF_PREFIX$placeId",
-                            name = unit.name?.takeIf { it.isNotBlank() } ?: unit.unitId.toString(),
-                            kind = kind,
-                            loopName = grid.facilityName ?: facility?.name,
-                            reservationUrl = reserveCaliforniaParkUrl(placeId),
-                            kindListed = kind,
-                            sourcePayload = campsiteSourcePayload(unit, grid, placeId, facility),
-                            vendorRefPayload = campsiteProviderRefPayload(unit, grid, placeId),
-                        )
-                    }
-                },
-        )
-}
-
-private fun locationPayload(
+internal fun locationPayload(
     latitude: Double,
     longitude: Double,
 ): JsonObject =
@@ -130,7 +81,7 @@ private fun locationPayload(
         put("country", COUNTRY)
     }
 
-private fun linksPayload(url: String): JsonElement =
+internal fun linksPayload(url: String): JsonElement =
     buildJsonArray {
         add(
             buildJsonObject {
@@ -139,7 +90,7 @@ private fun linksPayload(url: String): JsonElement =
         )
     }
 
-private fun photoPayload(url: String): JsonElement =
+internal fun photoPayload(url: String): JsonElement =
     buildJsonArray {
         add(
             buildJsonObject {
@@ -148,19 +99,19 @@ private fun photoPayload(url: String): JsonElement =
         )
     }
 
-private fun managementPayload(agency: String): JsonObject =
+internal fun managementPayload(agency: String): JsonObject =
     buildJsonObject {
         put("agency", agency)
     }
 
-private fun amenitiesPayload(values: List<String>): JsonObject? {
+internal fun amenitiesPayload(values: List<String>): JsonObject? {
     if (values.isEmpty()) return null
     return buildJsonObject {
         values.forEach { put(it, true) }
     }
 }
 
-private fun metadataPayload(place: ReserveCaliforniaPlace): JsonObject? {
+internal fun metadataPayload(place: ReserveCaliforniaPlace): JsonObject? {
     val payload =
         buildJsonObject {
             if (place.activities.isNotEmpty()) {
@@ -171,7 +122,7 @@ private fun metadataPayload(place: ReserveCaliforniaPlace): JsonObject? {
     return payload.takeIf { it.isNotEmpty() }
 }
 
-private fun providerRefPayload(place: ReserveCaliforniaPlace): JsonObject =
+internal fun providerRefPayload(place: ReserveCaliforniaPlace): JsonObject =
     buildJsonObject {
         put("place_id", place.placeId)
         put(
@@ -182,7 +133,7 @@ private fun providerRefPayload(place: ReserveCaliforniaPlace): JsonObject =
         )
     }
 
-private fun campsiteProviderRefPayload(
+internal fun campsiteProviderRefPayload(
     unit: ReserveCaliforniaUnit,
     grid: ReserveCaliforniaGridCatalog,
     placeId: Long,
@@ -194,7 +145,7 @@ private fun campsiteProviderRefPayload(
         put("place_id", placeId)
     }
 
-private fun campsiteSourcePayload(
+internal fun campsiteSourcePayload(
     unit: ReserveCaliforniaUnit,
     grid: ReserveCaliforniaGridCatalog,
     placeId: Long,
@@ -209,14 +160,14 @@ private fun campsiteSourcePayload(
         facility?.raw?.let { put("facility", it) }
     }
 
-private fun stringArrayPayload(values: List<String>): JsonElement? {
+internal fun stringArrayPayload(values: List<String>): JsonElement? {
     if (values.isEmpty()) return null
     return buildJsonArray {
         values.forEach { add(it) }
     }
 }
 
-private fun facilityUnitTypePayload(place: ReserveCaliforniaPlace): JsonObject =
+internal fun facilityUnitTypePayload(place: ReserveCaliforniaPlace): JsonObject =
     buildJsonObject {
         for ((facilityId, unitType) in place.unitTypeByFacilityId) {
             put(facilityId.toString(), unitType)
@@ -254,7 +205,7 @@ internal fun parseCatalog(
     )
 }
 
-private fun parsePlace(payload: JsonObject): ReserveCaliforniaPlace? {
+internal fun parsePlace(payload: JsonObject): ReserveCaliforniaPlace? {
     val selected = payload["SelectedPlace"]?.jsonObject ?: return null
     val placeId = selected["PlaceId"]?.jsonPrimitive?.longOrNull ?: return null
     val name = selected["Name"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: return null
@@ -292,7 +243,7 @@ private fun parsePlace(payload: JsonObject): ReserveCaliforniaPlace? {
     )
 }
 
-private fun parseFacility(payload: JsonObject): ReserveCaliforniaFacility? {
+internal fun parseFacility(payload: JsonObject): ReserveCaliforniaFacility? {
     val facilityId = payload["FacilityId"]?.jsonPrimitive?.longOrNull ?: return null
     return ReserveCaliforniaFacility(
         facilityId = facilityId,
@@ -305,7 +256,7 @@ private fun parseFacility(payload: JsonObject): ReserveCaliforniaFacility? {
     )
 }
 
-private fun parseGrid(payload: JsonObject): ReserveCaliforniaGridCatalog? {
+internal fun parseGrid(payload: JsonObject): ReserveCaliforniaGridCatalog? {
     val facility = payload["Facility"]?.jsonObject ?: return null
     val facilityId = facility["FacilityId"]?.jsonPrimitive?.longOrNull ?: return null
     val units = facility["Units"]?.jsonObject ?: JsonObject(emptyMap())
@@ -326,16 +277,16 @@ private fun parseGrid(payload: JsonObject): ReserveCaliforniaGridCatalog? {
     )
 }
 
-private fun parseFetchedAt(envelope: Envelope): Instant = runCatching { Instant.parse(envelope.fetchedAt) }.getOrDefault(Instant.now())
+internal fun parseFetchedAt(envelope: Envelope): Instant = runCatching { Instant.parse(envelope.fetchedAt) }.getOrDefault(Instant.now())
 
-private fun JsonObject.stringValue(key: String): String? =
+internal fun JsonObject.stringValue(key: String): String? =
     this[key]
         ?.jsonPrimitive
         ?.contentOrNull
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
 
-private fun parseHighlights(raw: String?): List<String> =
+internal fun parseHighlights(raw: String?): List<String> =
     raw
         ?.split(Regex("""(?i)<br\s*/?>"""))
         ?.map { it.replace(Regex("""<[^>]+>"""), " ") }
@@ -344,68 +295,21 @@ private fun parseHighlights(raw: String?): List<String> =
         ?.distinct()
         .orEmpty()
 
-private fun isActivityHighlight(label: String): Boolean {
+internal fun isActivityHighlight(label: String): Boolean {
     val normalized = label.lowercase()
     return ACTIVITY_HINTS.any { normalized.contains(it) }
 }
 
-private fun reserveCaliforniaParkUrl(placeId: Long): String = "https://reservecalifornia.com/park/$placeId"
+internal fun reserveCaliforniaParkUrl(placeId: Long): String = "https://reservecalifornia.com/park/$placeId"
 
-private const val RESERVECALIFORNIA_VENDOR = "reservecalifornia"
-private const val PARENT_CAMPGROUND_VENDOR = "california-state-parks"
-private const val CAMPGROUND_REF_PREFIX = "rc-"
-private const val REGION = "CA"
-private const val COUNTRY = "US"
-private const val PARENT_PLACE_ID_KEY = "_parent_place_id"
+internal const val RESERVECALIFORNIA_VENDOR = "reservecalifornia"
+internal const val PARENT_CAMPGROUND_VENDOR = "california-state-parks"
+internal const val CAMPGROUND_REF_PREFIX = "rc-"
+internal const val REGION = "CA"
+internal const val COUNTRY = "US"
+internal const val PARENT_PLACE_ID_KEY = "_parent_place_id"
 
-data class ReserveCaliforniaCatalog(
-    val places: Map<Long, ReserveCaliforniaPlace>,
-    val facilities: Map<Long, ReserveCaliforniaFacility>,
-    val grids: Map<Long, ReserveCaliforniaGridCatalog>,
-    val fetchedAt: Instant,
-)
-
-data class ReserveCaliforniaPlace(
-    val placeId: Long,
-    val name: String,
-    val latitude: Double,
-    val longitude: Double,
-    val facilityIds: List<Long>,
-    val unitTypeByFacilityId: Map<Long, String>,
-    val imageUrl: String?,
-    val description: String?,
-    val amenities: List<String>,
-    val activities: List<String>,
-    val raw: JsonElement,
-)
-
-data class ReserveCaliforniaFacility(
-    val facilityId: Long,
-    val placeId: Long?,
-    val name: String?,
-    val facilityTypeNew: Long?,
-    val facilityBehaviourType: Long?,
-    val allowWebBooking: Boolean?,
-    val raw: JsonElement,
-) {
-    val isStandardBookable: Boolean
-        get() = facilityTypeNew != 2L && facilityBehaviourType != 2L && allowWebBooking != false
-}
-
-data class ReserveCaliforniaGridCatalog(
-    val facilityId: Long,
-    val placeId: Long?,
-    val facilityName: String?,
-    val units: List<ReserveCaliforniaUnit>,
-)
-
-data class ReserveCaliforniaUnit(
-    val unitId: Long,
-    val name: String?,
-    val raw: JsonObject,
-)
-
-private val ACTIVITY_HINTS =
+internal val ACTIVITY_HINTS =
     setOf(
         "biking",
         "bird",

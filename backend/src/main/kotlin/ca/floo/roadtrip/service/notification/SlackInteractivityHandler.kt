@@ -2,8 +2,6 @@ package ca.floo.roadtrip.service.notification
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.availability.WatchStatus
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 
@@ -152,18 +150,3 @@ internal class SlackInteractivityHandler(
                 .getOrNull()
     }
 }
-
-@Serializable
-internal data class BlockActionsPayload(
-    val type: String,
-    val actions: List<BlockAction> = emptyList(),
-    @SerialName("response_url")
-    val responseUrl: String? = null,
-)
-
-@Serializable
-internal data class BlockAction(
-    @SerialName("action_id")
-    val actionId: String,
-    val value: String? = null,
-)

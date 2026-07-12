@@ -2,13 +2,12 @@ package ca.floo.roadtrip.service.etl.vendors.tesla
 
 import ca.floo.roadtrip.models.domain.DEFAULT_TESLA_SITE_STATUS
 import ca.floo.roadtrip.models.domain.TeslaSuperchargerUpsertCandidate
+import ca.floo.roadtrip.models.etl.TeslaSuperchargerEtlOutput
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
-import ca.floo.roadtrip.service.etl.framework.TeslaSuperchargerEtlOutput
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -246,80 +245,3 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerEtlOutput> {
         private val json = Json { ignoreUnknownKeys = true }
     }
 }
-
-@Serializable
-data class TeslaIndexEnvelope(
-    val data: TeslaIndexInner = TeslaIndexInner(),
-)
-
-@Serializable
-data class TeslaIndexInner(
-    val data: List<TeslaIndexRow> = emptyList(),
-)
-
-@Serializable
-data class TeslaIndexRow(
-    val latitude: Double? = null,
-    val longitude: Double? = null,
-    val title: String? = null,
-    @kotlinx.serialization.SerialName("location_type") val locationType: List<String>? = null,
-    @kotlinx.serialization.SerialName("location_url_slug") val locationUrlSlug: String? = null,
-    @kotlinx.serialization.SerialName("supercharger_function") val superchargerFunction: TeslaSuperchargerFunction? = null,
-)
-
-@Serializable
-data class TeslaSuperchargerFunction(
-    @kotlinx.serialization.SerialName("show_on_find_us") val showOnFindUs: String? = null,
-    @kotlinx.serialization.SerialName("site_status") val siteStatus: String? = null,
-)
-
-data class TeslaIndexDto(
-    val rows: List<TeslaIndexRow>,
-    val rawBySlug: Map<String, JsonObject>,
-    val fetchedAt: Instant,
-)
-
-// Tesla per-slug detail envelope shape: payload.data.data.{name, address, …}.
-@Serializable
-data class TeslaDetailEnvelope(
-    val data: TeslaDetailInner = TeslaDetailInner(),
-)
-
-@Serializable
-data class TeslaDetailInner(
-    val data: TeslaLocationDetail = TeslaLocationDetail(),
-)
-
-@Serializable
-data class TeslaLocationDetail(
-    val name: String? = null,
-    @kotlinx.serialization.SerialName("locationGUID") val locationGuid: String? = null,
-    val address: TeslaAddress? = null,
-    val timeZone: String? = null,
-    val openToPublic: Boolean? = null,
-    val publicStallCount: Int? = null,
-    val maxPowerKw: Int? = null,
-    val accessType: String? = null,
-    val openToNonTeslas: Boolean? = null,
-    val isTrailerFriendly: Boolean? = null,
-    val accessHours: TeslaAccessHours? = null,
-    // Pricebook entries Tesla returns alongside the location detail. Held
-    // as raw JsonElements; the FE knows the shape and renders only the
-    // entries it cares about (Tesla CHARGING, first CONGESTION row).
-    val effectivePricebooks: List<JsonElement> = emptyList(),
-)
-
-@Serializable
-data class TeslaAccessHours(
-    val twentyFourSeven: Boolean? = null,
-)
-
-@Serializable
-data class TeslaAddress(
-    val street: String? = null,
-    val streetNumber: String? = null,
-    val city: String? = null,
-    val state: String? = null,
-    val postalCode: String? = null,
-    val countryCode: String? = null,
-)

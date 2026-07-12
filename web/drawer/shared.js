@@ -76,7 +76,7 @@ export function reviveJsonProp(p, key) {
  */
 // Per-process detail cache for /api/pois/{id}. The slim bbox endpoint ships
 // only id + lng/lat + category + subcategory; the wide fields the popups
-// need (name, address, provider_ref, raw upstream blob) live behind this
+// need (name, address, detail/provider refs, raw upstream blob) live behind this
 // per-id GET. Keying by id collapses repeat-clicks of the same pin to a
 // single round-trip per session. The browser HTTP cache (Cache-Control:
 // max-age=300, stale-while-revalidate=3600) handles cross-session reuse.

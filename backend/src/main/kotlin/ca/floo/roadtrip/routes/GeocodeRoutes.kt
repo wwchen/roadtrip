@@ -3,6 +3,8 @@ package ca.floo.roadtrip.routes
 import ca.floo.roadtrip.clients.mapbox.GeocodeException
 import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.models.api.ApiErrorSchema
+import ca.floo.roadtrip.models.api.GeocodeResponseDto
+import ca.floo.roadtrip.models.api.GeocodeResultDto
 import ca.floo.roadtrip.models.routing.GeocodeResult
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -11,8 +13,6 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -88,20 +88,6 @@ internal fun geocodeResponseDto(results: List<GeocodeResult>): GeocodeResponseDt
     )
 
 internal inline fun <reified T> encodeGeocodeJson(value: T): String = geocodeRouteJson.encodeToString(value)
-
-@Serializable
-internal data class GeocodeResponseDto(
-    val results: List<GeocodeResultDto>,
-)
-
-@Serializable
-internal data class GeocodeResultDto(
-    val id: String,
-    @SerialName("place_name") val placeName: String,
-    @SerialName("place_type") val placeType: String,
-    val lng: Double,
-    val lat: Double,
-)
 
 private suspend fun ApplicationCall.respondGeocodeError(
     error: String,

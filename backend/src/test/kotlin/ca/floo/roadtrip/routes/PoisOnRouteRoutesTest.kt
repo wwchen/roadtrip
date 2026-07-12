@@ -10,11 +10,11 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
-import ca.floo.roadtrip.service.api.PoiService
-import ca.floo.roadtrip.service.api.PoisOnRouteService
-import ca.floo.roadtrip.service.catalog.CampgroundService
-import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
-import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
+import ca.floo.roadtrip.service.poi.CampgroundService
+import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
+import ca.floo.roadtrip.service.poi.PoiService
+import ca.floo.roadtrip.service.poi.PoisOnRouteService
+import ca.floo.roadtrip.service.poi.TeslaSuperchargerService
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import io.ktor.client.request.get
@@ -47,9 +47,12 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     private fun poiService(): PoiService =
         PoiService(
             poiRepo = PoiServingRepo(ctx),
-            campgroundService = CampgroundService(CampgroundRepo(ctx)),
-            teslaSuperchargerService = TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
-            planetFitnessLocationService = PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
+            detailServices =
+                listOf(
+                    CampgroundService(CampgroundRepo(ctx)),
+                    TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
+                    PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
+                ),
         )
 
     private fun poisOnRouteService(routeCache: RouteCache): PoisOnRouteService =

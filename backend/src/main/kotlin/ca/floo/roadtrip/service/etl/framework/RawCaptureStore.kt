@@ -44,7 +44,3 @@ class RawCaptureStore(
         fun parseEnvelope(file: File): Envelope = json.decodeFromString(Envelope.serializer(), file.readText())
     }
 }
-
-class NoCaptureException(
-    message: String,
-) : RuntimeException(message)
