@@ -10,7 +10,6 @@ import ca.floo.roadtrip.repo.CampsiteParentJoinerRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
-import ca.floo.roadtrip.repo.RawCaptureRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampsiteParentJoiner
 import ca.floo.roadtrip.service.etl.vendors.recgov.RecgovCampsiteParentJoiner
@@ -76,7 +75,7 @@ open class EtlOrchestrator(
     private val campsiteRepo = CampsiteRepo(ctx)
     private val teslaSuperchargerRepo = TeslaSuperchargerRepo(ctx)
     private val planetFitnessLocationRepo = PlanetFitnessLocationRepo(ctx)
-    private val rawCaptureRepo = RawCaptureRepo(rawDir)
+    private val rawCaptureStore = RawCaptureStore(rawDir)
 
     /**
      * Per-row run summary for import rows. `poi_data` and `campsite_data`
@@ -370,7 +369,7 @@ open class EtlOrchestrator(
             val ds = poiRegistry.dataSource(slug)
             if (ds != null) {
                 // data_source input: load envelope(s) from data/raw/<slug>/
-                raw[slug] = rawCaptureRepo.loadNewestEnvelopes(slug)
+                raw[slug] = rawCaptureStore.loadNewestEnvelopes(slug)
             } else if (slug in intermediateOutputs) {
                 // sibling intermediate from earlier in this same row's
                 // etls: chain. PoiRegistry's validator rejects cross-row

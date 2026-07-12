@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.db.migrate
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import org.testcontainers.containers.PostgreSQLContainer

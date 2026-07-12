@@ -19,7 +19,7 @@ class CampgroundRepo(
     private val ctx: DSLContext,
 ) {
     private val importRuns = ImportRunRepo(ctx)
-    private val vendorRefs = CatalogVendorRefRepo(ctx)
+    private val vendorRefs = VendorRefRepo(ctx)
     private val pois = PoiRepo(ctx)
     private val providerRefs = CampsiteProviderRepo(ctx)
 

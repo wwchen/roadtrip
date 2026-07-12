@@ -3,8 +3,8 @@ package ca.floo.roadtrip.service.etl.vendors.osmpf
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
-import ca.floo.roadtrip.repo.RawCaptureRepo
 import ca.floo.roadtrip.service.etl.framework.InputBundle
+import ca.floo.roadtrip.service.etl.framework.RawCaptureStore
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -43,7 +43,7 @@ class PlanetFitnessEtlTest {
 
     @Test
     fun `parses captured envelope into DTO with elements`() {
-        val envelope = RawCaptureRepo.parseEnvelope(fixtureFile())
+        val envelope = RawCaptureStore.parseEnvelope(fixtureFile())
         assertEquals("fetch_planet_fitness", envelope.fetcher)
         assertEquals(200, envelope.response.status)
         val dto = PlanetFitnessEtl().parse(bundle(envelope))
@@ -52,7 +52,7 @@ class PlanetFitnessEtlTest {
 
     @Test
     fun `validate rejects empty payload but accepts valid one`() {
-        val envelope = RawCaptureRepo.parseEnvelope(fixtureFile())
+        val envelope = RawCaptureStore.parseEnvelope(fixtureFile())
         val dto = PlanetFitnessEtl().parse(bundle(envelope))
         when (val r = PlanetFitnessEtl().validate(dto)) {
             is ValidationResult.Ok -> {} // expected
@@ -63,7 +63,7 @@ class PlanetFitnessEtlTest {
 
     @Test
     fun `transform produces canonical Planet Fitness locations with stable location ids`() {
-        val envelope = RawCaptureRepo.parseEnvelope(fixtureFile())
+        val envelope = RawCaptureStore.parseEnvelope(fixtureFile())
         val etl = PlanetFitnessEtl()
         val dto = etl.parse(bundle(envelope))
         val locations = etl.transform(dto, transformCtx).locations
@@ -82,7 +82,7 @@ class PlanetFitnessEtlTest {
 
     @Test
     fun `transform handles missing optional fields gracefully`() {
-        val envelope = RawCaptureRepo.parseEnvelope(fixtureFile())
+        val envelope = RawCaptureStore.parseEnvelope(fixtureFile())
         val etl = PlanetFitnessEtl()
         val dto = etl.parse(bundle(envelope))
         val locations = etl.transform(dto, transformCtx).locations

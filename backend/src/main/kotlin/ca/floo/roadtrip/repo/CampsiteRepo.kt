@@ -23,7 +23,7 @@ class CampsiteRepo(
     private val ctx: DSLContext,
 ) {
     private val importRuns = ImportRunRepo(ctx)
-    private val vendorRefs = CatalogVendorRefRepo(ctx)
+    private val vendorRefs = VendorRefRepo(ctx)
 
     data class SearchFilters(
         val vendors: List<String> = emptyList(),
