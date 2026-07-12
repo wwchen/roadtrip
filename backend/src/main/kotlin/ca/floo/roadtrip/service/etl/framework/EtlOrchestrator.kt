@@ -196,9 +196,9 @@ open class EtlOrchestrator(
 
     /**
      * Run a campsite_parent_joiner row by name. The joiner walks the canonical
-     * schema through its vendor-specific predicates (typically campsite
-     * vendor refs → campground vendor refs) and returns a list of
-     * (campsite_id, campground_id) pairs it believes are correct.
+     * schema through narrow repo candidate projections and adapter-owned
+     * vendor matching policy, then returns a list of (campsite_id,
+     * campground_id) pairs it believes are correct.
      *
      * `campsites.campground_id` is the durable parent link; where a
      * discovered pair disagrees with the current value we reparent the
