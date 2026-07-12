@@ -1,5 +1,9 @@
 package ca.floo.roadtrip.service.etl.framework
 
+import ca.floo.roadtrip.exceptions.FetchFailedException
+import ca.floo.roadtrip.exceptions.FetchTimeoutException
+import ca.floo.roadtrip.exceptions.TargetBusyException
+import ca.floo.roadtrip.exceptions.TargetNotFoundException
 import ca.floo.roadtrip.models.metadata.ingest.Phase
 import ca.floo.roadtrip.models.metadata.ingest.RunKind
 import ca.floo.roadtrip.models.metadata.ingest.RunOutcome

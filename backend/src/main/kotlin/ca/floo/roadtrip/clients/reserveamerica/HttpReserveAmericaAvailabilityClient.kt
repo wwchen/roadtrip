@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.clients.reserveamerica
 
 import ca.floo.roadtrip.clients.DateStringFormatter
+import ca.floo.roadtrip.exceptions.ReserveAmericaException
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.sync.Mutex

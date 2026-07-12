@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.availability.provider.adapters.campflare
 
 import ca.floo.roadtrip.clients.campflare.CampflareAvailability
 import ca.floo.roadtrip.clients.campflare.CampflareAvailabilityClient
-import ca.floo.roadtrip.clients.campflare.CampflareException
+import ca.floo.roadtrip.exceptions.CampflareException
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus

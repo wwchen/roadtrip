@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.framework
 
+import ca.floo.roadtrip.exceptions.NoCaptureException
 import ca.floo.roadtrip.models.metadata.Envelope
 import kotlinx.serialization.json.Json
 import java.io.File

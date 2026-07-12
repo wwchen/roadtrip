@@ -4,6 +4,8 @@ import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.models.domain.CatalogUpsertResult
+import ca.floo.roadtrip.models.domain.catalog.CatalogVendorRefKey
+import ca.floo.roadtrip.models.domain.catalog.CatalogVendorRefSpec
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext

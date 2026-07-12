@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.clients.mapbox
+package ca.floo.roadtrip.exceptions
 
 class GeocodeException(
     message: String,

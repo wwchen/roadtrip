@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica
 
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
-import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaException
+import ca.floo.roadtrip.exceptions.ReserveAmericaException
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus

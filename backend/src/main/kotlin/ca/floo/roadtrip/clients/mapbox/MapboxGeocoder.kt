@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.clients.mapbox
 
+import ca.floo.roadtrip.exceptions.GeocodeException
 import ca.floo.roadtrip.models.routing.GeocodeResult
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO

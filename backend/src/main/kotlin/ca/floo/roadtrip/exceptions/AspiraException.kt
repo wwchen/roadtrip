@@ -1,6 +1,6 @@
-package ca.floo.roadtrip.clients.reservecalifornia
+package ca.floo.roadtrip.exceptions
 
-class ReserveCaliforniaException(
+class AspiraException(
     message: String,
     val httpStatus: Int? = null,
 ) : RuntimeException(message)

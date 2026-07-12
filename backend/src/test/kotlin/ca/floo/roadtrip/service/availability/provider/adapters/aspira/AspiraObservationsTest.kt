@@ -2,9 +2,9 @@ package ca.floo.roadtrip.service.availability.provider.adapters.aspira
 
 import ca.floo.roadtrip.clients.aspira.AspiraAvailability
 import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
-import ca.floo.roadtrip.clients.aspira.AspiraException
 import ca.floo.roadtrip.clients.aspira.AspiraOccupancy
 import ca.floo.roadtrip.clients.aspira.AspiraResourceOccupancy
+import ca.floo.roadtrip.exceptions.AspiraException
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson

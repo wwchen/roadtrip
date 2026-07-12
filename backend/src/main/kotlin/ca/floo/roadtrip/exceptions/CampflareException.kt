@@ -1,6 +1,6 @@
-package ca.floo.roadtrip.clients.aspira
+package ca.floo.roadtrip.exceptions
 
-class AspiraException(
+class CampflareException(
     message: String,
     val httpStatus: Int? = null,
 ) : RuntimeException(message)

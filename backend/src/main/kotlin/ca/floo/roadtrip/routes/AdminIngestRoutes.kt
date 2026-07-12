@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.exceptions.TargetBusyException
+import ca.floo.roadtrip.exceptions.TargetNotFoundException
 import ca.floo.roadtrip.models.api.EXAMPLE_ERR_NOT_FOUND
 import ca.floo.roadtrip.models.api.EXAMPLE_ERR_NOT_FOUND_BAD_ID
 import ca.floo.roadtrip.models.api.EXAMPLE_ERR_TARGET_BUSY
@@ -25,16 +27,14 @@ import ca.floo.roadtrip.models.api.RunOutcomeSchema
 import ca.floo.roadtrip.models.api.RunsListSchema
 import ca.floo.roadtrip.models.api.StatusResponseSchema
 import ca.floo.roadtrip.models.api.TargetStatusSchema
+import ca.floo.roadtrip.models.domain.ingest.IngestRunDetailRow
+import ca.floo.roadtrip.models.domain.ingest.IngestRunListItemRow
+import ca.floo.roadtrip.models.domain.ingest.IngestRunPhaseRow
+import ca.floo.roadtrip.models.domain.ingest.TargetIngestStatusRow
 import ca.floo.roadtrip.models.metadata.ingest.RunKind
 import ca.floo.roadtrip.models.metadata.ingest.RunOutcome
 import ca.floo.roadtrip.repo.AdminIngestReadRepo
-import ca.floo.roadtrip.repo.IngestRunDetailRow
-import ca.floo.roadtrip.repo.IngestRunListItemRow
-import ca.floo.roadtrip.repo.IngestRunPhaseRow
-import ca.floo.roadtrip.repo.TargetIngestStatusRow
 import ca.floo.roadtrip.service.etl.framework.IngestController
-import ca.floo.roadtrip.service.etl.framework.TargetBusyException
-import ca.floo.roadtrip.service.etl.framework.TargetNotFoundException
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType

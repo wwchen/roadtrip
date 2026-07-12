@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.references.API_CACHE
+import ca.floo.roadtrip.models.domain.cache.PersistentCacheEntry
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement

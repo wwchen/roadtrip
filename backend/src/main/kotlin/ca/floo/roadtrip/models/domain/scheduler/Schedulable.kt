@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.scheduler.framework
+package ca.floo.roadtrip.models.domain.scheduler
 
 /**
  * Things a scheduled row carries that the scheduler reads. Intentionally

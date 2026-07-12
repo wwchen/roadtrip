@@ -1,5 +1,6 @@
-package ca.floo.roadtrip.service.scheduler.framework
+package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.models.domain.scheduler.Schedulable
 import java.time.Duration
 import java.time.OffsetDateTime
 
@@ -7,10 +8,10 @@ import java.time.OffsetDateTime
  * Contract a scheduled-work table must satisfy. Each row is a unit of
  * work the scheduler can claim, hand to a handler, and re-schedule.
  *
- * Implementations live in `repo/` (for example,
- * [ca.floo.roadtrip.repo.AvailabilityPollerRepo] fronts `availability_poller`).
+ * Implementations live in `repo/` (for example, [AvailabilityPollerRepo]
+ * fronts `availability_poller`).
  */
-interface SchedulableRepo<T> {
+interface SchedulableRepo<T : Schedulable> {
     /**
      * Claim up to [limit] eligible rows by setting a fresh claim token
      * and a lease. Rows with expired leases are eligible for re-claim.

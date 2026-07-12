@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.clients.mapbox.GeocodeException
 import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
+import ca.floo.roadtrip.exceptions.GeocodeException
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.GeocodeResponseDto
 import ca.floo.roadtrip.models.api.GeocodeResultDto

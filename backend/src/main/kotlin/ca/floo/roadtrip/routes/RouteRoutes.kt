@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.clients.mapbox.RoutingException
+import ca.floo.roadtrip.exceptions.RoutingException
 import ca.floo.roadtrip.models.api.CorridorFeatureDto
 import ca.floo.roadtrip.models.api.CorridorPropertiesDto
 import ca.floo.roadtrip.models.api.RouteErrorDto
