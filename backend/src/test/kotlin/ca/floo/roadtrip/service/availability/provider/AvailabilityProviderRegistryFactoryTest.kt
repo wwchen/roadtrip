@@ -192,7 +192,7 @@ class AvailabilityProviderRegistryFactoryTest {
                                         ),
                                 ),
                                 PoiDataEntry(
-                                    name = "Federal Campgrounds",
+                                    name = "Rec.gov Campgrounds",
                                     category = "campground",
                                     etls =
                                         listOf(

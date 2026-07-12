@@ -316,7 +316,7 @@ poi_data:
         adapter: CampflareCampgroundsEtl
         inputs: [campflare-campgrounds-export]
 
-  - name: Federal Campgrounds
+  - name: Rec.gov Campgrounds
     category: campground
     subcategory: federal
     agency:
@@ -451,7 +451,7 @@ campsite_data:
         adapter: CampflareCampsitesEtl
         inputs: [campflare-campsites-export]
 
-  - name: Federal Campsites
+  - name: Rec.gov Campsites
     etls:
       - slug: federal-campsites
         adapter: RecGovCampsitesEtl
@@ -515,9 +515,6 @@ campsite_data:
 # parent right; it earns its keep when vendor payloads shift over time.
 # ============================================================================
 campsite_parent_joiner:
-  - name: Federal Campsites → Federal Campgrounds
-    adapter: RecgovCampsiteParentJoiner
-
   - name: Aspira Resources → Aspira Pins
     adapter: AspiraCampsiteParentJoiner
 

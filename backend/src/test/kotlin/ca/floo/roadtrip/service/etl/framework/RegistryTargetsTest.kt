@@ -88,7 +88,7 @@ class RegistryTargetsTest {
                             etls = listOf(EtlEntry(slug = "campflare-campgrounds", adapter = "CampflareCampgroundsEtl")),
                         ),
                         PoiDataEntry(
-                            name = "Legacy Federal Campgrounds",
+                            name = "Legacy Rec.gov Campgrounds",
                             category = "campground",
                             etls = listOf(EtlEntry(slug = "legacy-federal-campgrounds", adapter = "LegacyFederalEtl")),
                         ),
@@ -106,14 +106,14 @@ class RegistryTargetsTest {
                             etls = listOf(EtlEntry(slug = "campflare-campsites", adapter = "CampflareCampsitesEtl")),
                         ),
                         CampsiteDataEntry(
-                            name = "Legacy Federal Campsites",
+                            name = "Legacy Rec.gov Campsites",
                             etls = listOf(EtlEntry(slug = "legacy-federal-campsites", adapter = "LegacyFederalSitesEtl")),
                         ),
                     ),
                 campsiteParentJoiners =
                     listOf(
                         CampsiteParentJoinerEntry(
-                            name = "Federal Campsites to Federal Campgrounds",
+                            name = "Rec.gov Campsites to Rec.gov Campgrounds",
                             adapter = "LegacyFederalJoiner",
                         ),
                     ),
@@ -137,7 +137,7 @@ class RegistryTargetsTest {
         assertEquals(
             listOf(
                 "Campflare Campgrounds",
-                "Federal Campgrounds",
+                "Rec.gov Campgrounds",
                 "Washington State Parks",
                 "BC Provincial Parks",
                 "Parks Canada",
@@ -147,14 +147,13 @@ class RegistryTargetsTest {
                 "Planet Fitness",
                 "Tesla Superchargers",
                 "Campflare Campsites",
-                "Federal Campsites",
+                "Rec.gov Campsites",
                 "Washington Aspira Resources",
                 "BC Aspira Resources",
                 "Parks Canada Aspira Resources",
                 "California State Park Sites",
                 "Alberta Provincial Park Sites",
                 "New York State Park Sites",
-                "Federal Campsites → Federal Campgrounds",
                 "Aspira Resources → Aspira Pins",
                 "ReserveCalifornia Sites → California State Parks",
                 "ReserveAmerica Sites → Alberta + NY Parks",

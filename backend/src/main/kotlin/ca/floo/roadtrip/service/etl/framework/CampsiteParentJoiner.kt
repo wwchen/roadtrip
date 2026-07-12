@@ -18,9 +18,8 @@ import ca.floo.roadtrip.repo.CampsiteParentJoinerRepo
  * a discovered pair disagrees with the current `campsites.campground_id`,
  * `EtlOrchestrator.runJoiner` reparents the campsite through the same repo
  * boundary. Idempotent on already-correct rows; useful when vendor payloads
- * shift over time (Aspira leaf reassignments, rec.gov facility moves) or when
- * a future cross-vendor merge exposes a better parent than the source-of-truth
- * ETL saw at write time.
+ * shift over time or when a source cannot reliably resolve every parent
+ * through its import-time row.
  */
 interface CampsiteParentJoiner {
     /** Adapter identifier; matches the YAML `adapter:` field. */

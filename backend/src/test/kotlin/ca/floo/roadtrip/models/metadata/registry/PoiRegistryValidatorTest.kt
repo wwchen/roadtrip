@@ -72,7 +72,7 @@ class PoiRegistryValidatorTest {
                       filename: scripts/y.py
                       output_dir_prefix: data/raw/src-b
                 poi_data:
-                  - name: Federal Campgrounds
+                  - name: Rec.gov Campgrounds
                     category: campground
                     agency:
                       derived_from_field: ORGANIZATION[0].OrgName
@@ -139,7 +139,7 @@ class PoiRegistryValidatorTest {
                       output_dir_prefix: data/raw/src-a
                 poi_data: []
                 campsite_data:
-                  - name: Federal Campsites
+                  - name: Rec.gov Campsites
                     etls:
                       - slug: federal-campsites
                         adapter: RecGovCampsitesEtl
@@ -147,7 +147,7 @@ class PoiRegistryValidatorTest {
                 """.trimIndent(),
             )
         assertEquals(1, r.campsiteData.size)
-        assertEquals("Federal Campsites", r.campsiteData[0].name)
+        assertEquals("Rec.gov Campsites", r.campsiteData[0].name)
     }
 
     @Test
@@ -294,12 +294,12 @@ class PoiRegistryValidatorTest {
                 poi_data: []
                 campsite_data: []
                 campsite_parent_joiner:
-                  - name: Recgov join
-                    adapter: RecgovCampsiteParentJoiner
+                  - name: Example join
+                    adapter: ExampleCampsiteParentJoiner
                 """.trimIndent(),
             )
         assertEquals(1, r.campsiteParentJoiners.size)
-        assertEquals("RecgovCampsiteParentJoiner", r.campsiteParentJoiners[0].adapter)
+        assertEquals("ExampleCampsiteParentJoiner", r.campsiteParentJoiners[0].adapter)
     }
 
     @Test

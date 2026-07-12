@@ -103,7 +103,7 @@ class RecGovCampgroundsEtlTest {
                                       filename: fetch_recgov.py
                                       output_dir_prefix: recgov-campgrounds
                                 poi_data:
-                                  - name: Federal Campgrounds
+                                  - name: Rec.gov Campgrounds
                                     category: campground
                                     subcategory: federal
                                     agency:
