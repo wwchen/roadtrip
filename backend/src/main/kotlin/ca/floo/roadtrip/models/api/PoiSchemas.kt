@@ -106,8 +106,8 @@ data class PoisOnRouteRequestSchema(
     val categories: List<String>? = null,
 )
 
-// /api/pois/on-route response. A slim GeoJSON FeatureCollection, ordered by
-// route_km and intentionally missing bbox-only metadata such as truncated.
+// /api/pois/on-route response. A slim GeoJSON FeatureCollection intentionally
+// missing bbox-only metadata such as truncated.
 @Serializable
 data class PoisOnRouteResponseSchema(
     val type: String = "FeatureCollection",
@@ -133,7 +133,6 @@ data class PoisOnRouteFeaturePropertiesSchema(
     val category: String,
     val subcategory: String? = null,
     val agency: String? = null,
-    @SerialName("route_km") val routeKm: Double,
 )
 
 @Serializable

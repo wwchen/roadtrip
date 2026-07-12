@@ -1764,9 +1764,9 @@ function distanceAlongRouteKm(lng, lat) {
 }
 
 /** Replace the corridor card list wholesale from a fresh /api/pois/on-route
- *  response. Slim features carry only id, lng/lat, category, subcategory,
- *  and route_km; the richer fields the cards display (name, sites, season,
- *  rating) arrive asynchronously via per-card hydratePoi. */
+ *  response. Slim features carry only id, lng/lat, category, and subcategory;
+ *  the richer fields the cards display (name, sites, season, rating) arrive
+ *  asynchronously via per-card hydratePoi. */
 function setTripPois(cgFeatures) {
   if (trip.mode !== 'directions' || !trip.route || !trip.stops[0]) {
     tripResults.cards = [];
@@ -1775,8 +1775,8 @@ function setTripPois(cgFeatures) {
     return;
   }
   // Refresh route index — the route polyline may have changed since the
-  // last call (added/removed/reordered stops). Used as a fallback when a
-  // feature lacks a server-supplied route_km.
+  // last call (added/removed/reordered stops). Used to sort cards in the
+  // order the driver encounters them.
   indexRoute(trip.route.features[0].geometry);
 
   const origin = trip.stops[0];
@@ -1802,10 +1802,7 @@ function setTripPois(cgFeatures) {
       rating: null,
       agency: p.agency || '',
       lng, lat,
-      // Prefer the BE-supplied along-route distance — the FE projection
-      // only knows about the cached polyline and may disagree on long
-      // routes where Mapbox's geometry differs from a straight LineString.
-      routeKm: Number.isFinite(p.route_km) ? p.route_km : distanceAlongRouteKm(lng, lat),
+      routeKm: distanceAlongRouteKm(lng, lat),
       distKm: distanceKm(origin.lat, origin.lng, lat, lng),
       feature: f,
       hydrated: false,

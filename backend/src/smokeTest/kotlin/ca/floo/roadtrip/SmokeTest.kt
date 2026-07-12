@@ -789,8 +789,7 @@ class SmokeTest {
                             "geometry": { "type": "Point", "coordinates": [-122.0, 47.8] },
                             "properties": {
                               "category": "campground",
-                              "subcategory": "federal",
-                              "route_km": 25.0
+                              "subcategory": "federal"
                             }
                           }]
                         }

@@ -38,6 +38,97 @@ internal class PoiServingRepo(
         return PoiResult(rows, truncated)
     }
 
+    fun fetchPoisWithinPolygon(
+        polygonGeoJson: String,
+        categories: List<String>,
+    ): List<PoiRow> {
+        if (categories.isEmpty()) return emptyList()
+        val placeholders = categories.joinToString(",") { "?" }
+        val sql =
+            """
+            WITH corridor AS (
+              SELECT ST_SetSRID(ST_GeomFromGeoJSON(?), 4326) AS poly
+            ),
+            candidates AS (
+              SELECT
+                id,
+                category,
+                subcategory,
+                agency,
+                ST_X(ST_Centroid(geom)) AS lng,
+                ST_Y(ST_Centroid(geom)) AS lat,
+                CASE
+                  WHEN category = 'campground' AND NULLIF(provider_ref ->> 'recgov_id', '') IS NOT NULL
+                    THEN 'recgov:' || (provider_ref ->> 'recgov_id')
+                  WHEN category = 'campground'
+                    AND NULLIF(provider_ref ->> 'transactionLocationId', '') IS NOT NULL
+                    AND NULLIF(provider_ref ->> 'mapId', '') IS NOT NULL
+                    THEN 'aspira:' || source || ':' ||
+                      (provider_ref ->> 'transactionLocationId') || ':' ||
+                      (provider_ref ->> 'mapId')
+                  WHEN category = 'campground' AND NULLIF(provider_ref ->> 'park_id', '') IS NOT NULL
+                    THEN 'reserveamerica:' || source || ':' || (provider_ref ->> 'park_id')
+                  WHEN category = 'campground' AND NULLIF(provider_ref ->> 'facility_id', '') IS NOT NULL
+                    THEN 'reserveamerica:' || source || ':' || (provider_ref ->> 'facility_id')
+                  ELSE source || ':' || source_id
+                END AS poi_key
+              FROM (
+                SELECT
+                  p.id,
+                  p.geom,
+                  p.poi_type AS category,
+                  cg.kind AS subcategory,
+                  cg.management->>'agency' AS agency,
+                  COALESCE(gvr.vendor, p.poi_type) AS source,
+                  COALESCE(gvr.external_id, ts.location_slug, pf.location_id, p.id::text) AS source_id,
+                  COALESCE(gvr.payload, '{}'::jsonb) AS provider_ref
+                FROM pois p
+                LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
+                LEFT JOIN campground_canonical cg ON cg.id = pc.campground_id
+                LEFT JOIN LATERAL (
+                  SELECT vr.vendor, vr.external_id, vr.payload
+                  FROM campground_vendor_refs cvr
+                  JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
+                  WHERE cvr.campground_id = cg.id
+                    AND vr.entity_type = 'campground'
+                    AND vr.deleted_at IS NULL
+                  ORDER BY cvr.vendor_ref_id ASC
+                  LIMIT 1
+                ) gvr ON TRUE
+                LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
+                LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id AND ts.deleted_at IS NULL
+                LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
+                LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id AND pf.deleted_at IS NULL
+                WHERE p.deleted_at IS NULL
+              ) catalog, corridor
+              WHERE category IN ($placeholders)
+                AND ST_Within(ST_Centroid(geom), corridor.poly)
+            ),
+            ranked AS (
+              SELECT *,
+                     ROW_NUMBER() OVER (PARTITION BY poi_key ORDER BY id ASC) AS rn
+              FROM candidates
+            )
+            SELECT id, category, subcategory, agency, lng, lat
+            FROM ranked
+            WHERE rn = 1
+            ORDER BY id ASC
+            """.trimIndent()
+        val args = mutableListOf<Any>()
+        args.add(polygonGeoJson)
+        args.addAll(categories)
+        return ctx.fetch(sql, *args.toTypedArray()).map { r ->
+            PoiRow(
+                id = (r.get("id") as Number).toLong(),
+                category = r.get("category") as String,
+                subcategory = r.get("subcategory") as String?,
+                agency = r.get("agency") as String?,
+                lng = (r.get("lng") as Number).toDouble(),
+                lat = (r.get("lat") as Number).toDouble(),
+            )
+        }
+    }
+
     fun findById(poiId: Long): PoiIndexRow? =
         ctx
             .fetchOne(
@@ -66,20 +157,16 @@ internal class PoiServingRepo(
         ctx
             .fetchOne(
                 """
-                SELECT name
-                FROM (
-                    SELECT p.id,
-                           COALESCE(cg.name, ts.common_site_name, pf.name) AS name
-                    FROM pois p
-                    LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
-                    LEFT JOIN campground_canonical cg ON cg.id = pc.campground_id
-                    LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
-                    LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id
-                    LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
-                    LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id
-                    WHERE p.deleted_at IS NULL
-                ) catalog
-                WHERE id = ?
+                SELECT COALESCE(cg.name, ts.common_site_name, pf.name) AS name
+                FROM pois p
+                LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
+                LEFT JOIN campground_canonical cg ON cg.id = pc.campground_id
+                LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
+                LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id
+                LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
+                LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id
+                WHERE p.id = ?
+                  AND p.deleted_at IS NULL
                 """.trimIndent(),
                 poiId,
             )?.get("name", String::class.java)
