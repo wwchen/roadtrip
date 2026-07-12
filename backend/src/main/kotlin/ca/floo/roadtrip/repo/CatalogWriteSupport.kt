@@ -28,7 +28,7 @@ internal data class CatalogVendorRefSpec(
     val payload: JsonElement?,
 )
 
-internal class CatalogVendorRefRepo(
+internal class VendorRefRepo(
     private val ctx: DSLContext,
 ) {
     /**

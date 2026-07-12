@@ -58,6 +58,31 @@ class AppConfigTest {
     }
 
     @Test
+    fun `db config uses local defaults when env is empty`() {
+        val config = DbConfig.fromEnv(emptyMap())
+
+        assertEquals("jdbc:postgresql://localhost:5432/roadtrip", config.jdbcUrl)
+        assertEquals("roadtrip", config.user)
+        assertEquals("roadtrip", config.password)
+    }
+
+    @Test
+    fun `db config reads env overrides`() {
+        val config =
+            DbConfig.fromEnv(
+                mapOf(
+                    "ROADTRIP_DB_URL" to "jdbc:postgresql://db.internal:5432/roadtrip",
+                    "ROADTRIP_DB_USER" to "app",
+                    "ROADTRIP_DB_PASSWORD" to "secret",
+                ),
+            )
+
+        assertEquals("jdbc:postgresql://db.internal:5432/roadtrip", config.jdbcUrl)
+        assertEquals("app", config.user)
+        assertEquals("secret", config.password)
+    }
+
+    @Test
     fun `cache config rejects invalid durations`() {
         val err =
             assertFailsWith<IllegalArgumentException> {

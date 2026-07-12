@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.config.DbConfig
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import org.flywaydb.core.Flyway
@@ -7,23 +8,6 @@ import org.jooq.DSLContext
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
 import javax.sql.DataSource
-
-data class DbConfig(
-    val jdbcUrl: String,
-    val user: String,
-    val password: String,
-) {
-    companion object {
-        fun fromEnv(): DbConfig =
-            DbConfig(
-                jdbcUrl =
-                    System.getenv("ROADTRIP_DB_URL")
-                        ?: "jdbc:postgresql://localhost:5432/roadtrip",
-                user = System.getenv("ROADTRIP_DB_USER") ?: "roadtrip",
-                password = System.getenv("ROADTRIP_DB_PASSWORD") ?: "roadtrip",
-            )
-    }
-}
 
 // HikariCP for the importer is overkill (single-threaded), but reusing one
 // pool config keeps importer + Ktor server symmetric. maxPoolSize = 4 is
