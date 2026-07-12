@@ -19,13 +19,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-data class ReserveAmericaTenant(
-    val source: String,
-    val host: String,
-    val contractCode: String,
-    val bookingHorizonDays: Int,
-)
-
 /**
  * Widest single-tick poll window for ReserveAmerica / Active Network. Latent
  * until watches turn on for this vendor (`pollableForAlerts` is still false)

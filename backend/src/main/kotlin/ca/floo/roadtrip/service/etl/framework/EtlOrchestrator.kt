@@ -1,6 +1,10 @@
 package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.models.domain.CatalogUpsertResult
+import ca.floo.roadtrip.models.etl.CampgroundEtlOutput
+import ca.floo.roadtrip.models.etl.CampsiteEtlOutput
+import ca.floo.roadtrip.models.etl.PlanetFitnessLocationEtlOutput
+import ca.floo.roadtrip.models.etl.TeslaSuperchargerEtlOutput
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.models.metadata.registry.EtlEntry

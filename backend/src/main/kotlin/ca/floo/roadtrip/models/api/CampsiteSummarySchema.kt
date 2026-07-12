@@ -19,18 +19,3 @@ data class CampsiteSummarySchema(
     val tags: JsonElement? = null,
     val raw: JsonElement? = null,
 )
-
-@Serializable
-data class PoiCampsitesResponseSchema(
-    @SerialName("poi_id") val poiId: Long,
-    val type: String,
-    val campsites: List<CampsiteSummarySchema>,
-)
-
-@Serializable
-data class PoiCampsitesAvailabilityResponseDto(
-    @SerialName("poi_id") val poiId: Long,
-    @SerialName("start_date") val startDate: String,
-    @SerialName("end_date") val endDate: String,
-    val campsites: List<AvailabilityResponseDto>,
-)

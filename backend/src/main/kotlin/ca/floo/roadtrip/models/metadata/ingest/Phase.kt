@@ -45,32 +45,3 @@ sealed interface Phase {
         }
     }
 }
-
-// A unit of refresh.
-//   - Fetch targets: one per data_sources row. Target.name = data_source slug.
-//   - Import targets: one per runnable poi_data/campsite_data row.
-//     Target.name = row display name.
-// Per-target mutex serializes concurrent runs of the same target.
-data class Target(
-    val name: String,
-    val fetchPhases: List<Phase.Fetch>,
-    val importPhases: List<Phase.Import>,
-)
-
-// What a run does. Each target has both a fetch list (web → data/) and an
-// import list (data/ → Postgres). They share a per-target mutex so a fetch
-// and an import on the same target serialize.
-enum class RunKind(
-    val rowValue: String,
-) {
-    FETCH("fetch"),
-    IMPORT("import"),
-}
-
-data class RunOutcome(
-    val parentRunId: Long,
-    val target: String,
-    val kind: RunKind,
-    val status: String, // 'completed' | 'failed' | 'noop'
-    val failedPhase: String?,
-)

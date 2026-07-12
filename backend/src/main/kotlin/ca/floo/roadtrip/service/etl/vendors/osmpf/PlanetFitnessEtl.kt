@@ -2,10 +2,10 @@ package ca.floo.roadtrip.service.etl.vendors.osmpf
 
 import ca.floo.roadtrip.models.domain.Address
 import ca.floo.roadtrip.models.domain.PlanetFitnessLocationUpsertCandidate
+import ca.floo.roadtrip.models.etl.PlanetFitnessLocationEtlOutput
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
-import ca.floo.roadtrip.service.etl.framework.PlanetFitnessLocationEtlOutput
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -159,28 +159,4 @@ private data class OverpassElementExtrasDto(
     val lon: Double? = null,
     val center: OverpassCenter? = null,
     val tags: Map<String, String>? = null,
-)
-
-// DTO mirroring Overpass's response shape. `_fetchedAt` is set by the ETL
-// after deserialization (it isn't on the wire — comes from the envelope).
-@Serializable
-data class PlanetFitnessRawDto(
-    val elements: List<OverpassElement> = emptyList(),
-    @kotlinx.serialization.Transient val _fetchedAt: Instant = Instant.EPOCH,
-)
-
-@Serializable
-data class OverpassElement(
-    val type: String, // "node" | "way" | "relation"
-    val id: Long,
-    val lat: Double? = null,
-    val lon: Double? = null,
-    val center: OverpassCenter? = null,
-    val tags: Map<String, String>? = null,
-)
-
-@Serializable
-data class OverpassCenter(
-    val lat: Double,
-    val lon: Double,
 )

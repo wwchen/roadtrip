@@ -2,12 +2,6 @@ package ca.floo.roadtrip.repo
 
 import org.jooq.DSLContext
 
-data class CatalogPoiFixture(
-    val poiId: Long,
-    val catalogId: Long,
-    val poiType: String,
-)
-
 private const val FIXTURE_FETCHED_AT = "2026-06-01 00:00:00+00"
 
 fun DSLContext.cleanCanonicalCatalogFixtures() {

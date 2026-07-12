@@ -32,15 +32,6 @@ private val ingestControllerJson =
         explicitNulls = false
     }
 
-class TargetNotFoundException(
-    name: String,
-) : RuntimeException("unknown target: $name")
-
-class TargetBusyException(
-    val target: String,
-    val runningRunId: Long,
-) : RuntimeException("target=$target is already running as run_id=$runningRunId")
-
 // Per-target locked, structured-record orchestrator. RFC 0004 / issue #44.
 //
 // Sequence per startRun(target, kind):
@@ -368,67 +359,3 @@ private data class ImportPhaseCountsDto(
     @SerialName("created_links") val createdLinks: Int? = null,
     @SerialName("stale_links_deleted") val staleLinksDeleted: Int? = null,
 )
-
-class FetchFailedException(
-    val exitCode: Int,
-    val stderrTail: String,
-) : RuntimeException("fetch phase exited $exitCode")
-
-class FetchTimeoutException(
-    message: String,
-) : RuntimeException(message)
-
-// Indirection to make process spawning testable without forking real procs.
-interface ProcessFactory {
-    fun start(
-        cmd: List<String>,
-        workingDir: File,
-    ): RunningProcess
-}
-
-interface RunningProcess {
-    fun stdoutStream(): java.io.InputStream
-
-    fun stderrStream(): java.io.InputStream
-
-    suspend fun awaitExit(): Int
-
-    fun killTree()
-}
-
-object DefaultProcessFactory : ProcessFactory {
-    override fun start(
-        cmd: List<String>,
-        workingDir: File,
-    ): RunningProcess {
-        val pb =
-            ProcessBuilder(cmd)
-                .directory(workingDir)
-                .redirectErrorStream(false)
-        val p = pb.start()
-        return JdkRunningProcess(p)
-    }
-}
-
-private class JdkRunningProcess(
-    private val process: Process,
-) : RunningProcess {
-    override fun stdoutStream() = process.inputStream
-
-    override fun stderrStream() = process.errorStream
-
-    override suspend fun awaitExit(): Int =
-        withContext(Dispatchers.IO) {
-            process.waitFor()
-        }
-
-    override fun killTree() {
-        // JDK 9+ Process.descendants() reaches grandchildren (curl spawned by
-        // python, ffmpeg spawned by curl, etc). destroyForcibly() on each so
-        // a hung pipeline can't outlive the timeout.
-        runCatching {
-            process.descendants().forEach { it.destroyForcibly() }
-            process.destroyForcibly()
-        }
-    }
-}

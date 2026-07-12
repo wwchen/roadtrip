@@ -2,12 +2,6 @@ package ca.floo.roadtrip.repo
 
 import org.jooq.DSLContext
 
-internal data class PoiGeometryUpdate(
-    val poiId: Long,
-    val longitude: Double,
-    val latitude: Double,
-)
-
 internal class PoiRepo(
     private val ctx: DSLContext,
 ) {

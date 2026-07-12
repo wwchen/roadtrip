@@ -1,13 +1,12 @@
 package ca.floo.roadtrip.service.etl.vendors.bcparks
 
 import ca.floo.roadtrip.models.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.models.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
-import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -185,38 +184,3 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, CampgroundEtlOutput> {
         private const val ORCS_REF_PREFIX = "orcs-"
     }
 }
-
-@Serializable
-data class BcParksPageDto(
-    val data: List<BcParksRow> = emptyList(),
-)
-
-@Serializable
-data class BcParksRow(
-    val orcs: Long? = null,
-    val protectedAreaName: String? = null,
-    val type: String? = null,
-    @kotlinx.serialization.SerialName("class") val parkClass: String? = null,
-    val totalArea: Double? = null,
-    val legalStatus: String? = null,
-    val url: String? = null,
-    val latitude: Double? = null,
-    val longitude: Double? = null,
-    val parkContact: String? = null,
-    val description: String? = null,
-    val parkPhotos: List<BcParksPhoto> = emptyList(),
-)
-
-@Serializable
-data class BcParksPhoto(
-    val imageUrl: String? = null,
-    val isFeatured: Boolean? = null,
-    val isActive: Boolean? = null,
-    val sortOrder: Int? = null,
-)
-
-data class BcParksDto(
-    val rows: List<BcParksRow>,
-    val rawById: Map<Long, JsonObject>,
-    val fetchedAt: Instant,
-)

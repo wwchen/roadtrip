@@ -33,16 +33,3 @@ data class Envelope(
     // Optional, set by paginated/multi-part captures.
     val part: String? = null,
 )
-
-@Serializable
-data class RequestMeta(
-    val url: String,
-    val method: String,
-    val headers: Map<String, String> = emptyMap(),
-)
-
-@Serializable
-data class ResponseMeta(
-    val status: Int,
-    val headers: Map<String, String> = emptyMap(),
-)

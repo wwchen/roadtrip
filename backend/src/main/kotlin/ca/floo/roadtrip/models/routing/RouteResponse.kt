@@ -10,10 +10,3 @@ data class RouteResponse(
     val durationSeconds: Double,
     val legs: List<RouteLeg>,
 )
-
-/** Per-leg summary: one entry per segment between adjacent waypoints. */
-@Serializable
-data class RouteLeg(
-    val distanceMeters: Double,
-    val durationSeconds: Double,
-)

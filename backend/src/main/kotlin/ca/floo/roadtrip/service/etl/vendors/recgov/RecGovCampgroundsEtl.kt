@@ -3,14 +3,13 @@ package ca.floo.roadtrip.service.etl.vendors.recgov
 import ca.floo.roadtrip.models.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.models.domain.CellSignal
 import ca.floo.roadtrip.models.domain.RatingSummary
+import ca.floo.roadtrip.models.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.models.metadata.registry.AgencyConfig
-import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -474,42 +473,3 @@ private const val RAW_PATH_SEPARATOR = "."
 private const val RAW_PATH_FIELD_GROUP = 1
 private const val RAW_PATH_INDEX_GROUP = 2
 private val RAW_PATH_SEGMENT = Regex("""([^\[\]]+)(?:\[(\d+)])?""")
-
-// RIDB page envelope: { METADATA: {...}, RECDATA: [Facility, ...] }.
-// Field names match RIDB's PascalCase verbatim — kotlinx-serialization
-// would normally complain, but the fields aren't generic enough to
-// alias, so we suppress and live with the naming noise.
-@Suppress("ConstructorParameterNaming", "PropertyName")
-@Serializable
-data class RidbPageDto(
-    val RECDATA: List<Facility> = emptyList(),
-)
-
-@Suppress("ConstructorParameterNaming", "PropertyName")
-@Serializable
-data class Facility(
-    val FacilityID: Long,
-    val FacilityName: String? = null,
-    val FacilityLatitude: Double? = null,
-    val FacilityLongitude: Double? = null,
-    val FacilityPhone: String? = null,
-    val FacilityReservationURL: String? = null,
-    val FACILITYADDRESS: List<FacilityAddress>? = null,
-)
-
-@Suppress("ConstructorParameterNaming", "PropertyName")
-@Serializable
-data class FacilityAddress(
-    val FacilityStreetAddress1: String? = null,
-    val City: String? = null,
-    val AddressStateCode: String? = null,
-    val PostalCode: String? = null,
-    val AddressCountryCode: String? = null,
-)
-
-data class RecGovDto(
-    val rows: List<Facility>,
-    val rawById: Map<Long, JsonObject>,
-    val enrichmentById: Map<Long, JsonObject>,
-    val fetchedAt: Instant,
-)

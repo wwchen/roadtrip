@@ -13,21 +13,6 @@ internal const val EMPTY_JSON_ARRAY: String = "[]"
 // Postgres protocol limit of 65 535, while amortizing round-trip overhead.
 internal const val BULK_CHUNK_SIZE: Int = 500
 
-internal data class CatalogVendorRefKey(
-    val vendor: String,
-    val entityType: String,
-    val externalId: String,
-)
-
-internal data class CatalogVendorRefSpec(
-    val vendor: String,
-    val entityType: String,
-    val externalId: String,
-    val externalName: String?,
-    val sourceUrl: String?,
-    val payload: JsonElement?,
-)
-
 internal class VendorRefRepo(
     private val ctx: DSLContext,
 ) {

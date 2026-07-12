@@ -50,8 +50,3 @@ internal class PoisOnRouteService(
         }
     }
 }
-
-internal data class OnRouteWaypoint(
-    val lat: Double,
-    val lng: Double,
-)

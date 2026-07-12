@@ -256,13 +256,6 @@ private fun observationsFromOccupancyCatalogArrivalDay(
     }
 }
 
-internal data class AspiraCatalogCampsite(
-    val campsiteId: Long,
-    val resourceId: String,
-    val mapId: Int?,
-    val resourceLocationId: Int? = null,
-)
-
 private data class CatalogResourceDays(
     val campsiteId: Long,
     val days: List<Int>?,
