@@ -1,13 +1,14 @@
 package ca.floo.roadtrip.service.catalog
 
 import ca.floo.roadtrip.models.api.PoiCategoryDetailSchema
-import ca.floo.roadtrip.models.api.PoiDetailFeatureSchema
 import ca.floo.roadtrip.models.api.PoiDetailPropertiesSchema
 import ca.floo.roadtrip.models.domain.PoiIndexRow
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.service.api.CAMPGROUND_POI_TYPE
 import ca.floo.roadtrip.service.api.PoiCta
 import ca.floo.roadtrip.service.api.UrlHosts
+import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.CampgroundAvailabilitySupport
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -20,12 +21,16 @@ private const val COUNTRY_KEY = "country"
 private const val AGENCY_KEY = "agency"
 private const val PHONE_KEY = "phone"
 private const val URL_KEY = "url"
+private const val LATITUDE_KEY = "latitude"
+private const val LONGITUDE_KEY = "longitude"
 
 internal class CampgroundService(
     private val repo: CampgroundRepo,
+    private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
+    private val availabilitySupport: CampgroundAvailabilitySupport? = null,
     private val cta: PoiCta = PoiCta.Default,
 ) {
-    fun poiDetailFeature(poi: PoiIndexRow): PoiDetailFeatureSchema? {
+    fun poiDetailProperties(poi: PoiIndexRow): PoiDetailPropertiesSchema? {
         val detail = repo.findPoiDetailByPoi(poi.id) ?: return null
         val campground = detail.campground
         val raw = Json.parseToJsonElement(detail.propertiesJson)
@@ -33,46 +38,52 @@ internal class CampgroundService(
         val infoUrl = campground.links.firstObjectStringProperty(URL_KEY)
         val description = rawObject.stringProperty("description")
         val photoUrl = rawObject.stringProperty("photo_url")
-        return PoiDetailFeatureSchema(
-            id = poi.id,
-            geometry = Json.parseToJsonElement(poi.geomJson),
-            properties =
-                PoiDetailPropertiesSchema(
-                    source = detail.source,
-                    sourceId = detail.sourceId,
-                    category = CAMPGROUND_POI_TYPE,
-                    subcategory = campground.kind,
-                    agency = campground.management.stringProperty(AGENCY_KEY),
-                    name = campground.name,
-                    region = campground.location.stringProperty(REGION_KEY),
-                    country = campground.location.stringProperty(COUNTRY_KEY),
-                    detail =
-                        PoiCategoryDetailSchema(
-                            sources = detail.memberSources,
-                            unitName = null,
+        val dateContext =
+            dateResolver.context(
+                lat = campground.location.doubleProperty(LATITUDE_KEY),
+                lng = campground.location.doubleProperty(LONGITUDE_KEY),
+            )
+        val availabilitySupported = availabilitySupport?.supportsCampground(campground.id) == true
+        val availabilityProvider = availabilitySupport?.preferredAvailabilityProvider(campground.id)
+        return PoiDetailPropertiesSchema(
+            source = detail.source,
+            sourceId = detail.sourceId,
+            category = CAMPGROUND_POI_TYPE,
+            subcategory = campground.kind,
+            agency = campground.management.stringProperty(AGENCY_KEY),
+            name = campground.name,
+            region = campground.location.stringProperty(REGION_KEY),
+            country = campground.location.stringProperty(COUNTRY_KEY),
+            detail =
+                PoiCategoryDetailSchema(
+                    sources = detail.memberSources,
+                    availabilityProvider = availabilityProvider,
+                    timeZone = dateContext.timeZone.id,
+                    earliestDate = dateContext.earliestDate.toString(),
+                    unitName = null,
+                    reserveUrl = campground.reservationUrl,
+                    bookingSite = campground.reservationUrl?.let(UrlHosts::extract),
+                    phone = campground.contact.stringProperty(PHONE_KEY),
+                    infoUrl = infoUrl,
+                    address = campground.location,
+                    description = description,
+                    photoUrl = photoUrl,
+                    providerRef = detail.providerRefJson?.let { Json.parseToJsonElement(it) },
+                    availabilitySupported = availabilitySupported.takeIf { it },
+                    cta =
+                        cta.computeCta(
+                            providerRefJson = detail.providerRefJson,
+                            ctaProviderRefJson = detail.ctaProviderRefJson,
                             reserveUrl = campground.reservationUrl,
-                            bookingSite = campground.reservationUrl?.let(UrlHosts::extract),
-                            phone = campground.contact.stringProperty(PHONE_KEY),
                             infoUrl = infoUrl,
-                            address = campground.location,
-                            description = description,
-                            photoUrl = photoUrl,
-                            providerRef = detail.providerRefJson?.let { Json.parseToJsonElement(it) },
-                            cta =
-                                cta.computeCta(
-                                    providerRefJson = detail.providerRefJson,
-                                    ctaProviderRefJson = detail.ctaProviderRefJson,
-                                    reserveUrl = campground.reservationUrl,
-                                    infoUrl = infoUrl,
-                                ),
-                            bookingSystem =
-                                cta.bookingSystem(
-                                    providerRefJson = detail.providerRefJson,
-                                    reserveUrl = campground.reservationUrl,
-                                    infoUrl = infoUrl,
-                                ),
-                            raw = raw,
                         ),
+                    bookingSystem =
+                        cta.bookingSystem(
+                            providerRefJson = detail.providerRefJson,
+                            reserveUrl = campground.reservationUrl,
+                            infoUrl = infoUrl,
+                        ),
+                    raw = raw,
                 ),
         )
     }
@@ -89,6 +100,13 @@ private fun JsonElement.stringProperty(key: String): String? =
         ?.contentOrNull
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
+
+private fun JsonElement.doubleProperty(key: String): Double? =
+    ((this as? JsonObject)?.get(key) as? JsonPrimitive)
+        ?.contentOrNull
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?.toDoubleOrNull()
 
 private fun JsonElement.firstObjectStringProperty(key: String): String? =
     (this as? JsonArray)

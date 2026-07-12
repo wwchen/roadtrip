@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.models.domain.CampgroundProviderRefRow
 import ca.floo.roadtrip.models.domain.CampsiteDateContextRow
 import ca.floo.roadtrip.models.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.models.domain.CampsiteVendorRefRow
@@ -42,6 +43,37 @@ class CampsiteProviderRepo(
                 """.trimIndent(),
                 poiId,
             ).mapNotNull(::campgroundProviderRow)
+
+    /** Provider refs for a campground catalog row, keyed by campground id. */
+    fun findCampgroundProviderRefCandidates(campgroundId: Long): List<CampgroundProviderRefRow> =
+        ctx
+            .fetch(
+                """
+                SELECT cg.id AS campground_id,
+                       vr.vendor AS source,
+                       vr.payload::text AS pref
+                FROM campgrounds cg
+                JOIN campground_vendor_refs cvr
+                  ON cvr.campground_id = cg.id
+                JOIN vendor_refs vr
+                  ON vr.id = cvr.vendor_ref_id
+                WHERE cg.id = ?
+                  AND cg.deleted_at IS NULL
+                  AND vr.entity_type = 'campground'
+                  AND vr.deleted_at IS NULL
+                ORDER BY
+                  CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
+                  cvr.vendor_ref_id ASC
+                """.trimIndent(),
+                campgroundId,
+            ).mapNotNull { r ->
+                val pref = r.get("pref") as String? ?: return@mapNotNull null
+                CampgroundProviderRefRow(
+                    campgroundId = (r.get("campground_id") as Number).toLong(),
+                    source = r.get("source") as String,
+                    providerRefJson = pref,
+                )
+            }
 
     fun findCampsiteProviderRefs(campsiteId: Long): List<CampsiteVendorRefRow> =
         ctx

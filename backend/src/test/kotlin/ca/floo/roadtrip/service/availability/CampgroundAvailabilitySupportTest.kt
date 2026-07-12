@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import kotlin.test.assertEquals
 
-class PoiAvailabilitySupportTest : SharedDbTest() {
+class CampgroundAvailabilitySupportTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
         ctx.cleanCanonicalCatalogFixtures()
@@ -40,7 +40,7 @@ class PoiAvailabilitySupportTest : SharedDbTest() {
             payloadJson = """{"recgov_id":"232447"}""",
         )
         val support =
-            PoiAvailabilitySupport(
+            CampgroundAvailabilitySupport(
                 providerRefs = CampsiteProviderRepo(ctx),
                 availabilityProviders =
                     AvailabilityProviderRegistry(
@@ -51,45 +51,28 @@ class PoiAvailabilitySupportTest : SharedDbTest() {
                     ),
             )
 
-        assertEquals(true, support.supportsPoi(fixture.poiId))
+        assertEquals(true, support.supportsCampground(fixture.catalogId))
     }
 
     @Test
     fun `preferredAvailabilityProvider returns the first provider ref on the campground row`() {
-        val poi = seedDualVendorPoi()
+        val campground = seedDualVendorCampground()
         val support = supportFor()
 
-        assertEquals("campflare", support.preferredAvailabilityProvider(poi.poiId))
+        assertEquals("campflare", support.preferredAvailabilityProvider(campground.campgroundId))
     }
 
-    @Test
-    fun `preferredAvailabilityProvider returns null for non-campground POIs`() {
-        val fixture =
-            ctx.seedCatalogPoi(
-                sourceId = "supercharger-no-provider",
-                name = "Supercharger",
-                lon = -119.56,
-                lat = 37.74,
-                poiType = "tesla_supercharger",
-            )
-        val support = supportFor()
-
-        assertEquals(null, support.preferredAvailabilityProvider(fixture.poiId))
-    }
-
-    /** POI-independent support instance; the preferredAvailabilityProvider path
-     *  only consults [CampsiteProviderRepo] and doesn't dispatch to adapters. */
-    private fun supportFor(): PoiAvailabilitySupport =
-        PoiAvailabilitySupport(
+    private fun supportFor(): CampgroundAvailabilitySupport =
+        CampgroundAvailabilitySupport(
             providerRefs = CampsiteProviderRepo(ctx),
             availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
         )
 
-    private data class MultiRefPoi(
-        val poiId: Long,
+    private data class MultiRefCampground(
+        val campgroundId: Long,
     )
 
-    private fun seedDualVendorPoi(): MultiRefPoi {
+    private fun seedDualVendorCampground(): MultiRefCampground {
         val fixture =
             ctx.seedCatalogPoi(
                 sourceId = "upper-pines-preferred-provider",
@@ -106,7 +89,7 @@ class PoiAvailabilitySupportTest : SharedDbTest() {
             payloadJson = """{"recgov_id":"232447"}""",
         )
         CanonicalViewRepo(ctx).refreshCanonicalViews()
-        return MultiRefPoi(poiId = fixture.poiId)
+        return MultiRefCampground(campgroundId = fixture.catalogId)
     }
 
     private fun linkCampgroundRef(

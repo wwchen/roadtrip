@@ -4,23 +4,25 @@ import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
 
-internal class PoiAvailabilitySupport(
+internal class CampgroundAvailabilitySupport(
     private val providerRefs: CampsiteProviderRepo,
     private val availabilityProviders: AvailabilityProviderRegistry,
 ) {
-    fun supportsPoi(poiId: Long): Boolean =
-        providerRefs.findProviderRefCandidates(poiId).any { candidate ->
+    fun supportsCampground(campgroundId: Long): Boolean =
+        providerRefs.findCampgroundProviderRefCandidates(campgroundId).any { candidate ->
             val ref = ProviderRefParser.parse(candidate.providerRefJson) ?: return@any false
             availabilityProviders
-                .forPoi(candidate, ref)
+                .forSource(candidate.source)
+                ?.takeIf { it.canHandle(ref) }
                 ?.capabilities
                 ?.supportsAvailability == true
         }
 
     /**
      * Vendor identifier of the resolver's preferred availability candidate for
-     * [poiId], or `null` when no candidate exists. Same ordering as
-     * [CampsiteProviderRepo.findProviderRefCandidates].
+     * [campgroundId], or `null` when no candidate exists. Same ordering as
+     * [CampsiteProviderRepo.findCampgroundProviderRefCandidates].
      */
-    fun preferredAvailabilityProvider(poiId: Long): String? = providerRefs.findProviderRefCandidates(poiId).firstOrNull()?.source
+    fun preferredAvailabilityProvider(campgroundId: Long): String? =
+        providerRefs.findCampgroundProviderRefCandidates(campgroundId).firstOrNull()?.source
 }

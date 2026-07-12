@@ -18,7 +18,7 @@ import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.routes.slackInteractivityRoute
 import ca.floo.roadtrip.service.api.PoiService
 import ca.floo.roadtrip.service.api.PoisOnRouteService
-import ca.floo.roadtrip.service.availability.PoiAvailabilitySupport
+import ca.floo.roadtrip.service.availability.CampgroundAvailabilitySupport
 import ca.floo.roadtrip.service.catalog.CampgroundService
 import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
@@ -98,20 +98,22 @@ internal fun Application.installRoadtripPlugins() {
 }
 
 internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
-    val poiAvailabilitySupport =
-        PoiAvailabilitySupport(
+    val campgroundAvailabilitySupport =
+        CampgroundAvailabilitySupport(
             providerRefs = runtime.campsiteProviders,
             availabilityProviders = runtime.availabilityProviderRegistry,
         )
     val poiService =
         PoiService(
             poiRepo = PoiServingRepo(runtime.ctx),
-            campgroundService = CampgroundService(CampgroundRepo(runtime.ctx)),
+            campgroundService =
+                CampgroundService(
+                    repo = CampgroundRepo(runtime.ctx),
+                    dateResolver = runtime.availabilityDateResolver,
+                    availabilitySupport = campgroundAvailabilitySupport,
+                ),
             teslaSuperchargerService = TeslaSuperchargerService(TeslaSuperchargerRepo(runtime.ctx)),
             planetFitnessLocationService = PlanetFitnessLocationService(PlanetFitnessLocationRepo(runtime.ctx)),
-            dateResolver = runtime.availabilityDateResolver,
-            availabilitySupport = poiAvailabilitySupport::supportsPoi,
-            availabilityProvider = poiAvailabilitySupport::preferredAvailabilityProvider,
         )
     val routeCorridorService = RouteCorridorService(RouteCorridorRepo(runtime.ctx))
     val poisOnRouteService =

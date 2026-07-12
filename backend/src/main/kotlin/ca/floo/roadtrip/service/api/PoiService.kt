@@ -7,11 +7,9 @@ import ca.floo.roadtrip.models.api.PoiSearchResponseSchema
 import ca.floo.roadtrip.models.api.PointGeometrySchema
 import ca.floo.roadtrip.models.api.SlimPoiFeatureSchema
 import ca.floo.roadtrip.models.api.SlimPoiPropertiesSchema
-import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.domain.Bbox
 import ca.floo.roadtrip.models.domain.PoiRow
 import ca.floo.roadtrip.repo.PoiServingRepo
-import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.catalog.CampgroundService
 import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
@@ -66,9 +64,6 @@ internal class PoiService(
     private val campgroundService: CampgroundService,
     private val teslaSuperchargerService: TeslaSuperchargerService,
     private val planetFitnessLocationService: PlanetFitnessLocationService,
-    private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
-    private val availabilitySupport: (Long) -> Boolean = { false },
-    private val availabilityProvider: (Long) -> String? = { null },
     private val limit: Int = POI_LIMIT,
     private val defaultCategories: List<String> = DEFAULT_POI_TYPES,
 ) {
@@ -118,19 +113,18 @@ internal class PoiService(
 
     fun poiDetail(id: Long): PoiDetailFeatureSchema? {
         val poi = poiRepo.findById(id) ?: return null
-        return when (poi.category) {
-            CAMPGROUND_POI_TYPE ->
-                campgroundService
-                    .poiDetailFeature(poi)
-                    ?.withCampgroundPoiContext(
-                        dateContext = dateResolver.context(lat = poi.lat, lng = poi.lng),
-                        availabilitySupported = availabilitySupport(poi.id),
-                        availabilityProvider = availabilityProvider(poi.id),
-                    )
-            TESLA_SUPERCHARGER_POI_TYPE -> teslaSuperchargerService.poiDetailFeature(poi)
-            PLANET_FITNESS_LOCATION_POI_TYPE -> planetFitnessLocationService.poiDetailFeature(poi)
-            else -> null
-        }
+        val properties =
+            when (poi.category) {
+                CAMPGROUND_POI_TYPE -> campgroundService.poiDetailProperties(poi)
+                TESLA_SUPERCHARGER_POI_TYPE -> teslaSuperchargerService.poiDetailProperties(poi)
+                PLANET_FITNESS_LOCATION_POI_TYPE -> planetFitnessLocationService.poiDetailProperties(poi)
+                else -> null
+            } ?: return null
+        return PoiDetailFeatureSchema(
+            id = poi.id,
+            geometry = Json.parseToJsonElement(poi.geomJson),
+            properties = properties,
+        )
     }
 
     fun search(
@@ -176,24 +170,6 @@ internal fun poiFeatureCollection(
                         ),
                 )
             },
-    )
-
-private fun PoiDetailFeatureSchema.withCampgroundPoiContext(
-    dateContext: PoiDateContext,
-    availabilitySupported: Boolean,
-    availabilityProvider: String?,
-): PoiDetailFeatureSchema =
-    copy(
-        properties =
-            properties.copy(
-                detail =
-                    properties.detail.copy(
-                        timeZone = dateContext.timeZone.id,
-                        earliestDate = dateContext.earliestDate.toString(),
-                        availabilitySupported = availabilitySupported.takeIf { it },
-                        availabilityProvider = availabilityProvider,
-                    ),
-            ),
     )
 
 internal fun encodePoiFeatureJson(value: PoiFeatureCollectionSchema): String = poiFeatureJson.encodeToString(value)
