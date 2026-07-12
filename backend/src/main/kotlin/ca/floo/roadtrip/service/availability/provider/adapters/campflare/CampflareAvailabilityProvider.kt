@@ -1,16 +1,15 @@
 package ca.floo.roadtrip.service.availability.provider.adapters.campflare
 
-import ca.floo.roadtrip.clients.campflare.CampflareAvailability
 import ca.floo.roadtrip.clients.campflare.CampflareAvailabilityClient
 import ca.floo.roadtrip.exceptions.CampflareException
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.CampsiteDayObservation
+import ca.floo.roadtrip.models.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.availability.provider.AvailabilityClient
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
@@ -20,9 +19,8 @@ import java.time.temporal.ChronoUnit
 
 class CampflareAvailabilityProvider(
     private val client: CampflareAvailabilityClient,
-    private val apiKeyConfigured: Boolean = true,
-) : AvailabilityProvider,
-    AvailabilityClient {
+    private val enabled: Boolean,
+) : AvailabilityProvider {
     override val id: AvailabilityProviderId = AvailabilityProviderId.CAMPFLARE
 
     override val capabilities: AvailabilityProviderCapabilities =
@@ -33,7 +31,9 @@ class CampflareAvailabilityProvider(
             maxPollWindowDays = CAMPFLARE_MAX_POLL_WINDOW_DAYS,
         )
 
-    override fun canHandle(ref: ProviderRef): Boolean = apiKeyConfigured && ref is ProviderRef.Campflare
+    override fun isEnabled(): Boolean = enabled
+
+    override fun canHandle(ref: ProviderRef): Boolean = isEnabled() && ref is ProviderRef.Campflare
 
     override suspend fun availability(
         ref: ProviderRef,

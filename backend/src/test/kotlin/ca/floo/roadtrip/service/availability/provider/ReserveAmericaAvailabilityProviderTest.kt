@@ -51,6 +51,7 @@ class ReserveAmericaAvailabilityProviderTest {
                             bookingHorizonDays = 270,
                         ),
                     client = client,
+                    enabled = true,
                 )
 
             val batch =

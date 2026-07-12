@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.clients.campflare.CampflareAvailability
 import ca.floo.roadtrip.clients.campflare.CampflareAvailabilityClient
-import ca.floo.roadtrip.clients.campflare.CampflareCampgroundAvailability
-import ca.floo.roadtrip.clients.campflare.CampflareCampsiteAvailability
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.campflare.CampflareAvailability
+import ca.floo.roadtrip.models.availability.campflare.CampflareCampgroundAvailability
+import ca.floo.roadtrip.models.availability.campflare.CampflareCampsiteAvailability
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.adapters.campflare.CampflareAvailabilityProvider
 import kotlinx.coroutines.runBlocking
@@ -50,7 +50,7 @@ class CampflareAvailabilityProviderTest {
                         observedAt = Instant.EPOCH,
                     )
                 }
-            val provider = CampflareAvailabilityProvider(client)
+            val provider = CampflareAvailabilityProvider(client, enabled = true)
 
             val batch =
                 provider.catalogAvailability(
@@ -103,7 +103,7 @@ class CampflareAvailabilityProviderTest {
                         observedAt = Instant.EPOCH,
                     )
                 }
-            val provider = CampflareAvailabilityProvider(client)
+            val provider = CampflareAvailabilityProvider(client, enabled = true)
 
             val batch =
                 provider.catalogAvailability(

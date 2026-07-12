@@ -118,21 +118,21 @@ class ProviderCooldownTrackerTest {
     }
 
     @Test
-    fun `fromEnv reads AVAILABILITY_PROVIDER_COOLDOWN_SECONDS`() {
-        // Behavioral test: env-configured tracker's cooldown is 42s. We can't
-        // inject a clock through fromEnv (uses default Instant::now), so verify
+    fun `fromProperties reads provider cooldown duration`() {
+        // Behavioral test: configured tracker's cooldown is 42s. We can't
+        // inject a clock through fromProperties (uses default Instant::now), so verify
         // the parse landed by constructing an equivalent tracker directly and
-        // exercising its boundary. This documents the contract: the env value
-        // becomes `Duration.ofSeconds(<value>)`.
-        val fromEnv =
-            ProviderCooldownTracker.fromEnv(
-                env = mapOf(ProviderCooldownTracker.ENV_COOLDOWN_SECONDS to "42"),
+        // exercising its boundary. This documents the contract: the property
+        // value becomes a Duration.
+        val fromProperties =
+            ProviderCooldownTracker.fromProperties(
+                properties = mapOf("roadtrip.availability.provider-cooldown" to "42s"),
             )
-        // With no injected clock, fromEnv uses Instant.now(). Recording a
+        // With no injected clock, fromProperties uses Instant.now(). Recording a
         // failure and immediately checking isCooling proves the cooldown is
         // positive; further boundary checks would race against wall time.
-        fromEnv.recordFailure(RECGOV)
-        assertTrue(fromEnv.isCooling(RECGOV), "just recorded, cooldown active")
+        fromProperties.recordFailure(RECGOV)
+        assertTrue(fromProperties.isCooling(RECGOV), "just recorded, cooldown active")
 
         // Precise boundary via an equivalent injected-clock tracker: same
         // parse path, deterministic assertions.
@@ -146,15 +146,16 @@ class ProviderCooldownTrackerTest {
     }
 
     @Test
-    fun `fromEnv falls back to default when env var is absent`() {
-        val tracker = ProviderCooldownTracker.fromEnv(env = emptyMap())
+    fun `fromProperties falls back to default when config is absent`() {
+        val tracker = ProviderCooldownTracker.fromProperties(properties = emptyMap())
         tracker.recordFailure(RECGOV)
         assertTrue(tracker.isCooling(RECGOV))
         // Boundary via equivalent injected-clock tracker at default seconds.
         val clock = FakeClock()
-        val equivalent = trackerWith(clock, cooldownSeconds = ProviderCooldownTracker.DEFAULT_COOLDOWN_SECONDS)
+        val defaultSeconds = ProviderCooldownTracker.DEFAULT_COOLDOWN.seconds
+        val equivalent = trackerWith(clock, cooldownSeconds = defaultSeconds)
         equivalent.recordFailure(RECGOV)
-        clock.advance(ProviderCooldownTracker.DEFAULT_COOLDOWN_SECONDS - 1)
+        clock.advance(defaultSeconds - 1)
         assertTrue(equivalent.isCooling(RECGOV))
         clock.advance(2)
         assertFalse(equivalent.isCooling(RECGOV))

@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import java.time.LocalDate
@@ -23,12 +24,15 @@ import java.time.LocalDate
  *   - rate-limit accounting (cross-adapter; lives above the port)
  *   - HTTP response shaping (service/API layer rolls observations into DTOs)
  */
-interface AvailabilityProvider : AvailabilityClient {
+interface AvailabilityProvider {
     /** Stable identity. Mapped from catalog source slug + `provider_ref` shape by the registry. */
     val id: AvailabilityProviderId
 
     /** Static per adapter; cheap to read and safe to surface to API clients. */
     val capabilities: AvailabilityProviderCapabilities
+
+    /** Whether this provider is configured for this process. */
+    fun isEnabled(): Boolean
 
     /**
      * Whether this adapter can serve the typed provider reference for this
@@ -36,7 +40,7 @@ interface AvailabilityProvider : AvailabilityClient {
      * providers can decline and the availability resolver can try linked
      * fallback refs without hardcoded provider branching.
      */
-    fun canHandle(ref: ProviderRef): Boolean = id == ref.availabilityProviderId()
+    fun canHandle(ref: ProviderRef): Boolean = isEnabled() && id == ref.availabilityProviderId()
 
     /**
      * Per-day availability for the half-open window `[startDate, endDate)`.
@@ -44,7 +48,7 @@ interface AvailabilityProvider : AvailabilityClient {
      * @throws AvailabilityProviderError on upstream failure (rate limit, WAF block,
      *   5xx, parse error, or unsupported capability).
      */
-    override suspend fun availability(
+    suspend fun availability(
         ref: ProviderRef,
         startDate: LocalDate,
         endDate: LocalDate,
@@ -56,7 +60,7 @@ interface AvailabilityProvider : AvailabilityClient {
      * default delegates to [availability]. Providers with a parent/child map
      * split can override this to classify the actual linked resources.
      */
-    override suspend fun catalogAvailability(
+    suspend fun catalogAvailability(
         ref: ProviderRef,
         campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,

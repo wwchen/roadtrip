@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.clients.reservecalifornia
+package ca.floo.roadtrip.models.availability.reservecalifornia
 
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import java.time.Instant

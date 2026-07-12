@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local fetcher entry point — reads config/poi-registry.yaml.
+"""Local fetcher entry point — reads the POI registry resource.
 
 Picks a source via fzf and runs its fetcher locally (no backend needed).
 For the production-shaped path that goes through the admin API and is
@@ -10,9 +10,9 @@ recorded in poller_runs, use `bin/refresh` instead.
   python3 scripts/poll_raw.py --all                   # every enabled source
   python3 scripts/poll_raw.py --list                  # JSON, no fetch
 
-The list of sources comes from config/poi-registry.yaml — one entry per
-`data_sources:` row. Adding a new fetcher means appending a row there +
-writing the Python script under scripts/.
+The list of sources comes from backend/src/main/resources/poi-registry.yaml —
+one entry per `data_sources:` row. Adding a new fetcher means appending a row
+there + writing the Python script under scripts/.
 """
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ except ImportError:
     sys.exit(1)
 
 ROOT = Path(__file__).parent.parent
-REGISTRY = ROOT / "config" / "poi-registry.yaml"
+REGISTRY = ROOT / "backend" / "src" / "main" / "resources" / "poi-registry.yaml"
 
 
 @dataclass
@@ -48,7 +48,7 @@ class Source:
 
 
 def load_sources() -> list[Source]:
-    """Flatten poi-registry.yaml's data_sources into Source rows."""
+    """Flatten the POI registry resource's data_sources into Source rows."""
     if not REGISTRY.exists():
         err(f"missing {REGISTRY}")
         sys.exit(1)
@@ -93,7 +93,7 @@ def captures_since(out_dir: Path, since_ts: float) -> list[Path]:
 
 def run_source(src: Source) -> int:
     if not src.fetcher_enabled:
-        err(f"  ⚠ {src.slug}: fetcher.enabled=false in poi-registry.yaml; skipping")
+        err(f"  ⚠ {src.slug}: fetcher.enabled=false in POI registry; skipping")
         return 0
     cli_args: list[str] = []
     for k, v in src.args.items():

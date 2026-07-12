@@ -1,13 +1,9 @@
 package ca.floo.roadtrip.config
 
 /**
- * Where our Grafana lives, so alert messages can deep-link a dashboard. Read
- * from [ROOT_URL_ENV] — the same var the Grafana container uses for
- * `GF_SERVER_ROOT_URL` — so the backend and Grafana share one source of truth
- * for the host. The environment-specific value (localhost in dev,
- * `roadtrip.floo.ca` in prod) lives in deploy config (compose), never here.
+ * Where our Grafana lives, so alert messages can deep-link a dashboard.
  *
- * [fromEnv] returns null when unset/blank — a first-class "no dashboard links"
+ * [fromProperties] returns null when unset/blank — a first-class "no dashboard links"
  * state (the alert still sends, just without the Grafana lines). There is
  * deliberately no code-level default host: a hardcoded prod URL would be
  * environment-specific config leaking into the binary.
@@ -19,10 +15,11 @@ data class GrafanaConfig(
     val rootUrl: String,
 ) {
     companion object {
-        const val ROOT_URL_ENV = "GRAFANA_ROOT_URL"
+        fun fromProperties(properties: Map<String, String>): GrafanaConfig? =
+            fromConfig(ConfigSection(properties).section("roadtrip.grafana"))
 
-        fun fromEnv(env: Map<String, String> = System.getenv()): GrafanaConfig? {
-            val raw = env[ROOT_URL_ENV]?.trim()?.ifEmpty { null } ?: return null
+        fun fromConfig(config: ConfigSection): GrafanaConfig? {
+            val raw = config.value("root-url") ?: return null
             return GrafanaConfig(rootUrl = raw.trimEnd('/'))
         }
     }

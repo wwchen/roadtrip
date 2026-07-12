@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
@@ -15,7 +16,6 @@ import ca.floo.roadtrip.service.availability.alert.AlertProvider
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import kotlinx.serialization.json.JsonObject
@@ -244,6 +244,8 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 bookingHorizonDays = 180,
                 maxPollWindowDays = 60,
             )
+
+        override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
             ref: ProviderRef,

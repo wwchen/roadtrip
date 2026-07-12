@@ -74,28 +74,23 @@ services:
     ports:
       - "127.0.0.1:8766:8766"
     environment:
-      - PORT=8765
-      - ADMIN_PORT=8766
-      - ROADTRIP_STATIC_DIR=/app/static
-      - ROADTRIP_DB_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-roadtrip}
-      - ROADTRIP_DB_USER=${POSTGRES_USER:-roadtrip}
-      - ROADTRIP_DB_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
+      # Profile selection is a process env control; loaded config exposes it as
+      # roadtrip.profile after application-prod.yml is selected.
+      - ROADTRIP_PROFILE=${ROADTRIP_PROFILE:-prod}
+      - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
+      - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
       # Mapbox is server-side only. /api/route (Directions) and /api/geocode
       # (forward geocoding) read this; the FE never sees the token. Both
       # endpoints return 503 when unset, so the trip planner just doesn't
       # work, instead of leaking the token by accident.
       - MAPBOX_TOKEN=${MAPBOX_TOKEN:-}
-      # Availability alerts (PR6). Unset SLACK_* => alerts disabled (no-op).
+      # Availability alert secrets consumed by roadtrip.slack.* placeholders.
+      # Unset SLACK_* => alerts disabled (no-op).
       - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
       - SLACK_ALERT_CHANNEL=${SLACK_ALERT_CHANNEL:-}
       # https://docs.slack.dev/interactivity/implementing-shortcuts/#scope_permissions
       - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET:-}
-      # Grafana host for the dashboard deep link in alerts; same var + default
-      # as the grafana service's GF_SERVER_ROOT_URL so they can't disagree.
-      - GRAFANA_ROOT_URL=${GRAFANA_ROOT_URL:-https://roadtrip.floo.ca/dash/}
-      # Public web app host for the POI map deep link (?poi=<id>) in alerts. The
-      # backend serves the site at this host's root; Grafana lives under /dash/.
-      - APP_ROOT_URL=${APP_ROOT_URL:-https://roadtrip.floo.ca/}
       - RIDB_API_KEY=${RIDB_API_KEY:-}
       - COOKIE_BOT_URL=${COOKIE_BOT_URL:-}
       - COOKIE_BOT_TOKEN=${COOKIE_BOT_TOKEN:-}
@@ -106,11 +101,8 @@ services:
       - ./web:/app/static/web:ro
       - ./scripts:/app/static/scripts:ro
       - ./data:/app/static/data
-      # PoiRegistry.load reads /app/static/config/poi-registry.yaml at boot;
-      # backend hard-flaps without it.
-      - ./config:/app/static/config:ro
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${PORT:-8765}/api/health >/dev/null"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8765/api/health >/dev/null"]
       interval: 5s
       timeout: 3s
       retries: 20

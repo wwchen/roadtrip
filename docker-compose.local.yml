@@ -11,21 +11,16 @@ services:
 
   backend:
     restart: "no"
+    environment:
+      ROADTRIP_PROFILE: compose-local
     ports:
       - "127.0.0.1:8765:8765"
       - "127.0.0.1:8766:8766"
-    environment:
-      # Local Grafana host, so alert dashboard links point at the dev instance
-      # instead of the prod default. Matches the grafana service below.
-      - GRAFANA_ROOT_URL=http://localhost:3000/dash/
-      # Local web app host, so alert POI map links point at the dev backend
-      # (which serves the site) instead of the prod default.
-      - APP_ROOT_URL=http://localhost:8765/
 
   grafana:
     restart: "no"
     environment:
-      GF_SERVER_ROOT_URL: "http://localhost:3000/dash/"
+      GF_SERVER_ROOT_URL: "http://127.0.0.1:3000/dash/"
       GRAFANA_DASHBOARD_ALLOW_UI_UPDATES: "true"
     ports:
       - "127.0.0.1:3000:3000"

@@ -57,7 +57,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
             startServer()
 
             val client = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
-            val provider = ReserveCaliforniaAvailabilityProvider(client)
+            val provider = ReserveCaliforniaAvailabilityProvider(client, enabled = true)
 
             val batch =
                 provider.catalogAvailability(
@@ -114,7 +114,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
             startServer(Executors.newFixedThreadPool(2))
 
             val client = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
-            val provider = ReserveCaliforniaAvailabilityProvider(client)
+            val provider = ReserveCaliforniaAvailabilityProvider(client, enabled = true)
 
             provider.catalogAvailability(
                 ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611, 612)),
@@ -134,6 +134,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
             val provider =
                 ReserveCaliforniaAvailabilityProvider(
                     client = client,
+                    enabled = true,
                     clock = Clock.fixed(fixed, ZoneOffset.UTC),
                 )
 

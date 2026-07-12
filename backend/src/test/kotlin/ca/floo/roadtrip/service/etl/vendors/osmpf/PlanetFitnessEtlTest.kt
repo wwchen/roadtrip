@@ -27,11 +27,7 @@ class PlanetFitnessEtlTest {
 
     @BeforeAll
     fun setUp() {
-        val yamlPath =
-            File(System.getProperty("user.dir"))
-                .resolve("../config/poi-registry.yaml")
-                .canonicalFile
-        val registry = PoiRegistry.load(yamlPath)
+        val registry = PoiRegistry.loadResource("poi-registry.yaml")
         transformCtx = TransformCtx.load(File("build/tmp/etl-test-raw"), registry)
     }
 

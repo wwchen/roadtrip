@@ -1,26 +1,31 @@
 package ca.floo.roadtrip.service.ratelimit
 
+import ca.floo.roadtrip.config.ConfigSection
+import ca.floo.roadtrip.config.parseDuration
 import java.time.Duration
 
 // Code-level default bucket. Deliberately conservative: a vendor with no explicit
 // override gets a modest steady rate so a misconfiguration errs toward under-fetching
 // rather than hammering an upstream we have no negotiated budget for. Overridable
-// per-vendor via config/env (see [VendorRateLimitConfig.fromEnv]).
+// per-vendor via config (see [VendorRateLimitConfig.fromProperties]).
 const val DEFAULT_VENDOR_BUCKET_CAPACITY: Long = 60
 const val DEFAULT_VENDOR_BUCKET_REFILL_TOKENS: Long = 60
 val DEFAULT_VENDOR_BUCKET_REFILL_PERIOD: Duration = Duration.ofMinutes(1)
 
-private const val ENV_PREFIX = "ROADTRIP_VENDOR_RATELIMIT_"
+private const val CAPACITY_SUFFIX = ".capacity"
+private const val REFILL_TOKENS_SUFFIX = ".refill-tokens"
+private const val REFILL_PERIOD_SUFFIX = ".refill-period"
 
 /**
- * Per-vendor bucket config with a code-level default, overridable via config/env.
+ * Per-vendor bucket config with a code-level default, overridable via config.
  * Providers not explicitly configured fall through to the code default
  * ([DEFAULT_VENDOR_BUCKET_CAPACITY] / [DEFAULT_VENDOR_BUCKET_REFILL_TOKENS] /
  * [DEFAULT_VENDOR_BUCKET_REFILL_PERIOD]).
  *
  * The class itself is pure and testable: the constructor takes an already-parsed
- * overrides map — no I/O. [fromEnv] is the wiring seam that reads the process
- * environment into that map at [ca.floo.roadtrip.Main] construction time.
+ * overrides map — no I/O. [fromProperties] is the wiring seam that reads the
+ * loaded application properties into that map at [ca.floo.roadtrip.Main]
+ * construction time.
  */
 class VendorRateLimitConfig(
     overrides: Map<String, VendorBucketConfig> = emptyMap(),
@@ -39,38 +44,45 @@ class VendorRateLimitConfig(
 
     companion object {
         /**
-         * Reads per-vendor overrides from the environment. A vendor is configured
-         * with three keys, e.g. for "aspira":
+         * Reads per-vendor overrides from application properties. A vendor is
+         * configured with three keys, e.g. for "aspira":
          *
-         *   ROADTRIP_VENDOR_RATELIMIT_ASPIRA_CAPACITY=5
-         *   ROADTRIP_VENDOR_RATELIMIT_ASPIRA_REFILL_TOKENS=5
-         *   ROADTRIP_VENDOR_RATELIMIT_ASPIRA_REFILL_PERIOD=PT10S   (ISO-8601 or Ns/Nm/Nh)
+         *   roadtrip.vendor-rate-limit.aspira.capacity=5
+         *   roadtrip.vendor-rate-limit.aspira.refill-tokens=5
+         *   roadtrip.vendor-rate-limit.aspira.refill-period=10s
          *
          * A vendor is only added to the overrides map when its CAPACITY key is
          * present; the other two fall back to the code defaults if omitted, so a
          * single CAPACITY override is a valid minimal config.
          */
-        fun fromEnv(env: Map<String, String> = System.getenv()): VendorRateLimitConfig {
-            val capacitySuffix = "_CAPACITY"
+        fun fromProperties(properties: Map<String, String>): VendorRateLimitConfig {
+            val config = ConfigSection(properties).section("roadtrip.vendor-rate-limit")
             val vendors =
-                env.keys
-                    .filter { it.startsWith(ENV_PREFIX) && it.endsWith(capacitySuffix) }
-                    .map { it.removePrefix(ENV_PREFIX).removeSuffix(capacitySuffix) }
+                config
+                    .absoluteKeys()
+                    .mapNotNull(config::relativeKey)
+                    .mapNotNull(::vendorFromCapacityKey)
                     .filter { it.isNotBlank() }
                     .distinct()
             val overrides =
-                vendors.associate { rawVendor ->
-                    val base = ENV_PREFIX + rawVendor
+                vendors.associate { vendor ->
                     val capacity =
-                        env["${base}_CAPACITY"]?.trim()?.toLongOrNull()
+                        config
+                            .value(capacityKey(vendor))
+                            ?.toLongOrNull()
                             ?: DEFAULT_VENDOR_BUCKET_CAPACITY
                     val refillTokens =
-                        env["${base}_REFILL_TOKENS"]?.trim()?.toLongOrNull()
+                        config
+                            .value(refillTokensKey(vendor))
+                            ?.toLongOrNull()
                             ?: DEFAULT_VENDOR_BUCKET_REFILL_TOKENS
                     val refillPeriod =
-                        env["${base}_REFILL_PERIOD"]?.let(::parseDurationOrNull)
-                            ?: DEFAULT_VENDOR_BUCKET_REFILL_PERIOD
-                    rawVendor.lowercase() to
+                        parseDuration(
+                            raw = config.value(refillPeriodKey(vendor)),
+                            default = DEFAULT_VENDOR_BUCKET_REFILL_PERIOD,
+                            key = config.key(refillPeriodKey(vendor)),
+                        )
+                    vendor to
                         VendorBucketConfig(
                             capacity = capacity,
                             refillTokens = refillTokens,
@@ -80,22 +92,16 @@ class VendorRateLimitConfig(
             return VendorRateLimitConfig(overrides)
         }
 
-        private val SIMPLE_DURATION = Regex("""^(\d+)(ms|s|m|h|d)?$""")
-
-        private fun parseDurationOrNull(raw: String): Duration? {
-            val value = raw.trim()
-            if (value.isBlank()) return null
-            runCatching { Duration.parse(value) }.getOrNull()?.let { return it }
-            val match = SIMPLE_DURATION.matchEntire(value.lowercase()) ?: return null
-            val amount = match.groupValues[1].toLong()
-            return when (match.groupValues[2]) {
-                "ms" -> Duration.ofMillis(amount)
-                "", "s" -> Duration.ofSeconds(amount)
-                "m" -> Duration.ofMinutes(amount)
-                "h" -> Duration.ofHours(amount)
-                "d" -> Duration.ofDays(amount)
+        private fun vendorFromCapacityKey(key: String): String? =
+            when {
+                key.endsWith(CAPACITY_SUFFIX) -> key.removeSuffix(CAPACITY_SUFFIX).lowercase()
                 else -> null
             }
-        }
+
+        private fun capacityKey(vendor: String): String = "$vendor$CAPACITY_SUFFIX"
+
+        private fun refillTokensKey(vendor: String): String = "$vendor$REFILL_TOKENS_SUFFIX"
+
+        private fun refillPeriodKey(vendor: String): String = "$vendor$REFILL_PERIOD_SUFFIX"
     }
 }

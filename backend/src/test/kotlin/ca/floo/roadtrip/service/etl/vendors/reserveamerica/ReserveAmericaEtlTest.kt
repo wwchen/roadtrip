@@ -141,13 +141,8 @@ class ReserveAmericaEtlTest {
         envelope: Envelope,
     ): InputBundle = InputBundle(linkedMapOf(slug to listOf(envelope)), linkedMapOf())
 
-    private fun transformCtx(): TransformCtx {
-        val yamlPath =
-            File(System.getProperty("user.dir"))
-                .resolve("../config/poi-registry.yaml")
-                .canonicalFile
-        return TransformCtx.load(File("build/tmp/reserveamerica-etl-test-raw"), PoiRegistry.load(yamlPath))
-    }
+    private fun transformCtx(): TransformCtx =
+        TransformCtx.load(File("build/tmp/reserveamerica-etl-test-raw"), PoiRegistry.loadResource("poi-registry.yaml"))
 
     private companion object {
         val FETCHED_AT: Instant = Instant.parse("2026-01-01T00:00:00Z")

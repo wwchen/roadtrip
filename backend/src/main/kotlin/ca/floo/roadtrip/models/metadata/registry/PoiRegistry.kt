@@ -7,10 +7,11 @@ import com.charleskorn.kaml.YamlScalar
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.io.File
+import java.nio.charset.StandardCharsets
 
 private const val CAMPSITE_DATA_SECTION = "campsite_data"
 
-// In-memory representation of config/poi-registry.yaml.
+// In-memory representation of the configured POI registry.
 //
 // Four sections:
 //   - data_sources: fetchers (executor + filename + args + output_dir_prefix).
@@ -71,9 +72,33 @@ data class PoiRegistry(
                     com.charleskorn.kaml.YamlConfiguration(strictMode = false),
             )
 
-        fun load(file: File): PoiRegistry {
-            val r = yaml.decodeFromString(serializer(), file.readText())
-            r.validate()
+        fun load(file: File): PoiRegistry =
+            loadString(
+                content = file.readText(),
+                sourceName = file.path,
+            )
+
+        fun loadResource(
+            resourceName: String,
+            classLoader: ClassLoader = Thread.currentThread().contextClassLoader ?: PoiRegistry::class.java.classLoader,
+        ): PoiRegistry {
+            val normalized = resourceName.trim().removePrefix("/")
+            require(normalized.isNotEmpty()) { "POI registry resource name must not be blank" }
+            val content =
+                classLoader
+                    .getResourceAsStream(normalized)
+                    ?.bufferedReader(StandardCharsets.UTF_8)
+                    ?.use { it.readText() }
+                    ?: error("POI registry resource '$normalized' not found on classpath")
+            return loadString(content = content, sourceName = "classpath:$normalized")
+        }
+
+        fun loadString(
+            content: String,
+            sourceName: String = "POI registry",
+        ): PoiRegistry {
+            val r = yaml.decodeFromString(serializer(), content)
+            r.validate(sourceName)
             return r
         }
     }
@@ -95,7 +120,7 @@ data class PoiRegistry(
      *     in memory; nothing crosses row boundaries)
      *   - no cycles in the global DAG (data_sources → etls)
      */
-    fun validate() {
+    fun validate(sourceName: String = "POI registry") {
         val errs = mutableListOf<String>()
 
         val dsSlugs = mutableSetOf<String>()
@@ -184,7 +209,7 @@ data class PoiRegistry(
         }
 
         require(errs.isEmpty()) {
-            "config/poi-registry.yaml has ${errs.size} validation error(s):\n" +
+            "$sourceName has ${errs.size} validation error(s):\n" +
                 errs.joinToString("\n") { "  - $it" }
         }
     }

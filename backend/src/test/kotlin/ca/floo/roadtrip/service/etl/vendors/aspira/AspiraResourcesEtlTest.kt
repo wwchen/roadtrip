@@ -10,7 +10,6 @@ import kotlinx.serialization.json.long
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
-import java.io.File
 import java.nio.file.Files
 import kotlin.test.assertEquals
 
@@ -20,11 +19,7 @@ class AspiraResourcesEtlTest {
 
     @BeforeAll
     fun setUp() {
-        val yamlPath =
-            File(System.getProperty("user.dir"))
-                .resolve("../config/poi-registry.yaml")
-                .canonicalFile
-        val registry = PoiRegistry.load(yamlPath)
+        val registry = PoiRegistry.loadResource("poi-registry.yaml")
         val tmp = Files.createTempDirectory("aspira-resources-").toFile()
         tmp.deleteOnExit()
         ctx = TransformCtx.load(tmp, registry)

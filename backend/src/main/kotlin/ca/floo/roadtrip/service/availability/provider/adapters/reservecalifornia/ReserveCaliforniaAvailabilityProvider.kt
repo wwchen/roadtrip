@@ -1,16 +1,15 @@
 package ca.floo.roadtrip.service.availability.provider.adapters.reservecalifornia
 
 import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaAvailabilityClient
-import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.exceptions.ReserveCaliforniaException
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.CampsiteDayObservation
+import ca.floo.roadtrip.models.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.availability.provider.AvailabilityClient
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
@@ -26,8 +25,8 @@ import java.time.temporal.ChronoUnit
 class ReserveCaliforniaAvailabilityProvider(
     private val client: ReserveCaliforniaAvailabilityClient,
     private val clock: Clock = Clock.systemUTC(),
-) : AvailabilityProvider,
-    AvailabilityClient {
+    private val enabled: Boolean,
+) : AvailabilityProvider {
     override val id: AvailabilityProviderId = AvailabilityProviderId.RESERVECALIFORNIA
 
     override val capabilities: AvailabilityProviderCapabilities =
@@ -37,6 +36,8 @@ class ReserveCaliforniaAvailabilityProvider(
             bookingHorizonDays = BOOKING_HORIZON_DAYS,
             maxPollWindowDays = MAX_POLL_WINDOW_DAYS,
         )
+
+    override fun isEnabled(): Boolean = enabled
 
     override suspend fun availability(
         ref: ProviderRef,

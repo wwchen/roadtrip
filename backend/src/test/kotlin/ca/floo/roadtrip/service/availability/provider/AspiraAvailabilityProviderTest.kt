@@ -55,6 +55,7 @@ class AspiraAvailabilityProviderTest {
                             bookingHorizonDays = 365,
                         ),
                     client = client,
+                    enabled = true,
                 )
 
             val batch =
@@ -124,6 +125,7 @@ class AspiraAvailabilityProviderTest {
                             bookingHorizonDays = 365,
                         ),
                     client = client,
+                    enabled = true,
                     occupancyEnabled = true,
                 )
 
@@ -186,6 +188,7 @@ class AspiraAvailabilityProviderTest {
                             bookingHorizonDays = 365,
                         ),
                     client = client,
+                    enabled = true,
                     occupancyEnabled = false,
                 )
 
@@ -242,6 +245,7 @@ class AspiraAvailabilityProviderTest {
                             bookingHorizonDays = 365,
                         ),
                     client = client,
+                    enabled = true,
                 )
 
             val batch =
@@ -271,6 +275,7 @@ class AspiraAvailabilityProviderTest {
             AspiraAvailabilityProvider(
                 tenant = AspiraTenant(host = "washington.goingtocamp.com", vendorCode = "aspira_wa", bookingHorizonDays = 365),
                 client = fakeAspiraClient(),
+                enabled = true,
             )
         val reservable =
             CampsiteAvailabilityTarget(

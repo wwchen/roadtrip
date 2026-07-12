@@ -50,7 +50,7 @@ class MapboxDirections(
         }
         val token =
             this.token
-                ?: throw RoutingException("MAPBOX_TOKEN not configured")
+                ?: throw RoutingException("roadtrip.mapbox.token not configured")
 
         val coordPath =
             coords

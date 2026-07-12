@@ -12,7 +12,7 @@ private val poisOnRouteLog = LoggerFactory.getLogger("PoisOnRouteService")
 internal class PoisOnRouteService(
     private val routeCache: RouteCache,
     private val routeCorridorService: RouteCorridorService,
-    private val poiService: PoiService,
+    private val poiService: PoiReader,
     private val defaultCategories: List<String> = DEFAULT_POI_TYPES,
 ) {
     suspend fun poisOnRoute(

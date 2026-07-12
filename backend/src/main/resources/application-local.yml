@@ -1,0 +1,14 @@
+server:
+  port: 8765
+  admin-port: 8766
+
+roadtrip:
+  static-dir: .
+  db:
+    url: jdbc:postgresql://localhost:5432/roadtrip
+    user: roadtrip
+    password: roadtrip
+  grafana:
+    root-url: http://127.0.0.1:3000/dash/
+  web:
+    root-url: http://127.0.0.1:8765

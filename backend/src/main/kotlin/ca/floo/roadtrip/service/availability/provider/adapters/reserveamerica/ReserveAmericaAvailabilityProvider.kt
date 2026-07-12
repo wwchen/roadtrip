@@ -5,12 +5,11 @@ import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.exceptions.ReserveAmericaException
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.CampsiteDayObservation
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.availability.provider.AvailabilityClient
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
@@ -29,8 +28,8 @@ private const val RESERVEAMERICA_MAX_POLL_WINDOW_DAYS = 30
 class ReserveAmericaAvailabilityProvider(
     private val tenant: ReserveAmericaTenant,
     private val client: ReserveAmericaAvailabilityClient,
-) : AvailabilityProvider,
-    AvailabilityClient {
+    private val enabled: Boolean,
+) : AvailabilityProvider {
     override val id: AvailabilityProviderId = AvailabilityProviderId.RESERVEAMERICA
 
     override val capabilities: AvailabilityProviderCapabilities =
@@ -42,6 +41,8 @@ class ReserveAmericaAvailabilityProvider(
             bookingHorizonDays = tenant.bookingHorizonDays,
             maxPollWindowDays = RESERVEAMERICA_MAX_POLL_WINDOW_DAYS,
         )
+
+    override fun isEnabled(): Boolean = enabled
 
     override suspend fun availability(
         ref: ProviderRef,

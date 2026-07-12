@@ -45,10 +45,12 @@ Status mapping:
 
 Operational config:
 
-- `CAMPFLARE_API_KEY` or `CAMPFLARE_TOKEN`: API key.
-- `CAMPFLARE_API_BASE`: optional API base URL override; defaults to
+- `roadtrip.campflare.api-key` or `roadtrip.campflare.token`: API key. The
+  default `application.yml` values read `${CAMPFLARE_API_KEY}` /
+  `${CAMPFLARE_TOKEN}` so secrets stay outside the file.
+- `roadtrip.campflare.api-base-url`: optional API base URL override; defaults to
   `https://api.campflare.com/v2`.
-- `ROADTRIP_CACHE_CAMPFLARE_AVAILABILITY_TTL`: optional cache TTL override.
+- `roadtrip.cache.campflare-availability.ttl`: optional cache TTL override.
 
 Campflare stays registered in the availability-provider registry even when no
 API key is configured. In that state the adapter declines Campflare refs, so

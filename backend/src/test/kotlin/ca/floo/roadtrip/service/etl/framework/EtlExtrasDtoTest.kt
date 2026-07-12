@@ -396,13 +396,8 @@ class EtlExtrasDtoTest {
                 ),
         )
 
-    private fun transformCtx(rawDir: File = File("build/tmp/etl-extras-dto-test-raw")): TransformCtx {
-        val yamlPath =
-            File(System.getProperty("user.dir"))
-                .resolve("../config/poi-registry.yaml")
-                .canonicalFile
-        return TransformCtx.load(rawDir, PoiRegistry.load(yamlPath))
-    }
+    private fun transformCtx(rawDir: File = File("build/tmp/etl-extras-dto-test-raw")): TransformCtx =
+        TransformCtx.load(rawDir, PoiRegistry.loadResource("poi-registry.yaml"))
 
     private companion object {
         val FETCHED_AT: Instant = Instant.parse("2026-01-01T00:00:00Z")

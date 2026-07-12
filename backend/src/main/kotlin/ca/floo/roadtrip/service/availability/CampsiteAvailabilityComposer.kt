@@ -26,7 +26,7 @@ internal class CampsiteAvailabilityComposer(
     availability: AvailabilityRepo? = null,
     private val snapshotFreshnessTtl: (AvailabilityProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
     private val failoverFetcher: FailoverAvailabilityFetcher =
-        FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromEnv()),
+        FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromProperties()),
 ) {
     private val availabilityLoader = AvailabilityLoader(availability)
 

@@ -3,11 +3,10 @@ package ca.floo.roadtrip.service.availability.provider.adapters.aspira
 import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.exceptions.AspiraException
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.availability.provider.AvailabilityClient
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
@@ -39,6 +38,7 @@ private const val ASPIRA_MAX_POLL_WINDOW_DAYS = 30
 class AspiraAvailabilityProvider(
     private val tenant: AspiraTenant,
     private val client: AspiraAvailabilityClient,
+    private val enabled: Boolean,
     /**
      * When true, catalog availability with a known `resourceLocationId` uses
      * the per-arrival-day `/api/occupancy` search. The normal per-day catalog
@@ -46,8 +46,7 @@ class AspiraAvailabilityProvider(
      * search result and does not return one status row per arrival date.
      */
     private val occupancyEnabled: Boolean = false,
-) : AvailabilityProvider,
-    AvailabilityClient {
+) : AvailabilityProvider {
     override val id: AvailabilityProviderId = AvailabilityProviderId.ASPIRA
 
     override val capabilities: AvailabilityProviderCapabilities =
@@ -59,6 +58,8 @@ class AspiraAvailabilityProvider(
             bookingHorizonDays = tenant.bookingHorizonDays,
             maxPollWindowDays = ASPIRA_MAX_POLL_WINDOW_DAYS,
         )
+
+    override fun isEnabled(): Boolean = enabled
 
     override suspend fun availability(
         ref: ProviderRef,

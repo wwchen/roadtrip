@@ -127,12 +127,7 @@ class RegistryTargetsTest {
 
     @Test
     fun `production import fan-out includes every configured canonical catalog source`() {
-        val registry =
-            PoiRegistry.load(
-                File(System.getProperty("user.dir"))
-                    .resolve("../config/poi-registry.yaml")
-                    .canonicalFile,
-            )
+        val registry = PoiRegistry.loadResource("poi-registry.yaml")
 
         assertEquals(
             listOf(

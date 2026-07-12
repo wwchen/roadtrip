@@ -3,15 +3,15 @@ package ca.floo.roadtrip.service.availability.provider
 import ca.floo.roadtrip.clients.aspira.AspiraAvailability
 import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.clients.aspira.AspiraOccupancy
-import ca.floo.roadtrip.clients.campflare.CampflareAvailability
 import ca.floo.roadtrip.clients.campflare.CampflareAvailabilityClient
-import ca.floo.roadtrip.clients.campflare.CampflareCampgroundAvailability
 import ca.floo.roadtrip.clients.recgov.Campsite
 import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaAvailabilityClient
-import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaGridAvailability
+import ca.floo.roadtrip.models.availability.campflare.CampflareAvailability
+import ca.floo.roadtrip.models.availability.campflare.CampflareCampgroundAvailability
+import ca.floo.roadtrip.models.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.models.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.metadata.registry.EtlEntry
@@ -25,14 +25,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
-class AvailabilityProviderRegistryFactoryTest {
+class AvailabilityProviderRegistryBuildTest {
     @Test
     fun `reserveamerica provider passes registry tenant args to shared client`() =
         runBlocking {
             var observedCall: ReserveAmericaCall? = null
 
             val registry =
-                AvailabilityProviderRegistryFactory.build(
+                AvailabilityProviderRegistry.fromPoiRegistry(
                     registry =
                         PoiRegistry(
                             dataSources = emptyList(),
@@ -77,6 +77,7 @@ class AvailabilityProviderRegistryFactoryTest {
                             reserveCaliforniaClient = stubReserveCaliforniaClient(),
                             campflareClient = stubCampflareClient(),
                         ),
+                    isProviderEnabled = ALL_PROVIDERS_ENABLED,
                 )
 
             val provider = registry.forPoi(row("test-reserveamerica"))
@@ -107,7 +108,7 @@ class AvailabilityProviderRegistryFactoryTest {
             var observedCall: CampflareCall? = null
 
             val registry =
-                AvailabilityProviderRegistryFactory.build(
+                AvailabilityProviderRegistry.fromPoiRegistry(
                     registry =
                         PoiRegistry(
                             dataSources = emptyList(),
@@ -147,6 +148,7 @@ class AvailabilityProviderRegistryFactoryTest {
                                     )
                                 },
                         ),
+                    isProviderEnabled = ALL_PROVIDERS_ENABLED,
                 )
 
             val provider = registry.forPoi(row("campflare-campgrounds"))
@@ -173,8 +175,9 @@ class AvailabilityProviderRegistryFactoryTest {
 
     @Test
     fun `unconfigured campflare provider declines campflare refs so recgov aliases can be fallback`() {
+        val disabledProviders = setOf(AvailabilityProviderId.CAMPFLARE)
         val registry =
-            AvailabilityProviderRegistryFactory.build(
+            AvailabilityProviderRegistry.fromPoiRegistry(
                 registry =
                     PoiRegistry(
                         dataSources = emptyList(),
@@ -212,11 +215,11 @@ class AvailabilityProviderRegistryFactoryTest {
                         reserveCaliforniaClient = stubReserveCaliforniaClient(),
                         campflareClient = stubCampflareClient(),
                     ),
-                campflareApiKeyConfigured = false,
+                isProviderEnabled = { it !in disabledProviders },
             )
 
-        assertEquals(AvailabilityProviderId.CAMPFLARE, registry.forPoi(row("campflare"))?.id)
-        assertEquals(AvailabilityProviderId.CAMPFLARE, registry.forPoi(row("campflare-campgrounds"))?.id)
+        assertNull(registry.forPoi(row("campflare")))
+        assertNull(registry.forPoi(row("campflare-campgrounds")))
         assertNull(registry.forPoi(row("campflare"), ProviderRef.Campflare("upper-pines-campground-447")))
         assertNull(registry.forPoi(row("campflare-campgrounds"), ProviderRef.Campflare("upper-pines-campground-447")))
         assertEquals(
@@ -369,4 +372,8 @@ class AvailabilityProviderRegistryFactoryTest {
         }
 
     private fun stubCampflareClient(): CampflareAvailabilityClient = CampflareAvailabilityClient { _, _, _ -> error("not used") }
+
+    private companion object {
+        val ALL_PROVIDERS_ENABLED: (AvailabilityProviderId) -> Boolean = { true }
+    }
 }

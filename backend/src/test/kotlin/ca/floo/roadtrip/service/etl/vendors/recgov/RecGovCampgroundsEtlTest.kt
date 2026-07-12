@@ -24,11 +24,11 @@ class RecGovCampgroundsEtlTest {
 
     @BeforeAll
     fun setUp() {
-        val yamlPath =
-            File(System.getProperty("user.dir"))
-                .resolve("../config/poi-registry.yaml")
-                .canonicalFile
-        transformCtx = TransformCtx.load(File("build/tmp/recgov-campgrounds-etl-test-raw"), PoiRegistry.load(yamlPath))
+        transformCtx =
+            TransformCtx.load(
+                File("build/tmp/recgov-campgrounds-etl-test-raw"),
+                PoiRegistry.loadResource("poi-registry.yaml"),
+            )
     }
 
     @Test

@@ -67,7 +67,7 @@ private val adminIngestJson =
 //   GET  /api/admin/data/status              per-target last-completed + age
 //
 // With no {target}, fetch and import fan out across every known target,
-// sequentially, in `targetsFromRegistry` order (see config/poi-registry.yaml). The response is the
+// sequentially, in `targetsFromRegistry` order (see the POI registry resource). The response is the
 // per-target outcome list.
 //
 // Auth boundary lives upstream at the Cloudflare Zero Trust path rule on

@@ -1,4 +1,4 @@
-# config/poi-registry.yaml
+# backend/src/main/resources/poi-registry.yaml
 #
 # Four sections.
 # 1. data_sources — fetchers. Pure network acquisition. Output to data/raw/<slug>/.

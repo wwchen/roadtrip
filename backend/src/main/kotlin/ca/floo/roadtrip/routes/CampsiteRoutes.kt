@@ -41,7 +41,7 @@ internal fun Route.campsiteRoutes(
     availabilityProviders: AvailabilityProviderRegistry,
     dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     failoverFetcher: FailoverAvailabilityFetcher =
-        FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromEnv()),
+        FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromProperties()),
 ) {
     val campsitesRepo = CampsiteRepo(ctx)
     val providerRefs = CampsiteProviderRepo(ctx)

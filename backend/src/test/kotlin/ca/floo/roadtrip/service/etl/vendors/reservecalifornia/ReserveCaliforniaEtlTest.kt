@@ -151,11 +151,6 @@ class ReserveCaliforniaEtlTest {
 
     private fun jsonObject(raw: String) = Json.parseToJsonElement(raw).jsonObject
 
-    private fun transformCtx(): TransformCtx {
-        val yamlPath =
-            File(System.getProperty("user.dir"))
-                .resolve("../config/poi-registry.yaml")
-                .canonicalFile
-        return TransformCtx.load(File("build/tmp/reservecalifornia-etl-test-raw"), PoiRegistry.load(yamlPath))
-    }
+    private fun transformCtx(): TransformCtx =
+        TransformCtx.load(File("build/tmp/reservecalifornia-etl-test-raw"), PoiRegistry.loadResource("poi-registry.yaml"))
 }

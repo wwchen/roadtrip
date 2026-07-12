@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.models.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.models.domain.ProviderRef
 import java.time.LocalDate
@@ -13,8 +14,11 @@ import kotlin.test.assertSame
 class AvailabilityProviderRegistryTest {
     private class FakeProvider(
         override val id: AvailabilityProviderId,
+        private val enabled: Boolean,
     ) : AvailabilityProvider {
         override val capabilities: AvailabilityProviderCapabilities = AvailabilityProviderCapabilities.UNSUPPORTED
+
+        override fun isEnabled(): Boolean = enabled
 
         override suspend fun availability(
             ref: ProviderRef,
@@ -25,8 +29,8 @@ class AvailabilityProviderRegistryTest {
 
     @Test
     fun `forPoi resolves source to its adapter instance`() {
-        val recgov = FakeProvider(AvailabilityProviderId.RECGOV)
-        val aspiraPc = FakeProvider(AvailabilityProviderId.ASPIRA)
+        val recgov = FakeProvider(AvailabilityProviderId.RECGOV, enabled = true)
+        val aspiraPc = FakeProvider(AvailabilityProviderId.ASPIRA, enabled = true)
         val registry =
             AvailabilityProviderRegistry(
                 adaptersBySource =
@@ -58,6 +62,8 @@ class AvailabilityProviderRegistryTest {
                 override val id: AvailabilityProviderId = AvailabilityProviderId.CAMPFLARE
                 override val capabilities: AvailabilityProviderCapabilities = AvailabilityProviderCapabilities.UNSUPPORTED
 
+                override fun isEnabled(): Boolean = true
+
                 override fun canHandle(ref: ProviderRef): Boolean = false
 
                 override suspend fun availability(
@@ -74,7 +80,7 @@ class AvailabilityProviderRegistryTest {
 
     @Test
     fun `forSource resolves source without requiring a campground row`() {
-        val recgov = FakeProvider(AvailabilityProviderId.RECGOV)
+        val recgov = FakeProvider(AvailabilityProviderId.RECGOV, enabled = true)
         val registry =
             AvailabilityProviderRegistry(
                 adaptersBySource = mapOf("federal-campgrounds" to recgov),
@@ -86,7 +92,7 @@ class AvailabilityProviderRegistryTest {
 
     @Test
     fun `multiple sources can share one adapter instance`() {
-        val recgov = FakeProvider(AvailabilityProviderId.RECGOV)
+        val recgov = FakeProvider(AvailabilityProviderId.RECGOV, enabled = true)
         val registry =
             AvailabilityProviderRegistry(
                 adaptersBySource =
@@ -101,10 +107,32 @@ class AvailabilityProviderRegistryTest {
     }
 
     @Test
+    fun `disabled providers are hidden from lookup helpers`() {
+        val recgov = FakeProvider(AvailabilityProviderId.RECGOV, enabled = true)
+        val campflare = FakeProvider(AvailabilityProviderId.CAMPFLARE, enabled = false)
+        val registry =
+            AvailabilityProviderRegistry(
+                adaptersBySource =
+                    mapOf(
+                        "federal-campgrounds" to recgov,
+                        "campflare-campgrounds" to campflare,
+                        "campflare" to campflare,
+                    ),
+            )
+
+        assertSame(recgov, registry.forPoi(row("federal-campgrounds")))
+        assertNull(registry.forPoi(row("campflare-campgrounds")))
+        assertNull(registry.forPoi(row("campflare"), ProviderRef.Campflare("upper-pines-campground-447")))
+        assertSame(recgov, registry.firstByVendor(AvailabilityProviderId.RECGOV))
+        assertNull(registry.firstByVendor(AvailabilityProviderId.CAMPFLARE))
+        assertEquals(listOf(AvailabilityProviderId.RECGOV), registry.all().map { it.id })
+    }
+
+    @Test
     fun `multiple Aspira tenants share an id but have distinct instances`() {
-        val pc = FakeProvider(AvailabilityProviderId.ASPIRA)
-        val bc = FakeProvider(AvailabilityProviderId.ASPIRA)
-        val wa = FakeProvider(AvailabilityProviderId.ASPIRA)
+        val pc = FakeProvider(AvailabilityProviderId.ASPIRA, enabled = true)
+        val bc = FakeProvider(AvailabilityProviderId.ASPIRA, enabled = true)
+        val wa = FakeProvider(AvailabilityProviderId.ASPIRA, enabled = true)
         val registry =
             AvailabilityProviderRegistry(
                 adaptersBySource =

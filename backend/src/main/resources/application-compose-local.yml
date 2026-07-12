@@ -1,0 +1,14 @@
+server:
+  port: 8765
+  admin-port: 8766
+
+roadtrip:
+  static-dir: /app/static
+  db:
+    url: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+    user: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+  grafana:
+    root-url: http://127.0.0.1:3000/dash/
+  web:
+    root-url: http://127.0.0.1:8765

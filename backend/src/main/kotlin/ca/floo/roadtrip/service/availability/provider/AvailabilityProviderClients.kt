@@ -15,7 +15,13 @@ class AvailabilityProviderClients(
 ) : AutoCloseable {
     override fun close() {
         val failures = mutableListOf<Throwable>()
-        for (client in listOf(campflareClient, reserveCaliforniaClient, reserveAmericaClient, aspiraClient, recgovClient)) {
+        for (client in listOf<AutoCloseable>(
+            campflareClient,
+            reserveCaliforniaClient,
+            reserveAmericaClient,
+            aspiraClient,
+            recgovClient,
+        )) {
             runCatching { client.close() }.onFailure { failures += it }
         }
         if (failures.isNotEmpty()) {

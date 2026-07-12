@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.config.ApplicationProperties
+import ca.floo.roadtrip.config.ConfigSection
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityPollerSchema
 import ca.floo.roadtrip.models.api.AvailabilityPollersListResponse
@@ -28,6 +30,7 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jooq.DSLContext
+import java.time.Duration
 import java.time.OffsetDateTime
 
 private const val DEFAULT_LIST_LIMIT = 100
@@ -39,12 +42,15 @@ private const val SNAPSHOT_MAX_LIMIT = 1000
  * Per-poller "check now" cooldown: the minimum spacing between two human-forced
  * pulls of the same poller. Keeps a user mashing the button from starving the
  * shared vendor governor (PR4) for everyone attached to this poller. Overridable
- * via the `FORCE_PULL_COOLDOWN_SEC` env var.
+ * via the `roadtrip.availability.force-pull-cooldown` app property.
  */
-private val FORCE_PULL_COOLDOWN: java.time.Duration =
-    java.time.Duration.ofSeconds(
-        System.getenv("FORCE_PULL_COOLDOWN_SEC")?.toLongOrNull() ?: 60L,
-    )
+private const val FORCE_PULL_COOLDOWN_KEY = "force-pull-cooldown"
+private val DEFAULT_FORCE_PULL_COOLDOWN = Duration.ofSeconds(60)
+
+fun forcePullCooldownFromProperties(properties: Map<String, String> = ApplicationProperties.load()): Duration =
+    ConfigSection(properties)
+        .section("roadtrip.availability")
+        .duration(FORCE_PULL_COOLDOWN_KEY, DEFAULT_FORCE_PULL_COOLDOWN)
 
 @OptIn(ExperimentalSerializationApi::class)
 private val dashboardJson =
@@ -54,7 +60,10 @@ private val dashboardJson =
         ignoreUnknownKeys = true
     }
 
-fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
+fun Route.availabilityDashboardRoutes(
+    ctx: DSLContext,
+    forcePullCooldown: Duration = forcePullCooldownFromProperties(),
+) {
     val pollers = AvailabilityPollerRepo(ctx)
     val runs = AvailabilityRunRepo(ctx)
     val availability = AvailabilityRepo(ctx)
@@ -161,7 +170,7 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
-        when (val result = pollers.forcePull(id, OffsetDateTime.now(), cooldown = FORCE_PULL_COOLDOWN)) {
+        when (val result = pollers.forcePull(id, OffsetDateTime.now(), cooldown = forcePullCooldown)) {
             is AvailabilityPollerRepo.ForcePullResult.Accepted ->
                 call.respondJson(
                     CheckNowResponseDto(pollerId = id, nextRunAt = result.nextRunAt.toString()),

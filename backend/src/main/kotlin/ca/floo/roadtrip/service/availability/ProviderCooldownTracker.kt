@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.config.ApplicationProperties
+import ca.floo.roadtrip.config.ConfigSection
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import java.time.Duration
 import java.time.Instant
@@ -24,13 +26,16 @@ internal class ProviderCooldownTracker(
     private val clock: () -> Instant = Instant::now,
 ) {
     companion object {
-        const val DEFAULT_COOLDOWN_SECONDS = 300L
-        const val ENV_COOLDOWN_SECONDS = "AVAILABILITY_PROVIDER_COOLDOWN_SECONDS"
+        val DEFAULT_COOLDOWN: Duration = Duration.ofSeconds(300)
+        const val COOLDOWN_KEY = "provider-cooldown"
 
-        fun fromEnv(env: Map<String, String> = System.getenv()): ProviderCooldownTracker {
-            val seconds = env[ENV_COOLDOWN_SECONDS]?.toLong() ?: DEFAULT_COOLDOWN_SECONDS
-            return ProviderCooldownTracker(cooldown = Duration.ofSeconds(seconds))
-        }
+        fun fromProperties(properties: Map<String, String> = ApplicationProperties.load()): ProviderCooldownTracker =
+            ProviderCooldownTracker(
+                cooldown =
+                    ConfigSection(properties)
+                        .section("roadtrip.availability")
+                        .duration(COOLDOWN_KEY, DEFAULT_COOLDOWN),
+            )
     }
 
     private val expiries = ConcurrentHashMap<AvailabilityProviderId, Instant>()

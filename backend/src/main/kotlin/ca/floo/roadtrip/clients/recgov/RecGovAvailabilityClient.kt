@@ -1,5 +1,4 @@
 package ca.floo.roadtrip.clients.recgov
-
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.json.Json

@@ -4,6 +4,7 @@ import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
 import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.CampsiteDayObservation
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
@@ -34,7 +35,6 @@ import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
@@ -341,7 +341,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         limiter: VendorRateLimiter = RecordingLimiter(grant = true),
         alertDispatcher: WatchAlertDispatcher = disabledDispatcher(),
         failoverFetcher: FailoverAvailabilityFetcher =
-            FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromEnv()),
+            FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = ProviderCooldownTracker.DEFAULT_COOLDOWN)),
     ): AvailabilityPollExecutor {
         val campsitesRepo = CampsiteRepo(ctx)
         val registry = AvailabilityProviderRegistry(mapOf("test" to provider))
@@ -396,6 +396,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 maxPollWindowDays = maxPollWindowDays,
             )
 
+        override fun isEnabled(): Boolean = true
+
         override suspend fun availability(
             ref: ProviderRef,
             startDate: LocalDate,
@@ -404,18 +406,18 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
         override suspend fun catalogAvailability(
             ref: ProviderRef,
-            reservables: List<CatalogCampsiteRef>,
+            campsites: List<CatalogCampsiteRef>,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch {
             calls++
             lastStart = startDate
             lastEnd = endDate
-            lastReservableCount = reservables.size
+            lastReservableCount = campsites.size
             mdcRunIdDuringCall = MDC.get("run_id")
             val observedAt = Instant.now()
             val observations =
-                reservables.map { reservable ->
+                campsites.map { reservable ->
                     CampsiteDayObservation(
                         campsiteId = reservable.campsiteId,
                         date = observationDate ?: startDate,
@@ -448,6 +450,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 maxPollWindowDays = 60,
             )
 
+        override fun isEnabled(): Boolean = true
+
         override suspend fun availability(
             ref: ProviderRef,
             startDate: LocalDate,
@@ -456,7 +460,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
         override suspend fun catalogAvailability(
             ref: ProviderRef,
-            reservables: List<CatalogCampsiteRef>,
+            campsites: List<CatalogCampsiteRef>,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw AvailabilityProviderError.RateLimited(RuntimeException("429"))
@@ -1309,7 +1313,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         successBatch: AvailabilityObservationBatch?,
         servedBy: AvailabilityProviderId?,
     ): FailoverAvailabilityFetcher =
-        object : FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromEnv()) {
+        object : FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = ProviderCooldownTracker.DEFAULT_COOLDOWN)) {
             override suspend fun fetch(
                 candidates: List<ProviderCandidate>,
                 campsites: List<CampsiteAvailabilityTarget>,

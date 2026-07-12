@@ -39,14 +39,14 @@ class VendorRateLimitConfigTest {
     }
 
     @Test
-    fun `fromEnv parses a per-vendor override with a simple duration`() {
+    fun `fromProperties parses a per-vendor override with a simple duration`() {
         val config =
-            VendorRateLimitConfig.fromEnv(
-                env =
+            VendorRateLimitConfig.fromProperties(
+                properties =
                     mapOf(
-                        "ROADTRIP_VENDOR_RATELIMIT_ASPIRA_CAPACITY" to "5",
-                        "ROADTRIP_VENDOR_RATELIMIT_ASPIRA_REFILL_TOKENS" to "5",
-                        "ROADTRIP_VENDOR_RATELIMIT_ASPIRA_REFILL_PERIOD" to "10s",
+                        "roadtrip.vendor-rate-limit.aspira.capacity" to "5",
+                        "roadtrip.vendor-rate-limit.aspira.refill-tokens" to "5",
+                        "roadtrip.vendor-rate-limit.aspira.refill-period" to "10s",
                     ),
             )
         val aspira = config.forVendor("aspira")
@@ -58,10 +58,10 @@ class VendorRateLimitConfigTest {
     }
 
     @Test
-    fun `fromEnv fills missing sub-keys from defaults when only capacity is set`() {
+    fun `fromProperties fills missing sub-keys from defaults when only capacity is set`() {
         val config =
-            VendorRateLimitConfig.fromEnv(
-                env = mapOf("ROADTRIP_VENDOR_RATELIMIT_RECGOV_CAPACITY" to "100"),
+            VendorRateLimitConfig.fromProperties(
+                properties = mapOf("roadtrip.vendor-rate-limit.recgov.capacity" to "100"),
             )
         val recgov = config.forVendor("recgov")
         assertEquals(100, recgov.capacity)
@@ -70,8 +70,8 @@ class VendorRateLimitConfigTest {
     }
 
     @Test
-    fun `fromEnv with no vendor keys yields all-default config`() {
-        val config = VendorRateLimitConfig.fromEnv(env = mapOf("SOME_OTHER_VAR" to "x"))
+    fun `fromProperties with no vendor keys yields all-default config`() {
+        val config = VendorRateLimitConfig.fromProperties(properties = mapOf("some.other.key" to "x"))
         assertEquals(DEFAULT_VENDOR_BUCKET_CAPACITY, config.forVendor("recgov").capacity)
     }
 }

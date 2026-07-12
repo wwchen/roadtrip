@@ -969,12 +969,14 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 private object FakeRecgovProvider : ca.floo.roadtrip.service.availability.provider.AvailabilityProvider {
     override val id = ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId.RECGOV
     override val capabilities =
-        ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities(
+        ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities(
             supportsAvailability = true,
             pollableForAlerts = true,
             bookingHorizonDays = 180,
             maxPollWindowDays = 60,
         )
+
+    override fun isEnabled(): Boolean = true
 
     override suspend fun availability(
         ref: ca.floo.roadtrip.models.domain.ProviderRef,

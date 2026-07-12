@@ -30,7 +30,7 @@ keys on — catalog rows bind to availability by construction.
 
 Add a tenant by appending to the `TENANTS` table in
 `scripts/fetch_reserveamerica.py` and registering its data sources + a SitesEtl
-instance (see `config/poi-registry.yaml`).
+instance (see `backend/src/main/resources/poi-registry.yaml`).
 
 ## ID model
 

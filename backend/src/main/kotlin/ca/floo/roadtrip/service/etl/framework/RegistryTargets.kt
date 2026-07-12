@@ -7,7 +7,7 @@ import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import org.slf4j.LoggerFactory
 import java.io.File
 
-// Derives the IngestController target maps from config/poi-registry.yaml.
+// Derives the IngestController target maps from the POI registry resource.
 //
 // Two namespaces:
 //   - fetchTargets: one Target per data_sources row. Target.name is the

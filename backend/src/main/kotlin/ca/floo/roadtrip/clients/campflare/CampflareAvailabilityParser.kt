@@ -1,6 +1,9 @@
 package ca.floo.roadtrip.clients.campflare
 
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.campflare.CampflareAvailability
+import ca.floo.roadtrip.models.availability.campflare.CampflareCampgroundAvailability
+import ca.floo.roadtrip.models.availability.campflare.CampflareCampsiteAvailability
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray

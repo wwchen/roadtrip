@@ -19,7 +19,7 @@ service/availability/provider/adapters/<vendor>/*
 service/api/<Vendor>PoiCtaProvider.kt          # only if POI drawer CTAs apply
 service/etl/vendors/<vendor>/*                 # only if importing catalog data
 models/<area>/*                                # shared DTOs/domain values only
-config/poi-registry.yaml                       # source + dataset wiring
+backend/src/main/resources/poi-registry.yaml  # source + dataset wiring
 ```
 
 Routes should not change for a new provider. Availability services should
@@ -130,7 +130,7 @@ pipeline details, then add campsite-specific pieces.
 
 Checklist:
 
-- Add source rows and ETL rows in `config/poi-registry.yaml`.
+- Add source rows and ETL rows in `backend/src/main/resources/poi-registry.yaml`.
 - Add fetcher scripts only when raw upstream capture is required.
 - Add ETL code under `service/etl/vendors/<vendor>/`.
 - Write `ProviderRef` payloads on parent POIs.

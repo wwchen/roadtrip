@@ -24,12 +24,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-REGISTRY = ROOT / "config" / "poi-registry.yaml"
+REGISTRY = ROOT / "backend" / "src" / "main" / "resources" / "poi-registry.yaml"
 
 
 @dataclass
 class LoadedSource:
-    """One row from `data_sources:` in config/poi-registry.yaml.
+    """One row from `data_sources:` in the POI registry resource.
 
     Exposes the bits the per-source fetcher scripts need: where to write
     the envelope (`output_dir_prefix`, relative to ROOT), the slug used
@@ -98,7 +98,7 @@ def write_envelope(
     """Write a single capture for one data_source. Returns the path written.
 
     Either `source` (slug string — the loader resolves it via
-    config/poi-registry.yaml) or `source_obj` (already-loaded
+    the POI registry resource) or `source_obj` (already-loaded
     LoadedSource) must be supplied. When both are given, `source_obj`
     wins.
 

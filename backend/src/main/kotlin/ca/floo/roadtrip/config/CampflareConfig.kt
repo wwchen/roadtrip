@@ -7,20 +7,15 @@ data class CampflareConfig(
     companion object {
         private const val DEFAULT_API_BASE_URL = "https://api.campflare.com/v2"
 
-        fun fromEnv(env: Map<String, String> = System.getenv()): CampflareConfig =
+        fun fromProperties(properties: Map<String, String>): CampflareConfig =
+            fromConfig(ConfigSection(properties).section("roadtrip.campflare"))
+
+        fun fromConfig(config: ConfigSection): CampflareConfig =
             CampflareConfig(
                 apiKey =
-                    env["CAMPFLARE_API_KEY"]
-                        ?.trim()
-                        ?.takeIf { it.isNotEmpty() }
-                        ?: env["CAMPFLARE_TOKEN"]
-                            ?.trim()
-                            ?.takeIf { it.isNotEmpty() },
-                apiBaseUrl =
-                    env["CAMPFLARE_API_BASE"]
-                        ?.trim()
-                        ?.takeIf { it.isNotEmpty() }
-                        ?: DEFAULT_API_BASE_URL,
+                    config.value("api-key")
+                        ?: config.value("token"),
+                apiBaseUrl = config.valueOrDefault("api-base-url", DEFAULT_API_BASE_URL),
             )
     }
 }

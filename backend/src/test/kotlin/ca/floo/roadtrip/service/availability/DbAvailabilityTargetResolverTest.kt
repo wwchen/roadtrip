@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.fixtures.CatalogPoiFixture
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -11,7 +12,6 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import kotlinx.coroutines.runBlocking
@@ -71,6 +71,8 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 maxPollWindowDays = 60,
             )
 
+        override fun isEnabled(): Boolean = true
+
         override suspend fun availability(
             ref: ProviderRef,
             startDate: LocalDate,
@@ -78,7 +80,9 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
     }
 
-    private open class NoopCampflareProvider : AvailabilityProvider {
+    private open class NoopCampflareProvider(
+        private val enabled: Boolean,
+    ) : AvailabilityProvider {
         override val id: AvailabilityProviderId = AvailabilityProviderId.CAMPFLARE
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
@@ -88,6 +92,8 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 maxPollWindowDays = 60,
             )
 
+        override fun isEnabled(): Boolean = enabled
+
         override suspend fun availability(
             ref: ProviderRef,
             startDate: LocalDate,
@@ -95,7 +101,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
     }
 
-    private class DecliningCampflareProvider : NoopCampflareProvider() {
+    private class DecliningCampflareProvider : NoopCampflareProvider(enabled = true) {
         override fun canHandle(ref: ProviderRef): Boolean = false
     }
 
@@ -105,7 +111,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             mapOf(
                 "test" to NoopRecgovProvider(),
                 "recgov" to NoopRecgovProvider(),
-                "campflare" to NoopCampflareProvider(),
+                "campflare" to NoopCampflareProvider(enabled = true),
             ),
     ): DbAvailabilityTargetResolver =
         DbAvailabilityTargetResolver(
@@ -272,7 +278,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                     campsitesRepo = campsitesRepo,
                     providers =
                         mapOf(
-                            "campflare" to NoopCampflareProvider(),
+                            "campflare" to NoopCampflareProvider(enabled = true),
                             "recgov" to NoopRecgovProvider(),
                         ),
                 ).resolve(reservable)!!
@@ -314,6 +320,29 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         }
 
     @Test
+    fun `resolve skips disabled provider candidates and falls back`() =
+        runBlocking {
+            val fixture = seedDualVendorPoi()
+            val campsiteId = seedDualVendorCampsite(fixture.catalogId)
+
+            val campsitesRepo = CampsiteRepo(ctx)
+            val reservable = campsitesRepo.findAvailabilityTargetById(campsiteId)!!
+            val target =
+                resolverFor(
+                    campsitesRepo = campsitesRepo,
+                    providers =
+                        mapOf(
+                            "campflare" to NoopCampflareProvider(enabled = false),
+                            "recgov" to NoopRecgovProvider(),
+                        ),
+                ).resolve(reservable)!!
+
+            assertEquals(1, target.candidates.size)
+            assertEquals(AvailabilityProviderId.RECGOV, target.provider.id)
+            assertEquals("232447", parentRefKey(target.parentRef))
+        }
+
+    @Test
     fun `resolve returns null when no candidate survives`() =
         runBlocking {
             val poi =
@@ -343,7 +372,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val target =
                 resolverFor(
                     campsitesRepo = campsitesRepo,
-                    providers = mapOf("campflare" to NoopCampflareProvider()),
+                    providers = mapOf("campflare" to NoopCampflareProvider(enabled = true)),
                 ).resolve(reservable)
 
             assertEquals(null, target)

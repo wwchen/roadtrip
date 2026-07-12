@@ -5,24 +5,23 @@ import java.time.Duration
 data class AppConfig(
     val cache: ApiCacheConfig,
     val campflare: CampflareConfig,
-    /** Slack alerting config, or null when unconfigured (alerts disabled). */
+    val readPathProviders: ReadPathProviderConfig,
     val slack: SlackConfig?,
-    /** Grafana host for dashboard deep links in alerts, or null when unset
-     *  (alerts omit the dashboard links). */
     val grafana: GrafanaConfig?,
-    /** Public web app host for POI map deep links in alerts, or null when unset
-     *  (alerts omit the map links). */
     val webApp: WebAppConfig?,
 ) {
     companion object {
-        fun fromEnv(env: Map<String, String> = System.getenv()): AppConfig =
-            AppConfig(
-                cache = ApiCacheConfig.fromEnv(env),
-                campflare = CampflareConfig.fromEnv(env),
-                slack = SlackConfig.fromEnv(env),
-                grafana = GrafanaConfig.fromEnv(env),
-                webApp = WebAppConfig.fromEnv(env),
+        fun fromProperties(properties: Map<String, String>): AppConfig {
+            val roadtrip = ConfigSection(properties).section("roadtrip")
+            return AppConfig(
+                cache = ApiCacheConfig.fromConfig(roadtrip.section("cache")),
+                campflare = CampflareConfig.fromConfig(roadtrip.section("campflare")),
+                readPathProviders = ReadPathProviderConfig.fromConfig(roadtrip.section("read-path")),
+                slack = SlackConfig.fromConfig(roadtrip.section("slack")),
+                grafana = GrafanaConfig.fromConfig(roadtrip.section("grafana")),
+                webApp = WebAppConfig.fromConfig(roadtrip.section("web")),
             )
+        }
     }
 }
 

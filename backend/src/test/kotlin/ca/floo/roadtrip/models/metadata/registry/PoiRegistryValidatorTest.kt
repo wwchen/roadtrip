@@ -347,15 +347,8 @@ class PoiRegistryValidatorTest {
     }
 
     @Test
-    fun `production poi-registry yaml validates`() {
-        val file =
-            java.io
-                .File(System.getProperty("user.dir"))
-                .resolve("../config/poi-registry.yaml")
-                .canonicalFile
-        // Just confirms the live YAML doesn't regress. The test setup
-        // path mirrors EtlOrchestratorTest's resolution.
-        PoiRegistry.load(file)
+    fun `production poi-registry resource validates`() {
+        PoiRegistry.loadResource("poi-registry.yaml")
     }
 
     @Test

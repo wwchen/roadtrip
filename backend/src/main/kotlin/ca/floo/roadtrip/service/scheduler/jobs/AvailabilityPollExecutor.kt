@@ -83,7 +83,7 @@ internal class AvailabilityPollExecutor(
     private val limiter: VendorRateLimiter,
     private val alertDispatcher: WatchAlertDispatcher,
     private val failoverFetcher: FailoverAvailabilityFetcher =
-        FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromEnv()),
+        FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromProperties()),
     private val clock: Clock = Clock.systemUTC(),
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -138,7 +138,7 @@ internal class AvailabilityPollExecutor(
         // and never drifts between the two.
         val windowFor: (
             ca.floo.roadtrip.models.availability.PoiDateContext,
-            ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities,
+            ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities,
         ) -> ca.floo.roadtrip.models.availability.AvailabilityWindows? = { context, caps ->
             val resolvedWindow =
                 dateResolver.resolvePollingWindow(
