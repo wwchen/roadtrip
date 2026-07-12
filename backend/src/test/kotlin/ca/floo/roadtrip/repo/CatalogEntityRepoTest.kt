@@ -115,7 +115,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         repo.upsertCampgrounds(
             listOf(
                 CampgroundUpsertCandidate(
-                    vendor = "federal-campgrounds",
+                    vendor = "recgov",
                     vendorRefId = "recgov-232447",
                     name = "Upper Pines",
                     latitude = 37.739,
@@ -124,7 +124,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     vendorRefPayload = json("""{"recgov_id":"232447"}"""),
                 ),
             ),
-            source = "federal-campgrounds",
+            source = "recgov-campgrounds",
         )
 
         repo.upsertCampgrounds(
@@ -140,7 +140,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     additionalVendorRefs =
                         listOf(
                             CatalogVendorRefUpsertCandidate(
-                                vendor = "federal-campgrounds",
+                                vendor = "recgov",
                                 vendorRefId = "recgov-232447",
                                 payload = json("""{"recgov_id":"232447"}"""),
                             ),
@@ -174,8 +174,8 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertEquals(
             listOf(
                 "campflare|campflare:upper-pines-campground-447",
-                "campflare|federal-campgrounds:recgov-232447",
-                "federal-campgrounds|federal-campgrounds:recgov-232447",
+                "campflare|recgov:recgov-232447",
+                "recgov|recgov:recgov-232447",
             ),
             links,
         )
@@ -184,7 +184,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         val recgovName =
             ctx
                 .fetchOne(
-                    "SELECT name FROM campgrounds WHERE data_source = 'federal-campgrounds'",
+                    "SELECT name FROM campgrounds WHERE data_source = 'recgov'",
                 )!!
                 .get("name", String::class.java)
         assertEquals("Upper Pines", recgovName)
@@ -395,7 +395,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     vendorRefPayload = json("""{"recgov_id":"232447"}"""),
                 ),
             ),
-            source = "federal-campgrounds",
+            source = "recgov-campgrounds",
         )
         campsites.upsertCampsites(
             listOf(
@@ -410,7 +410,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                     vendorRefPayload = json("""{"recgov_id":"100"}"""),
                 ),
             ),
-            source = "federal-campsites",
+            source = "recgov-campsites-catalog",
         )
 
         campsites.upsertCampsites(

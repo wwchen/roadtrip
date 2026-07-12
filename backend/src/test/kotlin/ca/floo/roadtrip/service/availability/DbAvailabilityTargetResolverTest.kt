@@ -104,7 +104,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         providers: Map<String, AvailabilityProvider> =
             mapOf(
                 "test" to NoopRecgovProvider(),
-                "federal-campgrounds" to NoopRecgovProvider(),
+                "recgov" to NoopRecgovProvider(),
                 "campflare" to NoopCampflareProvider(),
             ),
     ): DbAvailabilityTargetResolver =
@@ -147,7 +147,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val campgroundId = campgroundIdFor(poi)
             linkCampgroundRef(
                 campgroundId = campgroundId,
-                vendor = "federal-campgrounds",
+                vendor = "recgov",
                 externalId = "recgov-232447",
                 payloadJson = """{"recgov_id":"232447"}""",
             )
@@ -220,7 +220,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val campgroundId = campgroundIdFor(poi)
             linkCampgroundRef(
                 campgroundId = campgroundId,
-                vendor = "federal-campgrounds",
+                vendor = "recgov",
                 externalId = "recgov-232447",
                 payloadJson = """{"recgov_id":"232447"}""",
             )
@@ -247,7 +247,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                     providers =
                         mapOf(
                             "campflare" to DecliningCampflareProvider(),
-                            "federal-campgrounds" to NoopRecgovProvider(),
+                            "recgov" to NoopRecgovProvider(),
                         ),
                 ).resolve(reservable)!!
 

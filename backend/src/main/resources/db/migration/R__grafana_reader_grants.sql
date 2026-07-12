@@ -19,6 +19,12 @@ BEGIN
 END
 $$;
 
+-- Grafana's DB Stats dashboard needs query text, state, waits, and blockers
+-- for backend sessions. PostgreSQL masks other users' query text without this
+-- predefined role. Keep the privilege narrow: stats visibility only, still no
+-- writes and no raw api_cache payload access.
+GRANT pg_read_all_stats TO grafana_reader;
+
 REVOKE ALL PRIVILEGES ON SCHEMA public FROM grafana_reader;
 REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM grafana_reader;
 REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM grafana_reader;

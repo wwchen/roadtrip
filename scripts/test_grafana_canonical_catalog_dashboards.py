@@ -98,6 +98,35 @@ class GrafanaCanonicalCatalogDashboardTest(unittest.TestCase):
         missing = [token for token in REQUIRED_DB_STATS_TOKENS if token not in text]
         self.assertEqual([], missing)
 
+    def test_db_stats_surfaces_live_query_state(self) -> None:
+        dashboard = load_dashboard("db-stats.json")
+        text = (DASHBOARD_DIR / "db-stats.json").read_text()
+        required = [
+            "pg_stat_activity",
+            "pg_blocking_pids",
+            "query_age",
+            "wait_event_type",
+            "Live database sessions",
+            "Blocked queries",
+            "(state IS NULL) ASC",
+        ]
+        missing = [token for token in required if token not in text]
+        self.assertEqual([], missing)
+        self.assertEqual("5s", dashboard.get("refresh"))
+        self.assertIn("5s", dashboard.get("timepicker", {}).get("refresh_intervals", []))
+
+    def test_api_cache_dashboards_match_metadata_view(self) -> None:
+        offenders: list[str] = []
+        for name in ["db-stats.json", "catalog-explorer.json"]:
+            dashboard = load_dashboard(name)
+            for sql in raw_sql_strings(dashboard):
+                if "grafana_api_cache_metadata" not in sql:
+                    continue
+                for stale_column in ["fetched_at", " error"]:
+                    if stale_column in sql:
+                        offenders.append(f"{name}: {stale_column.strip()}")
+        self.assertEqual([], offenders)
+
     def test_canonical_campsite_dashboards_exist(self) -> None:
         missing = [name for name in CATALOG_DASHBOARDS if not (DASHBOARD_DIR / name).exists()]
         self.assertEqual([], missing)

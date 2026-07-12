@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
+import ca.floo.roadtrip.service.availability.provider.availabilityProviderId
 
 internal class CampgroundAvailabilitySupport(
     private val providerRefs: CampsiteProviderRepo,
@@ -19,10 +20,18 @@ internal class CampgroundAvailabilitySupport(
         }
 
     /**
-     * Vendor identifier of the resolver's preferred availability candidate for
-     * [campgroundId], or `null` when no candidate exists. Same ordering as
-     * [CampsiteProviderRepo.findCampgroundProviderRefCandidates].
+     * Stable provider identifier of the resolver's preferred availability
+     * candidate for [campgroundId], or `null` when no candidate exists. Same
+     * ordering as [CampsiteProviderRepo.findCampgroundProviderRefCandidates].
      */
     fun preferredAvailabilityProvider(campgroundId: Long): String? =
-        providerRefs.findCampgroundProviderRefCandidates(campgroundId).firstOrNull()?.source
+        providerRefs
+            .findCampgroundProviderRefCandidates(campgroundId)
+            .firstNotNullOfOrNull { candidate ->
+                ProviderRefParser
+                    .parse(candidate.providerRefJson)
+                    ?.availabilityProviderId()
+                    ?.name
+                    ?.lowercase()
+            }
 }

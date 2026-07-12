@@ -59,7 +59,7 @@ class CampflareCampgroundsEtlTest {
         assertEquals(true, hasToilets)
         assertEquals(" Upper Pines ", sourceName)
         assertEquals("upper-pines-campground-447", campflareId)
-        assertEquals("federal-campgrounds", recgovRef.vendor)
+        assertEquals("recgov", recgovRef.vendor)
         assertEquals("recgov-232447", recgovRef.vendorRefId)
         assertEquals(
             "232447",

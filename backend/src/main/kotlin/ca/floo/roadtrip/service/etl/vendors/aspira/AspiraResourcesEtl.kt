@@ -138,10 +138,12 @@ class AspiraResourcesEtl(
         // Maps tree → mapId-keyed leaf metadata. Each inventory record
         // carries `mapIds[]`; we look up the first one to label the
         // campsite's `loop`.
-        val leavesByMapId =
-            AspiraLeavesWalk
-                .walk(dto.maps)
-                .associateBy { it.mapId }
+        val leaves = AspiraLeavesWalk.walk(dto.maps)
+        val leavesByMapId = leaves.associateBy { it.mapId }
+        val leavesByResourceLocationId =
+            leaves
+                .mapNotNull { leaf -> leaf.resourceLocationId?.let { it to leaf } }
+                .toMap()
 
         val out = mutableListOf<CampsiteUpsertCandidate>()
         var unmatchedLeaf = 0
@@ -155,25 +157,26 @@ class AspiraResourcesEtl(
                 totalRecords++
                 val leafMapId = inv.firstMapId
                 val leaf = leafMapId?.let { leavesByMapId[it] }
+                val parentLeaf = leaf ?: inv.resourceLocationId?.let { leavesByResourceLocationId[it] }
                 if (leafMapId != null && leaf == null) unmatchedLeaf++
-                val providerRef = buildResourceProviderRef(inv = inv, leaf = leaf)
+                val providerRef = buildResourceProviderRef(inv = inv, leaf = leaf, parentLeaf = parentLeaf)
                 out +=
                     CampsiteUpsertCandidate(
                         vendor = vendor,
                         vendorRefId = resourceId,
                         parentVendor = PARENT_CAMPGROUND_VENDOR_BY_SITE_VENDOR[vendor],
-                        parentVendorRefId = parentVendorRefId(providerRef),
+                        parentVendorRefId = parentVendorRefId(parentLeaf = parentLeaf, providerRef = providerRef),
                         // Short label from /api/resourcelocation/resources
                         // (`localizedValues[0].name`) — e.g. "OFC13", "B7".
                         name = inv.name ?: resourceId,
                         // Loop is the parent leaf's name from /api/maps
                         // (PC's "AREA WHITE RIVER" analogue).
-                        loopName = leaf?.name,
+                        loopName = leaf?.name ?: parentLeaf?.name,
                         kind = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] } ?: "site",
                         kindListed = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] },
                         equipment = inv.allowedEquipment?.let { enrichAllowedEquipment(it, dto.dictionaries) },
                         maxPeople = inv.maxCapacity,
-                        sourcePayload = buildResourceRaw(inv = inv, leaf = leaf, dictionaries = dto.dictionaries),
+                        sourcePayload = buildResourceRaw(inv = inv, leaf = leaf, parentLeaf = parentLeaf, dictionaries = dto.dictionaries),
                         vendorRefPayload = providerRef,
                     )
             }
@@ -190,7 +193,13 @@ class AspiraResourcesEtl(
         return CampsiteEtlOutput(campsites = out)
     }
 
-    private fun parentVendorRefId(providerRef: JsonObject?): String? {
+    private fun parentVendorRefId(
+        parentLeaf: AspiraLeaf?,
+        providerRef: JsonObject?,
+    ): String? {
+        if (parentLeaf != null) {
+            return "$POI_SOURCE_ID_PREFIX${parentLeaf.transactionLocationId}-${parentLeaf.mapId}"
+        }
         val transactionLocationId = providerRef?.get(PROVIDER_REF_TXN_LOC_KEY)?.jsonPrimitive?.contentOrNull
         val mapId = providerRef?.get(PROVIDER_REF_MAP_ID_KEY)?.jsonPrimitive?.contentOrNull
         return if (transactionLocationId != null && mapId != null) {
@@ -244,6 +253,7 @@ class AspiraResourcesEtl(
     private fun buildResourceRaw(
         inv: ResourceInventory,
         leaf: AspiraLeaf?,
+        parentLeaf: AspiraLeaf?,
         dictionaries: AspiraDictionaries,
     ): JsonObject =
         buildJsonObject {
@@ -252,15 +262,19 @@ class AspiraResourcesEtl(
             // mapIds[0] to a known leaf. Fall back to the
             // resourceLocationId from the inventory record itself so parent
             // refs still resolve whenever the inventory carries enough IDs.
-            if (leaf != null) {
-                put("_parent_aspira_map_id", leaf.mapId)
-                put("_parent_aspira_txn_loc", leaf.transactionLocationId)
-                if (leaf.resourceLocationId != null) {
-                    put("_parent_aspira_resource_loc", leaf.resourceLocationId)
+            val parent = leaf ?: parentLeaf
+            if (parent != null) {
+                put("_parent_aspira_map_id", parent.mapId)
+                put("_parent_aspira_txn_loc", parent.transactionLocationId)
+                if (parent.resourceLocationId != null) {
+                    put("_parent_aspira_resource_loc", parent.resourceLocationId)
                 }
-                put("_parent_leaf_name", leaf.name)
-                if (leaf.parentName != null) {
-                    put("_parent_leaf_parent_name", leaf.parentName)
+                put("_parent_leaf_name", parent.name)
+                if (parent.parentName != null) {
+                    put("_parent_leaf_parent_name", parent.parentName)
+                }
+                if (leaf == null && inv.firstMapId != null && inv.firstMapId != parent.mapId) {
+                    put("_aspira_resource_map_id", inv.firstMapId)
                 }
             } else {
                 if (inv.firstMapId != null) {
@@ -303,10 +317,11 @@ class AspiraResourcesEtl(
     private fun buildResourceProviderRef(
         inv: ResourceInventory,
         leaf: AspiraLeaf?,
+        parentLeaf: AspiraLeaf?,
     ): JsonObject? {
-        val mapId = leaf?.mapId ?: inv.firstMapId
-        val transactionLocationId = leaf?.transactionLocationId
-        val resourceLocationId = leaf?.resourceLocationId ?: inv.resourceLocationId
+        val mapId = leaf?.mapId ?: inv.firstMapId ?: parentLeaf?.mapId
+        val transactionLocationId = leaf?.transactionLocationId ?: parentLeaf?.transactionLocationId
+        val resourceLocationId = leaf?.resourceLocationId ?: inv.resourceLocationId ?: parentLeaf?.resourceLocationId
         if (mapId == null && transactionLocationId == null && resourceLocationId == null) return null
 
         return buildJsonObject {

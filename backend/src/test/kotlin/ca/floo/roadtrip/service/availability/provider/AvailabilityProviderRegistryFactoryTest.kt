@@ -221,6 +221,10 @@ class AvailabilityProviderRegistryFactoryTest {
         assertNull(registry.forPoi(row("campflare-campgrounds"), ProviderRef.Campflare("upper-pines-campground-447")))
         assertEquals(
             AvailabilityProviderId.RECGOV,
+            registry.forPoi(row("recgov"), ProviderRef.RecGov("232447"))?.id,
+        )
+        assertEquals(
+            AvailabilityProviderId.RECGOV,
             registry.forPoi(row("federal-campgrounds"), ProviderRef.RecGov("232447"))?.id,
         )
     }

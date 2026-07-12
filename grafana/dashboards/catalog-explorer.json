@@ -243,7 +243,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  namespace,\n  cache_key,\n  status,\n  fetched_at,\n  expires_at,\n  error\nFROM grafana_api_cache_metadata\nWHERE (${campsite_id:sqlstring} = '' OR cache_key ILIKE '%' || ${campsite_id:sqlstring} || '%')\nORDER BY fetched_at DESC NULLS LAST\nLIMIT 200;",
+          "rawSql": "SELECT\n  namespace,\n  cache_key,\n  CASE WHEN expires_at <= now() THEN 'expired' ELSE 'fresh' END AS status,\n  created_at,\n  expires_at,\n  payload_bytes\nFROM grafana_api_cache_metadata\nWHERE (${campsite_id:sqlstring} = '' OR cache_key ILIKE '%' || ${campsite_id:sqlstring} || '%')\nORDER BY created_at DESC NULLS LAST\nLIMIT 200;",
           "refId": "A"
         }
       ],

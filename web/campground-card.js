@@ -509,9 +509,9 @@ function firstText(...values) {
 function sourcesLabel(sources) {
   if (!Array.isArray(sources)) return '';
   const cleaned = sources
-    .map(v => (typeof v === 'string' ? v.trim() : ''))
+    .map(v => (typeof v === 'string' || typeof v === 'number' ? String(v).trim() : ''))
     .filter(Boolean);
-  return cleaned.join(', ');
+  return [...new Set(cleaned)].join(', ');
 }
 
 function urlHost(url) {
