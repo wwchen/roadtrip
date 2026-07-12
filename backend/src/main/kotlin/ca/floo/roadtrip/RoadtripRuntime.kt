@@ -11,6 +11,9 @@ import ca.floo.roadtrip.clients.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.config.DbConfig
+import ca.floo.roadtrip.db.dataSourceFor
+import ca.floo.roadtrip.db.dsl
+import ca.floo.roadtrip.db.migrate
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ApiCacheRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
@@ -22,9 +25,6 @@ import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
-import ca.floo.roadtrip.repo.dataSourceFor
-import ca.floo.roadtrip.repo.dsl
-import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService

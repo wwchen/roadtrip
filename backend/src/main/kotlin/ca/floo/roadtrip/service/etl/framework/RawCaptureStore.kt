@@ -1,13 +1,13 @@
-package ca.floo.roadtrip.repo
+package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.models.metadata.Envelope
 import kotlinx.serialization.json.Json
 import java.io.File
 
-// Filesystem repo for captured upstream envelopes under data/raw/<source>/.
+// Filesystem store for captured upstream envelopes under data/raw/<source>/.
 // A capture is either one timestamped JSON file or a timestamped directory
 // containing page-NNN.json files for paginated sources.
-class RawCaptureRepo(
+class RawCaptureStore(
     private val rawDir: File,
 ) {
     fun loadNewestEnvelopes(source: String): List<Envelope> {
