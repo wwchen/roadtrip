@@ -9,9 +9,8 @@ import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteParentJoinerRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.CanonicalViewRepo
-import ca.floo.roadtrip.repo.NoCaptureException
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
-import ca.floo.roadtrip.repo.RawCapture
+import ca.floo.roadtrip.repo.RawCaptureRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampsiteParentJoiner
 import ca.floo.roadtrip.service.etl.vendors.recgov.RecgovCampsiteParentJoiner
@@ -77,6 +76,7 @@ open class EtlOrchestrator(
     private val campsiteRepo = CampsiteRepo(ctx)
     private val teslaSuperchargerRepo = TeslaSuperchargerRepo(ctx)
     private val planetFitnessLocationRepo = PlanetFitnessLocationRepo(ctx)
+    private val rawCaptureRepo = RawCaptureRepo(rawDir)
 
     /**
      * Per-row run summary for import rows. `poi_data` and `campsite_data`
@@ -370,7 +370,7 @@ open class EtlOrchestrator(
             val ds = poiRegistry.dataSource(slug)
             if (ds != null) {
                 // data_source input: load envelope(s) from data/raw/<slug>/
-                raw[slug] = loadDataSourceEnvelopes(slug)
+                raw[slug] = rawCaptureRepo.loadNewestEnvelopes(slug)
             } else if (slug in intermediateOutputs) {
                 // sibling intermediate from earlier in this same row's
                 // etls: chain. PoiRegistry's validator rejects cross-row
@@ -383,27 +383,6 @@ open class EtlOrchestrator(
             }
         }
         return InputBundle(raw, etls)
-    }
-
-    private fun loadDataSourceEnvelopes(slug: String): List<Envelope> {
-        val dir = File(rawDir, slug)
-        if (!dir.isDirectory) throw NoCaptureException("$dir is not a directory")
-        // Auto-detect single-file vs directory-of-pages by inspecting the
-        // newest entry. A single-file capture is one envelope; a directory
-        // is a multipart capture and we return all its pages.
-        val newest =
-            dir.listFiles()?.maxByOrNull { it.name }
-                ?: throw NoCaptureException("no captures under $dir")
-        return if (newest.isDirectory) {
-            val pages =
-                newest
-                    .listFiles { f -> f.isFile && f.name.endsWith(".json") }
-                    ?.sortedBy { it.name } ?: emptyList()
-            if (pages.isEmpty()) throw NoCaptureException("no pages under $newest")
-            pages.map { RawCapture.parseEnvelope(it) }
-        } else {
-            listOf(RawCapture.parseEnvelope(newest))
-        }
     }
 
     companion object {

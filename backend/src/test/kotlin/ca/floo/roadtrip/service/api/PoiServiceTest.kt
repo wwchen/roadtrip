@@ -13,6 +13,7 @@ import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.catalog.CampgroundService
 import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.BeforeEach
@@ -147,6 +148,40 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals("232869", publicRef["recgov_id"]!!.jsonPrimitive.content)
         // The singleton canonical view returns one member source equal to data_source.
         assertEquals(listOf("federal-campgrounds"), feature.properties.sources)
+    }
+
+    @Test
+    fun `detail provider ref follows linked campground provider candidate ordering`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "upper-pines-campflare",
+                name = "Upper Pines",
+                lon = -119.56,
+                lat = 37.74,
+                source = "campflare",
+                providerRefJson = """{"campflare_id":"upper-pines-campground-447"}""",
+            )
+        val recgovVendorRefId =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO vendor_refs (vendor, entity_type, external_id, payload)
+                    VALUES ('recgov', 'campground', 'recgov-232447', '{"recgov_id":"232447"}'::jsonb)
+                    RETURNING id
+                    """.trimIndent(),
+                )!!
+                .get("id", Long::class.java)
+        ctx.execute(
+            "INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id) VALUES (?, ?)",
+            fixture.catalogId,
+            recgovVendorRefId,
+        )
+
+        val defaultRef =
+            Json
+                .parseToJsonElement(campgroundDetailRow(fixture.poiId).providerRefJson!!)
+                .jsonObject
+        assertEquals("upper-pines-campground-447", defaultRef["campflare_id"]!!.jsonPrimitive.content)
     }
 
     @Test

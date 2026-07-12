@@ -20,7 +20,8 @@ class CampgroundRepo(
 ) {
     private val importRuns = ImportRunRepo(ctx)
     private val vendorRefs = CatalogVendorRefRepo(ctx)
-    private val pois = PoiCatalogRepo(ctx)
+    private val pois = PoiRepo(ctx)
+    private val providerRefs = CampsiteProviderRepo(ctx)
 
     data class SearchFilters(
         val vendors: List<String> = emptyList(),
@@ -85,7 +86,6 @@ class CampgroundRepo(
                   $BASE_SELECT_COLUMNS,
                   primary_ref.vendor AS detail_source,
                   primary_ref.external_id AS detail_source_id,
-                  provider_ref.payload::text AS provider_ref_text,
                   NULLIF(cg.source_payload->'booking_cta_provider_ref', 'null'::jsonb)::text
                     AS cta_provider_ref_text,
                   to_jsonb(cc)::text AS properties_text,
@@ -99,19 +99,6 @@ class CampgroundRepo(
                   ON cg.id = cc.id
                 JOIN vendor_refs primary_ref
                   ON primary_ref.id = cg.primary_vendor_ref_id
-                LEFT JOIN LATERAL (
-                  SELECT vr.payload
-                  FROM campground_vendor_refs cvr
-                  JOIN vendor_refs vr
-                    ON vr.id = cvr.vendor_ref_id
-                  WHERE cvr.campground_id = cg.id
-                    AND vr.entity_type = 'campground'
-                    AND vr.deleted_at IS NULL
-                  ORDER BY
-                    CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
-                    cvr.vendor_ref_id ASC
-                  LIMIT 1
-                ) provider_ref ON true
                 WHERE pc.poi_id = ?
                   AND cg.deleted_at IS NULL
                   AND p.deleted_at IS NULL
@@ -122,7 +109,7 @@ class CampgroundRepo(
             campground = fromRecord(record),
             source = record.get("detail_source", String::class.java),
             sourceId = record.get("detail_source_id", String::class.java),
-            providerRefJson = record.get("provider_ref_text", String::class.java),
+            providerRefJson = providerRefs.findProviderRef(poiId)?.providerRefJson,
             ctaProviderRefJson = record.get("cta_provider_ref_text", String::class.java),
             propertiesJson = record.get("properties_text", String::class.java),
             memberSources = memberSourcesOf(record.get("member_sources")),
@@ -432,25 +419,15 @@ class CampgroundRepo(
         val (existingRows, newRows) = deduped.partition { it.campgroundId in existingPoiByCampground }
 
         if (existingRows.isNotEmpty()) {
-            for (chunk in existingRows.chunked(BULK_CHUNK_SIZE)) {
-                val placeholders = chunk.joinToString(", ") { "(?::bigint, ?::float8, ?::float8)" }
-                val sql =
-                    """
-                    UPDATE pois AS p
-                       SET geom = ST_SetSRID(ST_MakePoint(v.lon, v.lat), 4326),
-                           updated_at = now(),
-                           deleted_at = NULL
-                      FROM (VALUES $placeholders) AS v(id, lon, lat)
-                     WHERE p.id = v.id
-                    """.trimIndent()
-                val params = mutableListOf<Any?>()
-                for (row in chunk) {
-                    params += existingPoiByCampground.getValue(row.campgroundId)
-                    params += row.longitude
-                    params += row.latitude
-                }
-                ctx.execute(sql, *params.toTypedArray())
-            }
+            pois.bulkUpdatePoiGeometry(
+                existingRows.map { row ->
+                    PoiGeometryUpdate(
+                        poiId = existingPoiByCampground.getValue(row.campgroundId),
+                        longitude = row.longitude,
+                        latitude = row.latitude,
+                    )
+                },
+            )
         }
 
         if (newRows.isNotEmpty()) {

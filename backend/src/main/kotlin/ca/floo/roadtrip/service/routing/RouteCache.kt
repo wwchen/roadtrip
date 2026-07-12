@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap
 // In-memory cache for Mapbox Directions responses keyed by waypoints.
 // /api/route populates the cache as a side-effect of serving the FE; the
 // matching /api/pois/on-route call (with the same waypoints) then reads the
-// cached polyline and asks RouteCorridorRepo for the server-side corridor
+// cached polyline and asks RouteCorridorService for the server-side corridor
 // polygon, instead of asking the FE to ship a turf.buffer-derived polygon
 // back over the wire.
 //
