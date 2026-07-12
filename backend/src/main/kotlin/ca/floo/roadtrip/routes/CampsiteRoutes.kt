@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.clients.aspira.AspiraException
+import ca.floo.roadtrip.exceptions.AspiraException
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityErrorDto
 import ca.floo.roadtrip.models.api.PoiCampsitesAvailabilityResponseDto

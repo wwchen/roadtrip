@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.clients.mapbox.RoutingException
+import ca.floo.roadtrip.exceptions.RoutingException
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.poi.PointGeometrySchema
 import ca.floo.roadtrip.models.api.poi.PoisOnRouteFeaturePropertiesSchema

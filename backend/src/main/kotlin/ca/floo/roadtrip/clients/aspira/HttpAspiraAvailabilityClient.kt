@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.clients.aspira
 
 import ca.floo.roadtrip.clients.DateStringFormatter
+import ca.floo.roadtrip.exceptions.AspiraException
 import ca.floo.roadtrip.models.metadata.aspira.AspiraResourceAvailability
 import ca.floo.roadtrip.models.metadata.aspira.AspiraStatus
 import kotlinx.coroutines.future.await

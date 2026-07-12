@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.etl.framework
+package ca.floo.roadtrip.exceptions
 
 class FetchTimeoutException(
     message: String,

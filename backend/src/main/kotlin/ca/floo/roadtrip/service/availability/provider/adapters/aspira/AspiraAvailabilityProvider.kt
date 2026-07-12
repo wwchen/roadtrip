@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability.provider.adapters.aspira
 
 import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
-import ca.floo.roadtrip.clients.aspira.AspiraException
+import ca.floo.roadtrip.exceptions.AspiraException
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef

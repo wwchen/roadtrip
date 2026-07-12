@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.repo
+package ca.floo.roadtrip.models.domain.ingest
 
 data class TargetIngestStatusRow(
     val target: String,

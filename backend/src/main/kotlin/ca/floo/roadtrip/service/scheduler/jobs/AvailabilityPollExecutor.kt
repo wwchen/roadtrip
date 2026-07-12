@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.scheduler.jobs
 
 import ca.floo.roadtrip.models.availability.CellTransition
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
+import ca.floo.roadtrip.models.domain.scheduler.HandlerResult
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -22,7 +23,6 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
-import ca.floo.roadtrip.service.scheduler.framework.HandlerResult
 import kotlinx.coroutines.slf4j.MDCContext
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory

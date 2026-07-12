@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.clients.campflare
 
 import ca.floo.roadtrip.clients.DateStringFormatter
+import ca.floo.roadtrip.exceptions.CampflareException
 import kotlinx.coroutines.future.await
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray

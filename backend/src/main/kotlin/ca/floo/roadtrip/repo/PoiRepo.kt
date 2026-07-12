@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.models.domain.poi.PoiGeometryUpdate
 import org.jooq.DSLContext
 
 internal class PoiRepo(

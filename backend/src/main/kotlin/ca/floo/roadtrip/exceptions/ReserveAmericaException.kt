@@ -1,6 +1,6 @@
-package ca.floo.roadtrip.clients.campflare
+package ca.floo.roadtrip.exceptions
 
-class CampflareException(
+class ReserveAmericaException(
     message: String,
     val httpStatus: Int? = null,
 ) : RuntimeException(message)

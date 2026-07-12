@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.repo
+package ca.floo.roadtrip.models.domain.cache
 
 import kotlinx.serialization.json.JsonElement
 import java.time.Clock

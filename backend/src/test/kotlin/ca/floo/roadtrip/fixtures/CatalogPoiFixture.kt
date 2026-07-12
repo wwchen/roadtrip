@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.repo
+package ca.floo.roadtrip.fixtures
 
 data class CatalogPoiFixture(
     val poiId: Long,

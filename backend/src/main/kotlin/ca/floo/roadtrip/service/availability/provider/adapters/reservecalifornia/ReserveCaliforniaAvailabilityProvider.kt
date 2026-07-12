@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.availability.provider.adapters.reservecalifornia
 
 import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaAvailabilityClient
-import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaException
 import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaGridAvailability
+import ca.floo.roadtrip.exceptions.ReserveCaliforniaException
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus

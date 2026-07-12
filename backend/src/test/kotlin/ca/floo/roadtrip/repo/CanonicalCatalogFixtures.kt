@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.fixtures.CatalogPoiFixture
 import org.jooq.DSLContext
 
 private const val FIXTURE_FETCHED_AT = "2026-06-01 00:00:00+00"

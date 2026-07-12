@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.etl.framework
+package ca.floo.roadtrip.exceptions
 
 class TargetBusyException(
     val target: String,

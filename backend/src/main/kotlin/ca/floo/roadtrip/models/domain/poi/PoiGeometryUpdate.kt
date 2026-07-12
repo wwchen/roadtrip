@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.repo
+package ca.floo.roadtrip.models.domain.poi
 
 internal data class PoiGeometryUpdate(
     val poiId: Long,

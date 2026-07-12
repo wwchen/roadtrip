@@ -1,6 +1,6 @@
-package ca.floo.roadtrip.clients.reserveamerica
+package ca.floo.roadtrip.exceptions
 
-class ReserveAmericaException(
+class ReserveCaliforniaException(
     message: String,
     val httpStatus: Int? = null,
 ) : RuntimeException(message)
