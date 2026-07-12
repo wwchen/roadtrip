@@ -55,11 +55,27 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
     }
 
     @Test
-    fun `preferredAvailabilityProvider returns the first provider ref on the campground row`() {
+    fun `preferredAvailabilityProvider returns normalized provider id for the first provider ref`() {
         val campground = seedDualVendorCampground()
         val support = supportFor()
 
         assertEquals("campflare", support.preferredAvailabilityProvider(campground.campgroundId))
+    }
+
+    @Test
+    fun `preferredAvailabilityProvider reports recgov for federal campgrounds catalog source`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "recgov-232447",
+                name = "Upper Pines",
+                lon = -119.56,
+                lat = 37.74,
+                source = "federal-campgrounds",
+                providerRefJson = """{"recgov_id":"232447"}""",
+            )
+        val support = supportFor()
+
+        assertEquals("recgov", support.preferredAvailabilityProvider(fixture.catalogId))
     }
 
     private fun supportFor(): CampgroundAvailabilitySupport =
