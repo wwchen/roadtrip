@@ -1,12 +1,20 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
-import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.models.routing.RouteResponse
+import ca.floo.roadtrip.repo.CampgroundRepo
+import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
+import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
+import ca.floo.roadtrip.service.api.PoiService
+import ca.floo.roadtrip.service.api.PoisOnRouteService
+import ca.floo.roadtrip.service.catalog.CampgroundService
+import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
+import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import io.ktor.client.request.get
@@ -27,20 +35,29 @@ import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import java.io.File as IoFile
 
 /**
  * POST /api/pois/on-route. Corridor-only endpoint behind the trip-planner
  * "campgrounds along route" card list. No viewport, no truncation, no
- * sampling — every POI inside the buffered corridor is returned, sorted
- * by along-route distance.
+ * sampling — every POI inside the buffered corridor is returned.
  */
 class PoisOnRouteRoutesTest : SharedDbTest() {
-    private val testRegistry: PoiRegistry by lazy {
-        PoiRegistry.load(IoFile("../config/poi-registry.yaml"))
-    }
-
     private fun routeCorridorService(): RouteCorridorService = RouteCorridorService(RouteCorridorRepo(ctx))
+
+    private fun poiService(): PoiService =
+        PoiService(
+            poiRepo = PoiServingRepo(ctx),
+            campgroundService = CampgroundService(CampgroundRepo(ctx)),
+            teslaSuperchargerService = TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
+            planetFitnessLocationService = PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
+        )
+
+    private fun poisOnRouteService(routeCache: RouteCache): PoisOnRouteService =
+        PoisOnRouteService(
+            routeCache = routeCache,
+            routeCorridorService = routeCorridorService(),
+            poiService = poiService(),
+        )
 
     @BeforeEach
     fun reset() {
@@ -49,10 +66,8 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     }
 
     @Test
-    fun `corridor returns inside features sorted by along-route km`() =
+    fun `corridor returns inside slim features`() =
         testApplication {
-            // Three points along a Vancouver → Seattle line. Seed in
-            // reverse-along-route order to confirm the response sort key.
             seed(
                 listOf(
                     row("south", -122.4, 47.7, "campground"),
@@ -61,7 +76,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                 ),
             )
             val routeCache = primedRoute()
-            application { routing { poisOnRouteRoutes(ctx, routeCache, testRegistry, routeCorridorService()) } }
+            application { routing { poisOnRouteRoutes(poisOnRouteService(routeCache)) } }
 
             val resp =
                 client.post("/api/pois/on-route") {
@@ -77,24 +92,9 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
             assertNull(parsed["truncated"])
             val features = parsed["features"]!!.jsonArray
             assertEquals(3, features.size)
-            // Sorted by route_km ascending — north (closer to start) first,
-            // south (closer to end) last.
-            val routeKms =
-                features.map {
-                    it.jsonObject["properties"]!!
-                        .jsonObject["route_km"]!!
-                        .jsonPrimitive.content
-                        .toDouble()
-                }
-            assertTrue(routeKms[0] < routeKms[1])
-            assertTrue(routeKms[1] < routeKms[2])
-            assertEquals(
-                "National Park Service",
-                features[0]
-                    .jsonObject["properties"]!!
-                    .jsonObject["agency"]!!
-                    .jsonPrimitive.content,
-            )
+            val properties = features.map { it.jsonObject["properties"]!!.jsonObject }
+            assertTrue(properties.any { it["agency"]?.jsonPrimitive?.content == "National Park Service" })
+            assertTrue(properties.all { "route_km" !in it })
         }
 
     @Test
@@ -107,7 +107,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                 ),
             )
             val routeCache = primedRoute()
-            application { routing { poisOnRouteRoutes(ctx, routeCache, testRegistry, routeCorridorService()) } }
+            application { routing { poisOnRouteRoutes(poisOnRouteService(routeCache)) } }
 
             val resp =
                 client.post("/api/pois/on-route") {
@@ -161,7 +161,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                 ),
             )
             val routeCache = primedRoute()
-            application { routing { poisOnRouteRoutes(ctx, routeCache, testRegistry, routeCorridorService()) } }
+            application { routing { poisOnRouteRoutes(poisOnRouteService(routeCache)) } }
 
             val resp =
                 client.post("/api/pois/on-route") {
@@ -234,7 +234,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
         testApplication {
             seed(listOf(row("far-east", -100.0, 40.0, "campground")))
             val routeCache = primedRoute()
-            application { routing { poisOnRouteRoutes(ctx, routeCache, testRegistry, routeCorridorService()) } }
+            application { routing { poisOnRouteRoutes(poisOnRouteService(routeCache)) } }
 
             val resp =
                 client.post("/api/pois/on-route") {
@@ -252,7 +252,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     @Test
     fun `radius below MIN returns 400`() =
         testApplication {
-            application { routing { poisOnRouteRoutes(ctx, primedRoute(), testRegistry, routeCorridorService()) } }
+            application { routing { poisOnRouteRoutes(poisOnRouteService(primedRoute())) } }
             val resp =
                 client.post("/api/pois/on-route") {
                     contentType(ContentType.Application.Json)
@@ -267,7 +267,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     @Test
     fun `radius above MAX returns 400`() =
         testApplication {
-            application { routing { poisOnRouteRoutes(ctx, primedRoute(), testRegistry, routeCorridorService()) } }
+            application { routing { poisOnRouteRoutes(poisOnRouteService(primedRoute())) } }
             val resp =
                 client.post("/api/pois/on-route") {
                     contentType(ContentType.Application.Json)
@@ -282,7 +282,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     @Test
     fun `single waypoint returns 400`() =
         testApplication {
-            application { routing { poisOnRouteRoutes(ctx, primedRoute(), testRegistry, routeCorridorService()) } }
+            application { routing { poisOnRouteRoutes(poisOnRouteService(primedRoute())) } }
             val resp =
                 client.post("/api/pois/on-route") {
                     contentType(ContentType.Application.Json)
@@ -298,12 +298,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
             // handler should surface 503.
             application {
                 routing {
-                    poisOnRouteRoutes(
-                        ctx,
-                        RouteCache(MapboxDirections(token = null)),
-                        testRegistry,
-                        routeCorridorService(),
-                    )
+                    poisOnRouteRoutes(poisOnRouteService(RouteCache(MapboxDirections(token = null))))
                 }
             }
             val resp =

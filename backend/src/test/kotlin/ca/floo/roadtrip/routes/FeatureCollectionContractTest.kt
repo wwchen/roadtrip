@@ -2,7 +2,6 @@ package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.models.domain.PoiDetailRow
 import ca.floo.roadtrip.models.domain.PoiRow
-import ca.floo.roadtrip.repo.OnRouteRow
 import ca.floo.roadtrip.service.api.encodePoiFeatureJson
 import ca.floo.roadtrip.service.api.poiDetailFeature
 import ca.floo.roadtrip.service.api.poiFeatureCollection
@@ -73,24 +72,23 @@ class FeatureCollectionContractTest {
     }
 
     @Test
-    fun `on-route feature collection carries route_km on each feature`() {
+    fun `on-route feature collection matches slim poi shape without truncation`() {
         val rows =
             listOf(
-                OnRouteRow(
+                PoiRow(
                     id = 7,
                     category = "campground",
                     subcategory = "federal",
                     agency = "National Park Service",
                     lng = -122.7,
                     lat = 48.4,
-                    routeKm = 95.5,
                 ),
             )
         val expected = (
             """{"type":"FeatureCollection","features":[""" +
                 """{"type":"Feature","id":7,""" +
                 """"geometry":{"type":"Point","coordinates":[-122.7,48.4]},""" +
-                """"properties":{"category":"campground","subcategory":"federal","agency":"National Park Service","route_km":95.5}}""" +
+                """"properties":{"category":"campground","subcategory":"federal","agency":"National Park Service"}}""" +
                 """]}"""
         )
         assertEquals(expected, encodeOnRouteJson(onRouteFeatureCollection(rows)))

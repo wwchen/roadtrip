@@ -8,16 +8,13 @@ import ca.floo.roadtrip.models.api.PoisOnRouteFeatureSchema
 import ca.floo.roadtrip.models.api.PoisOnRouteRequestSchema
 import ca.floo.roadtrip.models.api.PoisOnRouteResponseSchema
 import ca.floo.roadtrip.models.api.WaypointSchema
-import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
-import ca.floo.roadtrip.repo.OnRoutePoiRepo
-import ca.floo.roadtrip.repo.OnRouteRow
+import ca.floo.roadtrip.models.domain.PoiRow
+import ca.floo.roadtrip.service.api.OnRouteWaypoint
+import ca.floo.roadtrip.service.api.PoisOnRouteService
 import ca.floo.roadtrip.service.api.canonicalPoiCategories
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_CORRIDOR_RADIUS_MILES
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_WAYPOINTS
 import ca.floo.roadtrip.service.routing.MIN_ROUTE_CORRIDOR_RADIUS_MILES
-import ca.floo.roadtrip.service.routing.RouteCache
-import ca.floo.roadtrip.service.routing.RouteCorridorService
-import ca.floo.roadtrip.service.routing.lineStringGeoJson
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -32,8 +29,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import org.jooq.DSLContext
-import org.jooq.exception.DataAccessException
 import org.slf4j.LoggerFactory
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -45,29 +40,20 @@ private val onRouteJson =
     }
 
 private val onRouteLog = LoggerFactory.getLogger("PoisOnRouteRoutes")
-private val DEFAULT_ON_ROUTE_POI_TYPES = listOf("campground", "tesla_supercharger", "planet_fitness_location")
 
 // POST /api/pois/on-route
 //
 // Returns every POI inside the buffered route corridor — no viewport bound,
 // no per-category cap. Drives the trip planner's "campgrounds along route"
 // card list, which the user wants to scan end-to-end instead of pan-by-pan.
-internal fun Route.poisOnRouteRoutes(
-    ctx: DSLContext,
-    routeCache: RouteCache,
-    registry: PoiRegistry,
-    routeCorridorService: RouteCorridorService,
-) {
-    val defaultCategories: List<String> = DEFAULT_ON_ROUTE_POI_TYPES
-    val onRoutePoiRepo = OnRoutePoiRepo(ctx)
-
+internal fun Route.poisOnRouteRoutes(poisOnRouteService: PoisOnRouteService) {
     post("/api/pois/on-route", {
         tags = listOf("poi")
         summary = "Slim POIs inside a buffered route corridor (no viewport, no truncation)"
         description =
             "Body: { waypoints: [{lat,lng}…2..$MAX_ROUTE_WAYPOINTS], " +
             "radius_miles: ${MIN_ROUTE_CORRIDOR_RADIUS_MILES}..$MAX_ROUTE_CORRIDOR_RADIUS_MILES, categories? }. " +
-            "Returns a GeoJSON FeatureCollection ordered by route_km. " +
+            "Returns every matching POI as a slim GeoJSON FeatureCollection. " +
             "Backed by RouteCache; the FE typically primes it via /api/route just before this call."
         request {
             body<PoisOnRouteRequestSchema> {
@@ -88,7 +74,7 @@ internal fun Route.poisOnRouteRoutes(
         }
         response {
             code(HttpStatusCode.OK) {
-                description = "FeatureCollection of slim features (+ route_km), sorted by route_km."
+                description = "FeatureCollection of slim features inside the buffered route corridor."
                 body<PoisOnRouteResponseSchema> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.BadRequest) {
@@ -113,10 +99,13 @@ internal fun Route.poisOnRouteRoutes(
                 return@post
             }
 
-        val polylineCoords =
+        val rows =
             try {
-                val pairs = req.waypoints.map { it.lng to it.lat }
-                routeCache.directions(pairs).coordinates
+                poisOnRouteService.poisOnRoute(
+                    waypoints = req.waypoints,
+                    radiusMiles = req.radiusMiles,
+                    categories = req.categories,
+                )
             } catch (e: RoutingException) {
                 onRouteLog.warn("on-route lookup failed: {}", e.message)
                 call.respondOnRouteJson(
@@ -125,44 +114,15 @@ internal fun Route.poisOnRouteRoutes(
                 )
                 return@post
             }
-        val corridorLineGeoJson = lineStringGeoJson(polylineCoords)
-
-        val cats = req.categories ?: defaultCategories
-        val rows =
-            if (cats.isEmpty()) {
-                emptyList()
-            } else {
-                try {
-                    val corridorPolygonGeoJson =
-                        routeCorridorService.bufferedPolygonGeoJson(
-                            corridorLineGeoJson,
-                            req.radiusMiles,
-                        )
-                    onRoutePoiRepo.fetch(cats, corridorLineGeoJson, corridorPolygonGeoJson)
-                } catch (e: DataAccessException) {
-                    val cause = e.cause?.message.orEmpty()
-                    if (cause.contains("TopologyException")) {
-                        onRouteLog.warn("on-route GEOS topology fault, returning empty: {}", cause)
-                        emptyList()
-                    } else {
-                        throw e
-                    }
-                }
-            }
 
         call.respondOnRouteJson(onRouteFeatureCollection(rows))
     }
 }
 
 private data class OnRouteRequest(
-    val waypoints: List<Waypoint>,
+    val waypoints: List<OnRouteWaypoint>,
     val radiusMiles: Double,
     val categories: List<String>?,
-)
-
-private data class Waypoint(
-    val lat: Double,
-    val lng: Double,
 )
 
 @Serializable
@@ -198,12 +158,12 @@ private data class WaypointDto(
     val lat: Double? = null,
     val lng: Double? = null,
 ) {
-    fun validated(index: Int): Waypoint {
+    fun validated(index: Int): OnRouteWaypoint {
         val parsedLat = lat ?: error("waypoint[$index].lat is missing or not a number")
         val parsedLng = lng ?: error("waypoint[$index].lng is missing or not a number")
         require(parsedLat in -90.0..90.0) { "waypoint[$index].lat out of range" }
         require(parsedLng in -180.0..180.0) { "waypoint[$index].lng out of range" }
-        return Waypoint(lat = parsedLat, lng = parsedLng)
+        return OnRouteWaypoint(lat = parsedLat, lng = parsedLng)
     }
 }
 
@@ -211,13 +171,13 @@ private fun parseOnRouteRequest(bodyText: String): OnRouteRequest = onRouteJson.
 
 /**
  * On-route FeatureCollection. Same per-feature shape as the bbox endpoint
- * (id + Point + category[+subcategory]) plus a `route_km` property so the
- * FE can sort or label without re-projecting on the client.
+ * (id + Point + category[+subcategory]), but without bbox-only metadata
+ * such as `truncated`.
  */
-internal fun onRouteFeatureCollection(rows: List<OnRouteRow>): PoisOnRouteResponseSchema =
+internal fun onRouteFeatureCollection(rows: List<PoiRow>): PoisOnRouteResponseSchema =
     PoisOnRouteResponseSchema(features = rows.map(::onRouteFeature))
 
-private fun onRouteFeature(row: OnRouteRow): PoisOnRouteFeatureSchema =
+private fun onRouteFeature(row: PoiRow): PoisOnRouteFeatureSchema =
     PoisOnRouteFeatureSchema(
         id = row.id,
         geometry = PointGeometrySchema(coordinates = listOf(row.lng, row.lat)),
@@ -226,7 +186,6 @@ private fun onRouteFeature(row: OnRouteRow): PoisOnRouteFeatureSchema =
                 category = row.category,
                 subcategory = row.subcategory,
                 agency = row.agency,
-                routeKm = row.routeKm,
             ),
     )
 

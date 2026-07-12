@@ -17,6 +17,7 @@ import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.routes.slackInteractivityRoute
 import ca.floo.roadtrip.service.api.PoiService
+import ca.floo.roadtrip.service.api.PoisOnRouteService
 import ca.floo.roadtrip.service.availability.PoiAvailabilitySupport
 import ca.floo.roadtrip.service.catalog.CampgroundService
 import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
@@ -113,6 +114,12 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
             availabilityProvider = { row -> poiAvailabilitySupport.preferredAvailabilityProvider(row.id) },
         )
     val routeCorridorService = RouteCorridorService(RouteCorridorRepo(runtime.ctx))
+    val poisOnRouteService =
+        PoisOnRouteService(
+            routeCache = runtime.routeCache,
+            routeCorridorService = routeCorridorService,
+            poiService = poiService,
+        )
     routing {
         route("/api/docs") {
             swaggerUI("/api/docs/openapi.json")
@@ -142,7 +149,7 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
             slackInteractivityRoute(wiring.verifier, wiring.handler, runtime.schedulerScope)
         }
         availabilityDashboardRoutes(runtime.ctx)
-        poisOnRouteRoutes(runtime.ctx, runtime.routeCache, runtime.poiRegistry, routeCorridorService)
+        poisOnRouteRoutes(poisOnRouteService)
         routeRoutes(runtime.routeCache, routeCorridorService)
         geocodeRoutes(runtime.mapboxGeocoder)
         healthRoutes()

@@ -1,7 +1,6 @@
 package ca.floo.roadtrip
 
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
-import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
@@ -11,6 +10,7 @@ import ca.floo.roadtrip.routes.healthRoutes
 import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.service.api.PoiService
+import ca.floo.roadtrip.service.api.PoisOnRouteService
 import ca.floo.roadtrip.service.catalog.CampgroundService
 import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
@@ -34,7 +34,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
-import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -84,18 +83,20 @@ class OpenApiSmokeTest {
                     pathFilter = { _, path -> includeInRoadtripOpenApi(path) }
                 }
                 val ctx = DSL.using(SQLDialect.POSTGRES)
-                val registry = PoiRegistry.load(File("../config/poi-registry.yaml"))
+                val poiService = testPoiService(ctx)
+                val routeCorridorService = RouteCorridorService(RouteCorridorRepo(ctx))
                 routing {
                     route("/api/docs/openapi.json") { openApiSpec() }
                     ktorGet("/") { call.respondText("root") }
                     ktorGet("/web/{path...}") { call.respondText("static") }
                     healthRoutes()
-                    poiRoutes(testPoiService(ctx))
+                    poiRoutes(poiService)
                     poisOnRouteRoutes(
-                        ctx,
-                        RouteCache(MapboxDirections(token = null)),
-                        registry,
-                        RouteCorridorService(RouteCorridorRepo(ctx)),
+                        PoisOnRouteService(
+                            routeCache = RouteCache(MapboxDirections(token = null)),
+                            routeCorridorService = routeCorridorService,
+                            poiService = poiService,
+                        ),
                     )
                 }
             }

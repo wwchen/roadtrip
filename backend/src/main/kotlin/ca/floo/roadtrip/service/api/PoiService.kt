@@ -39,7 +39,7 @@ private const val CAMPGROUND_POI_TYPE = "campground"
 private const val TESLA_SUPERCHARGER_POI_TYPE = "tesla_supercharger"
 private const val PLANET_FITNESS_LOCATION_POI_TYPE = "planet_fitness_location"
 
-private val DEFAULT_POI_TYPES =
+internal val DEFAULT_POI_TYPES =
     listOf(
         CAMPGROUND_POI_TYPE,
         TESLA_SUPERCHARGER_POI_TYPE,
@@ -107,6 +107,18 @@ internal class PoiService(
                 limit = limit,
             )
         return poiFeatureCollection(result.rows, result.truncated)
+    }
+
+    fun poisWithinPolygon(
+        polygonGeoJson: String,
+        categories: List<String>?,
+    ): List<PoiRow> {
+        val requestedCategories = categories?.let(::canonicalPoiCategories) ?: defaultCategories
+        if (requestedCategories.isEmpty()) return emptyList()
+        return poiRepo.fetchPoisWithinPolygon(
+            polygonGeoJson = polygonGeoJson,
+            categories = requestedCategories,
+        )
     }
 
     fun poiDetail(id: Long): PoiDetailFeatureSchema? {
