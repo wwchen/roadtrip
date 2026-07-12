@@ -80,47 +80,6 @@ internal class CatalogVendorRefRepo(
     }
 }
 
-internal class PoiCatalogRepo(
-    private val ctx: DSLContext,
-) {
-    fun insertPoi(
-        poiType: String,
-        longitude: Double,
-        latitude: Double,
-    ): Long =
-        ctx
-            .fetchOne(
-                """
-                INSERT INTO pois (poi_type, geom)
-                VALUES (?, ST_SetSRID(ST_MakePoint(?, ?), 4326))
-                RETURNING id
-                """.trimIndent(),
-                poiType,
-                longitude,
-                latitude,
-            )!!
-            .get("id", Long::class.java)
-
-    fun updatePoiGeometry(
-        poiId: Long,
-        longitude: Double,
-        latitude: Double,
-    ) {
-        ctx.execute(
-            """
-            UPDATE pois
-            SET geom = ST_SetSRID(ST_MakePoint(?, ?), 4326),
-                updated_at = now(),
-                deleted_at = NULL
-            WHERE id = ?
-            """.trimIndent(),
-            longitude,
-            latitude,
-            poiId,
-        )
-    }
-}
-
 internal fun jsonObject(value: JsonElement?): String = value?.toString() ?: EMPTY_JSON_OBJECT
 
 internal fun jsonArray(value: JsonElement?): String = value?.toString() ?: EMPTY_JSON_ARRAY

@@ -9,10 +9,12 @@ import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
+import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.catalog.CampgroundService
 import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.catalog.TeslaSuperchargerService
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.BeforeEach
@@ -151,6 +153,47 @@ class PoiServiceTest : SharedDbTest() {
     }
 
     @Test
+    fun `detail provider ref follows campground provider candidate ordering`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "upper-pines-campflare",
+                name = "Upper Pines",
+                lon = -119.56,
+                lat = 37.74,
+                source = "campflare",
+                providerRefJson = """{"campflare_id":"upper-pines-campground-447"}""",
+            )
+        val siblingCampgroundId =
+            ctx.seedCampground(
+                name = "Upper Pines",
+                source = "recgov",
+                sourceId = "recgov-232447",
+                providerRefJson = """{"recgov_id":"232447"}""",
+            )
+        matchAndGroupCampgrounds(fixture.catalogId, siblingCampgroundId)
+        CanonicalViewRepo(ctx).refreshCanonicalViews()
+
+        val defaultRef =
+            Json
+                .parseToJsonElement(campgroundDetailRow(fixture.poiId).providerRefJson!!)
+                .jsonObject
+        assertEquals("upper-pines-campground-447", defaultRef["campflare_id"]!!.jsonPrimitive.content)
+
+        ctx.execute(
+            "UPDATE campgrounds SET preferred_availability_source = ? WHERE id = ?",
+            "recgov",
+            fixture.catalogId,
+        )
+        CanonicalViewRepo(ctx).refreshCanonicalViews()
+
+        val preferredRef =
+            Json
+                .parseToJsonElement(campgroundDetailRow(fixture.poiId).providerRefJson!!)
+                .jsonObject
+        assertEquals("232447", preferredRef["recgov_id"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun `low zoom default poi request suppresses campgrounds`() {
         ctx.seedCatalogPoi(sourceId = "cg-1", name = "Camp", lon = -123.0, lat = 49.0, poiType = "campground")
         ctx.seedCatalogPoi(sourceId = "tesla-1", name = "Tesla", lon = -123.05, lat = 49.05, poiType = "tesla_supercharger")
@@ -220,6 +263,23 @@ class PoiServiceTest : SharedDbTest() {
 
     private fun campgroundDetailRow(poiId: Long): PoiDetailRow =
         CampgroundService(CampgroundRepo(ctx)).poiDetail(PoiServingRepo(ctx).findById(poiId)!!)!!
+
+    private fun matchAndGroupCampgrounds(
+        aId: Long,
+        bId: Long,
+    ) {
+        val lo = minOf(aId, bId)
+        val hi = maxOf(aId, bId)
+        ctx.execute(
+            """
+            INSERT INTO campground_matches (campground_a_id, campground_b_id, heuristic)
+            VALUES (?, ?, '{"method":"manual","score":1.0}'::jsonb)
+            """.trimIndent(),
+            lo,
+            hi,
+        )
+        ctx.execute("UPDATE campgrounds SET match_group_id = ? WHERE id IN (?, ?)", lo, lo, hi)
+    }
 
     private companion object {
         const val SOURCE = "poi-serving-test"

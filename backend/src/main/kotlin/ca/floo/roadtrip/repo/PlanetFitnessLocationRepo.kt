@@ -19,7 +19,7 @@ class PlanetFitnessLocationRepo(
     private val ctx: DSLContext,
 ) {
     private val importRuns = ImportRunRepo(ctx)
-    private val pois = PoiCatalogRepo(ctx)
+    private val pois = PoiRepo(ctx)
 
     fun upsertPlanetFitnessLocations(
         records: List<PlanetFitnessLocationUpsertCandidate>,

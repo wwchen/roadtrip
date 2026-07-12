@@ -3,10 +3,12 @@ package ca.floo.roadtrip.routes
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.models.routing.RouteResponse
+import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.routing.RouteCache
+import ca.floo.roadtrip.service.routing.RouteCorridorService
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -38,6 +40,8 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
         PoiRegistry.load(IoFile("../config/poi-registry.yaml"))
     }
 
+    private fun routeCorridorService(): RouteCorridorService = RouteCorridorService(RouteCorridorRepo(ctx))
+
     @BeforeEach
     fun reset() {
         ctx.cleanCanonicalCatalogFixtures()
@@ -57,7 +61,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                 ),
             )
             val routeCache = primedRoute()
-            application { routing { poisOnRouteRoutes(ctx, routeCache, testRegistry) } }
+            application { routing { poisOnRouteRoutes(ctx, routeCache, testRegistry, routeCorridorService()) } }
 
             val resp =
                 client.post("/api/pois/on-route") {
@@ -103,7 +107,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                 ),
             )
             val routeCache = primedRoute()
-            application { routing { poisOnRouteRoutes(ctx, routeCache, testRegistry) } }
+            application { routing { poisOnRouteRoutes(ctx, routeCache, testRegistry, routeCorridorService()) } }
 
             val resp =
                 client.post("/api/pois/on-route") {
@@ -157,7 +161,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                 ),
             )
             val routeCache = primedRoute()
-            application { routing { poisOnRouteRoutes(ctx, routeCache, testRegistry) } }
+            application { routing { poisOnRouteRoutes(ctx, routeCache, testRegistry, routeCorridorService()) } }
 
             val resp =
                 client.post("/api/pois/on-route") {
@@ -183,7 +187,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     fun `route endpoint can include buffered corridor polygon`() =
         testApplication {
             val routeCache = primedRoute(token = "test-token")
-            application { routing { routeRoutes(routeCache, ctx) } }
+            application { routing { routeRoutes(routeCache, routeCorridorService()) } }
 
             val resp = client.get("/api/route?coords=-123.1,49.28%3B-122.33,47.61&radius_miles=5")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -212,7 +216,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     fun `route endpoint returns structured json error for bad quoted coords`() =
         testApplication {
             val routeCache = primedRoute(token = "test-token")
-            application { routing { routeRoutes(routeCache, ctx) } }
+            application { routing { routeRoutes(routeCache, routeCorridorService()) } }
 
             val resp = client.get("/api/route?coords=-123.1,49.28%3Bbad%22point")
 
@@ -230,7 +234,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
         testApplication {
             seed(listOf(row("far-east", -100.0, 40.0, "campground")))
             val routeCache = primedRoute()
-            application { routing { poisOnRouteRoutes(ctx, routeCache, testRegistry) } }
+            application { routing { poisOnRouteRoutes(ctx, routeCache, testRegistry, routeCorridorService()) } }
 
             val resp =
                 client.post("/api/pois/on-route") {
@@ -248,7 +252,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     @Test
     fun `radius below MIN returns 400`() =
         testApplication {
-            application { routing { poisOnRouteRoutes(ctx, primedRoute(), testRegistry) } }
+            application { routing { poisOnRouteRoutes(ctx, primedRoute(), testRegistry, routeCorridorService()) } }
             val resp =
                 client.post("/api/pois/on-route") {
                     contentType(ContentType.Application.Json)
@@ -263,7 +267,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     @Test
     fun `radius above MAX returns 400`() =
         testApplication {
-            application { routing { poisOnRouteRoutes(ctx, primedRoute(), testRegistry) } }
+            application { routing { poisOnRouteRoutes(ctx, primedRoute(), testRegistry, routeCorridorService()) } }
             val resp =
                 client.post("/api/pois/on-route") {
                     contentType(ContentType.Application.Json)
@@ -278,7 +282,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     @Test
     fun `single waypoint returns 400`() =
         testApplication {
-            application { routing { poisOnRouteRoutes(ctx, primedRoute(), testRegistry) } }
+            application { routing { poisOnRouteRoutes(ctx, primedRoute(), testRegistry, routeCorridorService()) } }
             val resp =
                 client.post("/api/pois/on-route") {
                     contentType(ContentType.Application.Json)
@@ -292,7 +296,16 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
         testApplication {
             // Empty route cache + null Mapbox token → directions() throws,
             // handler should surface 503.
-            application { routing { poisOnRouteRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+            application {
+                routing {
+                    poisOnRouteRoutes(
+                        ctx,
+                        RouteCache(MapboxDirections(token = null)),
+                        testRegistry,
+                        routeCorridorService(),
+                    )
+                }
+            }
             val resp =
                 client.post("/api/pois/on-route") {
                     contentType(ContentType.Application.Json)
