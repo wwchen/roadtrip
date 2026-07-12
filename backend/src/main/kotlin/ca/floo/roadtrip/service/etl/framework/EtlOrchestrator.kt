@@ -12,7 +12,6 @@ import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampsiteParentJoiner
-import ca.floo.roadtrip.service.etl.vendors.recgov.RecgovCampsiteParentJoiner
 import ca.floo.roadtrip.service.etl.vendors.reserveamerica.ReserveAmericaCampsiteParentJoiner
 import ca.floo.roadtrip.service.etl.vendors.reservecalifornia.ReserveCaliforniaCampsiteParentJoiner
 import kotlinx.serialization.json.Json
@@ -484,7 +483,6 @@ open class EtlOrchestrator(
         // campsite-parent joiner repo; runJoiner owns sequencing and retry.
         val joinerRegistry: Map<String, CampsiteParentJoiner> =
             listOf(
-                RecgovCampsiteParentJoiner(),
                 AspiraCampsiteParentJoiner(),
                 ReserveAmericaCampsiteParentJoiner(),
                 ReserveCaliforniaCampsiteParentJoiner(),

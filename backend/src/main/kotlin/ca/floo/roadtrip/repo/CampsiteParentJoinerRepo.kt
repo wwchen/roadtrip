@@ -15,17 +15,6 @@ import org.jooq.impl.DSL
 class CampsiteParentJoinerRepo(
     private val ctx: DSLContext,
 ) {
-    fun discoverRecgovLinks(): List<CampsiteParentLink> =
-        ctx
-            .fetch(
-                REC_GOV_LINKS_SQL,
-                RECGOV_VENDOR,
-                RECGOV_PARENT_CAMPGROUND_VENDOR,
-                RECGOV_PARENT_CAMPGROUND_REF_PREFIX,
-                RECGOV_PARENT_FACILITY_KEY,
-                RECGOV_PARENT_FACILITY_KEY,
-            ).map(::parentLink)
-
     fun discoverAspiraLinks(): List<CampsiteParentLink> =
         ctx
             .fetch(
@@ -98,11 +87,6 @@ class CampsiteParentJoinerRepo(
         )
 
     private companion object {
-        private const val RECGOV_VENDOR = "recgov"
-        private const val RECGOV_PARENT_CAMPGROUND_VENDOR = "federal-campgrounds"
-        private const val RECGOV_PARENT_CAMPGROUND_REF_PREFIX = "recgov-"
-        private const val RECGOV_PARENT_FACILITY_KEY = "_parent_facility_id"
-
         private const val ASPIRA_POI_SOURCE_ID_PREFIX = "aspira-"
         private const val ASPIRA_TXN_LOC_KEY = "transactionLocationId"
         private const val ASPIRA_MAP_ID_KEY = "mapId"
@@ -131,39 +115,6 @@ class CampsiteParentJoinerRepo(
 
         private const val REPARENT_CAMPSITE_SQL =
             "UPDATE campsites SET campground_id = ? WHERE id = ? AND campground_id <> ?"
-
-        private val REC_GOV_LINKS_SQL =
-            """
-            SELECT c.id AS campsite_id, cg.id AS campground_id
-            FROM campsites c
-            JOIN campsite_vendor_refs cvr
-              ON cvr.campsite_id = c.id
-            JOIN vendor_refs site_ref
-              ON site_ref.id = cvr.vendor_ref_id
-            JOIN campground_vendor_refs cgvr
-              ON TRUE
-            JOIN vendor_refs campground_ref
-              ON campground_ref.id = cgvr.vendor_ref_id
-            JOIN campgrounds cg
-              ON cg.id = cgvr.campground_id
-            WHERE c.deleted_at IS NULL
-              AND cg.deleted_at IS NULL
-              AND site_ref.deleted_at IS NULL
-              AND campground_ref.deleted_at IS NULL
-              AND site_ref.entity_type = 'campsite'
-              AND c.data_source = site_ref.vendor
-              AND site_ref.vendor = ?
-              AND campground_ref.entity_type = 'campground'
-              AND cg.data_source = campground_ref.vendor
-              AND campground_ref.vendor = ?
-              AND campground_ref.external_id = concat(
-                ?,
-                COALESCE(
-                  jsonb_extract_path_text(c.source_payload, ?),
-                  jsonb_extract_path_text(site_ref.payload, ?)
-                )
-              )
-            """.trimIndent()
 
         private val ASPIRA_LINKS_SQL =
             """
