@@ -2,7 +2,6 @@ package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
-import ca.floo.roadtrip.models.api.CatalogMatchRunStats
 import ca.floo.roadtrip.models.metadata.ingest.Phase
 import ca.floo.roadtrip.models.metadata.ingest.Target
 import ca.floo.roadtrip.repo.SharedDbTest
@@ -263,22 +262,13 @@ class AdminIngestRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `POST catalog-match returns 200 with combined stats DTO`() =
+    fun `POST catalog-match is not registered`() =
         testApplication {
-            val expected = CatalogMatchRunStats(1, 2, 3, 4, 5, 6)
-            val fakeEtl = FakeEtlOrchestrator(ctx, expected)
-            val controller = controllerWith(emptyMap(), etl = fakeEtl)
+            val controller = controllerWith(emptyMap())
             application { routing { adminIngestRoutes(controller, ctx) } }
 
             val resp = client.post("/api/admin/etl/catalog-match")
-            assertEquals(HttpStatusCode.OK, resp.status)
-            val body =
-                Json.decodeFromString(
-                    CatalogMatchRunStats.serializer(),
-                    resp.bodyAsText(),
-                )
-            assertEquals(expected, body)
-            assertEquals(1, fakeEtl.callCount)
+            assertEquals(HttpStatusCode.NotFound, resp.status)
         }
 
     private fun controllerWith(
@@ -301,30 +291,6 @@ class AdminIngestRoutesTest : SharedDbTest() {
             ioDispatcher = Dispatchers.IO,
             processFactory = factory,
         )
-
-    /**
-     * EtlOrchestrator subclass whose runCatalogMatch returns a fixed stats
-     * object without touching the matcher / canonical views. Lets the route
-     * test assert wire-format + call routing without spinning up match SQL.
-     */
-    private class FakeEtlOrchestrator(
-        ctx: org.jooq.DSLContext,
-        private val stats: CatalogMatchRunStats,
-    ) : EtlOrchestrator(
-            ctx = ctx,
-            rawDir = File("/tmp"),
-            poiRegistry =
-                ca.floo.roadtrip.models.metadata.registry
-                    .PoiRegistry(emptyList(), emptyList()),
-        ) {
-        var callCount: Int = 0
-            private set
-
-        override fun runCatalogMatch(): CatalogMatchRunStats {
-            callCount += 1
-            return stats
-        }
-    }
 
     private object NoProcessFactory : ProcessFactory {
         override fun start(

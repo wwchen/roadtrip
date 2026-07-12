@@ -145,8 +145,7 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals("https://www.recreation.gov/camping/campgrounds/232869", feature.properties.reserveUrl)
         val publicRef = feature.properties.providerRef!!.jsonObject
         assertEquals("232869", publicRef["recgov_id"]!!.jsonPrimitive.content)
-        // Ungrouped seed row (match_group_id NULL) is its own group; canonical
-        // view returns a single-element member_sources equal to data_source.
+        // The singleton canonical view returns one member source equal to data_source.
         assertEquals(listOf("federal-campgrounds"), feature.properties.sources)
     }
 

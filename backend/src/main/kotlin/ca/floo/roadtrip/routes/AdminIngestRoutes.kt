@@ -1,7 +1,5 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.models.api.CatalogMatchRunStats
-import ca.floo.roadtrip.models.api.EXAMPLE_CATALOG_MATCH_RUN
 import ca.floo.roadtrip.models.api.EXAMPLE_ERR_NOT_FOUND
 import ca.floo.roadtrip.models.api.EXAMPLE_ERR_NOT_FOUND_BAD_ID
 import ca.floo.roadtrip.models.api.EXAMPLE_ERR_TARGET_BUSY
@@ -283,31 +281,7 @@ fun Route.adminIngestRoutes(
             call.respondAdminJson(statusByTarget(readRepo, controller.knownTargets()))
         }
     }
-
-    // Catalog-match stage lives under a distinct /api/admin/etl prefix
-    // because it isn't a per-target run — it's the cross-vendor identity
-    // stage that follows any campsite-data run. Kept in the same file so
-    // one auth boundary (the /api/admin/* Cloudflare rule) covers both.
-    post(CATALOG_MATCH_ADMIN_PATH, {
-        tags = listOf("admin")
-        summary = "Run the catalog-match stage (matcher + canonical refresh + representative re-point)"
-        response {
-            code(HttpStatusCode.OK) {
-                description = "Match + refresh + re-point completed; body carries combined stats"
-                body<CatalogMatchRunStats> {
-                    mediaTypes(ContentType.Application.Json)
-                    example("stats") { value = EXAMPLE_CATALOG_MATCH_RUN }
-                }
-            }
-        }
-    }) {
-        val stats = controller.etl.runCatalogMatch()
-        call.respondAdminJson(stats)
-    }
 }
-
-/** Admin path for the manual catalog-match trigger. */
-const val CATALOG_MATCH_ADMIN_PATH = "/api/admin/etl/catalog-match"
 
 private suspend fun io.ktor.server.routing.RoutingContext.runOne(
     controller: IngestController,
@@ -321,7 +295,7 @@ private suspend fun io.ktor.server.routing.RoutingContext.runOne(
             }
         if (kind == RunKind.IMPORT && outcome.status == "completed") {
             withContext(NonCancellable) {
-                controller.etl.refreshCanonicalAndRepoint()
+                controller.etl.refreshCanonicalViews()
             }
         }
         val status =
@@ -390,8 +364,8 @@ private suspend fun io.ktor.server.routing.RoutingContext.runAll(
                 }
             }
             if (kind == RunKind.IMPORT && outcomes.any { it.status == "completed" }) {
-                log.info("fan-out: refreshing canonical views and repointing representatives")
-                controller.etl.refreshCanonicalAndRepoint()
+                log.info("fan-out: refreshing canonical views")
+                controller.etl.refreshCanonicalViews()
             }
             val totalElapsed = (System.currentTimeMillis() - started) / 1000.0
             log.info(

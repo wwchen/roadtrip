@@ -484,7 +484,6 @@ class CampsiteRepo(
             updatedAt = record.instant("updated_at"),
             deletedAt = record.nullableInstant("deleted_at"),
             dataSource = record.get("data_source", String::class.java),
-            matchGroupId = record.get("match_group_id", Long::class.java),
             primaryVendorRefId = record.get("primary_vendor_ref_id", Long::class.java),
         )
 
@@ -580,7 +579,6 @@ class CampsiteRepo(
               c.updated_at,
               c.deleted_at,
               c.data_source,
-              c.match_group_id,
               c.primary_vendor_ref_id
             FROM campsites c
             """.trimIndent()

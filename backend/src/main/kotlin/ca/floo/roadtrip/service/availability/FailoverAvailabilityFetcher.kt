@@ -20,11 +20,10 @@ import java.time.Instant
  * (via [ProviderCooldownTracker.recordSuccess] / [ProviderCooldownTracker.recordFailure])
  * so callers don't have to remember to.
  *
- * Sibling identity translation is delegated: the caller supplies
- * `translateRefs`, which for the preferred candidate returns the resolver's
- * pre-computed refs and for a sibling looks up the vendor's own refs across
- * the match group while keeping `campsiteId` = representative id (so
- * observations always land on the representative campsite row).
+ * Ref translation is delegated: the caller supplies `translateRefs`, which
+ * returns the provider-specific campsite refs for the candidate being tried.
+ * This keeps observations anchored to the catalog campsite ids chosen by the
+ * resolver.
  */
 internal open class FailoverAvailabilityFetcher(
     private val cooldowns: ProviderCooldownTracker,

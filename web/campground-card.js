@@ -504,9 +504,8 @@ function firstText(...values) {
   return '';
 }
 
-// Render the `sources` array from /api/pois/{id} (canonical view's
-// member_sources) as a comma-separated string. Empty array (single-vendor
-// campground with no match_group_id) → '' so firstText falls back to p.source.
+// Render the `sources` array from /api/pois/{id} as a comma-separated string.
+// Empty array means firstText falls back to p.source.
 function sourcesLabel(sources) {
   if (!Array.isArray(sources)) return '';
   const cleaned = sources

@@ -193,8 +193,6 @@ class CampgroundRepo(
             updatedAt = record.instant("updated_at"),
             deletedAt = record.nullableInstant("deleted_at"),
             dataSource = record.get("data_source", String::class.java),
-            matchGroupId = record.get("match_group_id", Long::class.java),
-            preferredAvailabilitySource = record.get("preferred_availability_source", String::class.java),
             primaryVendorRefId = record.get("primary_vendor_ref_id", Long::class.java),
         )
 
@@ -527,8 +525,6 @@ class CampgroundRepo(
             cg.updated_at,
             cg.deleted_at,
             cg.data_source,
-            cg.match_group_id,
-            cg.preferred_availability_source,
             cg.primary_vendor_ref_id
             """.trimIndent()
 

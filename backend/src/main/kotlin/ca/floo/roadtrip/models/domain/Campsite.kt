@@ -37,6 +37,5 @@ data class Campsite(
     val updatedAt: Instant,
     val deletedAt: Instant?,
     val dataSource: String,
-    val matchGroupId: Long?,
     val primaryVendorRefId: Long,
 )

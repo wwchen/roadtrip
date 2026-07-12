@@ -365,7 +365,6 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             limiter = limiter,
             alertDispatcher = alertDispatcher,
             failoverFetcher = failoverFetcher,
-            campsiteProviderRepo = CampsiteProviderRepo(ctx),
             clock = testClock,
         )
     }

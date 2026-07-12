@@ -20,7 +20,6 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.CanonicalViewRepo
-import ca.floo.roadtrip.repo.CatalogMatchRepo
 import ca.floo.roadtrip.repo.DbConfig
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.dataSourceFor
@@ -43,7 +42,6 @@ import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistryFactory
-import ca.floo.roadtrip.service.catalog.CatalogMatcherService
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
@@ -148,11 +146,6 @@ internal fun createRoadtripBootContext(): RoadtripBootContext {
     val poiRegistry = PoiRegistry.load(File(staticDir, "config/poi-registry.yaml"))
 
     sweepStaleIngestRuns(ctx)
-    val catalogMatcher =
-        CatalogMatcherService(
-            matches = CatalogMatchRepo(ctx),
-            config = CatalogMatcherService.MatcherConfig.fromEnv(),
-        )
     val canonicalViews = CanonicalViewRepo(ctx)
     val ingestController =
         IngestController(
@@ -162,7 +155,6 @@ internal fun createRoadtripBootContext(): RoadtripBootContext {
                     ctx = ctx,
                     rawDir = File(staticDir, "data/raw"),
                     poiRegistry = poiRegistry,
-                    matcher = catalogMatcher,
                     canonicalViews = canonicalViews,
                 ),
             fetchTargets = fetchTargetsFromRegistry(poiRegistry, staticDir),
@@ -297,7 +289,6 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                 limiter = VendorRateLimiter(VendorRateLimitConfig.fromEnv(), boot.dataSource),
                 alertDispatcher = watchAlertDispatcher,
                 failoverFetcher = sharedFailoverFetcher,
-                campsiteProviderRepo = campsiteProviders,
             )::handle,
         name = "availability",
     ).start(schedulerScope)
