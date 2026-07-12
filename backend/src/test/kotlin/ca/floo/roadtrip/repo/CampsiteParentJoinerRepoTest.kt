@@ -1,6 +1,10 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.models.domain.CampsiteParentLink
+import ca.floo.roadtrip.service.etl.framework.JoinerCtx
+import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampsiteParentJoiner
+import ca.floo.roadtrip.service.etl.vendors.reserveamerica.ReserveAmericaCampsiteParentJoiner
+import ca.floo.roadtrip.service.etl.vendors.reservecalifornia.ReserveCaliforniaCampsiteParentJoiner
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -37,7 +41,7 @@ class CampsiteParentJoinerRepoTest : SharedDbTest() {
                 refresh = false,
             )
 
-        val links = CampsiteParentJoinerRepo(ctx).discoverReserveCaliforniaLinks()
+        val links = ReserveCaliforniaCampsiteParentJoiner().discoverLinks(joinerCtx())
 
         assertEquals(
             setOf(CampsiteParentLink(campsiteId = campsiteId, campgroundId = targetCampgroundId)),
@@ -73,7 +77,43 @@ class CampsiteParentJoinerRepoTest : SharedDbTest() {
                 refresh = false,
             )
 
-        val links = CampsiteParentJoinerRepo(ctx).discoverAspiraLinks()
+        val links = AspiraCampsiteParentJoiner().discoverLinks(joinerCtx())
+
+        assertEquals(
+            setOf(CampsiteParentLink(campsiteId = campsiteId, campgroundId = targetCampgroundId)),
+            links.toSet(),
+        )
+    }
+
+    @Test
+    fun `aspira falls back to resource location when map parent ref does not match`() {
+        val oldCampgroundId =
+            ctx.seedCampground(
+                name = "Old Aspira Parent",
+                source = "aspira_bc",
+                sourceId = "old-parent",
+                refresh = false,
+            )
+        val targetCampgroundId =
+            ctx.seedCampground(
+                name = "BC Parks Parent Pin",
+                source = "aspira-bc-pins",
+                sourceId = "aspira-4189-parent-map",
+                providerRefJson =
+                    """{"transactionLocationId":4189,"mapId":"parent-map","resourceLocationId":-2147483408}""",
+                refresh = false,
+            )
+        val campsiteId =
+            ctx.seedCampsite(
+                campgroundId = oldCampgroundId,
+                vendor = "aspira_bc",
+                vendorId = "-2147483408",
+                providerRefJson =
+                    """{"transactionLocationId":4189,"mapId":-2147483361,"resourceLocationId":-2147483408}""",
+                refresh = false,
+            )
+
+        val links = AspiraCampsiteParentJoiner().discoverLinks(joinerCtx())
 
         assertEquals(
             setOf(CampsiteParentLink(campsiteId = campsiteId, campgroundId = targetCampgroundId)),
@@ -115,11 +155,13 @@ class CampsiteParentJoinerRepoTest : SharedDbTest() {
                 refresh = false,
             )
 
-        val links = CampsiteParentJoinerRepo(ctx).discoverReserveAmericaLinks()
+        val links = ReserveAmericaCampsiteParentJoiner().discoverLinks(joinerCtx())
 
         assertEquals(
             setOf(CampsiteParentLink(campsiteId = campsiteId, campgroundId = albertaCampgroundId)),
             links.toSet(),
         )
     }
+
+    private fun joinerCtx(): JoinerCtx = JoinerCtx(repo = CampsiteParentJoinerRepo(ctx))
 }

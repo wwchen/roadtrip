@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
+import ca.floo.roadtrip.models.domain.AspiraCampgroundParentCandidate
+import ca.floo.roadtrip.models.domain.AspiraCampsiteParentCandidate
 import ca.floo.roadtrip.models.domain.CampsiteParentLink
 import ca.floo.roadtrip.service.etl.framework.CampsiteParentJoiner
 import ca.floo.roadtrip.service.etl.framework.JoinerCtx
@@ -14,9 +16,91 @@ import ca.floo.roadtrip.service.etl.framework.JoinerCtx
 class AspiraCampsiteParentJoiner : CampsiteParentJoiner {
     override val adapter: String = ADAPTER_NAME
 
-    override fun discoverLinks(ctx: JoinerCtx): List<CampsiteParentLink> = ctx.repo.discoverAspiraLinks()
+    override fun discoverLinks(ctx: JoinerCtx): List<CampsiteParentLink> {
+        val campgrounds = ctx.repo.fetchAspiraCampgroundParentCandidates()
+        val campgroundsByExternalId =
+            campgrounds.groupBy { campground ->
+                AspiraExternalParentKey(
+                    vendor = campground.vendor,
+                    externalId = campground.externalId,
+                )
+            }
+        val campgroundsByResourceLocationId =
+            campgrounds
+                .filter { campground -> campground.resourceLocationId.isUseful() }
+                .groupBy { campground ->
+                    AspiraResourceLocationParentKey(
+                        vendor = campground.vendor,
+                        resourceLocationId = campground.resourceLocationId!!,
+                    )
+                }
+
+        val links = LinkedHashSet<CampsiteParentLink>()
+        for (site in ctx.repo.fetchAspiraCampsiteParentCandidates()) {
+            val parentVendor = parentVendorBySiteVendor[site.vendor] ?: continue
+            site.parentExternalId()?.let { parentExternalId ->
+                campgroundsByExternalId[AspiraExternalParentKey(parentVendor, parentExternalId)]
+                    .orEmpty()
+                    .addLinks(site, links)
+            }
+            site.parentResourceLocationId()?.let { parentResourceLocationId ->
+                campgroundsByResourceLocationId[
+                    AspiraResourceLocationParentKey(parentVendor, parentResourceLocationId),
+                ].orEmpty().addLinks(site, links)
+            }
+        }
+        return links.toList()
+    }
 
     private companion object {
         const val ADAPTER_NAME = "AspiraCampsiteParentJoiner"
+
+        private const val ASPIRA_PARENT_REF_PREFIX = "aspira-"
+        private const val ASPIRA_PARENT_REF_SEPARATOR = "-"
+        private const val ASPIRA_WA_VENDOR = "aspira_wa"
+        private const val ASPIRA_BC_VENDOR = "aspira_bc"
+        private const val ASPIRA_PC_VENDOR = "aspira_pc"
+        private const val ASPIRA_WA_CAMPGROUND_VENDOR = "aspira-wa-pins"
+        private const val ASPIRA_BC_CAMPGROUND_VENDOR = "aspira-bc-pins"
+        private const val ASPIRA_PC_CAMPGROUND_VENDOR = "aspira-pc-pins"
+
+        private val parentVendorBySiteVendor =
+            mapOf(
+                ASPIRA_WA_VENDOR to ASPIRA_WA_CAMPGROUND_VENDOR,
+                ASPIRA_BC_VENDOR to ASPIRA_BC_CAMPGROUND_VENDOR,
+                ASPIRA_PC_VENDOR to ASPIRA_PC_CAMPGROUND_VENDOR,
+            )
+
+        private fun AspiraCampsiteParentCandidate.parentExternalId(): String? {
+            val transactionLocationId = transactionLocationId.usefulOrNull() ?: return null
+            val mapId = mapId.usefulOrNull() ?: return null
+            return "$ASPIRA_PARENT_REF_PREFIX$transactionLocationId$ASPIRA_PARENT_REF_SEPARATOR$mapId"
+        }
+
+        private fun AspiraCampsiteParentCandidate.parentResourceLocationId(): String? =
+            vendorRefResourceLocationId.usefulOrNull() ?: sourceParentResourceLocationId.usefulOrNull()
+
+        private fun List<AspiraCampgroundParentCandidate>.addLinks(
+            site: AspiraCampsiteParentCandidate,
+            links: MutableSet<CampsiteParentLink>,
+        ) {
+            for (campground in this) {
+                links += CampsiteParentLink(campsiteId = site.campsiteId, campgroundId = campground.campgroundId)
+            }
+        }
+
+        private fun String?.isUseful(): Boolean = usefulOrNull() != null
+
+        private fun String?.usefulOrNull(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
     }
 }
+
+private data class AspiraExternalParentKey(
+    val vendor: String,
+    val externalId: String,
+)
+
+private data class AspiraResourceLocationParentKey(
+    val vendor: String,
+    val resourceLocationId: String,
+)
