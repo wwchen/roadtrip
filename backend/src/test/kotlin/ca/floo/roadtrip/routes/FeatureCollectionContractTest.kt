@@ -6,6 +6,10 @@ import ca.floo.roadtrip.service.api.encodePoiFeatureJson
 import ca.floo.roadtrip.service.api.poiDetailFeature
 import ca.floo.roadtrip.service.api.poiFeatureCollection
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -131,11 +135,12 @@ class FeatureCollectionContractTest {
             """{"type":"Feature","id":42,""" +
                 """"geometry":{"type":"Point","coordinates":[-115.547,51.1812]},""" +
                 """"properties":{"source":"uscampgrounds","source_id":"abc-123",""" +
-                """"sources":["uscampgrounds","recgov"],"availability_provider":"parks-canada",""" +
                 """"category":"campground","subcategory":"federal",""" +
                 """"agency":"Parks Canada",""" +
                 """"name":"Tunnel Mountain Village I",""" +
-                """"region":"AB","country":"CA","time_zone":"America/Edmonton",""" +
+                """"region":"AB","country":"CA",""" +
+                """"detail":{"type":"campground","sources":["uscampgrounds","recgov"],""" +
+                """"availability_provider":"parks-canada","time_zone":"America/Edmonton",""" +
                 """"earliest_date":"2026-06-21","unit_name":"Banff",""" +
                 """"reserve_url":"https://reservation.pc.gc.ca",""" +
                 """"booking_site":"reservation.pc.gc.ca",""" +
@@ -147,7 +152,7 @@ class FeatureCollectionContractTest {
                 """"label":"Park info on parks.canada.ca","kind":"info"},""" +
                 """"raw":{"category":"federal","amenities":["showers"],"activities":["hiking"],""" +
                 """"sites":42,"description":"Camp among redwoods.","photo_url":"https://example.test/photo.jpg",""" +
-                """"season":"May-Oct","near":"Banff"}}}"""
+                """"season":"May-Oct","near":"Banff"}}}}"""
         )
         val dateResolver = AvailabilityDateResolver(Clock.fixed(Instant.parse("2026-06-21T12:00:00Z"), ZoneOffset.UTC))
         assertEquals(
@@ -189,6 +194,7 @@ class FeatureCollectionContractTest {
         assert(!out.contains("\"availability_supported\""))
         assert(!out.contains("\"cta\""))
         assert(!out.contains("\"booking_system\""))
+        assert(out.contains(""""detail":{"type":"generic","raw":{}}"""))
     }
 
     @Test
@@ -214,8 +220,14 @@ class FeatureCollectionContractTest {
             )
 
         val out = encodePoiFeatureJson(poiDetailFeature(row))
+        val detail =
+            Json
+                .parseToJsonElement(out)
+                .jsonObject["properties"]!!
+                .jsonObject["detail"]!!
+                .jsonObject
 
-        assert(out.contains(""""availability_supported":true"""))
+        assertEquals(true, detail["availability_supported"]!!.jsonPrimitive.boolean)
     }
 
     @Test

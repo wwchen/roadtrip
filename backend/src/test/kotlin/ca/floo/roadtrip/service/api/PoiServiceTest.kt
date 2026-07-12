@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.api
 
+import ca.floo.roadtrip.models.api.CampgroundPoiDetailSchema
+import ca.floo.roadtrip.models.api.PoiDetailFeatureSchema
 import ca.floo.roadtrip.models.domain.Bbox
 import ca.floo.roadtrip.models.domain.PoiDetailRow
 import ca.floo.roadtrip.repo.CampgroundRepo
@@ -41,7 +43,7 @@ class PoiServiceTest : SharedDbTest() {
         val row = campgroundDetailRow(poiId)
 
         assertNotNull(feature)
-        val publicRef = feature.properties.providerRef!!.jsonObject
+        val publicRef = feature.campgroundDetail().providerRef!!.jsonObject
         assertEquals("-2147483026", publicRef["mapId"]!!.jsonPrimitive.content)
         assertEquals("-2147483647", publicRef["transactionLocationId"]!!.jsonPrimitive.content)
         assertEquals("-2147483640", publicRef["resourceLocationId"]!!.jsonPrimitive.content)
@@ -95,7 +97,7 @@ class PoiServiceTest : SharedDbTest() {
         val feature = poiService().poiDetail(fixture.poiId)
 
         assertNotNull(feature)
-        assertEquals(link, feature.properties.infoUrl)
+        assertEquals(link, feature.campgroundDetail().infoUrl)
     }
 
     @Test
@@ -143,11 +145,12 @@ class PoiServiceTest : SharedDbTest() {
         assertNotNull(feature)
         assertEquals("federal-campgrounds", feature.properties.source)
         assertEquals("recgov-232869", feature.properties.sourceId)
-        assertEquals("https://www.recreation.gov/camping/campgrounds/232869", feature.properties.reserveUrl)
-        val publicRef = feature.properties.providerRef!!.jsonObject
+        val detail = feature.campgroundDetail()
+        assertEquals("https://www.recreation.gov/camping/campgrounds/232869", detail.reserveUrl)
+        val publicRef = detail.providerRef!!.jsonObject
         assertEquals("232869", publicRef["recgov_id"]!!.jsonPrimitive.content)
         // The singleton canonical view returns one member source equal to data_source.
-        assertEquals(listOf("federal-campgrounds"), feature.properties.sources)
+        assertEquals(listOf("federal-campgrounds"), detail.sources)
     }
 
     @Test
@@ -254,6 +257,8 @@ class PoiServiceTest : SharedDbTest() {
 
     private fun campgroundDetailRow(poiId: Long): PoiDetailRow =
         CampgroundService(CampgroundRepo(ctx)).poiDetail(PoiServingRepo(ctx).findById(poiId)!!)!!
+
+    private fun PoiDetailFeatureSchema.campgroundDetail(): CampgroundPoiDetailSchema = properties.detail as CampgroundPoiDetailSchema
 
     private companion object {
         const val SOURCE = "poi-serving-test"

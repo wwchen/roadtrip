@@ -50,16 +50,24 @@ data class PoiDetailFeatureSchema(
 data class PoiDetailPropertiesSchema(
     val source: String,
     @SerialName("source_id") val sourceId: String,
-    // Vendors represented by this canonical row (currently one source per campground row).
-    // Empty for non-campground POIs.
-    val sources: List<String> = emptyList(),
-    @SerialName("availability_provider") val availabilityProvider: String? = null,
     val category: String,
     val subcategory: String? = null,
     val agency: String? = null,
     val name: String,
     val region: String? = null,
     val country: String? = null,
+    val detail: PoiCategoryDetailSchema,
+)
+
+@Serializable
+sealed interface PoiCategoryDetailSchema
+
+@Serializable
+@SerialName("campground")
+data class CampgroundPoiDetailSchema(
+    // Vendors represented by this canonical row (currently one source per campground row).
+    val sources: List<String> = emptyList(),
+    @SerialName("availability_provider") val availabilityProvider: String? = null,
     @SerialName("time_zone") val timeZone: String? = null,
     @SerialName("earliest_date") val earliestDate: String? = null,
     @SerialName("unit_name") val unitName: String? = null,
@@ -84,7 +92,35 @@ data class PoiDetailPropertiesSchema(
     // Used by the drawer footer; null when the pin has no known provider.
     @SerialName("booking_system") val bookingSystem: String? = null,
     val raw: JsonElement,
-)
+) : PoiCategoryDetailSchema
+
+@Serializable
+@SerialName("tesla_supercharger")
+data class TeslaSuperchargerPoiDetailSchema(
+    @SerialName("info_url") val infoUrl: String? = null,
+    val address: JsonElement? = null,
+    val raw: JsonElement,
+) : PoiCategoryDetailSchema
+
+@Serializable
+@SerialName("planet_fitness_location")
+data class PlanetFitnessLocationPoiDetailSchema(
+    val phone: String? = null,
+    @SerialName("info_url") val infoUrl: String? = null,
+    val address: JsonElement? = null,
+    val raw: JsonElement,
+) : PoiCategoryDetailSchema
+
+@Serializable
+@SerialName("generic")
+data class GenericPoiDetailSchema(
+    val phone: String? = null,
+    @SerialName("info_url") val infoUrl: String? = null,
+    val address: JsonElement? = null,
+    val description: String? = null,
+    @SerialName("photo_url") val photoUrl: String? = null,
+    val raw: JsonElement,
+) : PoiCategoryDetailSchema
 
 // "kind" tells the FE which visual treatment to use:
 //   - "reserve" — booking flow (rec.gov campground page, Aspira homepage, …)

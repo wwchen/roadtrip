@@ -1,5 +1,8 @@
 package ca.floo.roadtrip.service.api
 
+import ca.floo.roadtrip.models.api.CampgroundPoiDetailSchema
+import ca.floo.roadtrip.models.api.GenericPoiDetailSchema
+import ca.floo.roadtrip.models.api.PlanetFitnessLocationPoiDetailSchema
 import ca.floo.roadtrip.models.api.PoiDetailFeatureSchema
 import ca.floo.roadtrip.models.api.PoiDetailPropertiesSchema
 import ca.floo.roadtrip.models.api.PoiFeatureCollectionSchema
@@ -8,6 +11,7 @@ import ca.floo.roadtrip.models.api.PoiSearchResponseSchema
 import ca.floo.roadtrip.models.api.PointGeometrySchema
 import ca.floo.roadtrip.models.api.SlimPoiFeatureSchema
 import ca.floo.roadtrip.models.api.SlimPoiPropertiesSchema
+import ca.floo.roadtrip.models.api.TeslaSuperchargerPoiDetailSchema
 import ca.floo.roadtrip.models.domain.Bbox
 import ca.floo.roadtrip.models.domain.PoiDetailRow
 import ca.floo.roadtrip.models.domain.PoiRow
@@ -197,6 +201,9 @@ internal fun poiDetailFeature(
         } else {
             null
         }
+    val address = r.addressJson?.let { Json.parseToJsonElement(it) }
+    val description = rawObject.stringProperty("description")
+    val photoUrl = rawObject.stringProperty("photo_url")
     return PoiDetailFeatureSchema(
         id = r.id,
         geometry = Json.parseToJsonElement(r.geomJson),
@@ -204,29 +211,57 @@ internal fun poiDetailFeature(
             PoiDetailPropertiesSchema(
                 source = r.source,
                 sourceId = r.sourceId,
-                sources = r.memberSources,
-                availabilityProvider = availabilityProvider,
                 category = r.category,
                 subcategory = r.subcategory,
                 agency = r.agency,
                 name = r.name,
                 region = r.region,
                 country = r.country,
-                timeZone = dateContext?.timeZone?.id,
-                earliestDate = dateContext?.earliestDate?.toString(),
-                unitName = r.unitName,
-                reserveUrl = r.reserveUrl,
-                bookingSite = r.reserveUrl?.let(UrlHosts::extract),
-                phone = r.phone,
-                infoUrl = r.infoUrl,
-                address = r.addressJson?.let { Json.parseToJsonElement(it) },
-                description = rawObject.stringProperty("description"),
-                photoUrl = rawObject.stringProperty("photo_url"),
-                providerRef = r.providerRefJson?.let { Json.parseToJsonElement(it) },
-                availabilitySupported = availabilitySupported.takeIf { it },
-                cta = PoiCta.Default.computeCta(r),
-                bookingSystem = PoiCta.Default.bookingSystem(r),
-                raw = raw,
+                detail =
+                    when (r.category) {
+                        CAMPGROUND_POI_TYPE ->
+                            CampgroundPoiDetailSchema(
+                                sources = r.memberSources,
+                                availabilityProvider = availabilityProvider,
+                                timeZone = dateContext?.timeZone?.id,
+                                earliestDate = dateContext?.earliestDate?.toString(),
+                                unitName = r.unitName,
+                                reserveUrl = r.reserveUrl,
+                                bookingSite = r.reserveUrl?.let(UrlHosts::extract),
+                                phone = r.phone,
+                                infoUrl = r.infoUrl,
+                                address = address,
+                                description = description,
+                                photoUrl = photoUrl,
+                                providerRef = r.providerRefJson?.let { Json.parseToJsonElement(it) },
+                                availabilitySupported = availabilitySupported.takeIf { it },
+                                cta = PoiCta.Default.computeCta(r),
+                                bookingSystem = PoiCta.Default.bookingSystem(r),
+                                raw = raw,
+                            )
+                        TESLA_SUPERCHARGER_POI_TYPE ->
+                            TeslaSuperchargerPoiDetailSchema(
+                                infoUrl = r.infoUrl,
+                                address = address,
+                                raw = raw,
+                            )
+                        PLANET_FITNESS_LOCATION_POI_TYPE ->
+                            PlanetFitnessLocationPoiDetailSchema(
+                                phone = r.phone,
+                                infoUrl = r.infoUrl,
+                                address = address,
+                                raw = raw,
+                            )
+                        else ->
+                            GenericPoiDetailSchema(
+                                phone = r.phone,
+                                infoUrl = r.infoUrl,
+                                address = address,
+                                description = description,
+                                photoUrl = photoUrl,
+                                raw = raw,
+                            )
+                    },
             ),
     )
 }
