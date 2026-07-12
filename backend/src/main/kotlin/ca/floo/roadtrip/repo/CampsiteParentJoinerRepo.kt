@@ -151,8 +151,10 @@ class CampsiteParentJoinerRepo(
               AND site_ref.deleted_at IS NULL
               AND campground_ref.deleted_at IS NULL
               AND site_ref.entity_type = 'campsite'
+              AND c.data_source = site_ref.vendor
               AND site_ref.vendor = ?
               AND campground_ref.entity_type = 'campground'
+              AND cg.data_source = campground_ref.vendor
               AND campground_ref.vendor = ?
               AND campground_ref.external_id = concat(
                 ?,
@@ -182,7 +184,9 @@ class CampsiteParentJoinerRepo(
               AND site_ref.deleted_at IS NULL
               AND campground_ref.deleted_at IS NULL
               AND site_ref.entity_type = 'campsite'
+              AND c.data_source = site_ref.vendor
               AND campground_ref.entity_type = 'campground'
+              AND cg.data_source = campground_ref.vendor
               AND (
                 (site_ref.vendor = ? AND campground_ref.vendor = ?)
                 OR (site_ref.vendor = ? AND campground_ref.vendor = ?)
@@ -229,8 +233,10 @@ class CampsiteParentJoinerRepo(
               AND site_ref.deleted_at IS NULL
               AND campground_ref.deleted_at IS NULL
               AND site_ref.entity_type = 'campsite'
+              AND c.data_source = site_ref.vendor
               AND site_ref.vendor LIKE ?
               AND campground_ref.entity_type = 'campground'
+              AND cg.data_source = campground_ref.vendor
               AND campground_ref.vendor IN (?, ?)
               AND COALESCE(
                 jsonb_extract_path_text(site_ref.payload, ?),
@@ -271,8 +277,10 @@ class CampsiteParentJoinerRepo(
               AND site_ref.deleted_at IS NULL
               AND campground_ref.deleted_at IS NULL
               AND site_ref.entity_type = 'campsite'
+              AND c.data_source = site_ref.vendor
               AND site_ref.vendor = ?
               AND campground_ref.entity_type = 'campground'
+              AND cg.data_source = campground_ref.vendor
               AND campground_ref.vendor = ?
               AND jsonb_extract_path_text(campground_ref.payload, ?) =
                 COALESCE(
