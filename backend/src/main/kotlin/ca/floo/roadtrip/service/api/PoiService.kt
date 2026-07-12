@@ -7,6 +7,7 @@ import ca.floo.roadtrip.models.api.PoiSearchResponseSchema
 import ca.floo.roadtrip.models.api.PointGeometrySchema
 import ca.floo.roadtrip.models.api.SlimPoiFeatureSchema
 import ca.floo.roadtrip.models.api.SlimPoiPropertiesSchema
+import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.domain.Bbox
 import ca.floo.roadtrip.models.domain.PoiRow
 import ca.floo.roadtrip.repo.PoiServingRepo
@@ -119,12 +120,13 @@ internal class PoiService(
         val poi = poiRepo.findById(id) ?: return null
         return when (poi.category) {
             CAMPGROUND_POI_TYPE ->
-                campgroundService.poiDetailFeature(
-                    poi = poi,
-                    dateContext = dateResolver.context(lat = poi.lat, lng = poi.lng),
-                    availabilitySupported = availabilitySupport(poi.id),
-                    availabilityProvider = availabilityProvider(poi.id),
-                )
+                campgroundService
+                    .poiDetailFeature(poi)
+                    ?.withCampgroundPoiContext(
+                        dateContext = dateResolver.context(lat = poi.lat, lng = poi.lng),
+                        availabilitySupported = availabilitySupport(poi.id),
+                        availabilityProvider = availabilityProvider(poi.id),
+                    )
             TESLA_SUPERCHARGER_POI_TYPE -> teslaSuperchargerService.poiDetailFeature(poi)
             PLANET_FITNESS_LOCATION_POI_TYPE -> planetFitnessLocationService.poiDetailFeature(poi)
             else -> null
@@ -174,6 +176,24 @@ internal fun poiFeatureCollection(
                         ),
                 )
             },
+    )
+
+private fun PoiDetailFeatureSchema.withCampgroundPoiContext(
+    dateContext: PoiDateContext,
+    availabilitySupported: Boolean,
+    availabilityProvider: String?,
+): PoiDetailFeatureSchema =
+    copy(
+        properties =
+            properties.copy(
+                detail =
+                    properties.detail.copy(
+                        timeZone = dateContext.timeZone.id,
+                        earliestDate = dateContext.earliestDate.toString(),
+                        availabilitySupported = availabilitySupported.takeIf { it },
+                        availabilityProvider = availabilityProvider,
+                    ),
+            ),
     )
 
 internal fun encodePoiFeatureJson(value: PoiFeatureCollectionSchema): String = poiFeatureJson.encodeToString(value)

@@ -3,7 +3,6 @@ package ca.floo.roadtrip.service.catalog
 import ca.floo.roadtrip.models.api.PoiCategoryDetailSchema
 import ca.floo.roadtrip.models.api.PoiDetailFeatureSchema
 import ca.floo.roadtrip.models.api.PoiDetailPropertiesSchema
-import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.domain.PoiIndexRow
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.service.api.CAMPGROUND_POI_TYPE
@@ -26,12 +25,7 @@ internal class CampgroundService(
     private val repo: CampgroundRepo,
     private val cta: PoiCta = PoiCta.Default,
 ) {
-    fun poiDetailFeature(
-        poi: PoiIndexRow,
-        dateContext: PoiDateContext,
-        availabilitySupported: Boolean,
-        availabilityProvider: String?,
-    ): PoiDetailFeatureSchema? {
+    fun poiDetailFeature(poi: PoiIndexRow): PoiDetailFeatureSchema? {
         val detail = repo.findPoiDetailByPoi(poi.id) ?: return null
         val campground = detail.campground
         val raw = Json.parseToJsonElement(detail.propertiesJson)
@@ -55,9 +49,6 @@ internal class CampgroundService(
                     detail =
                         PoiCategoryDetailSchema(
                             sources = detail.memberSources,
-                            availabilityProvider = availabilityProvider,
-                            timeZone = dateContext.timeZone.id,
-                            earliestDate = dateContext.earliestDate.toString(),
                             unitName = null,
                             reserveUrl = campground.reservationUrl,
                             bookingSite = campground.reservationUrl?.let(UrlHosts::extract),
@@ -67,7 +58,6 @@ internal class CampgroundService(
                             description = description,
                             photoUrl = photoUrl,
                             providerRef = detail.providerRefJson?.let { Json.parseToJsonElement(it) },
-                            availabilitySupported = availabilitySupported.takeIf { it },
                             cta =
                                 cta.computeCta(
                                     providerRefJson = detail.providerRefJson,
