@@ -77,7 +77,7 @@ service/availability/
 ├── CampsiteAvailabilityComposer.kt      # grouping, window policy, per-collection availability load
 ├── AvailabilityTargetResolver.kt        # campsite → ordered provider candidates + date context
 ├── AvailabilityDateResolver.kt          # target-local earliest date/window policy
-├── ProviderCandidate.kt                 # (provider, parentRef, catalogRef) one candidate in a match group
+├── ProviderCandidate.kt                 # (provider, parentRef, catalogRef) one availability candidate
 ├── FailoverAvailabilityFetcher.kt       # walks candidates on retryable failure; records per-attempt outcomes
 ├── ProviderCooldownTracker.kt           # in-process demote-on-failure for AvailabilityProviderId
 ├── TriggerActionHandler.kt              # fire-side registry (`slack_notify` today; unknown kinds inert)
@@ -95,23 +95,19 @@ to dispatch upstream. It is deliberately not the persisted `Campsite` table row.
 When code needs table fields, use `CampsiteRepo.findById` / query methods; when
 code needs to call a provider, use the explicit availability-target methods.
 
-## Multi-source resolution
+## Provider-ref resolution
 
-Since Part 2, each ETL writes its own per-vendor campground row; match tables
-+ `campground_canonical` group the vendor rows that describe the same
-real-world campground. Availability lookups now enumerate every vendor row
-in a match group instead of choosing one at write time.
+Each ETL writes its own per-vendor campground row. Availability lookups use
+the campground row linked to the POI and enumerate the provider refs attached
+to that row. Cross-vendor catalog matching is intentionally not part of the
+product model.
 
 **Candidate ordering** (`CampsiteProviderRepo.findProviderRefCandidates`
 SQL, single source of truth reused by the resolver and the API):
 
-1. Rows whose vendor matches `campgrounds.preferred_availability_source` (an
-   optional per-campground column).
-2. Rows whose provider ref payload is provider-shaped (existing
+1. Rows whose provider ref payload is provider-shaped (existing
    `providerRefShapeSql` — filters out placeholder refs).
-3. Winner-first: the `campground_canonical` view's chosen row, then
-   siblings in member-id order.
-4. Deterministic tie-break on `vendor_ref_id`.
+2. Deterministic tie-break on `vendor_ref_id`.
 
 `ResolvedAvailabilityTarget.candidates: List<ProviderCandidate>` carries the
 full ordered list. The batcher `GroupKey` still keys on the first (preferred)
@@ -129,12 +125,9 @@ the group fetch.
 - On any candidate returning OK, the fetcher clears that provider's
   cooldown and returns.
 
-**Sibling identity translation:** when a sibling vendor serves the fetch,
-its campsite refs come from that row's own `campsite_vendor_refs`, joined
-through `campsite_matches` / `campsite_canonical`. Observations are still
-recorded against **representative campsite ids** (the canonical winner),
-not the sibling's row, so downstream reads through `campsite_canonical`
-stay coherent.
+**Campsite ref translation:** when failover tries a later candidate, campsite
+refs come from each resolved row's own candidate list. Observations are
+recorded against the same catalog campsite ids requested by the caller.
 
 **Per-attempt fetch-call rows:** `AvailabilityPollExecutor` writes one row
 per attempt to `availability_fetch_call` (each row carries its own
@@ -146,10 +139,7 @@ walks show up in the Grafana call-trace panels without extra plumbing.
 
 **Preference wiring:** `GET /api/pois/{id}` reads its `availability_provider`
 field from `PoiAvailabilitySupport.preferredAvailabilityProvider(poiId)`,
-which returns the first candidate. So setting
-`campgrounds.preferred_availability_source = 'recgov'` on a dual-vendor
-campground flips both the API field and the failover walk order in one
-SQL update.
+which returns the first candidate using the ordering above.
 
 ## Alert seam
 
@@ -169,8 +159,8 @@ implementation (e.g. Campflare's alert API) would:
 `service/availability/alert/providers/<vendor>/` plus one registry entry.
 `AlertProviderRegistry.forWatch` v1 always returns the internal poller;
 when the alert provider becomes per-watch (based on the watch's target
-vendors, `preferred_availability_source`, and adapter capability), that
-dispatch rule lives on the registry — no other code changes.
+vendors and adapter capability), that dispatch rule lives on the registry —
+no other code changes.
 
 `AvailabilityProviderCapabilities.pollableForAlerts` (renamed from
 `supportsAlerts` in Part 3) is the poller-side capability — "can the

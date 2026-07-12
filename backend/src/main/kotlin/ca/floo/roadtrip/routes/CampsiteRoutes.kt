@@ -63,7 +63,6 @@ internal fun Route.campsiteRoutes(
                     dateResolver = dateResolver,
                     availability = AvailabilityRepo(ctx),
                     failoverFetcher = failoverFetcher,
-                    campsiteProviderRepo = providerRefs,
                 ),
             dateResolver = dateResolver,
         )

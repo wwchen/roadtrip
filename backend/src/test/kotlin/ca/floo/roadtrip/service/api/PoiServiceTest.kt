@@ -9,7 +9,6 @@ import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
-import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.catalog.CampgroundService
 import ca.floo.roadtrip.service.catalog.PlanetFitnessLocationService
@@ -147,13 +146,12 @@ class PoiServiceTest : SharedDbTest() {
         assertEquals("https://www.recreation.gov/camping/campgrounds/232869", feature.properties.reserveUrl)
         val publicRef = feature.properties.providerRef!!.jsonObject
         assertEquals("232869", publicRef["recgov_id"]!!.jsonPrimitive.content)
-        // Ungrouped seed row (match_group_id NULL) is its own group; canonical
-        // view returns a single-element member_sources equal to data_source.
+        // The singleton canonical view returns one member source equal to data_source.
         assertEquals(listOf("federal-campgrounds"), feature.properties.sources)
     }
 
     @Test
-    fun `detail provider ref follows campground provider candidate ordering`() {
+    fun `detail provider ref follows linked campground provider candidate ordering`() {
         val fixture =
             ctx.seedCatalogPoi(
                 sourceId = "upper-pines-campflare",
@@ -163,34 +161,27 @@ class PoiServiceTest : SharedDbTest() {
                 source = "campflare",
                 providerRefJson = """{"campflare_id":"upper-pines-campground-447"}""",
             )
-        val siblingCampgroundId =
-            ctx.seedCampground(
-                name = "Upper Pines",
-                source = "recgov",
-                sourceId = "recgov-232447",
-                providerRefJson = """{"recgov_id":"232447"}""",
-            )
-        matchAndGroupCampgrounds(fixture.catalogId, siblingCampgroundId)
-        CanonicalViewRepo(ctx).refreshCanonicalViews()
+        val recgovVendorRefId =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO vendor_refs (vendor, entity_type, external_id, payload)
+                    VALUES ('recgov', 'campground', 'recgov-232447', '{"recgov_id":"232447"}'::jsonb)
+                    RETURNING id
+                    """.trimIndent(),
+                )!!
+                .get("id", Long::class.java)
+        ctx.execute(
+            "INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id) VALUES (?, ?)",
+            fixture.catalogId,
+            recgovVendorRefId,
+        )
 
         val defaultRef =
             Json
                 .parseToJsonElement(campgroundDetailRow(fixture.poiId).providerRefJson!!)
                 .jsonObject
         assertEquals("upper-pines-campground-447", defaultRef["campflare_id"]!!.jsonPrimitive.content)
-
-        ctx.execute(
-            "UPDATE campgrounds SET preferred_availability_source = ? WHERE id = ?",
-            "recgov",
-            fixture.catalogId,
-        )
-        CanonicalViewRepo(ctx).refreshCanonicalViews()
-
-        val preferredRef =
-            Json
-                .parseToJsonElement(campgroundDetailRow(fixture.poiId).providerRefJson!!)
-                .jsonObject
-        assertEquals("232447", preferredRef["recgov_id"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -263,23 +254,6 @@ class PoiServiceTest : SharedDbTest() {
 
     private fun campgroundDetailRow(poiId: Long): PoiDetailRow =
         CampgroundService(CampgroundRepo(ctx)).poiDetail(PoiServingRepo(ctx).findById(poiId)!!)!!
-
-    private fun matchAndGroupCampgrounds(
-        aId: Long,
-        bId: Long,
-    ) {
-        val lo = minOf(aId, bId)
-        val hi = maxOf(aId, bId)
-        ctx.execute(
-            """
-            INSERT INTO campground_matches (campground_a_id, campground_b_id, heuristic)
-            VALUES (?, ?, '{"method":"manual","score":1.0}'::jsonb)
-            """.trimIndent(),
-            lo,
-            hi,
-        )
-        ctx.execute("UPDATE campgrounds SET match_group_id = ? WHERE id IN (?, ?)", lo, lo, hi)
-    }
 
     private companion object {
         const val SOURCE = "poi-serving-test"

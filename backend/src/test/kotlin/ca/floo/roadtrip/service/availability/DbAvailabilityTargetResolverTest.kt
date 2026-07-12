@@ -8,7 +8,6 @@ import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.CatalogPoiFixture
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
-import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
@@ -179,10 +178,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         }
 
     @Test
-    fun `findProviderRefCandidates enumerates every vendor ref in the campground match group`() {
-        // Winner (lower id, seeded first via the POI) is campflare; sibling is
-        // recgov. Both rows carry a provider-shaped payload, so shape ranking
-        // ties and match-group-winner-first is the decisive ordering.
+    fun `findProviderRefCandidates enumerates every vendor ref on the campground row`() {
         val fixture =
             ctx.seedCatalogPoi(
                 sourceId = "upper-pines-campflare",
@@ -192,57 +188,20 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 source = "campflare",
                 providerRefJson = """{"campflare_id":"upper-pines-campground-447"}""",
             )
-        val winnerCampgroundId = fixture.catalogId
-        val siblingCampgroundId =
-            ctx.seedCampground(
-                name = "Upper Pines",
-                source = "recgov",
-                sourceId = "recgov-232447",
-                providerRefJson = """{"recgov_id":"232447"}""",
-            )
-        matchAndGroupCampgrounds(winnerCampgroundId, siblingCampgroundId)
-        CanonicalViewRepo(ctx).refreshCanonicalViews()
+        linkCampgroundRef(
+            campgroundId = fixture.catalogId,
+            vendor = "recgov",
+            externalId = "recgov-232447",
+            payloadJson = """{"recgov_id":"232447"}""",
+        )
 
         val repo = CampsiteProviderRepo(ctx)
 
-        // No preferred_availability_source: winner-source first.
-        val withoutPreference = repo.findProviderRefCandidates(fixture.poiId)
+        val candidates = repo.findProviderRefCandidates(fixture.poiId)
         assertEquals(
             listOf("campflare", "recgov"),
-            withoutPreference.map { it.source },
+            candidates.map { it.source },
         )
-
-        // Flip preference to recgov: sibling-source floats to the top even
-        // though its member id is higher and it isn't the canonical winner.
-        ctx.execute(
-            "UPDATE campgrounds SET preferred_availability_source = ? WHERE id = ?",
-            "recgov",
-            winnerCampgroundId,
-        )
-        CanonicalViewRepo(ctx).refreshCanonicalViews()
-
-        val withPreference = repo.findProviderRefCandidates(fixture.poiId)
-        assertEquals(
-            listOf("recgov", "campflare"),
-            withPreference.map { it.source },
-        )
-    }
-
-    private fun matchAndGroupCampgrounds(
-        aId: Long,
-        bId: Long,
-    ) {
-        val lo = minOf(aId, bId)
-        val hi = maxOf(aId, bId)
-        ctx.execute(
-            """
-            INSERT INTO campground_matches (campground_a_id, campground_b_id, heuristic)
-            VALUES (?, ?, '{"method":"manual","score":1.0}'::jsonb)
-            """.trimIndent(),
-            lo,
-            hi,
-        )
-        ctx.execute("UPDATE campgrounds SET match_group_id = ? WHERE id IN (?, ?)", lo, lo, hi)
     }
 
     @Test
@@ -301,9 +260,9 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         }
 
     @Test
-    fun `resolve returns ordered candidate list for a dual-vendor grouped POI`() =
+    fun `resolve returns ordered candidate list for a dual-vendor POI`() =
         runBlocking {
-            val fixture = seedDualVendorGroupedPoi()
+            val fixture = seedDualVendorPoi()
             val campsiteId = seedDualVendorCampsite(fixture.catalogId)
 
             val campsitesRepo = CampsiteRepo(ctx)
@@ -333,7 +292,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
     @Test
     fun `resolve skips candidates whose provider cannot handle the ref`() =
         runBlocking {
-            val fixture = seedDualVendorGroupedPoi()
+            val fixture = seedDualVendorPoi()
             val campsiteId = seedDualVendorCampsite(fixture.catalogId)
 
             val campsitesRepo = CampsiteRepo(ctx)
@@ -390,8 +349,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals(null, target)
         }
 
-    /** Winner campflare POI + recgov sibling grouped under a shared match_group_id. */
-    private fun seedDualVendorGroupedPoi(): CatalogPoiFixture {
+    private fun seedDualVendorPoi(): CatalogPoiFixture {
         val fixture =
             ctx.seedCatalogPoi(
                 sourceId = "upper-pines-campflare",
@@ -401,14 +359,12 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 source = "campflare",
                 providerRefJson = """{"campflare_id":"upper-pines-campground-447"}""",
             )
-        val siblingCampgroundId =
-            ctx.seedCampground(
-                name = "Upper Pines",
-                source = "recgov",
-                sourceId = "recgov-232447",
-                providerRefJson = """{"recgov_id":"232447"}""",
-            )
-        matchAndGroupCampgrounds(fixture.catalogId, siblingCampgroundId)
+        linkCampgroundRef(
+            campgroundId = fixture.catalogId,
+            vendor = "recgov",
+            externalId = "recgov-232447",
+            payloadJson = """{"recgov_id":"232447"}""",
+        )
         CanonicalViewRepo(ctx).refreshCanonicalViews()
         return fixture
     }

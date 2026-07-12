@@ -8,7 +8,6 @@ import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
-import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
@@ -60,32 +59,26 @@ class PoiAvailabilitySupportTest : SharedDbTest() {
     }
 
     @Test
-    fun `preferredAvailabilityProvider follows preferred_availability_source when set`() {
-        val group = seedDualVendorGroupedPoi()
+    fun `preferredAvailabilityProvider returns the first provider ref on the campground row`() {
+        val poi = seedDualVendorPoi()
         val support = supportFor()
 
-        // No preference set: match-group winner (campflare) is the preferred candidate.
-        assertEquals("campflare", support.preferredAvailabilityProvider(group.poiId))
-
-        // Flip preference to recgov on the canonical winner and refresh — the
-        // resolver ordering now floats recgov to the top, so the API field
-        // flips with it.
-        ctx.execute(
-            "UPDATE campgrounds SET preferred_availability_source = ? WHERE id = ?",
-            "recgov",
-            group.winnerCampgroundId,
-        )
-        CanonicalViewRepo(ctx).refreshCanonicalViews()
-
-        assertEquals("recgov", support.preferredAvailabilityProvider(group.poiId))
+        assertEquals("campflare", support.preferredAvailabilityProvider(poi.poiId))
     }
 
     @Test
-    fun `preferredAvailabilityProvider falls back to winner source when no preference is set`() {
-        val group = seedDualVendorGroupedPoi()
+    fun `preferredAvailabilityProvider returns null for non-campground POIs`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "supercharger-no-provider",
+                name = "Supercharger",
+                lon = -119.56,
+                lat = 37.74,
+                poiType = "tesla_supercharger",
+            )
         val support = supportFor()
 
-        assertEquals("campflare", support.preferredAvailabilityProvider(group.poiId))
+        assertEquals(null, support.preferredAvailabilityProvider(fixture.poiId))
     }
 
     /** POI-independent support instance; the preferredAvailabilityProvider path
@@ -96,15 +89,11 @@ class PoiAvailabilitySupportTest : SharedDbTest() {
             availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
         )
 
-    private data class GroupedPoi(
+    private data class MultiRefPoi(
         val poiId: Long,
-        val winnerCampgroundId: Long,
     )
 
-    /** Winner campflare POI + recgov sibling grouped under a shared match_group_id.
-     *  Mirrors the fixture in DbAvailabilityTargetResolverTest so both tests
-     *  exercise the same ordering surface. */
-    private fun seedDualVendorGroupedPoi(): GroupedPoi {
+    private fun seedDualVendorPoi(): MultiRefPoi {
         val fixture =
             ctx.seedCatalogPoi(
                 sourceId = "upper-pines-preferred-provider",
@@ -114,28 +103,14 @@ class PoiAvailabilitySupportTest : SharedDbTest() {
                 source = "campflare",
                 providerRefJson = """{"campflare_id":"upper-pines-campground-447"}""",
             )
-        val siblingCampgroundId =
-            ctx.seedCampground(
-                name = "Upper Pines",
-                source = "recgov",
-                sourceId = "recgov-232447",
-                providerRefJson = """{"recgov_id":"232447"}""",
-            )
-        val lo = minOf(fixture.catalogId, siblingCampgroundId)
-        val hi = maxOf(fixture.catalogId, siblingCampgroundId)
-        ctx.execute(
-            """
-            INSERT INTO campground_matches (campground_a_id, campground_b_id, heuristic)
-            VALUES (?, ?, '{"method":"manual","score":1.0}'::jsonb)
-            """.trimIndent(),
-            lo,
-            hi,
+        linkCampgroundRef(
+            campgroundId = fixture.catalogId,
+            vendor = "recgov",
+            externalId = "recgov-232447",
+            payloadJson = """{"recgov_id":"232447"}""",
         )
-        ctx.execute("UPDATE campgrounds SET match_group_id = ? WHERE id IN (?, ?)", lo, lo, hi)
         CanonicalViewRepo(ctx).refreshCanonicalViews()
-        // Canonical winner = richest, tie-break lowest id. Both campgrounds are
-        // equally sparse here, so the seed-first (campflare, lower id) row wins.
-        return GroupedPoi(poiId = fixture.poiId, winnerCampgroundId = fixture.catalogId)
+        return MultiRefPoi(poiId = fixture.poiId)
     }
 
     private fun linkCampgroundRef(

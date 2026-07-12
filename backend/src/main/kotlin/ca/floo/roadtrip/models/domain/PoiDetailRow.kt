@@ -26,9 +26,7 @@ data class PoiDetailRow(
     val propertiesJson: String,
     val ctaProviderRefJson: String? = null,
     /**
-     * Vendors that contributed to this canonical row (from the
-     * campground_canonical materialized view's `member_sources` TEXT[]).
-     * Empty for non-campground POIs and for campgrounds not yet grouped.
+     * Vendors represented by this canonical row. Empty for non-campground POIs.
      */
     val memberSources: List<String> = emptyList(),
 )

@@ -71,14 +71,12 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "location",
                 "long_description",
                 "management",
-                "match_group_id",
                 "max_rv_length",
                 "max_trailer_length",
                 "medium_description",
                 "metadata",
                 "name",
                 "photos",
-                "preferred_availability_source",
                 "price",
                 "primary_vendor_ref_id",
                 "reservation_url",
@@ -113,7 +111,6 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "latitude",
                 "longitude",
                 "loop_name",
-                "match_group_id",
                 "max_cars",
                 "max_people",
                 "max_rv_length",
@@ -389,63 +386,35 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
     }
 
     @Test
-    fun `campground and campsite match tables exist with required columns`() {
-        assertEquals(
-            listOf(
-                "campground_a_id",
-                "campground_b_id",
-                "created_at",
-                "heuristic",
-                "id",
-                "updated_at",
-            ),
-            columnNames("campground_matches"),
-        )
-        assertEquals(
-            listOf(
-                "campsite_a_id",
-                "campsite_b_id",
-                "created_at",
-                "heuristic",
-                "id",
-                "updated_at",
-            ),
-            columnNames("campsite_matches"),
-        )
-
-        // Required constraints on both match tables: ordered pairs, jsonb-object
-        // heuristic, and a unique index on the ordered pair.
-        val matchConstraints =
+    fun `catalog match tables and columns are removed`() {
+        val matchTables =
             ctx
                 .fetch(
                     """
-                    SELECT table_name || '.' || constraint_name AS ref
-                    FROM information_schema.table_constraints
+                    SELECT table_name
+                    FROM information_schema.tables
                     WHERE table_schema = 'public'
                       AND table_name IN ('campground_matches', 'campsite_matches')
-                      AND constraint_name IN (
-                        'campground_matches_order_check',
-                        'campground_matches_heuristic_check',
-                        'campground_matches_pair_uidx',
-                        'campsite_matches_order_check',
-                        'campsite_matches_heuristic_check',
-                        'campsite_matches_pair_uidx'
+                    ORDER BY table_name
+                    """.trimIndent(),
+                ).map { it.get("table_name", String::class.java) }
+        val matchColumns =
+            ctx
+                .fetch(
+                    """
+                    SELECT table_name || '.' || column_name AS ref
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND (
+                        (table_name = 'campgrounds' AND column_name IN ('match_group_id', 'preferred_availability_source'))
+                        OR (table_name = 'campsites' AND column_name = 'match_group_id')
                       )
                     ORDER BY ref
                     """.trimIndent(),
                 ).map { it.get("ref", String::class.java) }
 
-        assertEquals(
-            listOf(
-                "campground_matches.campground_matches_heuristic_check",
-                "campground_matches.campground_matches_order_check",
-                "campground_matches.campground_matches_pair_uidx",
-                "campsite_matches.campsite_matches_heuristic_check",
-                "campsite_matches.campsite_matches_order_check",
-                "campsite_matches.campsite_matches_pair_uidx",
-            ),
-            matchConstraints,
-        )
+        assertEquals(emptyList<String>(), matchTables)
+        assertEquals(emptyList<String>(), matchColumns)
     }
 
     @Test

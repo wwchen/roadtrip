@@ -6,8 +6,8 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
  * Chooses the [AlertProvider] responsible for detecting openings on a given
  * watch. v1 ships one provider ([InternalPollerAlertProvider]) and always
  * dispatches to it; a later revision will pick per-watch based on the watch's
- * target vendors + `preferred_availability_source` + each adapter's
- * capability, and that dispatch rule moves into [forWatch] rather than into
+ * target vendors + each adapter's capability, and that dispatch rule moves
+ * into [forWatch] rather than into
  * [ca.floo.roadtrip.service.availability.AvailabilityWatchService].
  */
 internal class AlertProviderRegistry(
@@ -19,8 +19,8 @@ internal class AlertProviderRegistry(
 
     /**
      * v1: always the internal poller. When alert-provider selection becomes
-     * per-watch, the dispatch rule (target vendors + preferred source +
-     * adapter capability) lives here — callers never need to change.
+     * per-watch, the dispatch rule (target vendors + adapter capability) lives
+     * here — callers never need to change.
      */
     fun forWatch(watch: AvailabilityWatchRepo.Watch): AlertProvider = providers.first { it.id == INTERNAL_POLLER_ID }
 

@@ -7,7 +7,6 @@ import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
@@ -28,7 +27,6 @@ internal class CampsiteAvailabilityComposer(
     private val snapshotFreshnessTtl: (AvailabilityProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
     private val failoverFetcher: FailoverAvailabilityFetcher =
         FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromEnv()),
-    private val campsiteProviderRepo: CampsiteProviderRepo? = null,
 ) {
     private val availabilityLoader = AvailabilityLoader(availability)
 
@@ -101,11 +99,10 @@ internal class CampsiteAvailabilityComposer(
     }
 
     /**
-     * Runs the group's fetch through [failoverFetcher]: preferred candidate
-     * first (with the resolver-picked catalog refs), retryable failures fall
-     * through to sibling vendor candidates (looked up via
-     * [CampsiteProviderRepo.findCampsiteRefsForCandidate], which keeps the
-     * observations anchored to the representative campsite id).
+     * Runs the group's fetch through [failoverFetcher]. Preferred candidate
+     * refs come from the batcher key; alternate candidates are resolved from
+     * each row's own candidate list, so observations stay anchored to the
+     * requested campsite ids without any cross-row identity translation.
      */
     private suspend fun fetchWithFailover(
         rows: List<ResolvedAvailabilityTarget>,
@@ -113,7 +110,6 @@ internal class CampsiteAvailabilityComposer(
     ): ca.floo.roadtrip.models.availability.AvailabilityObservationBatch {
         val groupCandidates = rows.first().candidates
         val preferredRefs = rows.map { it.catalogRef }
-        val representativeIds = rows.map { it.campsite.id }
         val result =
             failoverFetcher.fetch(
                 candidates = groupCandidates,
@@ -123,32 +119,24 @@ internal class CampsiteAvailabilityComposer(
                     if (candidate === groupCandidates.first()) {
                         preferredRefs
                     } else {
-                        siblingRefsFor(candidate, representativeIds)
+                        catalogRefsFor(candidate, rows)
                     }
                 },
             )
         return result.batch ?: throw synthesizedError(result.attempts.lastOrNull())
     }
 
-    private fun siblingRefsFor(
+    private fun catalogRefsFor(
         candidate: ProviderCandidate,
-        representativeIds: List<Long>,
+        rows: List<ResolvedAvailabilityTarget>,
     ): List<CatalogCampsiteRef> {
-        val repo = campsiteProviderRepo ?: return emptyList()
-        val vendorSlug =
-            candidate.provider.id.name
-                .lowercase()
-        return repo
-            .findCampsiteRefsForCandidate(representativeIds, vendorSlug)
-            .map { row ->
-                // vendorId comes from the sibling row's external_id; the
-                // representative id keeps observations landing on the winner-side
-                // campsite row.
-                CatalogCampsiteRef(
-                    campsiteId = row.representativeCampsiteId,
-                    vendorId = row.externalId,
-                )
+        val refs =
+            rows.mapNotNull { row ->
+                row.candidates
+                    .firstOrNull { it.provider.id == candidate.provider.id && it.parentRef == candidate.parentRef }
+                    ?.catalogRef
             }
+        return refs.takeIf { it.size == rows.size } ?: emptyList()
     }
 
     private fun synthesizedError(last: FailoverAvailabilityFetcher.AttemptRecord?): AvailabilityProviderError {

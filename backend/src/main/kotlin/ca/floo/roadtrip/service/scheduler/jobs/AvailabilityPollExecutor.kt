@@ -6,7 +6,6 @@ import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
@@ -85,7 +84,6 @@ internal class AvailabilityPollExecutor(
     private val alertDispatcher: WatchAlertDispatcher,
     private val failoverFetcher: FailoverAvailabilityFetcher =
         FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromEnv()),
-    private val campsiteProviderRepo: CampsiteProviderRepo? = null,
     private val clock: Clock = Clock.systemUTC(),
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -323,17 +321,15 @@ internal class AvailabilityPollExecutor(
         }
     }
 
-    /** Delegates to [FailoverAvailabilityFetcher] for one batcher group,
-     *  translating sibling candidates via [CampsiteProviderRepo]. Group all
-     *  rows share the preferred `(provider, parentRef)` (that's the batcher
-     *  key), so the group's candidate list is any row's. */
+    /** Delegates to [FailoverAvailabilityFetcher] for one batcher group.
+     *  Group rows share the preferred `(provider, parentRef)` (the batcher key),
+     *  so the group's candidate list is any row's. */
     private suspend fun fetchWithFailover(
         rows: List<ResolvedAvailabilityTarget>,
         fetchWindow: ResolvedDateWindow,
     ): FailoverAvailabilityFetcher.FailoverResult {
         val groupCandidates = rows.first().candidates
         val preferredRefs = rows.map { it.catalogRef }
-        val representativeIds = rows.map { it.campsite.id }
         return failoverFetcher.fetch(
             candidates = groupCandidates,
             campsites = rows.map { it.campsite },
@@ -342,28 +338,23 @@ internal class AvailabilityPollExecutor(
                 if (candidate === groupCandidates.first()) {
                     preferredRefs
                 } else {
-                    siblingRefsFor(candidate, representativeIds)
+                    catalogRefsFor(candidate, rows)
                 }
             },
         )
     }
 
-    private fun siblingRefsFor(
+    private fun catalogRefsFor(
         candidate: ProviderCandidate,
-        representativeIds: List<Long>,
+        rows: List<ResolvedAvailabilityTarget>,
     ): List<CatalogCampsiteRef> {
-        val repo = campsiteProviderRepo ?: return emptyList()
-        val vendorSlug =
-            candidate.provider.id.name
-                .lowercase()
-        return repo
-            .findCampsiteRefsForCandidate(representativeIds, vendorSlug)
-            .map { row ->
-                CatalogCampsiteRef(
-                    campsiteId = row.representativeCampsiteId,
-                    vendorId = row.externalId,
-                )
+        val refs =
+            rows.mapNotNull { row ->
+                row.candidates
+                    .firstOrNull { it.provider.id == candidate.provider.id && it.parentRef == candidate.parentRef }
+                    ?.catalogRef
             }
+        return refs.takeIf { it.size == rows.size } ?: emptyList()
     }
 
     private fun synthesizedError(last: FailoverAvailabilityFetcher.AttemptRecord?): AvailabilityProviderError {
