@@ -65,7 +65,7 @@
           "refId": "A"
         }
       ],
-      "title": "POIs With Campsites Map",
+      "title": "Campgrounds Map",
       "type": "geomap"
     },
     {
@@ -101,7 +101,7 @@
           "refId": "A"
         }
       ],
-      "title": "POI / Campground Data",
+      "title": "Campground Data",
       "type": "table"
     },
     {
@@ -137,7 +137,7 @@
           "refId": "A"
         }
       ],
-      "title": "Selected POI Campsite Details",
+      "title": "Campground Campsites",
       "type": "table"
     },
     {
@@ -283,7 +283,7 @@
                 "value": [
                   {
                     "title": "Show history for this date",
-                    "url": "/d/poi-campsites/poi-campsites?var-poi_name=${poi_name}&var-poi_id=${poi_id}&var-target_date=${__field.name}&var-poi_type=${poi_type}"
+                    "url": "/d/campground-detail/campground-detail?var-poi_name=${poi_name}&var-poi_id=${poi_id}&var-target_date=${__field.name}&var-poi_type=${poi_type}"
                   }
                 ]
               }
@@ -333,8 +333,9 @@
   "schemaVersion": 41,
   "tags": [
     "roadtrip",
-    "availability",
-    "catalog"
+    "catalog",
+    "campground",
+    "availability"
   ],
   "templating": {
     "list": [
@@ -355,17 +356,17 @@
       {
         "allowCustomValue": true,
         "current": {
-          "text": "All POIs / use filters",
+          "text": "All campgrounds / use filters",
           "value": ""
         },
         "hide": 0,
-        "label": "Campground / POI",
+        "label": "Campground",
         "name": "poi_id",
         "options": [],
         "query": {
-          "query": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'All POIs / use filters' AS __text, '' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    p.id::text || ' | ' || cg.name || ' | ' || cg.data_source || ' | ' || COALESCE(site_counts.campsite_count, 0)::text || ' sites | ' || primary_vr.external_id AS __text,\n    p.id::text AS __value\n  FROM pois p\n  JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  JOIN vendor_refs primary_vr ON primary_vr.id = cg.primary_vendor_ref_id\n  LEFT JOIN (\n    SELECT campground_id, count(*) AS campsite_count\n    FROM campsites\n    WHERE deleted_at IS NULL\n    GROUP BY campground_id\n  ) site_counts ON site_counts.campground_id = cg.id\n  WHERE p.deleted_at IS NULL\n    AND p.poi_type = 'campground'\n    AND (\n      '$__searchFilter' = '%'\n      OR p.id::text ILIKE '$__searchFilter'\n      OR cg.name ILIKE '$__searchFilter'\n      OR cg.data_source ILIKE '$__searchFilter'\n      OR primary_vr.external_id ILIKE '$__searchFilter'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
+          "query": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'All campgrounds / use filters' AS __text, '' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    p.id::text || ' | ' || cg.name || ' | ' || cg.data_source || ' | ' || COALESCE(site_counts.campsite_count, 0)::text || ' sites | ' || primary_vr.external_id AS __text,\n    p.id::text AS __value\n  FROM pois p\n  JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  JOIN vendor_refs primary_vr ON primary_vr.id = cg.primary_vendor_ref_id\n  LEFT JOIN (\n    SELECT campground_id, count(*) AS campsite_count\n    FROM campsites\n    WHERE deleted_at IS NULL\n    GROUP BY campground_id\n  ) site_counts ON site_counts.campground_id = cg.id\n  WHERE p.deleted_at IS NULL\n    AND p.poi_type = 'campground'\n    AND (\n      '$__searchFilter' = '%'\n      OR p.id::text ILIKE '$__searchFilter'\n      OR cg.name ILIKE '$__searchFilter'\n      OR cg.data_source ILIKE '$__searchFilter'\n      OR primary_vr.external_id ILIKE '$__searchFilter'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
           "rawQuery": true,
-          "rawSql": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'All POIs / use filters' AS __text, '' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    p.id::text || ' | ' || cg.name || ' | ' || cg.data_source || ' | ' || COALESCE(site_counts.campsite_count, 0)::text || ' sites | ' || primary_vr.external_id AS __text,\n    p.id::text AS __value\n  FROM pois p\n  JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  JOIN vendor_refs primary_vr ON primary_vr.id = cg.primary_vendor_ref_id\n  LEFT JOIN (\n    SELECT campground_id, count(*) AS campsite_count\n    FROM campsites\n    WHERE deleted_at IS NULL\n    GROUP BY campground_id\n  ) site_counts ON site_counts.campground_id = cg.id\n  WHERE p.deleted_at IS NULL\n    AND p.poi_type = 'campground'\n    AND (\n      '$__searchFilter' = '%'\n      OR p.id::text ILIKE '$__searchFilter'\n      OR cg.name ILIKE '$__searchFilter'\n      OR cg.data_source ILIKE '$__searchFilter'\n      OR primary_vr.external_id ILIKE '$__searchFilter'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
+          "rawSql": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'All campgrounds / use filters' AS __text, '' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    p.id::text || ' | ' || cg.name || ' | ' || cg.data_source || ' | ' || COALESCE(site_counts.campsite_count, 0)::text || ' sites | ' || primary_vr.external_id AS __text,\n    p.id::text AS __value\n  FROM pois p\n  JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  JOIN vendor_refs primary_vr ON primary_vr.id = cg.primary_vendor_ref_id\n  LEFT JOIN (\n    SELECT campground_id, count(*) AS campsite_count\n    FROM campsites\n    WHERE deleted_at IS NULL\n    GROUP BY campground_id\n  ) site_counts ON site_counts.campground_id = cg.id\n  WHERE p.deleted_at IS NULL\n    AND p.poi_type = 'campground'\n    AND (\n      '$__searchFilter' = '%'\n      OR p.id::text ILIKE '$__searchFilter'\n      OR cg.name ILIKE '$__searchFilter'\n      OR cg.data_source ILIKE '$__searchFilter'\n      OR primary_vr.external_id ILIKE '$__searchFilter'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
           "refId": "SQLVariableQueryEditor-VariableQuery"
         },
         "skipUrlSync": false,
@@ -374,7 +375,7 @@
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
-        "definition": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'All POIs / use filters' AS __text, '' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    p.id::text || ' | ' || cg.name || ' | ' || cg.data_source || ' | ' || COALESCE(site_counts.campsite_count, 0)::text || ' sites | ' || primary_vr.external_id AS __text,\n    p.id::text AS __value\n  FROM pois p\n  JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  JOIN vendor_refs primary_vr ON primary_vr.id = cg.primary_vendor_ref_id\n  LEFT JOIN (\n    SELECT campground_id, count(*) AS campsite_count\n    FROM campsites\n    WHERE deleted_at IS NULL\n    GROUP BY campground_id\n  ) site_counts ON site_counts.campground_id = cg.id\n  WHERE p.deleted_at IS NULL\n    AND p.poi_type = 'campground'\n    AND (\n      '$__searchFilter' = '%'\n      OR p.id::text ILIKE '$__searchFilter'\n      OR cg.name ILIKE '$__searchFilter'\n      OR cg.data_source ILIKE '$__searchFilter'\n      OR primary_vr.external_id ILIKE '$__searchFilter'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
+        "definition": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'All campgrounds / use filters' AS __text, '' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    p.id::text || ' | ' || cg.name || ' | ' || cg.data_source || ' | ' || COALESCE(site_counts.campsite_count, 0)::text || ' sites | ' || primary_vr.external_id AS __text,\n    p.id::text AS __value\n  FROM pois p\n  JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  JOIN vendor_refs primary_vr ON primary_vr.id = cg.primary_vendor_ref_id\n  LEFT JOIN (\n    SELECT campground_id, count(*) AS campsite_count\n    FROM campsites\n    WHERE deleted_at IS NULL\n    GROUP BY campground_id\n  ) site_counts ON site_counts.campground_id = cg.id\n  WHERE p.deleted_at IS NULL\n    AND p.poi_type = 'campground'\n    AND (\n      '$__searchFilter' = '%'\n      OR p.id::text ILIKE '$__searchFilter'\n      OR cg.name ILIKE '$__searchFilter'\n      OR cg.data_source ILIKE '$__searchFilter'\n      OR primary_vr.external_id ILIKE '$__searchFilter'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
         "refresh": 1,
         "regex": "",
         "regexApplyTo": "value",
@@ -441,20 +442,19 @@
         "type": "textbox"
       },
       {
-        "allValue": "'__all'",
         "allowCustomValue": true,
         "current": {
-          "text": "All",
-          "value": "$__all"
+          "text": "campground",
+          "value": "campground"
         },
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
         "definition": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
-        "hide": 0,
-        "includeAll": true,
-        "label": "POI type",
+        "hide": 2,
+        "includeAll": false,
+        "label": "Category",
         "multi": false,
         "name": "poi_type",
         "options": [],
@@ -489,7 +489,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "POI with Campsites / Details",
-  "uid": "poi-campsites",
+  "title": "Campground / Detail",
+  "uid": "campground-detail",
   "version": 1
 }
