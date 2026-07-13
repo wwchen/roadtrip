@@ -26,13 +26,13 @@ roadtrip:
     enabled-data-sources:
       - campflare
 #      - recgov
-      - federal-campgrounds
-      - aspira-wa-pins
+#      - federal-campgrounds
+#      - aspira-wa-pins
       - aspira-bc-pins
       - aspira-pc-pins
       - alberta-provincial
-      - new-york-state-parks
-      - california-state-parks
+#      - new-york-state-parks
+#      - california-state-parks
       - tesla_supercharger
       - planet_fitness_location
     enabled-availability-providers:
