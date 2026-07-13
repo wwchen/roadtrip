@@ -33,7 +33,7 @@ class CampflareCampgroundsEtlTest {
         assertEquals("established", row.kind)
         assertEquals(37.739, row.latitude)
         assertEquals(-119.565, row.longitude)
-        assertEquals("https://api.campflare.com/v2/campground/upper-pines-campground-447", row.sourceUrl)
+        assertEquals("https://campflare.com/campground/upper-pines-campground-447", row.sourceUrl)
         val ridbFacilityId =
             row.connections!!
                 .jsonObject["ridb_facility_id"]!!
@@ -67,7 +67,7 @@ class CampflareCampgroundsEtlTest {
         assertEquals("upper-pines-campground-447", campflareId)
         assertEquals("Campflare source", campflareLink["title"]!!.jsonPrimitive.content)
         assertEquals(
-            "https://api.campflare.com/v2/campground/upper-pines-campground-447",
+            "https://campflare.com/campground/upper-pines-campground-447",
             campflareLink["url"]!!.jsonPrimitive.content,
         )
         assertEquals("recgov", recgovRef.vendor)
@@ -131,7 +131,7 @@ class CampflareCampgroundsEtlTest {
                 .jsonObject
         assertEquals("Campflare source", link["title"]!!.jsonPrimitive.content)
         assertEquals(
-            "https://api.campflare.com/v2/campground/no-links",
+            "https://campflare.com/campground/no-links",
             link["url"]!!.jsonPrimitive.content,
         )
     }
@@ -153,7 +153,7 @@ class CampflareCampgroundsEtlTest {
                             "links":[
                               {
                                 "title":"Existing Campflare",
-                                "href":"https://api.campflare.com/v2/campground/has-campflare-href"
+                                "href":"https://campflare.com/campground/has-campflare-href"
                               }
                             ]
                           }

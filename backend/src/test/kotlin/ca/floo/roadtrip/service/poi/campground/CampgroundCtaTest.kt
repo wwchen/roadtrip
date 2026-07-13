@@ -202,6 +202,34 @@ class CampgroundCtaTest {
     }
 
     @Test
+    fun `campflare provider_ref appends public Campflare CTA after primary CTA`() {
+        val out =
+            cta.computeCtas(
+                row(
+                    providerRefJson = """{"campflare_id":"cranberry-lake-wsp"}""",
+                    infoUrl = "https://parks.wa.gov/find-parks/state-parks/deception-pass-state-park",
+                ),
+            )
+
+        assertEquals(2, out.size)
+        assertEquals("https://parks.wa.gov/find-parks/state-parks/deception-pass-state-park", out[0].url)
+        assertEquals("Visit parks.wa.gov", out[0].label)
+        assertEquals("info", out[0].kind)
+        assertEquals("https://campflare.com/campground/cranberry-lake-wsp", out[1].url)
+        assertEquals("View on Campflare", out[1].label)
+        assertEquals("info", out[1].kind)
+    }
+
+    @Test
+    fun `campflare provider_ref without primary link returns public Campflare CTA`() {
+        val out = cta.computeCtas(row(providerRefJson = """{"campflare_id":"cranberry-lake-wsp"}"""))
+
+        assertEquals(1, out.size)
+        assertEquals("https://campflare.com/campground/cranberry-lake-wsp", out.single().url)
+        assertEquals("View on Campflare", out.single().label)
+    }
+
+    @Test
     fun `bookingSystem labels`() {
         assertEquals("Recreation.gov", cta.bookingSystem(row(providerRefJson = """{"recgov_id":"232450"}""")))
         assertEquals(
@@ -257,8 +285,10 @@ class CampgroundCtaTest {
             infoUrl = infoUrl,
         )
 
-    private fun CampgroundCta.computeCta(input: CtaInput) =
-        computeCta(
+    private fun CampgroundCta.computeCta(input: CtaInput) = computeCtas(input).singleOrNull()
+
+    private fun CampgroundCta.computeCtas(input: CtaInput) =
+        computeCtas(
             providerRefJson = input.providerRefJson,
             ctaProviderRefJson = input.ctaProviderRefJson,
             reserveUrl = input.reserveUrl,

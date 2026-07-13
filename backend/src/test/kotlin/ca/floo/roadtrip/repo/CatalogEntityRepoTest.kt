@@ -34,7 +34,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 management = json("""{"agency_name":"National Park Service"}"""),
                 connections = json("""{"ridb_facility_id":"232447"}"""),
                 metadata = json("""{"last_updated":"2026-07-01T00:00:00Z"}"""),
-                sourceUrl = "https://api.campflare.com/v2/campground/upper-pines-campground-447",
+                sourceUrl = "https://campflare.com/campground/upper-pines-campground-447",
                 sourcePayload = json("""{"id":"upper-pines-campground-447","name":"Upper Pines"}"""),
                 vendorRefPayload = json("""{"connections":{"ridb_facility_id":"232447"}}"""),
             )
@@ -69,7 +69,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertNotNull(row)
         assertEquals("Upper Pines Campground", row.get("name", String::class.java))
         assertEquals("upper-pines-campground-447", row.get("external_id", String::class.java))
-        assertEquals("https://api.campflare.com/v2/campground/upper-pines-campground-447", row.get("source_url", String::class.java))
+        assertEquals("https://campflare.com/campground/upper-pines-campground-447", row.get("source_url", String::class.java))
         assertEquals(-119.565, row.get("lon", Double::class.java))
         assertEquals(37.739, row.get("lat", Double::class.java))
 

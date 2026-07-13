@@ -131,10 +131,12 @@ class FeatureCollectionContractTest {
                         description = "Camp among redwoods.",
                         photoUrl = "https://example.test/photo.jpg",
                         cta =
-                            PoiCtaSchema(
-                                url = "https://parks.canada.ca/banff",
-                                label = "Park info on parks.canada.ca",
-                                kind = "info",
+                            listOf(
+                                PoiCtaSchema(
+                                    url = "https://parks.canada.ca/banff",
+                                    label = "Park info on parks.canada.ca",
+                                    kind = "info",
+                                ),
                             ),
                         raw =
                             json(
@@ -161,8 +163,8 @@ class FeatureCollectionContractTest {
                 """"address":{"city":"Banff","state":"AB"},""" +
                 """"description":"Camp among redwoods.",""" +
                 """"photo_url":"https://example.test/photo.jpg",""" +
-                """"cta":{"url":"https://parks.canada.ca/banff",""" +
-                """"label":"Park info on parks.canada.ca","kind":"info"},""" +
+                """"cta":[{"url":"https://parks.canada.ca/banff",""" +
+                """"label":"Park info on parks.canada.ca","kind":"info"}],""" +
                 """"raw":{"category":"federal","amenities":["showers"],"activities":["hiking"],""" +
                 """"sites":42,"description":"Camp among redwoods.","photo_url":"https://example.test/photo.jpg",""" +
                 """"season":"May-Oct","near":"Banff"}}}}"""
