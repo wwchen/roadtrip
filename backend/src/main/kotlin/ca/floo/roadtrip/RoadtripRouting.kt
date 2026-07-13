@@ -10,7 +10,6 @@ import ca.floo.roadtrip.routes.adminIngestRoutes
 import ca.floo.roadtrip.routes.availabilityDashboardRoutes
 import ca.floo.roadtrip.routes.availabilityWatchRoutes
 import ca.floo.roadtrip.routes.campsiteRoutes
-import ca.floo.roadtrip.routes.forcePullCooldownFromProperties
 import ca.floo.roadtrip.routes.geocodeRoutes
 import ca.floo.roadtrip.routes.healthRoutes
 import ca.floo.roadtrip.routes.poiRoutes
@@ -163,7 +162,7 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
         }
         availabilityDashboardRoutes(
             ctx = runtime.ctx,
-            forcePullCooldown = forcePullCooldownFromProperties(runtime.boot.properties),
+            forcePullCooldown = runtime.appConfig.availability.forcePullCooldown,
         )
         poisOnRouteRoutes(poisOnRouteService)
         routeRoutes(runtime.routeCache, routeCorridorService)

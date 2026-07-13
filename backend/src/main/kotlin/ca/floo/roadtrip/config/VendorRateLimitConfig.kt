@@ -1,13 +1,11 @@
-package ca.floo.roadtrip.service.ratelimit
+package ca.floo.roadtrip.config
 
-import ca.floo.roadtrip.config.ConfigSection
-import ca.floo.roadtrip.config.parseDuration
 import java.time.Duration
 
 // Code-level default bucket. Deliberately conservative: a vendor with no explicit
 // override gets a modest steady rate so a misconfiguration errs toward under-fetching
 // rather than hammering an upstream we have no negotiated budget for. Overridable
-// per-vendor via config (see [VendorRateLimitConfig.fromProperties]).
+// per-vendor via config (see [VendorRateLimitConfig.fromConfig]).
 const val DEFAULT_VENDOR_BUCKET_CAPACITY: Long = 60
 const val DEFAULT_VENDOR_BUCKET_REFILL_TOKENS: Long = 60
 val DEFAULT_VENDOR_BUCKET_REFILL_PERIOD: Duration = Duration.ofMinutes(1)
@@ -23,9 +21,8 @@ private const val REFILL_PERIOD_SUFFIX = ".refill-period"
  * [DEFAULT_VENDOR_BUCKET_REFILL_PERIOD]).
  *
  * The class itself is pure and testable: the constructor takes an already-parsed
- * overrides map — no I/O. [fromProperties] is the wiring seam that reads the
- * loaded application properties into that map at [ca.floo.roadtrip.Main]
- * construction time.
+ * overrides map — no I/O. [fromConfig] reads the scoped application config
+ * section into that map.
  */
 class VendorRateLimitConfig(
     overrides: Map<String, VendorBucketConfig> = emptyMap(),
@@ -55,8 +52,7 @@ class VendorRateLimitConfig(
          * present; the other two fall back to the code defaults if omitted, so a
          * single CAPACITY override is a valid minimal config.
          */
-        fun fromProperties(properties: Map<String, String>): VendorRateLimitConfig {
-            val config = ConfigSection(properties).section("roadtrip.vendor-rate-limit")
+        fun fromConfig(config: ConfigSection): VendorRateLimitConfig {
             val vendors =
                 config
                     .absoluteKeys()

@@ -41,9 +41,11 @@ service/availability/provider/
     └── reservecalifornia/      # availability
 ```
 
-`models/availability/AvailabilityProviderCapabilities.kt` is shared contract
-data, not adapter implementation, because schedulers, API services, and
-provider adapters all read it.
+`models/availability/AvailabilityProviderCapabilities.kt`,
+`models/availability/CatalogCampsiteRef.kt`, and
+`models/availability/AvailabilityProviderError.kt` are shared provider-contract
+types, not adapter implementation, because schedulers, API services, routes,
+and provider adapters all read them.
 
 `models.ProviderRef` (sealed class with `RecGov` / `Campflare` / `Aspira` /
 `ReserveAmerica` / `ReserveCalifornia` variants) is the wire shape. Adapters take a `ProviderRef` of their

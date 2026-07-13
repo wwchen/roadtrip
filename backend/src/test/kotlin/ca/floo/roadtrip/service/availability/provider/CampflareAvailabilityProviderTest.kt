@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.clients.campflare.CampflareAvailabilityClient
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.models.availability.campflare.CampflareCampgroundAvailability
 import ca.floo.roadtrip.models.availability.campflare.CampflareCampsiteAvailability

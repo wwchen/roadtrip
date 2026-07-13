@@ -7,7 +7,7 @@ package ca.floo.roadtrip.config
  * than derived from [GrafanaConfig] — a POI link must not depend on Grafana
  * being configured or on its path layout.
  *
- * [fromProperties] returns null when unset/blank — a first-class "no map links" state
+ * [fromConfig] returns null when unset/blank — a first-class "no map links" state
  * (the alert still sends, just without the POI lines). There is deliberately no
  * code-level default host: a hardcoded prod URL would be environment-specific
  * config leaking into the binary.
@@ -19,8 +19,6 @@ data class WebAppConfig(
     val rootUrl: String,
 ) {
     companion object {
-        fun fromProperties(properties: Map<String, String>): WebAppConfig? = fromConfig(ConfigSection(properties).section("roadtrip.web"))
-
         fun fromConfig(config: ConfigSection): WebAppConfig? {
             val raw = config.value("root-url") ?: return null
             return WebAppConfig(rootUrl = raw.trimEnd('/'))

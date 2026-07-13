@@ -10,8 +10,6 @@ data class DbConfig(
         private const val DEFAULT_USER = "roadtrip"
         private const val DEFAULT_PASSWORD = "roadtrip"
 
-        fun fromProperties(properties: Map<String, String>): DbConfig = fromConfig(ConfigSection(properties).section("roadtrip.db"))
-
         fun fromConfig(config: ConfigSection): DbConfig =
             DbConfig(
                 jdbcUrl = config.valueOrDefault("url", DEFAULT_JDBC_URL),

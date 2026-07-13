@@ -7,9 +7,6 @@ data class CampflareConfig(
     companion object {
         private const val DEFAULT_API_BASE_URL = "https://api.campflare.com/v2"
 
-        fun fromProperties(properties: Map<String, String>): CampflareConfig =
-            fromConfig(ConfigSection(properties).section("roadtrip.campflare"))
-
         fun fromConfig(config: ConfigSection): CampflareConfig =
             CampflareConfig(
                 apiKey =

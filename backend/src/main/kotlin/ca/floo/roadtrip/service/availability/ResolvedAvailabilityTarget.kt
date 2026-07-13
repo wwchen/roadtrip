@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 
 /**
  * A campsite paired with the ordered availability providers that can serve

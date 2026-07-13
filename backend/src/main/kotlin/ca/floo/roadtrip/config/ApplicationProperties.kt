@@ -9,7 +9,6 @@ import com.charleskorn.kaml.YamlNull
 import com.charleskorn.kaml.YamlScalar
 
 object ApplicationProperties {
-    const val PROFILE_KEY = "roadtrip.profile"
     private const val PROFILE_ENV = "ROADTRIP_PROFILE"
     private const val DEFAULT_PROFILE = "local"
     private const val BASE_RESOURCE = "application.yml"
@@ -27,7 +26,6 @@ object ApplicationProperties {
         val values = linkedMapOf<String, String>()
         values.putAll(loadResource(BASE_RESOURCE, classLoader))
         values.putAll(loadResource("application-$profile.$RESOURCE_EXTENSION", classLoader))
-        values[PROFILE_KEY] = profile
         return resolvePlaceholders(values, env)
     }
 
@@ -35,7 +33,9 @@ object ApplicationProperties {
         name: String,
         classLoader: ClassLoader,
     ): Map<String, String> {
-        val stream = classLoader.getResourceAsStream(name) ?: return emptyMap()
+        val stream =
+            classLoader.getResourceAsStream(name)
+                ?: throw IllegalArgumentException("application config resource '$name' not found")
         val content = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
         return flattenYaml(content)
     }

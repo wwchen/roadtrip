@@ -20,9 +20,6 @@ data class ReadPathProviderConfig(
                 "reservecalifornia",
             )
 
-        fun fromProperties(properties: Map<String, String>): ReadPathProviderConfig =
-            fromConfig(ConfigSection(properties).section("roadtrip.read-path"))
-
         fun fromConfig(config: ConfigSection): ReadPathProviderConfig =
             ReadPathProviderConfig(
                 enabledDataSources = config.csvSet(ENABLED_DATA_SOURCES_KEY),

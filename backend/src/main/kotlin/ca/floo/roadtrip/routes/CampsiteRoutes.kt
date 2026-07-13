@@ -5,6 +5,7 @@ import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityErrorDto
 import ca.floo.roadtrip.models.api.PoiCampsitesAvailabilityResponseDto
 import ca.floo.roadtrip.models.api.PoiCampsitesResponseSchema
+import ca.floo.roadtrip.models.availability.AvailabilityProviderError
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -17,8 +18,6 @@ import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.CampsiteCatalogService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
-import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.http.ContentType
@@ -40,8 +39,7 @@ internal fun Route.campsiteRoutes(
     ctx: DSLContext,
     availabilityProviders: AvailabilityProviderRegistry,
     dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
-    failoverFetcher: FailoverAvailabilityFetcher =
-        FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromProperties()),
+    failoverFetcher: FailoverAvailabilityFetcher,
 ) {
     val campsitesRepo = CampsiteRepo(ctx)
     val providerRefs = CampsiteProviderRepo(ctx)

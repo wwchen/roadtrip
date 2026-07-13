@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations

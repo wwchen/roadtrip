@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.availability.provider
+package ca.floo.roadtrip.models.availability
 
 data class CatalogCampsiteRef(
     val campsiteId: Long,

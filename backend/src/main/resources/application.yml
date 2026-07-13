@@ -25,7 +25,7 @@ roadtrip:
   read-path:
     enabled-data-sources:
       - campflare
-      - recgov
+#      - recgov
       - federal-campgrounds
       - aspira-wa-pins
       - aspira-bc-pins

@@ -2,9 +2,9 @@ package ca.floo.roadtrip.service.availability.provider.adapters.recgov
 
 import ca.floo.roadtrip.clients.recgov.Campsite
 import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
-import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject

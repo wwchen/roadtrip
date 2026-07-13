@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.ratelimit
 
+import ca.floo.roadtrip.config.VendorBucketConfig
+import ca.floo.roadtrip.config.VendorRateLimitConfig
 import io.github.bucket4j.BucketConfiguration
 import io.github.bucket4j.distributed.jdbc.BucketTableSettings
 import io.github.bucket4j.distributed.jdbc.PrimaryKeyMapper

@@ -74,8 +74,8 @@ services:
     ports:
       - "127.0.0.1:8766:8766"
     environment:
-      # Profile selection is a process env control; loaded config exposes it as
-      # roadtrip.profile after application-prod.yml is selected.
+      # Profile selection is a process env control that chooses
+      # application-<profile>.yml before backend config is parsed.
       - ROADTRIP_PROFILE=${ROADTRIP_PROFILE:-prod}
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
       - POSTGRES_USER=${POSTGRES_USER:-roadtrip}

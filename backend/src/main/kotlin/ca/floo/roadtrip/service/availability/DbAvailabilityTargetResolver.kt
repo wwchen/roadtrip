@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.models.domain.ProviderRef
@@ -7,7 +8,6 @@ import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
-import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
 import ca.floo.roadtrip.service.availability.provider.availabilityProviderId
 

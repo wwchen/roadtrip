@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.availability.provider
+package ca.floo.roadtrip.models.availability
 
 /**
  * Provider-agnostic error surface. Adapters translate vendor-specific
@@ -31,7 +31,7 @@ sealed class AvailabilityProviderError(
     /** Adapter doesn't yet support the requested operation (capability stub). */
     class Unsupported(
         operation: String,
-        providerId: AvailabilityProviderId,
+        providerId: String,
     ) : AvailabilityProviderError("$providerId does not support $operation")
 
     /**
@@ -39,7 +39,7 @@ sealed class AvailabilityProviderError(
      * Programmer error — registry construction is wrong, not the request.
      */
     class WrongRefType(
-        providerId: AvailabilityProviderId,
+        providerId: String,
         gotType: String,
     ) : AvailabilityProviderError("$providerId received ProviderRef of type $gotType")
 }

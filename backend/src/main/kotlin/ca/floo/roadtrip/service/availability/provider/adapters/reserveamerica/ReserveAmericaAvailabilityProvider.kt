@@ -6,13 +6,13 @@ import ca.floo.roadtrip.exceptions.ReserveAmericaException
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.models.availability.AvailabilityProviderError
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.CampsiteDayObservation
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import kotlinx.coroutines.CancellationException
 import java.time.Instant
 import java.time.LocalDate
@@ -167,7 +167,7 @@ class ReserveAmericaAvailabilityProvider(
 
     private fun reserveAmericaRefOrThrow(ref: ProviderRef): ProviderRef.ReserveAmerica =
         (ref as? ProviderRef.ReserveAmerica)
-            ?: throw AvailabilityProviderError.WrongRefType(id, ref::class.simpleName ?: "unknown")
+            ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), ref::class.simpleName ?: "unknown")
 
     private fun contractCode(ref: ProviderRef.ReserveAmerica): String {
         val contract = ref.contractCode ?: tenant.contractCode

@@ -2,16 +2,16 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.models.api.AvailabilityResponseDto
+import ca.floo.roadtrip.models.availability.AvailabilityProviderError
 import ca.floo.roadtrip.models.availability.AvailabilityWindows
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -25,8 +25,7 @@ internal class CampsiteAvailabilityComposer(
     private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     availability: AvailabilityRepo? = null,
     private val snapshotFreshnessTtl: (AvailabilityProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
-    private val failoverFetcher: FailoverAvailabilityFetcher =
-        FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromProperties()),
+    private val failoverFetcher: FailoverAvailabilityFetcher,
 ) {
     private val availabilityLoader = AvailabilityLoader(availability)
 

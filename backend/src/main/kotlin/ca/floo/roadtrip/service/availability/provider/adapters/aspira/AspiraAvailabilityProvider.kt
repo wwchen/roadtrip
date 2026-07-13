@@ -4,12 +4,12 @@ import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.exceptions.AspiraException
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.models.availability.AvailabilityProviderError
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -146,7 +146,7 @@ class AspiraAvailabilityProvider(
 
     private fun aspiraRefOrThrow(ref: ProviderRef): ProviderRef.Aspira =
         (ref as? ProviderRef.Aspira)
-            ?: throw AvailabilityProviderError.WrongRefType(id, ref::class.simpleName ?: "unknown")
+            ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), ref::class.simpleName ?: "unknown")
 
     private fun intOrThrow(
         label: String,

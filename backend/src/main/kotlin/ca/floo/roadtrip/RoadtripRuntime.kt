@@ -13,6 +13,7 @@ import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.config.ApplicationProperties
 import ca.floo.roadtrip.config.ConfigSection
 import ca.floo.roadtrip.config.DbConfig
+import ca.floo.roadtrip.config.ReadPathProviderConfig
 import ca.floo.roadtrip.db.dataSourceFor
 import ca.floo.roadtrip.db.dsl
 import ca.floo.roadtrip.db.migrate
@@ -52,7 +53,8 @@ import ca.floo.roadtrip.service.etl.framework.sweepStaleIngestRuns
 import ca.floo.roadtrip.service.notification.SlackInteractivityHandler
 import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
-import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
+import ca.floo.roadtrip.service.poi.CampgroundService
+import ca.floo.roadtrip.service.poi.DEFAULT_POI_TYPES
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.scheduler.PollerBackfill
@@ -107,7 +109,11 @@ internal fun createRoadtripBootContext(properties: Map<String, String> = Applica
     val appConfig = AppConfig.fromProperties(properties)
     val rootConfig = ConfigSection(properties)
     val roadtripConfig = rootConfig.section("roadtrip")
-    val ds = dataSourceFor(DbConfig.fromProperties(properties))
+    val staticDir = File(roadtripConfig.valueOrDefault(STATIC_DIR_KEY, DEFAULT_STATIC_DIR))
+    val poiRegistry = loadPoiRegistry(roadtripConfig.section("poi-registry"), staticDir)
+    validateReadPathDataSources(appConfig.readPathProviders, poiRegistry)
+
+    val ds = dataSourceFor(DbConfig.fromConfig(roadtripConfig.section("db")))
     migrate(ds)
     val ctx = dsl(ds)
     val availabilityProviderClients =
@@ -123,7 +129,6 @@ internal fun createRoadtripBootContext(properties: Map<String, String> = Applica
                 ),
         )
 
-    val staticDir = File(roadtripConfig.valueOrDefault(STATIC_DIR_KEY, DEFAULT_STATIC_DIR))
     val mapboxToken = roadtripConfig.section("mapbox").value(MAPBOX_TOKEN_KEY)
     val mapboxGeocoder = MapboxGeocoder(token = mapboxToken)
     val routeCache =
@@ -132,9 +137,6 @@ internal fun createRoadtripBootContext(properties: Map<String, String> = Applica
             ttl = appConfig.cache.ttlFor(ApiCacheEntity.ROUTE),
             persistentCache = ApiCacheRepo(ctx),
         )
-
-    val poiRegistry = loadPoiRegistry(roadtripConfig.section("poi-registry"), staticDir)
-
     sweepStaleIngestRuns(ctx)
     val canonicalViews = CanonicalViewRepo(ctx)
     val ingestController =
@@ -264,7 +266,8 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
     // One in-process cooldown tracker shared by both the poller and the live
     // path — a cooldown observed in either surface should demote the same
     // provider in the other. Configurable via roadtrip.availability.provider-cooldown.
-    val providerCooldowns = ProviderCooldownTracker.fromProperties(boot.properties)
+    val providerCooldowns =
+        ProviderCooldownTracker(cooldown = boot.appConfig.availability.providerCooldown)
     val sharedFailoverFetcher = FailoverAvailabilityFetcher(cooldowns = providerCooldowns)
     Scheduler(
         repo = availabilityPollers,
@@ -278,7 +281,11 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                 dateResolver = availabilityDateResolver,
                 targets = availabilityTargets,
                 fetchCalls = AvailabilityFetchCallRepo(boot.ctx),
-                limiter = VendorRateLimiter(VendorRateLimitConfig.fromProperties(boot.properties), boot.dataSource),
+                limiter =
+                    VendorRateLimiter(
+                        boot.appConfig.vendorRateLimit,
+                        boot.dataSource,
+                    ),
                 alertDispatcher = watchAlertDispatcher,
                 failoverFetcher = sharedFailoverFetcher,
             )::handle,
@@ -303,6 +310,31 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
 private fun AppConfig.isProviderEnabled(id: AvailabilityProviderId): Boolean =
     readPathProviders.isAvailabilityProviderEnabled(id.name.lowercase()) &&
         (id != AvailabilityProviderId.CAMPFLARE || !campflare.apiKey.isNullOrBlank())
+
+internal fun validateReadPathDataSources(
+    providers: ReadPathProviderConfig,
+    registry: PoiRegistry,
+) {
+    val supported = supportedReadPathDataSources(registry)
+    val unknown = providers.enabledDataSources - supported
+    require(unknown.isEmpty()) {
+        "roadtrip.read-path.enabled-data-sources contains unknown source(s): " +
+            "${unknown.sorted()}. Expected one of: ${supported.sorted()}."
+    }
+}
+
+private fun supportedReadPathDataSources(registry: PoiRegistry): Set<String> =
+    registry.poiData
+        .mapNotNull { row -> row.etls.lastOrNull()?.slug }
+        .toSet() +
+        canonicalCampgroundSourceKeys(registry) +
+        DEFAULT_POI_TYPES.filter { it != CampgroundService.POI_TYPE }
+
+private fun canonicalCampgroundSourceKeys(registry: PoiRegistry): Set<String> =
+    buildSet {
+        if (registry.campflareSources().isNotEmpty()) add("campflare")
+        if (registry.recgovSources().isNotEmpty()) add("recgov")
+    }
 
 private fun loadPoiRegistry(
     config: ConfigSection,

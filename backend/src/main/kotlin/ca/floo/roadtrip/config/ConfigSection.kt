@@ -27,6 +27,12 @@ data class ConfigSection(
             key = key(name),
         )
 
+    fun requiredDuration(name: String): Duration =
+        parseRequiredDuration(
+            raw = value(name),
+            key = key(name),
+        )
+
     fun csvSet(name: String): Set<String> =
         value(name)
             ?.split(",")

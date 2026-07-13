@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
+import ca.floo.roadtrip.models.availability.AvailabilityProviderError
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.availability.CellTransition
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.models.domain.scheduler.HandlerResult
@@ -15,13 +17,10 @@ import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.FetchOutcome
 import ca.floo.roadtrip.service.availability.GroupFetchResult
 import ca.floo.roadtrip.service.availability.ProviderCandidate
-import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.ResolvedAvailabilityTarget
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.parentRefKey
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import kotlinx.coroutines.slf4j.MDCContext
 import kotlinx.coroutines.withContext
@@ -82,8 +81,7 @@ internal class AvailabilityPollExecutor(
     private val fetchCalls: AvailabilityFetchCallRepo,
     private val limiter: VendorRateLimiter,
     private val alertDispatcher: WatchAlertDispatcher,
-    private val failoverFetcher: FailoverAvailabilityFetcher =
-        FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromProperties()),
+    private val failoverFetcher: FailoverAvailabilityFetcher,
     private val clock: Clock = Clock.systemUTC(),
 ) {
     private val log = LoggerFactory.getLogger(javaClass)

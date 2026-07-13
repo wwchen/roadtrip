@@ -2,13 +2,13 @@ package ca.floo.roadtrip.config
 
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class ApplicationPropertiesTest {
     @Test
     fun `load defaults to local profile properties`() {
         val props = ApplicationProperties.load(env = emptyMap())
 
-        assertEquals("local", props[ApplicationProperties.PROFILE_KEY])
         assertEquals("8765", props["server.port"])
         assertEquals(".", props["roadtrip.static-dir"])
         assertEquals("poi-registry.yaml", props["roadtrip.poi-registry.resource"])
@@ -34,7 +34,6 @@ class ApplicationPropertiesTest {
                     ),
             )
 
-        assertEquals("prod", props[ApplicationProperties.PROFILE_KEY])
         assertEquals("/app/static", props["roadtrip.static-dir"])
         assertEquals("jdbc:postgresql://postgres:5432/roadtrip", props["roadtrip.db.url"])
         assertEquals("roadtrip", props["roadtrip.db.user"])
@@ -57,7 +56,6 @@ class ApplicationPropertiesTest {
                     ),
             )
 
-        assertEquals("compose-local", props[ApplicationProperties.PROFILE_KEY])
         assertEquals("/app/static", props["roadtrip.static-dir"])
         assertEquals("jdbc:postgresql://postgres:5432/roadtrip", props["roadtrip.db.url"])
         assertEquals("roadtrip", props["roadtrip.db.user"])
@@ -117,6 +115,7 @@ class ApplicationPropertiesTest {
                               - one
                               - two
                             """.trimIndent(),
+                        "application-local.yml" to "",
                     ),
             )
 
@@ -125,6 +124,22 @@ class ApplicationPropertiesTest {
         assertEquals("from-env", props["chained"])
         assertEquals("", props["self"])
         assertEquals("one,two", props["list"])
+    }
+
+    @Test
+    fun `load fails when selected profile resource is missing`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                ApplicationProperties.load(
+                    env = mapOf("ROADTRIP_PROFILE" to "typo"),
+                    classLoader =
+                        resourceClassLoader(
+                            "application.yml" to "server:\n  admin-port: 8766",
+                        ),
+                )
+            }
+
+        assertEquals("application config resource 'application-typo.yml' not found", err.message)
     }
 
     private fun resourceClassLoader(vararg resources: Pair<String, String>): ClassLoader {

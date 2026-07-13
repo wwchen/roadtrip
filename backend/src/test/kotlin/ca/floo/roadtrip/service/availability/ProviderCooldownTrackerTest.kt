@@ -116,48 +116,4 @@ class ProviderCooldownTrackerTest {
         clock.advance(31)
         assertFalse(tracker.isCooling(RECGOV))
     }
-
-    @Test
-    fun `fromProperties reads provider cooldown duration`() {
-        // Behavioral test: configured tracker's cooldown is 42s. We can't
-        // inject a clock through fromProperties (uses default Instant::now), so verify
-        // the parse landed by constructing an equivalent tracker directly and
-        // exercising its boundary. This documents the contract: the property
-        // value becomes a Duration.
-        val fromProperties =
-            ProviderCooldownTracker.fromProperties(
-                properties = mapOf("roadtrip.availability.provider-cooldown" to "42s"),
-            )
-        // With no injected clock, fromProperties uses Instant.now(). Recording a
-        // failure and immediately checking isCooling proves the cooldown is
-        // positive; further boundary checks would race against wall time.
-        fromProperties.recordFailure(RECGOV)
-        assertTrue(fromProperties.isCooling(RECGOV), "just recorded, cooldown active")
-
-        // Precise boundary via an equivalent injected-clock tracker: same
-        // parse path, deterministic assertions.
-        val clock = FakeClock()
-        val equivalent = trackerWith(clock, cooldownSeconds = 42L)
-        equivalent.recordFailure(RECGOV)
-        clock.advance(41)
-        assertTrue(equivalent.isCooling(RECGOV), "at 41s of 42s cooldown, still cooling")
-        clock.advance(2)
-        assertFalse(equivalent.isCooling(RECGOV), "past 42s, no longer cooling")
-    }
-
-    @Test
-    fun `fromProperties falls back to default when config is absent`() {
-        val tracker = ProviderCooldownTracker.fromProperties(properties = emptyMap())
-        tracker.recordFailure(RECGOV)
-        assertTrue(tracker.isCooling(RECGOV))
-        // Boundary via equivalent injected-clock tracker at default seconds.
-        val clock = FakeClock()
-        val defaultSeconds = ProviderCooldownTracker.DEFAULT_COOLDOWN.seconds
-        val equivalent = trackerWith(clock, cooldownSeconds = defaultSeconds)
-        equivalent.recordFailure(RECGOV)
-        clock.advance(defaultSeconds - 1)
-        assertTrue(equivalent.isCooling(RECGOV))
-        clock.advance(2)
-        assertFalse(equivalent.isCooling(RECGOV))
-    }
 }

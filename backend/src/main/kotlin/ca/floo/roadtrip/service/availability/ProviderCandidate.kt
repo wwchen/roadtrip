@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 
 /**
  * One resolvable (provider, parentRef, catalogRef) triple that could serve a

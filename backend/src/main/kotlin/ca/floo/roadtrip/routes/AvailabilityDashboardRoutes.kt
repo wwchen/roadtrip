@@ -1,7 +1,5 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.config.ApplicationProperties
-import ca.floo.roadtrip.config.ConfigSection
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityPollerSchema
 import ca.floo.roadtrip.models.api.AvailabilityPollersListResponse
@@ -38,20 +36,6 @@ private const val MAX_LIST_LIMIT = 500
 private const val SNAPSHOT_DEFAULT_LIMIT = 200
 private const val SNAPSHOT_MAX_LIMIT = 1000
 
-/**
- * Per-poller "check now" cooldown: the minimum spacing between two human-forced
- * pulls of the same poller. Keeps a user mashing the button from starving the
- * shared vendor governor (PR4) for everyone attached to this poller. Overridable
- * via the `roadtrip.availability.force-pull-cooldown` app property.
- */
-private const val FORCE_PULL_COOLDOWN_KEY = "force-pull-cooldown"
-private val DEFAULT_FORCE_PULL_COOLDOWN = Duration.ofSeconds(60)
-
-fun forcePullCooldownFromProperties(properties: Map<String, String> = ApplicationProperties.load()): Duration =
-    ConfigSection(properties)
-        .section("roadtrip.availability")
-        .duration(FORCE_PULL_COOLDOWN_KEY, DEFAULT_FORCE_PULL_COOLDOWN)
-
 @OptIn(ExperimentalSerializationApi::class)
 private val dashboardJson =
     Json {
@@ -62,7 +46,7 @@ private val dashboardJson =
 
 fun Route.availabilityDashboardRoutes(
     ctx: DSLContext,
-    forcePullCooldown: Duration = forcePullCooldownFromProperties(),
+    forcePullCooldown: Duration,
 ) {
     val pollers = AvailabilityPollerRepo(ctx)
     val runs = AvailabilityRunRepo(ctx)

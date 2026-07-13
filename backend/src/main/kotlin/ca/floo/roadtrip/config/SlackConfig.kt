@@ -6,7 +6,7 @@ package ca.floo.roadtrip.config
  * requests. Property values can point at process env placeholders so secrets do
  * not live in the file.
  *
- * [fromProperties] returns null when token or channel is absent/blank — a first-class
+ * [fromConfig] returns null when token or channel is absent/blank — a first-class
  * "Slack disabled" state, not an error. With Slack disabled the poller runs
  * identically; the alert path simply no-ops (see [ca.floo.roadtrip.service.availability.WatchAlertDispatcher]).
  * A missing [signingSecret] leaves outbound sends working but disables the
@@ -18,11 +18,6 @@ data class SlackConfig(
     val signingSecret: String? = null,
 ) {
     companion object {
-        const val TOKEN_KEY = "roadtrip.slack.bot-token"
-        const val CHANNEL_KEY = "roadtrip.slack.default-channel"
-
-        fun fromProperties(properties: Map<String, String>): SlackConfig? = fromConfig(ConfigSection(properties).section("roadtrip.slack"))
-
         fun fromConfig(config: ConfigSection): SlackConfig? {
             val token = config.value("bot-token").orEmpty()
             val channel = config.value("default-channel").orEmpty()

@@ -5,6 +5,7 @@ import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.clients.aspira.AspiraOccupancy
 import ca.floo.roadtrip.clients.aspira.AspiraResourceOccupancy
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
