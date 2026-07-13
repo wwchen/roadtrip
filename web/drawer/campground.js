@@ -26,6 +26,7 @@ import {
   bookingSystemFooterHTML,
   seasonVerdictHTML,
   reserveButtonHTML,
+  campflareSourceButtonHTML,
   structuredCampgroundDetailsHTML,
 } from '../campground-card.js';
 import { descriptionSectionHTML, upstreamDecorations } from '../upstream-html.js';
@@ -216,6 +217,7 @@ function renderShell(f, signal) {
       <div class="cg-actions">
         ${dirBtn}
         ${reserveButtonHTML(p, 'cg-btn')}
+        ${campflareSourceButtonHTML(p, 'cg-btn')}
       </div>`;
 
   const detailsBody = [structuredDetails, pills, cellPills, rating,
