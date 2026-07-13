@@ -23,11 +23,12 @@ data class PoiCategoryDetailSchema(
     // Backend-owned capability flag. The FE should not know individual
     // provider_ref shapes just to decide whether to mount availability UI.
     @SerialName("availability_supported") val availabilitySupported: Boolean? = null,
-    // Backend-computed CTA for the pin's primary action button. Picks the
-    // best upstream URL + label from provider_ref / info_url so the FE can
-    // render blindly without owning per-vendor precedence rules. null when
-    // the row has no usable upstream link (FE falls back to name search).
-    val cta: PoiCtaSchema? = null,
+    // Backend-computed ordered CTAs for the pin's action buttons. The first
+    // entry is the primary action; later entries are secondary actions. Picks
+    // URLs + labels from provider_ref / info_url so the FE can render blindly
+    // without owning per-vendor precedence rules. null when the row has no
+    // usable upstream link (FE falls back to name search).
+    val cta: List<PoiCtaSchema>? = null,
     // Display name for the booking system that reservations on this pin
     // flow through ("Recreation.gov", "Aspira NextGen (BC Parks)", …).
     // Used by the drawer footer; null when the pin has no known provider.

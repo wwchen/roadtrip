@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.vendors.campflare
 
+import ca.floo.roadtrip.models.domain.CampflareUrls
 import ca.floo.roadtrip.models.domain.CatalogVendorRefUpsertCandidate
 import ca.floo.roadtrip.models.metadata.Envelope
 import kotlinx.serialization.json.JsonElement
@@ -86,7 +87,7 @@ internal fun JsonObject.objectField(name: String): JsonObject? = this[name] as? 
 
 internal fun JsonObject.arrayField(name: String): JsonElement? = this[name]?.takeIf { runCatching { it.jsonArray }.isSuccess }
 
-internal fun campflareCampgroundSourceUrl(campflareId: String): String = "$CAMPGROUND_API_URL/$campflareId"
+internal fun campflareCampgroundSourceUrl(campflareId: String): String = CampflareUrls.campground(campflareId)
 
 internal fun campgroundLinksWithCampflareSource(
     raw: JsonObject,
@@ -129,7 +130,6 @@ internal const val RECGOV_CAMPSITE_VENDOR = "recgov"
 internal const val RECGOV_CAMPGROUND_REF_PREFIX = "recgov-"
 internal const val CAMPGROUNDS_ETL_SLUG = "campflare-campgrounds"
 internal const val CAMPSITES_ETL_SLUG = "campflare-campsites"
-internal const val CAMPGROUND_API_URL = "https://api.campflare.com/v2/campground"
 internal const val CAMPFLARE_SOURCE_LINK_TITLE = "Campflare source"
 internal const val LINKS_FIELD = "links"
 internal const val TITLE_FIELD = "title"

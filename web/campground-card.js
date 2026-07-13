@@ -13,10 +13,6 @@
 
 import { escapeHtml } from './core.js';
 
-const CAMPFLARE_SOURCE_LINK_TITLE = 'Campflare source';
-const CAMPFLARE_CAMPGROUND_URL_PREFIX = 'https://api.campflare.com/v2/campground/';
-const CAMPFLARE_CAMPGROUND_URL_RE = /^https:\/\/api\.campflare\.com\/v2\/campground\//i;
-
 /** Parse properties.amenities (legacy array or canonical object) → string[]. */
 export function parseAmenities(p) {
   const value = p.amenities;
@@ -244,23 +240,29 @@ export function seasonVerdictHTML(seasonStr, reservable) {
 }
 
 /**
- * Reserve / info button. The backend computes a {url, label, kind} CTA for
- * every campground pin — provider_ref + info_url → vendor-specific URL and
- * label, including dated Aspira NextGen deeplinks. The FE renders it
- * verbatim; the only fallback is a name search for pins with no upstream
- * link at all.
+ * Reserve / info buttons. The backend computes an ordered CTA list for every
+ * campground pin — provider_ref + info_url → vendor-specific URLs and labels,
+ * including dated Aspira NextGen deeplinks. The FE renders it verbatim; the
+ * only fallback is a name search for pins with no upstream link at all.
  *
  * `btnClass` is the CSS class prefix the caller wants (popup uses "btn",
  * drawer uses "cg-btn"). Returns full <a> HTML or a disabled span for
  * first-come-first-served pins with no info link.
  */
-export function reserveButtonHTML(p, btnClass = 'btn') {
+export function ctaButtonsHTML(p, btnClass = 'btn') {
+  const ctas = normalizedCtas(p.cta);
+  if (ctas.length) {
+    const buttons = [];
+    for (const cta of ctas) {
+      const button = ctaButtonHTML(cta, btnClass, buttons.length);
+      if (button) buttons.push(button);
+    }
+    if (buttons.length) return buttons.join('');
+  }
+
   let url = '';
   let label = 'Reserve';
-  if (p.cta?.url) {
-    url = p.cta.url;
-    label = p.cta.label;
-  } else if (p.reserve_url || p.reservation_url) {
+  if (p.reserve_url || p.reservation_url) {
     url = p.reserve_url || p.reservation_url;
     label = reserveUrlLabel(url);
   } else if (p.info_url || p.website) {
@@ -282,28 +284,27 @@ export function reserveButtonHTML(p, btnClass = 'btn') {
       label = 'Search Google';
     }
   }
-  return `<a class="${btnClass} ${btnClass}-primary" href="${url}" target="_blank" rel="noreferrer">${label}</a>`;
+  return ctaButtonHTML({ url, label }, btnClass, 0);
 }
 
-export function campflareSourceButtonHTML(p, btnClass = 'btn') {
-  const url = campflareSourceUrl(p);
+export function reserveButtonHTML(p, btnClass = 'btn') {
+  return ctaButtonsHTML(p, btnClass);
+}
+
+function ctaButtonHTML(cta, btnClass, index) {
+  if (!cta || typeof cta !== 'object') return '';
+  const url = safeUrl(cta.url);
   if (!url) return '';
-  return `<a class="${btnClass} ${btnClass}-secondary" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">` +
-    `${CAMPFLARE_SOURCE_LINK_TITLE}</a>`;
+  const label = firstText(cta.label, cta.title, cta.name, url);
+  const variant = index === 0 ? 'primary' : 'secondary';
+  return `<a class="${btnClass} ${btnClass}-${variant}" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">` +
+    `${escapeHtml(label)}</a>`;
 }
 
-function campflareSourceUrl(p) {
-  if (Array.isArray(p?.links)) {
-    for (const link of p.links) {
-      if (!link || typeof link !== 'object') continue;
-      const url = safeUrl(firstText(link.url, link.href));
-      if (!url) continue;
-      const title = firstText(link.title, link.label, link.name);
-      if (title === CAMPFLARE_SOURCE_LINK_TITLE || CAMPFLARE_CAMPGROUND_URL_RE.test(url)) return url;
-    }
-  }
-  const id = firstText(p?.provider_ref?.campflare_id, p?.campflare_id);
-  return id ? `${CAMPFLARE_CAMPGROUND_URL_PREFIX}${encodeURIComponent(id)}` : '';
+function normalizedCtas(cta) {
+  if (Array.isArray(cta)) return cta.filter(item => item && typeof item === 'object');
+  if (cta && typeof cta === 'object') return [cta];
+  return [];
 }
 
 const AMENITY_LABELS = {

@@ -25,8 +25,7 @@ import {
   lastVerifiedFooterHTML,
   bookingSystemFooterHTML,
   seasonVerdictHTML,
-  reserveButtonHTML,
-  campflareSourceButtonHTML,
+  ctaButtonsHTML,
   structuredCampgroundDetailsHTML,
 } from '../campground-card.js';
 import { descriptionSectionHTML, upstreamDecorations } from '../upstream-html.js';
@@ -208,16 +207,15 @@ function renderShell(f, signal) {
     : '';
 
   const dirBtn = directionsButtonHTML({ name: p.name, lng, lat, kind: 'CG' });
-  // reserveButtonHTML reads p.cta (backend-computed) plus the FE-only
-  // Aspira-deeplink path; per-vendor URL precedence lives on the server.
+  // ctaButtonsHTML reads p.cta (backend-computed) plus the FE-only fallback
+  // path; per-vendor URL precedence lives on the server.
   // Alert capture for any availability provider lives inside the week
   // component's day-detail panel — this top-level button is just the
   // "go look at the source" affordance.
   const actions = `
       <div class="cg-actions">
         ${dirBtn}
-        ${reserveButtonHTML(p, 'cg-btn')}
-        ${campflareSourceButtonHTML(p, 'cg-btn')}
+        ${ctaButtonsHTML(p, 'cg-btn')}
       </div>`;
 
   const detailsBody = [structuredDetails, pills, cellPills, rating,

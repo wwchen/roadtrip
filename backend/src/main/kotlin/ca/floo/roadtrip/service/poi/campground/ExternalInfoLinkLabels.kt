@@ -12,6 +12,7 @@ internal object ExternalInfoLinkLabels {
             host.endsWith("usbr.gov") -> "Park info on usbr.gov"
             host.endsWith("tva.gov") -> "Park info on tva.gov"
             host.endsWith("recreation.gov") -> "View on recreation.gov"
+            host.endsWith("campflare.com") -> "View on Campflare"
             host.endsWith("bcparks.ca") -> "Park info on bcparks.ca"
             host.endsWith("albertaparks.ca") -> "Park info on albertaparks.ca"
             host.endsWith("pc.gc.ca") || host.endsWith("parks.canada.ca") -> "Park info on parks.canada.ca"

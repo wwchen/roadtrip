@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.poi.campground
 
 import ca.floo.roadtrip.models.api.poi.PoiCtaSchema
+import ca.floo.roadtrip.models.domain.CampflareUrls
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.BookingUrlTemplate
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
@@ -15,11 +16,11 @@ import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneId
 
-// Backend-computed primary action for a POI pin. The drawer button reads
-// {url, label, kind} verbatim — the FE doesn't own per-vendor precedence
-// or URL construction.
+// Backend-computed actions for a POI pin. The drawer reads {url, label, kind}
+// verbatim — the FE doesn't own per-vendor precedence or URL construction.
 private const val INFO_CTA_KIND = "info"
 private const val RESERVE_CTA_KIND = "reserve"
+private const val CAMPFLARE_CTA_LABEL = "View on Campflare"
 
 internal class CampgroundCta(
     clock: Clock = Clock.systemUTC(),
@@ -38,7 +39,7 @@ internal class CampgroundCta(
     }
 
     // Display name for the booking system that reservations on this pin
-    // flow through. Same per-vendor knowledge as computeCta, surfaced as
+    // flow through. Same per-vendor knowledge as computeCtas, surfaced as
     // a string for the drawer footer.
     fun bookingSystem(
         providerRefJson: String?,
@@ -50,23 +51,49 @@ internal class CampgroundCta(
         return providers.firstNotNullOfOrNull { it.bookingSystem(providerRef, upstreamUrl) }
     }
 
-    fun computeCta(
+    fun computeCtas(
         providerRefJson: String?,
         ctaProviderRefJson: String?,
         reserveUrl: String?,
         infoUrl: String?,
-    ): PoiCtaSchema? {
-        val providerRef = (ctaProviderRefJson ?: providerRefJson)?.let { ProviderRefParser.parse(it) }
-        return providers.firstNotNullOfOrNull {
-            it.reserveCta(providerRef, providerUrl(reserveUrl = reserveUrl, infoUrl = infoUrl))
-        } ?: infoUrl?.takeIf { it.isNotBlank() }?.let {
-            PoiCtaSchema(
-                url = it,
-                label = ExternalInfoLinkLabels.forUrl(it),
-                kind = INFO_CTA_KIND,
-            )
-        }
+    ): List<PoiCtaSchema> {
+        val primaryProviderRef = (ctaProviderRefJson ?: providerRefJson)?.let { ProviderRefParser.parse(it) }
+        val sourceProviderRef = providerRefJson?.let { ProviderRefParser.parse(it) }
+        val primaryCta =
+            primaryReserveCta(
+                providerRef = primaryProviderRef,
+                reserveUrl = reserveUrl,
+                infoUrl = infoUrl,
+            ) ?: infoUrl?.takeIf { it.isNotBlank() }?.let {
+                PoiCtaSchema(
+                    url = it,
+                    label = ExternalInfoLinkLabels.forUrl(it),
+                    kind = INFO_CTA_KIND,
+                )
+            }
+        return listOfNotNull(
+            primaryCta,
+            campflareCta(sourceProviderRef),
+        ).distinctBy { it.url }
     }
+
+    private fun campflareCta(providerRef: ProviderRef?): PoiCtaSchema? {
+        val campflare = providerRef as? ProviderRef.Campflare ?: return null
+        return PoiCtaSchema(
+            url = CampflareUrls.campground(campflare.campgroundId),
+            label = CAMPFLARE_CTA_LABEL,
+            kind = INFO_CTA_KIND,
+        )
+    }
+
+    private fun primaryReserveCta(
+        providerRef: ProviderRef?,
+        reserveUrl: String?,
+        infoUrl: String?,
+    ): PoiCtaSchema? =
+        providers.firstNotNullOfOrNull {
+            it.reserveCta(providerRef, providerUrl(reserveUrl = reserveUrl, infoUrl = infoUrl))
+        }
 
     private fun providerUrl(
         reserveUrl: String?,

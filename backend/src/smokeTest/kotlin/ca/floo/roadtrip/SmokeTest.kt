@@ -534,11 +534,13 @@ class SmokeTest {
                               "availability_supported": true,
                               "description": "Clear Lake State Park offers rental cabins near the lake.",
                               "photo_url": "https://cali-content.usedirect.com/Images/California/ParkImages/Place/629.jpg",
-                              "cta": {
-                                "url": "https://reservecalifornia.com/park/629",
-                                "label": "Reserve on ReserveCalifornia",
-                                "kind": "reserve"
-                              },
+                              "cta": [
+                                {
+                                  "url": "https://reservecalifornia.com/park/629",
+                                  "label": "Reserve on ReserveCalifornia",
+                                  "kind": "reserve"
+                                }
+                              ],
                               "provider_ref": { "place_id": 629, "facility_ids": [889] },
                               "raw": {
                                 "amenities": ["Restrooms", "Showers"],

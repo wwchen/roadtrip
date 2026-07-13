@@ -7,8 +7,8 @@ import {
   cellCoveragePillsHTML,
   parseAmenities,
   parseCellCoverage,
+  ctaButtonsHTML,
   reserveButtonHTML,
-  campflareSourceButtonHTML,
   structuredCampgroundDetailsHTML,
 } from './campground-card.js';
 
@@ -27,6 +27,18 @@ const campflareDetail = {
       availability_provider: 'recgov',
       booking_site: 'recreation.gov',
       reserve_url: 'https://www.recreation.gov/camping/campgrounds/232869',
+      cta: [
+        {
+          url: 'https://www.recreation.gov/camping/campgrounds/232869',
+          label: 'View on recreation.gov',
+          kind: 'reserve',
+        },
+        {
+          url: 'https://campflare.com/campground/cold-creek-869',
+          label: 'View on Campflare',
+          kind: 'info',
+        },
+      ],
       address: {
         address: {
           city: 'Truckee',
@@ -89,7 +101,7 @@ const campflareDetail = {
         links: [
           { title: 'Official page', url: 'https://example.test/cold-creek' },
           { title: 'Map', url: 'https://example.test/cold-creek-map' },
-          { title: 'Campflare source', url: 'https://api.campflare.com/v2/campground/cold-creek-869' },
+          { title: 'Campflare source', url: 'https://campflare.com/campground/cold-creek-869' },
         ],
         alerts: [
           { title: 'Water unavailable', description: 'Bring drinking water.' },
@@ -143,15 +155,15 @@ test('campground drawer helpers accept canonical amenities and cell service', ()
   assert.deepEqual(parseCellCoverage(p), { verizon: 0, tmobile: 2.5 });
   assert.match(cellCoveragePillsHTML(parseCellCoverage(p)), /T-Mobile/);
   assert.match(reserveButtonHTML(p, 'cg-btn'), /View on recreation\.gov/);
-  assert.match(campflareSourceButtonHTML(p, 'cg-btn'), /Campflare source/);
-  assert.match(campflareSourceButtonHTML(p, 'cg-btn'), /cg-btn-secondary/);
-  assert.match(campflareSourceButtonHTML(p, 'cg-btn'), /api\.campflare\.com\/v2\/campground\/cold-creek-869/);
+  assert.match(ctaButtonsHTML(p, 'cg-btn'), /View on Campflare/);
+  assert.match(ctaButtonsHTML(p, 'cg-btn'), /cg-btn-secondary/);
+  assert.match(ctaButtonsHTML(p, 'cg-btn'), /campflare\.com\/campground\/cold-creek-869/);
 });
 
-test('campflareSourceButtonHTML falls back to provider ref id', () => {
+test('ctaButtonsHTML accepts the legacy single CTA shape', () => {
   assert.match(
-    campflareSourceButtonHTML({ provider_ref: { campflare_id: 'cranberry-lake-wsp' } }, 'cg-btn'),
-    /https:\/\/api\.campflare\.com\/v2\/campground\/cranberry-lake-wsp/,
+    ctaButtonsHTML({ cta: { url: 'https://example.test/book', label: 'Book now', kind: 'reserve' } }, 'cg-btn'),
+    /Book now/,
   );
 });
 
