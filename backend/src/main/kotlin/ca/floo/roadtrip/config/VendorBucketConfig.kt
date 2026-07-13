@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.ratelimit
+package ca.floo.roadtrip.config
 
 import java.time.Duration
 

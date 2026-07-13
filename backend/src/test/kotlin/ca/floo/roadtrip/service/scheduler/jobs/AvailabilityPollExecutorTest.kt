@@ -2,10 +2,14 @@ package ca.floo.roadtrip.service.scheduler.jobs
 
 import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
 import ca.floo.roadtrip.clients.slack.SlackBlockDto
+import ca.floo.roadtrip.config.VendorRateLimitConfig
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.models.availability.AvailabilityProviderError
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.CampsiteDayObservation
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
@@ -34,19 +38,15 @@ import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.BookingUrlTemplate
-import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import ca.floo.roadtrip.service.notification.SlackContentAvailabilityRenderer
 import ca.floo.roadtrip.service.notification.SlackContentWatchStatusRenderer
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
 import ca.floo.roadtrip.service.notification.WatchOpening
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
-import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
@@ -65,6 +65,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AvailabilityPollExecutorTest : SharedDbTest() {
+    private val testProviderCooldown = Duration.ofMinutes(5)
+
     // Pin the clock to noon UTC so the earliest-bookable-date calculation
     // (18:00 local cutoff) never drifts across midnight for the test POI
     // at lon=-119.56 (America/Los_Angeles). Without this, CI runs between
@@ -341,7 +343,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         limiter: VendorRateLimiter = RecordingLimiter(grant = true),
         alertDispatcher: WatchAlertDispatcher = disabledDispatcher(),
         failoverFetcher: FailoverAvailabilityFetcher =
-            FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromEnv()),
+            FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = testProviderCooldown)),
     ): AvailabilityPollExecutor {
         val campsitesRepo = CampsiteRepo(ctx)
         val registry = AvailabilityProviderRegistry(mapOf("test" to provider))
@@ -396,6 +398,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 maxPollWindowDays = maxPollWindowDays,
             )
 
+        override fun isEnabled(): Boolean = true
+
         override suspend fun availability(
             ref: ProviderRef,
             startDate: LocalDate,
@@ -404,18 +408,18 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
         override suspend fun catalogAvailability(
             ref: ProviderRef,
-            reservables: List<CatalogCampsiteRef>,
+            campsites: List<CatalogCampsiteRef>,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch {
             calls++
             lastStart = startDate
             lastEnd = endDate
-            lastReservableCount = reservables.size
+            lastReservableCount = campsites.size
             mdcRunIdDuringCall = MDC.get("run_id")
             val observedAt = Instant.now()
             val observations =
-                reservables.map { reservable ->
+                campsites.map { reservable ->
                     CampsiteDayObservation(
                         campsiteId = reservable.campsiteId,
                         date = observationDate ?: startDate,
@@ -448,6 +452,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 maxPollWindowDays = 60,
             )
 
+        override fun isEnabled(): Boolean = true
+
         override suspend fun availability(
             ref: ProviderRef,
             startDate: LocalDate,
@@ -456,7 +462,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
         override suspend fun catalogAvailability(
             ref: ProviderRef,
-            reservables: List<CatalogCampsiteRef>,
+            campsites: List<CatalogCampsiteRef>,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw AvailabilityProviderError.RateLimited(RuntimeException("429"))
@@ -1309,7 +1315,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         successBatch: AvailabilityObservationBatch?,
         servedBy: AvailabilityProviderId?,
     ): FailoverAvailabilityFetcher =
-        object : FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromEnv()) {
+        object : FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = testProviderCooldown)) {
             override suspend fun fetch(
                 candidates: List<ProviderCandidate>,
                 campsites: List<CampsiteAvailabilityTarget>,

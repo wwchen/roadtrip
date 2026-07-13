@@ -8,7 +8,8 @@ object AspiraTenants {
      * The tenant table. Order does not matter; lookup is by host.
      *
      * Adding a tenant: append a row. Validation at boot
-     * ([AvailabilityProviderRegistryFactory]) ensures every host the YAML
+     * ([ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry])
+     * ensures every host the YAML
      * registry declares has a row here, so a forgotten entry fails
      * loudly instead of silently routing to a missing adapter.
      */

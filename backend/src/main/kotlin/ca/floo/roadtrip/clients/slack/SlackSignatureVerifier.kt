@@ -87,7 +87,7 @@ class SlackSignatureVerifier(
         } else {
             log.info(
                 "Slack signature verify FAILED: signature mismatch (body_bytes={}, drift={}s, expected_prefix={}, got_prefix={}) " +
-                    "— usually means the SLACK_SIGNING_SECRET env doesn't match the app's Basic Info signing secret, " +
+                    "— usually means roadtrip.slack.signing-secret doesn't match the app's Basic Info signing secret, " +
                     "or a proxy re-encoded the body.",
                 body.size,
                 drift.seconds,

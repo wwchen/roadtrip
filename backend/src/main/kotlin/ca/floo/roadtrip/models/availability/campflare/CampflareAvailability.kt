@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.clients.campflare
+package ca.floo.roadtrip.models.availability.campflare
 
 import java.time.Instant
 

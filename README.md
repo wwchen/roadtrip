@@ -63,7 +63,7 @@ per-target mutex serializes a fetch and an import on the same target.
 Skipping `data-fetch` is fine — the ETL runs against the newest capture
 already on disk.
 
-Targets are derived from `config/poi-registry.yaml` at boot. Each
+Targets are derived from `backend/src/main/resources/poi-registry.yaml` at boot. Each
 `governing_body` slug becomes a multi-source target (refresh every source
 under that body), and each `source.id` becomes its own target (refresh
 just that one). Adding a vendor = appending a YAML row + writing the
@@ -123,7 +123,7 @@ Envelope shape:
 }
 ```
 
-Source registry lives at `config/poi-registry.yaml`. Run `make poll-raw
+Source registry lives at `backend/src/main/resources/poi-registry.yaml`. Run `make poll-raw
 SOURCE=--list` for the current set; abridged:
 
 | Source                | Upstream                                | Output dir |
@@ -140,7 +140,7 @@ SOURCE=--list` for the current set; abridged:
 | `tesla-index`         | tesla.com get-locations (curl-impersonate) | `data/raw/tesla-index/<ts>.json` |
 | `tesla-locations`     | tesla.com per-slug, cache-aware (~30d)  | `data/raw/tesla-locations/<slug>/<ts>.json` |
 
-`config/poi-registry.yaml` is the source of truth for governing bodies
+`backend/src/main/resources/poi-registry.yaml` is the source of truth for governing bodies
 (NPS, USFS, BC Parks, Alberta Parks, …), POI data sources, and tenant
 args. Reservation-provider dispatch uses `pois.source` plus `provider_ref`
 JSON rather than a provider FK.

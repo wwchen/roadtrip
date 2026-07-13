@@ -46,12 +46,12 @@ internal class PoiService(
     detailServices: List<PoiDetailService>,
     private val categoryPolicies: List<PoiCategoryPolicy> = DEFAULT_POI_CATEGORY_POLICIES,
     private val limit: Int = POI_LIMIT,
-) {
+) : PoiReader {
     private val detailServicesByType = detailServices.associateBy { it.poiType }
     private val categoryPoliciesByType = categoryPolicies.associateBy { it.poiType }
     private val defaultCategories = categoryPolicies.map { it.poiType }
 
-    fun pois(
+    override fun pois(
         bbox: Bbox,
         zoom: Int?,
         categories: List<String>?,
@@ -68,7 +68,7 @@ internal class PoiService(
         return poiFeatureCollection(result.rows, result.truncated)
     }
 
-    fun poisWithinPolygon(
+    override fun poisWithinPolygon(
         polygonGeoJson: String,
         categories: List<String>?,
     ): List<PoiRow> {
@@ -80,7 +80,7 @@ internal class PoiService(
         )
     }
 
-    fun poiDetail(id: Long): PoiDetailFeatureSchema? {
+    override fun poiDetail(id: Long): PoiDetailFeatureSchema? {
         val poi = poiRepo.findById(id) ?: return null
         val properties =
             detailServicesByType[poi.category]
@@ -93,7 +93,7 @@ internal class PoiService(
         )
     }
 
-    fun search(
+    override fun search(
         query: String,
         categories: List<String>,
         limit: Int,
@@ -102,8 +102,11 @@ internal class PoiService(
         val canonicalCategories = canonicalPoiCategories(categories)
         val hits =
             poiRepo
-                .search(query = query, categories = canonicalCategories, limit = limit)
-                .map {
+                .search(
+                    query = query,
+                    categories = canonicalCategories,
+                    limit = limit,
+                ).map {
                     PoiSearchHitSchema(
                         id = it.id,
                         name = it.name,

@@ -1,5 +1,4 @@
 package ca.floo.roadtrip.clients.aspira
-
 import ca.floo.roadtrip.models.metadata.aspira.AspiraResourceAvailability
 import ca.floo.roadtrip.models.metadata.aspira.AspiraStatus
 import java.net.URLEncoder

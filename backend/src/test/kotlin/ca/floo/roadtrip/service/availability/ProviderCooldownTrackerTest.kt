@@ -116,47 +116,4 @@ class ProviderCooldownTrackerTest {
         clock.advance(31)
         assertFalse(tracker.isCooling(RECGOV))
     }
-
-    @Test
-    fun `fromEnv reads AVAILABILITY_PROVIDER_COOLDOWN_SECONDS`() {
-        // Behavioral test: env-configured tracker's cooldown is 42s. We can't
-        // inject a clock through fromEnv (uses default Instant::now), so verify
-        // the parse landed by constructing an equivalent tracker directly and
-        // exercising its boundary. This documents the contract: the env value
-        // becomes `Duration.ofSeconds(<value>)`.
-        val fromEnv =
-            ProviderCooldownTracker.fromEnv(
-                env = mapOf(ProviderCooldownTracker.ENV_COOLDOWN_SECONDS to "42"),
-            )
-        // With no injected clock, fromEnv uses Instant.now(). Recording a
-        // failure and immediately checking isCooling proves the cooldown is
-        // positive; further boundary checks would race against wall time.
-        fromEnv.recordFailure(RECGOV)
-        assertTrue(fromEnv.isCooling(RECGOV), "just recorded, cooldown active")
-
-        // Precise boundary via an equivalent injected-clock tracker: same
-        // parse path, deterministic assertions.
-        val clock = FakeClock()
-        val equivalent = trackerWith(clock, cooldownSeconds = 42L)
-        equivalent.recordFailure(RECGOV)
-        clock.advance(41)
-        assertTrue(equivalent.isCooling(RECGOV), "at 41s of 42s cooldown, still cooling")
-        clock.advance(2)
-        assertFalse(equivalent.isCooling(RECGOV), "past 42s, no longer cooling")
-    }
-
-    @Test
-    fun `fromEnv falls back to default when env var is absent`() {
-        val tracker = ProviderCooldownTracker.fromEnv(env = emptyMap())
-        tracker.recordFailure(RECGOV)
-        assertTrue(tracker.isCooling(RECGOV))
-        // Boundary via equivalent injected-clock tracker at default seconds.
-        val clock = FakeClock()
-        val equivalent = trackerWith(clock, cooldownSeconds = ProviderCooldownTracker.DEFAULT_COOLDOWN_SECONDS)
-        equivalent.recordFailure(RECGOV)
-        clock.advance(ProviderCooldownTracker.DEFAULT_COOLDOWN_SECONDS - 1)
-        assertTrue(equivalent.isCooling(RECGOV))
-        clock.advance(2)
-        assertFalse(equivalent.isCooling(RECGOV))
-    }
 }

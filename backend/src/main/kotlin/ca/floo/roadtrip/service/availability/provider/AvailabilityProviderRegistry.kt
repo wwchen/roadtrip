@@ -2,6 +2,14 @@ package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.models.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraAvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraTenants
+import ca.floo.roadtrip.service.availability.provider.adapters.campflare.CampflareAvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovAvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaAvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaTenant
+import ca.floo.roadtrip.service.availability.provider.adapters.reservecalifornia.ReserveCaliforniaAvailabilityProvider
 
 /**
  * Holds the live availability-provider adapters and dispatches a selected
@@ -34,21 +42,25 @@ class AvailabilityProviderRegistry(
      * when the source is unmapped (e.g. a brand-new ReserveAmerica tenant,
      * or a brand-new ETL whose registry entry forgot to set a provider).
      */
-    fun forPoi(row: CampsiteProviderRefRow): AvailabilityProvider? = adaptersBySource[row.source]
+    fun forPoi(row: CampsiteProviderRefRow): AvailabilityProvider? =
+        adaptersBySource[row.source]
+            ?.takeIf { it.isEnabled() }
 
     fun forPoi(
         row: CampsiteProviderRefRow,
         ref: ProviderRef,
     ): AvailabilityProvider? =
         adaptersBySource[row.source]
-            ?.takeIf { it.canHandle(ref) }
+            ?.takeIf { it.isEnabled() && it.canHandle(ref) }
 
     /**
      * Source-only lookup for call sites that only need static adapter
      * capabilities. Use [forPoi] when future provider routing may need the
      * full campground row.
      */
-    fun forSource(source: String): AvailabilityProvider? = adaptersBySource[source]
+    fun forSource(source: String): AvailabilityProvider? =
+        adaptersBySource[source]
+            ?.takeIf { it.isEnabled() }
 
     /**
      * All distinct adapter instances. Used by capability probes and admin
@@ -56,12 +68,123 @@ class AvailabilityProviderRegistry(
      * (e.g. one RecGov adapter handles every recgov source); this method
      * returns it once.
      */
-    fun all(): Collection<AvailabilityProvider> = adaptersBySource.values.toSet()
+    fun all(): Collection<AvailabilityProvider> = adaptersBySource.values.filter { it.isEnabled() }.toSet()
 
     /**
      * First adapter found with the given vendor id. Convenience for tests
      * and capability endpoints that don't care which tenant they hit.
      * Returns null if no adapter for that vendor is registered.
      */
-    fun firstByVendor(id: AvailabilityProviderId): AvailabilityProvider? = adaptersBySource.values.firstOrNull { it.id == id }
+    fun firstByVendor(id: AvailabilityProviderId): AvailabilityProvider? =
+        adaptersBySource.values.firstOrNull { it.id == id && it.isEnabled() }
+
+    companion object {
+        fun fromPoiRegistry(
+            registry: PoiRegistry,
+            clients: AvailabilityProviderClients,
+            isProviderEnabled: (AvailabilityProviderId) -> Boolean,
+        ): AvailabilityProviderRegistry {
+            val adaptersBySource = mutableMapOf<String, AvailabilityProvider>()
+
+            // RecGov — single adapter instance shared across every recgov source.
+            val recgov =
+                RecGovAvailabilityProvider(
+                    client = clients.recgovClient,
+                    enabled = isProviderEnabled(AvailabilityProviderId.RECGOV),
+                )
+            adaptersBySource[RECGOV_VENDOR] = recgov
+            for (source in registry.recgovSources()) {
+                adaptersBySource[source] = recgov
+            }
+
+            // Canonical catalog reads expose `vendor_refs.vendor` ("campflare"),
+            // while registry YAML exposes the terminal ETL slug ("campflare-campgrounds").
+            val campflare =
+                CampflareAvailabilityProvider(
+                    client = clients.campflareClient,
+                    enabled = isProviderEnabled(AvailabilityProviderId.CAMPFLARE),
+                )
+            adaptersBySource[CAMPFLARE_VENDOR] = campflare
+            for (source in registry.campflareSources()) {
+                adaptersBySource[source] = campflare
+            }
+
+            // Aspira — one adapter instance per upstream host. Sources that share
+            // a host share an instance.
+            val hostBySource = registry.aspiraHostBySource()
+            validateAspiraHosts(hostBySource)
+            val aspiraByHost = mutableMapOf<String, AspiraAvailabilityProvider>()
+            for ((source, host) in hostBySource) {
+                val adapter =
+                    aspiraByHost.getOrPut(host) {
+                        val tenant =
+                            AspiraTenants.byHost(host)
+                                ?: error(
+                                    "Aspira host '$host' has no AspiraTenant config row; " +
+                                        "add it to AspiraTenants.kt.",
+                                )
+                        AspiraAvailabilityProvider(
+                            tenant = tenant,
+                            client = clients.aspiraClient,
+                            enabled = isProviderEnabled(AvailabilityProviderId.ASPIRA),
+                        )
+                    }
+                adaptersBySource[source] = adapter
+            }
+
+            // ReserveAmerica / Active Network — one adapter per tenant source.
+            for (config in registry.reserveAmericaSources()) {
+                val tenant =
+                    ReserveAmericaTenant(
+                        source = config.source,
+                        host = config.host,
+                        contractCode = config.contractCode,
+                        bookingHorizonDays = config.bookingHorizonDays,
+                    )
+                adaptersBySource[config.source] =
+                    ReserveAmericaAvailabilityProvider(
+                        tenant = tenant,
+                        client = clients.reserveAmericaClient,
+                        enabled = isProviderEnabled(AvailabilityProviderId.RESERVEAMERICA),
+                    )
+            }
+
+            val reserveCaliforniaSources = registry.reserveCaliforniaSources()
+            if (reserveCaliforniaSources.isNotEmpty()) {
+                val reserveCalifornia =
+                    ReserveCaliforniaAvailabilityProvider(
+                        client = clients.reserveCaliforniaClient,
+                        enabled = isProviderEnabled(AvailabilityProviderId.RESERVECALIFORNIA),
+                    )
+                for (source in reserveCaliforniaSources) {
+                    adaptersBySource[source] = reserveCalifornia
+                }
+            }
+
+            return AvailabilityProviderRegistry(adaptersBySource = adaptersBySource.toMap())
+        }
+
+        /**
+         * Boot-time gate: every Aspira host the YAML declares must have a
+         * tenant config row, and vice versa. Catches forgotten entries
+         * loudly instead of letting a request silently route to a missing
+         * adapter at the first user click.
+         */
+        private fun validateAspiraHosts(hostBySource: Map<String, String>) {
+            val yamlHosts = hostBySource.values.toSet()
+            val configHosts = AspiraTenants.knownHosts()
+            val missingFromConfig = yamlHosts - configHosts
+            if (missingFromConfig.isNotEmpty()) {
+                error(
+                    "Aspira hosts declared in POI registry but missing from AspiraTenants: " +
+                        "$missingFromConfig. Add a tenant row in AspiraTenants.kt.",
+                )
+            }
+            // Reverse direction is informational, not fatal: a tenant row with no
+            // YAML source is harmless (the adapter just won't be exercised).
+        }
+
+        private const val CAMPFLARE_VENDOR = "campflare"
+        private const val RECGOV_VENDOR = "recgov"
+    }
 }

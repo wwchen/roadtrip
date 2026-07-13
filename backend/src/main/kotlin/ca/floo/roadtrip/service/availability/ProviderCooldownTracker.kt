@@ -23,16 +23,6 @@ internal class ProviderCooldownTracker(
     private val cooldown: Duration,
     private val clock: () -> Instant = Instant::now,
 ) {
-    companion object {
-        const val DEFAULT_COOLDOWN_SECONDS = 300L
-        const val ENV_COOLDOWN_SECONDS = "AVAILABILITY_PROVIDER_COOLDOWN_SECONDS"
-
-        fun fromEnv(env: Map<String, String> = System.getenv()): ProviderCooldownTracker {
-            val seconds = env[ENV_COOLDOWN_SECONDS]?.toLong() ?: DEFAULT_COOLDOWN_SECONDS
-            return ProviderCooldownTracker(cooldown = Duration.ofSeconds(seconds))
-        }
-    }
-
     private val expiries = ConcurrentHashMap<AvailabilityProviderId, Instant>()
 
     fun recordFailure(id: AvailabilityProviderId) {

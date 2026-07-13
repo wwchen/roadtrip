@@ -252,7 +252,7 @@ def main() -> int:
         "--tenant",
         help=(
             "contract code to scope to (e.g. ABPP). Default: walk every "
-            "tenant in TENANTS. config/poi-registry.yaml passes one tenant "
+            "tenant in TENANTS. The POI registry passes one tenant "
             "per source row so each tenant lands under its own data/raw/ dir."
         ),
     )

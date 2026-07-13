@@ -8,8 +8,8 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.CampsiteDayObservation
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.service.api.availabilityErrorDto
-import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll

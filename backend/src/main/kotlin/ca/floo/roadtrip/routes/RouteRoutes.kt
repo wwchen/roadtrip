@@ -44,7 +44,7 @@ private val routeJson =
  *   200 { type:"FeatureCollection", features: [ LineString feature with
  *         distance_m, duration_s, legs[] in properties ] }
  *   400 for malformed coords / wrong number of waypoints
- *   503 when MAPBOX_TOKEN unset or upstream fails
+ *   503 when roadtrip.mapbox.token is unset or upstream fails
  */
 internal fun Route.routeRoutes(
     routeCache: RouteCache,
@@ -54,7 +54,7 @@ internal fun Route.routeRoutes(
         if (!routeCache.configured) {
             call.respondRouteError(
                 error = "routing_unavailable",
-                detail = "MAPBOX_TOKEN not set",
+                detail = "roadtrip.mapbox.token not set",
                 status = HttpStatusCode.ServiceUnavailable,
             )
             return@get

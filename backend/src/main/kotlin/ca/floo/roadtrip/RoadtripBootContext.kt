@@ -11,6 +11,7 @@ import java.io.File
 import javax.sql.DataSource
 
 internal data class RoadtripBootContext(
+    val properties: Map<String, String>,
     val appConfig: AppConfig,
     val dataSource: DataSource,
     val ctx: DSLContext,

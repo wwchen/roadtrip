@@ -5,6 +5,7 @@ import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.clients.aspira.AspiraOccupancy
 import ca.floo.roadtrip.clients.aspira.AspiraResourceOccupancy
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
@@ -55,6 +56,7 @@ class AspiraAvailabilityProviderTest {
                             bookingHorizonDays = 365,
                         ),
                     client = client,
+                    enabled = true,
                 )
 
             val batch =
@@ -124,6 +126,7 @@ class AspiraAvailabilityProviderTest {
                             bookingHorizonDays = 365,
                         ),
                     client = client,
+                    enabled = true,
                     occupancyEnabled = true,
                 )
 
@@ -186,6 +189,7 @@ class AspiraAvailabilityProviderTest {
                             bookingHorizonDays = 365,
                         ),
                     client = client,
+                    enabled = true,
                     occupancyEnabled = false,
                 )
 
@@ -242,6 +246,7 @@ class AspiraAvailabilityProviderTest {
                             bookingHorizonDays = 365,
                         ),
                     client = client,
+                    enabled = true,
                 )
 
             val batch =
@@ -271,6 +276,7 @@ class AspiraAvailabilityProviderTest {
             AspiraAvailabilityProvider(
                 tenant = AspiraTenant(host = "washington.goingtocamp.com", vendorCode = "aspira_wa", bookingHorizonDays = 365),
                 client = fakeAspiraClient(),
+                enabled = true,
             )
         val reservable =
             CampsiteAvailabilityTarget(

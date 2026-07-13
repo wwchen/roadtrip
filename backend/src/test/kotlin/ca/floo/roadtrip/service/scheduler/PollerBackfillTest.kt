@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.scheduler
 
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
@@ -14,7 +15,6 @@ import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import org.junit.jupiter.api.BeforeEach
@@ -117,6 +117,8 @@ class PollerBackfillTest : SharedDbTest() {
                 bookingHorizonDays = 180,
                 maxPollWindowDays = 60,
             )
+
+        override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
             ref: ProviderRef,

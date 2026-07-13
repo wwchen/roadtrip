@@ -90,7 +90,7 @@ class SlackNotificationServiceImpl(
         attachments: List<SlackAttachmentDto>,
     ): Boolean {
         if (config == null || client == null) {
-            log.warn("Slack disabled ({} / {} unset); message not sent: {}", SlackConfig.TOKEN_ENV, SlackConfig.CHANNEL_ENV, text)
+            log.warn("Slack disabled (bot-token/default-channel unset); message not sent: {}", text)
             return false
         }
         return client.postMessage(channel ?: config.defaultChannel, text, attachments = attachments)

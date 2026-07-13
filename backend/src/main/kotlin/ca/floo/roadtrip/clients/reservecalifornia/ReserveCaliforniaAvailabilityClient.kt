@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.clients.reservecalifornia
 
+import ca.floo.roadtrip.models.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import java.time.LocalDate
 
 interface ReserveCaliforniaAvailabilityClient : AutoCloseable {

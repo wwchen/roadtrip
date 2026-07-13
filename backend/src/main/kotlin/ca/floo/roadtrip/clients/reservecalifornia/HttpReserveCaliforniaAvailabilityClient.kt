@@ -2,6 +2,7 @@ package ca.floo.roadtrip.clients.reservecalifornia
 
 import ca.floo.roadtrip.clients.DateStringFormatter
 import ca.floo.roadtrip.exceptions.ReserveCaliforniaException
+import ca.floo.roadtrip.models.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import kotlinx.coroutines.future.await
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray

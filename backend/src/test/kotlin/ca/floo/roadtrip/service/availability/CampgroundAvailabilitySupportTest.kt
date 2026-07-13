@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CanonicalViewRepo
@@ -8,7 +9,6 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import org.junit.jupiter.api.BeforeEach
@@ -23,7 +23,7 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
     }
 
     @Test
-    fun `supports availability through recgov alias when campflare provider declines the ref`() {
+    fun `preferredAvailabilityProvider falls back through recgov alias when campflare provider declines the ref`() {
         val fixture =
             ctx.seedCatalogPoi(
                 sourceId = "upper-pines-campflare-support",
@@ -51,7 +51,7 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
                     ),
             )
 
-        assertEquals(true, support.supportsCampground(fixture.catalogId))
+        assertEquals("recgov", support.preferredAvailabilityProvider(fixture.catalogId))
     }
 
     @Test
@@ -78,10 +78,28 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
         assertEquals("recgov", support.preferredAvailabilityProvider(fixture.catalogId))
     }
 
-    private fun supportFor(): CampgroundAvailabilitySupport =
+    @Test
+    fun `preferredAvailabilityProvider skips disabled providers`() {
+        val campground = seedDualVendorCampground()
+        val support =
+            supportFor(
+                campflareEnabled = false,
+            )
+
+        assertEquals("recgov", support.preferredAvailabilityProvider(campground.campgroundId))
+    }
+
+    private fun supportFor(campflareEnabled: Boolean = true): CampgroundAvailabilitySupport =
         CampgroundAvailabilitySupport(
             providerRefs = CampsiteProviderRepo(ctx),
-            availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
+            availabilityProviders =
+                AvailabilityProviderRegistry(
+                    adaptersBySource =
+                        mapOf(
+                            "campflare" to NoopCampflareProvider(enabled = campflareEnabled),
+                            "recgov" to NoopRecgovProvider(),
+                        ),
+                ),
         )
 
     private data class MultiRefCampground(
@@ -147,6 +165,8 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
                 maxPollWindowDays = 60,
             )
 
+        override fun isEnabled(): Boolean = true
+
         override suspend fun availability(
             ref: ProviderRef,
             startDate: LocalDate,
@@ -164,7 +184,30 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
                 maxPollWindowDays = 60,
             )
 
+        override fun isEnabled(): Boolean = true
+
         override fun canHandle(ref: ProviderRef): Boolean = false
+
+        override suspend fun availability(
+            ref: ProviderRef,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
+    }
+
+    private class NoopCampflareProvider(
+        private val enabled: Boolean,
+    ) : AvailabilityProvider {
+        override val id: AvailabilityProviderId = AvailabilityProviderId.CAMPFLARE
+        override val capabilities: AvailabilityProviderCapabilities =
+            AvailabilityProviderCapabilities(
+                supportsAvailability = true,
+                pollableForAlerts = false,
+                bookingHorizonDays = 365,
+                maxPollWindowDays = 60,
+            )
+
+        override fun isEnabled(): Boolean = enabled
 
         override suspend fun availability(
             ref: ProviderRef,

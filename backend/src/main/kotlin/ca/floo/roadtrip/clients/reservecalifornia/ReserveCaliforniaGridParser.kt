@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.clients.reservecalifornia
 
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull

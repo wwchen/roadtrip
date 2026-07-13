@@ -2,14 +2,14 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.models.availability.AvailabilityProviderError
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import kotlinx.coroutines.runBlocking
 import java.time.Duration
 import java.time.Instant
@@ -64,6 +64,8 @@ class FailoverAvailabilityFetcherTest {
                 bookingHorizonDays = 180,
                 maxPollWindowDays = 60,
             )
+
+        override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
             ref: ProviderRef,

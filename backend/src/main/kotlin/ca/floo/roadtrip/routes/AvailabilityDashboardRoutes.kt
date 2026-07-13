@@ -28,23 +28,13 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jooq.DSLContext
+import java.time.Duration
 import java.time.OffsetDateTime
 
 private const val DEFAULT_LIST_LIMIT = 100
 private const val MAX_LIST_LIMIT = 500
 private const val SNAPSHOT_DEFAULT_LIMIT = 200
 private const val SNAPSHOT_MAX_LIMIT = 1000
-
-/**
- * Per-poller "check now" cooldown: the minimum spacing between two human-forced
- * pulls of the same poller. Keeps a user mashing the button from starving the
- * shared vendor governor (PR4) for everyone attached to this poller. Overridable
- * via the `FORCE_PULL_COOLDOWN_SEC` env var.
- */
-private val FORCE_PULL_COOLDOWN: java.time.Duration =
-    java.time.Duration.ofSeconds(
-        System.getenv("FORCE_PULL_COOLDOWN_SEC")?.toLongOrNull() ?: 60L,
-    )
 
 @OptIn(ExperimentalSerializationApi::class)
 private val dashboardJson =
@@ -54,7 +44,10 @@ private val dashboardJson =
         ignoreUnknownKeys = true
     }
 
-fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
+fun Route.availabilityDashboardRoutes(
+    ctx: DSLContext,
+    forcePullCooldown: Duration,
+) {
     val pollers = AvailabilityPollerRepo(ctx)
     val runs = AvailabilityRunRepo(ctx)
     val availability = AvailabilityRepo(ctx)
@@ -161,7 +154,7 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
-        when (val result = pollers.forcePull(id, OffsetDateTime.now(), cooldown = FORCE_PULL_COOLDOWN)) {
+        when (val result = pollers.forcePull(id, OffsetDateTime.now(), cooldown = forcePullCooldown)) {
             is AvailabilityPollerRepo.ForcePullResult.Accepted ->
                 call.respondJson(
                     CheckNowResponseDto(pollerId = id, nextRunAt = result.nextRunAt.toString()),

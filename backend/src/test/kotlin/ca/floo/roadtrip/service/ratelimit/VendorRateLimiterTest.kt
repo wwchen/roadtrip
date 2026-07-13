@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.ratelimit
 
+import ca.floo.roadtrip.config.VendorBucketConfig
+import ca.floo.roadtrip.config.VendorRateLimitConfig
 import ca.floo.roadtrip.repo.SharedDbTest
 import org.junit.jupiter.api.BeforeEach
 import java.time.Duration

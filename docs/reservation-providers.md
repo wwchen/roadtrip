@@ -28,12 +28,10 @@ tests, and operational wiring for a new provider.
 
 ```
 service/availability/provider/
-├── AvailabilityClient.kt           # normalized availability operations
 ├── AvailabilityProviderClients.kt   # boot-time vendor client set + lifecycle
-├── AvailabilityProvider.kt          # availability + provider metadata port
+├── AvailabilityProvider.kt          # normalized availability + provider metadata port
 ├── AvailabilityProviderId.kt        # enum/provider identity
 ├── AvailabilityProviderRegistry.kt  # forPoi(row, ref) → adapter that can handle it
-├── AvailabilityProviderCapabilities.kt
 ├── ProviderRefParser.kt            # JSONB → models.ProviderRef (single source)
 └── adapters/
     ├── recgov/                 # availability + watches
@@ -43,17 +41,22 @@ service/availability/provider/
     └── reservecalifornia/      # availability
 ```
 
+`models/availability/AvailabilityProviderCapabilities.kt`,
+`models/availability/CatalogCampsiteRef.kt`, and
+`models/availability/AvailabilityProviderError.kt` are shared provider-contract
+types, not adapter implementation, because schedulers, API services, routes,
+and provider adapters all read them.
+
 `models.ProviderRef` (sealed class with `RecGov` / `Campflare` / `Aspira` /
 `ReserveAmerica` / `ReserveCalifornia` variants) is the wire shape. Adapters take a `ProviderRef` of their
 matching variant and the registry guarantees the dispatch is correct.
 
-Every vendor adapter class implements both `AvailabilityClient` and
-`AvailabilityProvider`: `AvailabilityClient` is the shared normalized
-availability contract, while `AvailabilityProvider` adds identity,
-capabilities, ref handling, and booking-link metadata. Raw HTTP clients under
-`clients/` stay vendor-specific because their upstream request and response
-shapes are genuinely different. The adapter boundary is where those shapes
-become provider-neutral `AvailabilityObservationBatch` values.
+Every vendor adapter class implements `AvailabilityProvider`: the shared
+normalized availability contract plus identity, capabilities, ref handling,
+and booking-link metadata. Raw HTTP clients under `clients/` stay
+vendor-specific because their upstream request and response shapes are
+genuinely different. The adapter boundary is where those shapes become
+provider-neutral `AvailabilityObservationBatch` values.
 
 The registry does not hardcode fallback modes. Availability services enumerate
 candidate provider refs from the catalog/registry, and the registry asks the
@@ -63,11 +66,12 @@ linked candidate ref. This is how a Campflare catalog row can naturally fall
 through to a linked rec.gov alias without a Campflare-specific service branch.
 
 Boot wiring passes those vendor-specific HTTP clients as one
-`AvailabilityProviderClients` set. Every vendor client interface is
-`AutoCloseable` with a default no-op close; implementations that actually own
-closeable resources, such as RecGov's Ktor client, override it. `Main` closes
-the set, not an individual vendor, so transport lifecycle does not leak through
-the availability-provider abstraction.
+`AvailabilityProviderClients` set. Every vendor client interface is an
+`AutoCloseable` with a default no-op `close()`. Implementations that actually
+own closeable resources, such as RecGov's Ktor client, override `close()`.
+Provider enablement belongs on `AvailabilityProvider.isEnabled()`, not on raw
+HTTP clients. `Main` closes the set, not an individual vendor, so transport
+lifecycle does not leak through the availability-provider abstraction.
 
 The availability orchestration that consumes this port lives one layer above:
 
@@ -134,8 +138,8 @@ per attempt to `availability_fetch_call` (each row carries its own
 `provider`, `parent_ref`, `outcome`, `duration_ms`, `error`), so failover
 walks show up in the Grafana call-trace panels without extra plumbing.
 
-**Cooldown duration:** `AVAILABILITY_PROVIDER_COOLDOWN_SECONDS` (default
-300s). In-process only; expires lazily on the next `isCooling` check.
+**Cooldown duration:** `roadtrip.availability.provider-cooldown` (default
+`5m`). In-process only; expires lazily on the next `isCooling` check.
 
 **Preference wiring:** `GET /api/pois/{id}` reads its `availability_provider`
 field from `PoiAvailabilitySupport.preferredAvailabilityProvider(poiId)`,
@@ -192,6 +196,8 @@ data class AvailabilityProviderCapabilities(
     val pollableForAlerts: Boolean,
     /** Max days into the future the upstream exposes. */
     val bookingHorizonDays: Int,
+    /** Widest per-tick poll window. */
+    val maxPollWindowDays: Int,
 )
 ```
 
@@ -202,8 +208,8 @@ drawer can hide affordances the provider doesn't support.
 
 | Action | Required interface | Notes |
 |---|---|---|
-| Per-day availability for a window | `AvailabilityClient.availability(ref, startDate, endDate)` | Drives provider-level availability. Adapters fetch upstream directly; the decision to serve stored data or call the adapter live is handled above it by `AvailabilityLoader`, reading current state from the `availability` interval table. |
-| Catalog availability for linked campsites | `AvailabilityClient.catalogAvailability(ref, campsites, startDate, endDate)` | The POI/campsite catalog path uses this so returned availability is narrowed to known catalog rows. |
+| Per-day availability for a window | `AvailabilityProvider.availability(ref, startDate, endDate)` | Drives provider-level availability. Adapters fetch upstream directly; the decision to serve stored data or call the adapter live is handled above it by `AvailabilityLoader`, reading current state from the `availability` interval table. |
+| Catalog availability for linked campsites | `AvailabilityProvider.catalogAvailability(ref, campsites, startDate, endDate)` | The POI/campsite catalog path uses this so returned availability is narrowed to known catalog rows. |
 | Capability probe | `AvailabilityProvider.capabilities` | Static per adapter; cheap. |
 | Watch evaluation on poll | watch evaluator | `same_site` requires one site bookable across all N nights; `any_combination` succeeds if at least one site is open per night. |
 | Record availability history | poller writes status-run rows to the `availability` interval table | Provider-agnostic; uses `AvailabilityObservationBatch` observations. |
@@ -383,7 +389,7 @@ poller has produced.
    implementing `AvailabilityProvider`. Capabilities default conservatively
    (`pollableForAlerts = false`); flip them on as features land.
 4. Ensure the terminal ETL emits the right `provider_ref` JSON and that its
-   `pois.source` maps to the adapter in `AvailabilityProviderRegistryFactory`.
+   `pois.source` maps to the adapter in `AvailabilityProviderRegistry.fromPoiRegistry`.
 5. Update the matrix table above.
 
 Steps 1–5 should be the entire provider-registration diff. If you find

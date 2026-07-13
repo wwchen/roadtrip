@@ -8,17 +8,13 @@ data class ApiCacheConfig(
     fun ttlFor(entity: ApiCacheEntity): Duration = ttlByEntity[entity] ?: entity.defaultTtl
 
     companion object {
-        fun fromEnv(env: Map<String, String> = System.getenv()): ApiCacheConfig =
+        fun fromConfig(config: ConfigSection): ApiCacheConfig =
             ApiCacheConfig(
                 ttlByEntity =
                     ApiCacheEntity
                         .entries
                         .associateWith { entity ->
-                            parseDuration(
-                                raw = env[entity.envKey],
-                                default = entity.defaultTtl,
-                                key = entity.envKey,
-                            )
+                            config.duration(entity.configKey, entity.defaultTtl)
                         },
             )
     }

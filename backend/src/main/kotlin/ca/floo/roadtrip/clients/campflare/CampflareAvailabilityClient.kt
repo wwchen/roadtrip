@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.clients.campflare
 
+import ca.floo.roadtrip.models.availability.campflare.CampflareAvailability
 import java.time.LocalDate
 
 fun interface CampflareAvailabilityClient : AutoCloseable {

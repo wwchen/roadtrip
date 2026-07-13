@@ -2,6 +2,7 @@ package ca.floo.roadtrip.clients.campflare
 
 import ca.floo.roadtrip.clients.DateStringFormatter
 import ca.floo.roadtrip.exceptions.CampflareException
+import ca.floo.roadtrip.models.availability.campflare.CampflareAvailability
 import kotlinx.coroutines.future.await
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -37,7 +38,9 @@ class HttpCampflareAvailabilityClient(
         require(campgroundIds.size <= MAX_BULK_CAMPGROUNDS) {
             "Campflare bulk availability accepts at most $MAX_BULK_CAMPGROUNDS campground ids"
         }
-        val key = apiKey?.takeIf { it.isNotBlank() } ?: throw CampflareException("missing CAMPFLARE_API_KEY", httpStatus = null)
+        val key =
+            apiKey?.takeIf { it.isNotBlank() }
+                ?: throw CampflareException("missing roadtrip.campflare.api-key", httpStatus = null)
         log.info(
             "campflare POST bulk availability campgroundCount={} startDate={} endDate={}",
             campgroundIds.size,

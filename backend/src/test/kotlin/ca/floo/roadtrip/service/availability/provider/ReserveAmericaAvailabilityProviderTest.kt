@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.availability.provider
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaTenant
@@ -51,6 +52,7 @@ class ReserveAmericaAvailabilityProviderTest {
                             bookingHorizonDays = 270,
                         ),
                     client = client,
+                    enabled = true,
                 )
 
             val batch =

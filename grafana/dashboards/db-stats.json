@@ -1,6 +1,19 @@
 {
   "annotations": {
-    "list": []
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
   },
   "editable": true,
   "fiscalYearStartMonth": 0,
@@ -40,8 +53,31 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
       },
       "gridPos": {
         "h": 10,
@@ -51,6 +87,7 @@
       },
       "id": 1,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "13.1.0",
@@ -76,8 +113,31 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
       },
       "gridPos": {
         "h": 8,
@@ -87,6 +147,7 @@
       },
       "id": 2,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "13.1.0",
@@ -112,8 +173,46 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "query",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.inspect",
+                "value": true
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 12,
@@ -123,6 +222,7 @@
       },
       "id": 3,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "13.1.0",
@@ -148,8 +248,31 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
       },
       "gridPos": {
         "h": 8,
@@ -159,6 +282,7 @@
       },
       "id": 4,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "13.1.0",
@@ -184,8 +308,31 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
       },
       "gridPos": {
         "h": 8,
@@ -195,6 +342,7 @@
       },
       "id": 5,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "13.1.0",
@@ -215,21 +363,18 @@
       "type": "table"
     }
   ],
+  "preload": false,
   "refresh": "5s",
-  "schemaVersion": 41,
+  "schemaVersion": 42,
   "tags": [
     "roadtrip",
     "ops"
   ],
-  "templating": {
-    "list": []
-  },
   "time": {
     "from": "now-30d",
     "to": "now"
   },
   "timepicker": {
-    "hidden": false,
     "refresh_intervals": [
       "5s",
       "10s",

@@ -7,18 +7,11 @@ POSTGRES_DB ?= roadtrip
 POSTGRES_USER ?= roadtrip
 POSTGRES_PASSWORD ?= roadtrip
 
-DB_HOST ?= 127.0.0.1
-DB_PORT ?= 5432
-DB_NAME ?= $(POSTGRES_DB)
-DB_USER ?= $(POSTGRES_USER)
-DB_PASSWORD ?= $(POSTGRES_PASSWORD)
-DB_JDBC_URL ?= jdbc:postgresql://$(DB_HOST):$(DB_PORT)/$(DB_NAME)
-
 help:
 	@echo "Targets:"
 	@echo "  make install          One-time host setup: brew deps + companion + git hooks"
 	@echo "  make install-hooks    Point this clone's git hooks at .githooks/ (per-clone)"
-	@echo "  make run              Build + run backend locally on 127.0.0.1:$(PORT) (serves static + /api)"
+	@echo "  make run              Build + run backend locally on 127.0.0.1:8765 (serves static + /api)"
 	@echo "  make run env=prod     Build backend image + run production Compose profiles"
 	@echo "  make companion        Run the campsite Playwright companion (against the local backend)"
 	@echo "  make data-fetch       Fetch upstream data via admin API (TARGET=<data_source slug> for one)."
@@ -49,10 +42,7 @@ ifeq ($(RUN_ENV),prod)
 	docker compose --profile tunnel --profile pois restart grafana alloy
 else ifeq ($(RUN_ENV),dev)
 	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres
-	PORT=$(PORT) ROADTRIP_STATIC_DIR=$(PWD) \
-	  ROADTRIP_DB_URL=$(DB_JDBC_URL) \
-	  ROADTRIP_DB_USER=$(DB_USER) ROADTRIP_DB_PASSWORD=$(DB_PASSWORD) \
-	  ./gradlew :backend:run
+	ROADTRIP_PROFILE=local ./gradlew :backend:run
 else
 	$(error unsupported env '$(RUN_ENV)'; use env=dev or env=prod)
 endif

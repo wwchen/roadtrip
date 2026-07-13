@@ -9,7 +9,7 @@ import ca.floo.roadtrip.models.api.poi.PoisRequestSchema
 import ca.floo.roadtrip.models.domain.poi.Bbox
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.POI_LIMIT
-import ca.floo.roadtrip.service.poi.PoiService
+import ca.floo.roadtrip.service.poi.PoiReader
 import ca.floo.roadtrip.service.poi.encodePoiFeatureJson
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
@@ -45,7 +45,7 @@ private val poiRoutesJson =
 // Corridor filtering moved to POST /api/pois/on-route. The trip planner's
 // "campgrounds along route" list needs the full set, not a viewport slice +
 // per-category sample.
-internal fun Route.poiRoutes(poiService: PoiService) {
+internal fun Route.poiRoutes(poiService: PoiReader) {
     post("/api/pois", {
         tags = listOf("poi")
         summary = "POIs within bbox; capped at $POI_LIMIT features (truncated:true on overflow)"

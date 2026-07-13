@@ -40,7 +40,7 @@ fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
             call.respondGeocodeError(
                 "geocoding_unavailable",
                 HttpStatusCode.ServiceUnavailable,
-                detail = "MAPBOX_TOKEN not set",
+                detail = "roadtrip.mapbox.token not set",
             )
             return@get
         }

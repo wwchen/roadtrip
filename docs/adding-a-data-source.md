@@ -1,12 +1,12 @@
 # Adding a data source
 
-The pipeline is config-driven. `config/poi-registry.yaml` is the source of truth — adding a data source means adding YAML rows first, then filling in the code the YAML points at. Each step ends with a verification command. Run it before moving on.
+The pipeline is config-driven. `backend/src/main/resources/poi-registry.yaml` is the source of truth — adding a data source means adding YAML rows first, then filling in the code the YAML points at. Each step ends with a verification command. Run it before moving on.
 
 ## Pipeline at a glance
 
 ```mermaid
 flowchart TB
-    YAML[("config/poi-registry.yaml")]
+    YAML[("backend/src/main/resources/poi-registry.yaml")]
     Registry["PoiRegistry<br/>(boot-time)<br/>· validates YAML<br/>· topo-sorts the DAG"]
     Ingest["IngestController"]
     Fetcher["fetcher script<br/>(subprocess via fetcher.executor)"]
@@ -77,7 +77,7 @@ The shape of your data dictates how many YAML rows you write:
 
 This is the contract. Everything else fulfills it.
 
-**Edit** `config/poi-registry.yaml`. Append a new `data_sources:` row for each upstream feed:
+**Edit** `backend/src/main/resources/poi-registry.yaml`. Append a new `data_sources:` row for each upstream feed:
 
 ```yaml
 data_sources:
@@ -304,7 +304,7 @@ Many upstreams are a single platform with multiple tenants. Don't write one fetc
 
 ### Adding a new tenant under an existing fetcher
 
-1. Append a `data_sources:` row in `config/poi-registry.yaml` with new `slug`, `args:`, and `output_dir_prefix:`.
+1. Append a `data_sources:` row in `backend/src/main/resources/poi-registry.yaml` with new `slug`, `args:`, and `output_dir_prefix:`.
 2. Append a `poi_data:` row that consumes it. The terminal `etls:` slug is the new tenant identifier; `args:` carries per-tenant config (e.g. `host`).
 3. Add one line to `EtlOrchestrator.registry` mapping the new terminal etl slug (and any new intermediates) to fresh ETL instances: `"<new-slug>" to <Existing>Etl("<new-slug>")`.
 
@@ -371,8 +371,8 @@ fixture envelope to pin down the regression.
 
 | What                                | Where                                                                                                   |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Register fetcher                    | `config/poi-registry.yaml` `data_sources:`                                                              |
-| Register POI dataset                | `config/poi-registry.yaml` `poi_data:` (`name`, `category`, `subcategory`, `etls:` ordered list)        |
+| Register fetcher                    | `backend/src/main/resources/poi-registry.yaml` `data_sources:`                                                              |
+| Register POI dataset                | `backend/src/main/resources/poi-registry.yaml` `poi_data:` (`name`, `category`, `subcategory`, `etls:` ordered list)        |
 | New fetcher script                  | `scripts/<fetcher>` (any runtime — `fetcher.executor` decides)                                          |
 | New ETL                             | `backend/src/main/kotlin/ca/floo/roadtrip/etl/<vendor>/<Vendor>Etl.kt`                                  |
 | ETL test                            | `backend/src/test/kotlin/.../<vendor>/<Vendor>EtlTest.kt`                                               |
@@ -390,7 +390,7 @@ fixture envelope to pin down the regression.
 
 | Symptom                                                      | First thing to check                                                                                                                                                                                      |
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `FileNotFoundException` at backend boot                      | `config/poi-registry.yaml` is mounted at `/app/static/config/` (see `docker-compose.yml`).                                                                                                                |
+| `POI registry resource 'poi-registry.yaml' not found` at backend boot | Confirm `backend/src/main/resources/poi-registry.yaml` is packaged with the backend resources. Use `roadtrip.poi-registry.path` only for an explicit external-file override. |
 | `validation error: slug='…' duplicated` at boot              | Same slug used twice across `data_sources:` and any row's `etls:`. Slugs share one namespace — pick distinct names.                                                                                       |
 | `validation error: forward reference in etls` at boot        | An entry in a row's `etls:` list declares an `inputs:` slug from a later sibling. Reorder so dependencies come first.                                                                                     |
 | `validation error: cross-row refs not supported` at boot     | A row's `etls:` `inputs:` references an etl slug from a different `poi_data:` row. Intermediates are handed in memory within a row only; copy the upstream chain into this row, or promote it to a shared data_source. |

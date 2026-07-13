@@ -92,11 +92,6 @@ class BcParksStrapiEtlTest {
                 ),
         )
 
-    private fun transformCtx(): TransformCtx {
-        val yamlPath =
-            File(System.getProperty("user.dir"))
-                .resolve("../config/poi-registry.yaml")
-                .canonicalFile
-        return TransformCtx.load(File("build/tmp/bcparks-strapi-etl-test-raw"), PoiRegistry.load(yamlPath))
-    }
+    private fun transformCtx(): TransformCtx =
+        TransformCtx.load(File("build/tmp/bcparks-strapi-etl-test-raw"), PoiRegistry.loadResource("poi-registry.yaml"))
 }

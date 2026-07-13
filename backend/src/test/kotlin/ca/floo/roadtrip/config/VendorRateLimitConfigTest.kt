@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.ratelimit
+package ca.floo.roadtrip.config
 
 import java.time.Duration
 import kotlin.test.Test
@@ -39,15 +39,16 @@ class VendorRateLimitConfigTest {
     }
 
     @Test
-    fun `fromEnv parses a per-vendor override with a simple duration`() {
+    fun `fromConfig parses a per-vendor override with a simple duration`() {
         val config =
-            VendorRateLimitConfig.fromEnv(
-                env =
+            VendorRateLimitConfig.fromConfig(
+                ConfigSection(
                     mapOf(
-                        "ROADTRIP_VENDOR_RATELIMIT_ASPIRA_CAPACITY" to "5",
-                        "ROADTRIP_VENDOR_RATELIMIT_ASPIRA_REFILL_TOKENS" to "5",
-                        "ROADTRIP_VENDOR_RATELIMIT_ASPIRA_REFILL_PERIOD" to "10s",
+                        "roadtrip.vendor-rate-limit.aspira.capacity" to "5",
+                        "roadtrip.vendor-rate-limit.aspira.refill-tokens" to "5",
+                        "roadtrip.vendor-rate-limit.aspira.refill-period" to "10s",
                     ),
+                ).section("roadtrip.vendor-rate-limit"),
             )
         val aspira = config.forVendor("aspira")
         assertEquals(5, aspira.capacity)
@@ -58,10 +59,12 @@ class VendorRateLimitConfigTest {
     }
 
     @Test
-    fun `fromEnv fills missing sub-keys from defaults when only capacity is set`() {
+    fun `fromConfig fills missing sub-keys from defaults when only capacity is set`() {
         val config =
-            VendorRateLimitConfig.fromEnv(
-                env = mapOf("ROADTRIP_VENDOR_RATELIMIT_RECGOV_CAPACITY" to "100"),
+            VendorRateLimitConfig.fromConfig(
+                ConfigSection(
+                    mapOf("roadtrip.vendor-rate-limit.recgov.capacity" to "100"),
+                ).section("roadtrip.vendor-rate-limit"),
             )
         val recgov = config.forVendor("recgov")
         assertEquals(100, recgov.capacity)
@@ -70,8 +73,8 @@ class VendorRateLimitConfigTest {
     }
 
     @Test
-    fun `fromEnv with no vendor keys yields all-default config`() {
-        val config = VendorRateLimitConfig.fromEnv(env = mapOf("SOME_OTHER_VAR" to "x"))
+    fun `fromConfig with no vendor keys yields all-default config`() {
+        val config = VendorRateLimitConfig.fromConfig(ConfigSection(mapOf("some.other.key" to "x")).section("roadtrip.vendor-rate-limit"))
         assertEquals(DEFAULT_VENDOR_BUCKET_CAPACITY, config.forVendor("recgov").capacity)
     }
 }

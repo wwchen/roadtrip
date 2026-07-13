@@ -8,7 +8,7 @@ import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaAvailabilityClient
-import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaGridAvailability
+import ca.floo.roadtrip.models.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraTenant
@@ -21,14 +21,13 @@ import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
-class AvailabilityClientContractTest {
+class AvailabilityProviderContractTest {
     @Test
-    fun `all reservation vendor adapters implement shared availability client contract`() {
-        val clients: List<AvailabilityClient> =
+    fun `all reservation vendor adapters implement availability provider contract`() {
+        val providers: List<AvailabilityProvider> =
             listOf(
-                RecGovAvailabilityProvider(client = stubRecgovClient()),
+                RecGovAvailabilityProvider(client = stubRecgovClient(), enabled = true),
                 AspiraAvailabilityProvider(
                     tenant =
                         AspiraTenant(
@@ -37,6 +36,7 @@ class AvailabilityClientContractTest {
                             bookingHorizonDays = 365,
                         ),
                     client = stubAspiraClient(),
+                    enabled = true,
                 ),
                 ReserveAmericaAvailabilityProvider(
                     tenant =
@@ -47,32 +47,29 @@ class AvailabilityClientContractTest {
                             bookingHorizonDays = 270,
                         ),
                     client = stubReserveAmericaClient(),
+                    enabled = true,
                 ),
-                ReserveCaliforniaAvailabilityProvider(client = stubReserveCaliforniaClient()),
+                ReserveCaliforniaAvailabilityProvider(client = stubReserveCaliforniaClient(), enabled = true),
             )
 
-        assertEquals(4, clients.size)
-        assertDirectAvailabilityClient(RecGovAvailabilityProvider::class.java)
-        assertDirectAvailabilityClient(AspiraAvailabilityProvider::class.java)
-        assertDirectAvailabilityClient(ReserveAmericaAvailabilityProvider::class.java)
-        assertDirectAvailabilityClient(ReserveCaliforniaAvailabilityProvider::class.java)
+        assertEquals(4, providers.size)
     }
 
     @Test
-    fun `shared availability client accepts direct arguments instead of request wrappers`() =
+    fun `availability provider accepts direct arguments instead of request wrappers`() =
         runBlocking {
-            val client: AvailabilityClient = RecGovAvailabilityProvider(client = stubRecgovClient())
+            val provider: AvailabilityProvider = RecGovAvailabilityProvider(client = stubRecgovClient(), enabled = true)
             val startDate = LocalDate.parse("2026-07-01")
             val endDate = LocalDate.parse("2026-07-02")
 
             val availability =
-                client.availability(
+                provider.availability(
                     ref = ProviderRef.RecGov("232447"),
                     startDate = startDate,
                     endDate = endDate,
                 )
             val catalog =
-                client.catalogAvailability(
+                provider.catalogAvailability(
                     ref = ProviderRef.RecGov("232447"),
                     campsites = emptyList(),
                     startDate = startDate,
@@ -82,13 +79,6 @@ class AvailabilityClientContractTest {
             assertEquals("recgov", availability.provider)
             assertEquals("recgov", catalog.provider)
         }
-
-    private fun assertDirectAvailabilityClient(type: Class<*>) {
-        assertTrue(
-            type.interfaces.contains(AvailabilityClient::class.java),
-            "${type.simpleName} should declare AvailabilityClient directly, not only inherit it through AvailabilityProvider",
-        )
-    }
 
     private fun stubRecgovClient(): RecGovAvailabilityClient =
         object : RecGovAvailabilityClient {

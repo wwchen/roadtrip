@@ -50,7 +50,7 @@ class MapboxGeocoder(
         proximity: String? = null,
         limit: Int = 5,
     ): List<GeocodeResult> {
-        val token = this.token ?: throw GeocodeException("MAPBOX_TOKEN not configured")
+        val token = this.token ?: throw GeocodeException("roadtrip.mapbox.token not configured")
         val trimmed = q.trim()
         if (trimmed.isBlank()) return emptyList()
 

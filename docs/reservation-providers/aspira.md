@@ -296,7 +296,7 @@ Used for: `AspiraResourcesEtl` reads this catalog and populates
 `reservables.raw.defined_attributes[]`. Captured by
 `scripts/fetch_aspira_inventory.py` per-tenant under
 `data_source: aspira-inventory-{tenant}` (see
-`config/poi-registry.yaml`).
+`backend/src/main/resources/poi-registry.yaml`).
 
 Capture cost: one request per park (per `resourceLocationId`). At our
 1.5s throttle, ~3 minutes for ~120 PC parks; ~5 minutes for ~140 WA

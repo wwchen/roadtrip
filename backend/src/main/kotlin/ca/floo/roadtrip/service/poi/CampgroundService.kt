@@ -44,7 +44,6 @@ internal class CampgroundService(
                 lat = campground.location.doubleProperty(LATITUDE_KEY),
                 lng = campground.location.doubleProperty(LONGITUDE_KEY),
             )
-        val availabilitySupported = availabilitySupport?.supportsCampground(campground.id) == true
         val availabilityProvider = availabilitySupport?.preferredAvailabilityProvider(campground.id)
         return PoiDetailPropertiesSchema(
             source = detail.source,
@@ -70,7 +69,7 @@ internal class CampgroundService(
                     description = description,
                     photoUrl = photoUrl,
                     providerRef = detail.providerRefJson?.let { Json.parseToJsonElement(it) },
-                    availabilitySupported = availabilitySupported.takeIf { it },
+                    availabilitySupported = (availabilityProvider != null).takeIf { it },
                     cta =
                         cta.computeCta(
                             providerRefJson = detail.providerRefJson,
