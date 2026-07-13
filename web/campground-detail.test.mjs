@@ -8,6 +8,7 @@ import {
   parseAmenities,
   parseCellCoverage,
   reserveButtonHTML,
+  campflareSourceButtonHTML,
   structuredCampgroundDetailsHTML,
 } from './campground-card.js';
 
@@ -88,6 +89,7 @@ const campflareDetail = {
         links: [
           { title: 'Official page', url: 'https://example.test/cold-creek' },
           { title: 'Map', url: 'https://example.test/cold-creek-map' },
+          { title: 'Campflare source', url: 'https://api.campflare.com/v2/campground/cold-creek-869' },
         ],
         alerts: [
           { title: 'Water unavailable', description: 'Bring drinking water.' },
@@ -141,6 +143,16 @@ test('campground drawer helpers accept canonical amenities and cell service', ()
   assert.deepEqual(parseCellCoverage(p), { verizon: 0, tmobile: 2.5 });
   assert.match(cellCoveragePillsHTML(parseCellCoverage(p)), /T-Mobile/);
   assert.match(reserveButtonHTML(p, 'cg-btn'), /View on recreation\.gov/);
+  assert.match(campflareSourceButtonHTML(p, 'cg-btn'), /Campflare source/);
+  assert.match(campflareSourceButtonHTML(p, 'cg-btn'), /cg-btn-secondary/);
+  assert.match(campflareSourceButtonHTML(p, 'cg-btn'), /api\.campflare\.com\/v2\/campground\/cold-creek-869/);
+});
+
+test('campflareSourceButtonHTML falls back to provider ref id', () => {
+  assert.match(
+    campflareSourceButtonHTML({ provider_ref: { campflare_id: 'cranberry-lake-wsp' } }, 'cg-btn'),
+    /https:\/\/api\.campflare\.com\/v2\/campground\/cranberry-lake-wsp/,
+  );
 });
 
 test('campgroundParentParkName derives specific parent park labels from links', () => {

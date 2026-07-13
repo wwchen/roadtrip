@@ -13,6 +13,10 @@
 
 import { escapeHtml } from './core.js';
 
+const CAMPFLARE_SOURCE_LINK_TITLE = 'Campflare source';
+const CAMPFLARE_CAMPGROUND_URL_PREFIX = 'https://api.campflare.com/v2/campground/';
+const CAMPFLARE_CAMPGROUND_URL_RE = /^https:\/\/api\.campflare\.com\/v2\/campground\//i;
+
 /** Parse properties.amenities (legacy array or canonical object) → string[]. */
 export function parseAmenities(p) {
   const value = p.amenities;
@@ -279,6 +283,27 @@ export function reserveButtonHTML(p, btnClass = 'btn') {
     }
   }
   return `<a class="${btnClass} ${btnClass}-primary" href="${url}" target="_blank" rel="noreferrer">${label}</a>`;
+}
+
+export function campflareSourceButtonHTML(p, btnClass = 'btn') {
+  const url = campflareSourceUrl(p);
+  if (!url) return '';
+  return `<a class="${btnClass} ${btnClass}-secondary" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">` +
+    `${CAMPFLARE_SOURCE_LINK_TITLE}</a>`;
+}
+
+function campflareSourceUrl(p) {
+  if (Array.isArray(p?.links)) {
+    for (const link of p.links) {
+      if (!link || typeof link !== 'object') continue;
+      const url = safeUrl(firstText(link.url, link.href));
+      if (!url) continue;
+      const title = firstText(link.title, link.label, link.name);
+      if (title === CAMPFLARE_SOURCE_LINK_TITLE || CAMPFLARE_CAMPGROUND_URL_RE.test(url)) return url;
+    }
+  }
+  const id = firstText(p?.provider_ref?.campflare_id, p?.campflare_id);
+  return id ? `${CAMPFLARE_CAMPGROUND_URL_PREFIX}${encodeURIComponent(id)}` : '';
 }
 
 const AMENITY_LABELS = {
