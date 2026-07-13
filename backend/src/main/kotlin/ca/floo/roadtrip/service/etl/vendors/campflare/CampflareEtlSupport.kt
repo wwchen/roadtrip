@@ -5,6 +5,7 @@ import ca.floo.roadtrip.models.metadata.Envelope
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
@@ -85,6 +86,28 @@ internal fun JsonObject.objectField(name: String): JsonObject? = this[name] as? 
 
 internal fun JsonObject.arrayField(name: String): JsonElement? = this[name]?.takeIf { runCatching { it.jsonArray }.isSuccess }
 
+internal fun campflareCampgroundSourceUrl(campflareId: String): String = "$CAMPGROUND_API_URL/$campflareId"
+
+internal fun campgroundLinksWithCampflareSource(
+    raw: JsonObject,
+    sourceUrl: String,
+): JsonElement {
+    val links = raw.arrayField(LINKS_FIELD)?.jsonArray.orEmpty()
+    return buildJsonArray {
+        links.forEach { add(it) }
+        if (links.none { link -> (link as? JsonObject)?.sourceLinkUrl() == sourceUrl }) {
+            add(
+                buildJsonObject {
+                    put(TITLE_FIELD, CAMPFLARE_SOURCE_LINK_TITLE)
+                    put(URL_FIELD, sourceUrl)
+                },
+            )
+        }
+    }
+}
+
+private fun JsonObject.sourceLinkUrl(): String? = stringField(URL_FIELD) ?: stringField(HREF_FIELD)
+
 internal fun normalizedLatitude(value: Double?): Double? = normalizedCoordinate(value, LATITUDE_MIN, LATITUDE_MAX)
 
 internal fun normalizedLongitude(value: Double?): Double? = normalizedCoordinate(value, LONGITUDE_MIN, LONGITUDE_MAX)
@@ -107,6 +130,11 @@ internal const val RECGOV_CAMPGROUND_REF_PREFIX = "recgov-"
 internal const val CAMPGROUNDS_ETL_SLUG = "campflare-campgrounds"
 internal const val CAMPSITES_ETL_SLUG = "campflare-campsites"
 internal const val CAMPGROUND_API_URL = "https://api.campflare.com/v2/campground"
+internal const val CAMPFLARE_SOURCE_LINK_TITLE = "Campflare source"
+internal const val LINKS_FIELD = "links"
+internal const val TITLE_FIELD = "title"
+internal const val URL_FIELD = "url"
+internal const val HREF_FIELD = "href"
 internal const val LATITUDE_MIN = -90.0
 internal const val LATITUDE_MAX = 90.0
 internal const val LONGITUDE_MIN = -180.0

@@ -7,6 +7,7 @@ import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
@@ -54,18 +55,29 @@ class CampflareCampgroundsEtlTest {
                 .jsonObject["campflare_id"]!!
                 .jsonPrimitive
                 .content
+        val campflareLink =
+            row.links!!
+                .jsonArray
+                .last()
+                .jsonObject
         val recgovRef = row.additionalVendorRefs.single()
         assertEquals("232447", ridbFacilityId)
         assertEquals(true, hasToilets)
         assertEquals(" Upper Pines ", sourceName)
         assertEquals("upper-pines-campground-447", campflareId)
+        assertEquals("Campflare source", campflareLink["title"]!!.jsonPrimitive.content)
+        assertEquals(
+            "https://api.campflare.com/v2/campground/upper-pines-campground-447",
+            campflareLink["url"]!!.jsonPrimitive.content,
+        )
         assertEquals("recgov", recgovRef.vendor)
         assertEquals("recgov-232447", recgovRef.vendorRefId)
         assertEquals(
             "232447",
             recgovRef.payload!!
                 .jsonObject["recgov_id"]!!
-                .jsonPrimitive.content,
+                .jsonPrimitive
+                .content,
         )
     }
 
@@ -90,6 +102,76 @@ class CampflareCampgroundsEtlTest {
             )
 
         assertEquals(listOf("ok"), out.campgrounds.map { it.vendorRefId })
+    }
+
+    @Test
+    fun `adds campflare source link when campground dump has no links`() {
+        val etl = CampflareCampgroundsEtl()
+        val out =
+            etl.transform(
+                etl.parse(
+                    bundle(
+                        "campflare-campgrounds",
+                        """
+                        [
+                          {"id":"no-links","name":"No Links","location":{"latitude":1,"longitude":2}}
+                        ]
+                        """.trimIndent(),
+                    ),
+                ),
+                transformCtx(),
+            )
+
+        val link =
+            out.campgrounds
+                .single()
+                .links!!
+                .jsonArray
+                .single()
+                .jsonObject
+        assertEquals("Campflare source", link["title"]!!.jsonPrimitive.content)
+        assertEquals(
+            "https://api.campflare.com/v2/campground/no-links",
+            link["url"]!!.jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `does not duplicate existing campflare source href`() {
+        val etl = CampflareCampgroundsEtl()
+        val out =
+            etl.transform(
+                etl.parse(
+                    bundle(
+                        "campflare-campgrounds",
+                        """
+                        [
+                          {
+                            "id":"has-campflare-href",
+                            "name":"Has Campflare Href",
+                            "location":{"latitude":1,"longitude":2},
+                            "links":[
+                              {
+                                "title":"Existing Campflare",
+                                "href":"https://api.campflare.com/v2/campground/has-campflare-href"
+                              }
+                            ]
+                          }
+                        ]
+                        """.trimIndent(),
+                    ),
+                ),
+                transformCtx(),
+            )
+
+        assertEquals(
+            1,
+            out.campgrounds
+                .single()
+                .links!!
+                .jsonArray
+                .size,
+        )
     }
 
     @Test
