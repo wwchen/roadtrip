@@ -32,6 +32,7 @@ class CampflareCampgroundsEtl : SourceEtl<List<JsonObject>, CampgroundEtlOutput>
         val location = raw.objectField("location") ?: return null
         val latitude = normalizedLatitude(location.doubleField("latitude")) ?: return null
         val longitude = normalizedLongitude(location.doubleField("longitude")) ?: return null
+        val sourceUrl = campflareCampgroundSourceUrl(id)
         return CampgroundUpsertCandidate(
             vendor = CAMPFLARE_VENDOR,
             vendorRefId = id,
@@ -48,7 +49,7 @@ class CampflareCampgroundsEtl : SourceEtl<List<JsonObject>, CampgroundEtlOutput>
             hasPullThroughSites = raw.booleanField("has_pull_through_sites"),
             bigRigFriendly = raw.booleanField("big_rig_friendly"),
             reservationUrl = raw.stringField("reservation_url"),
-            links = raw.arrayField("links"),
+            links = campgroundLinksWithCampflareSource(raw, sourceUrl),
             photos = raw.arrayField("photos"),
             alerts = raw.arrayField("alerts"),
             price = raw.objectField("price"),
@@ -57,7 +58,7 @@ class CampflareCampgroundsEtl : SourceEtl<List<JsonObject>, CampgroundEtlOutput>
             contact = raw.objectField("contact"),
             connections = raw.objectField("connections"),
             metadata = raw.objectField("metadata"),
-            sourceUrl = "$CAMPGROUND_API_URL/$id",
+            sourceUrl = sourceUrl,
             sourcePayload = raw,
             vendorRefPayload =
                 buildJsonObject {
