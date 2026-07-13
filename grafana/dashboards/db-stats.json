@@ -384,7 +384,8 @@
       "15m",
       "1h",
       "1d"
-    ]
+    ],
+    "hidden": true
   },
   "timezone": "browser",
   "title": "DB Stats",

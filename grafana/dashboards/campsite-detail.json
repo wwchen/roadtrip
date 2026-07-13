@@ -229,24 +229,24 @@
       {
         "allowCustomValue": true,
         "current": {
-          "text": "",
-          "value": ""
+          "text": "No campsite selected",
+          "value": "__no_campsite"
         },
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
-        "definition": "SELECT cs.id::text || ' - ' || cg.name || ' / ' || cs.name AS __text, cs.id AS __value FROM campsites cs JOIN campgrounds cg ON cg.id = cs.campground_id WHERE cs.deleted_at IS NULL ORDER BY cg.name, cs.name LIMIT 1000",
+        "definition": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No campsite selected' AS __text, '__no_campsite' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    cs.id::text || ' | ' || cg.name || ' / ' || COALESCE(NULLIF(cs.loop_name, '') || ' / ', '') || cs.name || ' | ' || cs.data_source AS __text,\n    cs.id::text AS __value\n  FROM campsites cs\n  JOIN campgrounds cg ON cg.id = cs.campground_id\n  WHERE cs.deleted_at IS NULL\n    AND (\n      '$__searchFilter' = '%'\n      OR cs.id::text ILIKE '$__searchFilter'\n      OR cg.name ILIKE '$__searchFilter'\n      OR cs.name ILIKE '$__searchFilter'\n      OR cs.loop_name ILIKE '$__searchFilter'\n      OR cs.data_source ILIKE '$__searchFilter'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 1001",
         "hide": 0,
         "includeAll": false,
-        "label": "Campsite id",
+        "label": "Campsite",
         "multi": false,
         "name": "campsite_id",
         "options": [],
         "query": {
-          "query": "SELECT cs.id::text || ' - ' || cg.name || ' / ' || cs.name AS __text, cs.id AS __value FROM campsites cs JOIN campgrounds cg ON cg.id = cs.campground_id WHERE cs.deleted_at IS NULL ORDER BY cg.name, cs.name LIMIT 1000",
+          "query": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No campsite selected' AS __text, '__no_campsite' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    cs.id::text || ' | ' || cg.name || ' / ' || COALESCE(NULLIF(cs.loop_name, '') || ' / ', '') || cs.name || ' | ' || cs.data_source AS __text,\n    cs.id::text AS __value\n  FROM campsites cs\n  JOIN campgrounds cg ON cg.id = cs.campground_id\n  WHERE cs.deleted_at IS NULL\n    AND (\n      '$__searchFilter' = '%'\n      OR cs.id::text ILIKE '$__searchFilter'\n      OR cg.name ILIKE '$__searchFilter'\n      OR cs.name ILIKE '$__searchFilter'\n      OR cs.loop_name ILIKE '$__searchFilter'\n      OR cs.data_source ILIKE '$__searchFilter'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 1001",
           "rawQuery": true,
-          "rawSql": "SELECT cs.id::text || ' - ' || cg.name || ' / ' || cs.name AS __text, cs.id AS __value FROM campsites cs JOIN campgrounds cg ON cg.id = cs.campground_id WHERE cs.deleted_at IS NULL ORDER BY cg.name, cs.name LIMIT 1000",
+          "rawSql": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No campsite selected' AS __text, '__no_campsite' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    cs.id::text || ' | ' || cg.name || ' / ' || COALESCE(NULLIF(cs.loop_name, '') || ' / ', '') || cs.name || ' | ' || cs.data_source AS __text,\n    cs.id::text AS __value\n  FROM campsites cs\n  JOIN campgrounds cg ON cg.id = cs.campground_id\n  WHERE cs.deleted_at IS NULL\n    AND (\n      '$__searchFilter' = '%'\n      OR cs.id::text ILIKE '$__searchFilter'\n      OR cg.name ILIKE '$__searchFilter'\n      OR cs.name ILIKE '$__searchFilter'\n      OR cs.loop_name ILIKE '$__searchFilter'\n      OR cs.data_source ILIKE '$__searchFilter'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 1001",
           "refId": "SQLVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -263,7 +263,7 @@
     "to": "now"
   },
   "timepicker": {
-    "hidden": false,
+    "hidden": true,
     "refresh_intervals": [
       "30s",
       "1m",

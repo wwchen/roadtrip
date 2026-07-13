@@ -163,7 +163,7 @@
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
-        "definition": "SELECT DISTINCT country::text AS __text, country::text AS __value FROM tesla_superchargers WHERE country IS NOT NULL ORDER BY country",
+        "definition": "SELECT DISTINCT country::text AS __text, country::text AS __value FROM tesla_superchargers WHERE country IS NOT NULL ORDER BY __text",
         "hide": 0,
         "includeAll": true,
         "label": "Country",
@@ -171,9 +171,9 @@
         "name": "country",
         "options": [],
         "query": {
-          "query": "SELECT DISTINCT country::text AS __text, country::text AS __value FROM tesla_superchargers WHERE country IS NOT NULL ORDER BY country",
+          "query": "SELECT DISTINCT country::text AS __text, country::text AS __value FROM tesla_superchargers WHERE country IS NOT NULL ORDER BY __text",
           "rawQuery": true,
-          "rawSql": "SELECT DISTINCT country::text AS __text, country::text AS __value FROM tesla_superchargers WHERE country IS NOT NULL ORDER BY country",
+          "rawSql": "SELECT DISTINCT country::text AS __text, country::text AS __value FROM tesla_superchargers WHERE country IS NOT NULL ORDER BY __text",
           "refId": "SQLVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -252,7 +252,7 @@
     "to": "now"
   },
   "timepicker": {
-    "hidden": false,
+    "hidden": true,
     "refresh_intervals": [
       "30s",
       "1m",

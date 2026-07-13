@@ -121,7 +121,7 @@
     "to": "now"
   },
   "timepicker": {
-    "hidden": false,
+    "hidden": true,
     "refresh_intervals": [
       "30s",
       "1m",

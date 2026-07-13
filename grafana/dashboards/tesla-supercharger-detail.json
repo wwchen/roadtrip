@@ -536,24 +536,24 @@
       {
         "allowCustomValue": true,
         "current": {
-          "text": "",
-          "value": ""
+          "text": "No supercharger selected",
+          "value": "__no_supercharger"
         },
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
-        "definition": "SELECT\n  ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n  p.id::text AS __value\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\nORDER BY ts.common_site_name ASC, p.id ASC\nLIMIT 5000;",
+        "definition": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No supercharger selected' AS __text, '__no_supercharger' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n    p.id::text AS __value\n  FROM tesla_superchargers ts\n  JOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\n  JOIN pois p ON p.id = pts.poi_id\n  WHERE ts.deleted_at IS NULL\n    AND p.deleted_at IS NULL\n    AND p.poi_type = 'tesla_supercharger'\n    AND (\n      '$__searchFilter' = '%'\n      OR p.id::text ILIKE '$__searchFilter'\n      OR ts.common_site_name ILIKE '$__searchFilter'\n      OR ts.location_slug ILIKE '$__searchFilter'\n      OR ts.region ILIKE '$__searchFilter'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 5001;",
         "hide": 0,
         "includeAll": false,
-        "label": "Supercharger id",
+        "label": "Supercharger",
         "multi": false,
         "name": "supercharger_id",
         "options": [],
         "query": {
-          "query": "SELECT\n  ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n  p.id::text AS __value\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\nORDER BY ts.common_site_name ASC, p.id ASC\nLIMIT 5000;",
+          "query": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No supercharger selected' AS __text, '__no_supercharger' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n    p.id::text AS __value\n  FROM tesla_superchargers ts\n  JOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\n  JOIN pois p ON p.id = pts.poi_id\n  WHERE ts.deleted_at IS NULL\n    AND p.deleted_at IS NULL\n    AND p.poi_type = 'tesla_supercharger'\n    AND (\n      '$__searchFilter' = '%'\n      OR p.id::text ILIKE '$__searchFilter'\n      OR ts.common_site_name ILIKE '$__searchFilter'\n      OR ts.location_slug ILIKE '$__searchFilter'\n      OR ts.region ILIKE '$__searchFilter'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 5001;",
           "rawQuery": true,
-          "rawSql": "SELECT\n  ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n  p.id::text AS __value\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\nORDER BY ts.common_site_name ASC, p.id ASC\nLIMIT 5000;",
+          "rawSql": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No supercharger selected' AS __text, '__no_supercharger' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n    p.id::text AS __value\n  FROM tesla_superchargers ts\n  JOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\n  JOIN pois p ON p.id = pts.poi_id\n  WHERE ts.deleted_at IS NULL\n    AND p.deleted_at IS NULL\n    AND p.poi_type = 'tesla_supercharger'\n    AND (\n      '$__searchFilter' = '%'\n      OR p.id::text ILIKE '$__searchFilter'\n      OR ts.common_site_name ILIKE '$__searchFilter'\n      OR ts.location_slug ILIKE '$__searchFilter'\n      OR ts.region ILIKE '$__searchFilter'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 5001;",
           "refId": "SQLVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -570,7 +570,7 @@
     "to": "now"
   },
   "timepicker": {
-    "hidden": false,
+    "hidden": true,
     "refresh_intervals": [
       "30s",
       "1m",
