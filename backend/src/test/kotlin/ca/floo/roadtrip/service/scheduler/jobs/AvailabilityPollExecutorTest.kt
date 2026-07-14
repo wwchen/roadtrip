@@ -513,6 +513,63 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         }
 
     @Test
+    fun `fresh poll window inside cadence skips upstream fetch and governor token`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(maxPollWindowDays = 2)
+            val poiId = seedPoi("232447")
+            val campsiteIds = listOf("100", "101").map { seedCampsite(poiId, it) }
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 60)
+            val poller = linkWatch(provider, watchId)
+            val freshAt = testClock.instant().minus(Duration.ofSeconds(59))
+            val today = LocalDate.now(testClock)
+            val observations =
+                campsiteIds.flatMap { campsiteId ->
+                    listOf(today, today.plusDays(1)).map { date ->
+                        AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.RESERVED, freshAt)
+                    }
+                }
+            AvailabilityRepo(ctx).recordObservations(runId = null, observations = observations)
+            val limiter = RecordingLimiter(grant = true)
+
+            val before = OffsetDateTime.now()
+            val result = executorFor(provider, limiter = limiter).handle(poller)
+
+            assertEquals(0, provider.calls)
+            assertEquals(emptyList(), limiter.requests)
+            assertEquals(0, AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10).size)
+            val delaySec = Duration.between(before, result.nextRunAt).seconds
+            assertEquals(60L, delaySec)
+        }
+
+    @Test
+    fun `fresh poll window outside cadence fetches normally`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(maxPollWindowDays = 2)
+            val poiId = seedPoi("232447")
+            val campsiteIds = listOf("100", "101").map { seedCampsite(poiId, it) }
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 60)
+            val poller = linkWatch(provider, watchId)
+            val staleAt = testClock.instant().minus(Duration.ofSeconds(61))
+            val today = LocalDate.now(testClock)
+            val observations =
+                campsiteIds.flatMap { campsiteId ->
+                    listOf(today, today.plusDays(1)).map { date ->
+                        AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.RESERVED, staleAt)
+                    }
+                }
+            AvailabilityRepo(ctx).recordObservations(runId = null, observations = observations)
+            val limiter = RecordingLimiter(grant = true)
+
+            executorFor(provider, limiter = limiter).handle(poller)
+
+            assertEquals(1, provider.calls)
+            assertEquals(listOf("recgov" to 1L), limiter.requests)
+            val runs = AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10)
+            assertEquals(1, runs.size)
+            assertEquals("completed", runs.single().status)
+        }
+
+    @Test
     fun `poller fetches the full campground catalog even when a watch scopes one site`() =
         runBlocking {
             val provider = CountingRecgovProvider()

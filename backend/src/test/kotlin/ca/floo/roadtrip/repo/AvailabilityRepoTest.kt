@@ -3,10 +3,14 @@ package ca.floo.roadtrip.repo
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class AvailabilityRepoTest : SharedDbTest() {
     @BeforeEach
@@ -97,6 +101,53 @@ class AvailabilityRepoTest : SharedDbTest() {
         // Second run must not insert a duplicate past-run (would violate the previous_id chain).
         assertEquals(0, repo.markElapsedAsPast(listOf(campsiteId), today = today))
         assertEquals(2, ctx.fetchCount(ctx.selectFrom(ca.floo.roadtrip.db.generated.tables.Availability.AVAILABILITY)))
+    }
+
+    @Test
+    fun `hasFreshCoverage requires every campsite-date cell to be recent`() {
+        val campsiteA = seedCampsite("100")
+        val campsiteB = seedCampsite("101")
+        val repo = AvailabilityRepo(ctx)
+        val startDate = LocalDate.parse("2026-07-04")
+        val endDate = startDate.plusDays(2)
+        val now = Instant.parse("2026-06-18T10:00:00Z")
+        val cutoff = OffsetDateTime.ofInstant(now.minus(Duration.ofMinutes(5)), ZoneOffset.UTC)
+
+        repo.recordObservations(
+            null,
+            listOf(
+                AvailabilityRepo.Observation(campsiteA, startDate, AvailabilityStatus.RESERVED, now),
+                AvailabilityRepo.Observation(campsiteA, startDate.plusDays(1), AvailabilityStatus.RESERVED, now),
+                AvailabilityRepo.Observation(campsiteB, startDate, AvailabilityStatus.RESERVED, now),
+            ),
+        )
+
+        assertFalse(repo.hasFreshCoverage(listOf(campsiteA, campsiteB), startDate, endDate, cutoff))
+
+        repo.recordObservations(
+            null,
+            listOf(
+                AvailabilityRepo.Observation(campsiteB, startDate.plusDays(1), AvailabilityStatus.RESERVED, now),
+            ),
+        )
+
+        assertTrue(repo.hasFreshCoverage(listOf(campsiteA, campsiteB), startDate, endDate, cutoff))
+        assertTrue(
+            repo.hasFreshCoverage(
+                listOf(campsiteA, campsiteB),
+                startDate,
+                endDate,
+                OffsetDateTime.ofInstant(now, ZoneOffset.UTC),
+            ),
+        )
+        assertFalse(
+            repo.hasFreshCoverage(
+                listOf(campsiteA, campsiteB),
+                startDate,
+                endDate,
+                OffsetDateTime.ofInstant(now.plus(Duration.ofSeconds(1)), ZoneOffset.UTC),
+            ),
+        )
     }
 
     @Test

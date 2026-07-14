@@ -9,6 +9,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import ca.floo.roadtrip.db.generated.enums.AvailabilityStatus as DbAvailabilityStatus
 
 /**
@@ -171,6 +172,47 @@ class AvailabilityRepo(
                     observedAt = r.get("last_observed_at", OffsetDateTime::class.java),
                 )
             }
+    }
+
+    /**
+     * True when every campsite/date cell in `[startDate, endDate)` has a
+     * current observation at or newer than [freshAtOrAfter]. Missing cells make
+     * the window stale. Used by the alert poller to avoid re-fetching a whole
+     * campground window moments after another tick already refreshed it.
+     */
+    fun hasFreshCoverage(
+        campsiteIds: List<Long>,
+        startDate: LocalDate,
+        endDate: LocalDate,
+        freshAtOrAfter: OffsetDateTime,
+    ): Boolean {
+        if (campsiteIds.isEmpty() || !endDate.isAfter(startDate)) return false
+        val expectedCells =
+            campsiteIds.size *
+                ChronoUnit.DAYS.between(startDate, endDate)
+        if (expectedCells <= 0) return false
+        val freshCells =
+            ctx
+                .resultQuery(
+                    """
+                    SELECT count(*) AS fresh_cells
+                    FROM (
+                        SELECT DISTINCT ON (campsite_id, target_date)
+                            campsite_id, target_date, last_observed_at
+                        FROM availability
+                        WHERE campsite_id = ANY(?::bigint[])
+                          AND target_date >= ?::date
+                          AND target_date < ?::date
+                        ORDER BY campsite_id, target_date, last_observed_at DESC, id DESC
+                    ) cur
+                    WHERE cur.last_observed_at >= ?::timestamptz
+                    """.trimIndent(),
+                    campsiteIds.toTypedArray(),
+                    startDate,
+                    endDate,
+                    freshAtOrAfter,
+                ).fetchOne("fresh_cells", Long::class.java) ?: 0L
+        return freshCells == expectedCells
     }
 
     data class StatusRun(

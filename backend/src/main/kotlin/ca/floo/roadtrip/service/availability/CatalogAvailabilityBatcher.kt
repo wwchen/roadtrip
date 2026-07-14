@@ -65,6 +65,20 @@ internal class CatalogAvailabilityBatcher {
             .distinct()
             .count { windowFor(it.dateContext, it.provider.capabilities) != null }
 
+    fun filterFetchTargets(
+        targets: List<ResolvedAvailabilityTarget>,
+        windowFor: (PoiDateContext, AvailabilityProviderCapabilities) -> AvailabilityWindows?,
+        shouldFetch: (targets: List<ResolvedAvailabilityTarget>, windows: AvailabilityWindows) -> Boolean,
+    ): List<ResolvedAvailabilityTarget> =
+        targets
+            .groupBy { GroupKey(it.provider, it.parentRef, it.dateContext) }
+            .values
+            .filter { groupTargets ->
+                val first = groupTargets.firstOrNull() ?: return@filter false
+                val windows = windowFor(first.dateContext, first.provider.capabilities) ?: return@filter false
+                shouldFetch(groupTargets, windows)
+            }.flatten()
+
     suspend fun fetchByGroup(
         targets: List<ResolvedAvailabilityTarget>,
         windowFor: (PoiDateContext, AvailabilityProviderCapabilities) -> AvailabilityWindows?,

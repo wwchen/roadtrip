@@ -29,6 +29,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 /**
  * Executes one poller tick. Wired into [ca.floo.roadtrip.service.scheduler.framework.Scheduler]
@@ -150,23 +151,41 @@ internal class AvailabilityPollExecutor(
             }
         }
 
-        // Vendor governor: acquire one token per (provider, parentRef, dateContext)
-        // group the batcher will actually FETCH, BEFORE any upstream call. Groups
-        // whose polling window is null (all target dates elapsed) are skipped by
-        // the batcher — no upstream call — so they are excluded from the count;
-        // charging a token for a non-fetch would waste it and could starve a
-        // bucket, delaying retirement of an all-elapsed poller. On starvation,
-        // skip the fetch entirely — no upstream call, no wasted 429, and no run
-        // row (a starved tick is a non-event, like an empty window, not a
-        // failure, so it never feeds consecutive-failure backoff). Reschedule soon
-        // so the poller retries once the bucket refills. Per-poller backoff stays
-        // the reactive net for real upstream failures.
+        // Freshness gate, then vendor governor. Null-window groups (all target
+        // dates elapsed) are excluded from both counts. Groups whose whole
+        // campsite/date window was observed within this poller's effective
+        // cadence are skipped before the governor; the remaining stale groups
+        // consume one token per (provider, parentRef, dateContext) group before
+        // any upstream call. On starvation, skip the fetch entirely — no upstream
+        // call, no wasted 429, and no run row (a starved tick is a non-event,
+        // like an empty/fresh tick, not a failure). Per-poller backoff stays the
+        // reactive net for real upstream failures.
         val bucketCount = batcher.countFetchGroups(resolved, windowFor)
-        if (bucketCount > 0 && !limiter.tryAcquire(poller.provider, bucketCount.toLong())) {
+        val freshnessWindow = Duration.ofSeconds(cadenceSec.toLong())
+        val staleResolved =
+            batcher.filterFetchTargets(resolved, windowFor) { rows, windows ->
+                !availability.hasFreshCoverage(
+                    campsiteIds = rows.map { it.campsite.id },
+                    startDate = windows.fetch.startDate,
+                    endDate = windows.fetch.endDate,
+                    freshAtOrAfter = OffsetDateTime.ofInstant(clock.instant(), ZoneOffset.UTC).minus(freshnessWindow),
+                )
+            }
+        val staleBucketCount = batcher.countFetchGroups(staleResolved, windowFor)
+        if (bucketCount > 0 && staleBucketCount == 0) {
+            log.info(
+                "poller {} skipped fetch: {} group(s) fresh within {}s",
+                poller.id,
+                bucketCount,
+                freshnessWindow.seconds,
+            )
+            return HandlerResult(nextRunAt = OffsetDateTime.now().plusSeconds(cadenceSec.toLong()))
+        }
+        if (staleBucketCount > 0 && !limiter.tryAcquire(poller.provider, staleBucketCount.toLong())) {
             log.info(
                 "poller {} governor starved ({} tokens for {}); rescheduling in {}s",
                 poller.id,
-                bucketCount,
+                staleBucketCount,
                 poller.provider,
                 GOVERNOR_STARVED_RETRY_SEC,
             )
@@ -185,7 +204,7 @@ internal class AvailabilityPollExecutor(
             withContext(MDCContext(mapOf("run_id" to runId.toString()))) {
                 val results =
                     batcher.fetchByGroup(
-                        targets = resolved,
+                        targets = staleResolved,
                         windowFor = windowFor,
                         fetch = { parentRef, provider, rows, windows ->
                             val result = fetchWithFailover(rows, windows.fetch)
