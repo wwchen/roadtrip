@@ -375,6 +375,7 @@
     "to": "now"
   },
   "timepicker": {
+    "hidden": true,
     "refresh_intervals": [
       "5s",
       "10s",
@@ -384,8 +385,7 @@
       "15m",
       "1h",
       "1d"
-    ],
-    "hidden": true
+    ]
   },
   "timezone": "browser",
   "title": "DB Stats",

@@ -171,11 +171,11 @@
         "name": "country",
         "options": [],
         "query": {
+          "format": "table",
           "query": "SELECT DISTINCT country::text AS __text, country::text AS __value FROM tesla_superchargers WHERE country IS NOT NULL ORDER BY __text",
           "rawQuery": true,
           "rawSql": "SELECT DISTINCT country::text AS __text, country::text AS __value FROM tesla_superchargers WHERE country IS NOT NULL ORDER BY __text",
-          "refId": "SQLVariableQueryEditor-VariableQuery",
-          "format": "table"
+          "refId": "SQLVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
         "regex": "",
@@ -203,11 +203,11 @@
         "name": "region",
         "options": [],
         "query": {
+          "format": "table",
           "query": "SELECT DISTINCT region AS __text, region AS __value FROM tesla_superchargers WHERE region IS NOT NULL ORDER BY region",
           "rawQuery": true,
           "rawSql": "SELECT DISTINCT region AS __text, region AS __value FROM tesla_superchargers WHERE region IS NOT NULL ORDER BY region",
-          "refId": "SQLVariableQueryEditor-VariableQuery",
-          "format": "table"
+          "refId": "SQLVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
         "regex": "",
@@ -235,11 +235,11 @@
         "name": "access_type",
         "options": [],
         "query": {
+          "format": "table",
           "query": "SELECT DISTINCT access_type AS __text, access_type AS __value FROM tesla_superchargers WHERE access_type IS NOT NULL ORDER BY access_type",
           "rawQuery": true,
           "rawSql": "SELECT DISTINCT access_type AS __text, access_type AS __value FROM tesla_superchargers WHERE access_type IS NOT NULL ORDER BY access_type",
-          "refId": "SQLVariableQueryEditor-VariableQuery",
-          "format": "table"
+          "refId": "SQLVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
         "regex": "",

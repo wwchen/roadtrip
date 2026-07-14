@@ -1,6 +1,19 @@
 {
   "annotations": {
-    "list": []
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
   },
   "editable": true,
   "fiscalYearStartMonth": 0,
@@ -40,8 +53,31 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
       },
       "gridPos": {
         "h": 7,
@@ -51,6 +87,7 @@
       },
       "id": 1,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "13.1.0",
@@ -76,17 +113,42 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
       },
       "gridPos": {
-        "h": 10,
+        "h": 11,
         "w": 24,
         "x": 0,
         "y": 7
       },
       "id": 2,
       "options": {
+        "cellHeight": "sm",
+        "enablePagination": true,
         "showHeader": true
       },
       "pluginVersion": "13.1.0",
@@ -112,17 +174,42 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
       },
       "gridPos": {
-        "h": 9,
+        "h": 15,
         "w": 24,
         "x": 0,
-        "y": 17
+        "y": 18
       },
       "id": 3,
       "options": {
+        "cellHeight": "sm",
+        "enablePagination": true,
         "showHeader": true
       },
       "pluginVersion": "13.1.0",
@@ -148,17 +235,70 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Field",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 273
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*/"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json-view"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 8,
+        "h": 14,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 33
       },
       "id": 4,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "13.1.0",
@@ -176,6 +316,12 @@
         }
       ],
       "title": "Selected Campsite Detail",
+      "transformations": [
+        {
+          "id": "transpose",
+          "options": {}
+        }
+      ],
       "type": "table"
     },
     {
@@ -184,17 +330,41 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
       },
       "gridPos": {
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 34
+        "y": 47
       },
       "id": 5,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "13.1.0",
@@ -220,17 +390,41 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
       },
       "gridPos": {
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 43
+        "y": 56
       },
       "id": 6,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "13.1.0",
@@ -251,8 +445,9 @@
       "type": "table"
     }
   ],
-  "refresh": false,
-  "schemaVersion": 41,
+  "preload": false,
+  "refresh": "",
+  "schemaVersion": 42,
   "tags": [
     "roadtrip",
     "catalog"
@@ -260,7 +455,6 @@
   "templating": {
     "list": [
       {
-        "allowCustomValue": true,
         "current": {
           "text": "",
           "value": ""
@@ -268,7 +462,6 @@
         "hide": 0,
         "label": "Name contains (case-insensitive)",
         "name": "poi_name",
-        "options": [],
         "query": "",
         "skipUrlSync": false,
         "type": "textbox"
@@ -279,30 +472,30 @@
           "text": "All POIs / use filters",
           "value": "__all_pois"
         },
-        "hide": 0,
-        "label": "Campground / POI",
-        "name": "poi_id",
-        "options": [],
-        "query": {
-          "query": "WITH filters AS (\n  SELECT\n    btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter,\n    COALESCE((ARRAY[${poi_type:sqlstring}]::text[])[1], '') AS poi_type_filter\n), site_counts AS (\n  SELECT campground_id, count(*) AS campsite_count\n  FROM campsites\n  WHERE deleted_at IS NULL\n  GROUP BY campground_id\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'All POIs / use filters' AS __text, '__all_pois' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    p.id::text || ' | ' || p.poi_type || ' | ' || CASE\n      WHEN p.poi_type = 'campground' THEN cg.name || ' | ' || cg.data_source || ' | ' || COALESCE(site_counts.campsite_count, 0)::text || ' sites' || COALESCE(' | ' || primary_vr.external_id, '')\n      WHEN p.poi_type = 'tesla_supercharger' THEN ts.common_site_name || COALESCE(' | ' || ts.region, '') || COALESCE(' | ' || ts.stall_count::text || ' stalls', '')\n      WHEN p.poi_type = 'planet_fitness_location' THEN pf.name || COALESCE(' | ' || pf.region, '') || COALESCE(' | ' || pf.location_id, '')\n      ELSE p.poi_type\n    END AS __text,\n    p.id::text AS __value\n  FROM pois p\n  LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  LEFT JOIN vendor_refs primary_vr ON primary_vr.id = cg.primary_vendor_ref_id\n  LEFT JOIN site_counts ON site_counts.campground_id = cg.id\n  LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id\n  LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id AND ts.deleted_at IS NULL\n  LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id\n  LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id AND pf.deleted_at IS NULL\n  CROSS JOIN filters\n  WHERE p.deleted_at IS NULL\n    AND (\n      filters.poi_type_filter IN ('', '__all', '$__all')\n      OR p.poi_type = filters.poi_type_filter\n    )\n    AND CASE\n      WHEN p.poi_type = 'campground' THEN cg.id IS NOT NULL\n      WHEN p.poi_type = 'tesla_supercharger' THEN ts.id IS NOT NULL\n      WHEN p.poi_type = 'planet_fitness_location' THEN pf.id IS NOT NULL\n      ELSE false\n    END\n    AND (\n      filters.name_filter = ''\n      OR p.id::text = filters.name_filter\n      OR p.poi_type ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cg.name, ts.common_site_name, pf.name, '') ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cg.data_source, ts.location_slug, pf.location_id, '') ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(primary_vr.external_id, '') ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
-          "rawQuery": true,
-          "rawSql": "WITH filters AS (\n  SELECT\n    btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter,\n    COALESCE((ARRAY[${poi_type:sqlstring}]::text[])[1], '') AS poi_type_filter\n), site_counts AS (\n  SELECT campground_id, count(*) AS campsite_count\n  FROM campsites\n  WHERE deleted_at IS NULL\n  GROUP BY campground_id\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'All POIs / use filters' AS __text, '__all_pois' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    p.id::text || ' | ' || p.poi_type || ' | ' || CASE\n      WHEN p.poi_type = 'campground' THEN cg.name || ' | ' || cg.data_source || ' | ' || COALESCE(site_counts.campsite_count, 0)::text || ' sites' || COALESCE(' | ' || primary_vr.external_id, '')\n      WHEN p.poi_type = 'tesla_supercharger' THEN ts.common_site_name || COALESCE(' | ' || ts.region, '') || COALESCE(' | ' || ts.stall_count::text || ' stalls', '')\n      WHEN p.poi_type = 'planet_fitness_location' THEN pf.name || COALESCE(' | ' || pf.region, '') || COALESCE(' | ' || pf.location_id, '')\n      ELSE p.poi_type\n    END AS __text,\n    p.id::text AS __value\n  FROM pois p\n  LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  LEFT JOIN vendor_refs primary_vr ON primary_vr.id = cg.primary_vendor_ref_id\n  LEFT JOIN site_counts ON site_counts.campground_id = cg.id\n  LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id\n  LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id AND ts.deleted_at IS NULL\n  LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id\n  LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id AND pf.deleted_at IS NULL\n  CROSS JOIN filters\n  WHERE p.deleted_at IS NULL\n    AND (\n      filters.poi_type_filter IN ('', '__all', '$__all')\n      OR p.poi_type = filters.poi_type_filter\n    )\n    AND CASE\n      WHEN p.poi_type = 'campground' THEN cg.id IS NOT NULL\n      WHEN p.poi_type = 'tesla_supercharger' THEN ts.id IS NOT NULL\n      WHEN p.poi_type = 'planet_fitness_location' THEN pf.id IS NOT NULL\n      ELSE false\n    END\n    AND (\n      filters.name_filter = ''\n      OR p.id::text = filters.name_filter\n      OR p.poi_type ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cg.name, ts.common_site_name, pf.name, '') ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cg.data_source, ts.location_slug, pf.location_id, '') ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(primary_vr.external_id, '') ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
-          "refId": "SQLVariableQueryEditor-VariableQuery",
-          "format": "table"
-        },
-        "skipUrlSync": false,
-        "type": "query",
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
         "definition": "WITH filters AS (\n  SELECT\n    btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter,\n    COALESCE((ARRAY[${poi_type:sqlstring}]::text[])[1], '') AS poi_type_filter\n), site_counts AS (\n  SELECT campground_id, count(*) AS campsite_count\n  FROM campsites\n  WHERE deleted_at IS NULL\n  GROUP BY campground_id\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'All POIs / use filters' AS __text, '__all_pois' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    p.id::text || ' | ' || p.poi_type || ' | ' || CASE\n      WHEN p.poi_type = 'campground' THEN cg.name || ' | ' || cg.data_source || ' | ' || COALESCE(site_counts.campsite_count, 0)::text || ' sites' || COALESCE(' | ' || primary_vr.external_id, '')\n      WHEN p.poi_type = 'tesla_supercharger' THEN ts.common_site_name || COALESCE(' | ' || ts.region, '') || COALESCE(' | ' || ts.stall_count::text || ' stalls', '')\n      WHEN p.poi_type = 'planet_fitness_location' THEN pf.name || COALESCE(' | ' || pf.region, '') || COALESCE(' | ' || pf.location_id, '')\n      ELSE p.poi_type\n    END AS __text,\n    p.id::text AS __value\n  FROM pois p\n  LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  LEFT JOIN vendor_refs primary_vr ON primary_vr.id = cg.primary_vendor_ref_id\n  LEFT JOIN site_counts ON site_counts.campground_id = cg.id\n  LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id\n  LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id AND ts.deleted_at IS NULL\n  LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id\n  LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id AND pf.deleted_at IS NULL\n  CROSS JOIN filters\n  WHERE p.deleted_at IS NULL\n    AND (\n      filters.poi_type_filter IN ('', '__all', '$__all')\n      OR p.poi_type = filters.poi_type_filter\n    )\n    AND CASE\n      WHEN p.poi_type = 'campground' THEN cg.id IS NOT NULL\n      WHEN p.poi_type = 'tesla_supercharger' THEN ts.id IS NOT NULL\n      WHEN p.poi_type = 'planet_fitness_location' THEN pf.id IS NOT NULL\n      ELSE false\n    END\n    AND (\n      filters.name_filter = ''\n      OR p.id::text = filters.name_filter\n      OR p.poi_type ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cg.name, ts.common_site_name, pf.name, '') ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cg.data_source, ts.location_slug, pf.location_id, '') ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(primary_vr.external_id, '') ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Campground / POI",
+        "multi": false,
+        "name": "poi_id",
+        "options": [],
+        "query": {
+          "format": "table",
+          "query": "WITH filters AS (\n  SELECT\n    btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter,\n    COALESCE((ARRAY[${poi_type:sqlstring}]::text[])[1], '') AS poi_type_filter\n), site_counts AS (\n  SELECT campground_id, count(*) AS campsite_count\n  FROM campsites\n  WHERE deleted_at IS NULL\n  GROUP BY campground_id\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'All POIs / use filters' AS __text, '__all_pois' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    p.id::text || ' | ' || p.poi_type || ' | ' || CASE\n      WHEN p.poi_type = 'campground' THEN cg.name || ' | ' || cg.data_source || ' | ' || COALESCE(site_counts.campsite_count, 0)::text || ' sites' || COALESCE(' | ' || primary_vr.external_id, '')\n      WHEN p.poi_type = 'tesla_supercharger' THEN ts.common_site_name || COALESCE(' | ' || ts.region, '') || COALESCE(' | ' || ts.stall_count::text || ' stalls', '')\n      WHEN p.poi_type = 'planet_fitness_location' THEN pf.name || COALESCE(' | ' || pf.region, '') || COALESCE(' | ' || pf.location_id, '')\n      ELSE p.poi_type\n    END AS __text,\n    p.id::text AS __value\n  FROM pois p\n  LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  LEFT JOIN vendor_refs primary_vr ON primary_vr.id = cg.primary_vendor_ref_id\n  LEFT JOIN site_counts ON site_counts.campground_id = cg.id\n  LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id\n  LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id AND ts.deleted_at IS NULL\n  LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id\n  LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id AND pf.deleted_at IS NULL\n  CROSS JOIN filters\n  WHERE p.deleted_at IS NULL\n    AND (\n      filters.poi_type_filter IN ('', '__all', '$__all')\n      OR p.poi_type = filters.poi_type_filter\n    )\n    AND CASE\n      WHEN p.poi_type = 'campground' THEN cg.id IS NOT NULL\n      WHEN p.poi_type = 'tesla_supercharger' THEN ts.id IS NOT NULL\n      WHEN p.poi_type = 'planet_fitness_location' THEN pf.id IS NOT NULL\n      ELSE false\n    END\n    AND (\n      filters.name_filter = ''\n      OR p.id::text = filters.name_filter\n      OR p.poi_type ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cg.name, ts.common_site_name, pf.name, '') ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cg.data_source, ts.location_slug, pf.location_id, '') ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(primary_vr.external_id, '') ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
+          "rawQuery": true,
+          "rawSql": "WITH filters AS (\n  SELECT\n    btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter,\n    COALESCE((ARRAY[${poi_type:sqlstring}]::text[])[1], '') AS poi_type_filter\n), site_counts AS (\n  SELECT campground_id, count(*) AS campsite_count\n  FROM campsites\n  WHERE deleted_at IS NULL\n  GROUP BY campground_id\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'All POIs / use filters' AS __text, '__all_pois' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    p.id::text || ' | ' || p.poi_type || ' | ' || CASE\n      WHEN p.poi_type = 'campground' THEN cg.name || ' | ' || cg.data_source || ' | ' || COALESCE(site_counts.campsite_count, 0)::text || ' sites' || COALESCE(' | ' || primary_vr.external_id, '')\n      WHEN p.poi_type = 'tesla_supercharger' THEN ts.common_site_name || COALESCE(' | ' || ts.region, '') || COALESCE(' | ' || ts.stall_count::text || ' stalls', '')\n      WHEN p.poi_type = 'planet_fitness_location' THEN pf.name || COALESCE(' | ' || pf.region, '') || COALESCE(' | ' || pf.location_id, '')\n      ELSE p.poi_type\n    END AS __text,\n    p.id::text AS __value\n  FROM pois p\n  LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  LEFT JOIN vendor_refs primary_vr ON primary_vr.id = cg.primary_vendor_ref_id\n  LEFT JOIN site_counts ON site_counts.campground_id = cg.id\n  LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id\n  LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id AND ts.deleted_at IS NULL\n  LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id\n  LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id AND pf.deleted_at IS NULL\n  CROSS JOIN filters\n  WHERE p.deleted_at IS NULL\n    AND (\n      filters.poi_type_filter IN ('', '__all', '$__all')\n      OR p.poi_type = filters.poi_type_filter\n    )\n    AND CASE\n      WHEN p.poi_type = 'campground' THEN cg.id IS NOT NULL\n      WHEN p.poi_type = 'tesla_supercharger' THEN ts.id IS NOT NULL\n      WHEN p.poi_type = 'planet_fitness_location' THEN pf.id IS NOT NULL\n      ELSE false\n    END\n    AND (\n      filters.name_filter = ''\n      OR p.id::text = filters.name_filter\n      OR p.poi_type ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cg.name, ts.common_site_name, pf.name, '') ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cg.data_source, ts.location_slug, pf.location_id, '') ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(primary_vr.external_id, '') ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
+          "refId": "SQLVariableQueryEditor-VariableQuery"
+        },
         "refresh": 1,
         "regex": "",
         "regexApplyTo": "value",
+        "skipUrlSync": false,
         "sort": 0,
-        "includeAll": false,
-        "multi": false
+        "type": "query"
       },
       {
         "allValue": "'__all'",
@@ -323,11 +516,11 @@
         "name": "poi_type",
         "options": [],
         "query": {
+          "format": "table",
           "query": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
           "rawQuery": true,
           "rawSql": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
-          "refId": "SQLVariableQueryEditor-VariableQuery",
-          "format": "table"
+          "refId": "SQLVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
         "regex": "",
@@ -354,11 +547,11 @@
         "name": "campsite_id",
         "options": [],
         "query": {
+          "format": "table",
           "query": "WITH filters AS (\n  SELECT\n    btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter,\n    COALESCE((ARRAY[${poi_id:sqlstring}]::text[])[1], '') AS poi_filter\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No campsite selected' AS __text, '__no_campsite' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    cs.id::text || ' | ' || cg.name || ' / ' || COALESCE(NULLIF(cs.loop_name, '') || ' / ', '') || cs.name || ' | ' || cs.data_source AS __text,\n    cs.id::text AS __value\n  FROM campsites cs\n  JOIN campgrounds cg ON cg.id = cs.campground_id\n  LEFT JOIN poi_campgrounds pc ON pc.campground_id = cg.id\n  CROSS JOIN filters\n  WHERE cs.deleted_at IS NULL\n    AND (\n      filters.poi_filter IN ('', '__all_pois', '__all_campgrounds')\n      OR (filters.poi_filter ~ '^[0-9]+$' AND pc.poi_id::text = filters.poi_filter)\n    )\n    AND (\n      filters.name_filter = ''\n      OR cs.id::text = filters.name_filter\n      OR cg.name ILIKE '%' || filters.name_filter || '%'\n      OR cs.name ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cs.loop_name, '') ILIKE '%' || filters.name_filter || '%'\n      OR cs.data_source ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
           "rawQuery": true,
           "rawSql": "WITH filters AS (\n  SELECT\n    btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter,\n    COALESCE((ARRAY[${poi_id:sqlstring}]::text[])[1], '') AS poi_filter\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No campsite selected' AS __text, '__no_campsite' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    cs.id::text || ' | ' || cg.name || ' / ' || COALESCE(NULLIF(cs.loop_name, '') || ' / ', '') || cs.name || ' | ' || cs.data_source AS __text,\n    cs.id::text AS __value\n  FROM campsites cs\n  JOIN campgrounds cg ON cg.id = cs.campground_id\n  LEFT JOIN poi_campgrounds pc ON pc.campground_id = cg.id\n  CROSS JOIN filters\n  WHERE cs.deleted_at IS NULL\n    AND (\n      filters.poi_filter IN ('', '__all_pois', '__all_campgrounds')\n      OR (filters.poi_filter ~ '^[0-9]+$' AND pc.poi_id::text = filters.poi_filter)\n    )\n    AND (\n      filters.name_filter = ''\n      OR cs.id::text = filters.name_filter\n      OR cg.name ILIKE '%' || filters.name_filter || '%'\n      OR cs.name ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cs.loop_name, '') ILIKE '%' || filters.name_filter || '%'\n      OR cs.data_source ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
-          "refId": "SQLVariableQueryEditor-VariableQuery",
-          "format": "table"
+          "refId": "SQLVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
         "regex": "",

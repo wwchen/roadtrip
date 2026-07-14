@@ -342,30 +342,30 @@
           "text": "All campgrounds / use filters",
           "value": "__all_campgrounds"
         },
-        "hide": 0,
-        "label": "Campground",
-        "name": "poi_id",
-        "options": [],
-        "query": {
-          "query": "WITH filters AS (\n  SELECT btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter\n), site_counts AS (\n  SELECT campground_id, count(*) AS campsite_count\n  FROM campsites\n  WHERE deleted_at IS NULL\n  GROUP BY campground_id\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'All campgrounds / use filters' AS __text, '__all_campgrounds' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    p.id::text || ' | ' || cg.name || ' | ' || cg.data_source || ' | ' || COALESCE(site_counts.campsite_count, 0)::text || ' sites' || COALESCE(' | ' || primary_vr.external_id, '') AS __text,\n    p.id::text AS __value\n  FROM pois p\n  JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  LEFT JOIN vendor_refs primary_vr ON primary_vr.id = cg.primary_vendor_ref_id\n  LEFT JOIN site_counts ON site_counts.campground_id = cg.id\n  CROSS JOIN filters\n  WHERE p.deleted_at IS NULL\n    AND p.poi_type = 'campground'\n    AND (\n      filters.name_filter = ''\n      OR p.id::text = filters.name_filter\n      OR cg.name ILIKE '%' || filters.name_filter || '%'\n      OR cg.data_source ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(primary_vr.external_id, '') ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
-          "rawQuery": true,
-          "rawSql": "WITH filters AS (\n  SELECT btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter\n), site_counts AS (\n  SELECT campground_id, count(*) AS campsite_count\n  FROM campsites\n  WHERE deleted_at IS NULL\n  GROUP BY campground_id\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'All campgrounds / use filters' AS __text, '__all_campgrounds' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    p.id::text || ' | ' || cg.name || ' | ' || cg.data_source || ' | ' || COALESCE(site_counts.campsite_count, 0)::text || ' sites' || COALESCE(' | ' || primary_vr.external_id, '') AS __text,\n    p.id::text AS __value\n  FROM pois p\n  JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  LEFT JOIN vendor_refs primary_vr ON primary_vr.id = cg.primary_vendor_ref_id\n  LEFT JOIN site_counts ON site_counts.campground_id = cg.id\n  CROSS JOIN filters\n  WHERE p.deleted_at IS NULL\n    AND p.poi_type = 'campground'\n    AND (\n      filters.name_filter = ''\n      OR p.id::text = filters.name_filter\n      OR cg.name ILIKE '%' || filters.name_filter || '%'\n      OR cg.data_source ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(primary_vr.external_id, '') ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
-          "refId": "SQLVariableQueryEditor-VariableQuery",
-          "format": "table"
-        },
-        "skipUrlSync": false,
-        "type": "query",
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
         "definition": "WITH filters AS (\n  SELECT btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter\n), site_counts AS (\n  SELECT campground_id, count(*) AS campsite_count\n  FROM campsites\n  WHERE deleted_at IS NULL\n  GROUP BY campground_id\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'All campgrounds / use filters' AS __text, '__all_campgrounds' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    p.id::text || ' | ' || cg.name || ' | ' || cg.data_source || ' | ' || COALESCE(site_counts.campsite_count, 0)::text || ' sites' || COALESCE(' | ' || primary_vr.external_id, '') AS __text,\n    p.id::text AS __value\n  FROM pois p\n  JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  LEFT JOIN vendor_refs primary_vr ON primary_vr.id = cg.primary_vendor_ref_id\n  LEFT JOIN site_counts ON site_counts.campground_id = cg.id\n  CROSS JOIN filters\n  WHERE p.deleted_at IS NULL\n    AND p.poi_type = 'campground'\n    AND (\n      filters.name_filter = ''\n      OR p.id::text = filters.name_filter\n      OR cg.name ILIKE '%' || filters.name_filter || '%'\n      OR cg.data_source ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(primary_vr.external_id, '') ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Campground",
+        "multi": false,
+        "name": "poi_id",
+        "options": [],
+        "query": {
+          "format": "table",
+          "query": "WITH filters AS (\n  SELECT btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter\n), site_counts AS (\n  SELECT campground_id, count(*) AS campsite_count\n  FROM campsites\n  WHERE deleted_at IS NULL\n  GROUP BY campground_id\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'All campgrounds / use filters' AS __text, '__all_campgrounds' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    p.id::text || ' | ' || cg.name || ' | ' || cg.data_source || ' | ' || COALESCE(site_counts.campsite_count, 0)::text || ' sites' || COALESCE(' | ' || primary_vr.external_id, '') AS __text,\n    p.id::text AS __value\n  FROM pois p\n  JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  LEFT JOIN vendor_refs primary_vr ON primary_vr.id = cg.primary_vendor_ref_id\n  LEFT JOIN site_counts ON site_counts.campground_id = cg.id\n  CROSS JOIN filters\n  WHERE p.deleted_at IS NULL\n    AND p.poi_type = 'campground'\n    AND (\n      filters.name_filter = ''\n      OR p.id::text = filters.name_filter\n      OR cg.name ILIKE '%' || filters.name_filter || '%'\n      OR cg.data_source ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(primary_vr.external_id, '') ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
+          "rawQuery": true,
+          "rawSql": "WITH filters AS (\n  SELECT btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter\n), site_counts AS (\n  SELECT campground_id, count(*) AS campsite_count\n  FROM campsites\n  WHERE deleted_at IS NULL\n  GROUP BY campground_id\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'All campgrounds / use filters' AS __text, '__all_campgrounds' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    p.id::text || ' | ' || cg.name || ' | ' || cg.data_source || ' | ' || COALESCE(site_counts.campsite_count, 0)::text || ' sites' || COALESCE(' | ' || primary_vr.external_id, '') AS __text,\n    p.id::text AS __value\n  FROM pois p\n  JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  LEFT JOIN vendor_refs primary_vr ON primary_vr.id = cg.primary_vendor_ref_id\n  LEFT JOIN site_counts ON site_counts.campground_id = cg.id\n  CROSS JOIN filters\n  WHERE p.deleted_at IS NULL\n    AND p.poi_type = 'campground'\n    AND (\n      filters.name_filter = ''\n      OR p.id::text = filters.name_filter\n      OR cg.name ILIKE '%' || filters.name_filter || '%'\n      OR cg.data_source ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(primary_vr.external_id, '') ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
+          "refId": "SQLVariableQueryEditor-VariableQuery"
+        },
         "refresh": 1,
         "regex": "",
         "regexApplyTo": "value",
+        "skipUrlSync": false,
         "sort": 0,
-        "includeAll": false,
-        "multi": false
+        "type": "query"
       },
       {
         "allowCustomValue": true,
@@ -373,30 +373,30 @@
           "text": "No campsite selected",
           "value": "__no_campsite"
         },
-        "hide": 0,
-        "label": "Campsite",
-        "name": "campsite_id",
-        "options": [],
-        "query": {
-          "query": "WITH filters AS (\n  SELECT\n    btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter,\n    COALESCE((ARRAY[${poi_id:sqlstring}]::text[])[1], '') AS poi_filter\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No campsite selected' AS __text, '__no_campsite' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    cs.id::text || ' | ' || cg.name || ' / ' || COALESCE(NULLIF(cs.loop_name, '') || ' / ', '') || cs.name || ' | ' || cs.data_source AS __text,\n    cs.id::text AS __value\n  FROM campsites cs\n  JOIN campgrounds cg ON cg.id = cs.campground_id\n  LEFT JOIN poi_campgrounds pc ON pc.campground_id = cg.id\n  CROSS JOIN filters\n  WHERE cs.deleted_at IS NULL\n    AND (\n      filters.poi_filter IN ('', '__all_pois', '__all_campgrounds')\n      OR (filters.poi_filter ~ '^[0-9]+$' AND pc.poi_id::text = filters.poi_filter)\n    )\n    AND (\n      filters.name_filter = ''\n      OR cs.id::text = filters.name_filter\n      OR cg.name ILIKE '%' || filters.name_filter || '%'\n      OR cs.name ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cs.loop_name, '') ILIKE '%' || filters.name_filter || '%'\n      OR cs.data_source ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
-          "rawQuery": true,
-          "rawSql": "WITH filters AS (\n  SELECT\n    btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter,\n    COALESCE((ARRAY[${poi_id:sqlstring}]::text[])[1], '') AS poi_filter\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No campsite selected' AS __text, '__no_campsite' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    cs.id::text || ' | ' || cg.name || ' / ' || COALESCE(NULLIF(cs.loop_name, '') || ' / ', '') || cs.name || ' | ' || cs.data_source AS __text,\n    cs.id::text AS __value\n  FROM campsites cs\n  JOIN campgrounds cg ON cg.id = cs.campground_id\n  LEFT JOIN poi_campgrounds pc ON pc.campground_id = cg.id\n  CROSS JOIN filters\n  WHERE cs.deleted_at IS NULL\n    AND (\n      filters.poi_filter IN ('', '__all_pois', '__all_campgrounds')\n      OR (filters.poi_filter ~ '^[0-9]+$' AND pc.poi_id::text = filters.poi_filter)\n    )\n    AND (\n      filters.name_filter = ''\n      OR cs.id::text = filters.name_filter\n      OR cg.name ILIKE '%' || filters.name_filter || '%'\n      OR cs.name ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cs.loop_name, '') ILIKE '%' || filters.name_filter || '%'\n      OR cs.data_source ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
-          "refId": "SQLVariableQueryEditor-VariableQuery",
-          "format": "table"
-        },
-        "skipUrlSync": false,
-        "type": "query",
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
         "definition": "WITH filters AS (\n  SELECT\n    btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter,\n    COALESCE((ARRAY[${poi_id:sqlstring}]::text[])[1], '') AS poi_filter\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No campsite selected' AS __text, '__no_campsite' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    cs.id::text || ' | ' || cg.name || ' / ' || COALESCE(NULLIF(cs.loop_name, '') || ' / ', '') || cs.name || ' | ' || cs.data_source AS __text,\n    cs.id::text AS __value\n  FROM campsites cs\n  JOIN campgrounds cg ON cg.id = cs.campground_id\n  LEFT JOIN poi_campgrounds pc ON pc.campground_id = cg.id\n  CROSS JOIN filters\n  WHERE cs.deleted_at IS NULL\n    AND (\n      filters.poi_filter IN ('', '__all_pois', '__all_campgrounds')\n      OR (filters.poi_filter ~ '^[0-9]+$' AND pc.poi_id::text = filters.poi_filter)\n    )\n    AND (\n      filters.name_filter = ''\n      OR cs.id::text = filters.name_filter\n      OR cg.name ILIKE '%' || filters.name_filter || '%'\n      OR cs.name ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cs.loop_name, '') ILIKE '%' || filters.name_filter || '%'\n      OR cs.data_source ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Campsite",
+        "multi": false,
+        "name": "campsite_id",
+        "options": [],
+        "query": {
+          "format": "table",
+          "query": "WITH filters AS (\n  SELECT\n    btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter,\n    COALESCE((ARRAY[${poi_id:sqlstring}]::text[])[1], '') AS poi_filter\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No campsite selected' AS __text, '__no_campsite' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    cs.id::text || ' | ' || cg.name || ' / ' || COALESCE(NULLIF(cs.loop_name, '') || ' / ', '') || cs.name || ' | ' || cs.data_source AS __text,\n    cs.id::text AS __value\n  FROM campsites cs\n  JOIN campgrounds cg ON cg.id = cs.campground_id\n  LEFT JOIN poi_campgrounds pc ON pc.campground_id = cg.id\n  CROSS JOIN filters\n  WHERE cs.deleted_at IS NULL\n    AND (\n      filters.poi_filter IN ('', '__all_pois', '__all_campgrounds')\n      OR (filters.poi_filter ~ '^[0-9]+$' AND pc.poi_id::text = filters.poi_filter)\n    )\n    AND (\n      filters.name_filter = ''\n      OR cs.id::text = filters.name_filter\n      OR cg.name ILIKE '%' || filters.name_filter || '%'\n      OR cs.name ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cs.loop_name, '') ILIKE '%' || filters.name_filter || '%'\n      OR cs.data_source ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
+          "rawQuery": true,
+          "rawSql": "WITH filters AS (\n  SELECT\n    btrim(COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '')) AS name_filter,\n    COALESCE((ARRAY[${poi_id:sqlstring}]::text[])[1], '') AS poi_filter\n)\nSELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No campsite selected' AS __text, '__no_campsite' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    cs.id::text || ' | ' || cg.name || ' / ' || COALESCE(NULLIF(cs.loop_name, '') || ' / ', '') || cs.name || ' | ' || cs.data_source AS __text,\n    cs.id::text AS __value\n  FROM campsites cs\n  JOIN campgrounds cg ON cg.id = cs.campground_id\n  LEFT JOIN poi_campgrounds pc ON pc.campground_id = cg.id\n  CROSS JOIN filters\n  WHERE cs.deleted_at IS NULL\n    AND (\n      filters.poi_filter IN ('', '__all_pois', '__all_campgrounds')\n      OR (filters.poi_filter ~ '^[0-9]+$' AND pc.poi_id::text = filters.poi_filter)\n    )\n    AND (\n      filters.name_filter = ''\n      OR cs.id::text = filters.name_filter\n      OR cg.name ILIKE '%' || filters.name_filter || '%'\n      OR cs.name ILIKE '%' || filters.name_filter || '%'\n      OR COALESCE(cs.loop_name, '') ILIKE '%' || filters.name_filter || '%'\n      OR cs.data_source ILIKE '%' || filters.name_filter || '%'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 501",
+          "refId": "SQLVariableQueryEditor-VariableQuery"
+        },
         "refresh": 1,
         "regex": "",
         "regexApplyTo": "value",
+        "skipUrlSync": false,
         "sort": 0,
-        "includeAll": false,
-        "multi": false
+        "type": "query"
       },
       {
         "allowCustomValue": true,
@@ -444,11 +444,11 @@
         "name": "poi_type",
         "options": [],
         "query": {
+          "format": "table",
           "query": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
           "rawQuery": true,
           "rawSql": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
-          "refId": "SQLVariableQueryEditor-VariableQuery",
-          "format": "table"
+          "refId": "SQLVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
         "regex": "",

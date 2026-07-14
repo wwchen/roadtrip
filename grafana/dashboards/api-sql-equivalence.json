@@ -227,11 +227,11 @@
         "name": "poi_type",
         "options": [],
         "query": {
+          "format": "table",
           "query": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
           "rawQuery": true,
           "rawSql": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
-          "refId": "SQLVariableQueryEditor-VariableQuery",
-          "format": "table"
+          "refId": "SQLVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
         "regex": "",

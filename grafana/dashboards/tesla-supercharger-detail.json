@@ -533,11 +533,11 @@
         "name": "supercharger_id",
         "options": [],
         "query": {
+          "format": "table",
           "query": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No supercharger selected' AS __text, '__no_supercharger' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n    p.id::text AS __value\n  FROM tesla_superchargers ts\n  JOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\n  JOIN pois p ON p.id = pts.poi_id\n  WHERE ts.deleted_at IS NULL\n    AND p.deleted_at IS NULL\n    AND p.poi_type = 'tesla_supercharger'\n) options\nORDER BY sort_key, __text\nLIMIT 5001;",
           "rawQuery": true,
           "rawSql": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No supercharger selected' AS __text, '__no_supercharger' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n    p.id::text AS __value\n  FROM tesla_superchargers ts\n  JOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\n  JOIN pois p ON p.id = pts.poi_id\n  WHERE ts.deleted_at IS NULL\n    AND p.deleted_at IS NULL\n    AND p.poi_type = 'tesla_supercharger'\n) options\nORDER BY sort_key, __text\nLIMIT 5001;",
-          "refId": "SQLVariableQueryEditor-VariableQuery",
-          "format": "table"
+          "refId": "SQLVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
         "regex": "",
