@@ -161,6 +161,21 @@ class GrafanaCanonicalCatalogDashboardTest(unittest.TestCase):
 
         self.assertEqual([], transposed_panels)
 
+    def test_tesla_detail_selector_loads_default_options_without_dropdown_search_macro(self) -> None:
+        dashboard = load_dashboard("tesla-supercharger-detail.json")
+        variable = next(
+            variable
+            for variable in dashboard["templating"]["list"]
+            if variable.get("name") == "supercharger_id"
+        )
+        query = variable["query"]["query"]
+
+        self.assertNotIn("$__searchFilter", query)
+        self.assertIn("tesla_superchargers", query)
+        self.assertIn("No supercharger selected", query)
+        self.assertEqual(query, variable["definition"])
+        self.assertEqual(query, variable["query"]["rawSql"])
+
 
 if __name__ == "__main__":
     unittest.main()

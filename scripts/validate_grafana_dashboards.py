@@ -10,6 +10,7 @@ __all IN (...) and fail at runtime.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -41,6 +42,10 @@ STATIC_DASHBOARDS_WITH_HIDDEN_TIMEPICKER = {
     "poi-detail",
     "tesla-supercharger-detail",
     "tesla-supercharger-stats",
+}
+STALE_DASHBOARD_SQL_PATTERNS = {
+    "availability_poller.consecutive_failures": re.compile(r"\bconsecutive_failures\b"),
+    "availability_run.finished_at": re.compile(r"\bfinished_at\b"),
 }
 
 
@@ -141,6 +146,32 @@ def query_text(variable: dict[str, object]) -> str:
     return query if isinstance(query, str) else ""
 
 
+def iter_strings(value: object):
+    if isinstance(value, dict):
+        for child_value in value.values():
+            yield from iter_strings(child_value)
+        return
+
+    if isinstance(value, list):
+        for child_value in value:
+            yield from iter_strings(child_value)
+        return
+
+    if isinstance(value, str):
+        yield value
+
+
+def validate_stale_dashboard_schema_references(
+    uid: str,
+    dashboard: dict[str, object],
+    failures: list[str],
+) -> None:
+    for text in iter_strings(dashboard):
+        for reference, pattern in STALE_DASHBOARD_SQL_PATTERNS.items():
+            if pattern.search(text):
+                failures.append(f"{uid}: dashboard must not reference stale {reference}")
+
+
 def validate_variable_filter_wiring(
     uid: str,
     dashboard: dict[str, object],
@@ -168,10 +199,17 @@ def validate_variable_filter_wiring(
         text = query_text(variable)
         is_name_filtered_poi_selector = has_name_filter and name in {"poi_id", "campsite_id"}
         is_general_poi_selector = name == "poi_id" and variable.get("label") == "Campground / POI"
+        is_tesla_supercharger_selector = uid == "tesla-supercharger-detail" and name == "supercharger_id"
 
         if (is_name_filtered_poi_selector or is_general_poi_selector) and "$__searchFilter" in text:
             failures.append(
                 f"{uid}:{name} selector must use the poi_name textbox instead of "
+                "Grafana server-side dropdown search"
+            )
+
+        if is_tesla_supercharger_selector and "$__searchFilter" in text:
+            failures.append(
+                f"{uid}:{name} selector must load default options instead of "
                 "Grafana server-side dropdown search"
             )
 
@@ -203,6 +241,7 @@ def main() -> int:
     for path in sorted(dashboard_dir.glob("*.json")):
         dashboard = json.loads(path.read_text())
         uid = dashboard.get("uid", path.name)
+        validate_stale_dashboard_schema_references(uid, dashboard, failures)
         validate_url_override_safe_sqlstrings(uid, path.name, dashboard, failures)
         validate_variable_filter_wiring(uid, dashboard, failures)
         if not has_shared_dashboard_links(dashboard):

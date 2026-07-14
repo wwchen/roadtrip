@@ -63,7 +63,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT r.id AS run_id, r.poller_id, p.provider, p.parent_ref, r.status, r.started_at, r.finished_at, r.duration_ms, r.snapshot_count, r.error\nFROM availability_run r\nJOIN availability_poller p ON p.id = r.poller_id\nWHERE COALESCE((ARRAY[${run_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND r.id::text = COALESCE((ARRAY[${run_id:sqlstring}]::text[])[1], '');",
+          "rawSql": "SELECT r.id AS run_id, r.poller_id, p.provider, p.parent_ref, r.status, r.started_at, r.completed_at, r.duration_ms, r.snapshot_count, r.error\nFROM availability_run r\nJOIN availability_poller p ON p.id = r.poller_id\nWHERE COALESCE((ARRAY[${run_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND r.id::text = COALESCE((ARRAY[${run_id:sqlstring}]::text[])[1], '');",
           "refId": "A"
         }
       ],

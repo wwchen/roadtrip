@@ -55,6 +55,16 @@ class GrafanaDashboardConsolidationTest(unittest.TestCase):
         self.assertIn("Effective poll interval over time", poller_detail_titles)
         self.assertIn("Fetch calls for this run", poller_run_detail_titles)
 
+    def test_availability_detail_dashboards_match_current_poller_schema(self) -> None:
+        poller_detail_text = (DASHBOARD_DIR / "poller-detail.json").read_text()
+        poller_run_detail_text = (DASHBOARD_DIR / "poller-run-detail.json").read_text()
+
+        self.assertNotIn("consecutive_failures", poller_detail_text)
+        self.assertIn("current_failure_streak", poller_detail_text)
+        self.assertIn("po.cadence_override_sec AS poi_cadence_override_sec", poller_detail_text)
+        self.assertNotIn("finished_at", poller_run_detail_text)
+        self.assertIn("r.completed_at", poller_run_detail_text)
+
     def test_ingest_catalog_freshness_dashboard_is_retired(self) -> None:
         status_overview_titles = panel_titles(dashboard("status-overview.json"))
 
