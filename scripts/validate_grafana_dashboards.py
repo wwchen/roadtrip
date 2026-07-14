@@ -35,7 +35,6 @@ URL_OVERRIDE_SAFE_SQLSTRING_VARIABLES = {
 STATIC_DASHBOARDS_WITH_HIDDEN_TIMEPICKER = {
     "api-sql-equivalence",
     "campground-detail",
-    "campsite-detail",
     "campsite-stats",
     "catalog-explorer",
     "db-stats",

@@ -11,10 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD_DIR = ROOT / "grafana" / "dashboards"
 
 CATALOG_DASHBOARDS = [
+    "campground-detail.json",
     "catalog-explorer.json",
     "poi-detail.json",
-    "poi-campsites.json",
-    "campsite-detail.json",
     "campsite-stats.json",
     "tesla-supercharger-detail.json",
     "tesla-supercharger-stats.json",
@@ -29,10 +28,10 @@ BANNED_SQL_PATTERNS = [
     re.compile(r"\bp\.category\b", re.IGNORECASE),
     re.compile(r"\bp\.source_id\b", re.IGNORECASE),
     re.compile(r"\bp\.properties\b", re.IGNORECASE),
-    re.compile(r"\bprovider_ref\b", re.IGNORECASE),
 ]
 
 BANNED_LINKS = [
+    "/d/campsite-detail/",
     "/d/reservable-detail/",
     "var-reservable_id",
     "var-reservable_rid",

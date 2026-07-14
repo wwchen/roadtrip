@@ -257,23 +257,6 @@
         "overrides": [
           {
             "matcher": {
-              "id": "byName",
-              "options": "site / day"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "title": "Open Campsite / Detail",
-                    "url": "/d/campsite-detail/campsite-detail?var-campsite_id=${__data.fields.campsite_id}"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": {
               "id": "byRegexp",
               "options": "^\\d{4}-\\d{2}-\\d{2}$"
             },

@@ -25,20 +25,20 @@ def panel_by_title(dashboard_doc: dict[str, Any], title: str) -> dict[str, Any]:
 class GrafanaAvailabilityMatrixTest(unittest.TestCase):
     def availability_grid_panel(self) -> dict[str, Any]:
         return panel_by_title(
-            dashboard("poi-campsites.json"),
+            dashboard("campground-detail.json"),
             "Availability grid (next 30 days)",
         )
 
-    def poi_campsites_dashboard(self) -> dict[str, Any]:
-        return dashboard("poi-campsites.json")
+    def campground_detail_dashboard(self) -> dict[str, Any]:
+        return dashboard("campground-detail.json")
 
     def availability_history_panel(self) -> dict[str, Any]:
         return panel_by_title(
-            self.poi_campsites_dashboard(),
+            self.campground_detail_dashboard(),
             "Availability history for target date",
         )
 
-    def test_poi_campsites_grid_uses_grafana_regexp_extractor(self) -> None:
+    def test_campground_detail_grid_uses_grafana_regexp_extractor(self) -> None:
         panel = self.availability_grid_panel()
 
         extract_transforms = [
@@ -53,7 +53,7 @@ class GrafanaAvailabilityMatrixTest(unittest.TestCase):
             panel["title"],
         )
 
-    def test_poi_campsites_grid_uses_compact_status_labels(self) -> None:
+    def test_campground_detail_grid_uses_compact_status_labels(self) -> None:
         mappings = self.availability_grid_panel()["fieldConfig"]["defaults"]["mappings"]
         status_options = mappings[0]["options"]
 
@@ -64,7 +64,7 @@ class GrafanaAvailabilityMatrixTest(unittest.TestCase):
         self.assertEqual("C", status_options["closed"]["text"])
         self.assertEqual("?", status_options["unknown"]["text"])
 
-    def test_poi_campsites_grid_has_status_key_tooltip(self) -> None:
+    def test_campground_detail_grid_has_status_key_tooltip(self) -> None:
         description = self.availability_grid_panel().get("description", "")
 
         self.assertIn("Status key:", description)
@@ -75,27 +75,19 @@ class GrafanaAvailabilityMatrixTest(unittest.TestCase):
         self.assertIn("C = closed", description)
         self.assertIn("? = unknown", description)
 
-    def test_poi_campsites_grid_site_column_links_to_campsite_detail(self) -> None:
+    def test_campground_detail_grid_has_no_campsite_detail_link(self) -> None:
         overrides = self.availability_grid_panel()["fieldConfig"]["overrides"]
-        site_override = next(
-            override
+        links = [
+            link
             for override in overrides
-            if override["matcher"] == {"id": "byName", "options": "site / day"}
-        )
-        link_property = next(
-            prop
-            for prop in site_override["properties"]
-            if prop["id"] == "links"
-        )
-        link = link_property["value"][0]
+            for prop in override.get("properties", [])
+            if prop.get("id") == "links"
+            for link in prop.get("value", [])
+        ]
 
-        self.assertEqual("Open Campsite / Detail", link["title"])
-        self.assertEqual(
-            "/d/campsite-detail/campsite-detail?var-campsite_id=${__data.fields.campsite_id}",
-            link["url"],
-        )
+        self.assertFalse(any("/d/campsite-detail/" in link.get("url", "") for link in links))
 
-    def test_poi_campsites_grid_date_columns_link_to_target_date_history(self) -> None:
+    def test_campground_detail_grid_date_columns_link_to_target_date_history(self) -> None:
         panel = self.availability_grid_panel()
         raw_sql = panel["targets"][0]["rawSql"]
         overrides = panel["fieldConfig"]["overrides"]
@@ -114,12 +106,12 @@ class GrafanaAvailabilityMatrixTest(unittest.TestCase):
         self.assertIn("to_char(d.target_date, 'YYYY-MM-DD')", raw_sql)
         self.assertEqual("Show history for this date", link["title"])
         self.assertEqual(
-            "/d/poi-campsites/poi-campsites?var-poi_name=${poi_name}&var-poi_id=${poi_id}&var-target_date=${__field.name}&var-poi_type=${poi_type}",
+            "/d/campground-detail/campground-detail?var-poi_name=${poi_name}&var-poi_id=${poi_id}&var-target_date=${__field.name}&var-poi_type=${poi_type}",
             link["url"],
         )
 
-    def test_poi_campsites_has_target_date_history_graph(self) -> None:
-        dashboard_doc = self.poi_campsites_dashboard()
+    def test_campground_detail_has_target_date_history_graph(self) -> None:
+        dashboard_doc = self.campground_detail_dashboard()
         target_date_var = next(
             variable
             for variable in dashboard_doc["templating"]["list"]
