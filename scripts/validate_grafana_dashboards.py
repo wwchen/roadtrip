@@ -73,11 +73,12 @@ def validate_alert_provisioning(
     failures: list[str],
 ) -> None:
     text = provisioning_file.read_text()
-    if "folder: roadtrip" in text:
-        failures.append(
-            f"{provisioning_file.relative_to(repo)}: "
-            "alert rules must not create the lowercase roadtrip folder"
-        )
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        if line.strip().startswith("folder:"):
+            failures.append(
+                f"{provisioning_file.relative_to(repo)}:{line_number}: "
+                "alert rules must not create dashboard-visible Grafana folders"
+            )
 
 
 def validate_url_override_safe_sqlstrings(
@@ -133,6 +134,57 @@ def validate_url_override_safe_sqlstrings(
             cursor = token_index + len(token)
 
 
+def query_text(variable: dict[str, object]) -> str:
+    query = variable.get("query")
+    if isinstance(query, dict):
+        text = query.get("query") or query.get("rawSql")
+        return text if isinstance(text, str) else ""
+    return query if isinstance(query, str) else ""
+
+
+def validate_variable_filter_wiring(
+    uid: str,
+    dashboard: dict[str, object],
+    failures: list[str],
+) -> None:
+    variables = dashboard.get("templating", {}).get("list", [])
+    if not isinstance(variables, list):
+        return
+
+    variable_names = {
+        variable.get("name")
+        for variable in variables
+        if isinstance(variable, dict)
+    }
+    has_name_filter = "poi_name" in variable_names
+
+    for variable in variables:
+        if not isinstance(variable, dict):
+            continue
+
+        name = variable.get("name", "<unnamed>")
+        if variable.get("type") != "query":
+            continue
+
+        text = query_text(variable)
+        is_name_filtered_poi_selector = has_name_filter and name in {"poi_id", "campsite_id"}
+        is_general_poi_selector = name == "poi_id" and variable.get("label") == "Campground / POI"
+
+        if (is_name_filtered_poi_selector or is_general_poi_selector) and "$__searchFilter" in text:
+            failures.append(
+                f"{uid}:{name} selector must use the poi_name textbox instead of "
+                "Grafana server-side dropdown search"
+            )
+
+        if is_name_filtered_poi_selector:
+            if "${poi_name:sqlstring}" not in text:
+                failures.append(f"{uid}:{name} selector must apply the poi_name filter")
+
+        if is_general_poi_selector:
+            if "tesla_supercharger" not in text:
+                failures.append(f"{uid}:{name} selector must include Tesla superchargers")
+
+
 def main() -> int:
     repo = Path(__file__).resolve().parents[1]
     dashboard_dir = repo / "grafana" / "dashboards"
@@ -153,6 +205,7 @@ def main() -> int:
         dashboard = json.loads(path.read_text())
         uid = dashboard.get("uid", path.name)
         validate_url_override_safe_sqlstrings(uid, path.name, dashboard, failures)
+        validate_variable_filter_wiring(uid, dashboard, failures)
         if not has_shared_dashboard_links(dashboard):
             failures.append(f"{uid}: missing shared dashboard links")
         if not has_roadtrip_tag(dashboard):
