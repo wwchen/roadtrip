@@ -306,6 +306,14 @@ fan-out. Call-shaping stays inside each adapter (months for rec.gov, the park
 matrix for ReserveAmerica, per-day map calls for Aspira); the batcher and poller
 never branch on vendor, they only group and dispatch.
 
+Before a grouped poll calls the adapter, the executor checks the
+`availability` interval table for fresh full-window coverage. If every
+`(campsite_id, target_date)` cell in that group's vendor polling window has a
+current observation newer than the poller's effective cadence, the group is
+skipped before the vendor governor and no `availability_run` /
+`availability_fetch_call` rows are written. Missing cells or cells older than
+the cadence window make the group fetch normally.
+
 `availability_fetch_call` is the trace table for this grouping: one row per
 group call, keyed by `run_id`, with columns `provider`, `parent_ref`,
 `campsite_count`, `window_start` / `window_end`, `outcome`
