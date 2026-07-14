@@ -63,7 +63,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH canonical_pois AS (\n  SELECT\n    p.id AS poi_id,\n    p.poi_type,\n    COALESCE(cg.name, ts.common_site_name, pf.name) AS name,\n    COALESCE(cg.location->>'region', ts.region, pf.region) AS region,\n    COALESCE(cg.location->>'country', ts.country::text, pf.country::text) AS country,\n    ST_X(ST_Centroid(p.geom)) AS lng,\n    ST_Y(ST_Centroid(p.geom)) AS lat,\n    pc.campground_id,\n    pts.tesla_supercharger_id,\n    ppf.planet_fitness_location_id,\n    cg.status AS campground_status,\n    ts.site_status AS tesla_site_status,\n    ts.stall_count,\n    ts.max_power_kw,\n    count(DISTINCT cs.id) AS campsite_count,\n    max(a.last_observed_at) AS latest_availability_observed_at\n  FROM pois p\n  LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  LEFT JOIN campsites cs ON cs.campground_id = cg.id AND cs.deleted_at IS NULL\n  LEFT JOIN availability a ON a.campsite_id = cs.id\n  LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id\n  LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id AND ts.deleted_at IS NULL\n  LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id\n  LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id AND pf.deleted_at IS NULL\n  WHERE p.deleted_at IS NULL\n  GROUP BY p.id, p.poi_type, cg.id, ts.id, pf.id, pc.campground_id, pts.tesla_supercharger_id, ppf.planet_fitness_location_id\n)\nSELECT *\nFROM canonical_pois\nWHERE (${poi_name:sqlstring} = '' OR name ILIKE '%' || ${poi_name:sqlstring} || '%')\n  AND CASE\n    WHEN ${poi_id:sqlstring} = '' THEN true\n    WHEN ${poi_id:sqlstring} ~ '^[0-9]+$' THEN poi_id::text = ${poi_id:sqlstring}\n    ELSE false\n  END\n  AND (${poi_type:sqlstring} IN ('', '__all') OR poi_type IN (${poi_type:sqlstring}))\nORDER BY name ASC NULLS LAST, poi_id ASC\nLIMIT 1000;",
+          "rawSql": "WITH canonical_pois AS (\n  SELECT\n    p.id AS poi_id,\n    p.poi_type,\n    COALESCE(cg.name, ts.common_site_name, pf.name) AS name,\n    COALESCE(cg.location->>'region', ts.region, pf.region) AS region,\n    COALESCE(cg.location->>'country', ts.country::text, pf.country::text) AS country,\n    ST_X(ST_Centroid(p.geom)) AS lng,\n    ST_Y(ST_Centroid(p.geom)) AS lat,\n    pc.campground_id,\n    pts.tesla_supercharger_id,\n    ppf.planet_fitness_location_id,\n    cg.status AS campground_status,\n    ts.site_status AS tesla_site_status,\n    ts.stall_count,\n    ts.max_power_kw,\n    count(DISTINCT cs.id) AS campsite_count,\n    max(a.last_observed_at) AS latest_availability_observed_at\n  FROM pois p\n  LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  LEFT JOIN campsites cs ON cs.campground_id = cg.id AND cs.deleted_at IS NULL\n  LEFT JOIN availability a ON a.campsite_id = cs.id\n  LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id\n  LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id AND ts.deleted_at IS NULL\n  LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id\n  LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id AND pf.deleted_at IS NULL\n  WHERE p.deleted_at IS NULL\n  GROUP BY p.id, p.poi_type, cg.id, ts.id, pf.id, pc.campground_id, pts.tesla_supercharger_id, ppf.planet_fitness_location_id\n)\nSELECT *\nFROM canonical_pois\nWHERE (COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '') = '' OR name ILIKE '%' || COALESCE((ARRAY[${poi_name:sqlstring}]::text[])[1], '') || '%')\n  AND CASE\n    WHEN COALESCE((ARRAY[${poi_id:sqlstring}]::text[])[1], '') IN ('', '__all_pois', '__all_campgrounds') THEN true\n    WHEN COALESCE((ARRAY[${poi_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$' THEN poi_id::text = COALESCE((ARRAY[${poi_id:sqlstring}]::text[])[1], '')\n    ELSE false\n  END\n  AND (COALESCE((ARRAY[${poi_type:sqlstring}]::text[])[1], '') IN ('', '__all') OR poi_type IN (COALESCE((ARRAY[${poi_type:sqlstring}]::text[])[1], '')))\nORDER BY name ASC NULLS LAST, poi_id ASC\nLIMIT 1000;",
           "refId": "A"
         }
       ],
@@ -99,7 +99,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.campsite_id,\n  s.run_id,\n  s.target_date,\n  s.status::text AS status,\n  (s.status = 'available') AS available,\n  s.last_observed_at,\n  lag(s.last_observed_at) OVER (PARTITION BY s.campsite_id, s.target_date ORDER BY s.last_observed_at, s.id) AS observed_from\nFROM availability s\nWHERE ${campsite_id:sqlstring} ~ '^[0-9]+$'\n  AND s.campsite_id::text = ${campsite_id:sqlstring}\nORDER BY s.last_observed_at DESC, s.id DESC\nLIMIT 500;",
+          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.campsite_id,\n  s.run_id,\n  s.target_date,\n  s.status::text AS status,\n  (s.status = 'available') AS available,\n  s.last_observed_at,\n  lag(s.last_observed_at) OVER (PARTITION BY s.campsite_id, s.target_date ORDER BY s.last_observed_at, s.id) AS observed_from\nFROM availability s\nWHERE COALESCE((ARRAY[${campsite_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND s.campsite_id::text = COALESCE((ARRAY[${campsite_id:sqlstring}]::text[])[1], '')\nORDER BY s.last_observed_at DESC, s.id DESC\nLIMIT 500;",
           "refId": "A"
         }
       ],
@@ -135,7 +135,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH scoped AS (\n  SELECT\n    s.id,\n    s.target_date,\n    s.last_observed_at,\n    s.status,\n    lag(s.last_observed_at) OVER (PARTITION BY s.target_date ORDER BY s.last_observed_at, s.id) AS observed_from\n  FROM availability s\n  WHERE ${campsite_id:sqlstring} ~ '^[0-9]+$'\n    AND s.campsite_id::text = ${campsite_id:sqlstring}\n    AND s.last_observed_at >= now() - (${window_hours:sqlstring} || ' hours')::interval\n)\nSELECT\n  target_date,\n  count(*) AS total_runs,\n  max(last_observed_at) FILTER (WHERE status = 'available') AS last_open_at,\n  (array_agg((status = 'available') ORDER BY last_observed_at DESC, id DESC))[1] AS is_currently_open,\n  count(*) FILTER (WHERE status = 'available' AND coalesce(observed_from, last_observed_at) >= now() - interval '24 hours') AS opens_last_24h\nFROM scoped\nGROUP BY target_date\nORDER BY target_date ASC;",
+          "rawSql": "WITH scoped AS (\n  SELECT\n    s.id,\n    s.target_date,\n    s.last_observed_at,\n    s.status,\n    lag(s.last_observed_at) OVER (PARTITION BY s.target_date ORDER BY s.last_observed_at, s.id) AS observed_from\n  FROM availability s\n  WHERE COALESCE((ARRAY[${campsite_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n    AND s.campsite_id::text = COALESCE((ARRAY[${campsite_id:sqlstring}]::text[])[1], '')\n    AND s.last_observed_at >= now() - (COALESCE((ARRAY[${window_hours:sqlstring}]::text[])[1], '') || ' hours')::interval\n)\nSELECT\n  target_date,\n  count(*) AS total_runs,\n  max(last_observed_at) FILTER (WHERE status = 'available') AS last_open_at,\n  (array_agg((status = 'available') ORDER BY last_observed_at DESC, id DESC))[1] AS is_currently_open,\n  count(*) FILTER (WHERE status = 'available' AND coalesce(observed_from, last_observed_at) >= now() - interval '24 hours') AS opens_last_24h\nFROM scoped\nGROUP BY target_date\nORDER BY target_date ASC;",
           "refId": "A"
         }
       ],
@@ -227,6 +227,7 @@
         "name": "poi_type",
         "options": [],
         "query": {
+          "format": "table",
           "query": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
           "rawQuery": true,
           "rawSql": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
@@ -246,7 +247,7 @@
     "to": "now"
   },
   "timepicker": {
-    "hidden": false,
+    "hidden": true,
     "refresh_intervals": [
       "30s",
       "1m",

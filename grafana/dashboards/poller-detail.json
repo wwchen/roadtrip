@@ -63,7 +63,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT id, provider, parent_ref, poi_id, active, next_run_at, last_run_at, consecutive_failures, cadence_override_sec, updated_at\nFROM availability_poller\nWHERE ${poller_id:sqlstring} ~ '^[0-9]+$'\n  AND id::text = ${poller_id:sqlstring};",
+          "rawSql": "SELECT\n  p.id,\n  p.provider,\n  p.parent_ref,\n  p.poi_id,\n  p.active,\n  p.next_run_at,\n  p.claimed_until,\n  p.last_run_at,\n  COALESCE(run_stats.current_failure_streak, 0) AS current_failure_streak,\n  po.cadence_override_sec AS poi_cadence_override_sec,\n  p.last_force_pull_at,\n  p.created_at,\n  p.updated_at\nFROM availability_poller p\nJOIN pois po ON po.id = p.poi_id\nLEFT JOIN LATERAL (\n  SELECT count(*) FILTER (WHERE terminal_runs.status = 'failed')::int AS current_failure_streak\n  FROM (\n    SELECT\n      r.status,\n      count(*) FILTER (WHERE r.status = 'completed') OVER (\n        ORDER BY r.started_at DESC, r.id DESC\n        ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING\n      ) AS prior_completed_runs\n    FROM availability_run r\n    WHERE r.poller_id = p.id\n      AND r.status IN ('completed', 'failed')\n  ) terminal_runs\n  WHERE COALESCE(terminal_runs.prior_completed_runs, 0) = 0\n) run_stats ON true\nWHERE COALESCE((ARRAY[${poller_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND p.id::text = COALESCE((ARRAY[${poller_id:sqlstring}]::text[])[1], '');",
           "refId": "A"
         }
       ],
@@ -133,7 +133,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT started_at AS time, id AS run_id, status, duration_ms, snapshot_count\nFROM availability_run\nWHERE ${poller_id:sqlstring} ~ '^[0-9]+$'\n  AND poller_id::text = ${poller_id:sqlstring}\nORDER BY started_at ASC;",
+          "rawSql": "SELECT started_at AS time, id AS run_id, status, duration_ms, snapshot_count\nFROM availability_run\nWHERE COALESCE((ARRAY[${poller_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND poller_id::text = COALESCE((ARRAY[${poller_id:sqlstring}]::text[])[1], '')\nORDER BY started_at ASC;",
           "refId": "A"
         }
       ],

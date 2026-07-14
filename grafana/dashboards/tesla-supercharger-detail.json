@@ -88,17 +88,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  p.id AS poi_id,\n  ts.id AS supercharger_id,\n  ts.common_site_name AS name,\n  ts.location_slug,\n  ts.location_guid,\n  ts.site_status,\n  ts.access_type,\n  ts.open_to_public,\n  ts.open_to_non_teslas,\n  ts.trailer_friendly,\n  ts.twenty_four_seven,\n  ts.region,\n  ts.country,\n  ts.info_url,\n  ts.created_at,\n  ts.updated_at,\n  now() - ts.updated_at AS catalog_age,\n  ts.stall_count,\n  ts.max_power_kw,\n  CASE WHEN jsonb_typeof(ts.pricebooks) = 'array' THEN jsonb_array_length(ts.pricebooks) ELSE 0 END AS pricebook_count,\n  (ts.detail_payload IS NOT NULL AND ts.detail_payload <> '{}'::jsonb) AS detail_captured\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring};",
+          "rawSql": "SELECT\n  p.id AS poi_id,\n  ts.id AS supercharger_id,\n  ts.common_site_name AS name,\n  ts.location_slug,\n  ts.location_guid,\n  ts.site_status,\n  ts.access_type,\n  ts.open_to_public,\n  ts.open_to_non_teslas,\n  ts.trailer_friendly,\n  ts.twenty_four_seven,\n  ts.region,\n  ts.country,\n  ts.info_url,\n  ts.created_at,\n  ts.updated_at,\n  now() - ts.updated_at AS catalog_age,\n  ts.stall_count,\n  ts.max_power_kw,\n  CASE WHEN jsonb_typeof(ts.pricebooks) = 'array' THEN jsonb_array_length(ts.pricebooks) ELSE 0 END AS pricebook_count,\n  (ts.detail_payload IS NOT NULL AND ts.detail_payload <> '{}'::jsonb) AS detail_captured\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\n  AND COALESCE((ARRAY[${supercharger_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND p.id::text = COALESCE((ARRAY[${supercharger_id:sqlstring}]::text[])[1], '');",
           "refId": "A"
         }
       ],
       "title": "Supercharger properties",
-      "transformations": [
-        {
-          "id": "transpose",
-          "options": {}
-        }
-      ],
       "type": "table"
     },
     {
@@ -177,7 +171,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  p.id AS poi_id,\n  ts.id AS supercharger_id,\n  ts.common_site_name AS name,\n  ts.location_slug,\n  ts.region,\n  ts.country,\n  ts.stall_count,\n  ts.max_power_kw,\n  ts.site_status,\n  ts.access_type,\n  ST_X(ST_Centroid(p.geom)) AS lng,\n  ST_Y(ST_Centroid(p.geom)) AS lat\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring};",
+          "rawSql": "SELECT\n  p.id AS poi_id,\n  ts.id AS supercharger_id,\n  ts.common_site_name AS name,\n  ts.location_slug,\n  ts.region,\n  ts.country,\n  ts.stall_count,\n  ts.max_power_kw,\n  ts.site_status,\n  ts.access_type,\n  ST_X(ST_Centroid(p.geom)) AS lng,\n  ST_Y(ST_Centroid(p.geom)) AS lat\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\n  AND COALESCE((ARRAY[${supercharger_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND p.id::text = COALESCE((ARRAY[${supercharger_id:sqlstring}]::text[])[1], '');",
           "refId": "A"
         }
       ],
@@ -257,17 +251,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  ts.time_zone,\n  ts.address->>'street' AS street,\n  ts.address->>'city' AS city,\n  ts.address->>'state' AS state,\n  ts.address->>'country' AS country,\n  ts.address->>'postcode' AS postal_code,\n  ts.amenities,\n  ts.hardware_counts,\n  ts.index_payload->'supercharger_function' AS index_status\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring};",
+          "rawSql": "SELECT\n  ts.time_zone,\n  ts.address->>'street' AS street,\n  ts.address->>'city' AS city,\n  ts.address->>'state' AS state,\n  ts.address->>'country' AS country,\n  ts.address->>'postcode' AS postal_code,\n  ts.amenities,\n  ts.hardware_counts,\n  ts.index_payload->'supercharger_function' AS index_status\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\n  AND COALESCE((ARRAY[${supercharger_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND p.id::text = COALESCE((ARRAY[${supercharger_id:sqlstring}]::text[])[1], '');",
           "refId": "A"
         }
       ],
       "title": "Address & operational fields",
-      "transformations": [
-        {
-          "id": "transpose",
-          "options": {}
-        }
-      ],
       "type": "table"
     },
     {
@@ -326,7 +314,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  e.row_num,\n  e.pricebook->>'vehicleMakeType' AS vehicle_make_type,\n  e.pricebook->>'feeType' AS fee_type,\n  e.pricebook->>'currencyCode' AS currency,\n  e.pricebook->>'uom' AS unit,\n  NULLIF(e.pricebook->>'rateBase', '')::numeric AS rate_base,\n  NULLIF(e.pricebook->>'rateTier1', '')::numeric AS rate_tier_1,\n  NULLIF(e.pricebook->>'rateTier2', '')::numeric AS rate_tier_2,\n  NULLIF(e.pricebook->>'minSiteOccupancy', '')::numeric AS min_site_occupancy,\n  NULLIF(e.pricebook->>'maxSiteOccupancy', '')::numeric AS max_site_occupancy,\n  e.pricebook->>'isMemberPricebook' AS member_pricebook,\n  e.pricebook AS raw_pricebook\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nCROSS JOIN LATERAL jsonb_array_elements(\n  CASE WHEN jsonb_typeof(ts.pricebooks) = 'array' THEN ts.pricebooks ELSE '[]'::jsonb END\n) WITH ORDINALITY AS e(pricebook, row_num)\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring}\nORDER BY e.row_num ASC;",
+          "rawSql": "SELECT\n  e.row_num,\n  e.pricebook->>'vehicleMakeType' AS vehicle_make_type,\n  e.pricebook->>'feeType' AS fee_type,\n  e.pricebook->>'currencyCode' AS currency,\n  e.pricebook->>'uom' AS unit,\n  NULLIF(e.pricebook->>'rateBase', '')::numeric AS rate_base,\n  NULLIF(e.pricebook->>'rateTier1', '')::numeric AS rate_tier_1,\n  NULLIF(e.pricebook->>'rateTier2', '')::numeric AS rate_tier_2,\n  NULLIF(e.pricebook->>'minSiteOccupancy', '')::numeric AS min_site_occupancy,\n  NULLIF(e.pricebook->>'maxSiteOccupancy', '')::numeric AS max_site_occupancy,\n  e.pricebook->>'isMemberPricebook' AS member_pricebook,\n  e.pricebook AS raw_pricebook\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nCROSS JOIN LATERAL jsonb_array_elements(\n  CASE WHEN jsonb_typeof(ts.pricebooks) = 'array' THEN ts.pricebooks ELSE '[]'::jsonb END\n) WITH ORDINALITY AS e(pricebook, row_num)\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\n  AND COALESCE((ARRAY[${supercharger_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND p.id::text = COALESCE((ARRAY[${supercharger_id:sqlstring}]::text[])[1], '')\nORDER BY e.row_num ASC;",
           "refId": "A"
         }
       ],
@@ -430,7 +418,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH tou AS (\n  SELECT\n    NULLIF(e.pricebook->>'rateBase','')::numeric AS rate_base,\n    split_part(e.pricebook->>'startTime', ':', 1)::int AS start_hour,\n    split_part(e.pricebook->>'endTime', ':', 1)::int AS end_hour\n  FROM tesla_superchargers ts\n  JOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\n  JOIN pois p ON p.id = pts.poi_id\n  CROSS JOIN LATERAL jsonb_array_elements(\n    CASE WHEN jsonb_typeof(ts.pricebooks) = 'array' THEN ts.pricebooks ELSE '[]'::jsonb END\n  ) AS e(pricebook)\n  WHERE ts.deleted_at IS NULL\n    AND p.deleted_at IS NULL\n    AND p.poi_type = 'tesla_supercharger'\n    AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n    AND p.id::text = ${supercharger_id:sqlstring}\n    AND (e.pricebook->>'isTou')::bool = true\n    AND e.pricebook->>'feeType' = 'CHARGING'\n    AND e.pricebook->>'uom' = 'kwh'\n    AND e.pricebook->>'vehicleMakeType' = 'TSLA'\n    AND NULLIF(e.pricebook->>'startTime','') IS NOT NULL\n    AND NULLIF(e.pricebook->>'endTime','') IS NOT NULL\n)\nSELECT\n  hour,\n  avg(t.rate_base) AS rate_base\nFROM generate_series(0, 23) AS hour\nLEFT JOIN tou t\n  ON CASE\n       WHEN t.start_hour <= t.end_hour\n         THEN hour >= t.start_hour AND hour < t.end_hour\n       ELSE hour >= t.start_hour OR hour < t.end_hour\n     END\nGROUP BY hour\nORDER BY hour;",
+          "rawSql": "WITH tou AS (\n  SELECT\n    NULLIF(e.pricebook->>'rateBase','')::numeric AS rate_base,\n    split_part(e.pricebook->>'startTime', ':', 1)::int AS start_hour,\n    split_part(e.pricebook->>'endTime', ':', 1)::int AS end_hour\n  FROM tesla_superchargers ts\n  JOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\n  JOIN pois p ON p.id = pts.poi_id\n  CROSS JOIN LATERAL jsonb_array_elements(\n    CASE WHEN jsonb_typeof(ts.pricebooks) = 'array' THEN ts.pricebooks ELSE '[]'::jsonb END\n  ) AS e(pricebook)\n  WHERE ts.deleted_at IS NULL\n    AND p.deleted_at IS NULL\n    AND p.poi_type = 'tesla_supercharger'\n    AND COALESCE((ARRAY[${supercharger_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n    AND p.id::text = COALESCE((ARRAY[${supercharger_id:sqlstring}]::text[])[1], '')\n    AND (e.pricebook->>'isTou')::bool = true\n    AND e.pricebook->>'feeType' = 'CHARGING'\n    AND e.pricebook->>'uom' = 'kwh'\n    AND e.pricebook->>'vehicleMakeType' = 'TSLA'\n    AND NULLIF(e.pricebook->>'startTime','') IS NOT NULL\n    AND NULLIF(e.pricebook->>'endTime','') IS NOT NULL\n)\nSELECT\n  hour,\n  avg(t.rate_base) AS rate_base\nFROM generate_series(0, 23) AS hour\nLEFT JOIN tou t\n  ON CASE\n       WHEN t.start_hour <= t.end_hour\n         THEN hour >= t.start_hour AND hour < t.end_hour\n       ELSE hour >= t.start_hour OR hour < t.end_hour\n     END\nGROUP BY hour\nORDER BY hour;",
           "refId": "A"
         }
       ],
@@ -510,17 +498,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  ts.location_slug,\n  ts.location_guid,\n  ts.address,\n  ts.index_payload AS upstream_index,\n  ts.detail_payload AS upstream_detail,\n  ts.pricebooks,\n  ts.availability_profile,\n  to_jsonb(ts) AS raw_supercharger\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring};",
+          "rawSql": "SELECT\n  ts.location_slug,\n  ts.location_guid,\n  ts.address,\n  ts.index_payload AS upstream_index,\n  ts.detail_payload AS upstream_detail,\n  ts.pricebooks,\n  ts.availability_profile,\n  to_jsonb(ts) AS raw_supercharger\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\n  AND COALESCE((ARRAY[${supercharger_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND p.id::text = COALESCE((ARRAY[${supercharger_id:sqlstring}]::text[])[1], '');",
           "refId": "A"
         }
       ],
       "title": "Raw Tesla upstream data",
-      "transformations": [
-        {
-          "id": "transpose",
-          "options": {}
-        }
-      ],
       "type": "table"
     }
   ],
@@ -536,24 +518,25 @@
       {
         "allowCustomValue": true,
         "current": {
-          "text": "",
-          "value": ""
+          "text": "No supercharger selected",
+          "value": "__no_supercharger"
         },
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
-        "definition": "SELECT\n  ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n  p.id::text AS __value\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\nORDER BY ts.common_site_name ASC, p.id ASC\nLIMIT 5000;",
+        "definition": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No supercharger selected' AS __text, '__no_supercharger' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n    p.id::text AS __value\n  FROM tesla_superchargers ts\n  JOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\n  JOIN pois p ON p.id = pts.poi_id\n  WHERE ts.deleted_at IS NULL\n    AND p.deleted_at IS NULL\n    AND p.poi_type = 'tesla_supercharger'\n) options\nORDER BY sort_key, __text\nLIMIT 5001;",
         "hide": 0,
         "includeAll": false,
-        "label": "Supercharger id",
+        "label": "Supercharger",
         "multi": false,
         "name": "supercharger_id",
         "options": [],
         "query": {
-          "query": "SELECT\n  ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n  p.id::text AS __value\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\nORDER BY ts.common_site_name ASC, p.id ASC\nLIMIT 5000;",
+          "format": "table",
+          "query": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No supercharger selected' AS __text, '__no_supercharger' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n    p.id::text AS __value\n  FROM tesla_superchargers ts\n  JOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\n  JOIN pois p ON p.id = pts.poi_id\n  WHERE ts.deleted_at IS NULL\n    AND p.deleted_at IS NULL\n    AND p.poi_type = 'tesla_supercharger'\n) options\nORDER BY sort_key, __text\nLIMIT 5001;",
           "rawQuery": true,
-          "rawSql": "SELECT\n  ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n  p.id::text AS __value\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND p.poi_type = 'tesla_supercharger'\nORDER BY ts.common_site_name ASC, p.id ASC\nLIMIT 5000;",
+          "rawSql": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No supercharger selected' AS __text, '__no_supercharger' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    ts.common_site_name || ' - POI ' || p.id::text || COALESCE(' [' || NULLIF(ts.region, '') || ']', '') AS __text,\n    p.id::text AS __value\n  FROM tesla_superchargers ts\n  JOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\n  JOIN pois p ON p.id = pts.poi_id\n  WHERE ts.deleted_at IS NULL\n    AND p.deleted_at IS NULL\n    AND p.poi_type = 'tesla_supercharger'\n) options\nORDER BY sort_key, __text\nLIMIT 5001;",
           "refId": "SQLVariableQueryEditor-VariableQuery"
         },
         "refresh": 1,
@@ -570,7 +553,7 @@
     "to": "now"
   },
   "timepicker": {
-    "hidden": false,
+    "hidden": true,
     "refresh_intervals": [
       "30s",
       "1m",

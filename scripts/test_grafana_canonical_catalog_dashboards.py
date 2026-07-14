@@ -11,10 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD_DIR = ROOT / "grafana" / "dashboards"
 
 CATALOG_DASHBOARDS = [
+    "campground-detail.json",
     "catalog-explorer.json",
     "poi-detail.json",
-    "poi-campsites.json",
-    "campsite-detail.json",
     "campsite-stats.json",
     "tesla-supercharger-detail.json",
     "tesla-supercharger-stats.json",
@@ -29,10 +28,10 @@ BANNED_SQL_PATTERNS = [
     re.compile(r"\bp\.category\b", re.IGNORECASE),
     re.compile(r"\bp\.source_id\b", re.IGNORECASE),
     re.compile(r"\bp\.properties\b", re.IGNORECASE),
-    re.compile(r"\bprovider_ref\b", re.IGNORECASE),
 ]
 
 BANNED_LINKS = [
+    "/d/campsite-detail/",
     "/d/reservable-detail/",
     "var-reservable_id",
     "var-reservable_rid",
@@ -71,6 +70,16 @@ def raw_sql_strings(dashboard: dict[str, Any]) -> list[str]:
         if isinstance(value, str) and ("SELECT" in value.upper() or "WITH " in value.upper()):
             strings.append(value)
     return strings
+
+
+def panels_in(dashboard: dict[str, Any]) -> list[dict[str, Any]]:
+    panels: list[dict[str, Any]] = []
+    for panel in dashboard.get("panels", []):
+        if not isinstance(panel, dict):
+            continue
+        panels.append(panel)
+        panels.extend(panels_in(panel))
+    return panels
 
 
 class GrafanaCanonicalCatalogDashboardTest(unittest.TestCase):
@@ -140,6 +149,32 @@ class GrafanaCanonicalCatalogDashboardTest(unittest.TestCase):
         ]
         self.assertEqual(1, len(matching))
         self.assertEqual("barchart", matching[0].get("type"))
+
+    def test_tesla_detail_dashboard_does_not_transpose_empty_default_panels(self) -> None:
+        dashboard = load_dashboard("tesla-supercharger-detail.json")
+        transposed_panels = [
+            panel.get("title")
+            for panel in panels_in(dashboard)
+            for transformation in panel.get("transformations", [])
+            if transformation.get("id") == "transpose"
+        ]
+
+        self.assertEqual([], transposed_panels)
+
+    def test_tesla_detail_selector_loads_default_options_without_dropdown_search_macro(self) -> None:
+        dashboard = load_dashboard("tesla-supercharger-detail.json")
+        variable = next(
+            variable
+            for variable in dashboard["templating"]["list"]
+            if variable.get("name") == "supercharger_id"
+        )
+        query = variable["query"]["query"]
+
+        self.assertNotIn("$__searchFilter", query)
+        self.assertIn("tesla_superchargers", query)
+        self.assertIn("No supercharger selected", query)
+        self.assertEqual(query, variable["definition"])
+        self.assertEqual(query, variable["query"]["rawSql"])
 
 
 if __name__ == "__main__":

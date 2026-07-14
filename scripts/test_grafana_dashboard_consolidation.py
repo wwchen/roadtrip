@@ -16,6 +16,8 @@ RETIRED_PROVIDER_CACHE_PATH = DASHBOARD_DIR / "provider-cache-audit.json"
 RETIRED_PROVIDER_CACHE_URL = "/d/provider-cache-audit"
 RETIRED_AVAILABILITY_MATRIX_PATH = DASHBOARD_DIR / "availability-cell-matrix.json"
 RETIRED_AVAILABILITY_MATRIX_URL = "/d/availability-cell-matrix"
+RETIRED_CAMPSITE_DETAIL_PATH = DASHBOARD_DIR / "campsite-detail.json"
+RETIRED_CAMPSITE_DETAIL_URL = "/d/campsite-detail"
 
 
 def dashboard(name: str) -> dict[str, Any]:
@@ -53,6 +55,16 @@ class GrafanaDashboardConsolidationTest(unittest.TestCase):
         self.assertIn("Effective poll interval over time", poller_detail_titles)
         self.assertIn("Fetch calls for this run", poller_run_detail_titles)
 
+    def test_availability_detail_dashboards_match_current_poller_schema(self) -> None:
+        poller_detail_text = (DASHBOARD_DIR / "poller-detail.json").read_text()
+        poller_run_detail_text = (DASHBOARD_DIR / "poller-run-detail.json").read_text()
+
+        self.assertNotIn("consecutive_failures", poller_detail_text)
+        self.assertIn("current_failure_streak", poller_detail_text)
+        self.assertIn("po.cadence_override_sec AS poi_cadence_override_sec", poller_detail_text)
+        self.assertNotIn("finished_at", poller_run_detail_text)
+        self.assertIn("r.completed_at", poller_run_detail_text)
+
     def test_ingest_catalog_freshness_dashboard_is_retired(self) -> None:
         status_overview_titles = panel_titles(dashboard("status-overview.json"))
 
@@ -70,11 +82,18 @@ class GrafanaDashboardConsolidationTest(unittest.TestCase):
         self.assertIn("Availability Provider Cache For Selected Campsite", catalog_explorer_titles)
 
     def test_availability_matrix_dashboard_is_retired(self) -> None:
-        poi_campsites_titles = panel_titles(dashboard("poi-campsites.json"))
+        campground_detail_titles = panel_titles(dashboard("campground-detail.json"))
 
         self.assertFalse(RETIRED_AVAILABILITY_MATRIX_PATH.exists())
         self.assertNotIn(RETIRED_AVAILABILITY_MATRIX_URL, all_dashboard_text())
-        self.assertIn("Availability grid (next 30 days)", poi_campsites_titles)
+        self.assertIn("Availability grid (next 30 days)", campground_detail_titles)
+
+    def test_campsite_detail_dashboard_is_retired(self) -> None:
+        catalog_titles = panel_titles(dashboard("catalog-explorer.json"))
+
+        self.assertFalse(RETIRED_CAMPSITE_DETAIL_PATH.exists())
+        self.assertNotIn(RETIRED_CAMPSITE_DETAIL_URL, all_dashboard_text())
+        self.assertIn("Selected Campsite Detail", catalog_titles)
 
 
 if __name__ == "__main__":
