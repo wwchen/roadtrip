@@ -72,6 +72,16 @@ def raw_sql_strings(dashboard: dict[str, Any]) -> list[str]:
     return strings
 
 
+def panels_in(dashboard: dict[str, Any]) -> list[dict[str, Any]]:
+    panels: list[dict[str, Any]] = []
+    for panel in dashboard.get("panels", []):
+        if not isinstance(panel, dict):
+            continue
+        panels.append(panel)
+        panels.extend(panels_in(panel))
+    return panels
+
+
 class GrafanaCanonicalCatalogDashboardTest(unittest.TestCase):
     def test_catalog_dashboards_do_not_query_old_catalog_tables(self) -> None:
         offenders: list[str] = []
@@ -139,6 +149,17 @@ class GrafanaCanonicalCatalogDashboardTest(unittest.TestCase):
         ]
         self.assertEqual(1, len(matching))
         self.assertEqual("barchart", matching[0].get("type"))
+
+    def test_tesla_detail_dashboard_does_not_transpose_empty_default_panels(self) -> None:
+        dashboard = load_dashboard("tesla-supercharger-detail.json")
+        transposed_panels = [
+            panel.get("title")
+            for panel in panels_in(dashboard)
+            for transformation in panel.get("transformations", [])
+            if transformation.get("id") == "transpose"
+        ]
+
+        self.assertEqual([], transposed_panels)
 
 
 if __name__ == "__main__":

@@ -93,12 +93,6 @@
         }
       ],
       "title": "Supercharger properties",
-      "transformations": [
-        {
-          "id": "transpose",
-          "options": {}
-        }
-      ],
       "type": "table"
     },
     {
@@ -262,12 +256,6 @@
         }
       ],
       "title": "Address & operational fields",
-      "transformations": [
-        {
-          "id": "transpose",
-          "options": {}
-        }
-      ],
       "type": "table"
     },
     {
@@ -515,12 +503,6 @@
         }
       ],
       "title": "Raw Tesla upstream data",
-      "transformations": [
-        {
-          "id": "transpose",
-          "options": {}
-        }
-      ],
       "type": "table"
     }
   ],
