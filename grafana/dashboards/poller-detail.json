@@ -63,7 +63,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT id, provider, parent_ref, poi_id, active, next_run_at, last_run_at, consecutive_failures, cadence_override_sec, updated_at\nFROM availability_poller\nWHERE ${poller_id:sqlstring} ~ '^[0-9]+$'\n  AND id::text = ${poller_id:sqlstring};",
+          "rawSql": "SELECT id, provider, parent_ref, poi_id, active, next_run_at, last_run_at, consecutive_failures, cadence_override_sec, updated_at\nFROM availability_poller\nWHERE COALESCE((ARRAY[${poller_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND id::text = COALESCE((ARRAY[${poller_id:sqlstring}]::text[])[1], '');",
           "refId": "A"
         }
       ],
@@ -133,7 +133,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT started_at AS time, id AS run_id, status, duration_ms, snapshot_count\nFROM availability_run\nWHERE ${poller_id:sqlstring} ~ '^[0-9]+$'\n  AND poller_id::text = ${poller_id:sqlstring}\nORDER BY started_at ASC;",
+          "rawSql": "SELECT started_at AS time, id AS run_id, status, duration_ms, snapshot_count\nFROM availability_run\nWHERE COALESCE((ARRAY[${poller_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND poller_id::text = COALESCE((ARRAY[${poller_id:sqlstring}]::text[])[1], '')\nORDER BY started_at ASC;",
           "refId": "A"
         }
       ],

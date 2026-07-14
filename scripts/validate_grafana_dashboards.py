@@ -16,6 +16,22 @@ from pathlib import Path
 from grafana_dashboard_links import has_roadtrip_tag, has_shared_dashboard_links
 
 SELECTOR_VARIABLE_TYPES = {"custom", "query"}
+URL_OVERRIDE_SAFE_SQLSTRING_VARIABLES = {
+    "access_type",
+    "campground_id",
+    "campsite_id",
+    "country",
+    "loop_name",
+    "poi_id",
+    "poi_name",
+    "poi_type",
+    "poller_id",
+    "region",
+    "run_id",
+    "supercharger_id",
+    "target_date",
+    "window_hours",
+}
 STATIC_DASHBOARDS_WITH_HIDDEN_TIMEPICKER = {
     "api-sql-equivalence",
     "campground-detail",
@@ -64,6 +80,59 @@ def validate_alert_provisioning(
         )
 
 
+def validate_url_override_safe_sqlstrings(
+    uid: str,
+    value_path: str,
+    value: object,
+    failures: list[str],
+) -> None:
+    if isinstance(value, dict):
+        for key, child_value in value.items():
+            validate_url_override_safe_sqlstrings(
+                uid,
+                f"{value_path}.{key}",
+                child_value,
+                failures,
+            )
+        return
+
+    if isinstance(value, list):
+        for index, child_value in enumerate(value):
+            validate_url_override_safe_sqlstrings(
+                uid,
+                f"{value_path}[{index}]",
+                child_value,
+                failures,
+            )
+        return
+
+    if not isinstance(value, str):
+        return
+
+    for variable_name in URL_OVERRIDE_SAFE_SQLSTRING_VARIABLES:
+        token = f"${{{variable_name}:sqlstring}}"
+        if token not in value:
+            continue
+
+        safe_interpolation = f"ARRAY[{token}]::text[]"
+        cursor = 0
+        while True:
+            token_index = value.find(token, cursor)
+            if token_index == -1:
+                break
+
+            safe_start = token_index - len("ARRAY[")
+            safe_end = token_index + len(token) + len("]::text[]")
+            if safe_start < 0 or value[safe_start:safe_end] != safe_interpolation:
+                failures.append(
+                    f"{uid}:{value_path} uses {token} without a blank URL-safe "
+                    "ARRAY wrapper"
+                )
+                break
+
+            cursor = token_index + len(token)
+
+
 def main() -> int:
     repo = Path(__file__).resolve().parents[1]
     dashboard_dir = repo / "grafana" / "dashboards"
@@ -83,6 +152,7 @@ def main() -> int:
     for path in sorted(dashboard_dir.glob("*.json")):
         dashboard = json.loads(path.read_text())
         uid = dashboard.get("uid", path.name)
+        validate_url_override_safe_sqlstrings(uid, path.name, dashboard, failures)
         if not has_shared_dashboard_links(dashboard):
             failures.append(f"{uid}: missing shared dashboard links")
         if not has_roadtrip_tag(dashboard):
@@ -96,6 +166,14 @@ def main() -> int:
                 value = variable.get("current", {}).get("value")
                 if value == "" or value == []:
                     failures.append(f"{uid}:{name} selector has empty current value")
+
+            if (
+                variable.get("type") == "query"
+                and variable.get("datasource", {}).get("type") == "postgres"
+            ):
+                query = variable.get("query")
+                if not isinstance(query, dict) or query.get("format") != "table":
+                    failures.append(f"{uid}:{name} Postgres variable must use table format")
 
             if not variable.get("includeAll"):
                 continue

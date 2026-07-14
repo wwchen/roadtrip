@@ -63,7 +63,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  cs.id AS campsite_id,\n  cg.id AS campground_id,\n  cg.name AS campground_name,\n  cs.name,\n  cs.loop_name,\n  cs.kind,\n  cs.kind_listed,\n  cs.max_people,\n  cs.max_cars,\n  cs.max_rv_length,\n  cs.max_trailer_length,\n  cs.electric_hookups,\n  cs.water_hookups,\n  cs.sewer_hookups,\n  cs.ada_accessible,\n  cs.pull_through,\n  cs.equipment,\n  cs.price,\n  cs.schedule,\n  vr.vendor,\n  vr.external_id AS vendor_ref_id,\n  cs.source_payload,\n  cs.updated_at,\n  cs.deleted_at\nFROM campsites cs\nJOIN campgrounds cg ON cg.id = cs.campground_id\nLEFT JOIN campsite_vendor_refs cvr ON cvr.campsite_id = cs.id\nLEFT JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id\nWHERE ${campsite_id:sqlstring} ~ '^[0-9]+$'\n  AND cs.id::text = ${campsite_id:sqlstring};",
+          "rawSql": "SELECT\n  cs.id AS campsite_id,\n  cg.id AS campground_id,\n  cg.name AS campground_name,\n  cs.name,\n  cs.loop_name,\n  cs.kind,\n  cs.kind_listed,\n  cs.max_people,\n  cs.max_cars,\n  cs.max_rv_length,\n  cs.max_trailer_length,\n  cs.electric_hookups,\n  cs.water_hookups,\n  cs.sewer_hookups,\n  cs.ada_accessible,\n  cs.pull_through,\n  cs.equipment,\n  cs.price,\n  cs.schedule,\n  vr.vendor,\n  vr.external_id AS vendor_ref_id,\n  cs.source_payload,\n  cs.updated_at,\n  cs.deleted_at\nFROM campsites cs\nJOIN campgrounds cg ON cg.id = cs.campground_id\nLEFT JOIN campsite_vendor_refs cvr ON cvr.campsite_id = cs.id\nLEFT JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id\nWHERE COALESCE((ARRAY[${campsite_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND cs.id::text = COALESCE((ARRAY[${campsite_id:sqlstring}]::text[])[1], '');",
           "refId": "A"
         }
       ],
@@ -99,7 +99,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT sibling.id AS campsite_id, sibling.loop_name, sibling.name, sibling.kind, sibling.max_people, sibling.updated_at\nFROM campsites selected\nJOIN campsites sibling ON sibling.campground_id = selected.campground_id AND sibling.deleted_at IS NULL\nWHERE ${campsite_id:sqlstring} ~ '^[0-9]+$'\n  AND selected.id::text = ${campsite_id:sqlstring}\nORDER BY sibling.loop_name NULLS LAST, sibling.name NULLS LAST;",
+          "rawSql": "SELECT sibling.id AS campsite_id, sibling.loop_name, sibling.name, sibling.kind, sibling.max_people, sibling.updated_at\nFROM campsites selected\nJOIN campsites sibling ON sibling.campground_id = selected.campground_id AND sibling.deleted_at IS NULL\nWHERE COALESCE((ARRAY[${campsite_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND selected.id::text = COALESCE((ARRAY[${campsite_id:sqlstring}]::text[])[1], '')\nORDER BY sibling.loop_name NULLS LAST, sibling.name NULLS LAST;",
           "refId": "A"
         }
       ],
@@ -135,7 +135,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.campsite_id,\n  s.run_id,\n  s.target_date,\n  s.status::text AS status,\n  (s.status = 'available') AS available,\n  s.last_observed_at,\n  lag(s.last_observed_at) OVER (PARTITION BY s.campsite_id, s.target_date ORDER BY s.last_observed_at, s.id) AS observed_from\nFROM availability s\nWHERE ${campsite_id:sqlstring} ~ '^[0-9]+$'\n  AND s.campsite_id::text = ${campsite_id:sqlstring}\nORDER BY s.last_observed_at DESC, s.id DESC\nLIMIT 500;",
+          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.campsite_id,\n  s.run_id,\n  s.target_date,\n  s.status::text AS status,\n  (s.status = 'available') AS available,\n  s.last_observed_at,\n  lag(s.last_observed_at) OVER (PARTITION BY s.campsite_id, s.target_date ORDER BY s.last_observed_at, s.id) AS observed_from\nFROM availability s\nWHERE COALESCE((ARRAY[${campsite_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND s.campsite_id::text = COALESCE((ARRAY[${campsite_id:sqlstring}]::text[])[1], '')\nORDER BY s.last_observed_at DESC, s.id DESC\nLIMIT 500;",
           "refId": "A"
         }
       ],
@@ -173,7 +173,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.last_observed_at AS time,\n  s.target_date::text AS metric,\n  CASE s.status::text\n    WHEN 'available' THEN 4\n    WHEN 'first_come' THEN 3\n    WHEN 'reserved' THEN 2\n    WHEN 'booked' THEN 1\n    WHEN 'closed' THEN 0\n    ELSE -1\n  END::double precision AS value\nFROM availability s\nWHERE ${campsite_id:sqlstring} ~ '^[0-9]+$'\n  AND s.campsite_id::text = ${campsite_id:sqlstring}\nORDER BY s.target_date ASC, s.last_observed_at ASC;",
+          "rawSql": "SELECT\n  s.last_observed_at AS time,\n  s.target_date::text AS metric,\n  CASE s.status::text\n    WHEN 'available' THEN 4\n    WHEN 'first_come' THEN 3\n    WHEN 'reserved' THEN 2\n    WHEN 'booked' THEN 1\n    WHEN 'closed' THEN 0\n    ELSE -1\n  END::double precision AS value\nFROM availability s\nWHERE COALESCE((ARRAY[${campsite_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND s.campsite_id::text = COALESCE((ARRAY[${campsite_id:sqlstring}]::text[])[1], '')\nORDER BY s.target_date ASC, s.last_observed_at ASC;",
           "refId": "A"
         }
       ],
@@ -209,7 +209,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT w.id, w.status, w.start_date, w.end_date, w.cadence_sec, w.trigger_kinds, w.stop_when_triggered, w.campsite_filters, w.created_at\nFROM availability_watch w\nJOIN availability_watch_target wt ON wt.watch_id = w.id\nWHERE ${campsite_id:sqlstring} ~ '^[0-9]+$'\n  AND wt.campsite_id::text = ${campsite_id:sqlstring}\nORDER BY w.created_at DESC;",
+          "rawSql": "SELECT w.id, w.status, w.start_date, w.end_date, w.cadence_sec, w.trigger_kinds, w.stop_when_triggered, w.campsite_filters, w.created_at\nFROM availability_watch w\nJOIN availability_watch_target wt ON wt.watch_id = w.id\nWHERE COALESCE((ARRAY[${campsite_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND wt.campsite_id::text = COALESCE((ARRAY[${campsite_id:sqlstring}]::text[])[1], '')\nORDER BY w.created_at DESC;",
           "refId": "A"
         }
       ],
@@ -247,7 +247,8 @@
           "query": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No campsite selected' AS __text, '__no_campsite' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    cs.id::text || ' | ' || cg.name || ' / ' || COALESCE(NULLIF(cs.loop_name, '') || ' / ', '') || cs.name || ' | ' || cs.data_source AS __text,\n    cs.id::text AS __value\n  FROM campsites cs\n  JOIN campgrounds cg ON cg.id = cs.campground_id\n  WHERE cs.deleted_at IS NULL\n    AND (\n      '$__searchFilter' = '%'\n      OR cs.id::text ILIKE '$__searchFilter'\n      OR cg.name ILIKE '$__searchFilter'\n      OR cs.name ILIKE '$__searchFilter'\n      OR cs.loop_name ILIKE '$__searchFilter'\n      OR cs.data_source ILIKE '$__searchFilter'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 1001",
           "rawQuery": true,
           "rawSql": "SELECT __text, __value\nFROM (\n  SELECT 0 AS sort_key, 'No campsite selected' AS __text, '__no_campsite' AS __value\n  UNION ALL\n  SELECT\n    1 AS sort_key,\n    cs.id::text || ' | ' || cg.name || ' / ' || COALESCE(NULLIF(cs.loop_name, '') || ' / ', '') || cs.name || ' | ' || cs.data_source AS __text,\n    cs.id::text AS __value\n  FROM campsites cs\n  JOIN campgrounds cg ON cg.id = cs.campground_id\n  WHERE cs.deleted_at IS NULL\n    AND (\n      '$__searchFilter' = '%'\n      OR cs.id::text ILIKE '$__searchFilter'\n      OR cg.name ILIKE '$__searchFilter'\n      OR cs.name ILIKE '$__searchFilter'\n      OR cs.loop_name ILIKE '$__searchFilter'\n      OR cs.data_source ILIKE '$__searchFilter'\n    )\n) options\nORDER BY sort_key, __text\nLIMIT 1001",
-          "refId": "SQLVariableQueryEditor-VariableQuery"
+          "refId": "SQLVariableQueryEditor-VariableQuery",
+          "format": "table"
         },
         "refresh": 1,
         "regex": "",

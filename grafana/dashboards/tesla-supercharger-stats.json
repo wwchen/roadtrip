@@ -63,7 +63,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  ts.id AS supercharger_id,\n  p.id AS poi_id,\n  ts.common_site_name AS name,\n  ts.location_slug,\n  ts.location_guid,\n  ts.country,\n  ts.region,\n  ts.site_status,\n  ts.access_type,\n  ts.open_to_public,\n  ts.open_to_non_teslas,\n  ts.trailer_friendly,\n  ts.twenty_four_seven,\n  ts.stall_count,\n  ts.max_power_kw,\n  ts.pricebooks,\n  ts.amenities,\n  ts.availability_profile,\n  ST_X(ST_Centroid(p.geom)) AS lng,\n  ST_Y(ST_Centroid(p.geom)) AS lat,\n  ts.updated_at\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND (${country:sqlstring} IN ('', '__all') OR ts.country::text IN (${country:sqlstring}))\n  AND (${region:sqlstring} IN ('', '__all') OR ts.region IN (${region:sqlstring}))\n  AND (${access_type:sqlstring} IN ('', '__all') OR ts.access_type IN (${access_type:sqlstring}))\nORDER BY ts.common_site_name ASC\nLIMIT 6000;",
+          "rawSql": "SELECT\n  ts.id AS supercharger_id,\n  p.id AS poi_id,\n  ts.common_site_name AS name,\n  ts.location_slug,\n  ts.location_guid,\n  ts.country,\n  ts.region,\n  ts.site_status,\n  ts.access_type,\n  ts.open_to_public,\n  ts.open_to_non_teslas,\n  ts.trailer_friendly,\n  ts.twenty_four_seven,\n  ts.stall_count,\n  ts.max_power_kw,\n  ts.pricebooks,\n  ts.amenities,\n  ts.availability_profile,\n  ST_X(ST_Centroid(p.geom)) AS lng,\n  ST_Y(ST_Centroid(p.geom)) AS lat,\n  ts.updated_at\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND (COALESCE((ARRAY[${country:sqlstring}]::text[])[1], '') IN ('', '__all') OR ts.country::text IN (COALESCE((ARRAY[${country:sqlstring}]::text[])[1], '')))\n  AND (COALESCE((ARRAY[${region:sqlstring}]::text[])[1], '') IN ('', '__all') OR ts.region IN (COALESCE((ARRAY[${region:sqlstring}]::text[])[1], '')))\n  AND (COALESCE((ARRAY[${access_type:sqlstring}]::text[])[1], '') IN ('', '__all') OR ts.access_type IN (COALESCE((ARRAY[${access_type:sqlstring}]::text[])[1], '')))\nORDER BY ts.common_site_name ASC\nLIMIT 6000;",
           "refId": "A"
         }
       ],
@@ -174,7 +174,8 @@
           "query": "SELECT DISTINCT country::text AS __text, country::text AS __value FROM tesla_superchargers WHERE country IS NOT NULL ORDER BY __text",
           "rawQuery": true,
           "rawSql": "SELECT DISTINCT country::text AS __text, country::text AS __value FROM tesla_superchargers WHERE country IS NOT NULL ORDER BY __text",
-          "refId": "SQLVariableQueryEditor-VariableQuery"
+          "refId": "SQLVariableQueryEditor-VariableQuery",
+          "format": "table"
         },
         "refresh": 1,
         "regex": "",
@@ -205,7 +206,8 @@
           "query": "SELECT DISTINCT region AS __text, region AS __value FROM tesla_superchargers WHERE region IS NOT NULL ORDER BY region",
           "rawQuery": true,
           "rawSql": "SELECT DISTINCT region AS __text, region AS __value FROM tesla_superchargers WHERE region IS NOT NULL ORDER BY region",
-          "refId": "SQLVariableQueryEditor-VariableQuery"
+          "refId": "SQLVariableQueryEditor-VariableQuery",
+          "format": "table"
         },
         "refresh": 1,
         "regex": "",
@@ -236,7 +238,8 @@
           "query": "SELECT DISTINCT access_type AS __text, access_type AS __value FROM tesla_superchargers WHERE access_type IS NOT NULL ORDER BY access_type",
           "rawQuery": true,
           "rawSql": "SELECT DISTINCT access_type AS __text, access_type AS __value FROM tesla_superchargers WHERE access_type IS NOT NULL ORDER BY access_type",
-          "refId": "SQLVariableQueryEditor-VariableQuery"
+          "refId": "SQLVariableQueryEditor-VariableQuery",
+          "format": "table"
         },
         "refresh": 1,
         "regex": "",

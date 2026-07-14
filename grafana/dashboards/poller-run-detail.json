@@ -63,7 +63,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT r.id AS run_id, r.poller_id, p.provider, p.parent_ref, r.status, r.started_at, r.finished_at, r.duration_ms, r.snapshot_count, r.error\nFROM availability_run r\nJOIN availability_poller p ON p.id = r.poller_id\nWHERE ${run_id:sqlstring} ~ '^[0-9]+$'\n  AND r.id::text = ${run_id:sqlstring};",
+          "rawSql": "SELECT r.id AS run_id, r.poller_id, p.provider, p.parent_ref, r.status, r.started_at, r.finished_at, r.duration_ms, r.snapshot_count, r.error\nFROM availability_run r\nJOIN availability_poller p ON p.id = r.poller_id\nWHERE COALESCE((ARRAY[${run_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND r.id::text = COALESCE((ARRAY[${run_id:sqlstring}]::text[])[1], '');",
           "refId": "A"
         }
       ],
@@ -99,7 +99,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT created_at, provider, parent_ref, campsite_count, window_start, window_end, outcome, duration_ms, error\nFROM availability_fetch_call\nWHERE ${run_id:sqlstring} ~ '^[0-9]+$'\n  AND run_id::text = ${run_id:sqlstring}\nORDER BY created_at DESC;",
+          "rawSql": "SELECT created_at, provider, parent_ref, campsite_count, window_start, window_end, outcome, duration_ms, error\nFROM availability_fetch_call\nWHERE COALESCE((ARRAY[${run_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND run_id::text = COALESCE((ARRAY[${run_id:sqlstring}]::text[])[1], '')\nORDER BY created_at DESC;",
           "refId": "A"
         }
       ],
@@ -135,7 +135,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.campsite_id,\n  cs.name AS campsite_name,\n  s.target_date,\n  s.status::text AS status,\n  (s.status = 'available') AS available,\n  s.last_observed_at\nFROM availability s\nLEFT JOIN campsites cs ON cs.id = s.campsite_id\nWHERE ${run_id:sqlstring} ~ '^[0-9]+$'\n  AND s.run_id::text = ${run_id:sqlstring}\nORDER BY s.campsite_id, s.target_date ASC;",
+          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.campsite_id,\n  cs.name AS campsite_name,\n  s.target_date,\n  s.status::text AS status,\n  (s.status = 'available') AS available,\n  s.last_observed_at\nFROM availability s\nLEFT JOIN campsites cs ON cs.id = s.campsite_id\nWHERE COALESCE((ARRAY[${run_id:sqlstring}]::text[])[1], '') ~ '^[0-9]+$'\n  AND s.run_id::text = COALESCE((ARRAY[${run_id:sqlstring}]::text[])[1], '')\nORDER BY s.campsite_id, s.target_date ASC;",
           "refId": "A"
         }
       ],
