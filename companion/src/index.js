@@ -5,7 +5,7 @@
 //      Playwright, then reports complete/fail to the backend.
 //   4. Strict serial: one dispatch at a time across the whole companion.
 //
-// Usage: node --experimental-eventsource src/index.js [--id=companion-A]
+// Usage: npm start -- [--id=companion-A]
 
 import { setTimeout as sleep } from 'node:timers/promises'
 import { addToCart } from './cart.js'
