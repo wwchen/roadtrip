@@ -33,13 +33,10 @@ ifeq ($(RUN_ENV),prod)
 	# and any service whose `.env`-sourced config moved. Postgres/Loki/Alloy
 	# keep running, so a code deploy no longer bounces the database.
 	docker compose --profile tunnel --profile pois up -d
-	# Grafana and Alloy both bind-mount their config, so `up -d` won't reload
-	# it. Provisioned dashboards poll the files (updateIntervalSeconds > 10)
-	# and reconcile on their own, but datasource/config changes need a restart
-	# — which also reloads dashboards immediately instead of waiting for the
-	# next poll. Alloy has no such poll, so its config.alloy pipeline changes
-	# (log parsing, promoted labels) only take effect on this restart.
-	docker compose --profile tunnel --profile pois restart grafana alloy
+	# Grafana, Alloy, Tempo, and Prometheus bind-mount config, so `up -d` won't
+	# reload those files. Provisioned dashboards poll dashboard JSON, but
+	# datasource, telemetry pipeline, trace, and metric config need restarts.
+	docker compose --profile tunnel --profile pois restart grafana alloy tempo prometheus
 else ifeq ($(RUN_ENV),dev)
 	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres
 	ROADTRIP_PROFILE=local ./gradlew :backend:run

@@ -14,7 +14,7 @@ Personal web map for roadtripping a Tesla. Live at [roadtrip.floo.ca](https://ro
 ## Local dev
 
 ```sh
-tilt up                  # Compose stack (Postgres/backend/Grafana) + host companion
+tilt up                  # Compose stack (Postgres/backend/Grafana/observability) + host companion
 make run                 # Kotlin/Ktor backend on http://127.0.0.1:8765 (serves static + /api)
 make companion           # campsite Playwright companion against the local backend
 make run env=prod        # on the deploy host: build image + docker compose up
@@ -22,13 +22,21 @@ make fetch-tesla-supercharger-pricing  # mint cookies + crawl Tesla Supercharger
 ```
 
 `tilt up` is the easiest path for full-stack dev: Tilt uses Docker Compose
-for Postgres, the backend container, and Grafana, then runs the campsite
-companion as a host Node process so Playwright can drive a real Chromium.
-The backend still serves the app on <http://127.0.0.1:8765>. Grafana is
-available at <http://127.0.0.1:3000>. Local Compose enables anonymous editor
-access and provisioned dashboard UI saves so dashboards can be adjusted in the
-Grafana UI; those saves live in the local `grafana-data` volume and are not
-written back to `grafana/dashboards/*.json`.
+for Postgres, the backend container, Grafana, Loki, Tempo, Prometheus, and
+Alloy, then runs the campsite companion as a host Node process so Playwright
+can drive a real Chromium. The backend still serves the app on
+<http://127.0.0.1:8765>. Grafana is available at <http://127.0.0.1:3000>,
+Tempo at <http://127.0.0.1:3200>, Prometheus at
+<http://127.0.0.1:9090>, and Alloy at <http://127.0.0.1:12345>. Local
+Compose enables anonymous editor access and provisioned dashboard UI saves so
+dashboards can be adjusted in the Grafana UI; those saves live in the local
+`grafana-data` volume and are not written back to
+`grafana/dashboards/*.json`.
+The backend container runs with the OpenTelemetry Java agent. Ktor, JDBC, and
+JVM telemetry goes to Alloy over OTLP, Alloy forwards traces to Tempo and
+metrics to Prometheus, and existing JSON logs still go through Docker stdout to
+Loki. Trace/span IDs are injected into Logback MDC, so Grafana can correlate
+logs and traces.
 Provisioned dashboards include a catalog explorer
 (`/d/roadtrip-catalog-explorer/roadtrip-catalog-explorer`) that covers POIs,
 campsites, and snapshot-backed availability, plus status overview, POI detail,
@@ -222,7 +230,9 @@ the backend container and write raw captures back to the checkout.
 
    Grafana state is stored in the Compose-managed named volume
    `grafana-data` (Docker prefixes it with the Compose project name);
-   dashboard JSON and datasource provisioning stay bind-mounted from `grafana/`.
+   Tempo and Prometheus use `tempo-data` and `prometheus-data` for local trace
+   and metric retention. Dashboard JSON and datasource provisioning stay
+   bind-mounted from `grafana/`.
    Dashboard JSON reconciles on Grafana's provisioning poll
    (`updateIntervalSeconds` is >10 so Grafana polls the files rather than
    relying on inotify, which doesn't cross the bind mount). Deploy also

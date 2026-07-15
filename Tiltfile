@@ -8,7 +8,7 @@ PORT = '8765'
 ADMIN_PORT = '8766'
 COMPOSE_PROJECT = 'roadtrip'
 COMPOSE = 'docker compose -p ' + COMPOSE_PROJECT + ' --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois'
-COMPOSE_DEV_SERVICES = 'postgres backend grafana loki alloy'
+COMPOSE_DEV_SERVICES = 'postgres backend grafana loki tempo prometheus alloy'
 COMPOSE_DOWN = COMPOSE + ' down --timeout 10 ' + COMPOSE_DEV_SERVICES
 DETACHED_COMPOSE_DOWN = (
     "python3 -c 'import os, subprocess, sys; " +
@@ -121,9 +121,13 @@ docker_build(
 )
 
 dc_resource('postgres', resource_deps=['compose-cleanup'], labels=['infra'])
+dc_resource('loki', resource_deps=['compose-cleanup'], labels=['infra'])
+dc_resource('tempo', resource_deps=['compose-cleanup'], labels=['infra'])
+dc_resource('prometheus', resource_deps=['compose-cleanup'], labels=['infra'])
+dc_resource('alloy', resource_deps=['loki', 'tempo', 'prometheus'], labels=['infra'])
 dc_resource(
     'backend',
-    resource_deps=['postgres', 'backend-jar'],
+    resource_deps=['postgres', 'alloy', 'backend-jar'],
     labels=['app'],
     links=['http://127.0.0.1:' + PORT],
 )
@@ -135,8 +139,6 @@ dc_resource(
     labels=['infra'],
     links=['http://127.0.0.1:3000'],
 )
-dc_resource('loki', resource_deps=['compose-cleanup'], labels=['infra'])
-dc_resource('alloy', resource_deps=['loki'], labels=['infra'])
 
 # --- companion (host Node) ---------------------------------------------------
 # `cmd` runs the same npm + playwright install pair as `make install` does,

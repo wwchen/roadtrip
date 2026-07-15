@@ -1,3 +1,48 @@
+// Roadtrip observability pipeline:
+//
+//   backend stdout -> Docker logs -> Alloy -> Loki
+//   backend OTLP   -> Alloy       -> Tempo / Prometheus
+//
+// The Java agent injects trace_id/span_id into Logback MDC. We parse those
+// fields for query-time log/trace correlation, but do not promote them to Loki
+// labels because every trace id is unique.
+
+otelcol.receiver.otlp "roadtrip" {
+  grpc {}
+  http {}
+
+  output {
+    metrics = [otelcol.processor.batch.roadtrip.input]
+    traces  = [otelcol.processor.batch.roadtrip.input]
+  }
+}
+
+otelcol.processor.batch "roadtrip" {
+  output {
+    metrics = [otelcol.exporter.prometheus.roadtrip.input]
+    traces  = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = "tempo:4317"
+    tls {
+      insecure = true
+    }
+  }
+}
+
+otelcol.exporter.prometheus "roadtrip" {
+  forward_to = [prometheus.remote_write.roadtrip.receiver]
+}
+
+prometheus.remote_write "roadtrip" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}
+
 // Discover all Docker containers on the host and ship their logs to Loki.
 // Standard Alloy Docker-logs pattern: discovery.docker -> discovery.relabel
 // (strip the leading "/" from the container name into a `container` label)
@@ -41,7 +86,9 @@ loki.process "backend" {
 
     stage.json {
       expressions = {
-        level = "level",
+        level    = "level",
+        span_id  = "mdc.span_id",
+        trace_id = "mdc.trace_id",
       }
     }
 
