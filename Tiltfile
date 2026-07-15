@@ -151,7 +151,7 @@ dc_resource(
 local_resource(
     'companion',
     cmd='cd companion && npm install && npx playwright install chromium',
-    serve_cmd='cd companion && node --experimental-eventsource src/index.js',
+    serve_cmd='cd companion && npm start',
     serve_env={'BACKEND_URL': 'http://127.0.0.1:' + PORT},
     deps=['companion/src', 'companion/package.json'],
     ignore=['companion/node_modules'],

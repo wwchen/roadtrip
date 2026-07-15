@@ -307,20 +307,17 @@ the operator's machine is the only thing that lands cart adds reliably. The
 backend never touches a browser; it only polls the public availability API,
 queues authenticated dispatches for the companion, and tracks lease state.
 
-- **`companion/`** — Node 20+ Playwright client. Claims backend dispatches via
+- **`companion/`** — Node 22.9+ Playwright client. Claims backend dispatches via
   `POST /api/dispatches/claim`, drives Chromium to add the site to the
   operator's rec.gov cart, and reports completion or failure to
-  `/api/dispatches/{id}/complete` or `/api/dispatches/{id}/fail`. Set the same
-  `DISPATCH_COMPANION_TOKEN` on the backend and companion; backend startup
-  fails when the token is unset, and dispatch calls are rejected when it is
-  mismatched.
+  `/api/dispatches/{id}/complete` or `/api/dispatches/{id}/fail`. Set
+  `DISPATCH_COMPANION_TOKEN` in the repo `.env`; `npm start` loads it for the
+  companion, and the Tilt/Compose backend reads the same file. Exported env
+  vars still win for one-off overrides.
   ```sh
   cd companion
   npm install
-  # Use this same value in the backend environment before starting the app.
-  export DISPATCH_COMPANION_TOKEN='replace-with-a-local-secret'
-  BACKEND_URL=http://127.0.0.1:8765 \
-    node --experimental-eventsource src/index.js
+  BACKEND_URL=http://127.0.0.1:8765 npm start
   ```
 - **`RECGOV_RECACCOUNT`** seeds the backend's persisted refresh token on
   first run (subsequent runs reuse the DB-backed token). To get it: log in

@@ -49,7 +49,7 @@ else
 endif
 
 companion: _ensure-hooks
-	cd companion && BACKEND_URL=http://127.0.0.1:$(PORT) node --experimental-eventsource src/index.js
+	cd companion && BACKEND_URL=http://127.0.0.1:$(PORT) npm start
 
 # One-time host setup for a fresh clone. Idempotent: brew is no-op when
 # packages are present, npm install + playwright install are no-op when the

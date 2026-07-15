@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=22.9.0"
   },
   "scripts": {
-    "start": "node --experimental-eventsource src/index.js",
+    "start": "node --env-file-if-exists=../.env --experimental-eventsource src/index.js",
     "spike:client": "node spike/client.js",
     "spike:test": "node --test spike/test.js",
     "test": "node --test 'test/*.test.js'"
