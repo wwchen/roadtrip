@@ -2,6 +2,12 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.models.booking.AddToCartRequest
+import ca.floo.roadtrip.models.booking.AddToCartResult
+import ca.floo.roadtrip.models.booking.BookingAction
+import ca.floo.roadtrip.models.booking.BookingProviderId
+import ca.floo.roadtrip.models.booking.BookingTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
@@ -18,12 +24,15 @@ import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.booking.BookingProvider
+import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import kotlinx.serialization.json.JsonObject
 import org.jooq.DSLContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class AvailabilityWatchServiceTest : SharedDbTest() {
@@ -59,7 +68,10 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
             .fetchOne("SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?", poiId)!!
             .get("campground_id", Long::class.java)
 
-    private fun service(alertProviders: AlertProviderRegistry? = null): AvailabilityWatchService {
+    private fun service(
+        alertProviders: AlertProviderRegistry? = null,
+        capabilityValidator: WatchCapabilityValidator = NoopWatchCapabilityValidator,
+    ): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
         val registry = AvailabilityProviderRegistry(mapOf("test" to FakeProvider))
         val targets =
@@ -77,17 +89,54 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                     ),
                 ),
             )
-        return AvailabilityWatchService(ctx, providers)
+        return AvailabilityWatchService(ctx, providers, capabilityValidator)
     }
 
-    private fun poiInput(poiId: Long): AvailabilityWatchRepo.CreateInput =
+    private fun bookingValidatedService(bookingProviders: BookingProviderRegistry): AvailabilityWatchService {
+        val campsitesRepo = CampsiteRepo(ctx)
+        val registry = AvailabilityProviderRegistry(mapOf("test" to FakeProvider))
+        val targets =
+            DbAvailabilityTargetResolver(
+                providerRefs = CampsiteProviderRepo(ctx),
+                campsitesRepo = campsitesRepo,
+                availabilityProviders = registry,
+                dateResolver = AvailabilityDateResolver(),
+            )
+        val scopeResolver = WatchScopeResolver(campsitesRepo)
+        val providers =
+            AlertProviderRegistry(
+                listOf(
+                    InternalPollerAlertProvider(
+                        AvailabilityPollerMembership(scopeResolver, targets),
+                    ),
+                ),
+            )
+        return AvailabilityWatchService(
+            ctx = ctx,
+            alertProviders = providers,
+            capabilityValidator =
+                WatchBookingCapabilityValidator(
+                    scopeResolver = scopeResolver,
+                    capabilities =
+                        WatchBookingCapabilityService(
+                            availabilityTargets = targets,
+                            bookingTargets = AvailabilityBookingTargetResolver(bookingProviders),
+                        ),
+                ),
+        )
+    }
+
+    private fun poiInput(
+        poiId: Long,
+        triggerKinds: List<String> = listOf("atc"),
+    ): AvailabilityWatchRepo.CreateInput =
         AvailabilityWatchRepo.CreateInput(
             targets = listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiId, campsiteId = null)),
             campsiteFilters = JsonObject(emptyMap()),
             startDate = LocalDate.parse("2026-07-04"),
             endDate = LocalDate.parse("2026-07-06"),
             cadenceSec = 60,
-            triggerKinds = listOf("atc"),
+            triggerKinds = triggerKinds,
             triggerConfig = JsonObject(emptyMap()),
             stopWhenTriggered = false,
         )
@@ -138,6 +187,58 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         assertTrue(poller.active)
         assertEquals("recgov", poller.provider)
         assertEquals("232447", poller.parentRef)
+    }
+
+    @Test
+    fun `create rejects an atc watch when no booking provider supports its scoped campsite`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val svc = bookingValidatedService(BookingProviderRegistry(emptyList()))
+
+        val error = assertFailsWith<AvailabilityWatchValidationException> { svc.create(poiInput(poiId)) }
+
+        assertEquals("unsupported_trigger", error.error)
+        assertEquals(0, AvailabilityWatchRepo(ctx).count())
+    }
+
+    @Test
+    fun `update rejects adding atc when no booking provider supports the scoped campsite`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val svc = bookingValidatedService(BookingProviderRegistry(emptyList()))
+        val watch = svc.create(poiInput(poiId, triggerKinds = listOf("slack_notify")))
+
+        val error =
+            assertFailsWith<AvailabilityWatchValidationException> {
+                svc.update(watch.id, AvailabilityWatchRepo.UpdateInput(triggerKinds = listOf("atc")))
+            }
+
+        assertEquals("unsupported_trigger", error.error)
+        assertEquals(listOf("slack_notify"), AvailabilityWatchRepo(ctx).findById(watch.id)!!.triggerKinds)
+    }
+
+    @Test
+    fun `update allows pausing an unsupported legacy atc watch`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val watch = service().create(poiInput(poiId))
+        val validatingService = bookingValidatedService(BookingProviderRegistry(emptyList()))
+
+        val updated = validatingService.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))
+
+        assertEquals(WatchStatus.PAUSED, updated?.status)
+    }
+
+    @Test
+    fun `create allows an atc watch when recgov booking provider supports its scoped campsite`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val svc = bookingValidatedService(BookingProviderRegistry(listOf(RecGovOnlyBookingProvider)))
+
+        val watch = svc.create(poiInput(poiId))
+
+        assertEquals(listOf("atc"), watch.triggerKinds)
+        assertEquals(1, AvailabilityPollerRepo(ctx).pollerIdsForWatch(watch.id).size)
     }
 
     @Test
@@ -252,5 +353,32 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
+    }
+
+    private object RecGovOnlyBookingProvider : BookingProvider {
+        override val id: BookingProviderId = BookingProviderId.RECGOV
+
+        override fun targetFor(
+            parentRef: ProviderRef,
+            campsiteRef: CatalogCampsiteRef,
+        ): BookingTarget? {
+            if (parentRef !is ProviderRef.RecGov) return null
+            return BookingTarget(
+                providerId = id,
+                parentRef = parentRef,
+                campsiteRef = campsiteRef,
+            )
+        }
+
+        override fun can(
+            action: BookingAction,
+            target: BookingTarget,
+        ): Boolean =
+            action == BookingAction.ADD_TO_CART &&
+                target.providerId == BookingProviderId.RECGOV &&
+                target.parentRef is ProviderRef.RecGov &&
+                target.campsiteRef.vendorId.isNotBlank()
+
+        override suspend fun addToCart(request: AddToCartRequest): AddToCartResult = AddToCartResult.Unsupported
     }
 }

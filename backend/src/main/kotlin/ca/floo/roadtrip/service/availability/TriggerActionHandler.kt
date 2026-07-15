@@ -1,14 +1,13 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
-import ca.floo.roadtrip.service.notification.WatchOpening
 
 /**
  * Fires one trigger-action kind (Slack message, ATC route, future email, …)
  * for a watch that has just detected an opening. Handlers are matched by
  * kind slug against `availability_watches.trigger_kinds`; an unknown or
- * unregistered kind is inert (no handler ⇒ no fire, no error) — the current
- * `atc` behavior. Registering a new kind is one file under
+ * unregistered kind is inert (no handler ⇒ no fire, no error). Registering a
+ * new kind is one file under
  * `service/availability/` plus one entry in the runtime's
  * [TriggerActionRegistry] list.
  */
@@ -25,6 +24,6 @@ internal interface TriggerActionHandler {
      */
     suspend fun fire(
         watch: AvailabilityWatchRepo.Watch,
-        openings: List<WatchOpening>,
+        openings: List<TriggerOpening>,
     ): Boolean
 }

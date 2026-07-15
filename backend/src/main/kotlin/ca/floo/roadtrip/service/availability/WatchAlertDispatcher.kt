@@ -25,7 +25,7 @@ private const val CELL_MATRIX_UID = "availability-cell-matrix"
  * For each live watch it keeps the transitions that fall inside the watch's
  * campsite set and date window and — for every kind on the watch that has a
  * registered [TriggerActionHandler] — fires that handler with the hydrated
- * openings. Kinds with no registered handler (e.g. `atc` today) stay inert.
+ * openings. Kinds with no registered handler stay inert.
  * A watch with `stopWhenTriggered` goes `DONE` **only after a handler
  * actually reports success**, so a delivery failure never silences a watch
  * we could not notify on.
@@ -73,29 +73,34 @@ internal class WatchAlertDispatcher(
     }
 
     /**
-     * The "status message" for a `slack_notify` watch whose lifecycle just
-     * changed — created, updated, or paused. Unlike [dispatch], which reacts to
-     * cube *edges*, this always sends exactly one message reflecting the watch's
-     * current status, so a watch created on an already-open site is not silently
-     * stranded (its openings pre-date any future edge). Fire-and-forget from the
-     * route, so like [dispatch] it never throws into its caller.
+     * Initial trigger evaluation for a watch whose lifecycle just changed —
+     * created, updated, or paused. Unlike [dispatch], which reacts to cube
+     * *edges*, this inspects the current cube face, so a watch created on an
+     * already-open site is not silently stranded (its openings pre-date any
+     * future edge). Fire-and-forget from the route, so like [dispatch] it never
+     * throws into its caller.
      *
-     * A **paused/done** watch reports its lifecycle state and stops — no
-     * availability lookup, never a trigger. An **active** watch reads the current
-     * cube face for its window:
+     * A **paused/done** `slack_notify` watch reports its lifecycle state and
+     * stops — no availability lookup, never a trigger. An **active** watch reads
+     * the current cube face for its window:
      *  - **some cells bookable** → the same openings alert [dispatch] sends; a
      *    real trigger, so `stopWhenTriggered` still marks the watch `DONE`.
-     *  - **cells known, none bookable** → informational "nothing open yet".
-     *  - **no cells (cold POI)** → informational "not checked yet"; the immediate
-     *    poll `create()` schedules will observe the window and its first
-     *    observation is itself an edge, so the real opening fires via [dispatch].
+     *  - **cells known, none bookable** → `slack_notify` gets informational
+     *    "nothing open yet".
+     *  - **no cells (cold POI)** → `slack_notify` gets informational "not
+     *    checked yet"; the immediate poll `create()` schedules will observe the
+     *    window and its first observation is itself an edge, so the real opening
+     *    fires via [dispatch].
      * Only the bookable state ever marks a watch `DONE`.
      */
     suspend fun dispatchInitial(watch: AvailabilityWatchRepo.Watch) {
-        if (SlackNotifyHandler.KIND !in watch.triggerKinds) return
+        val handlers = watch.triggerKinds.mapNotNull { triggerActions.forKind(it) }
+        val hasSlack = SlackNotifyHandler.KIND in watch.triggerKinds
+        if (!hasSlack && handlers.isEmpty()) return
 
         val campsites = scopeResolver.resolve(watch)
         if (watch.status != WatchStatus.ACTIVE) {
+            if (!hasSlack) return
             val state =
                 when (watch.status) {
                     WatchStatus.PAUSED -> WatchStatusNotice.State.PAUSED
@@ -109,10 +114,9 @@ internal class WatchAlertDispatcher(
         val cells = availability.readCurrent(campsites.map { it.id }, datesInWindow(watch))
         val bookable = cells.filter { it.available }
         if (bookable.isNotEmpty()) {
-            val handlers = watch.triggerKinds.mapNotNull { triggerActions.forKind(it) }
             val covered = bookable.map { CellTransition(it.campsiteId, it.targetDate, it.status) }
             postOpenings(watch, covered, campsitesById, handlers)
-        } else {
+        } else if (hasSlack) {
             val state = if (cells.isNotEmpty()) WatchStatusNotice.State.WATCHING else WatchStatusNotice.State.UNCHECKED
             slack.sendWatchStatus(statusNotice(watch, campsites, state), watch.channelOverride())
         }
@@ -142,7 +146,7 @@ internal class WatchAlertDispatcher(
         state: WatchStatusNotice.State,
     ): WatchStatusNotice = statusNotice(watch, scopeResolver.resolve(watch), state)
 
-    /** Hydrates the covered cells into [WatchOpening]s, fires each of the
+    /** Hydrates the covered cells into [TriggerOpening]s, fires each of the
      *  watch's registered [TriggerActionHandler]s with them, and — if any
      *  handler reports success — marks a `stopWhenTriggered` watch `DONE`, so
      *  a delivery failure never silences a watch we could not notify on.
@@ -166,29 +170,43 @@ internal class WatchAlertDispatcher(
         }
     }
 
-    /** Resolves each covered cell to a [WatchOpening] — the campsite's display
-     *  label/loop/type, its parent campground (id + name, each POI fetched once),
-     *  and the provider booking URL — so the notification layer only formats. */
+    /** Resolves each covered cell to a [TriggerOpening] — the campsite's display
+     *  label/loop/type, parent campground, provider booking URL, and resolved
+     *  provider candidates — so handlers can project either notification or
+     *  booking inputs from one hydration pass. */
     private fun hydrateOpenings(
         covered: List<CellTransition>,
         campsitesById: Map<Long, CampsiteAvailabilityTarget>,
-    ): List<WatchOpening> {
+    ): List<TriggerOpening> {
         val poiNames = HashMap<Long, String?>()
         return covered.map { t ->
             // covered was filtered to campsites in this map, so the key exists.
             val r = campsitesById.getValue(t.campsiteId)
             val target = targets.resolve(r)
-            WatchOpening(
-                label = r.name ?: "Site #${r.vendorId}",
-                loop = r.loop,
-                siteType = r.siteType,
+            TriggerOpening(
+                campsite = r,
                 date = t.targetDate,
-                campgroundId = target?.parentPoiId,
-                campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { pois.fetchPoiName(it) } },
-                // Booking link, if the campsite's provider exposes one — the URL
-                // scheme is the adapter's, never this dispatcher's. The parent
-                // ref supplies vendor ids the per-site ref may omit (e.g. Aspira).
-                bookingUrl = target?.let { it.provider.bookingUrl(r, it.parentRef, t.targetDate) },
+                resolvedTarget = target,
+                notification =
+                    WatchOpening(
+                        label = r.name ?: "Site #${r.vendorId}",
+                        loop = r.loop,
+                        siteType = r.siteType,
+                        date = t.targetDate,
+                        campgroundId = target?.parentPoiId,
+                        campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { pois.fetchPoiName(it) } },
+                        // Booking link, if the campsite's provider exposes one — the URL
+                        // scheme is the adapter's, never this dispatcher's. The parent
+                        // ref supplies vendor ids the per-site ref may omit (e.g. Aspira).
+                        bookingUrl = target?.let { it.provider.bookingUrl(r, it.parentRef, t.targetDate) },
+                        vendor =
+                            target
+                                ?.provider
+                                ?.id
+                                ?.name
+                                ?.lowercase()
+                                ?: r.vendor.lowercase(),
+                    ),
             )
         }
     }

@@ -21,21 +21,24 @@ import { escapeHtml } from '../core.js';
  * @param {string}   args.date          YYYY-MM-DD (the watched day).
  * @param {boolean}  args.watching      Whether a watch already exists.
  * @param {boolean}  [args.stopWhenFound]
- * @param {(options: { stopWhenFound: boolean }) => Promise<void>} args.onSet
+ * @param {boolean}  [args.supportsAddToCart]
+ * @param {(options: { stopWhenFound: boolean, addToCart: boolean }) => Promise<void>} args.onSet
  * @param {() => Promise<void>} args.onRemove
  * @param {() => void}          args.onClose
  */
 export function mountWatchPopover(host, args) {
   const { poiName, date, onSet, onRemove, onClose } = args;
+  const supportsAddToCart = !!args.supportsAddToCart;
   let state = {
     watching: !!args.watching,
     stopWhenFound: args.stopWhenFound !== false,
+    addToCart: false,
     busy: false,
     error: null,
   };
 
   function rerender() {
-    host.innerHTML = renderPopover({ poiName, date, ...state });
+    host.innerHTML = renderPopover({ poiName, date, supportsAddToCart, ...state });
   }
 
   async function onClick(e) {
@@ -54,13 +57,13 @@ export function mountWatchPopover(host, args) {
         await onRemove?.();
         state = { ...state, watching: false, busy: false, error: null };
       } else {
-        await onSet?.({ stopWhenFound: state.stopWhenFound });
+        await onSet?.({ stopWhenFound: state.stopWhenFound, addToCart: state.addToCart });
         state = { ...state, watching: true, busy: false, error: null };
       }
       rerender();
     } catch (err) {
       if (err?.name === 'AbortError') return;
-      state = { ...state, busy: false, error: 'Could not save. Try again.' };
+      state = { ...state, busy: false, error: saveErrorMessage(err) };
       rerender();
     }
   }
@@ -73,8 +76,13 @@ export function mountWatchPopover(host, args) {
   function onChange(e) {
     const tgt = e.target;
     if (!(tgt instanceof HTMLInputElement)) return;
-    if (!tgt.classList.contains('cg-watch-pop-stop')) return;
-    state = { ...state, stopWhenFound: tgt.checked, error: null };
+    if (tgt.classList.contains('cg-watch-pop-stop')) {
+      state = { ...state, stopWhenFound: tgt.checked, error: null };
+      return;
+    }
+    if (tgt.classList.contains('cg-watch-pop-atc')) {
+      state = { ...state, addToCart: tgt.checked, error: null };
+    }
   }
 
   function onKey(e) {
@@ -100,7 +108,7 @@ export function mountWatchPopover(host, args) {
   };
 }
 
-function renderPopover({ poiName, date, watching, stopWhenFound, busy, error }) {
+function renderPopover({ poiName, date, watching, stopWhenFound, addToCart, supportsAddToCart, busy, error }) {
   const dateLabel = new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -132,6 +140,22 @@ function renderPopover({ poiName, date, watching, stopWhenFound, busy, error }) 
           <span class="cg-watch-pop-switch-track" aria-hidden="true"></span>
         </span>
       </label>`;
+  const addToCartHtml = watching || !supportsAddToCart ? '' : `
+      <label class="cg-watch-pop-option">
+        <span class="cg-watch-pop-option-text">
+          <span class="cg-watch-pop-option-title">Add to cart</span>
+          <span class="cg-watch-pop-option-help">Try to hold one matching site when it opens.</span>
+        </span>
+        <span class="cg-watch-pop-switch">
+          <input
+            type="checkbox"
+            class="cg-watch-pop-atc"
+            ${addToCart ? 'checked' : ''}
+            ${busy ? 'disabled' : ''}
+          >
+          <span class="cg-watch-pop-switch-track" aria-hidden="true"></span>
+        </span>
+      </label>`;
   return `
     <div class="cg-watch-pop" role="dialog" aria-label="Availability watch">
       <div class="cg-watch-pop-head">
@@ -140,6 +164,7 @@ function renderPopover({ poiName, date, watching, stopWhenFound, busy, error }) 
       </div>
       <div class="cg-watch-pop-date">${escapeHtml(dateLabel)}</div>
       ${stopWhenFoundHtml}
+      ${addToCartHtml}
       <button
         type="button"
         class="cg-btn ${actionClass} cg-watch-pop-action"
@@ -150,4 +175,11 @@ function renderPopover({ poiName, date, watching, stopWhenFound, busy, error }) 
       <div class="cg-watch-pop-note">🔔 Alerts post to Slack when a site opens.</div>
     </div>
   `;
+}
+
+function saveErrorMessage(err) {
+  const body = typeof err?.body === 'string' ? err.body : '';
+  return body.includes('unsupported_trigger')
+    ? 'Add to cart is no longer available for this watch.'
+    : 'Could not save. Try again.';
 }

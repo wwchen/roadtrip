@@ -1,6 +1,9 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.models.api.AvailabilityWatchCapabilitiesDto
 import ca.floo.roadtrip.models.api.PoiCampsitesAvailabilityResponseDto
+import ca.floo.roadtrip.models.booking.BookingAction
+import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import java.time.LocalDate
@@ -14,6 +17,7 @@ internal class CampsiteAvailabilityService(
     private val campsitesRepo: CampsiteRepo,
     private val composer: CampsiteAvailabilityComposer,
     private val dateResolver: AvailabilityDateResolver,
+    private val watchBookingCapabilities: WatchBookingCapabilityService,
 ) {
     suspend fun poiCampsitesAvailability(
         poiId: Long,
@@ -21,13 +25,12 @@ internal class CampsiteAvailabilityService(
         endDate: LocalDate?,
         siteTypes: List<String>,
     ): PoiCampsitesAvailabilityResponseDto {
-        val campsites =
-            campsitesRepo
-                .findAvailabilityTargetsByPoi(poiId)
-                .filterBySiteTypes(siteTypes)
+        val watchScopeCampsites = campsitesRepo.findAvailabilityTargetsByPoi(poiId)
+        val watchCapabilities = watchCapabilitiesFor(watchScopeCampsites, watchBookingCapabilities)
+        val campsites = watchScopeCampsites.filterBySiteTypes(siteTypes)
         if (campsites.isEmpty()) {
             val (start, end) = displayWindow(poiId, startDate, endDate, providerRefs, dateResolver)
-            return emptyPoiAvailability(poiId, start, end)
+            return emptyPoiAvailability(poiId, start, end, watchCapabilities)
         }
 
         val availability =
@@ -42,6 +45,7 @@ internal class CampsiteAvailabilityService(
                 poiId = poiId,
                 startDate = firstAvailability.startDate,
                 endDate = firstAvailability.endDate,
+                watchCapabilities = watchCapabilities,
                 campsites = availability,
             )
         }
@@ -51,6 +55,7 @@ internal class CampsiteAvailabilityService(
             poiId = poiId,
             startDate = fallbackStart.toString(),
             endDate = fallbackEnd.toString(),
+            watchCapabilities = watchCapabilities,
             campsites = availability,
         )
     }
@@ -60,13 +65,31 @@ private fun emptyPoiAvailability(
     poiId: Long,
     startDate: LocalDate,
     endDate: LocalDate,
+    watchCapabilities: AvailabilityWatchCapabilitiesDto,
 ): PoiCampsitesAvailabilityResponseDto =
     PoiCampsitesAvailabilityResponseDto(
         poiId = poiId,
         startDate = startDate.toString(),
         endDate = endDate.toString(),
+        watchCapabilities = watchCapabilities,
         campsites = emptyList(),
     )
+
+private fun watchCapabilitiesFor(
+    campsites: List<CampsiteAvailabilityTarget>,
+    bookingCapabilities: WatchBookingCapabilityService,
+): AvailabilityWatchCapabilitiesDto {
+    val bookingActions = bookingCapabilities.supportedActions(campsites)
+    val triggerKinds =
+        buildList {
+            add(AvailabilityTriggerKinds.SLACK_NOTIFY)
+            if (BookingAction.ADD_TO_CART in bookingActions) add(AvailabilityTriggerKinds.ATC)
+        }
+    return AvailabilityWatchCapabilitiesDto(
+        triggerKinds = triggerKinds,
+        bookingActions = BookingAction.entries.filter { it in bookingActions }.map { it.wireValue },
+    )
+}
 
 private fun displayWindow(
     poiId: Long,

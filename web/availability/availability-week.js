@@ -38,6 +38,9 @@ const SKELETON_RENDER_DELAY_MS = 150;
 const STALE_THRESHOLD_MIN = 10;
 const CALENDAR_MAX_DAYS_OUT = 365;
 const DEFAULT_STOP_WHEN_FOUND = true;
+const TRIGGER_KIND_SLACK_NOTIFY = 'slack_notify';
+const TRIGGER_KIND_ATC = 'atc';
+const BOOKING_ACTION_ADD_TO_CART = 'add_to_cart';
 
 /**
  * Mount the availability table into the host element. Returns a controller with a
@@ -105,6 +108,7 @@ function makeContext(host, feature, signal) {
     season: null,
     error: null,
     watchesByWindow: new Map(),
+    watchCapabilities: defaultWatchCapabilities(),
     skeletonTimer: null,
     sitesState: 'loading',
     sites: [],
@@ -604,8 +608,9 @@ function openWatchPopover(ctx, anchorEl, date) {
     date,
     watching: Boolean(existingWatch),
     stopWhenFound: watchStopWhenFound(existingWatch),
-    onSet: async ({ stopWhenFound } = {}) => {
-      const payload = buildWatchPayload(ctx, date, endDate, { stopWhenFound });
+    supportsAddToCart: supportsAddToCart(ctx),
+    onSet: async ({ stopWhenFound, addToCart } = {}) => {
+      const payload = buildWatchPayload(ctx, date, endDate, { stopWhenFound, addToCart });
       const created = await createWatch(payload, { signal: ctx.signal });
       ctx.watchesByWindow.set(key, created.watch || { ...payload, id: created.id });
       notifyWatchesChanged();
@@ -695,6 +700,7 @@ async function fetchWeek(ctx) {
     }
     const json = await resp.json();
     if (requestSeq !== ctx.weekRequestSeq) return;
+    ctx.watchCapabilities = normalizeWatchCapabilities(json?.watch_capabilities);
     const fused = fusePoiCampsitesAvailability(json, startDate, endDate);
     ctx.cacheBlock = fused.cacheBlock;
     if (fused.state === 'empty') {
@@ -899,20 +905,35 @@ async function toggleWatch(ctx, button) {
   }
 }
 
-function buildWatchPayload(ctx, date, endDate, { stopWhenFound = DEFAULT_STOP_WHEN_FOUND } = {}) {
+function buildWatchPayload(ctx, date, endDate, { stopWhenFound = DEFAULT_STOP_WHEN_FOUND, addToCart = false } = {}) {
+  const triggerKinds = [TRIGGER_KIND_SLACK_NOTIFY];
+  if (addToCart && supportsAddToCart(ctx)) triggerKinds.push(TRIGGER_KIND_ATC);
   return {
     poi_id: Number(ctx.poiId),
     campsite_filters: {},
     start_date: date,
     end_date: endDate,
     cadence_sec: 60,
-    // Must be 'slack_notify' — WatchAlertDispatcher only posts for watches
-    // carrying that kind (see backend WatchAlertDispatcher.kt). Future kinds
-    // (e.g. 'atc') get added alongside it when trigger config lands.
-    trigger_kinds: ['slack_notify'],
+    trigger_kinds: triggerKinds,
     trigger_config: {},
     stop_when_triggered: stopWhenFound,
   };
+}
+
+function supportsAddToCart(ctx) {
+  return ctx.watchCapabilities.bookingActions.has(BOOKING_ACTION_ADD_TO_CART)
+    && ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_ATC);
+}
+
+function normalizeWatchCapabilities(value) {
+  const triggerKinds = new Set(Array.isArray(value?.trigger_kinds) ? value.trigger_kinds : []);
+  const bookingActions = new Set(Array.isArray(value?.booking_actions) ? value.booking_actions : []);
+  triggerKinds.add(TRIGGER_KIND_SLACK_NOTIFY);
+  return { triggerKinds, bookingActions };
+}
+
+function defaultWatchCapabilities() {
+  return normalizeWatchCapabilities(null);
 }
 
 function watchStopWhenFound(watch) {

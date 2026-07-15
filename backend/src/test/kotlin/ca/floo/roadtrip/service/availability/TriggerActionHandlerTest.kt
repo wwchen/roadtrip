@@ -1,7 +1,22 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.models.availability.PoiDateContext
+import ca.floo.roadtrip.models.booking.AddToCartRequest
+import ca.floo.roadtrip.models.booking.AddToCartResult
+import ca.floo.roadtrip.models.booking.BookingAction
+import ca.floo.roadtrip.models.booking.BookingProviderId
+import ca.floo.roadtrip.models.booking.BookingTarget
+import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import ca.floo.roadtrip.service.booking.BookingProvider
+import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import ca.floo.roadtrip.service.notification.WatchOpening
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
@@ -11,6 +26,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.ZoneId
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -34,8 +50,6 @@ class TriggerActionHandlerTest {
     @Test
     fun `unknown kind returns null and is inert`() {
         val registry = TriggerActionRegistry(listOf(FakeHandler(kind = "slack_notify")))
-        // `atc` is the canonical unregistered kind today — no handler ⇒ inert.
-        assertNull(registry.forKind("atc"))
         assertNull(registry.forKind("email"))
     }
 
@@ -59,7 +73,7 @@ class TriggerActionHandlerTest {
                     id = 42L,
                     triggerConfig = JsonObject(mapOf("channel" to JsonPrimitive("custom-channel"))),
                 )
-            val delivered = handler.fire(watch, openings = listOf(anOpening()))
+            val delivered = handler.fire(watch, openings = listOf(triggerOpening()))
 
             assertTrue(delivered)
             assertEquals(42L, slack.lastWatchId)
@@ -73,7 +87,7 @@ class TriggerActionHandlerTest {
             val slack = CapturingSlack(result = true)
             val handler = SlackNotifyHandler(slack = slack, appRootUrl = null)
 
-            handler.fire(fakeWatch(id = 7L), openings = listOf(anOpening()))
+            handler.fire(fakeWatch(id = 7L), openings = listOf(triggerOpening()))
 
             // Null channel makes the service fall back to its configured default.
             assertNull(slack.lastChannel)
@@ -89,7 +103,86 @@ class TriggerActionHandlerTest {
             val slack = CapturingSlack(result = false)
             val handler = SlackNotifyHandler(slack = slack, appRootUrl = null)
 
-            assertFalse(handler.fire(fakeWatch(id = 9L), openings = listOf(anOpening())))
+            assertFalse(handler.fire(fakeWatch(id = 9L), openings = listOf(triggerOpening())))
+        }
+
+    @Test
+    fun `AtcTriggerActionHandler queues first supported opening through booking provider`() =
+        runBlocking {
+            val bookingProvider = RecordingBookingProvider(notifiedWaiters = 1)
+            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    slack = CapturingSlack(result = true),
+                )
+            val watch = fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND), stopWhenTriggered = true)
+
+            val delivered = handler.fire(watch, openings = listOf(triggerOpening()))
+
+            assertFalse(delivered)
+            val request = bookingProvider.requests.single()
+            assertEquals(42L, request.watchId)
+            assertEquals(BookingProviderId.RECGOV, request.target.providerId)
+            assertEquals(7L, request.target.campsiteRef.campsiteId)
+            assertEquals("site-7", request.target.campsiteRef.vendorId)
+            assertEquals(LocalDate.parse("2026-07-04"), request.arrivalDate)
+            assertEquals(LocalDate.parse("2026-07-06"), request.checkoutDate)
+            assertEquals("Site 12", request.campsiteLabel)
+            assertTrue(request.stopWhenTriggered)
+        }
+
+    @Test
+    fun `AtcTriggerActionHandler sends offline slack when no companion waiter is connected`() =
+        runBlocking {
+            val bookingProvider = RecordingBookingProvider(notifiedWaiters = 0)
+            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val slack = CapturingSlack(result = true)
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    slack = slack,
+                )
+            val watch =
+                fakeWatch(
+                    id = 42L,
+                    triggerKinds = listOf(AtcTriggerActionHandler.KIND),
+                    triggerConfig = JsonObject(mapOf("channel" to JsonPrimitive("#custom"))),
+                )
+
+            handler.fire(watch, openings = listOf(triggerOpening()))
+
+            val alert = slack.offlineAlerts.single()
+            assertEquals(42L, alert.watchId)
+            assertEquals("recgov", alert.vendor)
+            assertEquals("#custom", alert.channel)
+            assertEquals("Site 12", alert.openings.single().label)
+        }
+
+    @Test
+    fun `AtcTriggerActionHandler leaves unsupported openings inert`() =
+        runBlocking {
+            val bookingProvider = RecordingBookingProvider(notifiedWaiters = 1)
+            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val slack = CapturingSlack(result = true)
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    slack = slack,
+                )
+
+            val delivered =
+                handler.fire(
+                    fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                    openings = listOf(triggerOpening(parentRef = ProviderRef.Campflare("campflare-1"))),
+                )
+
+            assertFalse(delivered)
+            assertTrue(bookingProvider.requests.isEmpty())
+            assertTrue(slack.offlineAlerts.isEmpty())
         }
 
     private class FakeHandler(
@@ -100,7 +193,7 @@ class TriggerActionHandlerTest {
 
         override suspend fun fire(
             watch: AvailabilityWatchRepo.Watch,
-            openings: List<WatchOpening>,
+            openings: List<TriggerOpening>,
         ): Boolean {
             calls++
             return result
@@ -113,9 +206,17 @@ class TriggerActionHandlerTest {
     private class CapturingSlack(
         private val result: Boolean,
     ) : SlackNotificationService {
+        data class OfflineAlert(
+            val watchId: Long,
+            val vendor: String,
+            val openings: List<WatchOpening>,
+            val channel: String?,
+        )
+
         var lastWatchId: Long? = null
         var lastChannel: String? = null
         var lastAppRootUrl: String? = null
+        val offlineAlerts = mutableListOf<OfflineAlert>()
 
         override suspend fun sendWatchOpenings(
             watchId: Long,
@@ -136,6 +237,16 @@ class TriggerActionHandlerTest {
             channel: String?,
         ): Boolean = result
 
+        override suspend fun sendAtcCompanionOffline(
+            watchId: Long,
+            vendor: String,
+            openings: List<WatchOpening>,
+            channel: String?,
+        ): Boolean {
+            offlineAlerts += OfflineAlert(watchId, vendor, openings, channel)
+            return result
+        }
+
         override suspend fun postResponseWatchStatus(
             responseUrl: String,
             notice: WatchStatusNotice,
@@ -150,6 +261,8 @@ class TriggerActionHandlerTest {
     private fun fakeWatch(
         id: Long,
         triggerConfig: JsonObject = JsonObject(emptyMap()),
+        triggerKinds: List<String> = listOf(SlackNotifyHandler.KIND),
+        stopWhenTriggered: Boolean = false,
     ): AvailabilityWatchRepo.Watch =
         AvailabilityWatchRepo.Watch(
             id = id,
@@ -158,22 +271,110 @@ class TriggerActionHandlerTest {
             startDate = LocalDate.parse("2026-07-04"),
             endDate = LocalDate.parse("2026-07-06"),
             cadenceSec = null,
-            triggerKinds = listOf(SlackNotifyHandler.KIND),
+            triggerKinds = triggerKinds,
             triggerConfig = triggerConfig,
-            stopWhenTriggered = false,
+            stopWhenTriggered = stopWhenTriggered,
             status = WatchStatus.ACTIVE,
             createdAt = OffsetDateTime.parse("2026-07-01T00:00:00Z"),
             updatedAt = OffsetDateTime.parse("2026-07-01T00:00:00Z"),
         )
 
-    private fun anOpening(): WatchOpening =
-        WatchOpening(
-            label = "Site 12",
-            loop = "Loop A",
-            siteType = "Tent",
+    private class RecordingBookingProvider(
+        private val notifiedWaiters: Int,
+    ) : BookingProvider {
+        val requests = mutableListOf<AddToCartRequest>()
+
+        override val id: BookingProviderId = BookingProviderId.RECGOV
+
+        override fun targetFor(
+            parentRef: ProviderRef,
+            campsiteRef: CatalogCampsiteRef,
+        ): BookingTarget? {
+            if (parentRef !is ProviderRef.RecGov) return null
+            return BookingTarget(
+                providerId = id,
+                parentRef = parentRef,
+                campsiteRef = campsiteRef,
+            )
+        }
+
+        override fun can(
+            action: BookingAction,
+            target: BookingTarget,
+        ): Boolean =
+            action == BookingAction.ADD_TO_CART &&
+                target.providerId == BookingProviderId.RECGOV &&
+                target.parentRef is ProviderRef.RecGov
+
+        override suspend fun addToCart(request: AddToCartRequest): AddToCartResult {
+            requests += request
+            return AddToCartResult.Queued(dispatchId = 99L, providerId = BookingProviderId.RECGOV, notifiedWaiters = notifiedWaiters)
+        }
+    }
+
+    private class FakeAvailabilityProvider(
+        override val id: AvailabilityProviderId,
+    ) : AvailabilityProvider {
+        override val capabilities: AvailabilityProviderCapabilities =
+            AvailabilityProviderCapabilities(
+                supportsAvailability = true,
+                pollableForAlerts = true,
+                bookingHorizonDays = 365,
+                maxPollWindowDays = 60,
+            )
+
+        override fun isEnabled(): Boolean = true
+
+        override suspend fun availability(
+            ref: ProviderRef,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
+    }
+
+    private fun triggerOpening(parentRef: ProviderRef = ProviderRef.RecGov("100")): TriggerOpening {
+        val providerId =
+            when (parentRef) {
+                is ProviderRef.RecGov -> AvailabilityProviderId.RECGOV
+                is ProviderRef.Campflare -> AvailabilityProviderId.CAMPFLARE
+                is ProviderRef.Aspira -> AvailabilityProviderId.ASPIRA
+                is ProviderRef.ReserveAmerica -> AvailabilityProviderId.RESERVEAMERICA
+                is ProviderRef.ReserveCalifornia -> AvailabilityProviderId.RESERVECALIFORNIA
+            }
+        val campsite =
+            CampsiteAvailabilityTarget(
+                id = 7L,
+                vendor = "recgov",
+                vendorId = "site-7",
+                name = "Site 12",
+                loop = "Loop A",
+                siteType = "Tent",
+                raw = null,
+            )
+        val catalogRef = CatalogCampsiteRef(campsiteId = 7L, vendorId = "site-7")
+        return TriggerOpening(
+            campsite = campsite,
             date = LocalDate.parse("2026-07-04"),
-            campgroundId = 100L,
-            campground = "Test CG",
-            bookingUrl = null,
+            resolvedTarget =
+                ResolvedAvailabilityTarget(
+                    campsite = campsite,
+                    provider = FakeAvailabilityProvider(providerId),
+                    parentRef = parentRef,
+                    catalogRef = catalogRef,
+                    parentPoiId = 100L,
+                    dateContext = PoiDateContext(ZoneId.of("UTC"), LocalDate.parse("2026-07-01")),
+                ),
+            notification =
+                WatchOpening(
+                    label = "Site 12",
+                    loop = "Loop A",
+                    siteType = "Tent",
+                    date = LocalDate.parse("2026-07-04"),
+                    campgroundId = 100L,
+                    campground = "Test CG",
+                    bookingUrl = "https://example.test/book",
+                    vendor = "recgov",
+                ),
         )
+    }
 }

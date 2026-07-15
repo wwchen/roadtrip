@@ -27,11 +27,13 @@ import org.jooq.impl.DSL
 internal class AvailabilityWatchService(
     private val ctx: DSLContext,
     private val alertProviders: AlertProviderRegistry,
+    private val capabilityValidator: WatchCapabilityValidator = NoopWatchCapabilityValidator,
 ) {
     fun create(input: AvailabilityWatchRepo.CreateInput): Watch =
         ctx.transactionResult { config ->
             val txn = DSL.using(config)
             val watch = AvailabilityWatchRepo(txn).create(input)
+            capabilityValidator.validate(watch)
             alertProviders.forWatch(watch).onWatchActivated(txn, watch)
             watch
         }
@@ -43,6 +45,7 @@ internal class AvailabilityWatchService(
         ctx.transactionResult { config ->
             val txn = DSL.using(config)
             val updated = AvailabilityWatchRepo(txn).update(id, input) ?: return@transactionResult null
+            capabilityValidator.validate(updated)
             // ACTIVE → the alert provider (re)subscribes / re-syncs poller links;
             // any non-ACTIVE status is a deactivate as far as opening-detection
             // is concerned — the watch holds no live subscription.

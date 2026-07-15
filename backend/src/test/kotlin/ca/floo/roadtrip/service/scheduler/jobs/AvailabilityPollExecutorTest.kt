@@ -25,6 +25,7 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
+import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
@@ -34,7 +35,9 @@ import ca.floo.roadtrip.service.availability.FetchOutcome
 import ca.floo.roadtrip.service.availability.ProviderCandidate
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.SlackNotifyHandler
+import ca.floo.roadtrip.service.availability.TriggerActionHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
+import ca.floo.roadtrip.service.availability.TriggerOpening
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
@@ -289,6 +292,21 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         ): Boolean = result
     }
 
+    private class RecordingTriggerActionHandler(
+        override val kind: String,
+        private val result: Boolean = true,
+    ) : TriggerActionHandler {
+        val calls = mutableListOf<Pair<AvailabilityWatchRepo.Watch, List<TriggerOpening>>>()
+
+        override suspend fun fire(
+            watch: AvailabilityWatchRepo.Watch,
+            openings: List<TriggerOpening>,
+        ): Boolean {
+            calls += watch to openings
+            return result
+        }
+    }
+
     private fun targetsFor(provider: AvailabilityProvider): DbAvailabilityTargetResolver =
         DbAvailabilityTargetResolver(
             providerRefs = CampsiteProviderRepo(ctx),
@@ -325,6 +343,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         notifications: RecordingSlackNotifications,
         grafanaRootUrl: String? = GRAFANA_ROOT_URL,
         appRootUrl: String? = APP_ROOT_URL,
+        extraTriggerHandlers: List<TriggerActionHandler> = emptyList(),
     ): WatchAlertDispatcher =
         WatchAlertDispatcher(
             slack = notifications,
@@ -333,7 +352,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             targets = targetsFor(provider),
             pois = PoiServingRepo(ctx),
             availability = AvailabilityRepo(ctx),
-            triggerActions = TriggerActionRegistry(listOf(SlackNotifyHandler(notifications, appRootUrl))),
+            triggerActions = TriggerActionRegistry(listOf(SlackNotifyHandler(notifications, appRootUrl)) + extraTriggerHandlers),
             grafanaRootUrl = grafanaRootUrl,
             appRootUrl = appRootUrl,
         )
@@ -869,6 +888,26 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             dispatcherWith(provider, notifier).dispatchInitial(findWatch(watchId))
 
             assertTrue(notifier.posts.isEmpty())
+        }
+
+    @Test
+    fun `initial notify fires atc handler for an already-available window without slack`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val poiId = seedPoi("232447")
+            val campsiteId = seedCampsite(poiId, "100")
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
+            seedCell(campsiteId, farStart, AvailabilityStatus.AVAILABLE)
+            val notifier = RecordingSlackNotifications()
+            val atc = RecordingTriggerActionHandler(AtcTriggerActionHandler.KIND, result = false)
+
+            dispatcherWith(provider, notifier, extraTriggerHandlers = listOf(atc)).dispatchInitial(findWatch(watchId))
+
+            assertTrue(notifier.posts.isEmpty())
+            val (_, openings) = atc.calls.single()
+            assertEquals(1, openings.size)
+            assertEquals(campsiteId, openings.single().campsite.id)
+            assertEquals(farStart, openings.single().date)
         }
 
     @Test

@@ -18,6 +18,7 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.service.availability.AvailabilityWatchValidationException
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchStatus
 import io.github.smiley4.ktorswaggerui.dsl.routing.delete
@@ -178,18 +179,22 @@ internal fun Route.availabilityWatchRoutes(
             parseDateWindow(req.startDate, req.endDate)
                 ?: return@post call.respondError("invalid_date_window", HttpStatusCode.BadRequest, "end_date must be after start_date")
         val watch =
-            watchService.create(
-                AvailabilityWatchRepo.CreateInput(
-                    targets = resolved.targets,
-                    campsiteFilters = req.campsiteFilters,
-                    startDate = dateWindow.first,
-                    endDate = dateWindow.second,
-                    cadenceSec = req.cadenceSec,
-                    triggerKinds = req.triggerKinds,
-                    triggerConfig = req.triggerConfig,
-                    stopWhenTriggered = req.stopWhenTriggered,
-                ),
-            )
+            try {
+                watchService.create(
+                    AvailabilityWatchRepo.CreateInput(
+                        targets = resolved.targets,
+                        campsiteFilters = req.campsiteFilters,
+                        startDate = dateWindow.first,
+                        endDate = dateWindow.second,
+                        cadenceSec = req.cadenceSec,
+                        triggerKinds = req.triggerKinds,
+                        triggerConfig = req.triggerConfig,
+                        stopWhenTriggered = req.stopWhenTriggered,
+                    ),
+                )
+            } catch (e: AvailabilityWatchValidationException) {
+                return@post call.respondError(e.error, HttpStatusCode.BadRequest, e.message)
+            }
         scheduleInitialNotify(watch)
         call.respondJson(AvailabilityWatchResponse(watch.toSchema(campsitesRepo)), HttpStatusCode.Created)
     }
@@ -248,20 +253,24 @@ internal fun Route.availabilityWatchRoutes(
                 null -> null
             }
         val updated =
-            watchService.update(
-                id,
-                AvailabilityWatchRepo.UpdateInput(
-                    targets = updateTargets,
-                    campsiteFilters = req.campsiteFilters,
-                    startDate = dateWindow?.first,
-                    endDate = dateWindow?.second,
-                    cadenceSec = req.cadenceSec,
-                    triggerKinds = req.triggerKinds,
-                    triggerConfig = req.triggerConfig,
-                    stopWhenTriggered = req.stopWhenTriggered,
-                    status = status,
-                ),
-            )
+            try {
+                watchService.update(
+                    id,
+                    AvailabilityWatchRepo.UpdateInput(
+                        targets = updateTargets,
+                        campsiteFilters = req.campsiteFilters,
+                        startDate = dateWindow?.first,
+                        endDate = dateWindow?.second,
+                        cadenceSec = req.cadenceSec,
+                        triggerKinds = req.triggerKinds,
+                        triggerConfig = req.triggerConfig,
+                        stopWhenTriggered = req.stopWhenTriggered,
+                        status = status,
+                    ),
+                )
+            } catch (e: AvailabilityWatchValidationException) {
+                return@patch call.respondError(e.error, HttpStatusCode.BadRequest, e.message)
+            }
         if (updated == null) return@patch call.respondError("not_found", HttpStatusCode.NotFound)
         scheduleInitialNotify(updated)
         call.respondJson(AvailabilityWatchResponse(updated.toSchema(campsitesRepo)))

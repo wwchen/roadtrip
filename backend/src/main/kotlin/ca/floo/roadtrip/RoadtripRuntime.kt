@@ -28,23 +28,37 @@ import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
+import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
+import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.DispatchCreateInput
+import ca.floo.roadtrip.service.availability.DispatchEnqueuer
+import ca.floo.roadtrip.service.availability.DispatchService
+import ca.floo.roadtrip.service.availability.DispatchTestEventService
+import ca.floo.roadtrip.service.availability.DispatchWaiterRegistry
+import ca.floo.roadtrip.service.availability.DispatchWatchCompletion
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
+import ca.floo.roadtrip.service.availability.InMemoryDispatchStore
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.SlackNotifyHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
+import ca.floo.roadtrip.service.availability.WatchBookingCapabilityService
+import ca.floo.roadtrip.service.availability.WatchBookingCapabilityValidator
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.booking.adapters.RecGovBookingProvider
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
@@ -85,6 +99,10 @@ internal class RoadtripRuntime(
     val availabilityDateResolver: AvailabilityDateResolver,
     val availabilityWatchService: AvailabilityWatchService,
     val watchAlertDispatcher: WatchAlertDispatcher,
+    val dispatchService: DispatchService,
+    val dispatchTestEventService: DispatchTestEventService,
+    val bookingProviderRegistry: BookingProviderRegistry,
+    val watchBookingCapabilities: WatchBookingCapabilityService,
     val schedulerScope: CoroutineScope,
     val slackInteractivity: SlackInteractivityWiring?,
     val failoverFetcher: FailoverAvailabilityFetcher,
@@ -188,15 +206,42 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             availabilityProviders = availabilityProviderRegistry,
             dateResolver = availabilityDateResolver,
         )
-    val pollerMembership = AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), availabilityTargets)
+    val watchScopeResolver = WatchScopeResolver(campsitesRepo)
+    val pollerMembership = AvailabilityPollerMembership(watchScopeResolver, availabilityTargets)
     val alertProviders = AlertProviderRegistry(listOf(InternalPollerAlertProvider(pollerMembership)))
-    val availabilityWatchService = AvailabilityWatchService(boot.ctx, alertProviders)
 
     val schedulerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     val availabilityPollers = AvailabilityPollerRepo(boot.ctx)
     PollerBackfill(boot.ctx, pollerMembership).run()
 
     val slackNotifications = SlackNotificationServiceImpl(boot.appConfig.slack)
+    val dispatchEnqueuer = DeferredDispatchEnqueuer()
+    val bookingProviderRegistry = BookingProviderRegistry(listOf(RecGovBookingProvider(dispatchEnqueuer)))
+    val bookingTargets = AvailabilityBookingTargetResolver(bookingProviderRegistry)
+    val watchBookingCapabilities = WatchBookingCapabilityService(availabilityTargets, bookingTargets)
+    val availabilityWatchService =
+        AvailabilityWatchService(
+            ctx = boot.ctx,
+            alertProviders = alertProviders,
+            capabilityValidator =
+                WatchBookingCapabilityValidator(
+                    scopeResolver = watchScopeResolver,
+                    capabilities = watchBookingCapabilities,
+                ),
+        )
+    val dispatchService =
+        DispatchService(
+            store = InMemoryDispatchStore(),
+            waiters = DispatchWaiterRegistry(),
+            slack = slackNotifications,
+            watchCompletion =
+                DispatchWatchCompletion { watchId ->
+                    availabilityWatchService.update(watchId, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE)) != null
+                },
+            config = boot.appConfig.dispatch,
+        )
+    val dispatchTestEventService = DispatchTestEventService(dispatchService)
+    dispatchEnqueuer.delegate = dispatchService
     val triggerActions =
         TriggerActionRegistry(
             listOf(
@@ -204,12 +249,17 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                     slack = slackNotifications,
                     appRootUrl = boot.appConfig.webApp?.rootUrl,
                 ),
+                AtcTriggerActionHandler(
+                    bookings = bookingProviderRegistry,
+                    bookingTargets = bookingTargets,
+                    slack = slackNotifications,
+                ),
             ),
         )
     val watchAlertDispatcher =
         WatchAlertDispatcher(
             slack = slackNotifications,
-            scopeResolver = WatchScopeResolver(campsitesRepo),
+            scopeResolver = watchScopeResolver,
             watches = AvailabilityWatchRepo(boot.ctx),
             targets = availabilityTargets,
             pois = PoiServingRepo(boot.ctx),
@@ -300,11 +350,23 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         availabilityDateResolver = availabilityDateResolver,
         availabilityWatchService = availabilityWatchService,
         watchAlertDispatcher = watchAlertDispatcher,
+        dispatchService = dispatchService,
+        dispatchTestEventService = dispatchTestEventService,
+        bookingProviderRegistry = bookingProviderRegistry,
+        watchBookingCapabilities = watchBookingCapabilities,
         schedulerScope = schedulerScope,
         slackInteractivity = slackInteractivity,
         failoverFetcher = sharedFailoverFetcher,
         slackNotifications = slackNotifications,
     )
+}
+
+private class DeferredDispatchEnqueuer : DispatchEnqueuer {
+    var delegate: DispatchEnqueuer? = null
+
+    override suspend fun enqueue(input: DispatchCreateInput) =
+        checkNotNull(delegate) { "dispatch enqueuer used before runtime wiring completed" }
+            .enqueue(input)
 }
 
 private fun AppConfig.isProviderEnabled(id: AvailabilityProviderId): Boolean =

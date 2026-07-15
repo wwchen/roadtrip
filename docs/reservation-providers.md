@@ -183,6 +183,52 @@ entry in the registry list. The `stopWhenTriggered` DONE transition still
 gates on `fire()` returning true, so a handler that fails to deliver
 leaves the watch active for the next poll.
 
+## Booking provider seam
+
+Availability providers answer "can we observe openings?" Booking providers
+answer "can Roadtrip act on this concrete opening?" The first booking action
+is `ADD_TO_CART`, exposed to users as the `atc` trigger.
+
+```
+availability signal
+  -> concrete campsite/date opening
+  -> BookingProviderRegistry.targetFor(parent ref + campsite ref)
+  -> BookingTarget
+  -> BookingProvider.can(ADD_TO_CART, target)
+  -> BookingProvider.addToCart(request)
+```
+
+The provider object is the capability source of truth: registration only finds
+candidate providers; each `BookingProvider` translates the provider-specific
+catalog identity it understands, and `BookingProvider.can(action, target)`
+decides target-level support. This keeps add-to-cart support out of
+`AvailabilityProviderCapabilities`, because availability source and booking
+system can differ. For example, Campflare may provide availability for inventory
+whose booking action still happens on rec.gov, Aspira, ReserveAmerica, or
+another vendor site.
+
+Booking targets compose two identities:
+
+- Parent booking context from the campground/facility provider ref.
+- Concrete campsite/site/unit ref, which is the item added to cart.
+
+Provider implementations own fulfillment. Rec.gov currently fulfills
+`ADD_TO_CART` by dispatching companion work; a future Aspira implementation may
+call a backend HTTP API instead. Companion presence is runtime readiness for
+companion-backed providers, not durable booking capability.
+
+Watch create/update validates `atc` trigger support against the booking-provider
+registry after resolving the watch scope to concrete campsites. Unsupported
+targets fail the mutation instead of creating an active watch that can never
+fulfill its trigger.
+
+The campsite availability API exposes proposed-watch capabilities for the
+current POI scope as provider-neutral `watch_capabilities`:
+`trigger_kinds` always includes `slack_notify`, and includes `atc` only when
+the resolved watch scope supports `BookingAction.ADD_TO_CART`. The FE renders
+the Add to cart toggle from that contract; create/update validation still uses
+the same booking capability service as the authoritative gate.
+
 ## Capabilities
 
 Not every provider supports every monitoring action. The capability flags

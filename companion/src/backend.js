@@ -3,16 +3,24 @@
 
 const BASE = process.env.BACKEND_URL || 'http://127.0.0.1:8765'
 
-async function postJson (path, body) {
+async function postJson (path, body, options = {}) {
   const res = await fetch(BASE + path, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: dispatchHeaders(),
     body: JSON.stringify(body),
+    signal: options.signal,
   })
   const text = await res.text()
   let json = null
   try { json = JSON.parse(text) } catch {}
   return { status: res.status, body: text, json }
+}
+
+function dispatchHeaders () {
+  const headers = { 'content-type': 'application/json' }
+  const token = process.env.DISPATCH_COMPANION_TOKEN || process.env.COMPANION_DISPATCH_TOKEN
+  if (token) headers.authorization = `Bearer ${token}`
+  return headers
 }
 
 async function getJson (path) {
@@ -23,26 +31,9 @@ async function getJson (path) {
   return { status: res.status, body: text, json }
 }
 
-export async function claimMatch (matchId, companionId) {
-  return postJson(`/api/campsite/companion/matches/${matchId}/claim`, { companion_id: companionId })
-}
-
-export async function reportResult (matchId, cartAdded) {
-  return postJson(`/api/campsite/companion/matches/${matchId}/result`, { cart_added: cartAdded })
-}
-
-export async function heartbeat (companionId) {
-  return postJson('/api/campsite/companion/heartbeat', { companion_id: companionId })
-}
-
-export async function getMatch (matchId) {
-  return getJson(`/api/campsite/matches/${matchId}`)
-}
-
-// Backend owns the recgov token lifecycle as of RFC 0001 / PR 3. Companion
-// asks for a non-expired recaccount-shaped JSON every time it needs to inject
-// auth into a Playwright session. Returns null when the backend has no token
-// saved (paste hasn't happened) or the call fails — companion fails closed.
+// Backend owns the recgov token lifecycle. Companion asks for a non-expired
+// recaccount-shaped JSON every time it needs to inject auth into Playwright.
+// Returns null when the backend has no token saved or the call fails.
 export async function fetchFreshRecaccount () {
   try {
     const r = await getJson('/api/campsite/booking/session/fresh-token')
@@ -51,12 +42,43 @@ export async function fetchFreshRecaccount () {
   } catch { return null }
 }
 
-// Backend's planner endpoint. Returns {match: {...}} or {match: null}.
-// Companion calls this on every wakeup signal (match/result/lease_expired
-// SSE event, plus a 30s safety-net interval). The DB is the source of truth
-// for ATC orchestration; this endpoint just reads it.
-export async function getNextWork () {
-  return getJson('/api/campsite/companion/work/next')
+export async function claimDispatch ({
+  kind,
+  kinds = [],
+  vendors,
+  payloadVersions = [],
+  waitSec = 30,
+  leaseSec = 30,
+  signal,
+}) {
+  const selector = {
+    vendors,
+    payload_versions: payloadVersions,
+    wait_sec: waitSec,
+    lease_sec: leaseSec,
+  }
+  if (kinds.length > 0) {
+    selector.kinds = kinds
+  } else if (kind) {
+    selector.kind = kind
+  }
+  return postJson('/api/dispatches/claim', selector, { signal })
+}
+
+export async function completeDispatch (dispatchId, leaseToken, result = {}) {
+  return postJson(`/api/dispatches/${dispatchId}/complete`, {
+    lease_token: leaseToken,
+    result,
+  })
+}
+
+export async function failDispatch (dispatchId, leaseToken, error, detail = null, result = {}) {
+  return postJson(`/api/dispatches/${dispatchId}/fail`, {
+    lease_token: leaseToken,
+    error,
+    detail,
+    result,
+  })
 }
 
 export function backendBase () { return BASE }

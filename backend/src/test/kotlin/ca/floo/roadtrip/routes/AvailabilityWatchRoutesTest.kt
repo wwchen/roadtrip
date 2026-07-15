@@ -11,6 +11,7 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
+import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
@@ -18,10 +19,13 @@ import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.SlackNotifyHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
+import ca.floo.roadtrip.service.availability.WatchBookingCapabilityService
+import ca.floo.roadtrip.service.availability.WatchBookingCapabilityValidator
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -89,6 +93,31 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 dateResolver = AvailabilityDateResolver(),
             )
         return AvailabilityWatchService(ctx, alertProviders(campsitesRepo, targets))
+    }
+
+    private fun watchServiceRejectingAtc(): AvailabilityWatchService {
+        val campsitesRepo = CampsiteRepo(ctx)
+        val targets =
+            DbAvailabilityTargetResolver(
+                providerRefs = CampsiteProviderRepo(ctx),
+                campsitesRepo = campsitesRepo,
+                availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
+                dateResolver = AvailabilityDateResolver(),
+            )
+        val scopeResolver = WatchScopeResolver(campsitesRepo)
+        return AvailabilityWatchService(
+            ctx = ctx,
+            alertProviders = alertProviders(campsitesRepo, targets),
+            capabilityValidator =
+                WatchBookingCapabilityValidator(
+                    scopeResolver = scopeResolver,
+                    capabilities =
+                        WatchBookingCapabilityService(
+                            availabilityTargets = targets,
+                            bookingTargets = AvailabilityBookingTargetResolver(BookingProviderRegistry(emptyList())),
+                        ),
+                ),
+        )
     }
 
     /** Wraps the default internal-poller alert provider for tests, mirroring
@@ -263,6 +292,39 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("invalid_scope", obj["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `POST rejects atc watch when booking capability is unsupported`() =
+        testApplication {
+            application {
+                routing {
+                    availabilityWatchRoutes(
+                        ctx,
+                        watchServiceRejectingAtc(),
+                        disabledDispatcher(),
+                        testNotifyScope,
+                    )
+                }
+            }
+            val poiId = seedPoi(sourceId = "p-atc-unsupported", name = "Unsupported ATC")
+            val campsiteId = seedCampsite(vendorId = "unsupported-atc")
+            linkCampsiteToPoi(campsiteId, poiId)
+            val body =
+                """
+                {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                """.trimIndent()
+
+            val resp =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("unsupported_trigger", obj["error"]!!.jsonPrimitive.content)
+            assertEquals(0, AvailabilityWatchRepo(ctx).count())
         }
 
     @Test

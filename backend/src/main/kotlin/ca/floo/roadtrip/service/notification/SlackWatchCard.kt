@@ -30,4 +30,5 @@ internal object SlackWatchCard {
     const val COLOR_AVAIL = "#4cb96a" // openings / DONE
     const val COLOR_WATCHING = "#3b82f6" // WATCHING / UNCHECKED
     const val COLOR_MUTED = "#8a8f96" // PAUSED / STOPPED
+    const val COLOR_ERROR = "#d64545" // companion/offline failures
 }
