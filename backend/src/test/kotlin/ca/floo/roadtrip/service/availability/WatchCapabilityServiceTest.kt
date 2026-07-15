@@ -85,37 +85,15 @@ class WatchCapabilityServiceTest {
         assertEquals(emptyList(), service.supportedTriggerKinds(listOf(campsite)))
     }
 
-    @Test
-    fun `supports watch triggers when a later provider candidate can be internally polled`() {
-        val campsite = campsite(1L, "site-1")
-        val service =
-            service(
-                campsites = listOf(campsite),
-                supportsInternalPolling = false,
-                fallbackSupportsInternalPolling = true,
-            )
-
-        val support = service.internalPollingSupportFor(listOf(campsite))
-
-        assertTrue(support.supported)
-        assertEquals(1, support.scopedCount)
-        assertEquals(0, support.unsupportedCount)
-        assertEquals(
-            listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.ATC),
-            service.supportedTriggerKinds(listOf(campsite)),
-        )
-    }
-
     private fun service(vararg campsites: CampsiteAvailabilityTarget): WatchCapabilityService = service(campsites = campsites.toList())
 
     private fun service(
         campsites: List<CampsiteAvailabilityTarget>,
         supportsInternalPolling: Boolean = true,
-        fallbackSupportsInternalPolling: Boolean? = null,
     ): WatchCapabilityService {
         val registry = BookingProviderRegistry(listOf(RecGovOnlyBookingProvider))
         return WatchCapabilityService(
-            availabilityTargets = FakeTargetResolver(campsites, supportsInternalPolling, fallbackSupportsInternalPolling),
+            availabilityTargets = FakeTargetResolver(campsites, supportsInternalPolling),
             bookingTargets = AvailabilityBookingTargetResolver(registry),
         )
     }
@@ -150,11 +128,9 @@ class WatchCapabilityServiceTest {
     private class FakeTargetResolver(
         private val campsites: List<CampsiteAvailabilityTarget>,
         supportsInternalPolling: Boolean,
-        private val fallbackSupportsInternalPolling: Boolean?,
     ) : AvailabilityTargetResolver {
         private val byId = campsites.associateBy { it.id }
         private val provider = FakeAvailabilityProvider(supportsInternalPolling)
-        private val fallbackProvider = fallbackSupportsInternalPolling?.let { FakeAvailabilityProvider(it) }
 
         override fun resolve(campsite: CampsiteAvailabilityTarget): ResolvedAvailabilityTarget? {
             val known = byId[campsite.id] ?: return null
@@ -164,15 +140,6 @@ class WatchCapabilityServiceTest {
                     parentRef = ProviderRef.RecGov("facility-1"),
                     catalogRef = CatalogCampsiteRef(campsiteId = known.id, vendorId = known.vendorId),
                 )
-            val fallbackCandidate =
-                fallbackProvider?.let {
-                    ProviderCandidate(
-                        provider = it,
-                        parentRef = ProviderRef.RecGov("facility-1"),
-                        catalogRef = CatalogCampsiteRef(campsiteId = known.id, vendorId = known.vendorId),
-                    )
-                }
-            val candidates = listOfNotNull(candidate, fallbackCandidate)
             return ResolvedAvailabilityTarget(
                 campsite = known,
                 provider = candidate.provider,
@@ -180,7 +147,6 @@ class WatchCapabilityServiceTest {
                 catalogRef = candidate.catalogRef,
                 parentPoiId = TEST_PARENT_POI_ID,
                 dateContext = PoiDateContext(ZoneId.of("UTC"), LocalDate.parse("2026-07-01")),
-                candidates = candidates,
             )
         }
     }

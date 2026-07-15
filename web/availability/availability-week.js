@@ -452,7 +452,7 @@ function onRootScroll(ctx, e) {
   if (!(scroll instanceof HTMLElement)) return;
   if (!scroll.classList.contains('cg-site-matrix-scroll')) return;
   if (ctx.restoringMatrixScroll) return;
-  repositionWatchPopover(ctx);
+  closeWatchPopover(ctx);
 }
 
 function disarmBookButtonsInPlace(ctx) {

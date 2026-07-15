@@ -178,49 +178,6 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
                 )
         }
 
-        fun stubWithFallback(
-            campsite: CampsiteAvailabilityTarget,
-            primaryProvider: AvailabilityProviderId,
-            primaryRef: ProviderRef,
-            primarySupportsInternalPolling: Boolean,
-            fallbackProvider: AvailabilityProviderId,
-            fallbackRef: ProviderRef,
-            fallbackSupportsInternalPolling: Boolean,
-            parentPoiId: Long,
-            dateContext: PoiDateContext,
-        ) {
-            val primary =
-                ProviderCandidate(
-                    provider = FakeProvider(primaryProvider, primarySupportsInternalPolling),
-                    parentRef = primaryRef,
-                    catalogRef =
-                        CatalogCampsiteRef(
-                            campsiteId = campsite.id,
-                            vendorId = campsite.vendorId,
-                        ),
-                )
-            val fallback =
-                ProviderCandidate(
-                    provider = FakeProvider(fallbackProvider, fallbackSupportsInternalPolling),
-                    parentRef = fallbackRef,
-                    catalogRef =
-                        CatalogCampsiteRef(
-                            campsiteId = campsite.id,
-                            vendorId = campsite.vendorId,
-                        ),
-                )
-            byCampsiteId[campsite.id] =
-                ResolvedAvailabilityTarget(
-                    campsite = campsite,
-                    provider = primary.provider,
-                    parentRef = primary.parentRef,
-                    catalogRef = primary.catalogRef,
-                    parentPoiId = parentPoiId,
-                    dateContext = dateContext,
-                    candidates = listOf(primary, fallback),
-                )
-        }
-
         override fun resolve(campsite: CampsiteAvailabilityTarget): ResolvedAvailabilityTarget? = byCampsiteId[campsite.id]
     }
 
@@ -354,38 +311,6 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         membership.sync(watch(watchId), repo, null)
 
         assertTrue(repo.pollerIdsForWatch(watchId).isEmpty())
-    }
-
-    @Test
-    fun `watch links to later pollable candidate when preferred provider cannot poll internally`() {
-        val poi = insertPoi()
-        val campsiteId = insertCampsite(poi, "site-a")
-        val campsite = campsiteRepo.findAvailabilityTargetById(campsiteId)!!
-
-        val targets = FakeTargetResolver()
-        targets.stubWithFallback(
-            campsite = campsite,
-            primaryProvider = AvailabilityProviderId.CAMPFLARE,
-            primaryRef = ProviderRef.Campflare("campflare-parent"),
-            primarySupportsInternalPolling = false,
-            fallbackProvider = AvailabilityProviderId.RECGOV,
-            fallbackRef = ProviderRef.RecGov("232447"),
-            fallbackSupportsInternalPolling = true,
-            parentPoiId = poi,
-            dateContext = fakeDateContext,
-        )
-        val membership = AvailabilityPollerMembership(scopeResolver, targets)
-        val repo = AvailabilityPollerRepo(ctx)
-
-        val watchId = insertActiveWatch(campsiteId = campsiteId)
-
-        membership.sync(watch(watchId), repo, null)
-
-        val linked = repo.pollerIdsForWatch(watchId)
-        assertEquals(1, linked.size)
-        val poller = repo.findById(linked.single())!!
-        assertEquals("recgov", poller.provider)
-        assertEquals("232447", poller.parentRef)
     }
 
     @Test

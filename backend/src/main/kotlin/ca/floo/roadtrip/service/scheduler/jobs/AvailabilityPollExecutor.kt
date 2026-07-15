@@ -21,7 +21,6 @@ import ca.floo.roadtrip.service.availability.ResolvedAvailabilityTarget
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.parentRefKey
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.withPreferredCandidate
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import kotlinx.coroutines.slf4j.MDCContext
 import kotlinx.coroutines.withContext
@@ -122,7 +121,11 @@ internal class AvailabilityPollExecutor(
             campsitesRepo
                 .findAvailabilityTargetsByPoi(poller.poiId)
                 .mapNotNull { targets.resolve(it) }
-                .mapNotNull { it.forPoller(poller) }
+                .filter {
+                    parentRefKey(it.parentRef) == poller.parentRef &&
+                        it.provider.id.name
+                            .lowercase() == poller.provider
+                }
                 // findAvailabilityTargetsByPoi returns distinct campsites, but guard against
                 // duplicate poi links so a site is fetched once.
                 .distinctBy { it.campsite.id }
@@ -369,18 +372,6 @@ internal class AvailabilityPollExecutor(
                     ?.catalogRef
             }
         return refs.takeIf { it.size == rows.size } ?: emptyList()
-    }
-
-    private fun ResolvedAvailabilityTarget.forPoller(poller: AvailabilityPollerRepo.Poller): ResolvedAvailabilityTarget? {
-        val pollerCandidates =
-            candidates.filter { candidate ->
-                candidate.provider.capabilities.supportsInternalPolling &&
-                    parentRefKey(candidate.parentRef) == poller.parentRef &&
-                    candidate.provider.id.name
-                        .lowercase() == poller.provider
-            }
-        val head = pollerCandidates.firstOrNull() ?: return null
-        return withPreferredCandidate(head, pollerCandidates)
     }
 
     private fun synthesizedError(last: FailoverAvailabilityFetcher.AttemptRecord?): AvailabilityProviderError {

@@ -25,7 +25,7 @@ class CampflareAvailabilityProvider(
 
     override val capabilities: AvailabilityProviderCapabilities =
         AvailabilityProviderCapabilities(
-            supportsInternalPolling = false,
+            supportsInternalPolling = true,
             bookingHorizonDays = CAMPFLARE_BOOKING_HORIZON_DAYS,
             maxPollWindowDays = CAMPFLARE_MAX_POLL_WINDOW_DAYS,
         )

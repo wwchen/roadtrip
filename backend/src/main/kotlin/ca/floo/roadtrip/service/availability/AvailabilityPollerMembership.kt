@@ -46,7 +46,7 @@ internal class AvailabilityPollerMembership(
             scopeResolver
                 .resolve(watch)
                 .mapNotNull { targets.resolve(it) }
-                .mapNotNull { it.internalPollingTarget() }
+                .filter { it.provider.capabilities.supportsInternalPolling }
 
         // (provider, parentRefKey) -> representative poi id. LinkedHashMap so
         // the first target seen for a key wins deterministically.
