@@ -124,11 +124,17 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
 
     private fun watch(id: Long): AvailabilityWatchRepo.Watch = AvailabilityWatchRepo(ctx).findById(id)!!
 
-    /** Minimal AvailabilityProvider stub — only `id` is consumed by the membership. */
+    /** Minimal AvailabilityProvider stub — membership consumes id and internal polling support. */
     private class FakeProvider(
         override val id: AvailabilityProviderId,
+        supportsInternalPolling: Boolean,
     ) : AvailabilityProvider {
-        override val capabilities: AvailabilityProviderCapabilities = AvailabilityProviderCapabilities.UNSUPPORTED
+        override val capabilities: AvailabilityProviderCapabilities =
+            AvailabilityProviderCapabilities(
+                supportsInternalPolling = supportsInternalPolling,
+                bookingHorizonDays = 180,
+                maxPollWindowDays = 60,
+            )
 
         override fun isEnabled(): Boolean = true
 
@@ -155,11 +161,12 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
             parentRef: ProviderRef,
             parentPoiId: Long,
             dateContext: PoiDateContext,
+            supportsInternalPolling: Boolean = true,
         ) {
             byCampsiteId[campsite.id] =
                 ResolvedAvailabilityTarget(
                     campsite = campsite,
-                    provider = FakeProvider(provider),
+                    provider = FakeProvider(provider, supportsInternalPolling),
                     parentRef = parentRef,
                     catalogRef =
                         CatalogCampsiteRef(
@@ -280,6 +287,30 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         membership.sync(watch(watchId), repo, null)
 
         assertEquals(2, repo.pollerIdsForWatch(watchId).size)
+    }
+
+    @Test
+    fun `watch skips target when provider does not support internal polling`() {
+        val poi = insertPoi()
+        val campsiteA = insertCampsite(poi, "site-a")
+
+        val targets = FakeTargetResolver()
+        targets.stub(
+            campsiteRepo.findAvailabilityTargetById(campsiteA)!!,
+            AvailabilityProviderId.RECGOV,
+            ProviderRef.RecGov("111111"),
+            poi,
+            fakeDateContext,
+            supportsInternalPolling = false,
+        )
+        val membership = AvailabilityPollerMembership(scopeResolver, targets)
+        val repo = AvailabilityPollerRepo(ctx)
+
+        val watchId = insertActiveWatch(campsiteId = campsiteA)
+
+        membership.sync(watch(watchId), repo, null)
+
+        assertTrue(repo.pollerIdsForWatch(watchId).isEmpty())
     }
 
     @Test

@@ -71,9 +71,10 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     private fun service(
         alertProviders: AlertProviderRegistry? = null,
         capabilityValidator: WatchCapabilityValidator = NoopWatchCapabilityValidator,
+        availabilityProvider: AvailabilityProvider = FakeProvider,
     ): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("test" to FakeProvider))
+        val registry = AvailabilityProviderRegistry(mapOf("test" to availabilityProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
@@ -92,9 +93,12 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         return AvailabilityWatchService(ctx, providers, capabilityValidator)
     }
 
-    private fun bookingValidatedService(bookingProviders: BookingProviderRegistry): AvailabilityWatchService {
+    private fun bookingValidatedService(
+        bookingProviders: BookingProviderRegistry,
+        availabilityProvider: AvailabilityProvider = FakeProvider,
+    ): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("test" to FakeProvider))
+        val registry = AvailabilityProviderRegistry(mapOf("test" to availabilityProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
@@ -115,10 +119,10 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
             ctx = ctx,
             alertProviders = providers,
             capabilityValidator =
-                WatchBookingCapabilityValidator(
+                WatchTriggerCapabilityValidator(
                     scopeResolver = scopeResolver,
                     capabilities =
-                        WatchBookingCapabilityService(
+                        WatchCapabilityService(
                             availabilityTargets = targets,
                             bookingTargets = AvailabilityBookingTargetResolver(bookingProviders),
                         ),
@@ -242,6 +246,55 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     }
 
     @Test
+    fun `create rejects slack watch when provider does not support internal polling`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val svc =
+            bookingValidatedService(
+                bookingProviders = BookingProviderRegistry(listOf(RecGovOnlyBookingProvider)),
+                availabilityProvider = NonPollableProvider,
+            )
+
+        val error =
+            assertFailsWith<AvailabilityWatchValidationException> {
+                svc.create(
+                    poiInput(
+                        poiId,
+                        triggerKinds = listOf("slack_notify"),
+                    ),
+                )
+            }
+
+        assertEquals("unsupported_trigger", error.error)
+        assertEquals(0, AvailabilityWatchRepo(ctx).count())
+    }
+
+    @Test
+    fun `create rejects atc watch when provider does not support internal polling`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val svc =
+            bookingValidatedService(
+                bookingProviders = BookingProviderRegistry(listOf(RecGovOnlyBookingProvider)),
+                availabilityProvider = NonPollableProvider,
+            )
+
+        val error = assertFailsWith<AvailabilityWatchValidationException> { svc.create(poiInput(poiId)) }
+
+        assertEquals("unsupported_trigger", error.error)
+        assertEquals(0, AvailabilityWatchRepo(ctx).count())
+    }
+
+    @Test
+    fun `create does not link a poller when provider does not support internal polling`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val watch = service(availabilityProvider = NonPollableProvider).create(poiInput(poiId))
+
+        assertEquals(emptyList<Long>(), AvailabilityPollerRepo(ctx).pollerIdsForWatch(watch.id))
+    }
+
+    @Test
     fun `two watches on the same campground coalesce onto one poller`() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
@@ -341,6 +394,24 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         override val capabilities =
             AvailabilityProviderCapabilities(
                 supportsInternalPolling = true,
+                bookingHorizonDays = 180,
+                maxPollWindowDays = 60,
+            )
+
+        override fun isEnabled(): Boolean = true
+
+        override suspend fun availability(
+            ref: ProviderRef,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
+    }
+
+    private object NonPollableProvider : AvailabilityProvider {
+        override val id = AvailabilityProviderId.RECGOV
+        override val capabilities =
+            AvailabilityProviderCapabilities(
+                supportsInternalPolling = false,
                 bookingHorizonDays = 180,
                 maxPollWindowDays = 60,
             )

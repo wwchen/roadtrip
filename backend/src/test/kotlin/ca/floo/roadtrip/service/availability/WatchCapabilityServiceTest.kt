@@ -24,19 +24,23 @@ import kotlin.test.assertTrue
 
 private const val TEST_PARENT_POI_ID = 100L
 
-class WatchBookingCapabilityServiceTest {
+class WatchCapabilityServiceTest {
     @Test
     fun `supports add to cart when every scoped campsite resolves to a supported booking target`() {
         val campsiteA = campsite(1L, "site-1")
         val campsiteB = campsite(2L, "site-2")
         val service = service(campsiteA, campsiteB)
 
-        val support = service.supportFor(BookingAction.ADD_TO_CART, listOf(campsiteA, campsiteB))
+        val support = service.bookingSupportFor(BookingAction.ADD_TO_CART, listOf(campsiteA, campsiteB))
 
         assertTrue(support.supported)
         assertEquals(2, support.scopedCount)
         assertEquals(0, support.unsupportedCount)
-        assertEquals(setOf(BookingAction.ADD_TO_CART), service.supportedActions(listOf(campsiteA, campsiteB)))
+        assertEquals(setOf(BookingAction.ADD_TO_CART), service.supportedBookingActions(listOf(campsiteA, campsiteB)))
+        assertEquals(
+            listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.ATC),
+            service.supportedTriggerKinds(listOf(campsiteA, campsiteB)),
+        )
     }
 
     @Test
@@ -45,29 +49,51 @@ class WatchBookingCapabilityServiceTest {
         val unsupported = campsite(2L, "")
         val service = service(supported, unsupported)
 
-        val support = service.supportFor(BookingAction.ADD_TO_CART, listOf(supported, unsupported))
+        val support = service.bookingSupportFor(BookingAction.ADD_TO_CART, listOf(supported, unsupported))
 
         assertFalse(support.supported)
         assertEquals(2, support.scopedCount)
         assertEquals(1, support.unsupportedCount)
-        assertEquals(emptySet(), service.supportedActions(listOf(supported, unsupported)))
+        assertEquals(emptySet(), service.supportedBookingActions(listOf(supported, unsupported)))
+        assertEquals(listOf(AvailabilityTriggerKinds.SLACK_NOTIFY), service.supportedTriggerKinds(listOf(supported, unsupported)))
     }
 
     @Test
     fun `empty scope does not support add to cart`() {
         val service = service()
 
-        val support = service.supportFor(BookingAction.ADD_TO_CART, emptyList())
+        val support = service.bookingSupportFor(BookingAction.ADD_TO_CART, emptyList())
 
         assertFalse(support.supported)
         assertEquals(0, support.scopedCount)
         assertEquals(0, support.unsupportedCount)
+        assertFalse(service.internalPollingSupportFor(emptyList()).supported)
+        assertEquals(emptyList(), service.supportedTriggerKinds(emptyList()))
     }
 
-    private fun service(vararg campsites: CampsiteAvailabilityTarget): WatchBookingCapabilityService {
+    @Test
+    fun `does not support watch triggers when provider cannot be internally polled`() {
+        val campsite = campsite(1L, "site-1")
+        val service = service(campsites = listOf(campsite), supportsInternalPolling = false)
+
+        val support = service.internalPollingSupportFor(listOf(campsite))
+
+        assertFalse(support.supported)
+        assertEquals(1, support.scopedCount)
+        assertEquals(1, support.unsupportedCount)
+        assertEquals(setOf(BookingAction.ADD_TO_CART), service.supportedBookingActions(listOf(campsite)))
+        assertEquals(emptyList(), service.supportedTriggerKinds(listOf(campsite)))
+    }
+
+    private fun service(vararg campsites: CampsiteAvailabilityTarget): WatchCapabilityService = service(campsites = campsites.toList())
+
+    private fun service(
+        campsites: List<CampsiteAvailabilityTarget>,
+        supportsInternalPolling: Boolean = true,
+    ): WatchCapabilityService {
         val registry = BookingProviderRegistry(listOf(RecGovOnlyBookingProvider))
-        return WatchBookingCapabilityService(
-            availabilityTargets = FakeTargetResolver(campsites.toList()),
+        return WatchCapabilityService(
+            availabilityTargets = FakeTargetResolver(campsites, supportsInternalPolling),
             bookingTargets = AvailabilityBookingTargetResolver(registry),
         )
     }
@@ -101,14 +127,16 @@ class WatchBookingCapabilityServiceTest {
 
     private class FakeTargetResolver(
         private val campsites: List<CampsiteAvailabilityTarget>,
+        supportsInternalPolling: Boolean,
     ) : AvailabilityTargetResolver {
         private val byId = campsites.associateBy { it.id }
+        private val provider = FakeAvailabilityProvider(supportsInternalPolling)
 
         override fun resolve(campsite: CampsiteAvailabilityTarget): ResolvedAvailabilityTarget? {
             val known = byId[campsite.id] ?: return null
             val candidate =
                 ProviderCandidate(
-                    provider = FakeAvailabilityProvider,
+                    provider = provider,
                     parentRef = ProviderRef.RecGov("facility-1"),
                     catalogRef = CatalogCampsiteRef(campsiteId = known.id, vendorId = known.vendorId),
                 )
@@ -123,11 +151,13 @@ class WatchBookingCapabilityServiceTest {
         }
     }
 
-    private object FakeAvailabilityProvider : AvailabilityProvider {
+    private class FakeAvailabilityProvider(
+        supportsInternalPolling: Boolean,
+    ) : AvailabilityProvider {
         override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
-                supportsInternalPolling = true,
+                supportsInternalPolling = supportsInternalPolling,
                 bookingHorizonDays = 365,
                 maxPollWindowDays = 60,
             )

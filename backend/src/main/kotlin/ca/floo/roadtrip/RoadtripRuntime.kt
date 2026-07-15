@@ -48,10 +48,10 @@ import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.SlackNotifyHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
-import ca.floo.roadtrip.service.availability.WatchBookingCapabilityService
-import ca.floo.roadtrip.service.availability.WatchBookingCapabilityValidator
+import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchStatus
+import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
@@ -102,7 +102,7 @@ internal class RoadtripRuntime(
     val dispatchService: DispatchService,
     val dispatchTestEventService: DispatchTestEventService,
     val bookingProviderRegistry: BookingProviderRegistry,
-    val watchBookingCapabilities: WatchBookingCapabilityService,
+    val watchCapabilities: WatchCapabilityService,
     val schedulerScope: CoroutineScope,
     val slackInteractivity: SlackInteractivityWiring?,
     val failoverFetcher: FailoverAvailabilityFetcher,
@@ -218,15 +218,15 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
     val dispatchEnqueuer = DeferredDispatchEnqueuer()
     val bookingProviderRegistry = BookingProviderRegistry(listOf(RecGovBookingProvider(dispatchEnqueuer)))
     val bookingTargets = AvailabilityBookingTargetResolver(bookingProviderRegistry)
-    val watchBookingCapabilities = WatchBookingCapabilityService(availabilityTargets, bookingTargets)
+    val watchCapabilities = WatchCapabilityService(availabilityTargets, bookingTargets)
     val availabilityWatchService =
         AvailabilityWatchService(
             ctx = boot.ctx,
             alertProviders = alertProviders,
             capabilityValidator =
-                WatchBookingCapabilityValidator(
+                WatchTriggerCapabilityValidator(
                     scopeResolver = watchScopeResolver,
-                    capabilities = watchBookingCapabilities,
+                    capabilities = watchCapabilities,
                 ),
         )
     val dispatchService =
@@ -353,7 +353,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         dispatchService = dispatchService,
         dispatchTestEventService = dispatchTestEventService,
         bookingProviderRegistry = bookingProviderRegistry,
-        watchBookingCapabilities = watchBookingCapabilities,
+        watchCapabilities = watchCapabilities,
         schedulerScope = schedulerScope,
         slackInteractivity = slackInteractivity,
         failoverFetcher = sharedFailoverFetcher,

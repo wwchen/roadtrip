@@ -19,9 +19,9 @@ import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.SlackNotifyHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
-import ca.floo.roadtrip.service.availability.WatchBookingCapabilityService
-import ca.floo.roadtrip.service.availability.WatchBookingCapabilityValidator
+import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
@@ -109,10 +109,10 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             ctx = ctx,
             alertProviders = alertProviders(campsitesRepo, targets),
             capabilityValidator =
-                WatchBookingCapabilityValidator(
+                WatchTriggerCapabilityValidator(
                     scopeResolver = scopeResolver,
                     capabilities =
-                        WatchBookingCapabilityService(
+                        WatchCapabilityService(
                             availabilityTargets = targets,
                             bookingTargets = AvailabilityBookingTargetResolver(BookingProviderRegistry(emptyList())),
                         ),
