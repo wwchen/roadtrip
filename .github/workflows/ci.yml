@@ -124,6 +124,7 @@ jobs:
       ROADTRIP_DB_URL: jdbc:postgresql://localhost:5432/roadtrip
       ROADTRIP_DB_USER: roadtrip
       ROADTRIP_DB_PASSWORD: roadtrip
+      DISPATCH_COMPANION_TOKEN: ci-dispatch-companion-token
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
