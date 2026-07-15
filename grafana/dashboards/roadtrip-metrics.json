@@ -234,7 +234,7 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "ms"
         }
       },
       "gridPos": {
@@ -268,7 +268,7 @@
             "uid": "roadtrip-prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket[$__rate_interval]))) or on() vector(0)",
+          "expr": "(histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket[$__rate_interval]))) or on() vector(0)) * 1000",
           "legendFormat": "p95",
           "range": true,
           "refId": "A"
@@ -473,7 +473,7 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "ms"
         }
       },
       "gridPos": {
@@ -506,7 +506,7 @@
             "uid": "roadtrip-prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, http_route) (rate(http_server_request_duration_seconds_bucket[$__rate_interval]))) or on() vector(0)",
+          "expr": "(histogram_quantile(0.95, sum by (le, http_route) (rate(http_server_request_duration_seconds_bucket[$__rate_interval]))) or on() vector(0)) * 1000",
           "legendFormat": "{{http_route}} p95",
           "range": true,
           "refId": "A"
@@ -569,7 +569,7 @@
               }
             ]
           },
-          "unit": "s"
+          "unit": "ms"
         }
       },
       "gridPos": {
@@ -602,7 +602,7 @@
             "uid": "roadtrip-prometheus"
           },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum by (le, server_address) (rate(http_client_request_duration_seconds_bucket[$__rate_interval]))) or on() vector(0)",
+          "expr": "(histogram_quantile(0.95, sum by (le, server_address) (rate(http_client_request_duration_seconds_bucket[$__rate_interval]))) or on() vector(0)) * 1000",
           "legendFormat": "{{server_address}} p95",
           "range": true,
           "refId": "A"
