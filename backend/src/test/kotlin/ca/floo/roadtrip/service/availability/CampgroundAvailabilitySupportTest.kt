@@ -159,8 +159,7 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
         override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
-                supportsAvailability = true,
-                pollableForAlerts = true,
+                supportsInternalPolling = true,
                 bookingHorizonDays = 180,
                 maxPollWindowDays = 60,
             )
@@ -178,15 +177,14 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
         override val id: AvailabilityProviderId = AvailabilityProviderId.CAMPFLARE
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
-                supportsAvailability = true,
-                pollableForAlerts = false,
+                supportsInternalPolling = false,
                 bookingHorizonDays = 365,
                 maxPollWindowDays = 60,
             )
 
         override fun isEnabled(): Boolean = true
 
-        override fun canHandle(ref: ProviderRef): Boolean = false
+        override fun supportsRef(ref: ProviderRef): Boolean = false
 
         override suspend fun availability(
             ref: ProviderRef,
@@ -201,8 +199,7 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
         override val id: AvailabilityProviderId = AvailabilityProviderId.CAMPFLARE
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
-                supportsAvailability = true,
-                pollableForAlerts = false,
+                supportsInternalPolling = false,
                 bookingHorizonDays = 365,
                 maxPollWindowDays = 60,
             )

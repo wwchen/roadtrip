@@ -60,7 +60,7 @@ provider-neutral `AvailabilityObservationBatch` values.
 
 The registry does not hardcode fallback modes. Availability services enumerate
 candidate provider refs from the catalog/registry, and the registry asks the
-mapped provider whether it `canHandle(ref)`. If one provider declines a ref
+mapped provider whether it `supportsRef(ref)`. If one provider declines a ref
 because it is unconfigured in this process, the resolver continues to the next
 linked candidate ref. This is how a Campflare catalog row can naturally fall
 through to a linked rec.gov alias without a Campflare-specific service branch.
@@ -166,7 +166,7 @@ when the alert provider becomes per-watch (based on the watch's target
 vendors and adapter capability), that dispatch rule lives on the registry —
 no other code changes.
 
-`AvailabilityProviderCapabilities.pollableForAlerts` (renamed from
+`AvailabilityProviderCapabilities.supportsInternalPolling` (renamed from
 `supportsAlerts` in Part 3) is the poller-side capability — "can the
 internal poller poll this vendor for openings?". Hosted-alert capability
 lives on the alert provider itself (`hostsAlerts: Boolean`).
@@ -231,15 +231,13 @@ the same booking capability service as the authoritative gate.
 
 ## Capabilities
 
-Not every provider supports every monitoring action. The capability flags
-on each provider drive what the FE shows.
+Every `AvailabilityProvider` serves availability. Capability flags only describe
+optional monitoring behavior and provider limits.
 
 ```kotlin
 data class AvailabilityProviderCapabilities(
-    /** Can we serve per-day availability for a window? */
-    val supportsAvailability: Boolean,
     /** Can the internal poller poll this vendor for openings? */
-    val pollableForAlerts: Boolean,
+    val supportsInternalPolling: Boolean,
     /** Max days into the future the upstream exposes. */
     val bookingHorizonDays: Int,
     /** Widest per-tick poll window. */
@@ -388,7 +386,7 @@ walk `previous_id` back from the current row. Each row is an interval
 - **History only exists for slots we polled.** No background backfill,
   no synthetic data. If a slot was never alerted on, there's no history
   for it. Capability-gate any history endpoint behind
-  `pollableForAlerts`.
+  `supportsInternalPolling`.
 - **Widen data per upstream call.** Upstreams return a window of
   per-day availability in one response. Record the whole window, not
   just the alerted slot. Same upstream cost; vastly more history.
@@ -441,7 +439,7 @@ poller has produced.
    covered.
 3. Create `service/availability/provider/adapters/<vendor>/<Vendor>AvailabilityProvider.kt`
    implementing `AvailabilityProvider`. Capabilities default conservatively
-   (`pollableForAlerts = false`); flip them on as features land.
+   (`supportsInternalPolling = false`); flip them on as features land.
 4. Ensure the terminal ETL emits the right `provider_ref` JSON and that its
    `pois.source` maps to the adapter in `AvailabilityProviderRegistry.fromPoiRegistry`.
 5. Update the matrix table above.

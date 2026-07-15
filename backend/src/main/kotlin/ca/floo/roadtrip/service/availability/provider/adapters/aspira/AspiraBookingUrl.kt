@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.availability.provider.adapters.aspira
 
 import ca.floo.roadtrip.clients.aspira.AspiraSearchDefaults
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.availability.provider.BookingUrlTemplate
+import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -15,14 +15,14 @@ import java.time.temporal.ChronoUnit
 /**
  * The Aspira NextGen (goingtocamp) `create-booking/results` URL scheme — the
  * one place that knows it. Consumed by
- * [AspiraAvailabilityProvider.bookingUrlTemplate] (alerts) and the campsites
+ * [AspiraAvailabilityProvider.reservationUrlTemplate] (alerts) and the campsites
  * API (the web app's per-site "Book" link), so the query shape and its inert
  * defaults are never re-spelled at a call site.
  *
  * Aspira's deep link embeds the arrival date in several params (`startDate`,
  * `searchTime`, `flexibleSearch`), so the template is built for a fixed sentinel
  * window and the sentinel dates are then swapped for the
- * [BookingUrlTemplate] placeholders — the reliable way to templatize a URL whose
+ * [ReservationUrlTemplate] placeholders — the reliable way to templatize a URL whose
  * date appears inside larger strings.
  */
 internal object AspiraBookingUrl {
@@ -64,9 +64,9 @@ internal object AspiraBookingUrl {
         resourceLocationId: Long?,
     ): String =
         url(host, transactionLocationId, mapId, resourceLocationId, TEMPLATE_START_DATE, TEMPLATE_END_DATE)
-            .replace(TEMPLATE_START_DATE.toString(), BookingUrlTemplate.START_DATE)
-            .replace(TEMPLATE_END_DATE.toString(), BookingUrlTemplate.END_DATE)
-            .replace("nights=1", "nights=${BookingUrlTemplate.NIGHTS}")
+            .replace(TEMPLATE_START_DATE.toString(), ReservationUrlTemplate.START_DATE)
+            .replace(TEMPLATE_END_DATE.toString(), ReservationUrlTemplate.END_DATE)
+            .replace("nights=1", "nights=${ReservationUrlTemplate.NIGHTS}")
 
     private fun url(
         host: String,

@@ -340,8 +340,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         override val id = AvailabilityProviderId.RECGOV
         override val capabilities =
             AvailabilityProviderCapabilities(
-                supportsAvailability = true,
-                pollableForAlerts = true,
+                supportsInternalPolling = true,
                 bookingHorizonDays = 180,
                 maxPollWindowDays = 60,
             )

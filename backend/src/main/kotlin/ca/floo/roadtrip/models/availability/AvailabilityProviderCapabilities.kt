@@ -1,19 +1,13 @@
 package ca.floo.roadtrip.models.availability
 
 /**
- * What an availability provider supports. Surfaced to the frontend through
- * availability capability surfaces so the drawer can hide UI affordances the
- * upstream can't honor.
- *
- * Conservative defaults: a new provider answers "no" to every capability
- * until the corresponding behavior is implemented. Lying upward — claiming
- * a capability the provider can't deliver — is the worst failure mode.
+ * Optional behavior and limits for an availability provider. Implementing
+ * `AvailabilityProvider` is the availability-serving contract; this type only
+ * carries the parts that vary per adapter.
  */
 data class AvailabilityProviderCapabilities(
-    /** Can serve per-day availability for a date window. */
-    val supportsAvailability: Boolean,
     /** Can be polled in the background by the internal poller to drive watches. */
-    val pollableForAlerts: Boolean,
+    val supportsInternalPolling: Boolean,
     /** Max days into the future the upstream exposes (e.g. rec.gov = 180). */
     val bookingHorizonDays: Int,
     /**
@@ -32,8 +26,7 @@ data class AvailabilityProviderCapabilities(
         /** Reasonable starting point for a stub; can be flipped on as features land. */
         val UNSUPPORTED: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
-                supportsAvailability = false,
-                pollableForAlerts = false,
+                supportsInternalPolling = false,
                 bookingHorizonDays = 0,
                 maxPollWindowDays = 0,
             )

@@ -3,8 +3,8 @@ package ca.floo.roadtrip.service.poi.campground
 import ca.floo.roadtrip.models.api.poi.PoiCtaSchema
 import ca.floo.roadtrip.models.domain.CampflareUrls
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.availability.provider.BookingUrlTemplate
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
+import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
 import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraBookingDisplay
 import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraBookingUrl
 import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovBookingDisplay
@@ -163,7 +163,7 @@ private class AspiraCampgroundCtaProvider(
     ): String {
         val today = LocalDate.now(clock.withZone(ASPIRA_ANCHOR_TZ))
         val template = AspiraBookingUrl.template(host, ref.transactionLocationId, ref.mapId, ref.resourceLocationId)
-        return BookingUrlTemplate.fill(template, today, today.plusDays(1))
+        return ReservationUrlTemplate.fill(template, today, today.plusDays(1))
     }
 
     private companion object {

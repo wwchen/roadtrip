@@ -26,8 +26,7 @@ class RecGovAvailabilityProvider(
 
     override val capabilities: AvailabilityProviderCapabilities =
         AvailabilityProviderCapabilities(
-            supportsAvailability = true,
-            pollableForAlerts = true,
+            supportsInternalPolling = true,
             bookingHorizonDays = RECGOV_BOOKING_HORIZON_DAYS,
             maxPollWindowDays = RECGOV_MAX_POLL_WINDOW_DAYS,
         )
@@ -74,7 +73,7 @@ class RecGovAvailabilityProvider(
     /** rec.gov single-site booking page; the concrete-date [bookingUrl] fills
      *  the window placeholders. [parentRef] is unused — the site id alone
      *  addresses the page. */
-    override fun bookingUrlTemplate(
+    override fun reservationUrlTemplate(
         campsite: CampsiteAvailabilityTarget,
         parentRef: ProviderRef,
     ): String = RecGovBookingUrl.template(campsite.vendorId)

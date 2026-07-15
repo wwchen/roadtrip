@@ -198,7 +198,7 @@ internal class WatchAlertDispatcher(
                         // Booking link, if the campsite's provider exposes one — the URL
                         // scheme is the adapter's, never this dispatcher's. The parent
                         // ref supplies vendor ids the per-site ref may omit (e.g. Aspira).
-                        bookingUrl = target?.let { it.provider.bookingUrl(r, it.parentRef, t.targetDate) },
+                        bookingUrl = target?.let { it.provider.reservationUrl(r, it.parentRef, t.targetDate) },
                         vendor =
                             target
                                 ?.provider

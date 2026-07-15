@@ -51,7 +51,7 @@ class AvailabilityProviderRegistry(
         ref: ProviderRef,
     ): AvailabilityProvider? =
         adaptersBySource[row.source]
-            ?.takeIf { it.isEnabled() && it.canHandle(ref) }
+            ?.takeIf { it.isEnabled() && it.supportsRef(ref) }
 
     /**
      * Source-only lookup for call sites that only need static adapter

@@ -292,7 +292,7 @@ class AspiraAvailabilityProviderTest {
             )
         val parentRef = ProviderRef.Aspira(transactionLocationId = -2147483630, mapId = -2147483388, resourceLocationId = -2147483624)
 
-        val url = adapter.bookingUrl(reservable, parentRef, LocalDate.parse("2026-07-10"))!!
+        val url = adapter.reservationUrl(reservable, parentRef, LocalDate.parse("2026-07-10"))!!
 
         assertTrue(url.startsWith("https://washington.goingtocamp.com/create-booking/results?"), url)
         assertTrue(url.contains("transactionLocationId=-2147483630"), url)
