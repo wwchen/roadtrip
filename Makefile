@@ -6,6 +6,10 @@ RUN_ENV ?= $(or $(env),dev)
 POSTGRES_DB ?= roadtrip
 POSTGRES_USER ?= roadtrip
 POSTGRES_PASSWORD ?= roadtrip
+PROD_COMPOSE_PROFILES ?= --profile tunnel --profile pois
+PROD_COMPOSE := docker compose $(PROD_COMPOSE_PROFILES)
+LOCAL_COMPOSE := docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois
+OBSERVABILITY_SERVICES := grafana alloy tempo prometheus
 
 help:
 	@echo "Targets:"
@@ -32,16 +36,13 @@ ifeq ($(RUN_ENV),prod)
 	# `up -d` recreates only what changed: the rebuilt backend (new image id)
 	# and any service whose `.env`-sourced config moved. Postgres/Loki/Alloy
 	# keep running, so a code deploy no longer bounces the database.
-	docker compose --profile tunnel --profile pois up -d
-	# Grafana and Alloy both bind-mount their config, so `up -d` won't reload
-	# it. Provisioned dashboards poll the files (updateIntervalSeconds > 10)
-	# and reconcile on their own, but datasource/config changes need a restart
-	# — which also reloads dashboards immediately instead of waiting for the
-	# next poll. Alloy has no such poll, so its config.alloy pipeline changes
-	# (log parsing, promoted labels) only take effect on this restart.
-	docker compose --profile tunnel --profile pois restart grafana alloy
+	$(PROD_COMPOSE) up -d
+	# Grafana, Alloy, Tempo, and Prometheus bind-mount config, so `up -d` won't
+	# reload those files. Provisioned dashboards poll dashboard JSON, but
+	# datasource, telemetry pipeline, trace, and metric config need restarts.
+	$(PROD_COMPOSE) restart $(OBSERVABILITY_SERVICES)
 else ifeq ($(RUN_ENV),dev)
-	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres
+	$(LOCAL_COMPOSE) up -d postgres
 	ROADTRIP_PROFILE=local ./gradlew :backend:run
 else
 	$(error unsupported env '$(RUN_ENV)'; use env=dev or env=prod)
@@ -84,7 +85,7 @@ data-import:
 # Postgres re-initializes from scratch; Flyway re-migrates on backend boot
 # (including R__grafana_reader_grants.sql which re-grants grafana_reader).
 POSTGRES_DATA ?= $(HOME)/.roadtrip-map/postgres
-DC := docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois
+DC := $(LOCAL_COMPOSE)
 reset-db:
 	$(DC) rm -sf postgres backend
 	rm -rf $(POSTGRES_DATA)

@@ -13,6 +13,7 @@ services:
     restart: "no"
     environment:
       ROADTRIP_PROFILE: compose-local
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=roadtrip,deployment.environment=compose-local,service.version=${ROADTRIP_BACKEND_VERSION:-0.1.0}
     ports:
       - "127.0.0.1:8765:8765"
       - "127.0.0.1:8766:8766"
@@ -24,3 +25,18 @@ services:
       GRAFANA_DASHBOARD_ALLOW_UI_UPDATES: "true"
     ports:
       - "127.0.0.1:3000:3000"
+
+  tempo:
+    restart: "no"
+    ports:
+      - "127.0.0.1:3200:3200"
+
+  prometheus:
+    restart: "no"
+    ports:
+      - "127.0.0.1:9090:9090"
+
+  alloy:
+    restart: "no"
+    ports:
+      - "127.0.0.1:12345:12345"

@@ -6,3 +6,9 @@ datasources:
     type: loki
     access: proxy
     url: http://loki:3100
+    jsonData:
+      derivedFields:
+        - name: trace_id
+          matcherRegex: '"trace_id":"([a-f0-9]+)"'
+          datasourceUid: roadtrip-tempo
+          url: '$${__value.raw}'

@@ -77,6 +77,18 @@ services:
       # Profile selection is a process env control that chooses
       # application-<profile>.yml before backend config is parsed.
       - ROADTRIP_PROFILE=${ROADTRIP_PROFILE:-prod}
+      # OpenTelemetry Java agent exports Ktor/JDBC/JVM telemetry to Alloy.
+      # Logs still go through stdout -> Alloy -> Loki; trace/span ids are
+      # injected into Logback MDC and emitted by logback.xml's JSON encoder.
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-roadtrip-backend}
+      - OTEL_RESOURCE_ATTRIBUTES=service.namespace=roadtrip,deployment.environment=${ROADTRIP_PROFILE:-prod},service.version=${ROADTRIP_BACKEND_VERSION:-0.1.0}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://alloy:4317}
+      - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}
+      - OTEL_TRACES_EXPORTER=${OTEL_TRACES_EXPORTER:-otlp}
+      - OTEL_METRICS_EXPORTER=${OTEL_METRICS_EXPORTER:-otlp}
+      - OTEL_LOGS_EXPORTER=${OTEL_LOGS_EXPORTER:-none}
+      - OTEL_TRACES_SAMPLER=${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      - OTEL_TRACES_SAMPLER_ARG=${OTEL_TRACES_SAMPLER_ARG:-1.0}
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
       - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
@@ -110,6 +122,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      alloy:
+        condition: service_started
 
   grafana:
     profiles: [pois]
@@ -157,8 +171,32 @@ services:
       - ./grafana/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
       - loki-data:/loki
 
-  # Ships Docker container logs (stdout/stderr) to Loki. Discovers containers
-  # via the Docker socket; see grafana/alloy/config.alloy for the pipeline.
+  tempo:
+    profiles: [pois]
+    image: grafana/tempo:3.0.2
+    restart: unless-stopped
+    hostname: tempo
+    command: -config.file=/etc/tempo.yaml
+    volumes:
+      - ./grafana/tempo/tempo.yml:/etc/tempo.yaml:ro
+      - tempo-data:/var/tempo
+
+  prometheus:
+    profiles: [pois]
+    image: prom/prometheus:v3.13.1
+    restart: unless-stopped
+    hostname: prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-14d}
+      - --web.enable-remote-write-receiver
+    volumes:
+      - ./grafana/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+  # Ships Docker container logs to Loki and accepts OTLP traces/metrics from
+  # the backend Java agent. See grafana/alloy/config.alloy for the pipelines.
   alloy:
     profiles: [pois]
     image: grafana/alloy:latest
@@ -167,9 +205,12 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./grafana/alloy/config.alloy:/etc/alloy/config.alloy:ro
-    command: run --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
+      - alloy-data:/var/lib/alloy/data
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
     depends_on:
       - loki
+      - tempo
+      - prometheus
 
   cloudflared:
     # Runs in deploy with `--profile tunnel --profile pois`. Local modes skip it.
@@ -185,3 +226,6 @@ services:
 volumes:
   grafana-data:
   loki-data:
+  tempo-data:
+  prometheus-data:
+  alloy-data:
