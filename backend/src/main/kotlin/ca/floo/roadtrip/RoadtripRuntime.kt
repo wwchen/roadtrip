@@ -17,8 +17,6 @@ import ca.floo.roadtrip.config.ReadPathProviderConfig
 import ca.floo.roadtrip.db.dataSourceFor
 import ca.floo.roadtrip.db.dsl
 import ca.floo.roadtrip.db.migrate
-import ca.floo.roadtrip.models.booking.AddToCartRequest
-import ca.floo.roadtrip.models.booking.AddToCartResult
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ApiCacheRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
@@ -38,6 +36,8 @@ import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.DispatchCreateInput
+import ca.floo.roadtrip.service.availability.DispatchEnqueuer
 import ca.floo.roadtrip.service.availability.DispatchService
 import ca.floo.roadtrip.service.availability.DispatchWaiterRegistry
 import ca.floo.roadtrip.service.availability.DispatchWatchCompletion
@@ -56,7 +56,6 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClient
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
-import ca.floo.roadtrip.service.booking.adapters.recgov.RecGovAddToCartDispatchPort
 import ca.floo.roadtrip.service.booking.adapters.recgov.RecGovBookingProvider
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
@@ -212,8 +211,8 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
     PollerBackfill(boot.ctx, pollerMembership).run()
 
     val slackNotifications = SlackNotificationServiceImpl(boot.appConfig.slack)
-    val recgovDispatchPort = DeferredRecGovAddToCartDispatchPort()
-    val bookingProviderRegistry = BookingProviderRegistry(listOf(RecGovBookingProvider(recgovDispatchPort)))
+    val dispatchEnqueuer = DeferredDispatchEnqueuer()
+    val bookingProviderRegistry = BookingProviderRegistry(listOf(RecGovBookingProvider(dispatchEnqueuer)))
     val bookingTargets = AvailabilityBookingTargetResolver(bookingProviderRegistry)
     val availabilityWatchService =
         AvailabilityWatchService(
@@ -236,7 +235,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                     availabilityWatchService.update(watchId, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE)) != null
                 },
         )
-    recgovDispatchPort.delegate = dispatchService
+    dispatchEnqueuer.delegate = dispatchService
     val triggerActions =
         TriggerActionRegistry(
             listOf(
@@ -354,12 +353,12 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
     )
 }
 
-private class DeferredRecGovAddToCartDispatchPort : RecGovAddToCartDispatchPort {
-    var delegate: RecGovAddToCartDispatchPort? = null
+private class DeferredDispatchEnqueuer : DispatchEnqueuer {
+    var delegate: DispatchEnqueuer? = null
 
-    override suspend fun enqueueRecGovAddToCart(request: AddToCartRequest): AddToCartResult =
-        checkNotNull(delegate) { "RecGov add-to-cart dispatch port used before runtime wiring completed" }
-            .enqueueRecGovAddToCart(request)
+    override suspend fun enqueue(input: DispatchCreateInput) =
+        checkNotNull(delegate) { "dispatch enqueuer used before runtime wiring completed" }
+            .enqueue(input)
 }
 
 private fun AppConfig.isProviderEnabled(id: AvailabilityProviderId): Boolean =

@@ -1,11 +1,5 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.models.booking.AddToCartRequest
-import ca.floo.roadtrip.models.booking.AddToCartResult
-import ca.floo.roadtrip.models.booking.BookingProviderId
-import ca.floo.roadtrip.models.booking.BookingTarget
-import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import ca.floo.roadtrip.service.notification.WatchOpening
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
@@ -15,8 +9,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
@@ -44,10 +36,7 @@ private const val TEST_STATUS_FAILED = "failed"
 private const val TEST_ERROR_SIMULATED_FAILURE = "simulated_failure"
 private const val TEST_FAILURE_DETAIL = "test dispatch requested failure"
 private const val TEST_COMPANION_ID = "companion-A"
-private const val TEST_RECGOV_FACILITY_ID = "100"
-private const val TEST_RECGOV_CAMPSITE_ID = 7L
-private const val TEST_RECGOV_VENDOR_ID = "site-7"
-private const val TEST_CAMPSITE_LABEL = "Site 7"
+private const val TEST_DISPATCH_PAYLOAD_VALUE = "bar"
 
 class DispatchServiceTest {
     @Test
@@ -113,14 +102,25 @@ class DispatchServiceTest {
         }
 
     @Test
-    fun `enqueue recgov add to cart queues claimable dispatch with booking target payload`() =
+    fun `enqueue queues claimable dispatch envelope`() =
         runBlocking {
             val service = service()
 
-            val result = service.enqueueRecGovAddToCart(addToCartRequest())
+            val result =
+                service.enqueue(
+                    DispatchCreateInput(
+                        kind = TEST_KIND_ATC,
+                        vendor = TEST_VENDOR_RECGOV,
+                        payloadVersion = "atc.recgov.v1",
+                        payload =
+                            buildJsonObject {
+                                put("foo", TEST_DISPATCH_PAYLOAD_VALUE)
+                            },
+                        watchId = TEST_WATCH_ID,
+                        stopWhenTriggered = true,
+                    ),
+                )
 
-            assertTrue(result is AddToCartResult.Queued)
-            assertEquals(BookingProviderId.RECGOV, result.providerId)
             val claimed =
                 service.claim(
                     selector = DispatchClaimSelector.of(TEST_KIND_ATC, listOf(TEST_VENDOR_RECGOV)),
@@ -128,18 +128,9 @@ class DispatchServiceTest {
                     lease = Duration.ofSeconds(TEST_LEASE_SECONDS),
                 )
             assertNotNull(claimed)
-            assertEquals(result.dispatchId, claimed.id)
+            assertEquals(result.id, claimed.id)
             assertEquals("atc.recgov.v1", claimed.payloadVersion)
-            val payload = claimed.payload
-            assertEquals(TEST_WATCH_ID.toString(), payload["watch_id"]!!.jsonPrimitive.content)
-            assertEquals(TEST_VENDOR_RECGOV, payload["vendor"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-04", payload["start_date"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-05", payload["end_date"]!!.jsonPrimitive.content)
-            val opening = payload["openings"]!!.jsonArray.single().jsonObject
-            assertEquals(TEST_CAMPSITE_LABEL, opening["label"]!!.jsonPrimitive.content)
-            assertEquals(TEST_RECGOV_CAMPSITE_ID.toString(), opening["campsite_id"]!!.jsonPrimitive.content)
-            assertEquals(TEST_RECGOV_VENDOR_ID, opening["vendor_id"]!!.jsonPrimitive.content)
-            assertEquals("https://example.test/book", opening["booking_url"]!!.jsonPrimitive.content)
+            assertEquals(TEST_DISPATCH_PAYLOAD_VALUE, claimed.payload["foo"]!!.jsonPrimitive.content)
         }
 
     @Test
@@ -310,26 +301,6 @@ class DispatchServiceTest {
             watchId: Long,
         ): Boolean = true
     }
-
-    private fun addToCartRequest(): AddToCartRequest =
-        AddToCartRequest(
-            watchId = TEST_WATCH_ID,
-            target =
-                BookingTarget(
-                    providerId = BookingProviderId.RECGOV,
-                    parentRef = ProviderRef.RecGov(TEST_RECGOV_FACILITY_ID),
-                    campsiteRef = CatalogCampsiteRef(campsiteId = TEST_RECGOV_CAMPSITE_ID, vendorId = TEST_RECGOV_VENDOR_ID),
-                ),
-            arrivalDate = LocalDate.parse("2026-07-04"),
-            checkoutDate = LocalDate.parse("2026-07-05"),
-            campsiteLabel = TEST_CAMPSITE_LABEL,
-            loop = "Loop A",
-            siteType = "Tent",
-            campgroundId = 100L,
-            campgroundName = "Test CG",
-            bookingUrl = "https://example.test/book",
-            stopWhenTriggered = true,
-        )
 
     private fun completeReport(leaseToken: String): JsonObject =
         buildJsonObject {

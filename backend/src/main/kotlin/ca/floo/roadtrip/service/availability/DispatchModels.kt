@@ -5,6 +5,7 @@ import java.time.Instant
 
 private const val BLANK_KEY_MESSAGE = "dispatch selector keys must be non-blank"
 private const val EMPTY_VENDOR_MESSAGE = "dispatch selector vendors must be non-empty"
+private const val PAYLOAD_VERSION_SUFFIX = "v1"
 
 internal data class DispatchClaimSelector(
     val kind: String,
@@ -52,6 +53,10 @@ internal data class DispatchCreateInput(
     val watchId: Long?,
     val stopWhenTriggered: Boolean,
 )
+
+internal fun interface DispatchEnqueuer {
+    suspend fun enqueue(input: DispatchCreateInput): DispatchQueued
+}
 
 internal data class DispatchQueued(
     val id: Long,
@@ -123,6 +128,11 @@ internal sealed class DispatchFailResult {
 }
 
 internal fun normalizeDispatchKey(value: String): String = value.trim().lowercase()
+
+internal fun dispatchPayloadVersion(
+    kind: String,
+    vendor: String,
+): String = "${normalizeDispatchKey(kind)}.${normalizeDispatchKey(vendor)}.$PAYLOAD_VERSION_SUFFIX"
 
 private fun normalizeDispatchKeys(values: Iterable<String>): Set<String> =
     values.map(::normalizeDispatchKey).filter { it.isNotBlank() }.toSet()

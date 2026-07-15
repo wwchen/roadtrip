@@ -7,8 +7,15 @@ import ca.floo.roadtrip.models.booking.BookingAction
 import ca.floo.roadtrip.models.booking.BookingProviderId
 import ca.floo.roadtrip.models.booking.BookingTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.service.availability.DispatchCreateInput
+import ca.floo.roadtrip.service.availability.DispatchEnqueuer
+import ca.floo.roadtrip.service.availability.DispatchQueued
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
+import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -19,6 +26,10 @@ private const val TEST_WATCH_ID = 42L
 private const val TEST_CAMPSITE_ID = 7L
 private const val TEST_VENDOR_ID = "site-7"
 private const val TEST_DISPATCH_ID = 99L
+private const val TEST_NOTIFIED_WAITERS = 1
+private const val TEST_RECGOV_VENDOR = "recgov"
+private const val TEST_ADD_TO_CART_KIND = "atc"
+private const val TEST_ADD_TO_CART_PAYLOAD_VERSION = "atc.recgov.v1"
 
 class RecGovBookingProviderTest {
     @Test
@@ -46,8 +57,35 @@ class RecGovBookingProviderTest {
 
             val result = provider.addToCart(request)
 
-            assertEquals(AddToCartResult.Queued(TEST_DISPATCH_ID, BookingProviderId.RECGOV, notifiedWaiters = 1), result)
-            assertEquals(request, dispatches.request)
+            assertEquals(
+                AddToCartResult.Queued(
+                    dispatchId = TEST_DISPATCH_ID,
+                    providerId = BookingProviderId.RECGOV,
+                    notifiedWaiters = TEST_NOTIFIED_WAITERS,
+                ),
+                result,
+            )
+            val input = dispatches.input
+            assertEquals(TEST_ADD_TO_CART_KIND, input?.kind)
+            assertEquals(TEST_RECGOV_VENDOR, input?.vendor)
+            assertEquals(TEST_ADD_TO_CART_PAYLOAD_VERSION, input?.payloadVersion)
+            assertEquals(TEST_WATCH_ID, input?.watchId)
+            assertEquals(true, input?.stopWhenTriggered)
+            val payload = input?.payload
+            assertEquals(TEST_WATCH_ID.toString(), payload?.get("watch_id")?.jsonPrimitive?.content)
+            assertEquals(TEST_RECGOV_VENDOR, payload?.get("vendor")?.jsonPrimitive?.content)
+            assertEquals(TEST_ADD_TO_CART_PAYLOAD_VERSION, payload?.get("payload_version")?.jsonPrimitive?.content)
+            assertEquals("2026-07-04", payload?.get("start_date")?.jsonPrimitive?.content)
+            assertEquals("2026-07-05", payload?.get("end_date")?.jsonPrimitive?.content)
+            val opening =
+                payload
+                    ?.get("openings")
+                    ?.jsonArray
+                    ?.single()
+                    ?.jsonObject
+            assertEquals("Site 7", opening?.get("label")?.jsonPrimitive?.content)
+            assertEquals(TEST_CAMPSITE_ID.toString(), opening?.get("campsite_id")?.jsonPrimitive?.content)
+            assertEquals(TEST_VENDOR_ID, opening?.get("vendor_id")?.jsonPrimitive?.content)
         }
 
     @Test
@@ -59,17 +97,24 @@ class RecGovBookingProviderTest {
             val result = provider.addToCart(request(recgovTarget(vendorId = "")))
 
             assertEquals(AddToCartResult.Unsupported, result)
-            assertNull(dispatches.request)
+            assertNull(dispatches.input)
         }
 
     private fun provider(dispatches: RecordingDispatches = RecordingDispatches()): RecGovBookingProvider = RecGovBookingProvider(dispatches)
 
-    private class RecordingDispatches : RecGovAddToCartDispatchPort {
-        var request: AddToCartRequest? = null
+    private class RecordingDispatches : DispatchEnqueuer {
+        var input: DispatchCreateInput? = null
 
-        override suspend fun enqueueRecGovAddToCart(request: AddToCartRequest): AddToCartResult {
-            this.request = request
-            return AddToCartResult.Queued(TEST_DISPATCH_ID, BookingProviderId.RECGOV, notifiedWaiters = 1)
+        override suspend fun enqueue(input: DispatchCreateInput): DispatchQueued {
+            this.input = input
+            return DispatchQueued(
+                id = TEST_DISPATCH_ID,
+                kind = input.kind,
+                vendor = input.vendor,
+                payloadVersion = input.payloadVersion,
+                expiresAt = Instant.parse("2026-07-14T00:00:30Z"),
+                notifiedWaiters = TEST_NOTIFIED_WAITERS,
+            )
         }
     }
 

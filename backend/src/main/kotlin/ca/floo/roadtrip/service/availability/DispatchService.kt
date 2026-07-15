@@ -1,9 +1,5 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.booking.AddToCartRequest
-import ca.floo.roadtrip.models.booking.AddToCartResult
-import ca.floo.roadtrip.models.booking.BookingProviderId
-import ca.floo.roadtrip.service.booking.adapters.recgov.RecGovAddToCartDispatchPort
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
@@ -11,7 +7,6 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
-import org.slf4j.LoggerFactory
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
@@ -23,7 +18,6 @@ private const val MIN_CLAIM_WAIT_MILLIS = 1L
 private const val DEFAULT_LEASE_SECONDS = 30L
 private const val MIN_LEASE_SECONDS = 1L
 private const val MAX_LEASE_SECONDS = 120L
-private const val PAYLOAD_VERSION_SUFFIX = "v1"
 private const val TEST_OPENING_LABEL = "Companion Test Site"
 private const val TEST_OPENING_CAMPGROUND = "Companion Test Campground"
 private const val TEST_BOOKING_URL = "https://example.invalid/companion-test"
@@ -31,7 +25,6 @@ private const val TEST_WATCH_ID = 0L
 private const val TEST_WINDOW_DAYS = 1L
 private const val DISPATCH_RESULT_COMPLETED = "completed"
 private const val DISPATCH_RESULT_FAILED = "failed"
-private const val RECGOV_VENDOR = "recgov"
 
 internal fun interface DispatchWatchCompletion {
     fun markDone(watchId: Long): Boolean
@@ -44,9 +37,7 @@ internal class DispatchService(
     private val watchCompletion: DispatchWatchCompletion,
     private val clock: Clock = Clock.systemUTC(),
     private val pendingTtl: Duration = Duration.ofSeconds(DEFAULT_PENDING_TTL_SECONDS),
-) : RecGovAddToCartDispatchPort {
-    private val log = LoggerFactory.getLogger(javaClass)
-
+) : DispatchEnqueuer {
     suspend fun claim(
         selector: DispatchClaimSelector,
         wait: Duration,
@@ -123,27 +114,6 @@ internal class DispatchService(
             DispatchFailResult.NotFound -> DispatchFailResult.NotFound
         }
 
-    override suspend fun enqueueRecGovAddToCart(request: AddToCartRequest): AddToCartResult {
-        val version = payloadVersion(AtcTriggerActionHandler.KIND, RECGOV_VENDOR)
-        val queued =
-            enqueue(
-                input =
-                    DispatchCreateInput(
-                        kind = AtcTriggerActionHandler.KIND,
-                        vendor = RECGOV_VENDOR,
-                        payloadVersion = version,
-                        payload = addToCartPayload(request, RECGOV_VENDOR, version),
-                        watchId = request.watchId,
-                        stopWhenTriggered = request.stopWhenTriggered,
-                    ),
-            )
-        return AddToCartResult.Queued(
-            dispatchId = queued.id,
-            providerId = BookingProviderId.RECGOV,
-            notifiedWaiters = queued.notifiedWaiters,
-        )
-    }
-
     suspend fun enqueueTestEvent(
         kind: String,
         vendor: String,
@@ -155,7 +125,7 @@ internal class DispatchService(
     ): DispatchQueued {
         val normalizedKind = normalizeDispatchKey(kind)
         val normalizedVendor = normalizeDispatchKey(vendor)
-        val version = payloadVersion?.let(::normalizeDispatchKey) ?: payloadVersion(AtcTriggerActionHandler.KIND, normalizedVendor)
+        val version = payloadVersion?.let(::normalizeDispatchKey) ?: dispatchPayloadVersion(AtcTriggerActionHandler.KIND, normalizedVendor)
         return enqueue(
             input =
                 DispatchCreateInput(
@@ -169,7 +139,7 @@ internal class DispatchService(
         )
     }
 
-    private suspend fun enqueue(input: DispatchCreateInput): DispatchQueued {
+    override suspend fun enqueue(input: DispatchCreateInput): DispatchQueued {
         val queued = store.enqueue(input, pendingTtl, now())
         val notifiedWaiters = waiters.notifyMatching(queued)
         return queued.copy(notifiedWaiters = notifiedWaiters)
@@ -198,22 +168,6 @@ internal class DispatchService(
         }
     }
 
-    private fun addToCartPayload(
-        request: AddToCartRequest,
-        vendor: String,
-        payloadVersion: String,
-    ): JsonObject =
-        buildJsonObject {
-            put("watch_id", request.watchId)
-            put("vendor", vendor)
-            put("payload_version", payloadVersion)
-            put("start_date", request.arrivalDate.toString())
-            put("end_date", request.checkoutDate.toString())
-            putJsonArray("openings") {
-                add(request.toPayload(vendor))
-            }
-        }
-
     private fun testOpeningPayload(
         vendor: String,
         date: LocalDate,
@@ -226,27 +180,6 @@ internal class DispatchService(
             put("campground", TEST_OPENING_CAMPGROUND)
             put("booking_url", TEST_BOOKING_URL)
         }
-
-    private fun AddToCartRequest.toPayload(vendor: String): JsonObject =
-        buildJsonObject {
-            put("label", campsiteLabel)
-            put("date", arrivalDate.toString())
-            put("vendor", vendor)
-            put("campsite_id", target.campsiteRef.campsiteId)
-            put("vendor_id", target.campsiteRef.vendorId)
-            target.campsiteRef.mapId?.let { put("map_id", it) }
-            target.campsiteRef.resourceLocationId?.let { put("resource_location_id", it) }
-            loop?.let { put("loop", it) }
-            siteType?.let { put("site_type", it) }
-            campgroundId?.let { put("campground_id", it) }
-            campgroundName?.let { put("campground", it) }
-            bookingUrl?.let { put("booking_url", it) }
-        }
-
-    private fun payloadVersion(
-        kind: String,
-        vendor: String,
-    ): String = "${normalizeDispatchKey(kind)}.${normalizeDispatchKey(vendor)}.$PAYLOAD_VERSION_SUFFIX"
 
     private fun normalizeWait(wait: Duration): Duration =
         when {
