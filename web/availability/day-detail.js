@@ -15,9 +15,9 @@ import {
  * @param {object} args
  * @param {object} args.day           Per-day classification.
  * @param {boolean} args.watching
- * @param {boolean} args.canWatch
+ * @param {boolean} args.canCreateWatch
  */
-export function renderDayDetail({ day, watching, canWatch }) {
+export function renderDayDetail({ day, watching, canCreateWatch }) {
   const dateLabel = new Date(day.date + 'T00:00:00Z').toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -25,7 +25,7 @@ export function renderDayDetail({ day, watching, canWatch }) {
     timeZone: 'UTC',
   });
   const statusLine = renderStatusLine(day);
-  const actions = renderActions({ day, watching, canWatch });
+  const actions = renderActions({ day, watching, canCreateWatch });
 
   return `
     <div class="cg-day-detail">
@@ -48,20 +48,20 @@ function renderStatusLine(day) {
   return `<span class="${meta.detailClass}">${meta.text}</span>`;
 }
 
-function renderActions({ day, watching, canWatch }) {
+function renderActions({ day, watching, canCreateWatch }) {
   const parts = [];
 
   // Watch toggle: hidden on closed days because there is no available inventory
   // state to monitor.
   const status = normalizeAvailabilityStatus(day.status);
-  const canAlert = status !== 'closed' && status !== 'unknown' && (Boolean(canWatch) || Boolean(watching));
+  const canAlert = status !== 'closed' && status !== 'unknown' && (Boolean(canCreateWatch) || Boolean(watching));
   if (canAlert) {
     parts.push(
       watching
         ? `<button type="button" class="cg-btn cg-btn-secondary cg-day-alert" data-state="watching">Watching - tap to remove</button>`
         : `<button type="button" class="cg-btn cg-btn-primary cg-day-alert" data-state="set">Set watch</button>`,
     );
-  } else if (!canWatch) {
+  } else if (!canCreateWatch) {
     parts.push(`<span class="cg-day-detail-meta">Watches are not available for this campground.</span>`);
   } else {
     parts.push(`<span class="cg-day-detail-meta">No online openings to watch for this day.</span>`);

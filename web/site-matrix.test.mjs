@@ -26,7 +26,7 @@ test('site matrix keeps watched dates visible when new watches are unsupported',
     days: [RESERVED_DAY],
     siteColumnWidth: 128,
     watchedDates: new Set(['2026-07-04']),
-    canWatch: false,
+    canCreateWatch: false,
   });
 
   assert.match(html, /data-watch-date="2026-07-04"/);
@@ -41,8 +41,8 @@ test('site matrix keeps unsupported watch cells clickable for feedback', () => {
     days: [RESERVED_DAY],
     siteColumnWidth: 128,
     watchedDates: new Set(),
-    canWatch: false,
-    canOpenWatch: true,
+    canCreateWatch: false,
+    canOpenWatchPopover: true,
   });
 
   assert.match(html, /data-watch-date="2026-07-04"/);
@@ -54,7 +54,7 @@ test('day detail keeps existing watches removable when new watches are unsupport
   const html = renderDayDetail({
     day: RESERVED_DAY,
     watching: true,
-    canWatch: false,
+    canCreateWatch: false,
   });
 
   assert.match(html, /Watching - tap to remove/);

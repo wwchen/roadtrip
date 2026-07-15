@@ -9,8 +9,8 @@ import java.time.OffsetDateTime
  * (created, updated, paused/resumed) so poller coalescing happens at
  * watch-write time rather than needing a separate reconciliation pass.
  *
- * Resolves the watch's campsite set to its vendor call units (distinct
- * (provider, parentRefKey) pairs) and reconciles `availability_watch_poller`
+ * Resolves the watch's campsite set to its poller keys and reconciles
+ * `availability_watch_poller`
  * to exactly that set, creating/reviving pollers as needed via
  * [AvailabilityPollerRepo.upsertActive]. Pollers are the coalesced unit:
  * many watches on the same parent campground share one poller row.
@@ -24,7 +24,7 @@ internal class AvailabilityPollerMembership(
      * holds no links — its links are cleared and any poller left without
      * links is deactivated. An ACTIVE watch's campsite set is resolved to
      * targets, deduped to one representative poi per distinct
-     * (provider, parentRefKey), upserted into a poller each, and the
+     * poller key, upserted into a poller each, and the
      * watch's links replaced with exactly that set.
      *
      * [tighterCadencePull] is forwarded to [AvailabilityPollerRepo.upsertActive]
@@ -48,22 +48,19 @@ internal class AvailabilityPollerMembership(
                 .mapNotNull { targets.resolve(it) }
                 .mapNotNull { it.internalPollingTarget() }
 
-        // (provider, parentRefKey) -> representative poi id. LinkedHashMap so
+        // Poller key -> representative poi id. LinkedHashMap so
         // the first target seen for a key wins deterministically.
-        val keyToPoi = LinkedHashMap<Pair<String, String>, Long>()
+        val keyToPoi = LinkedHashMap<AvailabilityPollerKey, Long>()
         for (target in resolved) {
-            val key =
-                target.provider.id.name
-                    .lowercase() to parentRefKey(target.parentRef)
-            keyToPoi.putIfAbsent(key, target.parentPoiId)
+            keyToPoi.putIfAbsent(target.pollerKey, target.parentPoiId)
         }
 
         val pollerIds =
             keyToPoi
                 .map { (key, poiId) ->
                     repo.upsertActive(
-                        provider = key.first,
-                        parentRef = key.second,
+                        provider = key.provider,
+                        parentRef = key.parentRef,
                         poiId = poiId,
                         pullNextRunAt = tighterCadencePull,
                     )
