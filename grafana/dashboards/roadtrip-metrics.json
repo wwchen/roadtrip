@@ -605,7 +605,7 @@
             "uid": "roadtrip-prometheus"
           },
           "editorMode": "code",
-          "expr": "(histogram_quantile(0.95, sum by (le, server_address) (increase(http_client_request_duration_seconds_bucket[$__range]))) * 1000) and on(server_address) (sum by (server_address) (increase(http_client_request_duration_seconds_count[$__range])) > 0)",
+          "expr": "((histogram_quantile(0.95, sum by (le, server_address) (increase(http_client_request_duration_seconds_bucket[$__range]))) * 1000) and on(server_address) (sum by (server_address) (increase(http_client_request_duration_seconds_count[$__range])) > 0)) or (label_replace(vector(0), \"server_address\", \"no outbound traffic\", \"\", \"\") unless on() (sum(increase(http_client_request_duration_seconds_count[$__range])) > 0))",
           "legendFormat": "{{server_address}} p95",
           "range": true,
           "refId": "A"
@@ -1226,7 +1226,7 @@
             "uid": "roadtrip-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (server_address, http_response_status_code) (increase(http_client_request_duration_seconds_count[$__range])) or on() vector(0)",
+          "expr": "sum by (server_address, http_response_status_code) (increase(http_client_request_duration_seconds_count[$__range])) or (label_replace(vector(0), \"server_address\", \"no outbound traffic\", \"\", \"\") unless on() (sum(increase(http_client_request_duration_seconds_count[$__range])) > 0))",
           "legendFormat": "{{server_address}} {{http_response_status_code}}",
           "range": true,
           "refId": "A"

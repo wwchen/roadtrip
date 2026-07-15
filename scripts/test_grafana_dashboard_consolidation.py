@@ -123,6 +123,7 @@ class GrafanaDashboardConsolidationTest(unittest.TestCase):
                 "increase(http_client_request_duration_seconds_bucket[$__range])",
                 "increase(http_client_request_duration_seconds_count[$__range])",
                 "and on(server_address)",
+                'label_replace(vector(0), "server_address", "no outbound traffic"',
             ),
         }
 
@@ -134,6 +135,20 @@ class GrafanaDashboardConsolidationTest(unittest.TestCase):
                 self.assertIn(expected_fragment, expression, title)
             self.assertNotIn("rate(http_", expression, title)
             self.assertNotIn("or on() vector(0)", expression, title)
+
+    def test_metrics_http_client_count_has_labeled_no_traffic_fallback(self) -> None:
+        metrics_panels = {
+            panel.get("title", ""): panel
+            for panel in panels_in(dashboard("roadtrip-metrics.json"))
+        }
+        expressions = target_expressions(metrics_panels["HTTP client request count"])
+
+        self.assertEqual(1, len(expressions))
+        self.assertIn(
+            'label_replace(vector(0), "server_address", "no outbound traffic"',
+            expressions[0],
+        )
+        self.assertNotIn("or on() vector(0)", expressions[0])
 
 
 if __name__ == "__main__":
