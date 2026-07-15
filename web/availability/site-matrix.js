@@ -39,6 +39,7 @@ export function renderSiteMatrix({
   armedBook = null,
   watchedDates = null,
   canWatch = false,
+  canOpenWatch = canWatch,
 }) {
   const visibleDays = Array.isArray(days) ? days.filter((d) => d?.date) : [];
   if (visibleDays.length === 0) return '';
@@ -104,6 +105,7 @@ export function renderSiteMatrix({
         armedBook,
         watchedDates,
         canWatch,
+        canOpenWatch,
       }),
     )
     .join('');
@@ -356,6 +358,7 @@ function rowHtml(row, context) {
         armedBook: context.armedBook,
         watchedDates: context.watchedDates,
         canWatch: context.canWatch,
+        canOpenWatch: context.canOpenWatch,
       }),
     )
     .join('');
@@ -396,7 +399,7 @@ function siteLabelHtml(row, siteLabel, siteTitle, isSelected) {
   `;
 }
 
-function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook, watchedDates, canWatch }) {
+function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook, watchedDates, canWatch, canOpenWatch }) {
   const state = cellState(row, day, availableIds);
   const isSelected = selectedDate === day.date;
   const selectedClass = isSelected ? ' is-selected' : '';
@@ -405,12 +408,14 @@ function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook, 
   if (state.kind !== 'available') {
     // Reserved / first-come cells become watch buttons: tap to set (or manage)
     // an availability watch on that day for this POI.
-    if (canWatch && WATCHABLE_KINDS.has(state.kind)) {
-      const watched = !!watchedDates && watchedDates.has(day.date);
+    const watched = !!watchedDates && watchedDates.has(day.date);
+    if (WATCHABLE_KINDS.has(state.kind) && (canOpenWatch || watched)) {
       const watchedClass = watched ? ' is-watched' : '';
       const watchAria = watched
         ? `${aria}; availability watch set, tap to manage`
-        : `${aria}; tap to set an availability watch`;
+        : canWatch
+          ? `${aria}; tap to set an availability watch`
+          : `${aria}; watch unavailable`;
       return `
         <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}">
           <button

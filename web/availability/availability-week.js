@@ -38,6 +38,7 @@ const SKELETON_RENDER_DELAY_MS = 150;
 const STALE_THRESHOLD_MIN = 10;
 const CALENDAR_MAX_DAYS_OUT = 365;
 const DEFAULT_STOP_WHEN_FOUND = true;
+const DEFAULT_WATCH_CADENCE_SEC = 60;
 const TRIGGER_KIND_SLACK_NOTIFY = 'slack_notify';
 const TRIGGER_KIND_ATC = 'atc';
 const BOOKING_ACTION_ADD_TO_CART = 'add_to_cart';
@@ -192,7 +193,8 @@ function renderAvailabilitySurface(ctx) {
     showToday: shouldShowEarliestButton(ctx),
     armedBook: ctx.armedBook,
     watchedDates: watchedDatesSet(ctx),
-    canWatch: ctx.poiId != null,
+    canWatch: supportsWatchAlerts(ctx),
+    canOpenWatch: ctx.poiId != null,
   });
 }
 
@@ -222,7 +224,7 @@ function renderDetail(ctx) {
   return renderDayDetail({
     day,
     watching: ctx.watchesByWindow.has(watchWindowKey(day.date, stayEndDate(ctx, day.date))),
-    canWatch: ctx.poiId != null,
+    canWatch: ctx.poiId != null && supportsWatchAlerts(ctx),
   });
 }
 
@@ -294,9 +296,14 @@ function onRootClick(ctx, e) {
       const url = site
         ? reservationUrlFromTemplate(site, { startDate: date, endDate: stayEndDate(ctx, date) })
         : '';
-      if (url) window.open(url, '_blank', 'noreferrer');
-      ctx.armedBook = null;
-      updateBookButtonState(bookBtn, site, date, false);
+      if (url) {
+        window.open(url, '_blank', 'noreferrer');
+        // Keep the armed blue state after the booking tap. Resetting here
+        // flashes the underlying availability-green cell on mobile.
+      } else {
+        ctx.armedBook = null;
+        updateBookButtonState(bookBtn, site, date, false);
+      }
     } else {
       disarmBookButtonsInPlace(ctx);
       ctx.armedBook = { campsiteId: String(campsiteId), date };
@@ -310,7 +317,10 @@ function onRootClick(ctx, e) {
   }
 
   const wasArmed = ctx.armedBook != null;
-  if (wasArmed) ctx.armedBook = null;
+  if (wasArmed) {
+    ctx.armedBook = null;
+    disarmBookButtonsInPlace(ctx);
+  }
 
   const watchCell = tgt.closest('[data-watch-date]');
   if (watchCell) {
@@ -388,8 +398,6 @@ function onRootClick(ctx, e) {
     fetchSites(ctx);
     return;
   }
-
-  if (wasArmed) disarmBookButtonsInPlace(ctx);
 }
 
 function onRootInput(ctx, e) {
@@ -590,6 +598,9 @@ function openWatchPopover(ctx, anchorEl, date) {
   ctx.watchPopover?.dispose();
   ctx.watchPopover = null;
 
+  const endDate = stayEndDate(ctx, date);
+  const key = watchWindowKey(date, endDate);
+  const existingWatch = ctx.watchesByWindow.get(key);
   // Anchored with fixed positioning against the cell rect (not appended into
   // the cell) so the scrollable matrix doesn't clip it. Closed on outside
   // click / Escape / matrix scroll.
@@ -598,9 +609,6 @@ function openWatchPopover(ctx, anchorEl, date) {
   document.body.appendChild(host);
   positionWatchPopover(host, anchorEl);
 
-  const endDate = stayEndDate(ctx, date);
-  const key = watchWindowKey(date, endDate);
-  const existingWatch = ctx.watchesByWindow.get(key);
   const poiName = ctx.feature?.properties?.name || 'this campground';
 
   const controller = mountWatchPopover(host, {
@@ -609,6 +617,7 @@ function openWatchPopover(ctx, anchorEl, date) {
     watching: Boolean(existingWatch),
     stopWhenFound: watchStopWhenFound(existingWatch),
     supportsAddToCart: supportsAddToCart(ctx),
+    canSet: supportsWatchAlerts(ctx),
     onSet: async ({ stopWhenFound, addToCart } = {}) => {
       const payload = buildWatchPayload(ctx, date, endDate, { stopWhenFound, addToCart });
       const created = await createWatch(payload, { signal: ctx.signal });
@@ -890,6 +899,12 @@ async function toggleWatch(ctx, button) {
       await deleteWatch(existing.id, { signal: ctx.signal });
       ctx.watchesByWindow.delete(key);
     } else {
+      if (!supportsWatchAlerts(ctx)) {
+        button.textContent = previousLabel;
+        button.disabled = false;
+        rerender(ctx);
+        return;
+      }
       button.textContent = 'Creating watch...';
       const payload = buildWatchPayload(ctx, date, endDate);
       const created = await createWatch(payload, { signal: ctx.signal });
@@ -905,15 +920,19 @@ async function toggleWatch(ctx, button) {
   }
 }
 
-function buildWatchPayload(ctx, date, endDate, { stopWhenFound = DEFAULT_STOP_WHEN_FOUND, addToCart = false } = {}) {
-  const triggerKinds = [TRIGGER_KIND_SLACK_NOTIFY];
+export function buildWatchPayload(ctx, date, endDate, { stopWhenFound = DEFAULT_STOP_WHEN_FOUND, addToCart = false } = {}) {
+  const triggerKinds = [];
+  if (supportsWatchAlerts(ctx)) triggerKinds.push(TRIGGER_KIND_SLACK_NOTIFY);
   if (addToCart && supportsAddToCart(ctx)) triggerKinds.push(TRIGGER_KIND_ATC);
+  if (!triggerKinds.includes(TRIGGER_KIND_SLACK_NOTIFY)) {
+    throw new Error('Watch alerts are not available for this campground.');
+  }
   return {
     poi_id: Number(ctx.poiId),
     campsite_filters: {},
     start_date: date,
     end_date: endDate,
-    cadence_sec: 60,
+    cadence_sec: DEFAULT_WATCH_CADENCE_SEC,
     trigger_kinds: triggerKinds,
     trigger_config: {},
     stop_when_triggered: stopWhenFound,
@@ -925,10 +944,13 @@ function supportsAddToCart(ctx) {
     && ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_ATC);
 }
 
-function normalizeWatchCapabilities(value) {
+export function supportsWatchAlerts(ctx) {
+  return ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY);
+}
+
+export function normalizeWatchCapabilities(value) {
   const triggerKinds = new Set(Array.isArray(value?.trigger_kinds) ? value.trigger_kinds : []);
   const bookingActions = new Set(Array.isArray(value?.booking_actions) ? value.booking_actions : []);
-  triggerKinds.add(TRIGGER_KIND_SLACK_NOTIFY);
   return { triggerKinds, bookingActions };
 }
 

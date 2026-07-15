@@ -20,6 +20,25 @@ import kotlin.test.assertTrue
 
 class AspiraAvailabilityProviderTest {
     @Test
+    fun `aspira advertises internal polling through catalog availability`() {
+        val adapter =
+            AspiraAvailabilityProvider(
+                tenant =
+                    AspiraTenant(
+                        host = "reservation.pc.gc.ca",
+                        vendorCode = "aspira_pc",
+                        bookingHorizonDays = 365,
+                    ),
+                client = fakeAspiraClient(),
+                enabled = true,
+            )
+
+        assertEquals(true, adapter.capabilities.supportsInternalPolling)
+        assertEquals(365, adapter.capabilities.bookingHorizonDays)
+        assertEquals(30, adapter.capabilities.maxPollWindowDays)
+    }
+
+    @Test
     fun `aspira catalog availability uses map resource status by default when resource location is known`() =
         runBlocking {
             var mapFetches = 0

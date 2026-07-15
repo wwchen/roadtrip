@@ -22,6 +22,7 @@ import { escapeHtml } from '../core.js';
  * @param {boolean}  args.watching      Whether a watch already exists.
  * @param {boolean}  [args.stopWhenFound]
  * @param {boolean}  [args.supportsAddToCart]
+ * @param {boolean}  [args.canSet]
  * @param {(options: { stopWhenFound: boolean, addToCart: boolean }) => Promise<void>} args.onSet
  * @param {() => Promise<void>} args.onRemove
  * @param {() => void}          args.onClose
@@ -29,6 +30,7 @@ import { escapeHtml } from '../core.js';
 export function mountWatchPopover(host, args) {
   const { poiName, date, onSet, onRemove, onClose } = args;
   const supportsAddToCart = !!args.supportsAddToCart;
+  const canSet = args.canSet !== false;
   let state = {
     watching: !!args.watching,
     stopWhenFound: args.stopWhenFound !== false,
@@ -38,7 +40,7 @@ export function mountWatchPopover(host, args) {
   };
 
   function rerender() {
-    host.innerHTML = renderPopover({ poiName, date, supportsAddToCart, ...state });
+    host.innerHTML = renderPopover({ poiName, date, supportsAddToCart, canSet, ...state });
   }
 
   async function onClick(e) {
@@ -49,7 +51,7 @@ export function mountWatchPopover(host, args) {
       return;
     }
     const action = tgt.closest('.cg-watch-pop-action');
-    if (!action || action.disabled) return;
+    if (!action || action.disabled || (!state.watching && !canSet)) return;
     state = { ...state, busy: true, error: null };
     rerender();
     try {
@@ -108,7 +110,7 @@ export function mountWatchPopover(host, args) {
   };
 }
 
-function renderPopover({ poiName, date, watching, stopWhenFound, addToCart, supportsAddToCart, busy, error }) {
+function renderPopover({ poiName, date, watching, stopWhenFound, addToCart, supportsAddToCart, canSet, busy, error }) {
   const dateLabel = new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -121,10 +123,15 @@ function renderPopover({ poiName, date, watching, stopWhenFound, addToCart, supp
       : 'Setting…'
     : watching
       ? 'Watching — tap to remove'
-      : 'Set watch';
+      : canSet
+        ? 'Set watch'
+        : 'Watch unavailable';
   const actionClass = watching ? 'cg-btn-secondary' : 'cg-btn-primary';
   const errorHtml = error ? `<div class="cg-watch-pop-error">${escapeHtml(error)}</div>` : '';
-  const stopWhenFoundHtml = watching ? '' : `
+  const unavailableHtml = !watching && !canSet
+    ? '<div class="cg-watch-pop-error">Watches are not available for this campground.</div>'
+    : '';
+  const stopWhenFoundHtml = watching || !canSet ? '' : `
       <label class="cg-watch-pop-option">
         <span class="cg-watch-pop-option-text">
           <span class="cg-watch-pop-option-title">Stop when found</span>
@@ -140,7 +147,7 @@ function renderPopover({ poiName, date, watching, stopWhenFound, addToCart, supp
           <span class="cg-watch-pop-switch-track" aria-hidden="true"></span>
         </span>
       </label>`;
-  const addToCartHtml = watching || !supportsAddToCart ? '' : `
+  const addToCartHtml = watching || !canSet || !supportsAddToCart ? '' : `
       <label class="cg-watch-pop-option">
         <span class="cg-watch-pop-option-text">
           <span class="cg-watch-pop-option-title">Add to cart</span>
@@ -169,10 +176,11 @@ function renderPopover({ poiName, date, watching, stopWhenFound, addToCart, supp
         type="button"
         class="cg-btn ${actionClass} cg-watch-pop-action"
         data-state="${watching ? 'watching' : 'set'}"
-        ${busy ? 'disabled' : ''}
+        ${busy || (!watching && !canSet) ? 'disabled' : ''}
       >${escapeHtml(actionLabel)}</button>
       ${errorHtml}
-      <div class="cg-watch-pop-note">🔔 Alerts post to Slack when a site opens.</div>
+      ${unavailableHtml}
+      ${canSet || watching ? '<div class="cg-watch-pop-note">🔔 Alerts post to Slack when a site opens.</div>' : ''}
     </div>
   `;
 }
@@ -180,6 +188,6 @@ function renderPopover({ poiName, date, watching, stopWhenFound, addToCart, supp
 function saveErrorMessage(err) {
   const body = typeof err?.body === 'string' ? err.body : '';
   return body.includes('unsupported_trigger')
-    ? 'Add to cart is no longer available for this watch.'
+    ? 'Watches are not available for this campground.'
     : 'Could not save. Try again.';
 }
