@@ -25,3 +25,10 @@ data class RecGovAccountSchema(
     @SerialName("last_name")
     val lastName: String = "",
 )
+
+@Serializable
+data class RecGovSessionImportRequest(
+    val raw: String? = null,
+    @SerialName("recaccount")
+    val recaccountJson: String? = null,
+)

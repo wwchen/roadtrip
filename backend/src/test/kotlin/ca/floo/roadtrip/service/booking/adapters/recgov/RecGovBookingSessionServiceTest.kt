@@ -84,6 +84,20 @@ class RecGovBookingSessionServiceTest {
             assertEquals(TEST_ACCOUNT_ID, refreshCredentials.accountId)
             assertEquals(TEST_REFRESH_ID, refreshCredentials.refreshId)
         }
+
+    @Test
+    fun `import recaccount seeds future fresh recaccount calls`() =
+        runBlocking {
+            val client = RecordingAuthClient()
+            val service = emptyService(client)
+            val imported = recaccount(fakeJwt(testNow.plusSeconds(FRESH_TOKEN_OFFSET_SECONDS)))
+
+            val result = service.importRecaccount(testJson.encodeToString(imported))
+
+            assertEquals(imported.accessToken, result?.accessToken)
+            assertEquals(imported.accessToken, service.freshRecaccount()?.accessToken)
+            assertEquals(0, client.calls.size)
+        }
 }
 
 private fun service(
@@ -92,6 +106,14 @@ private fun service(
 ): RecGovBookingSessionService =
     RecGovBookingSessionService(
         seedJson = testJson.encodeToString(recaccount),
+        authClient = client,
+        clock = testClock,
+        refreshAheadOfExpiry = Duration.ofMinutes(TEST_REFRESH_AHEAD_MINUTES),
+    )
+
+private fun emptyService(client: RecordingAuthClient): RecGovBookingSessionService =
+    RecGovBookingSessionService(
+        seedJson = null,
         authClient = client,
         clock = testClock,
         refreshAheadOfExpiry = Duration.ofMinutes(TEST_REFRESH_AHEAD_MINUTES),

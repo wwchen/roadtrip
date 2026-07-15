@@ -44,6 +44,14 @@ export async function fetchFreshRecaccount () {
   } catch { return null }
 }
 
+export async function importRecaccount (raw) {
+  try {
+    const r = await postJson('/api/campsite/booking/session/import', { raw })
+    if (r.status !== 200 || !r.json) return null
+    return r.json
+  } catch { return null }
+}
+
 export async function claimDispatch ({
   kind,
   kinds = [],

@@ -1,9 +1,9 @@
 // Local JSON-file store for companion-side state.
 //
-// As of RFC 0001 / PR 6, the companion no longer stores recgov tokens or
-// refresh creds — the backend's TokenManager owns those, and companion
-// fetches a fresh recaccount via GET /api/campsite/booking/session/fresh-token on
-// every Playwright session setup.
+// The companion no longer stores recgov tokens or refresh creds in this JSON
+// file. Its persistent Chromium profile is the login source of truth, and the
+// backend owns refresh after the companion imports localStorage.recaccount via
+// POST /api/campsite/booking/session/import.
 //
 // What still lives here: `recgov_cookies` (paste-derived cookie string used
 // for the Akamai TLS-fingerprint workaround in the Playwright browser

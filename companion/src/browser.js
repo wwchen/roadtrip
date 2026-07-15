@@ -14,6 +14,7 @@ export const IS_HEADLESS = process.env.HEADLESS !== undefined
 
 const SESSION_DIR = process.env.SESSION_DIR
   || path.join(os.homedir(), '.campsite-companion', 'browser-session')
+const RECGOV_RECACCOUNT_STORAGE_KEY = 'recaccount'
 
 let sharedContext = null
 
@@ -151,6 +152,17 @@ export async function injectRecaccount (page, recaccount) {
   await page.addInitScript(({ v }) => {
     try { localStorage.setItem('recaccount', v) } catch {}
   }, { v })
+}
+
+export async function readRecaccount (page) {
+  return page.evaluate((key) => {
+    try {
+      const value = localStorage.getItem(key)
+      return typeof value === 'string' && value.trim() ? value : null
+    } catch {
+      return null
+    }
+  }, RECGOV_RECACCOUNT_STORAGE_KEY).catch(() => null)
 }
 
 export async function isSpaLoggedIn (page) {

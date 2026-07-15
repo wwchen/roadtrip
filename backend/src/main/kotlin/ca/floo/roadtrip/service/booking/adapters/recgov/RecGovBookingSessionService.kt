@@ -14,8 +14,10 @@ import java.time.Instant
 private const val RECGOV_REFRESH_AHEAD_MINUTES = 5L
 private const val JWT_SEPARATOR_COUNT = 2
 
-interface RecGovBookingSessionProvider {
+interface RecGovBookingSessionStore {
     suspend fun freshRecaccount(): RecGovRecaccountSchema?
+
+    suspend fun importRecaccount(raw: String): RecGovRecaccountSchema?
 }
 
 class RecGovBookingSessionService(
@@ -23,7 +25,7 @@ class RecGovBookingSessionService(
     private val authClient: RecGovAuthClient,
     private val clock: Clock = Clock.systemUTC(),
     private val refreshAheadOfExpiry: Duration = Duration.ofMinutes(RECGOV_REFRESH_AHEAD_MINUTES),
-) : RecGovBookingSessionProvider,
+) : RecGovBookingSessionStore,
     AutoCloseable {
     private val mutex = Mutex()
 
@@ -53,18 +55,33 @@ class RecGovBookingSessionService(
             current.takeIf { now.isBefore(expires) }
         }
 
+    override suspend fun importRecaccount(raw: String): RecGovRecaccountSchema? =
+        mutex.withLock {
+            val imported = parseRecaccount(raw)?.takeIf(::canCacheImportedRecaccount) ?: return@withLock null
+            cachedRecaccount = imported
+            imported
+        }
+
     override fun close() {
         authClient.close()
     }
 
-    private fun parseSeed(): RecGovRecaccountSchema? {
-        val raw = seedJson?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    private fun parseSeed(): RecGovRecaccountSchema? = parseRecaccount(seedJson)
+
+    private fun parseRecaccount(rawJson: String?): RecGovRecaccountSchema? {
+        val raw = rawJson?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         return parseRecGovRecaccount(raw)
             ?.takeIf { it.accessToken.isNotBlank() }
             ?: raw
                 .takeIf(::looksLikeJwt)
                 ?.let(RecGovJwt::buildRecaccountFromToken)
                 ?.takeIf { it.accessToken.isNotBlank() }
+    }
+
+    private fun canCacheImportedRecaccount(recaccount: RecGovRecaccountSchema): Boolean {
+        val token = recaccount.accessToken.takeIf { it.isNotBlank() } ?: return false
+        val expires = tokenExpiresAt(token, recaccount) ?: return false
+        return clock.instant().isBefore(expires) || recaccount.refreshCredentials() != null
     }
 
     private fun tokenExpiresAt(

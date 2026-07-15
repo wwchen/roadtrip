@@ -79,9 +79,9 @@ just that one). Adding a vendor = appending a YAML row + writing the
 Kotlin ETL impl. Adding a governing body = appending a YAML row.
 
 > Note: `refresh-tesla-cookies` is **Tesla-only**. Recreation.gov auth is
-> backend-owned via `TokenManager` — paste a fresh cURL in the campsite
-> Settings UI and the backend handles refresh on its own cadence. Two
-> unrelated systems that both happen to use the word "cookies."
+> seeded from the companion's logged-in Chromium profile, then refreshed by
+> the backend. Two unrelated systems that both happen to use the word
+> "cookies."
 
 First time only:
 
@@ -319,13 +319,14 @@ queues authenticated dispatches for the companion, and tracks lease state.
   npm install
   BACKEND_URL=http://127.0.0.1:8765 npm start
   ```
-- **`RECGOV_RECACCOUNT`** seeds the backend's persisted refresh token on
-  startup. To get it: log in
-  on recreation.gov in your browser, open DevTools console, run
-  `localStorage.getItem('recaccount')`, and paste the JSON blob into the
-  env var. The companion fetches a fresh recaccount from the backend via
-  `GET /api/campsite/booking/session/fresh-token` using the same
-  `DISPATCH_COMPANION_TOKEN` bearer as dispatch claims.
+- **Recreation.gov login** happens in the companion's persistent Chromium
+  profile. Run the companion headed, log in to recreation.gov in that window
+  once, and the companion imports `localStorage.recaccount` into the backend
+  via `POST /api/campsite/booking/session/import` using the same
+  `DISPATCH_COMPANION_TOKEN` bearer as dispatch claims. The backend then owns
+  refreshes and serves non-expired recaccount JSON from
+  `GET /api/campsite/booking/session/fresh-token`. `RECGOV_RECACCOUNT` remains
+  an optional startup bootstrap, but it is not the normal source of truth.
 - **Slack notifications** are optional. Create a Slack app with the
   `chat:write` scope, install it to the workspace, and paste the bot
   token (`xoxb-…`) plus a channel name (`#camping-alerts`) or channel ID
