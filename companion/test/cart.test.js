@@ -1,6 +1,14 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { Buffer } from 'node:buffer'
 import { bookingUrlForMatch } from '../src/cart.js'
+import { parseRecaccount, recaccountNeedsRefresh } from '../src/recgovSession.js'
+
+const TEST_NOW_MS = Date.parse('2026-07-15T20:00:00Z')
+const FRESH_OFFSET_SECONDS = 60 * 60
+const NEAR_EXPIRY_OFFSET_SECONDS = 60
+const JWT_HEADER = { alg: 'none' }
+const JWT_SIGNATURE = 'sig'
 
 test('bookingUrlForMatch prefers explicit booking_url', () => {
   const url = 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16'
@@ -30,3 +38,34 @@ test('bookingUrlForMatch derives campsite URL from provider id before internal i
     'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16',
   )
 })
+
+test('parseRecaccount reads browser localStorage JSON and rejects garbage', () => {
+  assert.equal(parseRecaccount('not-json'), null)
+  assert.deepEqual(parseRecaccount('{"access_token":"jwt"}'), { access_token: 'jwt' })
+})
+
+test('recaccountNeedsRefresh uses the browser JWT expiration', () => {
+  assert.equal(
+    recaccountNeedsRefresh(
+      { access_token: fakeJwt(TEST_NOW_MS, FRESH_OFFSET_SECONDS) },
+      TEST_NOW_MS,
+    ),
+    false,
+  )
+  assert.equal(
+    recaccountNeedsRefresh(
+      { access_token: fakeJwt(TEST_NOW_MS, NEAR_EXPIRY_OFFSET_SECONDS) },
+      TEST_NOW_MS,
+    ),
+    true,
+  )
+})
+
+function fakeJwt (nowMs, offsetSeconds) {
+  const exp = Math.floor(nowMs / 1000) + offsetSeconds
+  return `${base64Url(JWT_HEADER)}.${base64Url({ exp })}.${JWT_SIGNATURE}`
+}
+
+function base64Url (value) {
+  return Buffer.from(JSON.stringify(value)).toString('base64url')
+}

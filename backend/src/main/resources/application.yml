@@ -24,8 +24,6 @@ roadtrip:
     api-key: ${CAMPFLARE_API_KEY}
     token: ${CAMPFLARE_TOKEN}
     api-base-url: https://api.campflare.com/v2
-  recgov:
-    recaccount: ${RECGOV_RECACCOUNT}
   slack:
     bot-token: ${SLACK_BOT_TOKEN}
     default-channel: ${SLACK_ALERT_CHANNEL}

@@ -104,7 +104,6 @@ services:
       # https://docs.slack.dev/interactivity/implementing-shortcuts/#scope_permissions
       - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET:-}
       - RIDB_API_KEY=${RIDB_API_KEY:-}
-      - RECGOV_RECACCOUNT=${RECGOV_RECACCOUNT:-}
       - COOKIE_BOT_URL=${COOKIE_BOT_URL:-}
       - COOKIE_BOT_TOKEN=${COOKIE_BOT_TOKEN:-}
       - TESLA_COOKIES=${TESLA_COOKIES:-}

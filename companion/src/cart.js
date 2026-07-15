@@ -8,36 +8,20 @@ import {
   injectFingerprintCookie,
   injectBearerRoute,
   injectRecaccount,
-  readRecaccount,
   isSpaLoggedIn,
   reservationUrl,
   campsiteUrl,
   toCheckoutDate,
 } from './browser.js'
-import { fetchFreshRecaccount, importRecaccount } from './backend.js'
+import {
+  RECGOV_HOME_URL,
+  RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS,
+  RECGOV_LOGIN_STATE_SETTLE_MS,
+  resolveRecaccount,
+} from './recgovSession.js'
 
 let lastLoginState = null
 export function getLastLoginState () { return lastLoginState }
-
-const RECGOV_HOME_URL = 'https://www.recreation.gov/'
-const DEFAULT_RECGOV_LOGIN_TIMEOUT_MS = 120_000
-const RECGOV_LOGIN_POLL_MS = 1_000
-const RECGOV_LOGIN_BUTTON_TIMEOUT_MS = 5_000
-const RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS = 20_000
-const RECGOV_LOGIN_STATE_SETTLE_MS = 2_000
-const MILLISECONDS_PER_SECOND = 1_000
-const MIN_LOGIN_TIMEOUT_MS = 1
-
-function recgovLoginTimeoutMs () {
-  const configured = Number.parseInt(process.env.RECGOV_LOGIN_TIMEOUT_MS || '', 10)
-  return Number.isFinite(configured) && configured >= MIN_LOGIN_TIMEOUT_MS
-    ? configured
-    : DEFAULT_RECGOV_LOGIN_TIMEOUT_MS
-}
-
-function secondsLabel (millis) {
-  return Math.ceil(millis / MILLISECONDS_PER_SECOND)
-}
 
 export async function getCartItems (page) {
   return page.evaluate(async () => {
@@ -178,7 +162,6 @@ const RESERVE_SELECTORS = [
 ]
 const RESERVE_COMBINED = RESERVE_SELECTORS.join(', ')
 const ENTER_DATES_SEL = 'button:has-text("Enter Dates"), button:has-text("Change Dates")'
-const LOGIN_LINK_SEL = 'button:has-text("Sign Up / Log In"), a:has-text("Sign Up / Log In")'
 
 async function clickReserveButton (page) {
   for (const sel of RESERVE_SELECTORS) {
@@ -230,97 +213,6 @@ export async function setupAuthPage () {
   await injectFingerprintCookie(context, recaccount?.access_token)
 
   return { context, page, recaccount }
-}
-
-async function resolveRecaccount (page) {
-  const browserRecaccount = await recaccountFromBrowser(page)
-  if (browserRecaccount) return browserRecaccount
-
-  if (!IS_HEADLESS) {
-    const loginRecaccount = await recaccountFromManualLogin(page)
-    if (loginRecaccount) return loginRecaccount
-  }
-
-  const backendRecaccount = await fetchFreshRecaccount()
-  if (backendRecaccount) {
-    console.log('Cart: using backend Recreation.gov bootstrap session')
-    return backendRecaccount
-  }
-
-  if (IS_HEADLESS) {
-    console.log('Cart: no backend recaccount and companion is headless — run the companion headed and log in once')
-  }
-  return null
-}
-
-async function recaccountFromBrowser (page) {
-  await page.goto(RECGOV_HOME_URL, {
-    waitUntil: 'domcontentloaded',
-    timeout: RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS,
-  }).catch((err) => {
-    console.log(`Cart: could not open Recreation.gov login page — ${err.message}`)
-  })
-
-  const raw = await readRecaccountFromOpenPages(page)
-  if (!raw) return null
-  console.log('Cart: found Recreation.gov session in companion browser')
-  return importBrowserRecaccount(raw)
-}
-
-async function importBrowserRecaccount (raw) {
-  const imported = await importRecaccount(raw)
-  if (!imported) {
-    console.log('Cart: companion browser recaccount was rejected by backend')
-    return null
-  }
-
-  const fresh = await fetchFreshRecaccount()
-  if (!fresh) {
-    console.log('Cart: backend imported browser recaccount but could not return a fresh token')
-    return null
-  }
-
-  console.log('Cart: imported Recreation.gov session from companion browser')
-  return fresh
-}
-
-async function recaccountFromManualLogin (page) {
-  const timeoutMs = recgovLoginTimeoutMs()
-  console.log(`Cart: log in to Recreation.gov in the companion browser (waiting up to ${secondsLabel(timeoutMs)}s)`)
-  await openLoginIfPossible(page)
-  const raw = await waitForBrowserRecaccount(page, timeoutMs)
-  if (!raw) {
-    console.log(`Cart: Recreation.gov login wait timed out after ${secondsLabel(timeoutMs)}s`)
-    return null
-  }
-  return importBrowserRecaccount(raw)
-}
-
-async function openLoginIfPossible (page) {
-  await page.locator(LOGIN_LINK_SEL).first()
-    .click({ timeout: RECGOV_LOGIN_BUTTON_TIMEOUT_MS })
-    .catch(() => {})
-}
-
-async function waitForBrowserRecaccount (page, timeoutMs) {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    const raw = await readRecaccountFromOpenPages(page)
-    if (raw) return raw
-
-    const remaining = deadline - Date.now()
-    if (remaining <= 0) return null
-    await page.waitForTimeout(Math.min(RECGOV_LOGIN_POLL_MS, remaining))
-  }
-  return null
-}
-
-async function readRecaccountFromOpenPages (page) {
-  for (const candidate of page.context().pages()) {
-    const raw = await readRecaccount(candidate)
-    if (raw) return raw
-  }
-  return null
 }
 
 const CAPTCHA_SELECTORS = [
@@ -466,7 +358,7 @@ export async function testChromium (rawCookieInput = null) {
     const loggedIn = (await isSpaLoggedIn(page)) === true
     lastLoginState = loggedIn
     if (loggedIn) console.log(`Logged in to recreation.gov ✓ (token expires ${recaccount.expiration})`)
-    else console.log('Backend recaccount injected but SPA still shows logged-out — token may have been rejected')
+    else console.log('Companion browser recaccount injected but SPA still shows logged-out — token may have been rejected')
     return { ok: true, loggedIn }
   } finally {
     await page.close().catch(() => {})

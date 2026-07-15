@@ -23,35 +23,6 @@ function dispatchHeaders () {
   return headers
 }
 
-async function getJson (path, options = {}) {
-  const res = await fetch(BASE + path, {
-    headers: options.auth ? dispatchHeaders() : undefined,
-  })
-  const text = await res.text()
-  let json = null
-  try { json = JSON.parse(text) } catch {}
-  return { status: res.status, body: text, json }
-}
-
-// Backend owns the recgov token lifecycle. Companion asks for a non-expired
-// recaccount-shaped JSON every time it needs to inject auth into Playwright.
-// Returns null when the backend has no token saved or the call fails.
-export async function fetchFreshRecaccount () {
-  try {
-    const r = await getJson('/api/campsite/booking/session/fresh-token', { auth: true })
-    if (r.status !== 200 || !r.json) return null
-    return r.json
-  } catch { return null }
-}
-
-export async function importRecaccount (raw) {
-  try {
-    const r = await postJson('/api/campsite/booking/session/import', { raw })
-    if (r.status !== 200 || !r.json) return null
-    return r.json
-  } catch { return null }
-}
-
 export async function claimDispatch ({
   kind,
   kinds = [],

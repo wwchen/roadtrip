@@ -4,7 +4,6 @@ import ca.floo.roadtrip.clients.aspira.HttpAspiraAvailabilityClient
 import ca.floo.roadtrip.clients.campflare.HttpCampflareAvailabilityClient
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
 import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
-import ca.floo.roadtrip.clients.recgov.HttpRecGovAuthClient
 import ca.floo.roadtrip.clients.recgov.HttpRecgovAvailabilityClient
 import ca.floo.roadtrip.clients.reserveamerica.HttpReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.clients.reservecalifornia.HttpReserveCaliforniaAvailabilityClient
@@ -60,7 +59,6 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import ca.floo.roadtrip.service.booking.adapters.RecGovBookingProvider
-import ca.floo.roadtrip.service.booking.adapters.recgov.RecGovBookingSessionService
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
@@ -104,7 +102,6 @@ internal class RoadtripRuntime(
     val dispatchService: DispatchService,
     val dispatchTestEventService: DispatchTestEventService,
     val bookingProviderRegistry: BookingProviderRegistry,
-    val recGovBookingSession: RecGovBookingSessionService,
     val watchCapabilities: WatchCapabilityService,
     val schedulerScope: CoroutineScope,
     val slackInteractivity: SlackInteractivityWiring?,
@@ -122,7 +119,6 @@ internal class RoadtripRuntime(
     fun close() {
         schedulerScope.cancel()
         boot.availabilityProviderClients.close()
-        recGovBookingSession.close()
         slackNotifications.close()
     }
 }
@@ -221,11 +217,6 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
     val slackNotifications = SlackNotificationServiceImpl(boot.appConfig.slack)
     val dispatchEnqueuer = DeferredDispatchEnqueuer()
     val bookingProviderRegistry = BookingProviderRegistry(listOf(RecGovBookingProvider(dispatchEnqueuer)))
-    val recGovBookingSession =
-        RecGovBookingSessionService(
-            seedJson = boot.appConfig.recgovSession.recaccountJson,
-            authClient = HttpRecGovAuthClient(),
-        )
     val bookingTargets = AvailabilityBookingTargetResolver(bookingProviderRegistry)
     val watchCapabilities = WatchCapabilityService(availabilityTargets, bookingTargets)
     val availabilityWatchService =
@@ -362,7 +353,6 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         dispatchService = dispatchService,
         dispatchTestEventService = dispatchTestEventService,
         bookingProviderRegistry = bookingProviderRegistry,
-        recGovBookingSession = recGovBookingSession,
         watchCapabilities = watchCapabilities,
         schedulerScope = schedulerScope,
         slackInteractivity = slackInteractivity,

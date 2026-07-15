@@ -79,9 +79,8 @@ just that one). Adding a vendor = appending a YAML row + writing the
 Kotlin ETL impl. Adding a governing body = appending a YAML row.
 
 > Note: `refresh-tesla-cookies` is **Tesla-only**. Recreation.gov auth is
-> seeded from the companion's logged-in Chromium profile, then refreshed by
-> the backend. Two unrelated systems that both happen to use the word
-> "cookies."
+> owned by the companion's logged-in Chromium profile. Two unrelated systems
+> that both happen to use the word "cookies."
 
 First time only:
 
@@ -321,12 +320,9 @@ queues authenticated dispatches for the companion, and tracks lease state.
   ```
 - **Recreation.gov login** happens in the companion's persistent Chromium
   profile. Run the companion headed, log in to recreation.gov in that window
-  once, and the companion imports `localStorage.recaccount` into the backend
-  via `POST /api/campsite/booking/session/import` using the same
-  `DISPATCH_COMPANION_TOKEN` bearer as dispatch claims. The backend then owns
-  refreshes and serves non-expired recaccount JSON from
-  `GET /api/campsite/booking/session/fresh-token`. `RECGOV_RECACCOUNT` remains
-  an optional startup bootstrap, but it is not the normal source of truth.
+  once, and the companion manages `localStorage.recaccount` and refreshes in
+  that same browser context. The backend never receives the Recreation.gov JWT;
+  it only queues dispatches and records completion/failure.
 - **Slack notifications** are optional. Create a Slack app with the
   `chat:write` scope, install it to the workspace, and paste the bot
   token (`xoxb-…`) plus a channel name (`#camping-alerts`) or channel ID
