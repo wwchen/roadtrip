@@ -30,5 +30,11 @@ internal object RecGovBookingUrl {
     fun template(vendorId: String): String =
         "$CAMPSITE_URL/${urlEncode(vendorId)}?startDate=${ReservationUrlTemplate.START_DATE}&endDate=${ReservationUrlTemplate.END_DATE}"
 
+    fun campsite(
+        vendorId: String,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): String = ReservationUrlTemplate.fill(template(vendorId), startDate, endDate)
+
     private fun urlEncode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
 }

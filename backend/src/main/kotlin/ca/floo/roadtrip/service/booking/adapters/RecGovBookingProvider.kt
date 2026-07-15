@@ -94,11 +94,9 @@ internal class RecGovBookingProvider(
             siteType?.let { put("site_type", it) }
             campgroundId?.let { put("campground_id", it) }
             campgroundName?.let { put("campground", it) }
-            put("booking_url", recgovCampgroundBookingUrl())
+            put("booking_url", recgovCampsiteBookingUrl())
         }
 
-    private fun AddToCartRequest.recgovCampgroundBookingUrl(): String {
-        val parent = target.parentRef as ProviderRef.RecGov
-        return RecGovBookingUrl.campground(parent.recgovId, arrivalDate, checkoutDate)
-    }
+    private fun AddToCartRequest.recgovCampsiteBookingUrl(): String =
+        RecGovBookingUrl.campsite(target.campsiteRef.vendorId, arrivalDate, checkoutDate)
 }

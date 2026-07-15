@@ -24,10 +24,10 @@ import kotlin.test.assertTrue
 
 private const val TEST_WATCH_ID = 42L
 private const val TEST_CAMPSITE_ID = 7L
-private const val TEST_VENDOR_ID = "site-7"
+private const val TEST_VENDOR_ID = "300"
 private const val TEST_RECGOV_CAMPGROUND_ID = "232447"
-private const val TEST_RECGOV_BOOKING_URL =
-    "https://www.recreation.gov/camping/campgrounds/232447?startDate=2026-07-04&endDate=2026-07-05"
+private const val TEST_RECGOV_CAMPSITE_URL =
+    "https://www.recreation.gov/camping/campsites/300?startDate=2026-07-04&endDate=2026-07-05"
 private const val TEST_DISPATCH_ID = 99L
 private const val TEST_NOTIFIED_WAITERS = 1
 private const val TEST_RECGOV_VENDOR = "recgov"
@@ -113,18 +113,20 @@ class RecGovBookingProviderTest {
             assertEquals("Site 7", opening?.get("label")?.jsonPrimitive?.content)
             assertEquals(TEST_CAMPSITE_ID.toString(), opening?.get("campsite_id")?.jsonPrimitive?.content)
             assertEquals(TEST_VENDOR_ID, opening?.get("vendor_id")?.jsonPrimitive?.content)
-            assertEquals(TEST_RECGOV_BOOKING_URL, opening?.get("booking_url")?.jsonPrimitive?.content)
+            assertEquals(TEST_RECGOV_CAMPSITE_URL, opening?.get("booking_url")?.jsonPrimitive?.content)
         }
 
     @Test
-    fun `add to cart uses recgov campground page for companion booking url`() =
+    fun `add to cart uses recgov campsite page for companion booking url`() =
         runBlocking {
             val dispatches = RecordingDispatches()
             val provider = provider(dispatches)
             val request =
                 request(
                     recgovTarget(),
-                    bookingUrl = "https://www.recreation.gov/camping/campsites/$TEST_VENDOR_ID?startDate=2026-07-04&endDate=2026-07-05",
+                    bookingUrl =
+                        "https://www.recreation.gov/camping/campgrounds/" +
+                            "$TEST_RECGOV_CAMPGROUND_ID?startDate=2026-07-04&endDate=2026-07-05",
                 )
 
             provider.addToCart(request)
@@ -136,7 +138,7 @@ class RecGovBookingProviderTest {
                     ?.jsonArray
                     ?.single()
                     ?.jsonObject
-            assertEquals(TEST_RECGOV_BOOKING_URL, opening?.get("booking_url")?.jsonPrimitive?.content)
+            assertEquals(TEST_RECGOV_CAMPSITE_URL, opening?.get("booking_url")?.jsonPrimitive?.content)
         }
 
     @Test

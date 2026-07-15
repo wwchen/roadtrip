@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { bookingUrlForMatch } from '../src/cart.js'
 
 test('bookingUrlForMatch prefers explicit booking_url', () => {
-  const url = 'https://www.recreation.gov/camping/campgrounds/232447?startDate=2026-07-15&endDate=2026-07-16'
+  const url = 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16'
 
   assert.equal(
     bookingUrlForMatch({
