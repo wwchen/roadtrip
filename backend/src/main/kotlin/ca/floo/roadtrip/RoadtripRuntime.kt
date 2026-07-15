@@ -28,23 +28,31 @@ import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
+import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.DispatchService
+import ca.floo.roadtrip.service.availability.DispatchWaiterRegistry
+import ca.floo.roadtrip.service.availability.DispatchWatchCompletion
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
+import ca.floo.roadtrip.service.availability.InMemoryDispatchStore
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.SlackNotifyHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.booking.adapters.recgov.RecGovBookingProvider
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
@@ -85,6 +93,8 @@ internal class RoadtripRuntime(
     val availabilityDateResolver: AvailabilityDateResolver,
     val availabilityWatchService: AvailabilityWatchService,
     val watchAlertDispatcher: WatchAlertDispatcher,
+    val dispatchService: DispatchService,
+    val bookingProviderRegistry: BookingProviderRegistry,
     val schedulerScope: CoroutineScope,
     val slackInteractivity: SlackInteractivityWiring?,
     val failoverFetcher: FailoverAvailabilityFetcher,
@@ -197,6 +207,17 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
     PollerBackfill(boot.ctx, pollerMembership).run()
 
     val slackNotifications = SlackNotificationServiceImpl(boot.appConfig.slack)
+    val dispatchService =
+        DispatchService(
+            store = InMemoryDispatchStore(),
+            waiters = DispatchWaiterRegistry(),
+            slack = slackNotifications,
+            watchCompletion =
+                DispatchWatchCompletion { watchId ->
+                    availabilityWatchService.update(watchId, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE)) != null
+                },
+        )
+    val bookingProviderRegistry = BookingProviderRegistry(listOf(RecGovBookingProvider(dispatchService)))
     val triggerActions =
         TriggerActionRegistry(
             listOf(
@@ -204,6 +225,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                     slack = slackNotifications,
                     appRootUrl = boot.appConfig.webApp?.rootUrl,
                 ),
+                AtcTriggerActionHandler(dispatchService),
             ),
         )
     val watchAlertDispatcher =
@@ -300,6 +322,8 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         availabilityDateResolver = availabilityDateResolver,
         availabilityWatchService = availabilityWatchService,
         watchAlertDispatcher = watchAlertDispatcher,
+        dispatchService = dispatchService,
+        bookingProviderRegistry = bookingProviderRegistry,
         schedulerScope = schedulerScope,
         slackInteractivity = slackInteractivity,
         failoverFetcher = sharedFailoverFetcher,

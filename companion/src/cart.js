@@ -251,12 +251,14 @@ export async function addToCart (match) {
   const campgroundId = match.campground_id
   const campsiteId = match.campsite_id
   const firstDate = match.first_date
-  const availableDates = match.available_dates || []
+  const availableDates = match.available_dates || (firstDate ? [firstDate] : [])
   const site = match.campsite_site
-  const checkout = toCheckoutDate(availableDates[availableDates.length - 1])
-  const url = campsiteId
-    ? campsiteUrl(campsiteId, firstDate, checkout)
-    : reservationUrl(campgroundId, firstDate, checkout)
+  const checkout = match.checkout_date || toCheckoutDate(availableDates[availableDates.length - 1])
+  const url = match.booking_url || (
+    campsiteId
+      ? campsiteUrl(campsiteId, firstDate, checkout)
+      : reservationUrl(campgroundId, firstDate, checkout)
+  )
   console.log(`Cart: opening ${url}`)
 
   const { page } = await setupAuthPage()

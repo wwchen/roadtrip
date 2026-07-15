@@ -1,11 +1,24 @@
 package ca.floo.roadtrip.service.notification
 
 import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
+import ca.floo.roadtrip.clients.slack.SlackBlocks
 import ca.floo.roadtrip.clients.slack.SlackClient
 import ca.floo.roadtrip.config.SlackConfig
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.time.LocalDate
+
+private const val DISPATCH_STATUS_COMPLETED = "completed"
+private const val MAX_DISPATCH_REPORT_CHARS = 2500
+private const val TRUNCATED_REPORT_SUFFIX = "\n..."
+
+private val slackJson =
+    Json {
+        prettyPrint = true
+    }
 
 /**
  * Default [SlackNotificationService] backed by the Slack HTTP transport. Owns
@@ -54,6 +67,74 @@ class SlackNotificationServiceImpl(
         return send(channel, fallback, attachments)
     }
 
+    override suspend fun sendAtcCompanionOffline(
+        watchId: Long,
+        vendor: String,
+        openings: List<WatchOpening>,
+        channel: String?,
+    ): Boolean {
+        val siteCount = openings.map { it.label }.distinct().size
+        val nightCount = openings.map { it.date }.distinct().size
+        val text = "ATC companion offline for watch #$watchId ($vendor)"
+        val attachments =
+            listOf(
+                SlackAttachmentDto(
+                    color = SlackWatchCard.COLOR_ERROR,
+                    fallback = text,
+                    blocks =
+                        listOf(
+                            SlackBlocks.header("ATC companion offline"),
+                            SlackBlocks.fields(
+                                listOf(
+                                    "*Watch*\n#$watchId",
+                                    "*Vendor*\n$vendor",
+                                    "*Sites*\n$siteCount",
+                                    "*Nights*\n$nightCount",
+                                ),
+                            ),
+                            SlackBlocks.section("No matching companion long-poll was connected when an opening dispatch was queued."),
+                        ),
+                ),
+            )
+        return send(channel, text, attachments)
+    }
+
+    override suspend fun sendDispatchResult(
+        dispatchId: Long,
+        kind: String,
+        vendor: String,
+        payloadVersion: String,
+        status: String,
+        request: JsonObject,
+        channel: String?,
+    ): Boolean {
+        val text = "Dispatch #$dispatchId $status ($kind/$vendor)"
+        val attachments =
+            listOf(
+                SlackAttachmentDto(
+                    color = dispatchResultColor(status),
+                    fallback = text,
+                    blocks =
+                        listOf(
+                            SlackBlocks.header("Dispatch $status"),
+                            SlackBlocks.fields(
+                                listOf(
+                                    "*Dispatch*\n#$dispatchId",
+                                    "*Status*\n$status",
+                                    "*Kind*\n$kind",
+                                    "*Vendor*\n$vendor",
+                                    "*Payload version*\n$payloadVersion",
+                                ),
+                            ),
+                            SlackBlocks.section(
+                                "*Request body*\n```${formatDispatchRequest(request)}```",
+                            ),
+                        ),
+                ),
+            )
+        return send(channel, text, attachments)
+    }
+
     override suspend fun postResponseWatchStatus(
         responseUrl: String,
         notice: WatchStatusNotice,
@@ -99,5 +180,19 @@ class SlackNotificationServiceImpl(
     /** Releases the owned [SlackClient]'s HTTP client. Call on app shutdown. */
     override fun close() {
         client?.close()
+    }
+
+    private fun dispatchResultColor(status: String): String =
+        if (status == DISPATCH_STATUS_COMPLETED) {
+            SlackWatchCard.COLOR_AVAIL
+        } else {
+            SlackWatchCard.COLOR_ERROR
+        }
+
+    private fun formatDispatchRequest(request: JsonObject): String {
+        val rendered = slackJson.encodeToString(request)
+        if (rendered.length <= MAX_DISPATCH_REPORT_CHARS) return rendered
+        return rendered.take(MAX_DISPATCH_REPORT_CHARS - TRUNCATED_REPORT_SUFFIX.length) +
+            TRUNCATED_REPORT_SUFFIX
     }
 }

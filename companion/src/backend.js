@@ -3,11 +3,12 @@
 
 const BASE = process.env.BACKEND_URL || 'http://127.0.0.1:8765'
 
-async function postJson (path, body) {
+async function postJson (path, body, options = {}) {
   const res = await fetch(BASE + path, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
+    signal: options.signal,
   })
   const text = await res.text()
   let json = null
@@ -57,6 +58,39 @@ export async function fetchFreshRecaccount () {
 // for ATC orchestration; this endpoint just reads it.
 export async function getNextWork () {
   return getJson('/api/campsite/companion/work/next')
+}
+
+export async function claimDispatch ({
+  kind,
+  vendors,
+  payloadVersions = [],
+  waitSec = 30,
+  leaseSec = 30,
+  signal,
+}) {
+  return postJson('/api/dispatches/claim', {
+    kind,
+    vendors,
+    payload_versions: payloadVersions,
+    wait_sec: waitSec,
+    lease_sec: leaseSec,
+  }, { signal })
+}
+
+export async function completeDispatch (dispatchId, leaseToken, result = {}) {
+  return postJson(`/api/dispatches/${dispatchId}/complete`, {
+    lease_token: leaseToken,
+    result,
+  })
+}
+
+export async function failDispatch (dispatchId, leaseToken, error, detail = null, result = {}) {
+  return postJson(`/api/dispatches/${dispatchId}/fail`, {
+    lease_token: leaseToken,
+    error,
+    detail,
+    result,
+  })
 }
 
 export function backendBase () { return BASE }

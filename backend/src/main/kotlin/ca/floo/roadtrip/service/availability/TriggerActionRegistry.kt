@@ -2,8 +2,8 @@ package ca.floo.roadtrip.service.availability
 
 /**
  * Dispatch table matching a watch's `trigger_kinds` to their [TriggerActionHandler]s.
- * A kind with no registered handler resolves to `null` (inert — the current
- * `atc` behavior). Composed once at runtime startup.
+ * A kind with no registered handler resolves to `null` (inert). Composed once
+ * at runtime startup.
  */
 internal class TriggerActionRegistry(
     handlers: List<TriggerActionHandler>,
@@ -17,6 +17,6 @@ internal class TriggerActionRegistry(
         }
     }
 
-    /** `null` == inert (current `atc` behavior for unknown/absent handlers). */
+    /** `null` == inert for unknown/absent handlers. */
     fun forKind(kind: String): TriggerActionHandler? = byKind[kind]
 }

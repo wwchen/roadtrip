@@ -22,4 +22,5 @@ data class WatchOpening(
     val campgroundId: Long?,
     val campground: String?,
     val bookingUrl: String?,
+    val vendor: String? = null,
 )

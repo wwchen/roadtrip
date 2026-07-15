@@ -189,6 +189,13 @@ internal class WatchAlertDispatcher(
                 // scheme is the adapter's, never this dispatcher's. The parent
                 // ref supplies vendor ids the per-site ref may omit (e.g. Aspira).
                 bookingUrl = target?.let { it.provider.bookingUrl(r, it.parentRef, t.targetDate) },
+                vendor =
+                    target
+                        ?.provider
+                        ?.id
+                        ?.name
+                        ?.lowercase()
+                        ?: r.vendor.lowercase(),
             )
         }
     }

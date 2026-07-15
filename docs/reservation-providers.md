@@ -183,6 +183,38 @@ entry in the registry list. The `stopWhenTriggered` DONE transition still
 gates on `fire()` returning true, so a handler that fails to deliver
 leaves the watch active for the next poll.
 
+## Booking provider seam
+
+Availability providers answer "can we observe openings?" Booking providers
+answer "can Roadtrip act on this concrete opening?" The first booking action
+is `ADD_TO_CART`, exposed to users as the `atc` trigger.
+
+```
+availability signal
+  -> concrete campsite/date opening
+  -> BookingTarget(parent ref + campsite ref)
+  -> BookingProviderRegistry.providerFor(target)
+  -> BookingProvider.can(ADD_TO_CART, target)
+  -> BookingProvider.addToCart(request)
+```
+
+The provider object is the capability source of truth: registration only routes
+to a provider; `BookingProvider.can(action, target)` decides target-level
+support. This keeps add-to-cart support out of `AvailabilityProviderCapabilities`,
+because availability source and booking system can differ. For example,
+Campflare may provide availability for inventory whose booking action still
+happens on rec.gov, Aspira, ReserveAmerica, or another vendor site.
+
+Booking targets compose two identities:
+
+- Parent booking context from the campground/facility provider ref.
+- Concrete campsite/site/unit ref, which is the item added to cart.
+
+Provider implementations own fulfillment. Rec.gov currently fulfills
+`ADD_TO_CART` by dispatching companion work; a future Aspira implementation may
+call a backend HTTP API instead. Companion presence is runtime readiness for
+companion-backed providers, not durable booking capability.
+
 ## Capabilities
 
 Not every provider supports every monitoring action. The capability flags

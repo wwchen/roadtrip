@@ -34,8 +34,6 @@ class TriggerActionHandlerTest {
     @Test
     fun `unknown kind returns null and is inert`() {
         val registry = TriggerActionRegistry(listOf(FakeHandler(kind = "slack_notify")))
-        // `atc` is the canonical unregistered kind today — no handler ⇒ inert.
-        assertNull(registry.forKind("atc"))
         assertNull(registry.forKind("email"))
     }
 
