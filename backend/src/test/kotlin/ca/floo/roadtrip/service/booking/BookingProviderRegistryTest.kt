@@ -39,6 +39,17 @@ class BookingProviderRegistryTest {
     }
 
     @Test
+    fun `target for asks providers to translate provider refs`() {
+        val registry = BookingProviderRegistry(listOf(FakeBookingProvider(canAddToCart = true)))
+
+        val target = registry.targetFor(BookingAction.ADD_TO_CART, ProviderRef.RecGov("100"), campsiteRef())
+
+        assertEquals(BookingProviderId.RECGOV, target?.providerId)
+        assertEquals(ProviderRef.RecGov("100"), target?.parentRef)
+        assertEquals(campsiteRef(), target?.campsiteRef)
+    }
+
+    @Test
     fun `add to cart returns unsupported when provider declines target`() =
         runBlocking {
             val provider = FakeBookingProvider(canAddToCart = false)
@@ -76,6 +87,18 @@ class BookingProviderRegistryTest {
 
         override val id: BookingProviderId = BookingProviderId.RECGOV
 
+        override fun targetFor(
+            parentRef: ProviderRef,
+            campsiteRef: CatalogCampsiteRef,
+        ): BookingTarget? {
+            if (parentRef !is ProviderRef.RecGov) return null
+            return BookingTarget(
+                providerId = id,
+                parentRef = parentRef,
+                campsiteRef = campsiteRef,
+            )
+        }
+
         override fun can(
             action: BookingAction,
             target: BookingTarget,
@@ -101,6 +124,8 @@ class BookingProviderRegistryTest {
         BookingTarget(
             providerId = BookingProviderId.RECGOV,
             parentRef = ProviderRef.RecGov("100"),
-            campsiteRef = CatalogCampsiteRef(campsiteId = TEST_CAMPSITE_ID, vendorId = TEST_VENDOR_ID),
+            campsiteRef = campsiteRef(),
         )
+
+    private fun campsiteRef(): CatalogCampsiteRef = CatalogCampsiteRef(campsiteId = TEST_CAMPSITE_ID, vendorId = TEST_VENDOR_ID)
 }

@@ -1,9 +1,11 @@
 package ca.floo.roadtrip.service.booking
 
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.booking.AddToCartRequest
 import ca.floo.roadtrip.models.booking.AddToCartResult
 import ca.floo.roadtrip.models.booking.BookingAction
 import ca.floo.roadtrip.models.booking.BookingTarget
+import ca.floo.roadtrip.models.domain.ProviderRef
 
 internal class BookingProviderRegistry(
     providers: List<BookingProvider>,
@@ -18,6 +20,16 @@ internal class BookingProviderRegistry(
     }
 
     fun providerFor(target: BookingTarget): BookingProvider? = byId[target.providerId]
+
+    fun targetFor(
+        action: BookingAction,
+        parentRef: ProviderRef,
+        campsiteRef: CatalogCampsiteRef,
+    ): BookingTarget? =
+        byId.values
+            .asSequence()
+            .mapNotNull { it.targetFor(parentRef, campsiteRef) }
+            .firstOrNull { can(action, it) }
 
     fun can(
         action: BookingAction,

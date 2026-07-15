@@ -33,6 +33,26 @@ private const val TEST_ADD_TO_CART_PAYLOAD_VERSION = "atc.recgov.v1"
 
 class RecGovBookingProviderTest {
     @Test
+    fun `target for translates recgov refs into booking target`() {
+        val provider = provider()
+
+        val target = provider.targetFor(ProviderRef.RecGov("100"), CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_VENDOR_ID))
+
+        assertEquals(BookingProviderId.RECGOV, target?.providerId)
+        assertEquals(ProviderRef.RecGov("100"), target?.parentRef)
+        assertEquals(CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_VENDOR_ID), target?.campsiteRef)
+    }
+
+    @Test
+    fun `target for ignores non recgov refs`() {
+        val provider = provider()
+
+        val target = provider.targetFor(ProviderRef.Aspira(1L, 2L), CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_VENDOR_ID))
+
+        assertNull(target)
+    }
+
+    @Test
     fun `can add to cart for recgov target with concrete campsite vendor id`() {
         val provider = provider()
 

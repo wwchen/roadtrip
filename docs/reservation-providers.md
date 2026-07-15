@@ -192,18 +192,20 @@ is `ADD_TO_CART`, exposed to users as the `atc` trigger.
 ```
 availability signal
   -> concrete campsite/date opening
-  -> BookingTarget(parent ref + campsite ref)
-  -> BookingProviderRegistry.providerFor(target)
+  -> BookingProviderRegistry.targetFor(parent ref + campsite ref)
+  -> BookingTarget
   -> BookingProvider.can(ADD_TO_CART, target)
   -> BookingProvider.addToCart(request)
 ```
 
-The provider object is the capability source of truth: registration only routes
-to a provider; `BookingProvider.can(action, target)` decides target-level
-support. This keeps add-to-cart support out of `AvailabilityProviderCapabilities`,
-because availability source and booking system can differ. For example,
-Campflare may provide availability for inventory whose booking action still
-happens on rec.gov, Aspira, ReserveAmerica, or another vendor site.
+The provider object is the capability source of truth: registration only finds
+candidate providers; each `BookingProvider` translates the provider-specific
+catalog identity it understands, and `BookingProvider.can(action, target)`
+decides target-level support. This keeps add-to-cart support out of
+`AvailabilityProviderCapabilities`, because availability source and booking
+system can differ. For example, Campflare may provide availability for inventory
+whose booking action still happens on rec.gov, Aspira, ReserveAmerica, or
+another vendor site.
 
 Booking targets compose two identities:
 

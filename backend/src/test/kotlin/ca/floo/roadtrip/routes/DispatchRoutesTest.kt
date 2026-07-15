@@ -27,6 +27,7 @@ import kotlin.test.assertNotNull
 private const val TEST_VENDOR = "recgov"
 private const val TEST_SIMULATE_RESULT = "success"
 private const val TEST_KIND = "test"
+private const val TEST_PAYLOAD_VERSION = "test.recgov.v1"
 private const val TEST_CLAIM_WAIT_SECONDS = 0L
 
 private val testClock = Clock.fixed(Instant.parse("2026-07-14T00:00:00Z"), ZoneOffset.UTC)
@@ -57,7 +58,7 @@ class DispatchRoutesTest {
                 }
             assertEquals(HttpStatusCode.Created, queued.status)
             val queuedBody = Json.parseToJsonElement(queued.bodyAsText()).jsonObject["dispatch"]!!.jsonObject
-            assertEquals("atc.recgov.v1", queuedBody["payload_version"]!!.jsonPrimitive.content)
+            assertEquals(TEST_PAYLOAD_VERSION, queuedBody["payload_version"]!!.jsonPrimitive.content)
 
             val claimed =
                 client.post("/api/dispatches/claim") {
@@ -79,7 +80,7 @@ class DispatchRoutesTest {
             val payload = dispatch["payload"]!!.jsonObject
             assertEquals(TEST_SIMULATE_RESULT, payload["simulate_result"]!!.jsonPrimitive.content)
             assertEquals(TEST_VENDOR, payload["vendor"]!!.jsonPrimitive.content)
-            assertEquals("atc.recgov.v1", payload["payload_version"]!!.jsonPrimitive.content)
+            assertEquals(TEST_PAYLOAD_VERSION, payload["payload_version"]!!.jsonPrimitive.content)
             assertEquals("manual-test", payload["request_id"]!!.jsonPrimitive.content)
             val dispatchId = dispatch["id"]!!.jsonPrimitive.content
             val leaseToken = dispatch["lease_token"]!!.jsonPrimitive.content

@@ -1,18 +1,15 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.booking.BookingAction
-import ca.floo.roadtrip.models.booking.BookingProviderId
 import ca.floo.roadtrip.models.booking.BookingTarget
-import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 
 /**
  * Bridges availability resolution to booking resolution.
  *
- * Availability can be served by one provider while booking happens on another
- * vendor. This resolver walks the ordered availability candidates and returns
- * the first candidate whose parent/campsite identity is supported by the
- * booking-provider registry for the requested action.
+ * Availability can be served by one provider while booking happens on another.
+ * This resolver walks the ordered availability candidates and asks the booking
+ * registry to translate each candidate into a provider-owned booking target.
  */
 internal class AvailabilityBookingTargetResolver(
     private val bookings: BookingProviderRegistry,
@@ -23,24 +20,6 @@ internal class AvailabilityBookingTargetResolver(
     ): BookingTarget? =
         resolved.candidates
             .asSequence()
-            .mapNotNull { it.toBookingTarget() }
-            .firstOrNull { bookings.can(action, it) }
-
-    private fun ProviderCandidate.toBookingTarget(): BookingTarget? {
-        val providerId = parentRef.bookingProviderId() ?: return null
-        return BookingTarget(
-            providerId = providerId,
-            parentRef = parentRef,
-            campsiteRef = catalogRef,
-        )
-    }
-
-    private fun ProviderRef.bookingProviderId(): BookingProviderId? =
-        when (this) {
-            is ProviderRef.RecGov -> BookingProviderId.RECGOV
-            is ProviderRef.Aspira -> BookingProviderId.ASPIRA
-            is ProviderRef.ReserveAmerica -> BookingProviderId.RESERVEAMERICA
-            is ProviderRef.ReserveCalifornia -> BookingProviderId.RESERVECALIFORNIA
-            is ProviderRef.Campflare -> null
-        }
+            .mapNotNull { bookings.targetFor(action, it.parentRef, it.catalogRef) }
+            .firstOrNull()
 }

@@ -75,6 +75,18 @@ class WatchBookingCapabilityServiceTest {
     private object RecGovOnlyBookingProvider : BookingProvider {
         override val id: BookingProviderId = BookingProviderId.RECGOV
 
+        override fun targetFor(
+            parentRef: ProviderRef,
+            campsiteRef: CatalogCampsiteRef,
+        ): BookingTarget? {
+            if (parentRef !is ProviderRef.RecGov) return null
+            return BookingTarget(
+                providerId = id,
+                parentRef = parentRef,
+                campsiteRef = campsiteRef,
+            )
+        }
+
         override fun can(
             action: BookingAction,
             target: BookingTarget,

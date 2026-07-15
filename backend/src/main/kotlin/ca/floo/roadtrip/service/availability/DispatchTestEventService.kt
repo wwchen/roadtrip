@@ -24,7 +24,7 @@ internal class DispatchTestEventService(
         val normalizedVendor = normalizeDispatchKey(input.vendor)
         val version =
             input.payloadVersion?.let(::normalizeDispatchKey)
-                ?: dispatchPayloadVersion(AtcTriggerActionHandler.KIND, normalizedVendor)
+                ?: dispatchPayloadVersion(normalizedKind, normalizedVendor)
         return dispatches.enqueue(
             DispatchCreateInput(
                 kind = normalizedKind,

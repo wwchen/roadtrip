@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.booking.AddToCartRequest
 import ca.floo.roadtrip.models.booking.AddToCartResult
 import ca.floo.roadtrip.models.booking.BookingAction
@@ -356,6 +357,18 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
 
     private object RecGovOnlyBookingProvider : BookingProvider {
         override val id: BookingProviderId = BookingProviderId.RECGOV
+
+        override fun targetFor(
+            parentRef: ProviderRef,
+            campsiteRef: CatalogCampsiteRef,
+        ): BookingTarget? {
+            if (parentRef !is ProviderRef.RecGov) return null
+            return BookingTarget(
+                providerId = id,
+                parentRef = parentRef,
+                campsiteRef = campsiteRef,
+            )
+        }
 
         override fun can(
             action: BookingAction,
