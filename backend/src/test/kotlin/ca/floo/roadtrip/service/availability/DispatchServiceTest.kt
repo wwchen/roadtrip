@@ -53,15 +53,7 @@ class DispatchServiceTest {
                 }
             delay(25)
 
-            service.enqueueTestEvent(
-                kind = TEST_KIND_ATC,
-                vendor = TEST_VENDOR_RECGOV,
-                simulateResult = TEST_SIMULATE_RESULT_SUCCESS,
-                payloadVersion = null,
-                payload = JsonObject(emptyMap()),
-                watchId = null,
-                stopWhenTriggered = false,
-            )
+            enqueueDispatch(service)
 
             val claimed = withTimeout(Duration.ofSeconds(TEST_WAIT_SECONDS).toMillis()) { claim.await() }
             assertNotNull(claimed)
@@ -73,15 +65,7 @@ class DispatchServiceTest {
     fun `claim selector respects vendor`() =
         runBlocking {
             val service = service()
-            service.enqueueTestEvent(
-                kind = TEST_KIND_ATC,
-                vendor = TEST_VENDOR_RECGOV,
-                simulateResult = TEST_SIMULATE_RESULT_SUCCESS,
-                payloadVersion = null,
-                payload = JsonObject(emptyMap()),
-                watchId = null,
-                stopWhenTriggered = false,
-            )
+            enqueueDispatch(service)
 
             val aspiraClaim =
                 service.claim(
@@ -138,15 +122,7 @@ class DispatchServiceTest {
         runBlocking {
             val completedWatches = mutableListOf<Long>()
             val service = service(watchCompletion = DispatchWatchCompletion { watchId -> completedWatches.add(watchId) })
-            service.enqueueTestEvent(
-                kind = TEST_KIND_ATC,
-                vendor = TEST_VENDOR_RECGOV,
-                simulateResult = TEST_SIMULATE_RESULT_SUCCESS,
-                payloadVersion = null,
-                payload = JsonObject(emptyMap()),
-                watchId = TEST_WATCH_ID,
-                stopWhenTriggered = true,
-            )
+            enqueueDispatch(service, watchId = TEST_WATCH_ID, stopWhenTriggered = true)
             val claimed =
                 service.claim(
                     selector = DispatchClaimSelector.of(TEST_KIND_ATC, listOf(TEST_VENDOR_RECGOV)),
@@ -167,15 +143,7 @@ class DispatchServiceTest {
         runBlocking {
             val slack = RecordingSlack()
             val service = service(slack = slack)
-            service.enqueueTestEvent(
-                kind = TEST_KIND_ATC,
-                vendor = TEST_VENDOR_RECGOV,
-                simulateResult = TEST_SIMULATE_RESULT_SUCCESS,
-                payloadVersion = null,
-                payload = JsonObject(emptyMap()),
-                watchId = null,
-                stopWhenTriggered = false,
-            )
+            enqueueDispatch(service)
             val claimed =
                 service.claim(
                     selector = DispatchClaimSelector.of(TEST_KIND_ATC, listOf(TEST_VENDOR_RECGOV)),
@@ -201,15 +169,7 @@ class DispatchServiceTest {
         runBlocking {
             val slack = RecordingSlack()
             val service = service(slack = slack)
-            service.enqueueTestEvent(
-                kind = TEST_KIND_ATC,
-                vendor = TEST_VENDOR_RECGOV,
-                simulateResult = TEST_SIMULATE_RESULT_FAILURE,
-                payloadVersion = null,
-                payload = JsonObject(emptyMap()),
-                watchId = null,
-                stopWhenTriggered = false,
-            )
+            enqueueDispatch(service, simulateResult = TEST_SIMULATE_RESULT_FAILURE)
             val claimed =
                 service.claim(
                     selector = DispatchClaimSelector.of(TEST_KIND_ATC, listOf(TEST_VENDOR_RECGOV)),
@@ -240,6 +200,26 @@ class DispatchServiceTest {
             slack = slack,
             watchCompletion = watchCompletion,
             clock = Clock.fixed(Instant.parse("2026-07-14T00:00:00Z"), ZoneOffset.UTC),
+        )
+
+    private suspend fun enqueueDispatch(
+        service: DispatchService,
+        simulateResult: String = TEST_SIMULATE_RESULT_SUCCESS,
+        watchId: Long? = null,
+        stopWhenTriggered: Boolean = false,
+    ): DispatchQueued =
+        service.enqueue(
+            DispatchCreateInput(
+                kind = TEST_KIND_ATC,
+                vendor = TEST_VENDOR_RECGOV,
+                payloadVersion = "atc.recgov.v1",
+                payload =
+                    buildJsonObject {
+                        put("simulate_result", simulateResult)
+                    },
+                watchId = watchId,
+                stopWhenTriggered = stopWhenTriggered,
+            ),
         )
 
     private class RecordingSlack : SlackNotificationService {

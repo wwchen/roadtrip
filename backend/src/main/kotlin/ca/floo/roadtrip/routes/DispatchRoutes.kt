@@ -19,6 +19,8 @@ import ca.floo.roadtrip.service.availability.DispatchFailResult
 import ca.floo.roadtrip.service.availability.DispatchLeaseResult
 import ca.floo.roadtrip.service.availability.DispatchQueued
 import ca.floo.roadtrip.service.availability.DispatchService
+import ca.floo.roadtrip.service.availability.DispatchTestEventInput
+import ca.floo.roadtrip.service.availability.DispatchTestEventService
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -51,7 +53,10 @@ private val dispatchJson =
         ignoreUnknownKeys = true
     }
 
-internal fun Route.dispatchRoutes(dispatches: DispatchService) {
+internal fun Route.dispatchRoutes(
+    dispatches: DispatchService,
+    testEvents: DispatchTestEventService,
+) {
     post("/api/dispatches/claim", {
         tags = listOf("dispatches")
         summary = "Long-poll for a companion dispatch"
@@ -174,14 +179,16 @@ internal fun Route.dispatchRoutes(dispatches: DispatchService) {
         val error = validateTestEvent(req)
         if (error != null) return@post call.respondError(error.first, HttpStatusCode.BadRequest, error.second)
         val queued =
-            dispatches.enqueueTestEvent(
-                kind = req.kind,
-                vendor = req.vendor,
-                simulateResult = req.simulateResult,
-                payloadVersion = req.payloadVersion,
-                payload = req.payload,
-                watchId = req.watchId,
-                stopWhenTriggered = req.stopWhenTriggered,
+            testEvents.enqueue(
+                DispatchTestEventInput(
+                    kind = req.kind,
+                    vendor = req.vendor,
+                    simulateResult = req.simulateResult,
+                    payloadVersion = req.payloadVersion,
+                    payload = req.payload,
+                    watchId = req.watchId,
+                    stopWhenTriggered = req.stopWhenTriggered,
+                ),
             )
         call.respondJson(DispatchQueuedResponse(queued.toSchema()), HttpStatusCode.Created)
     }
@@ -205,7 +212,7 @@ private suspend fun ApplicationCall.dispatchId(): Long? =
         }
 
 private fun validateTestEvent(req: DispatchTestEventRequest): Pair<String, String?>? {
-    if (req.kind.isBlank()) return "invalid_kind" to "kind must be non-blank"
+    if (req.kind?.isBlank() == true) return "invalid_kind" to "kind must be non-blank"
     if (req.vendor.isBlank()) return "invalid_vendor" to "vendor must be non-blank"
     if (req.simulateResult.trim().lowercase() !in validSimulateResults) {
         return "invalid_simulate_result" to "simulate_result must be success or failure"

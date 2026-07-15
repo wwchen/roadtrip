@@ -5,7 +5,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
 const val DEFAULT_DISPATCH_KIND = "atc"
-const val TEST_DISPATCH_KIND = "test"
 const val DEFAULT_DISPATCH_WAIT_SEC = 30L
 const val DEFAULT_DISPATCH_LEASE_SEC = 30L
 
@@ -72,7 +71,7 @@ data class DispatchMutationResponse(
 data class DispatchTestEventRequest(
     val vendor: String,
     @SerialName("simulate_result") val simulateResult: String,
-    val kind: String = TEST_DISPATCH_KIND,
+    val kind: String? = null,
     @SerialName("payload_version") val payloadVersion: String? = null,
     @SerialName("watch_id") val watchId: Long? = null,
     @SerialName("stop_when_triggered") val stopWhenTriggered: Boolean = false,

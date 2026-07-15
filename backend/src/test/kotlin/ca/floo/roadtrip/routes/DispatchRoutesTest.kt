@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.service.availability.DispatchService
+import ca.floo.roadtrip.service.availability.DispatchTestEventService
 import ca.floo.roadtrip.service.availability.DispatchWaiterRegistry
 import ca.floo.roadtrip.service.availability.DispatchWatchCompletion
 import ca.floo.roadtrip.service.availability.InMemoryDispatchStore
@@ -14,7 +15,6 @@ import io.ktor.http.contentType
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
@@ -29,13 +29,16 @@ private const val TEST_SIMULATE_RESULT = "success"
 private const val TEST_KIND = "test"
 private const val TEST_CLAIM_WAIT_SECONDS = 0L
 
+private val testClock = Clock.fixed(Instant.parse("2026-07-14T00:00:00Z"), ZoneOffset.UTC)
+
 class DispatchRoutesTest {
     @Test
     fun `test endpoint queues an event that companion can claim and complete`() =
         testApplication {
             application {
                 routing {
-                    dispatchRoutes(testDispatchService())
+                    val dispatches = testDispatchService()
+                    dispatchRoutes(dispatches, testDispatchEventService(dispatches))
                 }
             }
 
@@ -46,7 +49,8 @@ class DispatchRoutesTest {
                         """
                         {
                           "vendor": "$TEST_VENDOR",
-                          "simulate_result": "$TEST_SIMULATE_RESULT"
+                          "simulate_result": "$TEST_SIMULATE_RESULT",
+                          "payload": {"request_id": "manual-test"}
                         }
                         """.trimIndent(),
                     )
@@ -76,9 +80,7 @@ class DispatchRoutesTest {
             assertEquals(TEST_SIMULATE_RESULT, payload["simulate_result"]!!.jsonPrimitive.content)
             assertEquals(TEST_VENDOR, payload["vendor"]!!.jsonPrimitive.content)
             assertEquals("atc.recgov.v1", payload["payload_version"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-14", payload["start_date"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-15", payload["end_date"]!!.jsonPrimitive.content)
-            assertEquals(1, payload["openings"]!!.jsonArray.size)
+            assertEquals("manual-test", payload["request_id"]!!.jsonPrimitive.content)
             val dispatchId = dispatch["id"]!!.jsonPrimitive.content
             val leaseToken = dispatch["lease_token"]!!.jsonPrimitive.content
             assertNotNull(leaseToken)
@@ -105,7 +107,8 @@ class DispatchRoutesTest {
         testApplication {
             application {
                 routing {
-                    dispatchRoutes(testDispatchService())
+                    val dispatches = testDispatchService()
+                    dispatchRoutes(dispatches, testDispatchEventService(dispatches))
                 }
             }
 
@@ -132,6 +135,8 @@ class DispatchRoutesTest {
             waiters = DispatchWaiterRegistry(),
             slack = SlackNotificationServiceImpl(config = null),
             watchCompletion = DispatchWatchCompletion { true },
-            clock = Clock.fixed(Instant.parse("2026-07-14T00:00:00Z"), ZoneOffset.UTC),
+            clock = testClock,
         )
+
+    private fun testDispatchEventService(dispatches: DispatchService): DispatchTestEventService = DispatchTestEventService(dispatches)
 }

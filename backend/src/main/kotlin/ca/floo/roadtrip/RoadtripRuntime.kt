@@ -39,6 +39,7 @@ import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.DispatchCreateInput
 import ca.floo.roadtrip.service.availability.DispatchEnqueuer
 import ca.floo.roadtrip.service.availability.DispatchService
+import ca.floo.roadtrip.service.availability.DispatchTestEventService
 import ca.floo.roadtrip.service.availability.DispatchWaiterRegistry
 import ca.floo.roadtrip.service.availability.DispatchWatchCompletion
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
@@ -98,6 +99,7 @@ internal class RoadtripRuntime(
     val availabilityWatchService: AvailabilityWatchService,
     val watchAlertDispatcher: WatchAlertDispatcher,
     val dispatchService: DispatchService,
+    val dispatchTestEventService: DispatchTestEventService,
     val bookingProviderRegistry: BookingProviderRegistry,
     val schedulerScope: CoroutineScope,
     val slackInteractivity: SlackInteractivityWiring?,
@@ -235,6 +237,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                     availabilityWatchService.update(watchId, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE)) != null
                 },
         )
+    val dispatchTestEventService = DispatchTestEventService(dispatchService)
     dispatchEnqueuer.delegate = dispatchService
     val triggerActions =
         TriggerActionRegistry(
@@ -345,6 +348,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         availabilityWatchService = availabilityWatchService,
         watchAlertDispatcher = watchAlertDispatcher,
         dispatchService = dispatchService,
+        dispatchTestEventService = dispatchTestEventService,
         bookingProviderRegistry = bookingProviderRegistry,
         schedulerScope = schedulerScope,
         slackInteractivity = slackInteractivity,
