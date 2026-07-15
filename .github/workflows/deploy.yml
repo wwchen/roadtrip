@@ -78,7 +78,14 @@ jobs:
       - name: Deploy on mini-ca
         run: |
           ssh -o BatchMode=yes mini@mini-ca \
-            'cd ~/workspace/roadtrip && git pull --ff-only && make run env=prod'
+            'set -e
+             cd ~/workspace/roadtrip
+             git pull --ff-only
+             make run env=prod
+             running="$(docker compose --profile tunnel --profile pois ps --services --status running)"
+             for service in backend grafana loki alloy tempo prometheus; do
+               echo "$running" | grep -qx "$service"
+             done'
 
       - name: Health check
         run: |

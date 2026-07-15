@@ -6,6 +6,10 @@ RUN_ENV ?= $(or $(env),dev)
 POSTGRES_DB ?= roadtrip
 POSTGRES_USER ?= roadtrip
 POSTGRES_PASSWORD ?= roadtrip
+PROD_COMPOSE_PROFILES ?= --profile tunnel --profile pois
+PROD_COMPOSE := docker compose $(PROD_COMPOSE_PROFILES)
+LOCAL_COMPOSE := docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois
+OBSERVABILITY_SERVICES := grafana alloy tempo prometheus
 
 help:
 	@echo "Targets:"
@@ -32,13 +36,13 @@ ifeq ($(RUN_ENV),prod)
 	# `up -d` recreates only what changed: the rebuilt backend (new image id)
 	# and any service whose `.env`-sourced config moved. Postgres/Loki/Alloy
 	# keep running, so a code deploy no longer bounces the database.
-	docker compose --profile tunnel --profile pois up -d
+	$(PROD_COMPOSE) up -d
 	# Grafana, Alloy, Tempo, and Prometheus bind-mount config, so `up -d` won't
 	# reload those files. Provisioned dashboards poll dashboard JSON, but
 	# datasource, telemetry pipeline, trace, and metric config need restarts.
-	docker compose --profile tunnel --profile pois restart grafana alloy tempo prometheus
+	$(PROD_COMPOSE) restart $(OBSERVABILITY_SERVICES)
 else ifeq ($(RUN_ENV),dev)
-	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres
+	$(LOCAL_COMPOSE) up -d postgres
 	ROADTRIP_PROFILE=local ./gradlew :backend:run
 else
 	$(error unsupported env '$(RUN_ENV)'; use env=dev or env=prod)
@@ -81,7 +85,7 @@ data-import:
 # Postgres re-initializes from scratch; Flyway re-migrates on backend boot
 # (including R__grafana_reader_grants.sql which re-grants grafana_reader).
 POSTGRES_DATA ?= $(HOME)/.roadtrip-map/postgres
-DC := docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois
+DC := $(LOCAL_COMPOSE)
 reset-db:
 	$(DC) rm -sf postgres backend
 	rm -rf $(POSTGRES_DATA)
