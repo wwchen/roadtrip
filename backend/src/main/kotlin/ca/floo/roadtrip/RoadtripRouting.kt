@@ -15,6 +15,7 @@ import ca.floo.roadtrip.routes.geocodeRoutes
 import ca.floo.roadtrip.routes.healthRoutes
 import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
+import ca.floo.roadtrip.routes.recGovBookingSessionRoutes
 import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.routes.slackInteractivityRoute
 import ca.floo.roadtrip.service.availability.CampgroundAvailabilitySupport
@@ -149,6 +150,7 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
             runtime.schedulerScope,
         )
         dispatchRoutes(runtime.dispatchService, runtime.dispatchTestEventService, runtime.appConfig.dispatch)
+        recGovBookingSessionRoutes(runtime.recGovBookingSession, runtime.appConfig.dispatch)
         campsiteRoutes(
             ctx = runtime.ctx,
             availabilityProviders = runtime.availabilityProviderRegistry,

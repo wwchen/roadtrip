@@ -320,11 +320,12 @@ queues authenticated dispatches for the companion, and tracks lease state.
   BACKEND_URL=http://127.0.0.1:8765 npm start
   ```
 - **`RECGOV_RECACCOUNT`** seeds the backend's persisted refresh token on
-  first run (subsequent runs reuse the DB-backed token). To get it: log in
+  startup. To get it: log in
   on recreation.gov in your browser, open DevTools console, run
   `localStorage.getItem('recaccount')`, and paste the JSON blob into the
-  env var (or into Settings → Recreation.gov in the `/campsite/` UI, which
-  writes it to the `campsite_settings` table via the same path).
+  env var. The companion fetches a fresh recaccount from the backend via
+  `GET /api/campsite/booking/session/fresh-token` using the same
+  `DISPATCH_COMPANION_TOKEN` bearer as dispatch claims.
 - **Slack notifications** are optional. Create a Slack app with the
   `chat:write` scope, install it to the workspace, and paste the bot
   token (`xoxb-…`) plus a channel name (`#camping-alerts`) or channel ID

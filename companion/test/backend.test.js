@@ -64,6 +64,9 @@ test('fetchFreshRecaccount returns the recaccount-shaped JSON from backend', asy
   assert.equal(ra.access_token, 'fake-jwt')
   assert.equal(ra.account.account_id, 'A-1')
   assert.equal(ra.is_guest, false)
+  const last = log.pop()
+  assert.equal(last.url, '/api/campsite/booking/session/fresh-token')
+  assert.equal(last.authorization, 'Bearer test-token')
 })
 
 test('claimDispatch posts dispatch selector', async () => {

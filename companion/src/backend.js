@@ -23,8 +23,10 @@ function dispatchHeaders () {
   return headers
 }
 
-async function getJson (path) {
-  const res = await fetch(BASE + path)
+async function getJson (path, options = {}) {
+  const res = await fetch(BASE + path, {
+    headers: options.auth ? dispatchHeaders() : undefined,
+  })
   const text = await res.text()
   let json = null
   try { json = JSON.parse(text) } catch {}
@@ -36,7 +38,7 @@ async function getJson (path) {
 // Returns null when the backend has no token saved or the call fails.
 export async function fetchFreshRecaccount () {
   try {
-    const r = await getJson('/api/campsite/booking/session/fresh-token')
+    const r = await getJson('/api/campsite/booking/session/fresh-token', { auth: true })
     if (r.status !== 200 || !r.json) return null
     return r.json
   } catch { return null }
