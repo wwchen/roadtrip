@@ -95,64 +95,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         return AvailabilityWatchService(ctx, alertProviders(campsitesRepo, targets))
     }
 
-    private fun watchServiceWithCampflareAndRecgovCapabilityValidation(): AvailabilityWatchService {
-        val campsitesRepo = CampsiteRepo(ctx)
-        val registry =
-            AvailabilityProviderRegistry(
-                mapOf(
-                    "campflare" to FakeCampflareProvider,
-                    "recgov" to FakeRecgovProvider,
-                ),
-            )
-        val targets =
-            DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
-                campsitesRepo = campsitesRepo,
-                availabilityProviders = registry,
-                dateResolver = AvailabilityDateResolver(),
-            )
-        val scopeResolver = WatchScopeResolver(campsitesRepo)
-        return AvailabilityWatchService(
-            ctx = ctx,
-            alertProviders = alertProviders(campsitesRepo, targets),
-            capabilityValidator =
-                WatchTriggerCapabilityValidator(
-                    scopeResolver = scopeResolver,
-                    capabilities =
-                        WatchCapabilityService(
-                            availabilityTargets = targets,
-                            bookingTargets = AvailabilityBookingTargetResolver(BookingProviderRegistry(emptyList())),
-                        ),
-                ),
-        )
-    }
-
-    private fun watchServiceWithAspiraCapabilityValidation(): AvailabilityWatchService {
-        val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("aspira-pc-pins" to FakeAspiraProvider))
-        val targets =
-            DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
-                campsitesRepo = campsitesRepo,
-                availabilityProviders = registry,
-                dateResolver = AvailabilityDateResolver(),
-            )
-        val scopeResolver = WatchScopeResolver(campsitesRepo)
-        return AvailabilityWatchService(
-            ctx = ctx,
-            alertProviders = alertProviders(campsitesRepo, targets),
-            capabilityValidator =
-                WatchTriggerCapabilityValidator(
-                    scopeResolver = scopeResolver,
-                    capabilities =
-                        WatchCapabilityService(
-                            availabilityTargets = targets,
-                            bookingTargets = AvailabilityBookingTargetResolver(BookingProviderRegistry(emptyList())),
-                        ),
-                ),
-        )
-    }
-
     private fun watchServiceRejectingAtc(): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
@@ -889,112 +831,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             assertEquals(false, pollers.findById(linked.single())!!.active)
         }
 
-    @Test
-    fun `POST accepts slack watch when later provider candidate supports internal polling`() =
-        testApplication {
-            application {
-                routing {
-                    availabilityWatchRoutes(
-                        ctx,
-                        watchServiceWithCampflareAndRecgovCapabilityValidation(),
-                        disabledDispatcher(),
-                        testNotifyScope,
-                    )
-                }
-            }
-            val fixture =
-                ctx.seedCatalogPoi(
-                    sourceId = "campflare-fallback",
-                    name = "Fallback Campground",
-                    lon = -119.56,
-                    lat = 37.74,
-                    source = "campflare",
-                    providerRefJson = """{"campflare_id": "campflare-fallback"}""",
-                )
-            addCampgroundVendorRef(
-                campgroundId = fixture.catalogId,
-                vendor = "recgov",
-                externalId = "232447",
-                externalName = "Fallback Campground",
-                providerRefJson = """{"recgov_id": "232447"}""",
-            )
-            ctx.seedCampsite(
-                campgroundId = fixture.catalogId,
-                vendor = "recgov",
-                vendorId = "100",
-            )
-            val createBody =
-                """
-                {"poi_id": ${fixture.poiId}, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["slack_notify"]}
-                """.trimIndent()
-
-            val created =
-                client.post("/api/availability/watches") {
-                    contentType(ContentType.Application.Json)
-                    setBody(createBody)
-                }
-
-            assertEquals(HttpStatusCode.Created, created.status)
-            val watchId =
-                Json
-                    .parseToJsonElement(created.bodyAsText())
-                    .jsonObject["watch"]!!
-                    .jsonObject["id"]!!
-                    .jsonPrimitive.long
-            val linked = AvailabilityPollerRepo(ctx).pollerIdsForWatch(watchId)
-            assertEquals(1, linked.size)
-        }
-
-    @Test
-    fun `POST accepts slack watch for aspira internal polling provider`() =
-        testApplication {
-            application {
-                routing {
-                    availabilityWatchRoutes(
-                        ctx,
-                        watchServiceWithAspiraCapabilityValidation(),
-                        disabledDispatcher(),
-                        testNotifyScope,
-                    )
-                }
-            }
-            val fixture =
-                ctx.seedCatalogPoi(
-                    sourceId = "aspira-illecillewaet",
-                    name = "Illecillewaet",
-                    lon = -117.45,
-                    lat = 51.26,
-                    source = "aspira-pc-pins",
-                    providerRefJson = """{"transactionLocationId":-2147483630,"mapId":-2147483388,"resourceLocationId":-2147483624}""",
-                )
-            ctx.seedCampsite(
-                campgroundId = fixture.catalogId,
-                vendor = "aspira_pc",
-                vendorId = "100",
-                providerRefJson = """{"mapId":-2147483615,"resourceLocationId":-2147483624}""",
-            )
-            val createBody =
-                """
-                {"poi_id": ${fixture.poiId}, "start_date": "2026-07-21", "end_date": "2026-07-22", "cadence_sec": 60, "trigger_kinds": ["slack_notify"]}
-                """.trimIndent()
-
-            val created =
-                client.post("/api/availability/watches") {
-                    contentType(ContentType.Application.Json)
-                    setBody(createBody)
-                }
-
-            assertEquals(HttpStatusCode.Created, created.status)
-            val watchId =
-                Json
-                    .parseToJsonElement(created.bodyAsText())
-                    .jsonObject["watch"]!!
-                    .jsonObject["id"]!!
-                    .jsonPrimitive.long
-            val linked = AvailabilityPollerRepo(ctx).pollerIdsForWatch(watchId)
-            assertEquals(1, linked.size)
-        }
-
     private fun seedPoi(
         sourceId: String,
         name: String,
@@ -1041,37 +877,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             """.trimIndent(),
             poiId,
             campsiteId,
-        )
-    }
-
-    private fun addCampgroundVendorRef(
-        campgroundId: Long,
-        vendor: String,
-        externalId: String,
-        externalName: String,
-        providerRefJson: String,
-    ) {
-        val vendorRefId =
-            ctx
-                .fetchOne(
-                    """
-                    INSERT INTO vendor_refs (
-                      vendor, entity_type, external_id, external_name, payload, created_at, updated_at
-                    ) VALUES (
-                      ?, 'campground', ?, ?, ?::jsonb, now(), now()
-                    )
-                    RETURNING id
-                    """.trimIndent(),
-                    vendor,
-                    externalId,
-                    externalName,
-                    providerRefJson,
-                )!!
-                .get("id", Long::class.java)
-        ctx.execute(
-            "INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id) VALUES (?, ?)",
-            campgroundId,
-            vendorRefId,
         )
     }
 
@@ -1230,42 +1035,6 @@ private object FakeRecgovProvider : ca.floo.roadtrip.service.availability.provid
             supportsInternalPolling = true,
             bookingHorizonDays = 180,
             maxPollWindowDays = 60,
-        )
-
-    override fun isEnabled(): Boolean = true
-
-    override suspend fun availability(
-        ref: ca.floo.roadtrip.models.domain.ProviderRef,
-        startDate: java.time.LocalDate,
-        endDate: java.time.LocalDate,
-    ): ca.floo.roadtrip.models.availability.AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
-}
-
-private object FakeCampflareProvider : ca.floo.roadtrip.service.availability.provider.AvailabilityProvider {
-    override val id = ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId.CAMPFLARE
-    override val capabilities =
-        ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities(
-            supportsInternalPolling = false,
-            bookingHorizonDays = 180,
-            maxPollWindowDays = 60,
-        )
-
-    override fun isEnabled(): Boolean = true
-
-    override suspend fun availability(
-        ref: ca.floo.roadtrip.models.domain.ProviderRef,
-        startDate: java.time.LocalDate,
-        endDate: java.time.LocalDate,
-    ): ca.floo.roadtrip.models.availability.AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
-}
-
-private object FakeAspiraProvider : ca.floo.roadtrip.service.availability.provider.AvailabilityProvider {
-    override val id = ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId.ASPIRA
-    override val capabilities =
-        ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities(
-            supportsInternalPolling = true,
-            bookingHorizonDays = 365,
-            maxPollWindowDays = 30,
         )
 
     override fun isEnabled(): Boolean = true

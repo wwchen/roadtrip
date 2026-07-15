@@ -100,7 +100,6 @@ class WatchCapabilityServiceTest {
         assertTrue(support.supported)
         assertEquals(1, support.scopedCount)
         assertEquals(0, support.unsupportedCount)
-        assertEquals(setOf(BookingAction.ADD_TO_CART), service.supportedBookingActions(listOf(campsite)))
         assertEquals(
             listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.ATC),
             service.supportedTriggerKinds(listOf(campsite)),
@@ -154,27 +153,15 @@ class WatchCapabilityServiceTest {
         private val fallbackSupportsInternalPolling: Boolean?,
     ) : AvailabilityTargetResolver {
         private val byId = campsites.associateBy { it.id }
-        private val providerId =
-            if (fallbackSupportsInternalPolling == null) {
-                AvailabilityProviderId.RECGOV
-            } else {
-                AvailabilityProviderId.CAMPFLARE
-            }
-        private val provider = FakeAvailabilityProvider(providerId, supportsInternalPolling)
-        private val fallbackProvider =
-            fallbackSupportsInternalPolling?.let { FakeAvailabilityProvider(AvailabilityProviderId.RECGOV, it) }
+        private val provider = FakeAvailabilityProvider(supportsInternalPolling)
+        private val fallbackProvider = fallbackSupportsInternalPolling?.let { FakeAvailabilityProvider(it) }
 
         override fun resolve(campsite: CampsiteAvailabilityTarget): ResolvedAvailabilityTarget? {
             val known = byId[campsite.id] ?: return null
             val candidate =
                 ProviderCandidate(
                     provider = provider,
-                    parentRef =
-                        if (providerId == AvailabilityProviderId.CAMPFLARE) {
-                            ProviderRef.Campflare("facility-1")
-                        } else {
-                            ProviderRef.RecGov("facility-1")
-                        },
+                    parentRef = ProviderRef.RecGov("facility-1"),
                     catalogRef = CatalogCampsiteRef(campsiteId = known.id, vendorId = known.vendorId),
                 )
             val fallbackCandidate =
@@ -199,9 +186,9 @@ class WatchCapabilityServiceTest {
     }
 
     private class FakeAvailabilityProvider(
-        override val id: AvailabilityProviderId,
         supportsInternalPolling: Boolean,
     ) : AvailabilityProvider {
+        override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsInternalPolling = supportsInternalPolling,

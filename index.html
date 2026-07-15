@@ -1573,7 +1573,13 @@
   /* Side-by-side action row. Text CTAs share the available width and shrink
      together on mobile. Directions opts out so the icon target stays square. */
   .cg-actions { display: flex; flex-direction: row; flex-wrap: nowrap; gap: 8px; }
-  .cg-actions > .cg-btn { flex: 1 1 0; min-width: 0; }
+  .cg-actions > .cg-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   /* Directions is icon-only — square aspect ratio, fixed width, no
      padding-driven sizing. flex:0 0 auto keeps it from being squeezed
      by the primary CTA next to it. */
@@ -1594,10 +1600,6 @@
     text-align: center; text-decoration: none;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
     letter-spacing: -0.005em;
     border: 1px solid transparent;
