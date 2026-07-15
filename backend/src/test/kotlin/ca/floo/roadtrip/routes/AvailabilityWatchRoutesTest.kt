@@ -1,5 +1,8 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
@@ -24,6 +27,8 @@ import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
@@ -48,6 +53,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -64,17 +70,15 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
      * CRUD assertions here (poller membership is exercised in the membership
      * and executor tests).
      */
-    private fun watchService(): AvailabilityWatchService {
-        val campsitesRepo = CampsiteRepo(ctx)
-        val targets =
-            DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
-                campsitesRepo = campsitesRepo,
-                availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
-                dateResolver = AvailabilityDateResolver(),
-            )
-        return AvailabilityWatchService(ctx, alertProviders(campsitesRepo, targets))
-    }
+    private fun watchService(
+        availabilityProviders: Map<String, AvailabilityProvider> = emptyMap(),
+        validateCapabilities: Boolean = false,
+    ): AvailabilityWatchService =
+        watchServiceFor(
+            campsitesRepo = CampsiteRepo(ctx),
+            availabilityProviders = availabilityProviders,
+            validateCapabilities = validateCapabilities,
+        )
 
     /**
      * Watch service whose registry maps the test POI source ('test') to a
@@ -82,28 +86,33 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
      * resolves to a real (recgov, parentRef) poller. Used to exercise poller
      * membership on watch mutation.
      */
-    private fun watchServiceWithRecgov(): AvailabilityWatchService {
-        val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("test" to FakeRecgovProvider))
-        val targets =
-            DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
-                campsitesRepo = campsitesRepo,
-                availabilityProviders = registry,
-                dateResolver = AvailabilityDateResolver(),
-            )
-        return AvailabilityWatchService(ctx, alertProviders(campsitesRepo, targets))
-    }
+    private fun watchServiceWithRecgov(): AvailabilityWatchService =
+        watchService(availabilityProviders = mapOf("test" to fakeRecgovProvider))
 
-    private fun watchServiceWithCampflareAndRecgovCapabilityValidation(): AvailabilityWatchService {
-        val campsitesRepo = CampsiteRepo(ctx)
-        val registry =
-            AvailabilityProviderRegistry(
+    private fun watchServiceWithCampflareAndRecgovCapabilityValidation(): AvailabilityWatchService =
+        watchService(
+            availabilityProviders =
                 mapOf(
-                    "campflare" to FakeCampflareProvider,
-                    "recgov" to FakeRecgovProvider,
+                    "campflare" to fakeCampflareProvider,
+                    "recgov" to fakeRecgovProvider,
                 ),
-            )
+            validateCapabilities = true,
+        )
+
+    private fun watchServiceWithAspiraCapabilityValidation(): AvailabilityWatchService =
+        watchService(
+            availabilityProviders = mapOf("aspira-pc-pins" to fakeAspiraProvider),
+            validateCapabilities = true,
+        )
+
+    private fun watchServiceRejectingAtc(): AvailabilityWatchService = watchService(validateCapabilities = true)
+
+    private fun watchServiceFor(
+        campsitesRepo: CampsiteRepo,
+        availabilityProviders: Map<String, AvailabilityProvider>,
+        validateCapabilities: Boolean,
+    ): AvailabilityWatchService {
+        val registry = AvailabilityProviderRegistry(availabilityProviders)
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
@@ -111,69 +120,21 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
             )
-        val scopeResolver = WatchScopeResolver(campsitesRepo)
-        return AvailabilityWatchService(
-            ctx = ctx,
-            alertProviders = alertProviders(campsitesRepo, targets),
-            capabilityValidator =
-                WatchTriggerCapabilityValidator(
-                    scopeResolver = scopeResolver,
-                    capabilities =
-                        WatchCapabilityService(
-                            availabilityTargets = targets,
-                            bookingTargets = AvailabilityBookingTargetResolver(BookingProviderRegistry(emptyList())),
-                        ),
-                ),
-        )
-    }
+        if (!validateCapabilities) return AvailabilityWatchService(ctx, alertProviders(campsitesRepo, targets))
 
-    private fun watchServiceWithAspiraCapabilityValidation(): AvailabilityWatchService {
-        val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("aspira-pc-pins" to FakeAspiraProvider))
-        val targets =
-            DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
-                campsitesRepo = campsitesRepo,
-                availabilityProviders = registry,
-                dateResolver = AvailabilityDateResolver(),
-            )
         val scopeResolver = WatchScopeResolver(campsitesRepo)
+        val capabilities =
+            WatchCapabilityService(
+                availabilityTargets = targets,
+                bookingTargets = AvailabilityBookingTargetResolver(BookingProviderRegistry(emptyList())),
+            )
         return AvailabilityWatchService(
             ctx = ctx,
             alertProviders = alertProviders(campsitesRepo, targets),
             capabilityValidator =
                 WatchTriggerCapabilityValidator(
                     scopeResolver = scopeResolver,
-                    capabilities =
-                        WatchCapabilityService(
-                            availabilityTargets = targets,
-                            bookingTargets = AvailabilityBookingTargetResolver(BookingProviderRegistry(emptyList())),
-                        ),
-                ),
-        )
-    }
-
-    private fun watchServiceRejectingAtc(): AvailabilityWatchService {
-        val campsitesRepo = CampsiteRepo(ctx)
-        val targets =
-            DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
-                campsitesRepo = campsitesRepo,
-                availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
-                dateResolver = AvailabilityDateResolver(),
-            )
-        val scopeResolver = WatchScopeResolver(campsitesRepo)
-        return AvailabilityWatchService(
-            ctx = ctx,
-            alertProviders = alertProviders(campsitesRepo, targets),
-            capabilityValidator =
-                WatchTriggerCapabilityValidator(
-                    scopeResolver = scopeResolver,
-                    capabilities =
-                        WatchCapabilityService(
-                            availabilityTargets = targets,
-                            bookingTargets = AvailabilityBookingTargetResolver(BookingProviderRegistry(emptyList())),
-                        ),
+                    capabilities = capabilities,
                 ),
         )
     }
@@ -1223,56 +1184,34 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
  * never fetches (the watch service only resolves targets, it does not poll),
  * so the availability methods are unsupported.
  */
-private object FakeRecgovProvider : ca.floo.roadtrip.service.availability.provider.AvailabilityProvider {
-    override val id = ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId.RECGOV
+private val fakeRecgovProvider = FakeAvailabilityProvider(AvailabilityProviderId.RECGOV, supportsInternalPolling = true)
+private val fakeCampflareProvider = FakeAvailabilityProvider(AvailabilityProviderId.CAMPFLARE, supportsInternalPolling = false)
+private val fakeAspiraProvider =
+    FakeAvailabilityProvider(
+        id = AvailabilityProviderId.ASPIRA,
+        supportsInternalPolling = true,
+        bookingHorizonDays = 365,
+        maxPollWindowDays = 30,
+    )
+
+private class FakeAvailabilityProvider(
+    override val id: AvailabilityProviderId,
+    supportsInternalPolling: Boolean,
+    bookingHorizonDays: Int = 180,
+    maxPollWindowDays: Int = 60,
+) : AvailabilityProvider {
     override val capabilities =
-        ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities(
-            supportsInternalPolling = true,
-            bookingHorizonDays = 180,
-            maxPollWindowDays = 60,
+        AvailabilityProviderCapabilities(
+            supportsInternalPolling = supportsInternalPolling,
+            bookingHorizonDays = bookingHorizonDays,
+            maxPollWindowDays = maxPollWindowDays,
         )
 
     override fun isEnabled(): Boolean = true
 
     override suspend fun availability(
-        ref: ca.floo.roadtrip.models.domain.ProviderRef,
-        startDate: java.time.LocalDate,
-        endDate: java.time.LocalDate,
-    ): ca.floo.roadtrip.models.availability.AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
-}
-
-private object FakeCampflareProvider : ca.floo.roadtrip.service.availability.provider.AvailabilityProvider {
-    override val id = ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId.CAMPFLARE
-    override val capabilities =
-        ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities(
-            supportsInternalPolling = false,
-            bookingHorizonDays = 180,
-            maxPollWindowDays = 60,
-        )
-
-    override fun isEnabled(): Boolean = true
-
-    override suspend fun availability(
-        ref: ca.floo.roadtrip.models.domain.ProviderRef,
-        startDate: java.time.LocalDate,
-        endDate: java.time.LocalDate,
-    ): ca.floo.roadtrip.models.availability.AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
-}
-
-private object FakeAspiraProvider : ca.floo.roadtrip.service.availability.provider.AvailabilityProvider {
-    override val id = ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId.ASPIRA
-    override val capabilities =
-        ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities(
-            supportsInternalPolling = true,
-            bookingHorizonDays = 365,
-            maxPollWindowDays = 30,
-        )
-
-    override fun isEnabled(): Boolean = true
-
-    override suspend fun availability(
-        ref: ca.floo.roadtrip.models.domain.ProviderRef,
-        startDate: java.time.LocalDate,
-        endDate: java.time.LocalDate,
-    ): ca.floo.roadtrip.models.availability.AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
+        ref: ProviderRef,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
 }
