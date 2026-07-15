@@ -452,9 +452,7 @@ function onRootScroll(ctx, e) {
   if (!(scroll instanceof HTMLElement)) return;
   if (!scroll.classList.contains('cg-site-matrix-scroll')) return;
   if (ctx.restoringMatrixScroll) return;
-  // A genuine user scroll detaches the fixed-positioned popover from its
-  // cell; close it. Programmatic scroll restores are guarded above.
-  closeWatchPopover(ctx);
+  repositionWatchPopover(ctx);
 }
 
 function disarmBookButtonsInPlace(ctx) {
@@ -595,12 +593,21 @@ function openWatchPopover(ctx, anchorEl, date) {
   ctx.watchPopover = null;
 
   // Anchored with fixed positioning against the cell rect (not appended into
-  // the cell) so the scrollable matrix doesn't clip it. Closed on outside
-  // click / Escape / matrix scroll.
+  // the cell) so the scrollable matrix doesn't clip it. Repositioned on
+  // scroll/resize so it stays with the clicked cell.
   const host = document.createElement('div');
   host.className = 'cg-watch-pop-host';
   document.body.appendChild(host);
-  positionWatchPopover(host, anchorEl);
+  const reposition = () => {
+    if (!anchorEl.isConnected) {
+      closeWatchPopover(ctx);
+      return;
+    }
+    positionWatchPopover(host, anchorEl);
+  };
+  reposition();
+  window.addEventListener('scroll', reposition, true);
+  window.addEventListener('resize', reposition);
 
   const endDate = stayEndDate(ctx, date);
   const key = watchWindowKey(date, endDate);
@@ -633,7 +640,10 @@ function openWatchPopover(ctx, anchorEl, date) {
   });
 
   ctx.watchPopover = {
+    reposition,
     dispose() {
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
       controller.dispose();
       host.remove();
     },
@@ -643,6 +653,10 @@ function openWatchPopover(ctx, anchorEl, date) {
 function closeWatchPopover(ctx) {
   ctx.watchPopover?.dispose();
   ctx.watchPopover = null;
+}
+
+function repositionWatchPopover(ctx) {
+  ctx.watchPopover?.reposition?.();
 }
 
 function positionWatchPopover(host, anchorEl) {
