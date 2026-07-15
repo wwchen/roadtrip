@@ -38,6 +38,14 @@ def panel_titles(dashboard_doc: dict[str, Any]) -> set[str]:
     return {panel.get("title", "") for panel in panels_in(dashboard_doc)}
 
 
+def target_expressions(panel: dict[str, Any]) -> list[str]:
+    return [
+        target.get("expr", "")
+        for target in panel.get("targets", [])
+        if isinstance(target, dict)
+    ]
+
+
 def all_dashboard_text() -> str:
     return "\n".join(path.read_text() for path in sorted(DASHBOARD_DIR.glob("*.json")))
 
@@ -94,6 +102,53 @@ class GrafanaDashboardConsolidationTest(unittest.TestCase):
         self.assertFalse(RETIRED_CAMPSITE_DETAIL_PATH.exists())
         self.assertNotIn(RETIRED_CAMPSITE_DETAIL_URL, all_dashboard_text())
         self.assertIn("Selected Campsite Detail", catalog_titles)
+
+    def test_metrics_http_p95_uses_dashboard_range_without_zero_fallback(self) -> None:
+        metrics_panels = {
+            panel.get("title", ""): panel
+            for panel in panels_in(dashboard("roadtrip-metrics.json"))
+        }
+        p95_expectations = {
+            "Server p95": (
+                "increase(http_server_request_duration_seconds_bucket[$__range])",
+                "increase(http_server_request_duration_seconds_count[$__range])",
+                "and on()",
+            ),
+            "HTTP server p95 by route": (
+                "increase(http_server_request_duration_seconds_bucket[$__range])",
+                "increase(http_server_request_duration_seconds_count[$__range])",
+                "and on(http_route)",
+            ),
+            "HTTP client p95 by upstream": (
+                "increase(http_client_request_duration_seconds_bucket[$__range])",
+                "increase(http_client_request_duration_seconds_count[$__range])",
+                "and on(server_address)",
+                'label_replace(vector(0), "server_address", "no outbound traffic"',
+            ),
+        }
+
+        for title, expected_fragments in p95_expectations.items():
+            expressions = target_expressions(metrics_panels[title])
+            self.assertEqual(1, len(expressions), title)
+            expression = expressions[0]
+            for expected_fragment in expected_fragments:
+                self.assertIn(expected_fragment, expression, title)
+            self.assertNotIn("rate(http_", expression, title)
+            self.assertNotIn("or on() vector(0)", expression, title)
+
+    def test_metrics_http_client_count_has_labeled_no_traffic_fallback(self) -> None:
+        metrics_panels = {
+            panel.get("title", ""): panel
+            for panel in panels_in(dashboard("roadtrip-metrics.json"))
+        }
+        expressions = target_expressions(metrics_panels["HTTP client request count"])
+
+        self.assertEqual(1, len(expressions))
+        self.assertIn(
+            'label_replace(vector(0), "server_address", "no outbound traffic"',
+            expressions[0],
+        )
+        self.assertNotIn("or on() vector(0)", expressions[0])
 
 
 if __name__ == "__main__":

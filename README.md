@@ -41,7 +41,8 @@ Provisioned dashboards include a catalog explorer
 (`/d/roadtrip-catalog-explorer/roadtrip-catalog-explorer`) that covers POIs,
 campsites, and snapshot-backed availability, plus status overview, POI detail,
 Campground detail, Tesla Supercharger detail/stats, Campsite detail/stats, DB
-stats, watch/scheduler health, and API/SQL equivalence.
+stats, Roadtrip Metrics (`/d/roadtrip-metrics/roadtrip-metrics`),
+watch/scheduler health, and API/SQL equivalence.
 Tilt UI is at <http://localhost:10350>.
 
 Plain `make run` remains the fastest backend-only loop: it starts Postgres in
