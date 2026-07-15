@@ -24,40 +24,15 @@ async function getJson (path) {
   return { status: res.status, body: text, json }
 }
 
-export async function claimMatch (matchId, companionId) {
-  return postJson(`/api/campsite/companion/matches/${matchId}/claim`, { companion_id: companionId })
-}
-
-export async function reportResult (matchId, cartAdded) {
-  return postJson(`/api/campsite/companion/matches/${matchId}/result`, { cart_added: cartAdded })
-}
-
-export async function heartbeat (companionId) {
-  return postJson('/api/campsite/companion/heartbeat', { companion_id: companionId })
-}
-
-export async function getMatch (matchId) {
-  return getJson(`/api/campsite/matches/${matchId}`)
-}
-
-// Backend owns the recgov token lifecycle as of RFC 0001 / PR 3. Companion
-// asks for a non-expired recaccount-shaped JSON every time it needs to inject
-// auth into a Playwright session. Returns null when the backend has no token
-// saved (paste hasn't happened) or the call fails — companion fails closed.
+// Backend owns the recgov token lifecycle. Companion asks for a non-expired
+// recaccount-shaped JSON every time it needs to inject auth into Playwright.
+// Returns null when the backend has no token saved or the call fails.
 export async function fetchFreshRecaccount () {
   try {
     const r = await getJson('/api/campsite/booking/session/fresh-token')
     if (r.status !== 200 || !r.json) return null
     return r.json
   } catch { return null }
-}
-
-// Backend's planner endpoint. Returns {match: {...}} or {match: null}.
-// Companion calls this on every wakeup signal (match/result/lease_expired
-// SSE event, plus a 30s safety-net interval). The DB is the source of truth
-// for ATC orchestration; this endpoint just reads it.
-export async function getNextWork () {
-  return getJson('/api/campsite/companion/work/next')
 }
 
 export async function claimDispatch ({
