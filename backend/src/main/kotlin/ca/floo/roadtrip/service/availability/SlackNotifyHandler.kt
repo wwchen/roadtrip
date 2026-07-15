@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.notification.SlackNotificationService
-import ca.floo.roadtrip.service.notification.WatchOpening
 
 /**
  * The `slack_notify` [TriggerActionHandler]: renders and posts the "Sites
@@ -21,13 +20,13 @@ internal class SlackNotifyHandler(
 
     override suspend fun fire(
         watch: AvailabilityWatchRepo.Watch,
-        openings: List<WatchOpening>,
+        openings: List<TriggerOpening>,
     ): Boolean =
         slack.sendWatchOpenings(
             watchId = watch.id,
             startDate = watch.startDate,
             endDate = watch.endDate,
-            openings = openings,
+            openings = openings.map { it.notification },
             channel = watch.channelOverride(),
             appRootUrl = appRootUrl,
         )

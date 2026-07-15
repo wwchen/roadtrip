@@ -29,6 +29,7 @@ import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
+import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
@@ -218,6 +219,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                 },
         )
     val bookingProviderRegistry = BookingProviderRegistry(listOf(RecGovBookingProvider(dispatchService)))
+    val bookingTargets = AvailabilityBookingTargetResolver(bookingProviderRegistry)
     val triggerActions =
         TriggerActionRegistry(
             listOf(
@@ -225,7 +227,11 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                     slack = slackNotifications,
                     appRootUrl = boot.appConfig.webApp?.rootUrl,
                 ),
-                AtcTriggerActionHandler(dispatchService),
+                AtcTriggerActionHandler(
+                    bookings = bookingProviderRegistry,
+                    bookingTargets = bookingTargets,
+                    slack = slackNotifications,
+                ),
             ),
         )
     val watchAlertDispatcher =

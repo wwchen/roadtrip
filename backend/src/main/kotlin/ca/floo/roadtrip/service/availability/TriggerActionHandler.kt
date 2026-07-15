@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
-import ca.floo.roadtrip.service.notification.WatchOpening
 
 /**
  * Fires one trigger-action kind (Slack message, ATC route, future email, …)
@@ -25,6 +24,6 @@ internal interface TriggerActionHandler {
      */
     suspend fun fire(
         watch: AvailabilityWatchRepo.Watch,
-        openings: List<WatchOpening>,
+        openings: List<TriggerOpening>,
     ): Boolean
 }

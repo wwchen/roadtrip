@@ -25,7 +25,7 @@ private const val CELL_MATRIX_UID = "availability-cell-matrix"
  * For each live watch it keeps the transitions that fall inside the watch's
  * campsite set and date window and — for every kind on the watch that has a
  * registered [TriggerActionHandler] — fires that handler with the hydrated
- * openings. Kinds with no registered handler (e.g. `atc` today) stay inert.
+ * openings. Kinds with no registered handler stay inert.
  * A watch with `stopWhenTriggered` goes `DONE` **only after a handler
  * actually reports success**, so a delivery failure never silences a watch
  * we could not notify on.
@@ -142,7 +142,7 @@ internal class WatchAlertDispatcher(
         state: WatchStatusNotice.State,
     ): WatchStatusNotice = statusNotice(watch, scopeResolver.resolve(watch), state)
 
-    /** Hydrates the covered cells into [WatchOpening]s, fires each of the
+    /** Hydrates the covered cells into [TriggerOpening]s, fires each of the
      *  watch's registered [TriggerActionHandler]s with them, and — if any
      *  handler reports success — marks a `stopWhenTriggered` watch `DONE`, so
      *  a delivery failure never silences a watch we could not notify on.
@@ -166,36 +166,43 @@ internal class WatchAlertDispatcher(
         }
     }
 
-    /** Resolves each covered cell to a [WatchOpening] — the campsite's display
-     *  label/loop/type, its parent campground (id + name, each POI fetched once),
-     *  and the provider booking URL — so the notification layer only formats. */
+    /** Resolves each covered cell to a [TriggerOpening] — the campsite's display
+     *  label/loop/type, parent campground, provider booking URL, and resolved
+     *  provider candidates — so handlers can project either notification or
+     *  booking inputs from one hydration pass. */
     private fun hydrateOpenings(
         covered: List<CellTransition>,
         campsitesById: Map<Long, CampsiteAvailabilityTarget>,
-    ): List<WatchOpening> {
+    ): List<TriggerOpening> {
         val poiNames = HashMap<Long, String?>()
         return covered.map { t ->
             // covered was filtered to campsites in this map, so the key exists.
             val r = campsitesById.getValue(t.campsiteId)
             val target = targets.resolve(r)
-            WatchOpening(
-                label = r.name ?: "Site #${r.vendorId}",
-                loop = r.loop,
-                siteType = r.siteType,
+            TriggerOpening(
+                campsite = r,
                 date = t.targetDate,
-                campgroundId = target?.parentPoiId,
-                campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { pois.fetchPoiName(it) } },
-                // Booking link, if the campsite's provider exposes one — the URL
-                // scheme is the adapter's, never this dispatcher's. The parent
-                // ref supplies vendor ids the per-site ref may omit (e.g. Aspira).
-                bookingUrl = target?.let { it.provider.bookingUrl(r, it.parentRef, t.targetDate) },
-                vendor =
-                    target
-                        ?.provider
-                        ?.id
-                        ?.name
-                        ?.lowercase()
-                        ?: r.vendor.lowercase(),
+                resolvedTarget = target,
+                notification =
+                    WatchOpening(
+                        label = r.name ?: "Site #${r.vendorId}",
+                        loop = r.loop,
+                        siteType = r.siteType,
+                        date = t.targetDate,
+                        campgroundId = target?.parentPoiId,
+                        campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { pois.fetchPoiName(it) } },
+                        // Booking link, if the campsite's provider exposes one — the URL
+                        // scheme is the adapter's, never this dispatcher's. The parent
+                        // ref supplies vendor ids the per-site ref may omit (e.g. Aspira).
+                        bookingUrl = target?.let { it.provider.bookingUrl(r, it.parentRef, t.targetDate) },
+                        vendor =
+                            target
+                                ?.provider
+                                ?.id
+                                ?.name
+                                ?.lowercase()
+                                ?: r.vendor.lowercase(),
+                    ),
             )
         }
     }

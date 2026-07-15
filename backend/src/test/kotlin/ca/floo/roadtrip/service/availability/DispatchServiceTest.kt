@@ -30,7 +30,6 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -258,18 +257,6 @@ class DispatchServiceTest {
             assertEquals(request, notice.request)
         }
 
-    @Test
-    fun `atc trigger handler queues dispatch and keeps watch completion with companion result`() =
-        runBlocking {
-            val port = RecordingAtcPort()
-            val handler = AtcTriggerActionHandler(port)
-            val delivered = handler.fire(fakeWatch(), listOf(opening(TEST_VENDOR_RECGOV)))
-
-            assertFalse(delivered)
-            assertEquals(TEST_WATCH_ID, port.watch?.id)
-            assertEquals(TEST_VENDOR_RECGOV, port.openings.single().vendor)
-        }
-
     private fun service(
         slack: SlackNotificationService = RecordingSlack(),
         watchCompletion: DispatchWatchCompletion = DispatchWatchCompletion { true },
@@ -281,20 +268,6 @@ class DispatchServiceTest {
             watchCompletion = watchCompletion,
             clock = Clock.fixed(Instant.parse("2026-07-14T00:00:00Z"), ZoneOffset.UTC),
         )
-
-    private class RecordingAtcPort : AtcDispatchPort {
-        var watch: AvailabilityWatchRepo.Watch? = null
-        var openings: List<WatchOpening> = emptyList()
-
-        override suspend fun enqueueAtc(
-            watch: AvailabilityWatchRepo.Watch,
-            openings: List<WatchOpening>,
-        ): List<DispatchQueued> {
-            this.watch = watch
-            this.openings = openings
-            return emptyList()
-        }
-    }
 
     private class RecordingSlack : SlackNotificationService {
         data class OfflineAlert(
