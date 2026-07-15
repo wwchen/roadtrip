@@ -300,11 +300,13 @@ queues authenticated dispatches for the companion, and tracks lease state.
   `POST /api/dispatches/claim`, drives Chromium to add the site to the
   operator's rec.gov cart, and reports completion or failure to
   `/api/dispatches/{id}/complete` or `/api/dispatches/{id}/fail`. Set the same
-  `DISPATCH_COMPANION_TOKEN` on the backend and companion; the backend rejects
-  dispatch calls when the token is unset or mismatched.
+  `DISPATCH_COMPANION_TOKEN` on the backend and companion; backend startup
+  fails when the token is unset, and dispatch calls are rejected when it is
+  mismatched.
   ```sh
   cd companion
   npm install
+  # Use this same value in the backend environment before starting the app.
   export DISPATCH_COMPANION_TOKEN='replace-with-a-local-secret'
   BACKEND_URL=http://127.0.0.1:8765 \
     node --experimental-eventsource src/index.js

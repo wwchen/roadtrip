@@ -11,9 +11,20 @@ class AppConfigTest {
             "roadtrip.availability.force-pull-cooldown" to "60s",
             "roadtrip.availability.provider-cooldown" to "5m",
         )
+    private val requiredDispatchProperties =
+        mapOf(
+            "roadtrip.dispatch.pending-ttl" to "30s",
+            "roadtrip.dispatch.max-claim-wait" to "30s",
+            "roadtrip.dispatch.min-claim-wait" to "1ms",
+            "roadtrip.dispatch.default-lease" to "30s",
+            "roadtrip.dispatch.min-lease" to "1s",
+            "roadtrip.dispatch.max-lease" to "120s",
+            "roadtrip.dispatch.companion-token" to "token-123",
+            "roadtrip.dispatch.test-endpoint-enabled" to "false",
+        )
 
     private fun appConfig(properties: Map<String, String> = emptyMap()): AppConfig =
-        AppConfig.fromProperties(requiredAvailabilityProperties + properties)
+        AppConfig.fromProperties(requiredAvailabilityProperties + requiredDispatchProperties + properties)
 
     @Test
     fun `availability config parses cooldown durations`() {
@@ -45,7 +56,7 @@ class AppConfigTest {
     }
 
     @Test
-    fun `dispatch config uses operational defaults when properties are empty`() {
+    fun `dispatch config parses required properties`() {
         val config = appConfig().dispatch
 
         assertEquals(Duration.ofSeconds(30), config.pendingTtl)
@@ -54,8 +65,38 @@ class AppConfigTest {
         assertEquals(Duration.ofSeconds(30), config.defaultLease)
         assertEquals(Duration.ofSeconds(1), config.minLease)
         assertEquals(Duration.ofSeconds(120), config.maxLease)
-        assertEquals(null, config.companionToken)
+        assertEquals("token-123", config.companionToken)
         assertEquals(false, config.testEndpointEnabled)
+    }
+
+    @Test
+    fun `dispatch config requires explicit operational values`() {
+        val missingDuration =
+            assertFailsWith<IllegalArgumentException> {
+                AppConfig.fromProperties(
+                    requiredAvailabilityProperties +
+                        requiredDispatchProperties.minus("roadtrip.dispatch.pending-ttl"),
+                )
+            }
+        assertEquals("roadtrip.dispatch.pending-ttl is required", missingDuration.message)
+
+        val missingToken =
+            assertFailsWith<IllegalArgumentException> {
+                AppConfig.fromProperties(
+                    requiredAvailabilityProperties +
+                        requiredDispatchProperties.minus("roadtrip.dispatch.companion-token"),
+                )
+            }
+        assertEquals("roadtrip.dispatch.companion-token is required", missingToken.message)
+
+        val missingToggle =
+            assertFailsWith<IllegalArgumentException> {
+                AppConfig.fromProperties(
+                    requiredAvailabilityProperties +
+                        requiredDispatchProperties.minus("roadtrip.dispatch.test-endpoint-enabled"),
+                )
+            }
+        assertEquals("roadtrip.dispatch.test-endpoint-enabled is required", missingToggle.message)
     }
 
     @Test

@@ -19,7 +19,7 @@ internal class DispatchService(
     private val waiters: DispatchWaiterRegistry,
     private val slack: SlackNotificationService,
     private val watchCompletion: DispatchWatchCompletion,
-    private val config: DispatchConfig = DispatchConfig(),
+    private val config: DispatchConfig,
     private val clock: Clock = Clock.systemUTC(),
 ) : DispatchEnqueuer {
     suspend fun claim(

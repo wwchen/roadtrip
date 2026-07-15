@@ -22,6 +22,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 import java.time.Clock
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
@@ -231,6 +232,7 @@ class DispatchRoutesTest {
             waiters = DispatchWaiterRegistry(),
             slack = SlackNotificationServiceImpl(config = null),
             watchCompletion = DispatchWatchCompletion { true },
+            config = testDispatchConfig(),
             clock = testClock,
         )
 
@@ -238,8 +240,18 @@ class DispatchRoutesTest {
 
     private fun testDispatchConfig(
         testEndpointEnabled: Boolean = true,
-        companionToken: String? = TEST_COMPANION_TOKEN,
-    ): DispatchConfig = DispatchConfig(companionToken = companionToken, testEndpointEnabled = testEndpointEnabled)
+        companionToken: String = TEST_COMPANION_TOKEN,
+    ): DispatchConfig =
+        DispatchConfig(
+            pendingTtl = Duration.ofSeconds(30),
+            maxClaimWait = Duration.ofSeconds(30),
+            minClaimWait = Duration.ofMillis(1),
+            defaultLease = Duration.ofSeconds(30),
+            minLease = Duration.ofSeconds(1),
+            maxLease = Duration.ofSeconds(120),
+            companionToken = companionToken,
+            testEndpointEnabled = testEndpointEnabled,
+        )
 
     private fun io.ktor.client.request.HttpRequestBuilder.dispatchAuth() {
         header(HttpHeaders.Authorization, "Bearer $TEST_COMPANION_TOKEN")

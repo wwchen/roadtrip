@@ -141,7 +141,7 @@ class DispatchServiceTest {
     fun `enqueue uses configured pending ttl`() =
         runBlocking {
             val ttl = Duration.ofSeconds(5)
-            val service = service(config = DispatchConfig(pendingTtl = ttl))
+            val service = service(config = dispatchConfig(pendingTtl = ttl))
 
             val queued = enqueueDispatch(service)
 
@@ -154,7 +154,7 @@ class DispatchServiceTest {
             val service =
                 service(
                     config =
-                        DispatchConfig(
+                        dispatchConfig(
                             defaultLease = Duration.ofSeconds(7),
                             maxLease = Duration.ofSeconds(11),
                         ),
@@ -257,7 +257,7 @@ class DispatchServiceTest {
     private fun service(
         slack: SlackNotificationService = RecordingSlack(),
         watchCompletion: DispatchWatchCompletion = DispatchWatchCompletion { true },
-        config: DispatchConfig = DispatchConfig(),
+        config: DispatchConfig = dispatchConfig(),
     ): DispatchService =
         DispatchService(
             store = InMemoryDispatchStore(),
@@ -266,6 +266,27 @@ class DispatchServiceTest {
             watchCompletion = watchCompletion,
             config = config,
             clock = Clock.fixed(TEST_NOW, ZoneOffset.UTC),
+        )
+
+    private fun dispatchConfig(
+        pendingTtl: Duration = Duration.ofSeconds(30),
+        maxClaimWait: Duration = Duration.ofSeconds(30),
+        minClaimWait: Duration = Duration.ofMillis(1),
+        defaultLease: Duration = Duration.ofSeconds(30),
+        minLease: Duration = Duration.ofSeconds(1),
+        maxLease: Duration = Duration.ofSeconds(120),
+        companionToken: String = "token-123",
+        testEndpointEnabled: Boolean = false,
+    ): DispatchConfig =
+        DispatchConfig(
+            pendingTtl = pendingTtl,
+            maxClaimWait = maxClaimWait,
+            minClaimWait = minClaimWait,
+            defaultLease = defaultLease,
+            minLease = minLease,
+            maxLease = maxLease,
+            companionToken = companionToken,
+            testEndpointEnabled = testEndpointEnabled,
         )
 
     private suspend fun enqueueDispatch(

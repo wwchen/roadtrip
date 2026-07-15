@@ -221,10 +221,6 @@ private fun DispatchClaimRequest.claimKinds(): List<String> = kinds.takeIf { it.
 
 private suspend fun ApplicationCall.requireDispatchAuth(config: DispatchConfig): Boolean {
     val expected = config.companionToken
-    if (expected.isNullOrBlank()) {
-        respondError("dispatch_auth_unconfigured", HttpStatusCode.ServiceUnavailable)
-        return false
-    }
     val presented = request.headers[HttpHeaders.Authorization]?.bearerToken()
     if (presented == null || !tokensMatch(presented, expected)) {
         respondError("unauthorized", HttpStatusCode.Unauthorized)
