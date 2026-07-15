@@ -54,7 +54,7 @@ function renderActions({ day, watching, canWatch }) {
   // Watch toggle: hidden on closed days because there is no available inventory
   // state to monitor.
   const status = normalizeAvailabilityStatus(day.status);
-  const canAlert = status !== 'closed' && status !== 'unknown' && Boolean(canWatch);
+  const canAlert = status !== 'closed' && status !== 'unknown' && (Boolean(canWatch) || Boolean(watching));
   if (canAlert) {
     parts.push(
       watching

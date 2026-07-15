@@ -18,7 +18,7 @@ internal class WatchCapabilityService(
         val unsupported =
             campsites.count { campsite ->
                 val resolved = availabilityTargets.resolve(campsite) ?: return@count true
-                !resolved.provider.capabilities.supportsInternalPolling
+                resolved.internalPollingTarget() == null
             }
         return WatchCapabilitySupport(scopedCount = campsites.size, unsupportedCount = unsupported)
     }
