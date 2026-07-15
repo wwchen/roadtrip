@@ -56,7 +56,6 @@ internal class DbAvailabilityTargetResolver(
     ): ProviderCandidate? {
         val ref = ProviderRefParser.parse(row.providerRefJson) ?: return null
         val provider = availabilityProviders.forPoi(row, ref) ?: return null
-        if (!provider.capabilities.supportsAvailability) return null
         return ProviderCandidate(
             provider = provider,
             parentRef = ref,

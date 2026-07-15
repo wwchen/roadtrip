@@ -1032,8 +1032,7 @@ private object FakeRecgovProvider : ca.floo.roadtrip.service.availability.provid
     override val id = ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId.RECGOV
     override val capabilities =
         ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities(
-            supportsAvailability = true,
-            pollableForAlerts = true,
+            supportsInternalPolling = true,
             bookingHorizonDays = 180,
             maxPollWindowDays = 60,
         )

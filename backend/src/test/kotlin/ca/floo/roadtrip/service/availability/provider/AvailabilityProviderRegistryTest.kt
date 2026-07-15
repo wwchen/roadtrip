@@ -64,7 +64,7 @@ class AvailabilityProviderRegistryTest {
 
                 override fun isEnabled(): Boolean = true
 
-                override fun canHandle(ref: ProviderRef): Boolean = false
+                override fun supportsRef(ref: ProviderRef): Boolean = false
 
                 override suspend fun availability(
                     ref: ProviderRef,

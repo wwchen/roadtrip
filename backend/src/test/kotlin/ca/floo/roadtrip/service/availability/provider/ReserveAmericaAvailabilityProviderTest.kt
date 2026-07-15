@@ -67,8 +67,7 @@ class ReserveAmericaAvailabilityProviderTest {
                 )
 
             assertEquals(AvailabilityProviderId.RESERVEAMERICA, adapter.id)
-            assertEquals(true, adapter.capabilities.supportsAvailability)
-            assertEquals(false, adapter.capabilities.pollableForAlerts)
+            assertEquals(false, adapter.capabilities.supportsInternalPolling)
             assertEquals("reserveamerica", batch.provider)
             assertEquals("489", batch.campgroundId)
             assertEquals(2, batch.observations.size)

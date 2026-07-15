@@ -20,7 +20,7 @@ internal class CampgroundAvailabilitySupport(
                 val ref = ProviderRefParser.parse(candidate.providerRefJson) ?: return@firstNotNullOfOrNull null
                 availabilityProviders
                     .forSource(candidate.source)
-                    ?.takeIf { it.canHandle(ref) && it.capabilities.supportsAvailability }
+                    ?.takeIf { it.supportsRef(ref) }
                     ?.id
                     ?.name
                     ?.lowercase()

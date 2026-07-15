@@ -20,7 +20,7 @@ import java.time.temporal.ChronoUnit
 
 /**
  * Widest single-tick poll window for ReserveAmerica / Active Network. Latent
- * until watches turn on for this vendor (`pollableForAlerts` is still false)
+ * until watches turn on for this vendor (`supportsInternalPolling` is still false)
  * pending cadence/load validation; declared for capability completeness.
  */
 private const val RESERVEAMERICA_MAX_POLL_WINDOW_DAYS = 30
@@ -34,10 +34,9 @@ class ReserveAmericaAvailabilityProvider(
 
     override val capabilities: AvailabilityProviderCapabilities =
         AvailabilityProviderCapabilities(
-            supportsAvailability = true,
             // The live endpoint can support polling, but watches stay off until
             // cadence and upstream load limits are validated for Active Network.
-            pollableForAlerts = false,
+            supportsInternalPolling = false,
             bookingHorizonDays = tenant.bookingHorizonDays,
             maxPollWindowDays = RESERVEAMERICA_MAX_POLL_WINDOW_DAYS,
         )

@@ -15,7 +15,7 @@ import java.time.temporal.ChronoUnit
 
 /**
  * Widest single-tick poll window for Aspira. Latent until the Aspira alert
- * poller lands (see RFC 0007) — `pollableForAlerts` is still false — but declared
+ * poller lands (see RFC 0007) — `supportsInternalPolling` is still false — but declared
  * honestly so the capability is complete. Conservative default; tune per
  * tenant when polling turns on.
  */
@@ -51,10 +51,9 @@ class AspiraAvailabilityProvider(
 
     override val capabilities: AvailabilityProviderCapabilities =
         AvailabilityProviderCapabilities(
-            supportsAvailability = true,
             // Alert poller is rec.gov-only today; Aspira polling is planned
             // (see RFC 0007). Keep this honest until the poller adapter lands.
-            pollableForAlerts = false,
+            supportsInternalPolling = false,
             bookingHorizonDays = tenant.bookingHorizonDays,
             maxPollWindowDays = ASPIRA_MAX_POLL_WINDOW_DAYS,
         )
@@ -127,7 +126,7 @@ class AspiraAvailabilityProvider(
      *  the concrete-date [bookingUrl] fills the window placeholders. Null when
      *  neither the campsite's own ref nor [parentRef] carries the ids the
      *  link needs. */
-    override fun bookingUrlTemplate(
+    override fun reservationUrlTemplate(
         campsite: CampsiteAvailabilityTarget,
         parentRef: ProviderRef,
     ): String? = AspiraBookingUrl.templateFor(tenant.host, campsite.providerRef, parentRef)

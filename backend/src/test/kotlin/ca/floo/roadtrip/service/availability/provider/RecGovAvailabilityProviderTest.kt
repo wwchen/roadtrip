@@ -174,7 +174,7 @@ class RecGovAvailabilityProviderTest {
                 raw = null,
             )
 
-        val url = adapter.bookingUrl(campsite, ProviderRef.RecGov("232447"), LocalDate.parse("2026-07-01"))
+        val url = adapter.reservationUrl(campsite, ProviderRef.RecGov("232447"), LocalDate.parse("2026-07-01"))
 
         assertEquals(
             "https://www.recreation.gov/camping/campsites/330257?startDate=2026-07-01&endDate=2026-07-02",

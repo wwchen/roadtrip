@@ -165,8 +165,7 @@ class CatalogAvailabilityBatcherTest {
             override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
             override val capabilities: AvailabilityProviderCapabilities =
                 AvailabilityProviderCapabilities(
-                    supportsAvailability = true,
-                    pollableForAlerts = true,
+                    supportsInternalPolling = true,
                     bookingHorizonDays = 180,
                     maxPollWindowDays = 60,
                 )

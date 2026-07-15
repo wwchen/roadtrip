@@ -15,7 +15,7 @@ import java.time.temporal.ChronoUnit
  * Keeping the tokens here (not re-declared per adapter) is the single source
  * for the wire contract both ends depend on.
  */
-object BookingUrlTemplate {
+object ReservationUrlTemplate {
     const val START_DATE = "{start_date}"
     const val END_DATE = "{end_date}"
     const val NIGHTS = "{nights}"

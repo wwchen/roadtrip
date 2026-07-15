@@ -42,7 +42,7 @@ interface AvailabilityProvider {
      * providers can decline and the availability resolver can try linked
      * fallback refs without hardcoded provider branching.
      */
-    fun canHandle(ref: ProviderRef): Boolean = isEnabled() && id == ref.availabilityProviderId()
+    fun supportsRef(ref: ProviderRef): Boolean = isEnabled() && id == ref.availabilityProviderId()
 
     /**
      * Per-day availability for the half-open window `[startDate, endDate)`.
@@ -70,33 +70,33 @@ interface AvailabilityProvider {
     ): AvailabilityObservationBatch = availability(ref, startDate, endDate)
 
     /**
-     * User-facing booking URL *template* for [campsite] under a campground
+     * User-facing reservation URL *template* for [campsite] under a campground
      * whose parent scope is [parentRef], or null when this provider exposes no
      * stable deep link. The template may embed the
-     * [BookingUrlTemplate] placeholders (filled by the caller for a chosen
+     * [ReservationUrlTemplate] placeholders (filled by the caller for a chosen
      * window) or be a static URL. Pure and cheap — no upstream call, no throw.
      *
      * The URL scheme is vendor-specific, so it lives in the adapter — the one
-     * place that knows the vendor's booking-site shape. Both the campsites
+     * place that knows the vendor's reservation-site shape. Both the campsites
      * API (which ships the template to the web app) and provider-neutral
-     * callers (alert notifications, via [bookingUrl]) read it from here rather
+     * callers (alert notifications, via [reservationUrl]) read it from here rather
      * than hardcoding vendor URLs. Default null keeps deep links opt-in per
      * adapter — a provider without one is not a gap to fill.
      */
-    fun bookingUrlTemplate(
+    fun reservationUrlTemplate(
         campsite: CampsiteAvailabilityTarget,
         parentRef: ProviderRef,
     ): String? = null
 
     /**
-     * Concrete booking deep link for [campsite] on the single night beginning
+     * Concrete reservation deep link for [campsite] on the single night beginning
      * [date] (check-out the next day), or null when the provider exposes none.
-     * Derived from [bookingUrlTemplate] by filling its window placeholders, so
+     * Derived from [reservationUrlTemplate] by filling its window placeholders, so
      * an adapter only implements the template once.
      */
-    fun bookingUrl(
+    fun reservationUrl(
         campsite: CampsiteAvailabilityTarget,
         parentRef: ProviderRef,
         date: LocalDate,
-    ): String? = bookingUrlTemplate(campsite, parentRef)?.let { BookingUrlTemplate.fill(it, date, date.plusDays(1)) }
+    ): String? = reservationUrlTemplate(campsite, parentRef)?.let { ReservationUrlTemplate.fill(it, date, date.plusDays(1)) }
 }

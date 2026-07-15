@@ -65,8 +65,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
-                supportsAvailability = true,
-                pollableForAlerts = true,
+                supportsInternalPolling = true,
                 bookingHorizonDays = 180,
                 maxPollWindowDays = 60,
             )
@@ -86,8 +85,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         override val id: AvailabilityProviderId = AvailabilityProviderId.CAMPFLARE
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
-                supportsAvailability = true,
-                pollableForAlerts = false,
+                supportsInternalPolling = false,
                 bookingHorizonDays = 365,
                 maxPollWindowDays = 60,
             )
@@ -102,7 +100,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
     }
 
     private class DecliningCampflareProvider : NoopCampflareProvider(enabled = true) {
-        override fun canHandle(ref: ProviderRef): Boolean = false
+        override fun supportsRef(ref: ProviderRef): Boolean = false
     }
 
     private fun resolverFor(

@@ -25,15 +25,14 @@ class CampflareAvailabilityProvider(
 
     override val capabilities: AvailabilityProviderCapabilities =
         AvailabilityProviderCapabilities(
-            supportsAvailability = true,
-            pollableForAlerts = false,
+            supportsInternalPolling = false,
             bookingHorizonDays = CAMPFLARE_BOOKING_HORIZON_DAYS,
             maxPollWindowDays = CAMPFLARE_MAX_POLL_WINDOW_DAYS,
         )
 
     override fun isEnabled(): Boolean = enabled
 
-    override fun canHandle(ref: ProviderRef): Boolean = isEnabled() && ref is ProviderRef.Campflare
+    override fun supportsRef(ref: ProviderRef): Boolean = isEnabled() && ref is ProviderRef.Campflare
 
     override suspend fun availability(
         ref: ProviderRef,

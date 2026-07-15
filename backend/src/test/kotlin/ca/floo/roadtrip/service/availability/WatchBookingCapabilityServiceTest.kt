@@ -127,8 +127,7 @@ class WatchBookingCapabilityServiceTest {
         override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
-                supportsAvailability = true,
-                pollableForAlerts = true,
+                supportsInternalPolling = true,
                 bookingHorizonDays = 365,
                 maxPollWindowDays = 60,
             )

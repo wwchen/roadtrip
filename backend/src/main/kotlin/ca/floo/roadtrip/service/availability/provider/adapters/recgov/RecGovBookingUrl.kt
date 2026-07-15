@@ -1,12 +1,12 @@
 package ca.floo.roadtrip.service.availability.provider.adapters.recgov
 
-import ca.floo.roadtrip.service.availability.provider.BookingUrlTemplate
+import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 /**
  * The rec.gov single-site booking URL scheme — the one place that knows it.
- * Consumed by [RecGovAvailabilityProvider.bookingUrlTemplate] (alerts) and the
+ * Consumed by [RecGovAvailabilityProvider.reservationUrlTemplate] (alerts) and the
  * campsites API (the web app's per-site "Book" link), so the scheme is never
  * re-spelled at a call site.
  */
@@ -18,7 +18,7 @@ internal object RecGovBookingUrl {
 
     /** Booking-page template for the campsite [vendorId], with window placeholders. */
     fun template(vendorId: String): String =
-        "$CAMPSITE_URL/${urlEncode(vendorId)}?startDate=${BookingUrlTemplate.START_DATE}&endDate=${BookingUrlTemplate.END_DATE}"
+        "$CAMPSITE_URL/${urlEncode(vendorId)}?startDate=${ReservationUrlTemplate.START_DATE}&endDate=${ReservationUrlTemplate.END_DATE}"
 
     private fun urlEncode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
 }

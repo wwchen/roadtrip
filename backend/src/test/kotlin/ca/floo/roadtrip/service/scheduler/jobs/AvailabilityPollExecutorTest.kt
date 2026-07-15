@@ -43,7 +43,7 @@ import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
-import ca.floo.roadtrip.service.availability.provider.BookingUrlTemplate
+import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
 import ca.floo.roadtrip.service.notification.SlackContentAvailabilityRenderer
 import ca.floo.roadtrip.service.notification.SlackContentWatchStatusRenderer
 import ca.floo.roadtrip.service.notification.SlackNotificationService
@@ -411,8 +411,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
-                supportsAvailability = true,
-                pollableForAlerts = true,
+                supportsInternalPolling = true,
                 bookingHorizonDays = 3650,
                 maxPollWindowDays = maxPollWindowDays,
             )
@@ -455,18 +454,17 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             )
         }
 
-        override fun bookingUrlTemplate(
+        override fun reservationUrlTemplate(
             campsite: CampsiteAvailabilityTarget,
             parentRef: ProviderRef,
-        ): String = "https://example.test/book/${campsite.vendorId}?d=${BookingUrlTemplate.START_DATE}"
+        ): String = "https://example.test/book/${campsite.vendorId}?d=${ReservationUrlTemplate.START_DATE}"
     }
 
     private class RateLimitedProvider : AvailabilityProvider {
         override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
-                supportsAvailability = true,
-                pollableForAlerts = true,
+                supportsInternalPolling = true,
                 bookingHorizonDays = 3650,
                 maxPollWindowDays = 60,
             )
