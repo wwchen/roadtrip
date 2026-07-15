@@ -322,7 +322,16 @@ queues authenticated dispatches for the companion, and tracks lease state.
   profile. Run the companion headed, log in to recreation.gov in that window
   once, and the companion manages `localStorage.recaccount` and refreshes in
   that same browser context. The backend never receives the Recreation.gov JWT;
-  it only queues dispatches and records completion/failure.
+  it only queues dispatches and records completion/failure. To test the real
+  browser auth integration without claiming dispatches, run:
+  ```sh
+  cd companion
+  npm run recgov:login
+  # or from repo root:
+  make recgov-login
+  ```
+  The command exits `0` after `REC_GOV_AUTH_OK`, or non-zero after
+  `REC_GOV_AUTH_FAILED` / `REC_GOV_AUTH_ERROR`.
 - **Slack notifications** are optional. Create a Slack app with the
   `chat:write` scope, install it to the workspace, and paste the bot
   token (`xoxb-…`) plus a channel name (`#camping-alerts`) or channel ID
