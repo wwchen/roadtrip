@@ -247,18 +247,24 @@ async function waitForCaptchaIfPresent (page, solveTimeout = 90000) {
 
 // Adds a match to the cart on rec.gov. Returns true if the cart now has the reservation.
 // `match` is the backend Match shape (snake_case fields from /api/campsite/matches).
+export function bookingUrlForMatch (match) {
+  const firstDate = match.first_date
+  const availableDates = match.available_dates || (firstDate ? [firstDate] : [])
+  const checkout = match.checkout_date || toCheckoutDate(availableDates[availableDates.length - 1])
+  const campsiteId = match.provider_campsite_id || match.vendor_id || match.campsite_id
+  return match.booking_url || (
+    campsiteId
+      ? campsiteUrl(campsiteId, firstDate, checkout)
+      : reservationUrl(match.campground_id, firstDate, checkout)
+  )
+}
+
 export async function addToCart (match) {
-  const campgroundId = match.campground_id
-  const campsiteId = match.campsite_id
   const firstDate = match.first_date
   const availableDates = match.available_dates || (firstDate ? [firstDate] : [])
   const site = match.campsite_site
   const checkout = match.checkout_date || toCheckoutDate(availableDates[availableDates.length - 1])
-  const url = match.booking_url || (
-    campsiteId
-      ? campsiteUrl(campsiteId, firstDate, checkout)
-      : reservationUrl(campgroundId, firstDate, checkout)
-  )
+  const url = bookingUrlForMatch(match)
   console.log(`Cart: opening ${url}`)
 
   const { page } = await setupAuthPage()

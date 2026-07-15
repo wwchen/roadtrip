@@ -219,6 +219,7 @@ function dispatchToCartMatch (dispatch) {
     booking_url: opening.booking_url,
     campground_id: opening.campground_id,
     campsite_id: opening.campsite_id,
+    provider_campsite_id: opening.vendor_id,
     first_date: firstDate,
     checkout_date: payload.end_date,
     available_dates: dates.length ? dates : (firstDate ? [firstDate] : []),

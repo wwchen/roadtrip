@@ -10,6 +10,7 @@ import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.DispatchCreateInput
 import ca.floo.roadtrip.service.availability.DispatchEnqueuer
 import ca.floo.roadtrip.service.availability.dispatchPayloadVersion
+import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovBookingUrl
 import ca.floo.roadtrip.service.booking.BookingProvider
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
@@ -93,6 +94,11 @@ internal class RecGovBookingProvider(
             siteType?.let { put("site_type", it) }
             campgroundId?.let { put("campground_id", it) }
             campgroundName?.let { put("campground", it) }
-            bookingUrl?.let { put("booking_url", it) }
+            put("booking_url", recgovCampgroundBookingUrl())
         }
+
+    private fun AddToCartRequest.recgovCampgroundBookingUrl(): String {
+        val parent = target.parentRef as ProviderRef.RecGov
+        return RecGovBookingUrl.campground(parent.recgovId, arrivalDate, checkoutDate)
+    }
 }
