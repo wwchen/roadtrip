@@ -216,6 +216,7 @@
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 2,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -226,11 +227,11 @@
               },
               {
                 "color": "yellow",
-                "value": 0.05
+                "value": 50
               },
               {
                 "color": "red",
-                "value": 0.2
+                "value": 200
               }
             ]
           },
@@ -268,7 +269,7 @@
             "uid": "roadtrip-prometheus"
           },
           "editorMode": "code",
-          "expr": "(histogram_quantile(0.95, sum by (le) (rate(http_server_request_duration_seconds_bucket[$__rate_interval]))) or on() vector(0)) * 1000",
+          "expr": "(histogram_quantile(0.95, sum by (le) (increase(http_server_request_duration_seconds_bucket[$__range]))) * 1000) and on() (sum(increase(http_server_request_duration_seconds_count[$__range])) > 0)",
           "legendFormat": "p95",
           "range": true,
           "refId": "A"
@@ -429,6 +430,7 @@
           "color": {
             "mode": "palette-classic"
           },
+          "decimals": 2,
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -506,7 +508,7 @@
             "uid": "roadtrip-prometheus"
           },
           "editorMode": "code",
-          "expr": "(histogram_quantile(0.95, sum by (le, http_route) (rate(http_server_request_duration_seconds_bucket[$__rate_interval]))) or on() vector(0)) * 1000",
+          "expr": "(histogram_quantile(0.95, sum by (le, http_route) (increase(http_server_request_duration_seconds_bucket[$__range]))) * 1000) and on(http_route) (sum by (http_route) (increase(http_server_request_duration_seconds_count[$__range])) > 0)",
           "legendFormat": "{{http_route}} p95",
           "range": true,
           "refId": "A"
@@ -525,6 +527,7 @@
           "color": {
             "mode": "palette-classic"
           },
+          "decimals": 2,
           "custom": {
             "axisBorderShow": false,
             "axisCenteredZero": false,
@@ -602,7 +605,7 @@
             "uid": "roadtrip-prometheus"
           },
           "editorMode": "code",
-          "expr": "(histogram_quantile(0.95, sum by (le, server_address) (rate(http_client_request_duration_seconds_bucket[$__rate_interval]))) or on() vector(0)) * 1000",
+          "expr": "(histogram_quantile(0.95, sum by (le, server_address) (increase(http_client_request_duration_seconds_bucket[$__range]))) * 1000) and on(server_address) (sum by (server_address) (increase(http_client_request_duration_seconds_count[$__range])) > 0)",
           "legendFormat": "{{server_address}} p95",
           "range": true,
           "refId": "A"
