@@ -193,8 +193,8 @@ function renderAvailabilitySurface(ctx) {
     showToday: shouldShowEarliestButton(ctx),
     armedBook: ctx.armedBook,
     watchedDates: watchedDatesSet(ctx),
-    canCreateWatch: canCreateWatch(ctx),
-    canOpenWatchPopover: ctx.poiId != null,
+    canWatch: supportsWatchAlerts(ctx),
+    canOpenWatch: ctx.poiId != null,
   });
 }
 
@@ -224,7 +224,7 @@ function renderDetail(ctx) {
   return renderDayDetail({
     day,
     watching: ctx.watchesByWindow.has(watchWindowKey(day.date, stayEndDate(ctx, day.date))),
-    canCreateWatch: canCreateWatch(ctx),
+    canWatch: ctx.poiId != null && supportsWatchAlerts(ctx),
   });
 }
 
@@ -617,7 +617,7 @@ function openWatchPopover(ctx, anchorEl, date) {
     watching: Boolean(existingWatch),
     stopWhenFound: watchStopWhenFound(existingWatch),
     supportsAddToCart: supportsAddToCart(ctx),
-    canCreate: canCreateWatch(ctx),
+    canSet: supportsWatchAlerts(ctx),
     onSet: async ({ stopWhenFound, addToCart } = {}) => {
       const payload = buildWatchPayload(ctx, date, endDate, { stopWhenFound, addToCart });
       const created = await createWatch(payload, { signal: ctx.signal });
@@ -899,7 +899,7 @@ async function toggleWatch(ctx, button) {
       await deleteWatch(existing.id, { signal: ctx.signal });
       ctx.watchesByWindow.delete(key);
     } else {
-      if (!canCreateWatch(ctx)) {
+      if (!supportsWatchAlerts(ctx)) {
         button.textContent = previousLabel;
         button.disabled = false;
         rerender(ctx);
@@ -921,11 +921,12 @@ async function toggleWatch(ctx, button) {
 }
 
 export function buildWatchPayload(ctx, date, endDate, { stopWhenFound = DEFAULT_STOP_WHEN_FOUND, addToCart = false } = {}) {
-  if (!canCreateWatch(ctx)) {
+  const triggerKinds = [];
+  if (supportsWatchAlerts(ctx)) triggerKinds.push(TRIGGER_KIND_SLACK_NOTIFY);
+  if (addToCart && supportsAddToCart(ctx)) triggerKinds.push(TRIGGER_KIND_ATC);
+  if (!triggerKinds.includes(TRIGGER_KIND_SLACK_NOTIFY)) {
     throw new Error('Watch alerts are not available for this campground.');
   }
-  const triggerKinds = [TRIGGER_KIND_SLACK_NOTIFY];
-  if (addToCart && supportsAddToCart(ctx)) triggerKinds.push(TRIGGER_KIND_ATC);
   return {
     poi_id: Number(ctx.poiId),
     campsite_filters: {},
@@ -941,10 +942,6 @@ export function buildWatchPayload(ctx, date, endDate, { stopWhenFound = DEFAULT_
 function supportsAddToCart(ctx) {
   return ctx.watchCapabilities.bookingActions.has(BOOKING_ACTION_ADD_TO_CART)
     && ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_ATC);
-}
-
-function canCreateWatch(ctx) {
-  return ctx.poiId != null && supportsWatchAlerts(ctx);
 }
 
 export function supportsWatchAlerts(ctx) {

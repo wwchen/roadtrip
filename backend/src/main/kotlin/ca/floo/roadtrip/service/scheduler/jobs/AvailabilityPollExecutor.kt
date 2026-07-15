@@ -11,7 +11,6 @@ import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
-import ca.floo.roadtrip.service.availability.AvailabilityPollerKey
 import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
@@ -21,7 +20,8 @@ import ca.floo.roadtrip.service.availability.ProviderCandidate
 import ca.floo.roadtrip.service.availability.ResolvedAvailabilityTarget
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.parentRefKey
-import ca.floo.roadtrip.service.availability.pollerKeyFor
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import ca.floo.roadtrip.service.availability.withPreferredCandidate
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import kotlinx.coroutines.slf4j.MDCContext
 import kotlinx.coroutines.withContext
@@ -118,12 +118,11 @@ internal class AvailabilityPollExecutor(
         // This is what severs the fetch path from watch state: the poller reads
         // no watch to decide *what* to fetch — only whether to run (above) and
         // how often (cadence).
-        val pollerKey = poller.key()
         val resolved =
             campsitesRepo
                 .findAvailabilityTargetsByPoi(poller.poiId)
                 .mapNotNull { targets.resolve(it) }
-                .mapNotNull { it.internalPollingTargetFor(pollerKey) }
+                .mapNotNull { it.forPoller(poller) }
                 // findAvailabilityTargetsByPoi returns distinct campsites, but guard against
                 // duplicate poi links so a site is fetched once.
                 .distinctBy { it.campsite.id }
@@ -196,7 +195,8 @@ internal class AvailabilityPollExecutor(
         // Per-group attempt trace captured inside the batcher's fetch lambda so
         // recordFetchCalls can write ONE availability_fetch_call row per attempt
         // (preferred + each sibling failover), not one per group.
-        val attemptsByGroup = mutableMapOf<AvailabilityPollerKey, List<FailoverAvailabilityFetcher.AttemptRecord>>()
+        val attemptsByGroup =
+            mutableMapOf<Pair<AvailabilityProviderId, String>, List<FailoverAvailabilityFetcher.AttemptRecord>>()
         try {
             withContext(MDCContext(mapOf("run_id" to runId.toString()))) {
                 val results =
@@ -205,7 +205,7 @@ internal class AvailabilityPollExecutor(
                         windowFor = windowFor,
                         fetch = { parentRef, provider, rows, windows ->
                             val result = fetchWithFailover(rows, windows.fetch)
-                            attemptsByGroup[pollerKeyFor(provider.id, parentRef)] = result.attempts
+                            attemptsByGroup[provider.id to parentRefKey(parentRef)] = result.attempts
                             result.batch ?: throw synthesizedError(result.attempts.lastOrNull())
                         },
                     )
@@ -293,11 +293,11 @@ internal class AvailabilityPollExecutor(
      *  batcher's aggregated outcome is the fallback single row. */
     private fun recordFetchCalls(
         results: List<GroupFetchResult>,
-        attemptsByGroup: Map<AvailabilityPollerKey, List<FailoverAvailabilityFetcher.AttemptRecord>>,
+        attemptsByGroup: Map<Pair<AvailabilityProviderId, String>, List<FailoverAvailabilityFetcher.AttemptRecord>>,
         runId: Long,
     ) {
         results.filter { it.window != null }.forEach { r ->
-            val key = pollerKeyFor(r.provider.id, r.parentRef)
+            val key = r.provider.id to parentRefKey(r.parentRef)
             val attempts = attemptsByGroup[key].orEmpty()
             if (attempts.isEmpty()) {
                 fetchCalls.record(
@@ -371,6 +371,18 @@ internal class AvailabilityPollExecutor(
         return refs.takeIf { it.size == rows.size } ?: emptyList()
     }
 
+    private fun ResolvedAvailabilityTarget.forPoller(poller: AvailabilityPollerRepo.Poller): ResolvedAvailabilityTarget? {
+        val pollerCandidates =
+            candidates.filter { candidate ->
+                candidate.provider.capabilities.supportsInternalPolling &&
+                    parentRefKey(candidate.parentRef) == poller.parentRef &&
+                    candidate.provider.id.name
+                        .lowercase() == poller.provider
+            }
+        val head = pollerCandidates.firstOrNull() ?: return null
+        return withPreferredCandidate(head, pollerCandidates)
+    }
+
     private fun synthesizedError(last: FailoverAvailabilityFetcher.AttemptRecord?): AvailabilityProviderError {
         val message = last?.error ?: NO_CANDIDATES_ERROR
         return when (last?.outcome) {
@@ -394,8 +406,6 @@ internal class AvailabilityPollExecutor(
             .toInt()
             .coerceAtLeast(0)
 }
-
-private fun AvailabilityPollerRepo.Poller.key(): AvailabilityPollerKey = AvailabilityPollerKey(provider = provider, parentRef = parentRef)
 
 /**
  * Resolves the poller's cadence as the tightest (min) over live watches, where

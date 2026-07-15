@@ -14,10 +14,4 @@ internal data class ProviderCandidate(
     val provider: AvailabilityProvider,
     val parentRef: ProviderRef,
     val catalogRef: CatalogCampsiteRef,
-) {
-    val supportsInternalPolling: Boolean
-        get() = provider.capabilities.supportsInternalPolling
-
-    val pollerKey: AvailabilityPollerKey
-        get() = pollerKeyFor(provider.id, parentRef)
-}
+)

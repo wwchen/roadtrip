@@ -30,23 +30,21 @@ internal data class ResolvedAvailabilityTarget(
         require(first.parentRef == parentRef) { "candidates[0].parentRef must mirror parentRef" }
         require(first.catalogRef == catalogRef) { "candidates[0].catalogRef must mirror catalogRef" }
     }
-
-    val pollerKey: AvailabilityPollerKey
-        get() = pollerKeyFor(provider.id, parentRef)
-
-    fun internalPollingTarget(): ResolvedAvailabilityTarget? = selectCandidates { it.supportsInternalPolling }
-
-    fun internalPollingTargetFor(key: AvailabilityPollerKey): ResolvedAvailabilityTarget? =
-        selectCandidates { it.supportsInternalPolling && it.pollerKey == key }
-
-    private fun selectCandidates(predicate: (ProviderCandidate) -> Boolean): ResolvedAvailabilityTarget? {
-        val selected = candidates.filter(predicate)
-        val head = selected.firstOrNull() ?: return null
-        return copy(
-            provider = head.provider,
-            parentRef = head.parentRef,
-            catalogRef = head.catalogRef,
-            candidates = selected,
-        )
-    }
 }
+
+internal fun ResolvedAvailabilityTarget.internalPollingTarget(): ResolvedAvailabilityTarget? {
+    val pollableCandidates = candidates.filter { it.provider.capabilities.supportsInternalPolling }
+    val head = pollableCandidates.firstOrNull() ?: return null
+    return withPreferredCandidate(head, pollableCandidates)
+}
+
+internal fun ResolvedAvailabilityTarget.withPreferredCandidate(
+    candidate: ProviderCandidate,
+    candidates: List<ProviderCandidate>,
+): ResolvedAvailabilityTarget =
+    copy(
+        provider = candidate.provider,
+        parentRef = candidate.parentRef,
+        catalogRef = candidate.catalogRef,
+        candidates = candidates,
+    )

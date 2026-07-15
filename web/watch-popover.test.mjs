@@ -71,7 +71,7 @@ test('watch popover renders unavailable state without a set action', async () =>
       poiName: 'Illecillewaet',
       date: '2026-07-21',
       watching: false,
-      canCreate: false,
+      canSet: false,
       onSet: async () => {
         setCalls += 1;
       },

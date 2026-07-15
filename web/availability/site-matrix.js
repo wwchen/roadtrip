@@ -38,8 +38,8 @@ export function renderSiteMatrix({
   showToday = true,
   armedBook = null,
   watchedDates = null,
-  canCreateWatch = false,
-  canOpenWatchPopover = canCreateWatch,
+  canWatch = false,
+  canOpenWatch = canWatch,
 }) {
   const visibleDays = Array.isArray(days) ? days.filter((d) => d?.date) : [];
   if (visibleDays.length === 0) return '';
@@ -104,8 +104,8 @@ export function renderSiteMatrix({
         visibleDays,
         armedBook,
         watchedDates,
-        canCreateWatch,
-        canOpenWatchPopover,
+        canWatch,
+        canOpenWatch,
       }),
     )
     .join('');
@@ -357,8 +357,8 @@ function rowHtml(row, context) {
         siteLabel,
         armedBook: context.armedBook,
         watchedDates: context.watchedDates,
-        canCreateWatch: context.canCreateWatch,
-        canOpenWatchPopover: context.canOpenWatchPopover,
+        canWatch: context.canWatch,
+        canOpenWatch: context.canOpenWatch,
       }),
     )
     .join('');
@@ -399,17 +399,7 @@ function siteLabelHtml(row, siteLabel, siteTitle, isSelected) {
   `;
 }
 
-function cellHtml({
-  row,
-  day,
-  availableIds,
-  selectedDate,
-  siteLabel,
-  armedBook,
-  watchedDates,
-  canCreateWatch,
-  canOpenWatchPopover,
-}) {
+function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook, watchedDates, canWatch, canOpenWatch }) {
   const state = cellState(row, day, availableIds);
   const isSelected = selectedDate === day.date;
   const selectedClass = isSelected ? ' is-selected' : '';
@@ -419,11 +409,11 @@ function cellHtml({
     // Reserved / first-come cells become watch buttons: tap to set (or manage)
     // an availability watch on that day for this POI.
     const watched = !!watchedDates && watchedDates.has(day.date);
-    if (WATCHABLE_KINDS.has(state.kind) && (canOpenWatchPopover || watched)) {
+    if (WATCHABLE_KINDS.has(state.kind) && (canOpenWatch || watched)) {
       const watchedClass = watched ? ' is-watched' : '';
       const watchAria = watched
         ? `${aria}; availability watch set, tap to manage`
-        : canCreateWatch
+        : canWatch
           ? `${aria}; tap to set an availability watch`
           : `${aria}; watch unavailable`;
       return `
