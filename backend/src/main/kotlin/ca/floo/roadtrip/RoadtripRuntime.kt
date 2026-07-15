@@ -17,6 +17,8 @@ import ca.floo.roadtrip.config.ReadPathProviderConfig
 import ca.floo.roadtrip.db.dataSourceFor
 import ca.floo.roadtrip.db.dsl
 import ca.floo.roadtrip.db.migrate
+import ca.floo.roadtrip.models.booking.AddToCartRequest
+import ca.floo.roadtrip.models.booking.AddToCartResult
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ApiCacheRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
@@ -45,6 +47,7 @@ import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.SlackNotifyHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
+import ca.floo.roadtrip.service.availability.WatchBookingCapabilityValidator
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
@@ -53,6 +56,7 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClient
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.booking.adapters.recgov.RecGovAddToCartDispatchPort
 import ca.floo.roadtrip.service.booking.adapters.recgov.RecGovBookingProvider
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
@@ -199,15 +203,29 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             availabilityProviders = availabilityProviderRegistry,
             dateResolver = availabilityDateResolver,
         )
-    val pollerMembership = AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), availabilityTargets)
+    val watchScopeResolver = WatchScopeResolver(campsitesRepo)
+    val pollerMembership = AvailabilityPollerMembership(watchScopeResolver, availabilityTargets)
     val alertProviders = AlertProviderRegistry(listOf(InternalPollerAlertProvider(pollerMembership)))
-    val availabilityWatchService = AvailabilityWatchService(boot.ctx, alertProviders)
 
     val schedulerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     val availabilityPollers = AvailabilityPollerRepo(boot.ctx)
     PollerBackfill(boot.ctx, pollerMembership).run()
 
     val slackNotifications = SlackNotificationServiceImpl(boot.appConfig.slack)
+    val recgovDispatchPort = DeferredRecGovAddToCartDispatchPort()
+    val bookingProviderRegistry = BookingProviderRegistry(listOf(RecGovBookingProvider(recgovDispatchPort)))
+    val bookingTargets = AvailabilityBookingTargetResolver(bookingProviderRegistry)
+    val availabilityWatchService =
+        AvailabilityWatchService(
+            ctx = boot.ctx,
+            alertProviders = alertProviders,
+            capabilityValidator =
+                WatchBookingCapabilityValidator(
+                    scopeResolver = watchScopeResolver,
+                    availabilityTargets = availabilityTargets,
+                    bookingTargets = bookingTargets,
+                ),
+        )
     val dispatchService =
         DispatchService(
             store = InMemoryDispatchStore(),
@@ -218,8 +236,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                     availabilityWatchService.update(watchId, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE)) != null
                 },
         )
-    val bookingProviderRegistry = BookingProviderRegistry(listOf(RecGovBookingProvider(dispatchService)))
-    val bookingTargets = AvailabilityBookingTargetResolver(bookingProviderRegistry)
+    recgovDispatchPort.delegate = dispatchService
     val triggerActions =
         TriggerActionRegistry(
             listOf(
@@ -237,7 +254,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
     val watchAlertDispatcher =
         WatchAlertDispatcher(
             slack = slackNotifications,
-            scopeResolver = WatchScopeResolver(campsitesRepo),
+            scopeResolver = watchScopeResolver,
             watches = AvailabilityWatchRepo(boot.ctx),
             targets = availabilityTargets,
             pois = PoiServingRepo(boot.ctx),
@@ -335,6 +352,14 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         failoverFetcher = sharedFailoverFetcher,
         slackNotifications = slackNotifications,
     )
+}
+
+private class DeferredRecGovAddToCartDispatchPort : RecGovAddToCartDispatchPort {
+    var delegate: RecGovAddToCartDispatchPort? = null
+
+    override suspend fun enqueueRecGovAddToCart(request: AddToCartRequest): AddToCartResult =
+        checkNotNull(delegate) { "RecGov add-to-cart dispatch port used before runtime wiring completed" }
+            .enqueueRecGovAddToCart(request)
 }
 
 private fun AppConfig.isProviderEnabled(id: AvailabilityProviderId): Boolean =

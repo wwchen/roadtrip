@@ -215,6 +215,11 @@ Provider implementations own fulfillment. Rec.gov currently fulfills
 call a backend HTTP API instead. Companion presence is runtime readiness for
 companion-backed providers, not durable booking capability.
 
+Watch create/update validates `atc` trigger support against the booking-provider
+registry after resolving the watch scope to concrete campsites. Unsupported
+targets fail the mutation instead of creating an active watch that can never
+fulfill its trigger.
+
 ## Capabilities
 
 Not every provider supports every monitoring action. The capability flags
