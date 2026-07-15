@@ -37,9 +37,6 @@ def _load_dotenv(path):
     return out
 
 DOTENV = _load_dotenv('.env')
-COMPANION_ENV = {'BACKEND_URL': 'http://127.0.0.1:' + PORT}
-if DOTENV.get('DISPATCH_COMPANION_TOKEN', ''):
-    COMPANION_ENV['DISPATCH_COMPANION_TOKEN'] = DOTENV['DISPATCH_COMPANION_TOKEN']
 
 # Point this clone's git at .githooks/ so the committed pre-commit (ktlint) and
 # pre-push (backend tests) hooks fire. core.hooksPath isn't tracked in the repo,
@@ -155,7 +152,7 @@ local_resource(
     'companion',
     cmd='cd companion && npm install && npx playwright install chromium',
     serve_cmd='cd companion && node --experimental-eventsource src/index.js',
-    serve_env=COMPANION_ENV,
+    serve_env={'BACKEND_URL': 'http://127.0.0.1:' + PORT},
     deps=['companion/src', 'companion/package.json'],
     ignore=['companion/node_modules'],
     resource_deps=['backend'],

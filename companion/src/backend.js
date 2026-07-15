@@ -1,6 +1,8 @@
 // HTTP client for the Kotlin backend. The companion never touches Postgres;
 // every state change goes through these endpoints.
 
+import { dispatchCompanionToken } from './env.js'
+
 const BASE = process.env.BACKEND_URL || 'http://127.0.0.1:8765'
 
 async function postJson (path, body, options = {}) {
@@ -18,7 +20,7 @@ async function postJson (path, body, options = {}) {
 
 function dispatchHeaders () {
   const headers = { 'content-type': 'application/json' }
-  const token = process.env.DISPATCH_COMPANION_TOKEN || process.env.COMPANION_DISPATCH_TOKEN
+  const token = dispatchCompanionToken()
   if (token) headers.authorization = `Bearer ${token}`
   return headers
 }
