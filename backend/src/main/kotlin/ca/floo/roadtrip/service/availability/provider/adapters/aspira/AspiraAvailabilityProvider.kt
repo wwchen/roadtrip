@@ -14,10 +14,8 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
 /**
- * Widest single-tick poll window for Aspira. Latent until the Aspira alert
- * poller lands (see RFC 0007) — `supportsInternalPolling` is still false — but declared
- * honestly so the capability is complete. Conservative default; tune per
- * tenant when polling turns on.
+ * Widest single-tick poll window for Aspira. Conservative default; tune per
+ * tenant if an upstream host needs a narrower window.
  */
 private const val ASPIRA_MAX_POLL_WINDOW_DAYS = 30
 
@@ -51,9 +49,9 @@ class AspiraAvailabilityProvider(
 
     override val capabilities: AvailabilityProviderCapabilities =
         AvailabilityProviderCapabilities(
-            // Alert poller is rec.gov-only today; Aspira polling is planned
-            // (see RFC 0007). Keep this honest until the poller adapter lands.
-            supportsInternalPolling = false,
+            // The generic internal poller consumes catalogAvailability; Aspira's
+            // adapter provides that path via map availability or occupancy.
+            supportsInternalPolling = true,
             bookingHorizonDays = tenant.bookingHorizonDays,
             maxPollWindowDays = ASPIRA_MAX_POLL_WINDOW_DAYS,
         )

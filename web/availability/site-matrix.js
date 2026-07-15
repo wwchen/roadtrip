@@ -405,8 +405,8 @@ function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook, 
   if (state.kind !== 'available') {
     // Reserved / first-come cells become watch buttons: tap to set (or manage)
     // an availability watch on that day for this POI.
-    if (canWatch && WATCHABLE_KINDS.has(state.kind)) {
-      const watched = !!watchedDates && watchedDates.has(day.date);
+    const watched = !!watchedDates && watchedDates.has(day.date);
+    if (WATCHABLE_KINDS.has(state.kind) && (canWatch || watched)) {
       const watchedClass = watched ? ' is-watched' : '';
       const watchAria = watched
         ? `${aria}; availability watch set, tap to manage`

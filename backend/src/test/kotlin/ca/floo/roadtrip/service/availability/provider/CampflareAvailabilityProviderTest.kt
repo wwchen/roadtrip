@@ -65,7 +65,7 @@ class CampflareAvailabilityProviderTest {
                 )
 
             assertEquals(AvailabilityProviderId.CAMPFLARE, provider.id)
-            assertEquals(false, provider.capabilities.supportsInternalPolling)
+            assertEquals(true, provider.capabilities.supportsInternalPolling)
             assertEquals(365, provider.capabilities.bookingHorizonDays)
             assertEquals(60, provider.capabilities.maxPollWindowDays)
             assertEquals(

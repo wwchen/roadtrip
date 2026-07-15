@@ -38,6 +38,7 @@ const SKELETON_RENDER_DELAY_MS = 150;
 const STALE_THRESHOLD_MIN = 10;
 const CALENDAR_MAX_DAYS_OUT = 365;
 const DEFAULT_STOP_WHEN_FOUND = true;
+const DEFAULT_WATCH_CADENCE_SEC = 60;
 const TRIGGER_KIND_SLACK_NOTIFY = 'slack_notify';
 const TRIGGER_KIND_ATC = 'atc';
 const BOOKING_ACTION_ADD_TO_CART = 'add_to_cart';
@@ -192,7 +193,7 @@ function renderAvailabilitySurface(ctx) {
     showToday: shouldShowEarliestButton(ctx),
     armedBook: ctx.armedBook,
     watchedDates: watchedDatesSet(ctx),
-    canWatch: ctx.poiId != null,
+    canWatch: supportsWatchAlerts(ctx),
   });
 }
 
@@ -222,7 +223,7 @@ function renderDetail(ctx) {
   return renderDayDetail({
     day,
     watching: ctx.watchesByWindow.has(watchWindowKey(day.date, stayEndDate(ctx, day.date))),
-    canWatch: ctx.poiId != null,
+    canWatch: ctx.poiId != null && supportsWatchAlerts(ctx),
   });
 }
 
@@ -294,9 +295,12 @@ function onRootClick(ctx, e) {
       const url = site
         ? reservationUrlFromTemplate(site, { startDate: date, endDate: stayEndDate(ctx, date) })
         : '';
-      if (url) window.open(url, '_blank', 'noreferrer');
-      ctx.armedBook = null;
-      updateBookButtonState(bookBtn, site, date, false);
+      if (url) {
+        window.open(url, '_blank', 'noreferrer');
+      } else {
+        ctx.armedBook = null;
+        updateBookButtonState(bookBtn, site, date, false);
+      }
     } else {
       disarmBookButtonsInPlace(ctx);
       ctx.armedBook = { campsiteId: String(campsiteId), date };
@@ -448,8 +452,6 @@ function onRootScroll(ctx, e) {
   if (!(scroll instanceof HTMLElement)) return;
   if (!scroll.classList.contains('cg-site-matrix-scroll')) return;
   if (ctx.restoringMatrixScroll) return;
-  // A genuine user scroll detaches the fixed-positioned popover from its
-  // cell; close it. Programmatic scroll restores are guarded above.
   closeWatchPopover(ctx);
 }
 
@@ -591,12 +593,21 @@ function openWatchPopover(ctx, anchorEl, date) {
   ctx.watchPopover = null;
 
   // Anchored with fixed positioning against the cell rect (not appended into
-  // the cell) so the scrollable matrix doesn't clip it. Closed on outside
-  // click / Escape / matrix scroll.
+  // the cell) so the scrollable matrix doesn't clip it. Repositioned on
+  // scroll/resize so it stays with the clicked cell.
   const host = document.createElement('div');
   host.className = 'cg-watch-pop-host';
   document.body.appendChild(host);
-  positionWatchPopover(host, anchorEl);
+  const reposition = () => {
+    if (!anchorEl.isConnected) {
+      closeWatchPopover(ctx);
+      return;
+    }
+    positionWatchPopover(host, anchorEl);
+  };
+  reposition();
+  window.addEventListener('scroll', reposition, true);
+  window.addEventListener('resize', reposition);
 
   const endDate = stayEndDate(ctx, date);
   const key = watchWindowKey(date, endDate);
@@ -629,7 +640,10 @@ function openWatchPopover(ctx, anchorEl, date) {
   });
 
   ctx.watchPopover = {
+    reposition,
     dispose() {
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
       controller.dispose();
       host.remove();
     },
@@ -639,6 +653,10 @@ function openWatchPopover(ctx, anchorEl, date) {
 function closeWatchPopover(ctx) {
   ctx.watchPopover?.dispose();
   ctx.watchPopover = null;
+}
+
+function repositionWatchPopover(ctx) {
+  ctx.watchPopover?.reposition?.();
 }
 
 function positionWatchPopover(host, anchorEl) {
@@ -890,6 +908,12 @@ async function toggleWatch(ctx, button) {
       await deleteWatch(existing.id, { signal: ctx.signal });
       ctx.watchesByWindow.delete(key);
     } else {
+      if (!supportsWatchAlerts(ctx)) {
+        button.textContent = previousLabel;
+        button.disabled = false;
+        rerender(ctx);
+        return;
+      }
       button.textContent = 'Creating watch...';
       const payload = buildWatchPayload(ctx, date, endDate);
       const created = await createWatch(payload, { signal: ctx.signal });
@@ -906,6 +930,9 @@ async function toggleWatch(ctx, button) {
 }
 
 function buildWatchPayload(ctx, date, endDate, { stopWhenFound = DEFAULT_STOP_WHEN_FOUND, addToCart = false } = {}) {
+  if (!supportsWatchAlerts(ctx)) {
+    throw new Error('Watch alerts are not available for this campground.');
+  }
   const triggerKinds = [TRIGGER_KIND_SLACK_NOTIFY];
   if (addToCart && supportsAddToCart(ctx)) triggerKinds.push(TRIGGER_KIND_ATC);
   return {
@@ -913,7 +940,7 @@ function buildWatchPayload(ctx, date, endDate, { stopWhenFound = DEFAULT_STOP_WH
     campsite_filters: {},
     start_date: date,
     end_date: endDate,
-    cadence_sec: 60,
+    cadence_sec: DEFAULT_WATCH_CADENCE_SEC,
     trigger_kinds: triggerKinds,
     trigger_config: {},
     stop_when_triggered: stopWhenFound,
@@ -925,10 +952,13 @@ function supportsAddToCart(ctx) {
     && ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_ATC);
 }
 
+function supportsWatchAlerts(ctx) {
+  return ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY);
+}
+
 function normalizeWatchCapabilities(value) {
   const triggerKinds = new Set(Array.isArray(value?.trigger_kinds) ? value.trigger_kinds : []);
   const bookingActions = new Set(Array.isArray(value?.booking_actions) ? value.booking_actions : []);
-  triggerKinds.add(TRIGGER_KIND_SLACK_NOTIFY);
   return { triggerKinds, bookingActions };
 }
 
