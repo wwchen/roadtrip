@@ -28,12 +28,11 @@ internal class AvailabilityWatchValidationException(
  */
 internal class WatchBookingCapabilityValidator(
     private val scopeResolver: WatchScopeResolver,
-    private val availabilityTargets: AvailabilityTargetResolver,
-    private val bookingTargets: AvailabilityBookingTargetResolver,
+    private val capabilities: WatchBookingCapabilityService,
 ) : WatchCapabilityValidator {
     override fun validate(watch: AvailabilityWatchRepo.Watch) {
         if (watch.status != WatchStatus.ACTIVE) return
-        if (AtcTriggerActionHandler.KIND !in watch.triggerKinds) return
+        if (AvailabilityTriggerKinds.ATC !in watch.triggerKinds) return
 
         val campsites = scopeResolver.resolve(watch)
         if (campsites.isEmpty()) {
@@ -43,15 +42,11 @@ internal class WatchBookingCapabilityValidator(
             )
         }
 
-        val unsupported =
-            campsites.filter { campsite ->
-                val resolved = availabilityTargets.resolve(campsite) ?: return@filter true
-                bookingTargets.targetFor(BookingAction.ADD_TO_CART, resolved) == null
-            }
-        if (unsupported.isNotEmpty()) {
+        val support = capabilities.supportFor(BookingAction.ADD_TO_CART, campsites)
+        if (!support.supported) {
             throw AvailabilityWatchValidationException(
                 error = UNSUPPORTED_TRIGGER_ERROR,
-                message = "atc is not supported for ${unsupported.size} of ${campsites.size} scoped campsite(s)",
+                message = "atc is not supported for ${support.unsupportedCount} of ${support.scopedCount} scoped campsite(s)",
             )
         }
     }

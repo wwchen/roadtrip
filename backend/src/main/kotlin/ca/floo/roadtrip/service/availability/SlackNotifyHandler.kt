@@ -32,6 +32,6 @@ internal class SlackNotifyHandler(
         )
 
     companion object {
-        const val KIND = "slack_notify"
+        const val KIND = AvailabilityTriggerKinds.SLACK_NOTIFY
     }
 }

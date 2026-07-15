@@ -19,6 +19,7 @@ import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.SlackNotifyHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
+import ca.floo.roadtrip.service.availability.WatchBookingCapabilityService
 import ca.floo.roadtrip.service.availability.WatchBookingCapabilityValidator
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
@@ -110,8 +111,11 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             capabilityValidator =
                 WatchBookingCapabilityValidator(
                     scopeResolver = scopeResolver,
-                    availabilityTargets = targets,
-                    bookingTargets = AvailabilityBookingTargetResolver(BookingProviderRegistry(emptyList())),
+                    capabilities =
+                        WatchBookingCapabilityService(
+                            availabilityTargets = targets,
+                            bookingTargets = AvailabilityBookingTargetResolver(BookingProviderRegistry(emptyList())),
+                        ),
                 ),
         )
     }

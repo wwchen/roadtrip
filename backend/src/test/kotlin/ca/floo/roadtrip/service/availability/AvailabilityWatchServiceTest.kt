@@ -116,8 +116,11 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
             capabilityValidator =
                 WatchBookingCapabilityValidator(
                     scopeResolver = scopeResolver,
-                    availabilityTargets = targets,
-                    bookingTargets = AvailabilityBookingTargetResolver(bookingProviders),
+                    capabilities =
+                        WatchBookingCapabilityService(
+                            availabilityTargets = targets,
+                            bookingTargets = AvailabilityBookingTargetResolver(bookingProviders),
+                        ),
                 ),
         )
     }

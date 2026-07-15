@@ -220,6 +220,13 @@ registry after resolving the watch scope to concrete campsites. Unsupported
 targets fail the mutation instead of creating an active watch that can never
 fulfill its trigger.
 
+The campsite availability API exposes proposed-watch capabilities for the
+current POI scope as provider-neutral `watch_capabilities`:
+`trigger_kinds` always includes `slack_notify`, and includes `atc` only when
+the resolved watch scope supports `BookingAction.ADD_TO_CART`. The FE renders
+the Add to cart toggle from that contract; create/update validation still uses
+the same booking capability service as the authoritative gate.
+
 ## Capabilities
 
 Not every provider supports every monitoring action. The capability flags

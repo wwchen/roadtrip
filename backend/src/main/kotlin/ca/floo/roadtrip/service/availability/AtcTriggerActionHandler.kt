@@ -122,6 +122,6 @@ internal class AtcTriggerActionHandler(
     private fun BookingProviderId.vendorSlug(): String = name.lowercase()
 
     companion object {
-        const val KIND = "atc"
+        const val KIND = AvailabilityTriggerKinds.ATC
     }
 }
