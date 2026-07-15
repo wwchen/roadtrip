@@ -101,7 +101,7 @@
               }
             ]
           },
-          "unit": "reqps"
+          "unit": "short"
         }
       },
       "gridPos": {
@@ -134,13 +134,13 @@
             "uid": "roadtrip-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (http_route, http_response_status_code) (rate(http_server_request_duration_seconds_count[$__rate_interval])) or on() vector(0)",
+          "expr": "sum by (http_route, http_response_status_code) (increase(http_server_request_duration_seconds_count[$__range])) or on() vector(0)",
           "legendFormat": "{{http_route}} {{http_response_status_code}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "HTTP server request rate",
+      "title": "HTTP server request count",
       "type": "timeseries"
     },
     {
@@ -171,7 +171,7 @@
               }
             ]
           },
-          "unit": "reqps"
+          "unit": "short"
         }
       },
       "gridPos": {
@@ -205,13 +205,13 @@
             "uid": "roadtrip-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(http_server_request_duration_seconds_count[$__rate_interval])) or on() vector(0)",
+          "expr": "sum(increase(http_server_request_duration_seconds_count[$__range])) or on() vector(0)",
           "legendFormat": "requests",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Total RPS",
+      "title": "Total requests",
       "type": "stat"
     },
     {
@@ -313,7 +313,7 @@
               }
             ]
           },
-          "unit": "reqps"
+          "unit": "short"
         }
       },
       "gridPos": {
@@ -347,13 +347,13 @@
             "uid": "roadtrip-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~\"5..\"}[$__rate_interval])) or on() vector(0)",
+          "expr": "sum(increase(http_server_request_duration_seconds_count{http_response_status_code=~\"5..\"}[$__range])) or on() vector(0)",
           "legendFormat": "5xx",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "5xx RPS",
+      "title": "5xx requests",
       "type": "stat"
     },
     {
@@ -1198,7 +1198,7 @@
               }
             ]
           },
-          "unit": "reqps"
+          "unit": "short"
         }
       },
       "gridPos": {
@@ -1231,13 +1231,13 @@
             "uid": "roadtrip-prometheus"
           },
           "editorMode": "code",
-          "expr": "sum by (server_address, http_response_status_code) (rate(http_client_request_duration_seconds_count[$__rate_interval])) or on() vector(0)",
+          "expr": "sum by (server_address, http_response_status_code) (increase(http_client_request_duration_seconds_count[$__range])) or on() vector(0)",
           "legendFormat": "{{server_address}} {{http_response_status_code}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "HTTP client request rate",
+      "title": "HTTP client request count",
       "type": "timeseries"
     }
   ],
