@@ -3,10 +3,8 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.models.booking.AddToCartRequest
 import ca.floo.roadtrip.models.booking.AddToCartResult
 import ca.floo.roadtrip.models.booking.BookingProviderId
-import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.booking.adapters.recgov.RecGovAddToCartDispatchPort
 import ca.floo.roadtrip.service.notification.SlackNotificationService
-import ca.floo.roadtrip.service.notification.WatchOpening
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
@@ -26,7 +24,6 @@ private const val DEFAULT_LEASE_SECONDS = 30L
 private const val MIN_LEASE_SECONDS = 1L
 private const val MAX_LEASE_SECONDS = 120L
 private const val PAYLOAD_VERSION_SUFFIX = "v1"
-private const val UNKNOWN_VENDOR = "unknown"
 private const val TEST_OPENING_LABEL = "Companion Test Site"
 private const val TEST_OPENING_CAMPGROUND = "Companion Test Campground"
 private const val TEST_BOOKING_URL = "https://example.invalid/companion-test"
@@ -40,13 +37,6 @@ internal fun interface DispatchWatchCompletion {
     fun markDone(watchId: Long): Boolean
 }
 
-internal interface AtcDispatchPort {
-    suspend fun enqueueAtc(
-        watch: AvailabilityWatchRepo.Watch,
-        openings: List<WatchOpening>,
-    ): List<DispatchQueued>
-}
-
 internal class DispatchService(
     private val store: DispatchStore,
     private val waiters: DispatchWaiterRegistry,
@@ -54,8 +44,7 @@ internal class DispatchService(
     private val watchCompletion: DispatchWatchCompletion,
     private val clock: Clock = Clock.systemUTC(),
     private val pendingTtl: Duration = Duration.ofSeconds(DEFAULT_PENDING_TTL_SECONDS),
-) : AtcDispatchPort,
-    RecGovAddToCartDispatchPort {
+) : RecGovAddToCartDispatchPort {
     private val log = LoggerFactory.getLogger(javaClass)
 
     suspend fun claim(
@@ -134,27 +123,6 @@ internal class DispatchService(
             DispatchFailResult.NotFound -> DispatchFailResult.NotFound
         }
 
-    override suspend fun enqueueAtc(
-        watch: AvailabilityWatchRepo.Watch,
-        openings: List<WatchOpening>,
-    ): List<DispatchQueued> =
-        openings
-            .groupBy { opening -> normalizeDispatchKey(opening.vendor ?: UNKNOWN_VENDOR) }
-            .map { (vendor, vendorOpenings) ->
-                enqueue(
-                    input =
-                        DispatchCreateInput(
-                            kind = AtcTriggerActionHandler.KIND,
-                            vendor = vendor,
-                            payloadVersion = payloadVersion(AtcTriggerActionHandler.KIND, vendor),
-                            payload = atcPayload(watch, vendor, vendorOpenings),
-                            watchId = watch.id,
-                            stopWhenTriggered = watch.stopWhenTriggered,
-                        ),
-                    offlineAlert = OfflineAlert.Atc(watch = watch, openings = vendorOpenings),
-                )
-            }
-
     override suspend fun enqueueRecGovAddToCart(request: AddToCartRequest): AddToCartResult {
         val version = payloadVersion(AtcTriggerActionHandler.KIND, RECGOV_VENDOR)
         val queued =
@@ -168,7 +136,6 @@ internal class DispatchService(
                         watchId = request.watchId,
                         stopWhenTriggered = request.stopWhenTriggered,
                     ),
-                offlineAlert = OfflineAlert.None,
             )
         return AddToCartResult.Queued(
             dispatchId = queued.id,
@@ -199,51 +166,13 @@ internal class DispatchService(
                     watchId = watchId,
                     stopWhenTriggered = stopWhenTriggered,
                 ),
-            offlineAlert = OfflineAlert.None,
         )
     }
 
-    private suspend fun enqueue(
-        input: DispatchCreateInput,
-        offlineAlert: OfflineAlert,
-    ): DispatchQueued {
+    private suspend fun enqueue(input: DispatchCreateInput): DispatchQueued {
         val queued = store.enqueue(input, pendingTtl, now())
         val notifiedWaiters = waiters.notifyMatching(queued)
-        val notified = queued.copy(notifiedWaiters = notifiedWaiters)
-        if (notifiedWaiters == 0 && offlineAlert is OfflineAlert.Atc) {
-            log.error(
-                "ATC companion offline: watch_id={} vendor={} dispatch_id={} openings={}",
-                offlineAlert.watch.id,
-                input.vendor,
-                queued.id,
-                offlineAlert.openings.size,
-            )
-            slack.sendAtcCompanionOffline(
-                watchId = offlineAlert.watch.id,
-                vendor = input.vendor,
-                openings = offlineAlert.openings,
-                channel = offlineAlert.watch.channelOverride(),
-            )
-        }
-        return notified
-    }
-
-    private fun atcPayload(
-        watch: AvailabilityWatchRepo.Watch,
-        vendor: String,
-        openings: List<WatchOpening>,
-    ): JsonObject {
-        val version = payloadVersion(AtcTriggerActionHandler.KIND, vendor)
-        return buildJsonObject {
-            put("watch_id", watch.id)
-            put("vendor", vendor)
-            put("payload_version", version)
-            put("start_date", watch.startDate.toString())
-            put("end_date", watch.endDate.toString())
-            putJsonArray("openings") {
-                openings.forEach { opening -> add(opening.toPayload(vendor)) }
-            }
-        }
+        return queued.copy(notifiedWaiters = notifiedWaiters)
     }
 
     private fun testPayload(
@@ -262,18 +191,7 @@ internal class DispatchService(
             put("start_date", startDate.toString())
             put("end_date", endDate.toString())
             putJsonArray("openings") {
-                add(
-                    WatchOpening(
-                        label = TEST_OPENING_LABEL,
-                        loop = null,
-                        siteType = "test",
-                        date = startDate,
-                        campgroundId = null,
-                        campground = TEST_OPENING_CAMPGROUND,
-                        bookingUrl = TEST_BOOKING_URL,
-                        vendor = vendor,
-                    ).toPayload(vendor),
-                )
+                add(testOpeningPayload(vendor, startDate))
             }
             put("simulate_result", normalizeDispatchKey(simulateResult))
             if (payload.isNotEmpty()) put("data", payload)
@@ -296,16 +214,17 @@ internal class DispatchService(
             }
         }
 
-    private fun WatchOpening.toPayload(vendor: String): JsonObject =
+    private fun testOpeningPayload(
+        vendor: String,
+        date: LocalDate,
+    ): JsonObject =
         buildJsonObject {
-            put("label", label)
+            put("label", TEST_OPENING_LABEL)
             put("date", date.toString())
             put("vendor", vendor)
-            loop?.let { put("loop", it) }
-            siteType?.let { put("site_type", it) }
-            campgroundId?.let { put("campground_id", it) }
-            campground?.let { put("campground", it) }
-            bookingUrl?.let { put("booking_url", it) }
+            put("site_type", "test")
+            put("campground", TEST_OPENING_CAMPGROUND)
+            put("booking_url", TEST_BOOKING_URL)
         }
 
     private fun AddToCartRequest.toPayload(vendor: String): JsonObject =
@@ -344,15 +263,6 @@ internal class DispatchService(
         }
 
     private fun now() = clock.instant()
-
-    private sealed class OfflineAlert {
-        data object None : OfflineAlert()
-
-        data class Atc(
-            val watch: AvailabilityWatchRepo.Watch,
-            val openings: List<WatchOpening>,
-        ) : OfflineAlert()
-    }
 }
 
 internal sealed class DispatchCompleteOutcome {

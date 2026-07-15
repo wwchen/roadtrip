@@ -6,8 +6,6 @@ import ca.floo.roadtrip.models.booking.AddToCartResult
 import ca.floo.roadtrip.models.booking.BookingProviderId
 import ca.floo.roadtrip.models.booking.BookingTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.repo.AvailabilityWatchRepo
-import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import ca.floo.roadtrip.service.notification.WatchOpening
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
@@ -27,7 +25,6 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
-import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -113,21 +110,6 @@ class DispatchServiceTest {
             assertNull(aspiraClaim)
             assertNotNull(recgovClaim)
             assertEquals(TEST_VENDOR_RECGOV, recgovClaim.vendor)
-        }
-
-    @Test
-    fun `enqueue atc sends offline slack when no companion waiter is connected`() =
-        runBlocking {
-            val slack = RecordingSlack()
-            val service = service(slack = slack)
-
-            service.enqueueAtc(fakeWatch(), listOf(opening(TEST_VENDOR_RECGOV)))
-
-            assertEquals(1, slack.offlineAlerts.size)
-            val alert = slack.offlineAlerts.single()
-            assertEquals(TEST_WATCH_ID, alert.watchId)
-            assertEquals(TEST_VENDOR_RECGOV, alert.vendor)
-            assertEquals(1, alert.openings.size)
         }
 
     @Test
@@ -270,14 +252,6 @@ class DispatchServiceTest {
         )
 
     private class RecordingSlack : SlackNotificationService {
-        data class OfflineAlert(
-            val watchId: Long,
-            val vendor: String,
-            val openings: List<WatchOpening>,
-            val channel: String?,
-        )
-
-        val offlineAlerts = mutableListOf<OfflineAlert>()
         val dispatchResults = mutableListOf<DispatchResult>()
 
         data class DispatchResult(
@@ -303,16 +277,6 @@ class DispatchServiceTest {
             channel: String?,
             appRootUrl: String?,
         ): Boolean = true
-
-        override suspend fun sendAtcCompanionOffline(
-            watchId: Long,
-            vendor: String,
-            openings: List<WatchOpening>,
-            channel: String?,
-        ): Boolean {
-            offlineAlerts += OfflineAlert(watchId, vendor, openings, channel)
-            return true
-        }
 
         override suspend fun sendDispatchResult(
             dispatchId: Long,
@@ -346,34 +310,6 @@ class DispatchServiceTest {
             watchId: Long,
         ): Boolean = true
     }
-
-    private fun fakeWatch(): AvailabilityWatchRepo.Watch =
-        AvailabilityWatchRepo.Watch(
-            id = TEST_WATCH_ID,
-            targets = emptyList<AvailabilityWatchTargetRepo.WatchTarget>(),
-            campsiteFilters = JsonObject(emptyMap()),
-            startDate = LocalDate.parse("2026-07-04"),
-            endDate = LocalDate.parse("2026-07-06"),
-            cadenceSec = null,
-            triggerKinds = listOf(AtcTriggerActionHandler.KIND),
-            triggerConfig = JsonObject(emptyMap()),
-            stopWhenTriggered = true,
-            status = WatchStatus.ACTIVE,
-            createdAt = OffsetDateTime.parse("2026-07-01T00:00:00Z"),
-            updatedAt = OffsetDateTime.parse("2026-07-01T00:00:00Z"),
-        )
-
-    private fun opening(vendor: String): WatchOpening =
-        WatchOpening(
-            label = "Site 12",
-            loop = "Loop A",
-            siteType = "Tent",
-            date = LocalDate.parse("2026-07-04"),
-            campgroundId = 100L,
-            campground = "Test CG",
-            bookingUrl = "https://example.test/book",
-            vendor = vendor,
-        )
 
     private fun addToCartRequest(): AddToCartRequest =
         AddToCartRequest(
