@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.booking.adapters.recgov
+package ca.floo.roadtrip.service.booking.adapters
 
 import ca.floo.roadtrip.models.booking.AddToCartRequest
 import ca.floo.roadtrip.models.booking.AddToCartResult
