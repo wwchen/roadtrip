@@ -18,7 +18,7 @@ import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.CampsiteCatalogService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
-import ca.floo.roadtrip.service.availability.WatchBookingCapabilityService
+import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.http.ContentType
@@ -41,7 +41,7 @@ internal fun Route.campsiteRoutes(
     availabilityProviders: AvailabilityProviderRegistry,
     dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     failoverFetcher: FailoverAvailabilityFetcher,
-    watchBookingCapabilities: WatchBookingCapabilityService,
+    watchCapabilities: WatchCapabilityService,
 ) {
     val campsitesRepo = CampsiteRepo(ctx)
     val providerRefs = CampsiteProviderRepo(ctx)
@@ -52,7 +52,7 @@ internal fun Route.campsiteRoutes(
             availabilityProviders = availabilityProviders,
             dateResolver = dateResolver,
         )
-    val catalogService = CampsiteCatalogService(providerRefs, campsitesRepo)
+    val catalogService = CampsiteCatalogService(providerRefs, campsitesRepo, targets)
     val availabilityService =
         CampsiteAvailabilityService(
             providerRefs = providerRefs,
@@ -65,7 +65,7 @@ internal fun Route.campsiteRoutes(
                     failoverFetcher = failoverFetcher,
                 ),
             dateResolver = dateResolver,
-            watchBookingCapabilities = watchBookingCapabilities,
+            watchCapabilityService = watchCapabilities,
         )
     val rateLimit = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE)
 

@@ -3,24 +3,19 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.models.api.CampsiteSummarySchema
 import ca.floo.roadtrip.models.api.PoiCampsitesResponseSchema
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
-import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
-import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraBookingUrl
-import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraTenants
-import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovBookingUrl
 
 internal class CampsiteCatalogService(
     private val providerRefs: CampsiteProviderRepo,
     private val campsitesRepo: CampsiteRepo,
+    private val targets: AvailabilityTargetResolver,
 ) {
     fun campsitesForPoi(
         poiId: Long,
         siteTypes: List<String>,
     ): PoiCampsitesResponseSchema {
         if (!providerRefs.campgroundExists(poiId)) throw AvailabilityServiceError.NotFound
-        val parentRef = providerRefs.findProviderRef(poiId)?.providerRefJson?.let(ProviderRefParser::parse)
         val campsites =
             campsitesRepo
                 .findAvailabilityTargetsByPoi(poiId)
@@ -32,11 +27,16 @@ internal class CampsiteCatalogService(
                 campsites.map {
                     it.toCampsiteSchema(
                         poiIds = listOf(poiId),
-                        reservationUrlTemplate = it.reservationUrlTemplate(parentRef),
+                        reservationUrlTemplate = reservationUrlTemplate(it),
                     )
                 },
         )
     }
+
+    private fun reservationUrlTemplate(campsite: CampsiteAvailabilityTarget): String? =
+        targets.resolve(campsite)?.let { resolved ->
+            resolved.provider.reservationUrlTemplate(campsite, resolved.parentRef)
+        }
 }
 
 internal fun CampsiteAvailabilityTarget.toCampsiteSchema(
@@ -57,16 +57,6 @@ internal fun CampsiteAvailabilityTarget.toCampsiteSchema(
         tags = tags,
         raw = raw,
     )
-
-internal fun CampsiteAvailabilityTarget.reservationUrlTemplate(parentRef: ProviderRef?): String? =
-    when {
-        vendor == "recgov" -> RecGovBookingUrl.template(vendorId)
-        vendor.startsWith("aspira_") ->
-            AspiraTenants.byVendorCode(vendor)?.host?.let { host ->
-                AspiraBookingUrl.templateFor(host, providerRef, parentRef)
-            }
-        else -> null
-    }
 
 internal fun List<CampsiteAvailabilityTarget>.filterBySiteTypes(siteTypes: Collection<String>): List<CampsiteAvailabilityTarget> {
     if (siteTypes.isEmpty()) return this

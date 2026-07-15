@@ -17,7 +17,7 @@ internal class CampsiteAvailabilityService(
     private val campsitesRepo: CampsiteRepo,
     private val composer: CampsiteAvailabilityComposer,
     private val dateResolver: AvailabilityDateResolver,
-    private val watchBookingCapabilities: WatchBookingCapabilityService,
+    private val watchCapabilityService: WatchCapabilityService,
 ) {
     suspend fun poiCampsitesAvailability(
         poiId: Long,
@@ -26,7 +26,7 @@ internal class CampsiteAvailabilityService(
         siteTypes: List<String>,
     ): PoiCampsitesAvailabilityResponseDto {
         val watchScopeCampsites = campsitesRepo.findAvailabilityTargetsByPoi(poiId)
-        val watchCapabilities = watchCapabilitiesFor(watchScopeCampsites, watchBookingCapabilities)
+        val watchCapabilities = watchCapabilitiesFor(watchScopeCampsites, watchCapabilityService)
         val campsites = watchScopeCampsites.filterBySiteTypes(siteTypes)
         if (campsites.isEmpty()) {
             val (start, end) = displayWindow(poiId, startDate, endDate, providerRefs, dateResolver)
@@ -77,16 +77,11 @@ private fun emptyPoiAvailability(
 
 private fun watchCapabilitiesFor(
     campsites: List<CampsiteAvailabilityTarget>,
-    bookingCapabilities: WatchBookingCapabilityService,
+    capabilities: WatchCapabilityService,
 ): AvailabilityWatchCapabilitiesDto {
-    val bookingActions = bookingCapabilities.supportedActions(campsites)
-    val triggerKinds =
-        buildList {
-            add(AvailabilityTriggerKinds.SLACK_NOTIFY)
-            if (BookingAction.ADD_TO_CART in bookingActions) add(AvailabilityTriggerKinds.ATC)
-        }
+    val bookingActions = capabilities.supportedBookingActions(campsites)
     return AvailabilityWatchCapabilitiesDto(
-        triggerKinds = triggerKinds,
+        triggerKinds = capabilities.supportedTriggerKinds(campsites),
         bookingActions = BookingAction.entries.filter { it in bookingActions }.map { it.wireValue },
     )
 }
