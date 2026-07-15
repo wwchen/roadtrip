@@ -294,22 +294,22 @@ separate companion process** — recreation.gov sits behind Akamai, which
 flags datacenter IPs and headless Chromium, so a real Chromium running on
 the operator's machine is the only thing that lands cart adds reliably. The
 backend never touches a browser; it only polls the public availability API,
-emits SSE `match` events, and tracks lease state.
+queues authenticated dispatches for the companion, and tracks lease state.
 
-- **`companion/`** — Node 20+ Playwright client. Subscribes to the backend
-  SSE stream at `/api/campsite/events`, claims matches via
-  `POST /api/campsite/companion/matches/{id}/claim`, drives Chromium to add the site
-  to the operator's rec.gov cart, reports the result, then PATCHes the
-  cart-extend endpoint every 5 minutes to hold the reservation. Heartbeats
-  to `/api/campsite/companion/heartbeat` every 30 s.
+- **`companion/`** — Node 20+ Playwright client. Claims backend dispatches via
+  `POST /api/dispatches/claim`, drives Chromium to add the site to the
+  operator's rec.gov cart, and reports completion or failure to
+  `/api/dispatches/{id}/complete` or `/api/dispatches/{id}/fail`. Set the same
+  `DISPATCH_COMPANION_TOKEN` on the backend and companion; the backend rejects
+  dispatch calls when the token is unset or mismatched.
   ```sh
   cd companion
   npm install
+  export DISPATCH_COMPANION_TOKEN='replace-with-a-local-secret'
   BACKEND_URL=http://127.0.0.1:8765 \
-    RECGOV_RECACCOUNT='{"refresh_id":"…","account_id":"…"}' \
     node --experimental-eventsource src/index.js
   ```
-- **`RECGOV_RECACCOUNT`** seeds the companion's persisted refresh token on
+- **`RECGOV_RECACCOUNT`** seeds the backend's persisted refresh token on
   first run (subsequent runs reuse the DB-backed token). To get it: log in
   on recreation.gov in your browser, open DevTools console, run
   `localStorage.getItem('recaccount')`, and paste the JSON blob into the

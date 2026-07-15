@@ -89,6 +89,23 @@ class DispatchServiceTest {
         }
 
     @Test
+    fun `claim selector matches any configured kind`() =
+        runBlocking {
+            val service = service()
+            enqueueDispatch(service)
+
+            val claimed =
+                service.claim(
+                    selector = DispatchClaimSelector.ofKinds(listOf("test", TEST_KIND_ATC), listOf(TEST_VENDOR_RECGOV)),
+                    wait = Duration.ZERO,
+                    lease = Duration.ofSeconds(TEST_LEASE_SECONDS),
+                )
+
+            assertNotNull(claimed)
+            assertEquals(TEST_KIND_ATC, claimed.kind)
+        }
+
+    @Test
     fun `enqueue queues claimable dispatch envelope`() =
         runBlocking {
             val service = service()

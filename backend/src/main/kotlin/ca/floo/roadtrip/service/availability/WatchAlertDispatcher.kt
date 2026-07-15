@@ -73,29 +73,34 @@ internal class WatchAlertDispatcher(
     }
 
     /**
-     * The "status message" for a `slack_notify` watch whose lifecycle just
-     * changed — created, updated, or paused. Unlike [dispatch], which reacts to
-     * cube *edges*, this always sends exactly one message reflecting the watch's
-     * current status, so a watch created on an already-open site is not silently
-     * stranded (its openings pre-date any future edge). Fire-and-forget from the
-     * route, so like [dispatch] it never throws into its caller.
+     * Initial trigger evaluation for a watch whose lifecycle just changed —
+     * created, updated, or paused. Unlike [dispatch], which reacts to cube
+     * *edges*, this inspects the current cube face, so a watch created on an
+     * already-open site is not silently stranded (its openings pre-date any
+     * future edge). Fire-and-forget from the route, so like [dispatch] it never
+     * throws into its caller.
      *
-     * A **paused/done** watch reports its lifecycle state and stops — no
-     * availability lookup, never a trigger. An **active** watch reads the current
-     * cube face for its window:
+     * A **paused/done** `slack_notify` watch reports its lifecycle state and
+     * stops — no availability lookup, never a trigger. An **active** watch reads
+     * the current cube face for its window:
      *  - **some cells bookable** → the same openings alert [dispatch] sends; a
      *    real trigger, so `stopWhenTriggered` still marks the watch `DONE`.
-     *  - **cells known, none bookable** → informational "nothing open yet".
-     *  - **no cells (cold POI)** → informational "not checked yet"; the immediate
-     *    poll `create()` schedules will observe the window and its first
-     *    observation is itself an edge, so the real opening fires via [dispatch].
+     *  - **cells known, none bookable** → `slack_notify` gets informational
+     *    "nothing open yet".
+     *  - **no cells (cold POI)** → `slack_notify` gets informational "not
+     *    checked yet"; the immediate poll `create()` schedules will observe the
+     *    window and its first observation is itself an edge, so the real opening
+     *    fires via [dispatch].
      * Only the bookable state ever marks a watch `DONE`.
      */
     suspend fun dispatchInitial(watch: AvailabilityWatchRepo.Watch) {
-        if (SlackNotifyHandler.KIND !in watch.triggerKinds) return
+        val handlers = watch.triggerKinds.mapNotNull { triggerActions.forKind(it) }
+        val hasSlack = SlackNotifyHandler.KIND in watch.triggerKinds
+        if (!hasSlack && handlers.isEmpty()) return
 
         val campsites = scopeResolver.resolve(watch)
         if (watch.status != WatchStatus.ACTIVE) {
+            if (!hasSlack) return
             val state =
                 when (watch.status) {
                     WatchStatus.PAUSED -> WatchStatusNotice.State.PAUSED
@@ -109,10 +114,9 @@ internal class WatchAlertDispatcher(
         val cells = availability.readCurrent(campsites.map { it.id }, datesInWindow(watch))
         val bookable = cells.filter { it.available }
         if (bookable.isNotEmpty()) {
-            val handlers = watch.triggerKinds.mapNotNull { triggerActions.forKind(it) }
             val covered = bookable.map { CellTransition(it.campsiteId, it.targetDate, it.status) }
             postOpenings(watch, covered, campsitesById, handlers)
-        } else {
+        } else if (hasSlack) {
             val state = if (cells.isNotEmpty()) WatchStatusNotice.State.WATCHING else WatchStatusNotice.State.UNCHECKED
             slack.sendWatchStatus(statusNotice(watch, campsites, state), watch.channelOverride())
         }

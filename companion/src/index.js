@@ -1,5 +1,5 @@
 // Companion main loop:
-//   1. Opens backend long-polls for dispatch work.
+//   1. Opens a backend long-poll for dispatch work.
 //   2. Claims dispatches through /api/dispatches/claim.
 //   3. Runs test dispatches by simulation flag and real ATC dispatches through
 //      Playwright, then reports complete/fail to the backend.
@@ -84,48 +84,30 @@ function dispatchSummary (dispatch) {
 }
 
 async function claimAnyDispatch () {
-  const pending = new Map()
-  activeClaims = []
-  for (const kind of DISPATCH_KINDS) {
-    const controller = new AbortController()
-    activeClaims.push(controller)
-    const promise = claimDispatch({
-      kind,
+  const controller = new AbortController()
+  activeClaims = [controller]
+  try {
+    const response = await claimDispatch({
+      kinds: DISPATCH_KINDS,
       vendors: DISPATCH_VENDORS,
       payloadVersions: PAYLOAD_VERSIONS,
       waitSec: CLAIM_WAIT_SEC,
       leaseSec: LEASE_SEC,
       signal: controller.signal,
     })
-      .then((response) => ({ kind, response }))
-      .catch((error) => ({ kind, error }))
-    pending.set(kind, { controller, promise })
-  }
-
-  try {
-    while (pending.size > 0 && !stopRequested) {
-      const { kind, response, error } = await Promise.race([...pending.values()].map((entry) => entry.promise))
-      pending.delete(kind)
-
-      if (error) {
-        if (error.name !== 'AbortError') log('dispatch claim error', kind, errorDetail(error))
-        continue
-      }
-      if (response.status === 204) continue
-      if (response.status !== 200) {
-        log('dispatch claim HTTP', kind, response.status, response.body)
-        continue
-      }
-      const dispatch = response.json?.dispatch
-      if (!dispatch) {
-        log('dispatch claim missing dispatch body', kind, response.body)
-        continue
-      }
-      for (const [otherKind, entry] of pending) {
-        if (otherKind !== kind) entry.controller.abort()
-      }
-      return dispatch
+    if (response.status === 204) return null
+    if (response.status !== 200) {
+      log('dispatch claim HTTP', DISPATCH_KINDS.join(','), response.status, response.body)
+      return null
     }
+    const dispatch = response.json?.dispatch
+    if (!dispatch) {
+      log('dispatch claim missing dispatch body', DISPATCH_KINDS.join(','), response.body)
+      return null
+    }
+    return dispatch
+  } catch (error) {
+    if (error.name !== 'AbortError') log('dispatch claim error', errorDetail(error))
     return null
   } finally {
     activeClaims = []

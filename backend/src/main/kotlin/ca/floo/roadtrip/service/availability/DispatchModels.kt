@@ -4,16 +4,18 @@ import kotlinx.serialization.json.JsonObject
 import java.time.Instant
 
 private const val BLANK_KEY_MESSAGE = "dispatch selector keys must be non-blank"
+private const val EMPTY_KIND_MESSAGE = "dispatch selector kinds must be non-empty"
 private const val EMPTY_VENDOR_MESSAGE = "dispatch selector vendors must be non-empty"
 private const val PAYLOAD_VERSION_SUFFIX = "v1"
 
 internal data class DispatchClaimSelector(
-    val kind: String,
+    val kinds: Set<String>,
     val vendors: Set<String>,
     val payloadVersions: Set<String> = emptySet(),
 ) {
     init {
-        require(kind.isNotBlank()) { BLANK_KEY_MESSAGE }
+        require(kinds.isNotEmpty()) { EMPTY_KIND_MESSAGE }
+        require(kinds.none { it.isBlank() }) { BLANK_KEY_MESSAGE }
         require(vendors.isNotEmpty()) { EMPTY_VENDOR_MESSAGE }
         require(vendors.none { it.isBlank() }) { BLANK_KEY_MESSAGE }
         require(payloadVersions.none { it.isBlank() }) { BLANK_KEY_MESSAGE }
@@ -24,7 +26,7 @@ internal data class DispatchClaimSelector(
         vendor: String,
         payloadVersion: String,
     ): Boolean =
-        this.kind == normalizeDispatchKey(kind) &&
+        kinds.contains(normalizeDispatchKey(kind)) &&
             vendors.contains(normalizeDispatchKey(vendor)) &&
             (
                 payloadVersions.isEmpty() ||
@@ -36,9 +38,15 @@ internal data class DispatchClaimSelector(
             kind: String,
             vendors: Iterable<String>,
             payloadVersions: Iterable<String> = emptyList(),
+        ): DispatchClaimSelector = ofKinds(listOf(kind), vendors, payloadVersions)
+
+        fun ofKinds(
+            kinds: Iterable<String>,
+            vendors: Iterable<String>,
+            payloadVersions: Iterable<String> = emptyList(),
         ): DispatchClaimSelector =
             DispatchClaimSelector(
-                kind = normalizeDispatchKey(kind),
+                kinds = normalizeDispatchKeys(kinds),
                 vendors = normalizeDispatchKeys(vendors),
                 payloadVersions = normalizeDispatchKeys(payloadVersions),
             )
@@ -134,5 +142,4 @@ internal fun dispatchPayloadVersion(
     vendor: String,
 ): String = "${normalizeDispatchKey(kind)}.${normalizeDispatchKey(vendor)}.$PAYLOAD_VERSION_SUFFIX"
 
-private fun normalizeDispatchKeys(values: Iterable<String>): Set<String> =
-    values.map(::normalizeDispatchKey).filter { it.isNotBlank() }.toSet()
+private fun normalizeDispatchKeys(values: Iterable<String>): Set<String> = values.map(::normalizeDispatchKey).toSet()

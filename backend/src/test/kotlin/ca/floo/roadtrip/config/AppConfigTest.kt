@@ -54,6 +54,8 @@ class AppConfigTest {
         assertEquals(Duration.ofSeconds(30), config.defaultLease)
         assertEquals(Duration.ofSeconds(1), config.minLease)
         assertEquals(Duration.ofSeconds(120), config.maxLease)
+        assertEquals(null, config.companionToken)
+        assertEquals(false, config.testEndpointEnabled)
     }
 
     @Test
@@ -67,6 +69,8 @@ class AppConfigTest {
                     "roadtrip.dispatch.default-lease" to "20s",
                     "roadtrip.dispatch.min-lease" to "2s",
                     "roadtrip.dispatch.max-lease" to "90s",
+                    "roadtrip.dispatch.companion-token" to " token-123 ",
+                    "roadtrip.dispatch.test-endpoint-enabled" to "true",
                 ),
             ).dispatch
 
@@ -76,6 +80,8 @@ class AppConfigTest {
         assertEquals(Duration.ofSeconds(20), config.defaultLease)
         assertEquals(Duration.ofSeconds(2), config.minLease)
         assertEquals(Duration.ofSeconds(90), config.maxLease)
+        assertEquals("token-123", config.companionToken)
+        assertEquals(true, config.testEndpointEnabled)
     }
 
     @Test
@@ -91,6 +97,16 @@ class AppConfigTest {
             }
 
         assertEquals("dispatch defaultLease must be <= maxLease", err.message)
+    }
+
+    @Test
+    fun `dispatch config validates boolean toggles`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                appConfig(mapOf("roadtrip.dispatch.test-endpoint-enabled" to "sometimes"))
+            }
+
+        assertEquals("roadtrip.dispatch.test-endpoint-enabled must be true or false", err.message)
     }
 
     @Test

@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.config.DispatchConfig
 import ca.floo.roadtrip.models.api.ApiErrorSchema
+import ca.floo.roadtrip.models.api.DEFAULT_DISPATCH_KIND
 import ca.floo.roadtrip.models.api.DispatchClaimRequest
 import ca.floo.roadtrip.models.api.DispatchClaimedResponse
 import ca.floo.roadtrip.models.api.DispatchClaimedSchema
@@ -21,8 +23,10 @@ import ca.floo.roadtrip.service.availability.DispatchQueued
 import ca.floo.roadtrip.service.availability.DispatchService
 import ca.floo.roadtrip.service.availability.DispatchTestEventInput
 import ca.floo.roadtrip.service.availability.DispatchTestEventService
+import ca.floo.roadtrip.service.availability.normalizeDispatchKey
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
@@ -36,12 +40,15 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
+import java.security.MessageDigest
 import java.time.Duration
 
 private const val STATUS_COMPLETED = "completed"
 private const val STATUS_FAILED = "failed"
 private const val SIMULATE_RESULT_SUCCESS = "success"
 private const val SIMULATE_RESULT_FAILURE = "failure"
+private const val BEARER_AUTH_PREFIX = "Bearer "
+private const val TEST_DISPATCH_KIND = "test"
 
 private val validSimulateResults = setOf(SIMULATE_RESULT_SUCCESS, SIMULATE_RESULT_FAILURE)
 
@@ -56,6 +63,7 @@ private val dispatchJson =
 internal fun Route.dispatchRoutes(
     dispatches: DispatchService,
     testEvents: DispatchTestEventService,
+    dispatchConfig: DispatchConfig,
 ) {
     post("/api/dispatches/claim", {
         tags = listOf("dispatches")
@@ -67,10 +75,18 @@ internal fun Route.dispatchRoutes(
             code(HttpStatusCode.BadRequest) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
         }
     }) {
+        if (!call.requireDispatchAuth(dispatchConfig)) return@post
         val req = call.decodeBody<DispatchClaimRequest>() ?: return@post
         val selector =
-            runCatching { DispatchClaimSelector.of(req.kind, req.vendors, req.payloadVersions) }
-                .getOrElse { return@post call.respondError("invalid_selector", HttpStatusCode.BadRequest, it.message) }
+            runCatching {
+                DispatchClaimSelector.ofKinds(
+                    req.claimKinds(),
+                    req.vendors,
+                    req.payloadVersions,
+                )
+            }.getOrElse {
+                return@post call.respondError("invalid_selector", HttpStatusCode.BadRequest, it.message)
+            }
         val claimed =
             dispatches.claim(
                 selector = selector,
@@ -98,6 +114,7 @@ internal fun Route.dispatchRoutes(
             code(HttpStatusCode.Conflict) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
         }
     }) {
+        if (!call.requireDispatchAuth(dispatchConfig)) return@post
         val id = call.dispatchId() ?: return@post
         val req = call.decodeBody<DispatchHeartbeatRequest>() ?: return@post
         if (req.leaseToken.isBlank()) return@post call.respondError("invalid_lease_token", HttpStatusCode.BadRequest)
@@ -128,6 +145,7 @@ internal fun Route.dispatchRoutes(
             code(HttpStatusCode.Conflict) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
         }
     }) {
+        if (!call.requireDispatchAuth(dispatchConfig)) return@post
         val id = call.dispatchId() ?: return@post
         val req = call.decodeBody<DispatchCompleteRequest>() ?: return@post
         if (req.leaseToken.isBlank()) return@post call.respondError("invalid_lease_token", HttpStatusCode.BadRequest)
@@ -154,6 +172,7 @@ internal fun Route.dispatchRoutes(
             code(HttpStatusCode.Conflict) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
         }
     }) {
+        if (!call.requireDispatchAuth(dispatchConfig)) return@post
         val id = call.dispatchId() ?: return@post
         val req = call.decodeBody<DispatchFailRequest>() ?: return@post
         if (req.leaseToken.isBlank()) return@post call.respondError("invalid_lease_token", HttpStatusCode.BadRequest)
@@ -175,6 +194,10 @@ internal fun Route.dispatchRoutes(
             code(HttpStatusCode.BadRequest) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
         }
     }) {
+        if (!call.requireDispatchAuth(dispatchConfig)) return@post
+        if (!dispatchConfig.testEndpointEnabled) {
+            return@post call.respondError("test_dispatch_disabled", HttpStatusCode.Forbidden)
+        }
         val req = call.decodeBody<DispatchTestEventRequest>() ?: return@post
         val error = validateTestEvent(req)
         if (error != null) return@post call.respondError(error.first, HttpStatusCode.BadRequest, error.second)
@@ -194,6 +217,37 @@ internal fun Route.dispatchRoutes(
     }
 }
 
+private fun DispatchClaimRequest.claimKinds(): List<String> = kinds.takeIf { it.isNotEmpty() } ?: listOf(kind ?: DEFAULT_DISPATCH_KIND)
+
+private suspend fun ApplicationCall.requireDispatchAuth(config: DispatchConfig): Boolean {
+    val expected = config.companionToken
+    if (expected.isNullOrBlank()) {
+        respondError("dispatch_auth_unconfigured", HttpStatusCode.ServiceUnavailable)
+        return false
+    }
+    val presented = request.headers[HttpHeaders.Authorization]?.bearerToken()
+    if (presented == null || !tokensMatch(presented, expected)) {
+        respondError("unauthorized", HttpStatusCode.Unauthorized)
+        return false
+    }
+    return true
+}
+
+private fun String.bearerToken(): String? =
+    takeIf { it.startsWith(BEARER_AUTH_PREFIX, ignoreCase = true) }
+        ?.substring(BEARER_AUTH_PREFIX.length)
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+
+private fun tokensMatch(
+    presented: String,
+    expected: String,
+): Boolean =
+    MessageDigest.isEqual(
+        presented.toByteArray(Charsets.UTF_8),
+        expected.toByteArray(Charsets.UTF_8),
+    )
+
 private suspend inline fun <reified T> ApplicationCall.decodeBody(): T? {
     val raw = receiveText()
     return try {
@@ -212,7 +266,9 @@ private suspend fun ApplicationCall.dispatchId(): Long? =
         }
 
 private fun validateTestEvent(req: DispatchTestEventRequest): Pair<String, String?>? {
-    if (req.kind?.isBlank() == true) return "invalid_kind" to "kind must be non-blank"
+    val kind = req.kind?.let(::normalizeDispatchKey)
+    if (kind?.isBlank() == true) return "invalid_kind" to "kind must be non-blank"
+    if (kind != null && kind != TEST_DISPATCH_KIND) return "invalid_kind" to "test endpoint only queues test dispatches"
     if (req.vendor.isBlank()) return "invalid_vendor" to "vendor must be non-blank"
     if (req.simulateResult.trim().lowercase() !in validSimulateResults) {
         return "invalid_simulate_result" to "simulate_result must be success or failure"

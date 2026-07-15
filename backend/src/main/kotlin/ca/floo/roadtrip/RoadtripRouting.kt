@@ -148,7 +148,7 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
             runtime.watchAlertDispatcher,
             runtime.schedulerScope,
         )
-        dispatchRoutes(runtime.dispatchService, runtime.dispatchTestEventService)
+        dispatchRoutes(runtime.dispatchService, runtime.dispatchTestEventService, runtime.appConfig.dispatch)
         campsiteRoutes(
             ctx = runtime.ctx,
             availabilityProviders = runtime.availabilityProviderRegistry,

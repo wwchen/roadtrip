@@ -16,6 +16,8 @@ roadtrip:
     default-lease: 30s
     min-lease: 1s
     max-lease: 120s
+    companion-token: ${DISPATCH_COMPANION_TOKEN}
+    test-endpoint-enabled: ${DISPATCH_TEST_ENDPOINT_ENABLED}
   mapbox:
     token: ${MAPBOX_TOKEN}
   campflare:

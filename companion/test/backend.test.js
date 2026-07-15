@@ -12,7 +12,7 @@ before(async () => {
     let body = ''
     req.on('data', (c) => { body += c })
     req.on('end', () => {
-      log.push({ method: req.method, url: req.url, body })
+      log.push({ method: req.method, url: req.url, authorization: req.headers.authorization, body })
       if (req.url === '/api/dispatches/claim') {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({
@@ -51,6 +51,7 @@ before(async () => {
   const port = server.address().port
   baseUrl = `http://127.0.0.1:${port}`
   process.env.BACKEND_URL = baseUrl
+  process.env.DISPATCH_COMPANION_TOKEN = 'test-token'
 })
 
 after(async () => {
@@ -68,7 +69,7 @@ test('fetchFreshRecaccount returns the recaccount-shaped JSON from backend', asy
 test('claimDispatch posts dispatch selector', async () => {
   const { claimDispatch } = await import('../src/backend.js')
   const r = await claimDispatch({
-    kind: 'test',
+    kinds: ['test', 'atc'],
     vendors: ['recgov'],
     payloadVersions: ['atc.recgov.v1'],
     waitSec: 30,
@@ -78,8 +79,9 @@ test('claimDispatch posts dispatch selector', async () => {
   assert.equal(r.json.dispatch.id, 9)
   const last = log.pop()
   assert.equal(last.url, '/api/dispatches/claim')
+  assert.equal(last.authorization, 'Bearer test-token')
   assert.deepEqual(JSON.parse(last.body), {
-    kind: 'test',
+    kinds: ['test', 'atc'],
     vendors: ['recgov'],
     payload_versions: ['atc.recgov.v1'],
     wait_sec: 30,
@@ -93,6 +95,7 @@ test('completeDispatch posts lease token and result', async () => {
   assert.equal(r.status, 200)
   const last = log.pop()
   assert.equal(last.url, '/api/dispatches/9/complete')
+  assert.equal(last.authorization, 'Bearer test-token')
   assert.deepEqual(JSON.parse(last.body), {
     lease_token: 'lease-1',
     result: { simulated: true },
@@ -105,6 +108,7 @@ test('failDispatch posts lease token and failure detail', async () => {
   assert.equal(r.status, 200)
   const last = log.pop()
   assert.equal(last.url, '/api/dispatches/9/fail')
+  assert.equal(last.authorization, 'Bearer test-token')
   assert.deepEqual(JSON.parse(last.body), {
     lease_token: 'lease-1',
     error: 'simulated_failure',

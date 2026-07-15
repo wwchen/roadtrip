@@ -8,7 +8,8 @@ const val DEFAULT_DISPATCH_KIND = "atc"
 
 @Serializable
 data class DispatchClaimRequest(
-    val kind: String = DEFAULT_DISPATCH_KIND,
+    val kind: String? = null,
+    val kinds: List<String> = emptyList(),
     val vendors: List<String>,
     @SerialName("payload_versions") val payloadVersions: List<String> = emptyList(),
     @SerialName("wait_sec") val waitSec: Long? = null,

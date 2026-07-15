@@ -6,7 +6,7 @@ const BASE = process.env.BACKEND_URL || 'http://127.0.0.1:8765'
 async function postJson (path, body, options = {}) {
   const res = await fetch(BASE + path, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: dispatchHeaders(),
     body: JSON.stringify(body),
     signal: options.signal,
   })
@@ -14,6 +14,13 @@ async function postJson (path, body, options = {}) {
   let json = null
   try { json = JSON.parse(text) } catch {}
   return { status: res.status, body: text, json }
+}
+
+function dispatchHeaders () {
+  const headers = { 'content-type': 'application/json' }
+  const token = process.env.DISPATCH_COMPANION_TOKEN || process.env.COMPANION_DISPATCH_TOKEN
+  if (token) headers.authorization = `Bearer ${token}`
+  return headers
 }
 
 async function getJson (path) {
@@ -37,19 +44,25 @@ export async function fetchFreshRecaccount () {
 
 export async function claimDispatch ({
   kind,
+  kinds = [],
   vendors,
   payloadVersions = [],
   waitSec = 30,
   leaseSec = 30,
   signal,
 }) {
-  return postJson('/api/dispatches/claim', {
-    kind,
+  const selector = {
     vendors,
     payload_versions: payloadVersions,
     wait_sec: waitSec,
     lease_sec: leaseSec,
-  }, { signal })
+  }
+  if (kinds.length > 0) {
+    selector.kinds = kinds
+  } else if (kind) {
+    selector.kind = kind
+  }
+  return postJson('/api/dispatches/claim', selector, { signal })
 }
 
 export async function completeDispatch (dispatchId, leaseToken, result = {}) {

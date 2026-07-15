@@ -8,6 +8,7 @@ private val DEFAULT_DISPATCH_MIN_CLAIM_WAIT: Duration = Duration.ofMillis(1)
 private val DEFAULT_DISPATCH_LEASE: Duration = Duration.ofSeconds(30)
 private val DEFAULT_DISPATCH_MIN_LEASE: Duration = Duration.ofSeconds(1)
 private val DEFAULT_DISPATCH_MAX_LEASE: Duration = Duration.ofSeconds(120)
+private const val DEFAULT_DISPATCH_TEST_ENDPOINT_ENABLED = false
 
 data class DispatchConfig(
     val pendingTtl: Duration = DEFAULT_DISPATCH_PENDING_TTL,
@@ -16,6 +17,8 @@ data class DispatchConfig(
     val defaultLease: Duration = DEFAULT_DISPATCH_LEASE,
     val minLease: Duration = DEFAULT_DISPATCH_MIN_LEASE,
     val maxLease: Duration = DEFAULT_DISPATCH_MAX_LEASE,
+    val companionToken: String? = null,
+    val testEndpointEnabled: Boolean = DEFAULT_DISPATCH_TEST_ENDPOINT_ENABLED,
 ) {
     init {
         require(pendingTtl.isPositive()) { "dispatch pendingTtl must be positive" }
@@ -38,6 +41,8 @@ data class DispatchConfig(
                 defaultLease = config.duration("default-lease", DEFAULT_DISPATCH_LEASE),
                 minLease = config.duration("min-lease", DEFAULT_DISPATCH_MIN_LEASE),
                 maxLease = config.duration("max-lease", DEFAULT_DISPATCH_MAX_LEASE),
+                companionToken = config.value("companion-token"),
+                testEndpointEnabled = config.boolean("test-endpoint-enabled", DEFAULT_DISPATCH_TEST_ENDPOINT_ENABLED),
             )
     }
 }
@@ -45,3 +50,14 @@ data class DispatchConfig(
 private fun Duration.isPositive(): Boolean = !isZero && !isNegative
 
 private fun Duration.isGreaterThan(other: Duration): Boolean = compareTo(other) > 0
+
+private fun ConfigSection.boolean(
+    name: String,
+    default: Boolean,
+): Boolean =
+    when (val raw = value(name)?.lowercase()) {
+        null -> default
+        "true" -> true
+        "false" -> false
+        else -> throw IllegalArgumentException("${key(name)} must be true or false")
+    }
