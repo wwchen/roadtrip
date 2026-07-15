@@ -238,6 +238,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                 DispatchWatchCompletion { watchId ->
                     availabilityWatchService.update(watchId, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE)) != null
                 },
+            config = boot.appConfig.dispatch,
         )
     val dispatchTestEventService = DispatchTestEventService(dispatchService)
     dispatchEnqueuer.delegate = dispatchService

@@ -74,8 +74,8 @@ internal fun Route.dispatchRoutes(
         val claimed =
             dispatches.claim(
                 selector = selector,
-                wait = Duration.ofSeconds(req.waitSec),
-                lease = Duration.ofSeconds(req.leaseSec),
+                wait = req.waitSec?.let(Duration::ofSeconds),
+                lease = req.leaseSec?.let(Duration::ofSeconds),
             )
         if (claimed == null) {
             call.respond(HttpStatusCode.NoContent)
@@ -101,7 +101,7 @@ internal fun Route.dispatchRoutes(
         val id = call.dispatchId() ?: return@post
         val req = call.decodeBody<DispatchHeartbeatRequest>() ?: return@post
         if (req.leaseToken.isBlank()) return@post call.respondError("invalid_lease_token", HttpStatusCode.BadRequest)
-        when (val result = dispatches.heartbeat(id, req.leaseToken, Duration.ofSeconds(req.leaseSec))) {
+        when (val result = dispatches.heartbeat(id, req.leaseToken, req.leaseSec?.let(Duration::ofSeconds))) {
             is DispatchLeaseResult.Updated ->
                 call.respondJson(
                     DispatchLeaseResponse(

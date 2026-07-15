@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.config.DispatchConfig
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import ca.floo.roadtrip.service.notification.WatchOpening
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
@@ -37,6 +38,8 @@ private const val TEST_ERROR_SIMULATED_FAILURE = "simulated_failure"
 private const val TEST_FAILURE_DETAIL = "test dispatch requested failure"
 private const val TEST_COMPANION_ID = "companion-A"
 private const val TEST_DISPATCH_PAYLOAD_VALUE = "bar"
+
+private val TEST_NOW: Instant = Instant.parse("2026-07-14T00:00:00Z")
 
 class DispatchServiceTest {
     @Test
@@ -118,6 +121,50 @@ class DispatchServiceTest {
         }
 
     @Test
+    fun `enqueue uses configured pending ttl`() =
+        runBlocking {
+            val ttl = Duration.ofSeconds(5)
+            val service = service(config = DispatchConfig(pendingTtl = ttl))
+
+            val queued = enqueueDispatch(service)
+
+            assertEquals(TEST_NOW.plus(ttl), queued.expiresAt)
+        }
+
+    @Test
+    fun `claim uses configured default and max lease durations`() =
+        runBlocking {
+            val service =
+                service(
+                    config =
+                        DispatchConfig(
+                            defaultLease = Duration.ofSeconds(7),
+                            maxLease = Duration.ofSeconds(11),
+                        ),
+                )
+            enqueueDispatch(service)
+            enqueueDispatch(service)
+
+            val defaultLeaseClaim =
+                service.claim(
+                    selector = DispatchClaimSelector.of(TEST_KIND_ATC, listOf(TEST_VENDOR_RECGOV)),
+                    wait = Duration.ZERO,
+                    lease = null,
+                )
+            val maxLeaseClaim =
+                service.claim(
+                    selector = DispatchClaimSelector.of(TEST_KIND_ATC, listOf(TEST_VENDOR_RECGOV)),
+                    wait = Duration.ZERO,
+                    lease = Duration.ofSeconds(99),
+                )
+
+            assertNotNull(defaultLeaseClaim)
+            assertNotNull(maxLeaseClaim)
+            assertEquals(TEST_NOW.plusSeconds(7), defaultLeaseClaim.leaseExpiresAt)
+            assertEquals(TEST_NOW.plusSeconds(11), maxLeaseClaim.leaseExpiresAt)
+        }
+
+    @Test
     fun `complete marks a stop-when-triggered watch done`() =
         runBlocking {
             val completedWatches = mutableListOf<Long>()
@@ -193,13 +240,15 @@ class DispatchServiceTest {
     private fun service(
         slack: SlackNotificationService = RecordingSlack(),
         watchCompletion: DispatchWatchCompletion = DispatchWatchCompletion { true },
+        config: DispatchConfig = DispatchConfig(),
     ): DispatchService =
         DispatchService(
             store = InMemoryDispatchStore(),
             waiters = DispatchWaiterRegistry(),
             slack = slack,
             watchCompletion = watchCompletion,
-            clock = Clock.fixed(Instant.parse("2026-07-14T00:00:00Z"), ZoneOffset.UTC),
+            config = config,
+            clock = Clock.fixed(TEST_NOW, ZoneOffset.UTC),
         )
 
     private suspend fun enqueueDispatch(

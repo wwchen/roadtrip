@@ -9,6 +9,13 @@ roadtrip:
   availability:
     force-pull-cooldown: 60s
     provider-cooldown: 5m
+  dispatch:
+    pending-ttl: 30s
+    max-claim-wait: 30s
+    min-claim-wait: 1ms
+    default-lease: 30s
+    min-lease: 1s
+    max-lease: 120s
   mapbox:
     token: ${MAPBOX_TOKEN}
   campflare:

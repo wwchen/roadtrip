@@ -45,6 +45,55 @@ class AppConfigTest {
     }
 
     @Test
+    fun `dispatch config uses operational defaults when properties are empty`() {
+        val config = appConfig().dispatch
+
+        assertEquals(Duration.ofSeconds(30), config.pendingTtl)
+        assertEquals(Duration.ofSeconds(30), config.maxClaimWait)
+        assertEquals(Duration.ofMillis(1), config.minClaimWait)
+        assertEquals(Duration.ofSeconds(30), config.defaultLease)
+        assertEquals(Duration.ofSeconds(1), config.minLease)
+        assertEquals(Duration.ofSeconds(120), config.maxLease)
+    }
+
+    @Test
+    fun `dispatch config parses duration overrides`() {
+        val config =
+            appConfig(
+                mapOf(
+                    "roadtrip.dispatch.pending-ttl" to "45s",
+                    "roadtrip.dispatch.max-claim-wait" to "15s",
+                    "roadtrip.dispatch.min-claim-wait" to "2ms",
+                    "roadtrip.dispatch.default-lease" to "20s",
+                    "roadtrip.dispatch.min-lease" to "2s",
+                    "roadtrip.dispatch.max-lease" to "90s",
+                ),
+            ).dispatch
+
+        assertEquals(Duration.ofSeconds(45), config.pendingTtl)
+        assertEquals(Duration.ofSeconds(15), config.maxClaimWait)
+        assertEquals(Duration.ofMillis(2), config.minClaimWait)
+        assertEquals(Duration.ofSeconds(20), config.defaultLease)
+        assertEquals(Duration.ofSeconds(2), config.minLease)
+        assertEquals(Duration.ofSeconds(90), config.maxLease)
+    }
+
+    @Test
+    fun `dispatch config validates duration ordering`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                appConfig(
+                    mapOf(
+                        "roadtrip.dispatch.default-lease" to "30s",
+                        "roadtrip.dispatch.max-lease" to "5s",
+                    ),
+                )
+            }
+
+        assertEquals("dispatch defaultLease must be <= maxLease", err.message)
+    }
+
+    @Test
     fun `cache config uses entity defaults when properties are empty`() {
         val config = appConfig()
 

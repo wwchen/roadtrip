@@ -1,17 +1,12 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.config.DispatchConfig
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 import java.time.Clock
 import java.time.Duration
 
-private const val DEFAULT_PENDING_TTL_SECONDS = 30L
-private const val MAX_CLAIM_WAIT_SECONDS = 30L
-private const val MIN_CLAIM_WAIT_MILLIS = 1L
-private const val DEFAULT_LEASE_SECONDS = 30L
-private const val MIN_LEASE_SECONDS = 1L
-private const val MAX_LEASE_SECONDS = 120L
 private const val DISPATCH_RESULT_COMPLETED = "completed"
 private const val DISPATCH_RESULT_FAILED = "failed"
 
@@ -24,13 +19,13 @@ internal class DispatchService(
     private val waiters: DispatchWaiterRegistry,
     private val slack: SlackNotificationService,
     private val watchCompletion: DispatchWatchCompletion,
+    private val config: DispatchConfig = DispatchConfig(),
     private val clock: Clock = Clock.systemUTC(),
-    private val pendingTtl: Duration = Duration.ofSeconds(DEFAULT_PENDING_TTL_SECONDS),
 ) : DispatchEnqueuer {
     suspend fun claim(
         selector: DispatchClaimSelector,
-        wait: Duration,
-        lease: Duration,
+        wait: Duration?,
+        lease: Duration?,
     ): DispatchClaimed? {
         val leaseDuration = normalizeLease(lease)
         store.claim(selector, leaseDuration, now())?.let { return it }
@@ -40,7 +35,7 @@ internal class DispatchService(
         val registration = waiters.register(selector)
         try {
             store.claim(selector, leaseDuration, now())?.let { return it }
-            withTimeoutOrNull(waitDuration.toMillis().coerceAtLeast(MIN_CLAIM_WAIT_MILLIS)) {
+            withTimeoutOrNull(waitDuration.toMillis().coerceAtLeast(config.minClaimWait.toMillis())) {
                 registration.await()
             }
             return store.claim(selector, leaseDuration, now())
@@ -52,7 +47,7 @@ internal class DispatchService(
     fun heartbeat(
         id: Long,
         leaseToken: String,
-        lease: Duration,
+        lease: Duration?,
     ): DispatchLeaseResult = store.heartbeat(id, leaseToken, normalizeLease(lease), now())
 
     suspend fun complete(
@@ -104,22 +99,24 @@ internal class DispatchService(
         }
 
     override suspend fun enqueue(input: DispatchCreateInput): DispatchQueued {
-        val queued = store.enqueue(input, pendingTtl, now())
+        val queued = store.enqueue(input, config.pendingTtl, now())
         val notifiedWaiters = waiters.notifyMatching(queued)
         return queued.copy(notifiedWaiters = notifiedWaiters)
     }
 
-    private fun normalizeWait(wait: Duration): Duration =
+    private fun normalizeWait(wait: Duration?): Duration =
         when {
+            wait == null -> config.maxClaimWait
             wait.isNegative || wait.isZero -> Duration.ZERO
-            wait.seconds > MAX_CLAIM_WAIT_SECONDS -> Duration.ofSeconds(MAX_CLAIM_WAIT_SECONDS)
+            wait > config.maxClaimWait -> config.maxClaimWait
             else -> wait
         }
 
-    private fun normalizeLease(lease: Duration): Duration =
+    private fun normalizeLease(lease: Duration?): Duration =
         when {
-            lease.seconds < MIN_LEASE_SECONDS -> Duration.ofSeconds(DEFAULT_LEASE_SECONDS)
-            lease.seconds > MAX_LEASE_SECONDS -> Duration.ofSeconds(MAX_LEASE_SECONDS)
+            lease == null -> config.defaultLease
+            lease < config.minLease -> config.defaultLease
+            lease > config.maxLease -> config.maxLease
             else -> lease
         }
 

@@ -5,16 +5,14 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 
 const val DEFAULT_DISPATCH_KIND = "atc"
-const val DEFAULT_DISPATCH_WAIT_SEC = 30L
-const val DEFAULT_DISPATCH_LEASE_SEC = 30L
 
 @Serializable
 data class DispatchClaimRequest(
     val kind: String = DEFAULT_DISPATCH_KIND,
     val vendors: List<String>,
     @SerialName("payload_versions") val payloadVersions: List<String> = emptyList(),
-    @SerialName("wait_sec") val waitSec: Long = DEFAULT_DISPATCH_WAIT_SEC,
-    @SerialName("lease_sec") val leaseSec: Long = DEFAULT_DISPATCH_LEASE_SEC,
+    @SerialName("wait_sec") val waitSec: Long? = null,
+    @SerialName("lease_sec") val leaseSec: Long? = null,
 )
 
 @Serializable
@@ -37,7 +35,7 @@ data class DispatchClaimedSchema(
 @Serializable
 data class DispatchHeartbeatRequest(
     @SerialName("lease_token") val leaseToken: String,
-    @SerialName("lease_sec") val leaseSec: Long = DEFAULT_DISPATCH_LEASE_SEC,
+    @SerialName("lease_sec") val leaseSec: Long? = null,
 )
 
 @Serializable
