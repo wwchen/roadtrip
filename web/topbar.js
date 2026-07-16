@@ -1617,6 +1617,7 @@ function syncCorridorInput() {
 function restoreSharedLinkFromUrl() {
   if (typeof window === 'undefined') return;
   const params = new URLSearchParams(window.location.search);
+  let restored = false;
   const run = () => {
     const routeParam = params.get('route');
     if (routeParam) {
@@ -1638,12 +1639,35 @@ function restoreSharedLinkFromUrl() {
     const poiId = params.get('poi');
     if (poiId) openPoiById(poiId);
   };
+  const runOnce = () => {
+    if (restored) return;
+    restored = true;
+    run();
+  };
+  restoreAfterMapReady(runOnce);
+}
 
-  if (state.mapReady) {
-    setTimeout(run, 0);
-  } else {
-    mapRef.once('style.load', run);
+function restoreAfterMapReady(callback) {
+  if (isMapReadyForSharedLink()) {
+    deferSharedLinkRestore(callback);
+    return;
   }
+
+  mapRef.once('style.load', callback);
+  mapRef.once('load', callback);
+  deferSharedLinkRestore(() => {
+    if (isMapReadyForSharedLink()) callback();
+  });
+}
+
+function isMapReadyForSharedLink() {
+  return state.mapReady ||
+    mapRef?.loaded?.() === true ||
+    mapRef?.isStyleLoaded?.() === true;
+}
+
+function deferSharedLinkRestore(callback) {
+  Promise.resolve().then(callback);
 }
 
 // --- row drag (HTML5 DnD reorder) --------------------------------------

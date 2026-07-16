@@ -9,6 +9,7 @@ import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import ca.floo.roadtrip.service.availability.provider.RecGovBookingUrl
 import java.time.LocalDate
 
 /**

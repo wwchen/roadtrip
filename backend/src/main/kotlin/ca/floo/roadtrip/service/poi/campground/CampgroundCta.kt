@@ -8,7 +8,6 @@ import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
 import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraBookingDisplay
 import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraBookingUrl
 import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovBookingDisplay
-import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovBookingUrl
 import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaBookingDisplay
 import ca.floo.roadtrip.service.availability.provider.adapters.reservecalifornia.ReserveCaliforniaBookingDisplay
 import ca.floo.roadtrip.service.availability.provider.adapters.reservecalifornia.ReserveCaliforniaBookingUrl
@@ -126,9 +125,10 @@ private object RecGovCampgroundCtaProvider : CampgroundCtaProvider {
         providerRef: ProviderRef?,
         infoUrl: String?,
     ): PoiCtaSchema? {
-        val recgov = providerRef as? ProviderRef.RecGov ?: return null
+        providerRef as? ProviderRef.RecGov ?: return null
+        val url = infoUrl?.takeIf { it.isNotBlank() } ?: return null
         return reserveCta(
-            url = RecGovBookingUrl.campground(recgov.recgovId),
+            url = url,
             label = RecGovBookingDisplay.CAMPGROUND_CTA_LABEL,
         )
     }
