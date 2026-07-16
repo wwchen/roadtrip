@@ -152,6 +152,51 @@ test('clickReserveButton surfaces a login modal as an auth failure', async () =>
   assert.deepEqual(page.clickedSelectors, ['button:has-text("Add to Cart")'])
 })
 
+test('clickReserveButton skips disabled confirmation candidates and clicks the enabled one', async () => {
+  const page = reserveClickPage({
+    loginModalVisible: false,
+    confirmationCandidates: [
+      { text: 'Continue', visible: true, enabled: false, ariaDisabled: 'true' },
+      { text: 'Continue', visible: true, enabled: true },
+    ],
+  })
+
+  const result = await clickReserveButton(page)
+
+  assert.equal(result.clicked, true)
+  assert.equal(result.confirmation.clicked, true)
+  assert.equal(result.confirmation.index, 1)
+  assert.equal(result.confirmation.text, 'Continue')
+  assert.deepEqual(page.clickedSelectors, ['button:has-text("Add to Cart")'])
+  assert.deepEqual(page.clickedConfirmationIndexes, [1])
+})
+
+test('clickReserveButton reports visible confirmation buttons that never enable', async () => {
+  const page = reserveClickPage({
+    loginModalVisible: false,
+    confirmationCandidates: [
+      { text: 'Continue', visible: true, enabled: false, ariaDisabled: 'true' },
+    ],
+  })
+
+  const result = await clickReserveButton(page)
+
+  assert.equal(result.clicked, true)
+  assert.equal(result.confirmation.clicked, false)
+  assert.equal(result.confirmation.reason, 'confirmation_disabled')
+  assert.deepEqual(result.confirmation.candidates, [
+    {
+      index: 0,
+      text: 'Continue',
+      visible: true,
+      enabled: false,
+      disabled: true,
+      aria_disabled: 'true',
+    },
+  ])
+  assert.deepEqual(page.clickedConfirmationIndexes, [])
+})
+
 test('testChromium falls back after a stored recaccount is rejected by the SPA', async () => {
   const { context, pages } = authCheckContext()
   const stale = { access_token: 'stale-token', expiration: '2026-07-16T20:00:00Z' }
@@ -337,11 +382,15 @@ function api (status, path) {
   return { status, path }
 }
 
-function reserveClickPage ({ loginModalVisible }) {
+function reserveClickPage ({ loginModalVisible, confirmationCandidates = [] }) {
   return {
     clickedSelectors: [],
+    clickedConfirmationIndexes: [],
     locator (selector) {
       const page = this
+      if (isConfirmationSelector(selector)) {
+        return confirmationLocator(page, confirmationCandidates)
+      }
       return {
         first () {
           return this
@@ -359,7 +408,63 @@ function reserveClickPage ({ loginModalVisible }) {
       }
     },
     async waitForTimeout () {},
-    async waitForSelector () {},
+    async waitForSelector (selector) {
+      if (!isConfirmationSelector(selector)) return
+      const visible = confirmationCandidates.some(candidate => candidate.visible)
+      const enabled = confirmationCandidates.some(candidate => candidate.visible && candidate.enabled)
+      if (isEnabledConfirmationSelector(selector) ? !enabled : !visible) {
+        throw new Error(`selector not found: ${selector}`)
+      }
+    },
+  }
+}
+
+function isConfirmationSelector (selector) {
+  return ['Continue', 'Confirm', 'Book Now', 'Next'].some(label => selector.includes(label))
+}
+
+function isEnabledConfirmationSelector (selector) {
+  return selector.includes(':enabled')
+}
+
+function confirmationLocator (page, candidates) {
+  return {
+    first () {
+      return this.nth(0)
+    },
+    async count () {
+      return candidates.length
+    },
+    nth (index) {
+      return confirmationCandidateLocator(page, candidates[index], index)
+    },
+    async isVisible () {
+      return candidates.some(candidate => candidate.visible)
+    },
+    async isEnabled () {
+      return candidates.some(candidate => candidate.visible && candidate.enabled)
+    },
+  }
+}
+
+function confirmationCandidateLocator (page, candidate = {}, index) {
+  return {
+    async isVisible () {
+      return Boolean(candidate.visible)
+    },
+    async isEnabled () {
+      return Boolean(candidate.enabled)
+    },
+    async innerText () {
+      return candidate.text || ''
+    },
+    async getAttribute (name) {
+      if (name === 'aria-disabled') return candidate.ariaDisabled || null
+      return null
+    },
+    async click () {
+      page.clickedConfirmationIndexes.push(index)
+    },
   }
 }
 

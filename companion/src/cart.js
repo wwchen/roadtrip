@@ -164,9 +164,20 @@ const RESERVE_SELECTORS = [
   '.rec-button-primary:has-text("Reserve")',
 ]
 const RESERVE_COMBINED = RESERVE_SELECTORS.join(', ')
+const CONFIRMATION_BUTTON_LABELS = ['Continue', 'Confirm', 'Book Now', 'Next']
+const CONFIRMATION_SELECTORS = CONFIRMATION_BUTTON_LABELS.map(label => `button:has-text("${label}")`)
+const CONFIRMATION_ENABLED_SELECTORS = CONFIRMATION_BUTTON_LABELS.map(label => `button:enabled:has-text("${label}")`)
+const CONFIRMATION_COMBINED = CONFIRMATION_SELECTORS.join(', ')
+const CONFIRMATION_ENABLED_COMBINED = CONFIRMATION_ENABLED_SELECTORS.join(', ')
 const ENTER_DATES_SEL = 'button:has-text("Enter Dates"), button:has-text("Change Dates")'
 const CART_VERIFY_WAIT_MS = 10_000
 const CART_VERIFY_POLL_MS = 1_000
+const CONFIRMATION_WAIT_MS = 3_000
+const CONFIRMATION_ENABLED_WAIT_MS = 5_000
+const CONFIRMATION_CLICK_TIMEOUT_MS = 3_000
+const POST_CONFIRMATION_CLICK_SETTLE_MS = 2_000
+const CONFIRMATION_DIAGNOSTIC_LIMIT = 8
+const CONFIRMATION_TEXT_LOG_LIMIT = 80
 const CART_URL_CAMPSITE_ID_RE = /\/camping\/campsites\/([^/?#]+)/
 const CART_VERIFY_MATCHED = 'matched'
 const CART_VERIFY_FETCH_FAILED = 'cart_fetch_failed'
@@ -177,6 +188,7 @@ const ERROR_RECGOV_NOT_AUTHENTICATED = 'recgov_not_authenticated'
 const ERROR_RECGOV_LOGIN_FAILED = 'recgov_login_failed'
 const ERROR_RECGOV_REFRESH_FAILED = 'recgov_refresh_failed'
 const ERROR_RECGOV_SPA_LOGGED_OUT = 'recgov_spa_logged_out'
+const ERROR_RECGOV_CONFIRMATION_DISABLED = 'recgov_confirmation_disabled'
 const HEADLESS_NO_SESSION_DETAIL =
   'No Recreation.gov browser session is available in the companion profile, and the headless companion is not logged in.'
 const HEADED_NO_SESSION_DETAIL =
@@ -187,10 +199,14 @@ const REFRESH_FAILED_DETAIL =
   'Recreation.gov browser session refresh failed. The stored session may be expired or rejected.'
 const SPA_LOGGED_OUT_DETAIL =
   'Recreation.gov rejected the companion browser session after page load; the SPA still shows a logged-out state.'
+const CONFIRMATION_DISABLED_DETAIL =
+  'Recreation.gov showed an add-to-cart confirmation step, but no confirmation button became enabled and the requested campsite/date was not found in the cart.'
 const LOGIN_ON_HOST_ACTION =
   'Run make recgov-login on the host profile mounted by the companion, or start the companion headed and log in once.'
 const LOGIN_ON_COMPANION_ACTION =
   'Open the companion /login page and submit the Recreation.gov username, password, and MFA code when required.'
+const INSPECT_COMPANION_ACTION =
+  'Open the booking URL in a headed companion session to inspect the Recreation.gov confirmation step; the site may require extra input, reject the date/site, or present a challenge.'
 
 export function cartHoldCompletionObserved (responses) {
   return responses.some(e => e.status >= 200 && e.status < 300 &&
@@ -289,6 +305,18 @@ function spaLoggedOutFailure () {
     error: ERROR_RECGOV_SPA_LOGGED_OUT,
     detail: SPA_LOGGED_OUT_DETAIL,
     corrective_action: LOGIN_ON_HOST_ACTION,
+  }
+}
+
+function confirmationDisabledFailure (cartCheck, confirmation) {
+  return {
+    error: ERROR_RECGOV_CONFIRMATION_DISABLED,
+    detail: CONFIRMATION_DISABLED_DETAIL,
+    corrective_action: INSPECT_COMPANION_ACTION,
+    cart_check: {
+      ...cartCheck,
+      action_failure: confirmation,
+    },
   }
 }
 
@@ -438,21 +466,91 @@ export async function clickReserveButton (page) {
       }
     }
 
-    const confirmSel = 'button:has-text("Continue"), button:has-text("Confirm"), button:has-text("Book Now"), button:has-text("Next")'
-    await page.waitForSelector(confirmSel, { timeout: 3000 }).catch(() => {})
-    const confirmBtn = page.locator(confirmSel).first()
-    if (await confirmBtn.isVisible().catch(() => false)) {
-      console.log('Cart: clicking confirmation overlay')
-      await confirmBtn.waitFor({ state: 'enabled', timeout: 5000 }).catch(() => {})
-      await confirmBtn.click({ timeout: 3000 }).catch(() => {
-        console.log('Cart: confirmation button still disabled — not a success signal; verifying cart contents next')
-      })
-      await page.waitForTimeout(2000)
-    }
+    const confirmation = await clickConfirmationButton(page)
 
-    return { clicked: true }
+    return { clicked: true, confirmation }
   }
   return { clicked: false }
+}
+
+async function clickConfirmationButton (page) {
+  await page.waitForSelector(CONFIRMATION_COMBINED, { timeout: CONFIRMATION_WAIT_MS }).catch(() => {})
+  const candidates = await confirmationButtonCandidates(page)
+  const visibleCandidates = candidates.filter(candidate => candidate.visible)
+  if (!visibleCandidates.length) return { seen: false }
+
+  await page.waitForSelector(CONFIRMATION_ENABLED_COMBINED, { timeout: CONFIRMATION_ENABLED_WAIT_MS }).catch(() => {})
+  const enabled = await firstEnabledConfirmationButton(page)
+  if (!enabled) {
+    console.log(`Cart: confirmation buttons visible but none enabled — ${formatConfirmationCandidates(visibleCandidates)}`)
+    return {
+      seen: true,
+      clicked: false,
+      reason: 'confirmation_disabled',
+      candidates: visibleCandidates,
+    }
+  }
+
+  console.log(`Cart: clicking confirmation button text="${enabled.text || '?'}" index=${enabled.index}`)
+  await enabled.button.click({ timeout: CONFIRMATION_CLICK_TIMEOUT_MS })
+  await page.waitForTimeout(POST_CONFIRMATION_CLICK_SETTLE_MS)
+  return {
+    seen: true,
+    clicked: true,
+    index: enabled.index,
+    text: enabled.text,
+  }
+}
+
+async function firstEnabledConfirmationButton (page) {
+  const locator = page.locator(CONFIRMATION_COMBINED)
+  const count = Math.min(await locator.count().catch(() => 0), CONFIRMATION_DIAGNOSTIC_LIMIT)
+  for (let index = 0; index < count; index++) {
+    const button = locator.nth(index)
+    if (!await button.isVisible().catch(() => false)) continue
+    if (!await button.isEnabled().catch(() => false)) continue
+    return {
+      button,
+      index,
+      text: await normalizedLocatorText(button),
+    }
+  }
+  return null
+}
+
+async function confirmationButtonCandidates (page) {
+  const locator = page.locator(CONFIRMATION_COMBINED)
+  const count = Math.min(await locator.count().catch(() => 0), CONFIRMATION_DIAGNOSTIC_LIMIT)
+  const candidates = []
+  for (let index = 0; index < count; index++) {
+    const button = locator.nth(index)
+    const visible = await button.isVisible().catch(() => false)
+    const enabled = visible && await button.isEnabled().catch(() => false)
+    candidates.push({
+      index,
+      text: await normalizedLocatorText(button),
+      visible,
+      enabled,
+      disabled: visible ? !enabled : null,
+      aria_disabled: await button.getAttribute('aria-disabled').catch(() => null),
+    })
+  }
+  return candidates
+}
+
+async function normalizedLocatorText (locator) {
+  const text = await locator.innerText().catch(() => '')
+  return truncateText(text.replace(/\s+/g, ' ').trim(), CONFIRMATION_TEXT_LOG_LIMIT)
+}
+
+function formatConfirmationCandidates (candidates) {
+  return candidates
+    .map(candidate => `#${candidate.index} "${candidate.text || '?'}" enabled=${candidate.enabled} aria_disabled=${candidate.aria_disabled ?? '?'}`)
+    .join('; ')
+}
+
+function truncateText (value, maxLength) {
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength)}...`
 }
 
 export async function setupAuthPage () {
@@ -567,7 +665,7 @@ export async function addToCart (match) {
         ...spaLoggedOutFailure(),
       }
     }
-    console.log('Cart: SPA logged-in ✓')
+    console.log('Cart: SPA header does not show logged-out CTA')
 
     const reserveClick = await clickReserveButton(page)
     if (reserveClick.failure) return { ok: false, page, ...reserveClick.failure }
@@ -576,6 +674,9 @@ export async function addToCart (match) {
       console.log('Cart: verifying requested campsite/date in cart after reserve click')
       const verification = await waitForRequestedCartItem(page, captured, match, getCartForVerification)
       if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
+      if (!verification.ok && reserveClick.confirmation?.reason === 'confirmation_disabled') {
+        return { ok: false, page, ...confirmationDisabledFailure(verification.check, reserveClick.confirmation) }
+      }
       return { ok: verification.ok, page, cart_check: verification.check }
     }
 
@@ -589,6 +690,9 @@ export async function addToCart (match) {
         console.log('Cart: verifying requested campsite/date in cart after dated reserve click')
         const verification = await waitForRequestedCartItem(page, captured, match, getCartForVerification)
         if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
+        if (!verification.ok && datedReserveClick.confirmation?.reason === 'confirmation_disabled') {
+          return { ok: false, page, ...confirmationDisabledFailure(verification.check, datedReserveClick.confirmation) }
+        }
         return { ok: verification.ok, page, cart_check: verification.check }
       }
     }
