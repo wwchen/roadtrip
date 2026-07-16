@@ -54,6 +54,7 @@ let geocodeTimer = null;
 // Set true while a card-click is synthesizing a map click — bindPinClicks
 // reads this and skips its "fill active row with pin name" side effect.
 let suppressPinClick = false;
+const SHARED_LINK_DEFER_MS = 0;
 
 function isMobileViewport() {
   return typeof window !== 'undefined' &&
@@ -1617,6 +1618,7 @@ function syncCorridorInput() {
 function restoreSharedLinkFromUrl() {
   if (typeof window === 'undefined') return;
   const params = new URLSearchParams(window.location.search);
+  let restored = false;
   const run = () => {
     const routeParam = params.get('route');
     if (routeParam) {
@@ -1638,12 +1640,26 @@ function restoreSharedLinkFromUrl() {
     const poiId = params.get('poi');
     if (poiId) openPoiById(poiId);
   };
+  const runOnce = () => {
+    if (restored) return;
+    restored = true;
+    run();
+  };
+  const isMapReady = () =>
+    state.mapReady ||
+    mapRef?.loaded?.() === true ||
+    mapRef?.isStyleLoaded?.() === true;
 
-  if (state.mapReady) {
-    setTimeout(run, 0);
-  } else {
-    mapRef.once('style.load', run);
+  if (isMapReady()) {
+    window.setTimeout(runOnce, SHARED_LINK_DEFER_MS);
+    return;
   }
+
+  mapRef.once('style.load', runOnce);
+  mapRef.once('load', runOnce);
+  window.setTimeout(() => {
+    if (isMapReady()) runOnce();
+  }, SHARED_LINK_DEFER_MS);
 }
 
 // --- row drag (HTML5 DnD reorder) --------------------------------------
