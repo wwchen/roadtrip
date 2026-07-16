@@ -91,6 +91,7 @@ test('GET /login returns a simple operator login form', async () => {
   assert.match(response.text, /name="username"/)
   assert.match(response.text, /name="password"/)
   assert.match(response.text, /name="mfa_code"/)
+  assert.match(response.text, /class="secondary button-link" href="\/health"/)
   assert.doesNotMatch(response.text, /RECGOV_EMAIL|RECGOV_PASSWORD|RECGOV_MFA_CODE|RECGOV_OTP/)
 })
 

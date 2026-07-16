@@ -398,9 +398,11 @@ function renderLoginPage ({ result = null } = {}) {
     label { display: block; font-weight: 650; margin-top: 1rem; }
     input { box-sizing: border-box; width: 100%; padding: .7rem; margin-top: .35rem; border: 1px solid #c8d0dc; border-radius: 6px; font: inherit; }
     button { margin-top: 1.25rem; padding: .75rem 1rem; border: 0; border-radius: 6px; background: #24579a; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+    .button-link { display: inline-flex; align-items: center; justify-content: center; margin-top: 1.25rem; padding: .75rem 1rem; border-radius: 6px; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
     .row { display: flex; gap: .75rem; align-items: center; }
     .row form { margin: 0; }
     .secondary { background: #eef2f7; color: #172033; }
+    .secondary:visited { color: #172033; }
     .ok { color: #166534; font-weight: 700; }
     .error { color: #b42318; font-weight: 700; }
     pre { overflow: auto; background: #f6f8fb; padding: .75rem; border-radius: 6px; }
@@ -420,7 +422,7 @@ function renderLoginPage ({ result = null } = {}) {
   </form>
   <div class="row">
     <form method="post" action="/refresh"><button class="secondary" type="submit">Refresh session</button></form>
-    <a href="/health">Health JSON</a>
+    <a class="secondary button-link" href="/health">Health JSON</a>
   </div>
   ${healthHtml}
 </body>
