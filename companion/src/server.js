@@ -16,6 +16,7 @@ const HTTP_UNPROCESSABLE_ENTITY = 422
 const HTTP_INTERNAL_ERROR = 500
 const EXIT_SUCCESS = 0
 const EXIT_USAGE = 2
+const LOG_DETAIL_MAX_CHARS = 160
 
 const HOST = process.env.COMPANION_HOST || DEFAULT_HOST
 const PORT = Number.parseInt(process.env.COMPANION_PORT || String(DEFAULT_PORT), 10)
@@ -106,7 +107,7 @@ async function handleAtc (req, res) {
         : code === EXIT_USAGE
           ? HTTP_UNPROCESSABLE_ENTITY
           : HTTP_INTERNAL_ERROR
-    log('recgov atc result', result.ok ? 'success' : 'fail', `code=${code}`, `duration_ms=${Date.now() - startedAt}`)
+    log('recgov atc result', ...resultLogFields(result), `code=${code}`, `duration_ms=${Date.now() - startedAt}`)
     jsonResponse(res, status, result)
   } catch (error) {
     log('recgov atc exception', error.message)
@@ -144,6 +145,27 @@ function parseRunResult (raw) {
       detail: `companion returned non-json stdout: ${error.message}`,
     }
   }
+}
+
+function resultLogFields (result) {
+  const fields = [result.ok ? 'success' : 'fail']
+  if (!result.ok) {
+    fields.push(`error=${result.error || '?'}`)
+    fields.push(`detail="${truncateLogField(result.detail || '', LOG_DETAIL_MAX_CHARS)}"`)
+  }
+  if (result.cart_check?.reason) {
+    fields.push(`cart_reason=${result.cart_check.reason}`)
+    fields.push(`cart_status=${result.cart_check.status ?? '?'}`)
+    fields.push(`cart_reservations=${result.cart_check.reservation_count ?? '?'}`)
+    fields.push(`cart_response_signal=${result.cart_check.response_signal ?? '?'}`)
+    fields.push(`cart_best_score=${result.cart_check.best_match?.score ?? '?'}`)
+  }
+  return fields
+}
+
+function truncateLogField (value, maxLength) {
+  const rendered = String(value).replace(/\s+/g, ' ').trim()
+  return rendered.length <= maxLength ? rendered : `${rendered.slice(0, maxLength)}...`
 }
 
 const server = http.createServer(async (req, res) => {

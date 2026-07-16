@@ -26,9 +26,11 @@ export function getLastLoginState () { return lastLoginState }
 export async function getCartItems (page) {
   return page.evaluate(async () => {
     try {
-      const resp = await fetch('https://www.recreation.gov/api/cart/shoppingcart', { credentials: 'include' })
+      const resp = await fetch('https://www.recreation.gov/api/cart/shoppingcart', {
+        credentials: 'include',
+      })
       const body = await resp.json().catch(() => ({}))
-      return { status: resp.status, reservations: body?.reservations ?? null }
+      return { status: resp.status, reservations: body?.reservations ?? null, body }
     } catch (e) { return { error: e.message } }
   })
 }
@@ -162,21 +164,190 @@ const RESERVE_SELECTORS = [
 ]
 const RESERVE_COMBINED = RESERVE_SELECTORS.join(', ')
 const ENTER_DATES_SEL = 'button:has-text("Enter Dates"), button:has-text("Change Dates")'
-const CART_ACCEPTED_WAIT_MS = 10_000
-const CART_ACCEPTED_POLL_MS = 250
+const CART_VERIFY_WAIT_MS = 10_000
+const CART_VERIFY_POLL_MS = 1_000
+const CART_URL_CAMPSITE_ID_RE = /\/camping\/campsites\/([^/?#]+)/
+const CART_VERIFY_MATCHED = 'matched'
+const CART_VERIFY_FETCH_FAILED = 'cart_fetch_failed'
+const CART_VERIFY_HTTP_ERROR = 'cart_http_error'
+const CART_VERIFY_EMPTY = 'cart_empty'
+const CART_VERIFY_MISSING_ITEM = 'missing_expected_item'
 
-export function cartAcceptedFromResponses (responses) {
+export function cartHoldCompletionObserved (responses) {
   return responses.some(e => e.status >= 200 && e.status < 300 &&
     (/\/api\/camps\/reservations\?id=/.test(e.path) || /\/api\/cart\/buy-now/.test(e.path)))
 }
 
-async function waitForCartAccepted (page, responses) {
-  const deadline = Date.now() + CART_ACCEPTED_WAIT_MS
-  while (Date.now() < deadline) {
-    if (cartAcceptedFromResponses(responses)) return true
-    await page.waitForTimeout(Math.min(CART_ACCEPTED_POLL_MS, deadline - Date.now()))
+export function cartContainsMatch (cart, match) {
+  return verifyCartContainsMatch(cart, match).ok
+}
+
+export function verifyCartContainsMatch (cart, match) {
+  const reservations = Array.isArray(cart?.reservations)
+    ? cart.reservations
+    : Array.isArray(cart?.body?.reservations) ? cart.body.reservations : []
+
+  const base = {
+    status: cart?.status ?? null,
+    reservation_count: reservations.length,
+    expected: expectedCartMatch(match),
   }
-  return cartAcceptedFromResponses(responses)
+
+  if (cart?.error) {
+    return { ok: false, reason: CART_VERIFY_FETCH_FAILED, detail: cart.error, ...base }
+  }
+  if (Number.isFinite(cart?.status) && (cart.status < 200 || cart.status >= 300)) {
+    return { ok: false, reason: CART_VERIFY_HTTP_ERROR, ...base }
+  }
+  if (!reservations.length) {
+    return { ok: false, reason: CART_VERIFY_EMPTY, ...base }
+  }
+
+  let bestMatch = null
+  for (let index = 0; index < reservations.length; index++) {
+    const result = cartReservationMatchResult(reservations[index], base.expected)
+    if (result.ok) {
+      return {
+        ok: true,
+        reason: CART_VERIFY_MATCHED,
+        reservation_index: index,
+        matched: result.matched,
+        ...base,
+      }
+    }
+    if (!bestMatch || result.score > bestMatch.score) {
+      bestMatch = { reservation_index: index, score: result.score, matched: result.matched }
+    }
+  }
+
+  return { ok: false, reason: CART_VERIFY_MISSING_ITEM, best_match: bestMatch, ...base }
+}
+
+function cartReservationMatchResult (reservation, expected) {
+  const values = primitiveStrings(reservation)
+  if (!values.length) return { ok: false, score: 0, matched: {} }
+
+  const campsiteId = firstMatchingToken(values, expected.campsite_ids)
+  const campsiteLabel = firstMatchingToken(values, expected.campsite_labels)
+  const campgroundId = firstMatchingToken(values, expected.campground_ids)
+  const arrivalDate = firstMatchingDate(values, expected.arrival_date)
+  const checkoutDate = firstMatchingDate(values, expected.checkout_date)
+  const campsiteMatched = campsiteId || (campsiteLabel && campgroundId)
+  const score = [campsiteMatched, arrivalDate, checkoutDate].filter(Boolean).length
+
+  return {
+    ok: Boolean(campsiteMatched && arrivalDate && checkoutDate),
+    score,
+    matched: {
+      campsite_id: campsiteId,
+      campsite_label: campsiteLabel,
+      campground_id: campgroundId,
+      arrival_date: arrivalDate,
+      checkout_date: checkoutDate,
+    },
+  }
+}
+
+function expectedCartMatch (match) {
+  const bookingUrlCampsiteId = String(match.booking_url || '').match(CART_URL_CAMPSITE_ID_RE)?.[1]
+  const preferredIds = compactStrings([
+    match.provider_campsite_id,
+    match.vendor_id,
+    bookingUrlCampsiteId,
+  ])
+  const campsiteIds = preferredIds.length ? preferredIds : compactStrings([match.campsite_id])
+
+  return {
+    campsite_ids: campsiteIds,
+    campsite_labels: compactStrings([match.campsite_site]),
+    campground_ids: compactStrings([match.provider_campground_id, match.campground_id]),
+    arrival_date: normalizeNeedle(match.first_date),
+    checkout_date: normalizeNeedle(match.checkout_date || checkoutDateForMatch(match)),
+  }
+}
+
+function checkoutDateForMatch (match) {
+  const availableDates = match.available_dates || (match.first_date ? [match.first_date] : [])
+  const lastNight = availableDates[availableDates.length - 1]
+  return lastNight ? toCheckoutDate(lastNight) : null
+}
+
+function compactStrings (values) {
+  return [...new Set(values.map(value => normalizeNeedle(value)).filter(Boolean))]
+}
+
+function primitiveStrings (value, seen = new Set(), out = []) {
+  if (value === null || value === undefined) return out
+  if (typeof value === 'object') {
+    if (seen.has(value)) return out
+    seen.add(value)
+    const children = Array.isArray(value) ? value : Object.values(value)
+    for (const child of children) primitiveStrings(child, seen, out)
+    return out
+  }
+  out.push(String(value).toLowerCase())
+  return out
+}
+
+function firstMatchingDate (values, date) {
+  const expected = normalizeNeedle(date)
+  if (!expected) return null
+  return values.some(value => value.includes(expected)) ? expected : null
+}
+
+function firstMatchingToken (values, needles) {
+  return needles.find(needle => {
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const tokenRe = new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i')
+    return values.some(value => value === needle || tokenRe.test(value))
+  }) || null
+}
+
+function normalizeNeedle (value) {
+  if (value === null || value === undefined) return ''
+  return String(value).trim().toLowerCase()
+}
+
+async function waitForRequestedCartItem (page, responses, match, getCart = () => getCartItems(page)) {
+  const deadline = Date.now() + CART_VERIFY_WAIT_MS
+  let lastCheck = null
+  while (Date.now() < deadline) {
+    const cart = await getCart()
+    lastCheck = verifyCartContainsMatch(cart, match)
+    if (lastCheck.ok) {
+      console.log(`Cart: verified requested campsite/date in cart ${cartVerificationSummary(lastCheck)}`)
+      return { ok: true, check: lastCheck }
+    }
+    await page.waitForTimeout(Math.min(CART_VERIFY_POLL_MS, deadline - Date.now()))
+  }
+
+  const responseSignal = cartHoldCompletionObserved(responses)
+  const check = { ...lastCheck, response_signal: responseSignal }
+  console.log(`Cart: verification failed ${cartVerificationSummary(check)}`)
+  return { ok: false, check }
+}
+
+function cartVerificationSummary (check) {
+  const expected = check?.expected || {}
+  const fields = [
+    `reason=${check?.reason || 'unknown'}`,
+    `status=${check?.status ?? '?'}`,
+    `reservations=${check?.reservation_count ?? '?'}`,
+    `response_signal=${check?.response_signal ?? '?'}`,
+    `campsite_ids="${expected.campsite_ids?.join(',') || ''}"`,
+    `site_labels="${expected.campsite_labels?.join(',') || ''}"`,
+    `campground_ids="${expected.campground_ids?.join(',') || ''}"`,
+    `arrival=${expected.arrival_date || '?'}`,
+    `checkout=${expected.checkout_date || '?'}`,
+  ]
+  if (check?.best_match) {
+    fields.push(`best_score=${check.best_match.score}`)
+    fields.push(`best_index=${check.best_match.reservation_index}`)
+    fields.push(`best_campsite_id=${check.best_match.matched?.campsite_id || '?'}`)
+    fields.push(`best_arrival=${check.best_match.matched?.arrival_date || '?'}`)
+    fields.push(`best_checkout=${check.best_match.matched?.checkout_date || '?'}`)
+  }
+  return fields.join(' ')
 }
 
 async function clickReserveButton (page) {
@@ -286,8 +457,18 @@ export async function addToCart (match) {
   if (!recaccount) return { ok: false, page }
 
   const captured = []
+  let cartVerificationRequests = 0
+  const getCartForVerification = async () => {
+    cartVerificationRequests += 1
+    try {
+      return await getCartItems(page)
+    } finally {
+      cartVerificationRequests -= 1
+    }
+  }
   page.on('response', r => {
     if (/api.*(cart|reserv|booking|order)/i.test(r.url())) {
+      if (cartVerificationRequests > 0 && r.url().includes('/api/cart/shoppingcart')) return
       const path = r.url().replace('https://www.recreation.gov', '').slice(0, 80)
       const entry = { status: r.status(), path, line: `${r.status()} ${path}` }
       captured.push(entry)
@@ -312,9 +493,9 @@ export async function addToCart (match) {
 
     if (await clickReserveButton(page)) {
       await waitForCaptchaIfPresent(page)
-      const ok = await waitForCartAccepted(page, captured)
+      const verification = await waitForRequestedCartItem(page, captured, match, getCartForVerification)
       if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
-      return { ok, page }
+      return { ok: verification.ok, page, cart_check: verification.check }
     }
 
     if (await page.locator(ENTER_DATES_SEL).first().isVisible().catch(() => false)) {
@@ -322,9 +503,9 @@ export async function addToCart (match) {
       await page.waitForSelector(RESERVE_COMBINED, { timeout: 12000 }).catch(() => {})
       if (await clickReserveButton(page)) {
         await waitForCaptchaIfPresent(page)
-        const ok = await waitForCartAccepted(page, captured)
+        const verification = await waitForRequestedCartItem(page, captured, match, getCartForVerification)
         if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
-        return { ok, page }
+        return { ok: verification.ok, page, cart_check: verification.check }
       }
     }
 

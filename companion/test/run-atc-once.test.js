@@ -73,6 +73,35 @@ test('runAtcOnce exits one when cart automation does not confirm a hold', async 
   assert.equal(result.error, 'cart_not_added')
 })
 
+test('runAtcOnce includes cart verification details on ATC failure', async () => {
+  const stdout = bufferWriter()
+
+  const code = await runAtcOnce({
+    argv: ['--payload-json', PAYLOAD_JSON],
+    stdout,
+    stderr: bufferWriter(),
+    addToCartFn: async () => ({
+      ok: false,
+      cart_check: {
+        reason: 'missing_expected_item',
+        status: 200,
+        reservation_count: 1,
+        response_signal: true,
+      },
+    }),
+  })
+
+  const result = JSON.parse(stdout.text())
+  assert.equal(code, 1)
+  assert.equal(result.detail, 'cart verification failed: reason=missing_expected_item status=200 reservations=1')
+  assert.deepEqual(result.cart_check, {
+    reason: 'missing_expected_item',
+    status: 200,
+    reservation_count: 1,
+    response_signal: true,
+  })
+})
+
 test('runAtcOnce exits two for invalid payloads', async () => {
   const stdout = bufferWriter()
 
