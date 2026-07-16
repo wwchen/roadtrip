@@ -39,9 +39,13 @@ test('getRecgovHealthStatus exposes login status and refresh metadata', async ()
 
 test('runStartupAuthCheck records actionable auth failure status', async () => {
   const log = logCapture()
+  const diagnostic = {
+    reason: 'captcha_required',
+    screenshot_url: '/diagnostics/recgov-login-captcha.png',
+  }
 
   const status = await runStartupAuthCheck({
-    testChromiumFn: async () => ({ ok: true, loggedIn: false }),
+    testChromiumFn: async () => ({ ok: true, loggedIn: false, diagnostic }),
     authFailureFn: () => ({
       error: 'recgov_not_authenticated',
       detail: 'No Recreation.gov browser session is available.',
@@ -60,8 +64,11 @@ test('runStartupAuthCheck records actionable auth failure status', async () => {
   assert.deepEqual(status.auth, {
     headless: true,
   })
+  assert.deepEqual(status.diagnostic, diagnostic)
   assert.match(log.text(), /recgov auth startup check fail/)
   assert.match(log.text(), /error=recgov_not_authenticated/)
+  assert.match(log.text(), /diagnostic_reason=captcha_required/)
+  assert.match(log.text(), /screenshot=\/diagnostics\/recgov-login-captcha\.png/)
 })
 
 test('runStartupAuthCheck records exceptions as startup auth failures', async () => {
@@ -124,6 +131,36 @@ test('POST /login passes request-scoped credentials to the auth check', async ()
     mfaCode: '123456',
   })
   assert.equal(authOptions.allowManualLogin, false)
+})
+
+test('POST /login HTML response renders a failed login diagnostic screenshot', async () => {
+  const response = await request(createCompanionServer({
+    testChromiumFn: async () => ({
+      ok: true,
+      loggedIn: false,
+      diagnostic: {
+        reason: 'login_error',
+        screenshot_url: '/diagnostics/recgov-login-error.png',
+      },
+    }),
+  }), {
+    method: 'POST',
+    path: '/login',
+    headers: {
+      accept: 'text/html',
+      'content-type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      username: 'camper@example.test',
+      password: 'secret',
+      mfa_code: '123456',
+    }).toString(),
+  })
+
+  assert.equal(response.status, 401)
+  assert.match(response.text, /Last login screenshot/)
+  assert.match(response.text, /Reason: login_error/)
+  assert.match(response.text, /src="\/diagnostics\/recgov-login-error\.png"/)
 })
 
 test('POST /refresh force-refreshes the stored browser session without credentials', async () => {

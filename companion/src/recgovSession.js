@@ -3,6 +3,8 @@
 // localStorage.recaccount inside the same Chromium context that clicks ATC.
 
 import { Buffer } from 'node:buffer'
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import {
   IS_HEADLESS,
   injectFingerprintCookie,
@@ -12,12 +14,15 @@ import {
 export const RECGOV_HOME_URL = 'https://www.recreation.gov/'
 export const RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS = 20_000
 export const RECGOV_LOGIN_STATE_SETTLE_MS = 2_000
+export const RECGOV_DIAGNOSTIC_DIR = process.env.RECGOV_DIAGNOSTIC_DIR || '/tmp/campsite-companion/recgov-diagnostics'
 
 const RECGOV_REFRESH_URL = 'https://www.recreation.gov/api/accounts/login/v2/refresh'
 const RECGOV_REFRESH_CONTENT_TYPE = 'text/plain;charset=UTF-8'
 const RECGOV_RECACCOUNT_STORAGE_KEY = 'recaccount'
+const RECGOV_DIAGNOSTIC_URL_PREFIX = '/diagnostics'
 const DEFAULT_RECGOV_LOGIN_TIMEOUT_MS = 120_000
 const RECGOV_LOGIN_POLL_MS = 1_000
+const RECGOV_LOGIN_WAIT_PROGRESS_MS = 10_000
 const RECGOV_LOGIN_BUTTON_TIMEOUT_MS = 5_000
 const RECGOV_REFRESH_AHEAD_MS = 5 * 60 * 1_000
 const RECGOV_REFRESH_MAX_ATTEMPTS = 3
@@ -31,6 +36,7 @@ const LOGIN_FIELD_TIMEOUT_MS = 5_000
 const LOGIN_SUBMIT_TIMEOUT_MS = 5_000
 const LOGIN_BLOCKER_TIMEOUT_MS = 1_000
 const LOGIN_MFA_PROMPT_TIMEOUT_MS = 8_000
+const DIAGNOSTIC_REASON_MAX_CHARS = 60
 
 const LOGIN_LINK_SEL = 'button:has-text("Sign Up / Log In"), a:has-text("Sign Up / Log In")'
 const LOGIN_EMAIL_SELECTORS = [
@@ -124,6 +130,7 @@ const LOGIN_ERROR_SELECTORS = [
 let recgovSessionStatus = {
   last_refresh_at: null,
   last_refresh_expires_at: null,
+  last_login_diagnostic: null,
 }
 
 export async function resolveRecaccount (page, options = {}) {
@@ -227,11 +234,13 @@ async function recaccountFromManualLogin (page, options) {
     console.log(`Cart: could not reopen Recreation.gov login page — ${err.message}`)
   })
   await openLoginIfPossible(page)
-  const browserSession = await waitForBrowserRecaccount(page, timeoutMs)
+  const browserSession = await waitForBrowserRecaccount(page, timeoutMs, { label: 'manual login' })
   if (!browserSession) {
     console.log(`Cart: Recreation.gov login wait timed out after ${secondsLabel(timeoutMs)}s`)
+    await captureLoginDiagnostic(page, 'manual_login_timeout')
     return null
   }
+  clearLoginDiagnostic()
   return activateBrowserRecaccount(browserSession.page, browserSession.raw, options)
 }
 
@@ -244,6 +253,7 @@ async function recaccountFromCredentialLogin (page, options, credentialState) {
   }
 
   const timeoutMs = recgovLoginTimeoutMs(options)
+  clearLoginDiagnostic()
   console.log(
     `Cart: attempting Recreation.gov credential login for ${maskLoginEmail(credentialState.email)} ` +
     `(waiting up to ${secondsLabel(timeoutMs)}s)`
@@ -257,33 +267,41 @@ async function recaccountFromCredentialLogin (page, options, credentialState) {
 
   if (!await openLoginIfPossible(page)) {
     console.log('Cart: Recreation.gov credential login failed reason=login_link_not_found')
+    await captureLoginDiagnostic(page, 'login_link_not_found')
     return null
   }
+  console.log('Cart: Recreation.gov login form opened')
 
   const formResult = await submitCredentialLoginForm(page, credentialState)
   if (!formResult.ok) {
     console.log(`Cart: Recreation.gov credential login failed reason=${formResult.reason}`)
+    await captureLoginDiagnostic(page, formResult.reason)
     return null
   }
+  console.log('Cart: submitted Recreation.gov username/password')
 
   const mfaResult = await submitMfaCodeIfPrompted(page, credentialState)
   if (!mfaResult.ok) {
     console.log(`Cart: Recreation.gov credential login failed reason=${mfaResult.reason}`)
+    await captureLoginDiagnostic(page, mfaResult.reason)
     return null
   }
   if (mfaResult.submitted) {
     console.log('Cart: submitted Recreation.gov 2FA code')
   }
 
-  const browserSession = await waitForBrowserRecaccount(page, timeoutMs)
+  console.log(`Cart: waiting for Recreation.gov browser session after credential submit (timeout ${secondsLabel(timeoutMs)}s)`)
+  const browserSession = await waitForBrowserRecaccount(page, timeoutMs, { label: 'credential login' })
   if (!browserSession) {
     const blocker = await credentialLoginBlocker(page)
+    await captureLoginDiagnostic(page, blocker.reason, blocker.detail)
     console.log(
       `Cart: Recreation.gov credential login failed reason=${blocker.reason}` +
       (blocker.detail ? ` detail="${blocker.detail}"` : '')
     )
     return null
   }
+  clearLoginDiagnostic()
   return activateBrowserRecaccount(browserSession.page, browserSession.raw, options)
 }
 
@@ -426,17 +444,79 @@ function maskLoginEmail (email) {
   return `${visible}@${domain}`
 }
 
-async function waitForBrowserRecaccount (page, timeoutMs) {
+async function waitForBrowserRecaccount (page, timeoutMs, { label = 'login' } = {}) {
   const deadline = Date.now() + timeoutMs
+  const startedAt = Date.now()
+  let nextProgressAt = startedAt + RECGOV_LOGIN_WAIT_PROGRESS_MS
   while (Date.now() < deadline) {
     const browserSession = await readRecaccountFromOpenPages(page)
     if (browserSession) return browserSession
+
+    const now = Date.now()
+    if (now >= nextProgressAt) {
+      const elapsed = secondsLabel(now - startedAt)
+      const remaining = Math.max(0, secondsLabel(deadline - now))
+      console.log(`Cart: still waiting for Recreation.gov ${label} session elapsed=${elapsed}s remaining=${remaining}s url=${safePageUrl(page)}`)
+      nextProgressAt = now + RECGOV_LOGIN_WAIT_PROGRESS_MS
+    }
 
     const remaining = deadline - Date.now()
     if (remaining <= 0) return null
     await page.waitForTimeout(Math.min(RECGOV_LOGIN_POLL_MS, remaining))
   }
   return null
+}
+
+async function captureLoginDiagnostic (page, reason, detail = null) {
+  const capturedAt = new Date().toISOString()
+  const filename = `recgov-login-${capturedAt.replace(/[:.]/g, '-')}-${sanitizeDiagnosticReason(reason)}.png`
+  const screenshotPath = path.join(RECGOV_DIAGNOSTIC_DIR, filename)
+  const diagnostic = {
+    reason,
+    detail: detail || null,
+    captured_at: capturedAt,
+    page_url: safePageUrl(page),
+    screenshot_path: screenshotPath,
+    screenshot_url: `${RECGOV_DIAGNOSTIC_URL_PREFIX}/${filename}`,
+  }
+
+  try {
+    await fs.mkdir(RECGOV_DIAGNOSTIC_DIR, { recursive: true })
+    await page.screenshot({ path: screenshotPath, fullPage: true })
+    console.log(`Cart: captured Recreation.gov login diagnostic screenshot reason=${reason} url=${diagnostic.screenshot_url} page=${diagnostic.page_url}`)
+  } catch (error) {
+    diagnostic.screenshot_error = error.message
+    console.log(`Cart: failed to capture Recreation.gov login diagnostic screenshot reason=${reason} error="${error.message}" page=${diagnostic.page_url}`)
+  }
+
+  recgovSessionStatus = {
+    ...recgovSessionStatus,
+    last_login_diagnostic: diagnostic,
+  }
+  return diagnostic
+}
+
+function clearLoginDiagnostic () {
+  recgovSessionStatus = {
+    ...recgovSessionStatus,
+    last_login_diagnostic: null,
+  }
+}
+
+function safePageUrl (page) {
+  try {
+    return page.url?.() || null
+  } catch {
+    return null
+  }
+}
+
+function sanitizeDiagnosticReason (reason) {
+  return String(reason || 'unknown')
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, DIAGNOSTIC_REASON_MAX_CHARS) || 'unknown'
 }
 
 async function readRecaccountFromOpenPages (page) {

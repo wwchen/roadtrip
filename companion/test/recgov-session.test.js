@@ -251,11 +251,14 @@ test('resolveRecaccount fails closed when Recreation.gov 2FA has no supplied cod
   const resolved = await resolveRecaccount(page, {
     credentials: { username: 'user@example.com', password: 'secret' },
     loginTimeoutMs: '1',
+    allowManualLogin: false,
   })
 
   assert.equal(resolved, null)
   assert.equal(page.credentialSubmitClicks, 1)
   assert.equal(page.mfaSubmitClicks, 0)
+  assert.equal(page.screenshots.length, 1)
+  assert.equal(getRecgovSessionStatus().last_login_diagnostic.reason, 'mfa_required')
 })
 
 function fakePage ({
@@ -289,11 +292,16 @@ function fakePage ({
     credentialSubmitClicks: 0,
     mfaSubmitClicks: 0,
     fills: [],
+    screenshots: [],
     waits: [],
     enterPresses: 0,
     context: () => context,
+    url: () => 'https://www.recreation.gov/',
     goto: async (url) => {
       page.gotos.push(url)
+    },
+    screenshot: async (options) => {
+      page.screenshots.push(options)
     },
     locator: (selector) => ({
       first: () => ({

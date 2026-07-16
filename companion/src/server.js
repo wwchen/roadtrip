@@ -3,6 +3,8 @@
 // and returns the same JSON result as the recgov:atc CLI.
 
 import http from 'node:http'
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { IS_HEADLESS } from './browser.js'
 import {
@@ -10,6 +12,7 @@ import {
   testChromium,
 } from './cart.js'
 import {
+  RECGOV_DIAGNOSTIC_DIR,
   getRecgovSessionStatus,
   recgovLoginCredentialsFromInput,
 } from './recgovSession.js'
@@ -21,6 +24,7 @@ const MAX_BODY_BYTES = 64 * 1024
 const HTTP_OK = 200
 const HTTP_BAD_REQUEST = 400
 const HTTP_UNAUTHORIZED = 401
+const HTTP_NOT_FOUND = 404
 const HTTP_CONFLICT = 409
 const HTTP_PAYLOAD_TOO_LARGE = 413
 const HTTP_UNPROCESSABLE_ENTITY = 422
@@ -32,6 +36,8 @@ const AUTH_CHECK_EXCEPTION_ERROR = 'recgov_auth_check_exception'
 const AUTH_CHECK_EXCEPTION_ACTION =
   'Check the companion logs, then open the companion /login page or run make recgov-login from the host profile.'
 const LOGIN_FORM_TITLE = 'Recreation.gov Login'
+const DIAGNOSTIC_ROUTE_PREFIX = '/diagnostics/'
+const PNG_CONTENT_TYPE = 'image/png'
 
 const HOST = process.env.COMPANION_HOST || DEFAULT_HOST
 const PORT = Number.parseInt(process.env.COMPANION_PORT || String(DEFAULT_PORT), 10)
@@ -58,6 +64,14 @@ function htmlResponse (res, status, body) {
   res.writeHead(status, {
     'content-type': 'text/html; charset=utf-8',
     'content-length': Buffer.byteLength(body),
+  })
+  res.end(body)
+}
+
+function imageResponse (res, status, body, contentType) {
+  res.writeHead(status, {
+    'content-type': contentType,
+    'content-length': body.length,
   })
   res.end(body)
 }
@@ -113,20 +127,23 @@ export async function runRecgovAuthCheck ({
         logged_in: true,
         operation,
         checked_at: new Date().toISOString(),
+        diagnostic: null,
       }
       logger('recgov auth', operation, 'ok')
       return recgovAuthStatus
     }
 
     const failure = authFailureFn()
+    const diagnostic = result?.diagnostic || getRecgovSessionStatus().last_login_diagnostic || null
     recgovAuthStatus = {
       state: 'failed',
       logged_in: false,
       operation,
       checked_at: new Date().toISOString(),
+      diagnostic,
       ...failure,
     }
-    logger('recgov auth', operation, 'fail', ...authLogFields(failure))
+    logger('recgov auth', operation, 'fail', ...authLogFields(recgovAuthStatus))
     return recgovAuthStatus
   } catch (error) {
     recgovAuthStatus = {
@@ -381,11 +398,19 @@ function renderLoginPage ({ result = null } = {}) {
   const ok = result?.ok === true
   const error = result && !ok ? result.detail || status?.detail || result.error || status?.error : null
   const operation = status?.operation === 'refresh' ? 'Refresh' : 'Login'
+  const diagnostic = status?.diagnostic || status?.last_login_diagnostic || null
   const statusHtml = result
     ? `<p class="${ok ? 'ok' : 'error'}">${escapeHtml(ok ? `${operation} succeeded.` : `${operation} failed: ${error}`)}</p>`
     : ''
   const healthHtml = status
     ? `<pre>${escapeHtml(JSON.stringify(status, null, 2))}</pre>`
+    : ''
+  const diagnosticHtml = diagnostic?.screenshot_url
+    ? `<section>
+        <h2>Last login screenshot</h2>
+        <p>Reason: ${escapeHtml(diagnostic.reason || 'unknown')}</p>
+        <img class="diagnostic" src="${escapeHtml(diagnostic.screenshot_url)}" alt="Recreation.gov login diagnostic screenshot">
+      </section>`
     : ''
 
   return `<!doctype html>
@@ -406,6 +431,7 @@ function renderLoginPage ({ result = null } = {}) {
     .secondary:visited { color: #172033; }
     .ok { color: #166534; font-weight: 700; }
     .error { color: #b42318; font-weight: 700; }
+    .diagnostic { display: block; max-width: 100%; border: 1px solid #c8d0dc; border-radius: 6px; }
     pre { overflow: auto; background: #f6f8fb; padding: .75rem; border-radius: 6px; }
   </style>
 </head>
@@ -425,6 +451,7 @@ function renderLoginPage ({ result = null } = {}) {
     <form method="post" action="/refresh"><button class="secondary" type="submit">Refresh session</button></form>
     <a class="secondary button-link" href="/health">Health JSON</a>
   </div>
+  ${diagnosticHtml}
   ${healthHtml}
 </body>
 </html>`
@@ -468,6 +495,12 @@ function authLogFields (failure) {
   }
   if (failure?.auth) {
     fields.push(`headless=${failure.auth.headless}`)
+  }
+  if (failure?.diagnostic?.reason) {
+    fields.push(`diagnostic_reason=${failure.diagnostic.reason}`)
+  }
+  if (failure?.diagnostic?.screenshot_url) {
+    fields.push(`screenshot=${failure.diagnostic.screenshot_url}`)
   }
   return fields
 }
@@ -524,6 +557,10 @@ export function createCompanionServer ({
   const deps = { testChromiumFn }
   return http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://companion.local')
+    if (req.method === 'GET' && url.pathname.startsWith(DIAGNOSTIC_ROUTE_PREFIX)) {
+      await handleDiagnosticImage(url, res)
+      return
+    }
     if (req.method === 'GET' && url.pathname === '/health') {
       jsonResponse(res, HTTP_OK, { ok: true, busy, recgov_auth: getRecgovHealthStatus() })
       return
@@ -554,6 +591,27 @@ export function createCompanionServer ({
       detail: `${req.method} ${req.url}`,
     })
   })
+}
+
+async function handleDiagnosticImage (url, res) {
+  const filename = path.basename(url.pathname)
+  if (!filename || filename !== decodeURIComponent(url.pathname.slice(DIAGNOSTIC_ROUTE_PREFIX.length)) || !filename.endsWith('.png')) {
+    jsonResponse(res, HTTP_BAD_REQUEST, {
+      ok: false,
+      error: 'invalid_diagnostic_path',
+    })
+    return
+  }
+
+  try {
+    const image = await readFile(path.join(RECGOV_DIAGNOSTIC_DIR, filename))
+    imageResponse(res, HTTP_OK, image, PNG_CONTENT_TYPE)
+  } catch {
+    jsonResponse(res, HTTP_NOT_FOUND, {
+      ok: false,
+      error: 'diagnostic_not_found',
+    })
+  }
 }
 
 export const server = createCompanionServer()
