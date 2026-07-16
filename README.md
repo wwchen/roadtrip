@@ -300,11 +300,12 @@ ones automatically.
 The campsite sub-app polls recreation.gov for matching availability against
 operator-defined alerts and (optionally) auto-claims matches by adding them
 to a real recreation.gov shopping cart. **The cart-add path requires a
-separate companion process** — recreation.gov sits behind Akamai, which
+separate companion process or container** — recreation.gov sits behind Akamai, which
 flags datacenter IPs and headless Chromium, so a real Chromium running on
 the operator's machine is the only thing that lands cart adds reliably. The
 backend never touches a browser; it only polls the public availability API,
-queues authenticated dispatches for the companion, and tracks lease state.
+then either queues authenticated dispatches for the companion or calls the
+companion's one-shot executor.
 
 - **`companion/`** — Node 22.9+ Playwright client. Claims backend dispatches via
   `POST /api/dispatches/claim`, drives Chromium to add the site to the
@@ -368,6 +369,22 @@ queues authenticated dispatches for the companion, and tracks lease state.
   Browser logs go to stderr. Stdout is one JSON result, suitable for a backend
   process caller; exit `0` means `cart_added=true`, exit `1` means the browser
   ran but did not confirm a cart hold, and exit `2` means invalid input.
+- **Docker Rec.gov ATC executor** runs the one-shot path as a Compose service
+  instead of the long-poll companion. Start the service with the
+  `recgov-companion` profile, then opt the backend into direct ATC by setting
+  the companion base URL:
+  ```sh
+  RECGOV_ATC_COMPANION_BASE_URL=http://recgov-companion:8770
+  RECGOV_ATC_COMPANION_TIMEOUT=180s
+  RECGOV_COMPANION_BROWSER_PROFILE=$HOME/.campsite-companion/browser-session
+
+  docker compose --profile pois --profile recgov-companion up -d recgov-companion backend
+  ```
+  The mounted browser profile is the same persistent profile used by
+  `recgov:login`. The companion container name is under the `roadtrip-*`
+  Compose project, so Alloy's Docker log discovery ships its stdout/stderr to
+  Loki; the backend also records the terminal ATC result and sends Slack for
+  direct success/failure.
 - **Slack notifications** are optional. Create a Slack app with the
   `chat:write` scope, install it to the workspace, and paste the bot
   token (`xoxb-…`) plus a channel name (`#camping-alerts`) or channel ID

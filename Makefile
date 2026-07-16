@@ -1,4 +1,4 @@
-.PHONY: help run data-fetch data-import reset-db qa install install-hooks _ensure-hooks companion recgov-login recgov-refresh recgov-atc grafana-export
+.PHONY: help run data-fetch data-import reset-db qa install install-hooks _ensure-hooks companion recgov-companion recgov-login recgov-refresh recgov-atc grafana-export
 
 PORT       ?= 8765
 BACKEND_IMAGE ?= roadtrip/backend
@@ -6,18 +6,22 @@ RUN_ENV ?= $(or $(env),dev)
 POSTGRES_DB ?= roadtrip
 POSTGRES_USER ?= roadtrip
 POSTGRES_PASSWORD ?= roadtrip
-PROD_COMPOSE_PROFILES ?= --profile tunnel --profile pois
+RECGOV_ATC_DOCKER_URL ?= http://recgov-companion:8770
+RECGOV_ATC_LOCAL_URL ?= http://127.0.0.1:8770
+PROD_COMPOSE_PROFILES ?= --profile tunnel --profile pois --profile recgov-companion
+LOCAL_COMPOSE_PROFILES ?= --profile pois --profile recgov-companion
 PROD_COMPOSE := docker compose $(PROD_COMPOSE_PROFILES)
-LOCAL_COMPOSE := docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois
+LOCAL_COMPOSE := docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml $(LOCAL_COMPOSE_PROFILES)
 OBSERVABILITY_SERVICES := grafana alloy tempo prometheus
 
 help:
 	@echo "Targets:"
 	@echo "  make install          One-time host setup: brew deps + companion + git hooks"
 	@echo "  make install-hooks    Point this clone's git hooks at .githooks/ (per-clone)"
-	@echo "  make run              Build + run backend locally on 127.0.0.1:8765 (serves static + /api)"
-	@echo "  make run env=prod     Build backend image + run production Compose profiles"
-	@echo "  make companion        Run the campsite Playwright companion (against the local backend)"
+	@echo "  make run              Run backend locally + Docker Rec.gov companion"
+	@echo "  make run env=prod     Build backend/companion images + run production Compose profiles"
+	@echo "  make companion        Run the legacy host long-poll Playwright companion"
+	@echo "  make recgov-companion Run the Docker one-shot Rec.gov companion"
 	@echo "  make recgov-login     Open companion Chromium and verify Recreation.gov login"
 	@echo "  make recgov-refresh   Force-refresh the companion Recreation.gov session"
 	@echo "  make recgov-atc       Run one Rec.gov add-to-cart attempt (PAYLOAD=/path/to/atc.json)"
@@ -36,23 +40,28 @@ run: _ensure-hooks
 ifeq ($(RUN_ENV),prod)
 	./gradlew :backend:shadowJar
 	docker build -t $(BACKEND_IMAGE) --target backend .
+	RECGOV_ATC_COMPANION_BASE_URL=$${RECGOV_ATC_COMPANION_BASE_URL:-$(RECGOV_ATC_DOCKER_URL)} $(PROD_COMPOSE) build recgov-companion
 	# `up -d` recreates only what changed: the rebuilt backend (new image id)
 	# and any service whose `.env`-sourced config moved. Postgres/Loki/Alloy
 	# keep running, so a code deploy no longer bounces the database.
-	$(PROD_COMPOSE) up -d
+	RECGOV_ATC_COMPANION_BASE_URL=$${RECGOV_ATC_COMPANION_BASE_URL:-$(RECGOV_ATC_DOCKER_URL)} $(PROD_COMPOSE) up -d
 	# Grafana, Alloy, Tempo, and Prometheus bind-mount config, so `up -d` won't
 	# reload those files. Provisioned dashboards poll dashboard JSON, but
 	# datasource, telemetry pipeline, trace, and metric config need restarts.
 	$(PROD_COMPOSE) restart $(OBSERVABILITY_SERVICES)
 else ifeq ($(RUN_ENV),dev)
-	$(LOCAL_COMPOSE) up -d postgres
-	ROADTRIP_PROFILE=local ./gradlew :backend:run
+	$(LOCAL_COMPOSE) up -d --build postgres recgov-companion
+	RECGOV_ATC_COMPANION_BASE_URL=$${RECGOV_ATC_COMPANION_BASE_URL:-$(RECGOV_ATC_LOCAL_URL)} ROADTRIP_PROFILE=local ./gradlew :backend:run
 else
 	$(error unsupported env '$(RUN_ENV)'; use env=dev or env=prod)
 endif
 
 companion: _ensure-hooks
 	cd companion && BACKEND_URL=http://127.0.0.1:$(PORT) npm start
+
+recgov-companion: _ensure-hooks
+	$(LOCAL_COMPOSE) up -d --build recgov-companion
+	@echo "Rec.gov companion listening on $(RECGOV_ATC_LOCAL_URL)"
 
 recgov-login: _ensure-hooks
 	cd companion && npm run recgov:login
@@ -102,7 +111,7 @@ DC := $(LOCAL_COMPOSE)
 reset-db:
 	$(DC) rm -sf postgres backend
 	rm -rf $(POSTGRES_DATA)
-	$(DC) up -d postgres backend
+	$(DC) up -d --build postgres recgov-companion backend
 
 # Local-only Playwright smoke. Hits the Kotlin backend on $(PORT) (serves
 # static + all /api routes). Doesn't boot the stack — bring it up first
