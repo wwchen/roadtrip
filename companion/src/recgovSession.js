@@ -3,11 +3,13 @@
 // localStorage.recaccount inside the same Chromium context that clicks ATC.
 
 import { Buffer } from 'node:buffer'
+import { readFile } from 'node:fs/promises'
 import {
   IS_HEADLESS,
   injectFingerprintCookie,
   readRecaccount,
 } from './browser.js'
+import { generateTotp } from './totp.js'
 
 export const RECGOV_HOME_URL = 'https://www.recreation.gov/'
 export const RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS = 20_000
@@ -33,6 +35,8 @@ const RECGOV_PASSWORD_ENV = 'RECGOV_PASSWORD'
 const RECGOV_MFA_CODE_ENV = 'RECGOV_MFA_CODE'
 const RECGOV_OTP_ENV = 'RECGOV_OTP'
 const RECGOV_TWO_FACTOR_CODE_ENV = 'RECGOV_TWO_FACTOR_CODE'
+const RECGOV_TOTP_SECRET_ENV = 'RECGOV_TOTP_SECRET'
+const RECGOV_TOTP_SECRET_FILE_ENV = 'RECGOV_TOTP_SECRET_FILE'
 const LOGIN_FIELD_TIMEOUT_MS = 5_000
 const LOGIN_SUBMIT_TIMEOUT_MS = 5_000
 const LOGIN_BLOCKER_TIMEOUT_MS = 1_000
@@ -149,16 +153,44 @@ export function recgovLoginCredentialsFromEnv (env = process.env) {
     env?.[RECGOV_TWO_FACTOR_CODE_ENV] ||
     ''
   ).trim()
+  const totpSecret = String(env?.[RECGOV_TOTP_SECRET_ENV] || '').trim()
+  const totpSecretFile = String(env?.[RECGOV_TOTP_SECRET_FILE_ENV] || '').trim()
   const emailConfigured = Boolean(email)
   const passwordConfigured = Boolean(password)
-  const mfaConfigured = Boolean(mfaCode)
+  const totpConfigured = Boolean(totpSecret || totpSecretFile)
+  const mfaConfigured = Boolean(mfaCode || totpConfigured)
   if (!emailConfigured && !passwordConfigured) {
-    return { configured: false, reason: 'credentials_not_configured', emailConfigured, passwordConfigured, mfaConfigured }
+    return {
+      configured: false,
+      reason: 'credentials_not_configured',
+      emailConfigured,
+      passwordConfigured,
+      mfaConfigured,
+      totpConfigured,
+    }
   }
   if (!emailConfigured || !passwordConfigured) {
-    return { configured: false, reason: 'credentials_incomplete', emailConfigured, passwordConfigured, mfaConfigured }
+    return {
+      configured: false,
+      reason: 'credentials_incomplete',
+      emailConfigured,
+      passwordConfigured,
+      mfaConfigured,
+      totpConfigured,
+    }
   }
-  return { configured: true, email, password, mfaCode, emailConfigured, passwordConfigured, mfaConfigured }
+  return {
+    configured: true,
+    email,
+    password,
+    mfaCode,
+    totpSecret,
+    totpSecretFile,
+    emailConfigured,
+    passwordConfigured,
+    mfaConfigured,
+    totpConfigured,
+  }
 }
 
 export function parseRecaccount (raw) {
@@ -256,13 +288,14 @@ async function recaccountFromCredentialLogin (page, options, credentialState) {
     return null
   }
 
-  const mfaResult = await submitMfaCodeIfPrompted(page, credentialState)
+  const mfaResult = await submitMfaCodeIfPrompted(page, credentialState, options)
   if (!mfaResult.ok) {
     console.log(`Cart: Recreation.gov credential login failed reason=${mfaResult.reason}`)
     return null
   }
   if (mfaResult.submitted) {
-    console.log('Cart: submitted Recreation.gov 2FA code')
+    const source = mfaResult.source === 'totp' ? 'generated TOTP code' : 'configured 2FA code'
+    console.log(`Cart: submitted Recreation.gov ${source}`)
   }
 
   const browserSession = await waitForBrowserRecaccount(page, timeoutMs)
@@ -311,26 +344,61 @@ async function submitCredentialLoginForm (page, credentials) {
   return { ok: true }
 }
 
-async function submitMfaCodeIfPrompted (page, credentials) {
+async function submitMfaCodeIfPrompted (page, credentials, options = {}) {
   const mfaSelector = await firstVisibleSelector(page, LOGIN_MFA_CODE_SELECTORS, LOGIN_MFA_PROMPT_TIMEOUT_MS)
   if (!mfaSelector) return { ok: true, submitted: false }
-  if (!credentials.mfaCode) return { ok: false, reason: 'mfa_required' }
+
+  const mfaCode = await mfaCodeForCredentialLogin(credentials, options)
+  if (!mfaCode.ok) return { ok: false, reason: mfaCode.reason }
 
   const mfaInput = page.locator(mfaSelector).first()
   try {
-    await mfaInput.fill(credentials.mfaCode, { timeout: LOGIN_FIELD_TIMEOUT_MS })
+    await mfaInput.fill(mfaCode.code, { timeout: LOGIN_FIELD_TIMEOUT_MS })
   } catch {
     return { ok: false, reason: 'mfa_code_input_not_found' }
   }
 
   const submit = await clickFirstVisible(page, LOGIN_MFA_SUBMIT_SELECTORS)
-  if (submit) return { ok: true, submitted: true }
+  if (submit) return { ok: true, submitted: true, source: mfaCode.source }
 
   try {
     await page.keyboard.press('Enter')
-    return { ok: true, submitted: true }
+    return { ok: true, submitted: true, source: mfaCode.source }
   } catch {
     return { ok: false, reason: 'mfa_submit_button_not_found' }
+  }
+}
+
+async function mfaCodeForCredentialLogin (credentials, options = {}) {
+  if (credentials.mfaCode) return { ok: true, code: credentials.mfaCode, source: 'configured' }
+
+  if (!credentials.totpSecret && !credentials.totpSecretFile) {
+    return { ok: false, reason: 'mfa_required' }
+  }
+
+  const totpSecret = await readTotpSecret(credentials)
+  if (!totpSecret.ok) return totpSecret
+
+  try {
+    return {
+      ok: true,
+      code: generateTotp(totpSecret.value, { nowMs: options.totpNowMs }),
+      source: 'totp',
+    }
+  } catch {
+    return { ok: false, reason: 'mfa_totp_secret_invalid' }
+  }
+}
+
+async function readTotpSecret (credentials) {
+  if (credentials.totpSecret) return { ok: true, value: credentials.totpSecret }
+
+  try {
+    const value = (await readFile(credentials.totpSecretFile, 'utf8')).trim()
+    if (!value) return { ok: false, reason: 'mfa_totp_secret_empty' }
+    return { ok: true, value }
+  } catch {
+    return { ok: false, reason: 'mfa_totp_secret_read_failed' }
   }
 }
 
