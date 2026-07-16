@@ -221,6 +221,25 @@ class CampgroundCtaTest {
     }
 
     @Test
+    fun `campflare provider_ref with recgov reserve_url uses recgov booking CTA`() {
+        val out =
+            cta.computeCtas(
+                row(
+                    providerRefJson = """{"campflare_id":"white-wolf-campground-567"}""",
+                    reserveUrl = "https://www.recreation.gov/camping/campgrounds/10083567",
+                    infoUrl = "https://www.nps.gov/yose/planyourvisit/wwcamp.htm",
+                ),
+            )
+
+        assertEquals(2, out.size)
+        assertEquals("https://www.recreation.gov/camping/campgrounds/10083567", out[0].url)
+        assertEquals("Reserve on recreation.gov", out[0].label)
+        assertEquals("reserve", out[0].kind)
+        assertEquals("https://campflare.com/campground/white-wolf-campground-567", out[1].url)
+        assertEquals("View on Campflare", out[1].label)
+    }
+
+    @Test
     fun `campflare provider_ref without primary link returns public Campflare CTA`() {
         val out = cta.computeCtas(row(providerRefJson = """{"campflare_id":"cranberry-lake-wsp"}"""))
 
@@ -232,6 +251,15 @@ class CampgroundCtaTest {
     @Test
     fun `bookingSystem labels`() {
         assertEquals("Recreation.gov", cta.bookingSystem(row(providerRefJson = """{"recgov_id":"232450"}""")))
+        assertEquals(
+            "Recreation.gov",
+            cta.bookingSystem(
+                row(
+                    providerRefJson = """{"campflare_id":"white-wolf-campground-567"}""",
+                    reserveUrl = "https://www.recreation.gov/camping/campgrounds/10083567",
+                ),
+            ),
+        )
         assertEquals(
             "Aspira NextGen (Parks Canada)",
             cta.bookingSystem(

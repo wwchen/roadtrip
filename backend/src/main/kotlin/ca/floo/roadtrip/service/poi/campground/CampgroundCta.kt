@@ -21,6 +21,9 @@ import java.time.ZoneId
 private const val INFO_CTA_KIND = "info"
 private const val RESERVE_CTA_KIND = "reserve"
 private const val CAMPFLARE_CTA_LABEL = "View on Campflare"
+private const val RECGOV_HOST = "recreation.gov"
+private const val RECGOV_CAMPGROUND_ID_GROUP = 1
+private val RECGOV_CAMPGROUND_URL = Regex("""/campgrounds/(\d+)""")
 
 internal class CampgroundCta(
     clock: Clock = Clock.systemUTC(),
@@ -120,18 +123,30 @@ private object RecGovCampgroundCtaProvider : CampgroundCtaProvider {
     override fun bookingSystem(
         providerRef: ProviderRef?,
         infoUrl: String?,
-    ): String? = (providerRef as? ProviderRef.RecGov)?.let { RecGovBookingDisplay.BOOKING_SYSTEM_LABEL }
+    ): String? =
+        if (providerRef is ProviderRef.RecGov || recgovCampgroundIdFromUrl(infoUrl) != null) {
+            RecGovBookingDisplay.BOOKING_SYSTEM_LABEL
+        } else {
+            null
+        }
 
     override fun reserveCta(
         providerRef: ProviderRef?,
         infoUrl: String?,
     ): PoiCtaSchema? {
-        val recgov = providerRef as? ProviderRef.RecGov ?: return null
+        val recgov = providerRef as? ProviderRef.RecGov
+        val recgovId = recgov?.recgovId ?: recgovCampgroundIdFromUrl(infoUrl) ?: return null
         return reserveCta(
-            url = RecGovBookingUrl.campground(recgov.recgovId),
+            url = RecGovBookingUrl.campground(recgovId),
             label = RecGovBookingDisplay.CAMPGROUND_CTA_LABEL,
         )
     }
+}
+
+private fun recgovCampgroundIdFromUrl(url: String?): String? {
+    val value = url?.takeIf { it.isNotBlank() } ?: return null
+    if (UrlHosts.extract(value) != RECGOV_HOST) return null
+    return RECGOV_CAMPGROUND_URL.find(value)?.groupValues?.get(RECGOV_CAMPGROUND_ID_GROUP)
 }
 
 private class AspiraCampgroundCtaProvider(
