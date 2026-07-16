@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test
 import java.time.Duration
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 class AppConfigTest {
     private val requiredAvailabilityProperties =
@@ -11,20 +12,9 @@ class AppConfigTest {
             "roadtrip.availability.force-pull-cooldown" to "60s",
             "roadtrip.availability.provider-cooldown" to "5m",
         )
-    private val requiredDispatchProperties =
-        mapOf(
-            "roadtrip.dispatch.pending-ttl" to "30s",
-            "roadtrip.dispatch.max-claim-wait" to "30s",
-            "roadtrip.dispatch.min-claim-wait" to "1ms",
-            "roadtrip.dispatch.default-lease" to "30s",
-            "roadtrip.dispatch.min-lease" to "1s",
-            "roadtrip.dispatch.max-lease" to "120s",
-            "roadtrip.dispatch.companion-token" to "token-123",
-            "roadtrip.dispatch.test-endpoint-enabled" to "false",
-        )
 
     private fun appConfig(properties: Map<String, String> = emptyMap()): AppConfig =
-        AppConfig.fromProperties(requiredAvailabilityProperties + requiredDispatchProperties + properties)
+        AppConfig.fromProperties(requiredAvailabilityProperties + properties)
 
     @Test
     fun `availability config parses cooldown durations`() {
@@ -56,98 +46,27 @@ class AppConfigTest {
     }
 
     @Test
-    fun `dispatch config parses required properties`() {
-        val config = appConfig().dispatch
+    fun `booking config disables recgov companion by default`() {
+        val config = appConfig().booking.recgovAtc
 
-        assertEquals(Duration.ofSeconds(30), config.pendingTtl)
-        assertEquals(Duration.ofSeconds(30), config.maxClaimWait)
-        assertEquals(Duration.ofMillis(1), config.minClaimWait)
-        assertEquals(Duration.ofSeconds(30), config.defaultLease)
-        assertEquals(Duration.ofSeconds(1), config.minLease)
-        assertEquals(Duration.ofSeconds(120), config.maxLease)
-        assertEquals("token-123", config.companionToken)
-        assertEquals(false, config.testEndpointEnabled)
+        assertNull(config.companionBaseUrl)
+        assertEquals(false, config.companionEnabled)
+        assertEquals(Duration.ofSeconds(180), config.companionTimeout)
     }
 
     @Test
-    fun `dispatch config requires explicit operational values`() {
-        val missingDuration =
-            assertFailsWith<IllegalArgumentException> {
-                AppConfig.fromProperties(
-                    requiredAvailabilityProperties +
-                        requiredDispatchProperties.minus("roadtrip.dispatch.pending-ttl"),
-                )
-            }
-        assertEquals("roadtrip.dispatch.pending-ttl is required", missingDuration.message)
-
-        val missingToken =
-            assertFailsWith<IllegalArgumentException> {
-                AppConfig.fromProperties(
-                    requiredAvailabilityProperties +
-                        requiredDispatchProperties.minus("roadtrip.dispatch.companion-token"),
-                )
-            }
-        assertEquals("roadtrip.dispatch.companion-token is required", missingToken.message)
-
-        val missingToggle =
-            assertFailsWith<IllegalArgumentException> {
-                AppConfig.fromProperties(
-                    requiredAvailabilityProperties +
-                        requiredDispatchProperties.minus("roadtrip.dispatch.test-endpoint-enabled"),
-                )
-            }
-        assertEquals("roadtrip.dispatch.test-endpoint-enabled is required", missingToggle.message)
-    }
-
-    @Test
-    fun `dispatch config parses duration overrides`() {
+    fun `booking config parses recgov companion settings`() {
         val config =
             appConfig(
                 mapOf(
-                    "roadtrip.dispatch.pending-ttl" to "45s",
-                    "roadtrip.dispatch.max-claim-wait" to "15s",
-                    "roadtrip.dispatch.min-claim-wait" to "2ms",
-                    "roadtrip.dispatch.default-lease" to "20s",
-                    "roadtrip.dispatch.min-lease" to "2s",
-                    "roadtrip.dispatch.max-lease" to "90s",
-                    "roadtrip.dispatch.companion-token" to " token-123 ",
-                    "roadtrip.dispatch.test-endpoint-enabled" to "true",
+                    "roadtrip.booking.recgov-atc.companion-base-url" to " http://recgov-companion:8770/ ",
+                    "roadtrip.booking.recgov-atc.companion-timeout" to "45s",
                 ),
-            ).dispatch
+            ).booking.recgovAtc
 
-        assertEquals(Duration.ofSeconds(45), config.pendingTtl)
-        assertEquals(Duration.ofSeconds(15), config.maxClaimWait)
-        assertEquals(Duration.ofMillis(2), config.minClaimWait)
-        assertEquals(Duration.ofSeconds(20), config.defaultLease)
-        assertEquals(Duration.ofSeconds(2), config.minLease)
-        assertEquals(Duration.ofSeconds(90), config.maxLease)
-        assertEquals("token-123", config.companionToken)
-        assertEquals(true, config.testEndpointEnabled)
-    }
-
-    @Test
-    fun `dispatch config validates duration ordering`() {
-        val err =
-            assertFailsWith<IllegalArgumentException> {
-                appConfig(
-                    mapOf(
-                        "roadtrip.dispatch.default-lease" to "30s",
-                        "roadtrip.dispatch.max-lease" to "5s",
-                    ),
-                )
-            }
-
-        assertEquals("dispatch defaultLease must be <= maxLease", err.message)
-    }
-
-    @Test
-    fun `dispatch config validates boolean toggles`() {
-        val err =
-            assertFailsWith<IllegalArgumentException> {
-                appConfig(mapOf("roadtrip.dispatch.test-endpoint-enabled" to "sometimes"))
-            }
-
-        assertEquals("roadtrip.dispatch.test-endpoint-enabled must be true or false", err.message)
+        assertEquals("http://recgov-companion:8770", config.companionBaseUrl)
+        assertEquals(true, config.companionEnabled)
+        assertEquals(Duration.ofSeconds(45), config.companionTimeout)
     }
 
     @Test

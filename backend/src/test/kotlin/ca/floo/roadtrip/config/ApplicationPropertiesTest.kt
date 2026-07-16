@@ -15,6 +15,8 @@ class ApplicationPropertiesTest {
         assertEquals("", props["roadtrip.poi-registry.path"])
         assertEquals("http://127.0.0.1:3000/dash/", props["roadtrip.grafana.root-url"])
         assertEquals("http://127.0.0.1:8765", props["roadtrip.web.root-url"])
+        assertEquals("http://127.0.0.1:8770", props["roadtrip.booking.recgov-atc.companion-base-url"])
+        assertEquals("180s", props["roadtrip.booking.recgov-atc.companion-timeout"])
         assertEquals(
             "aspira,campflare,recgov,reserveamerica,reservecalifornia",
             props["roadtrip.read-path.enabled-availability-providers"],
@@ -41,6 +43,8 @@ class ApplicationPropertiesTest {
         assertEquals("poi-registry.yaml", props["roadtrip.poi-registry.resource"])
         assertEquals("", props["roadtrip.poi-registry.path"])
         assertEquals("https://roadtrip.floo.ca/dash/", props["roadtrip.grafana.root-url"])
+        assertEquals("http://recgov-companion:8770", props["roadtrip.booking.recgov-atc.companion-base-url"])
+        assertEquals("180s", props["roadtrip.booking.recgov-atc.companion-timeout"])
     }
 
     @Test
@@ -62,6 +66,8 @@ class ApplicationPropertiesTest {
         assertEquals("roadtrip", props["roadtrip.db.password"])
         assertEquals("http://127.0.0.1:3000/dash/", props["roadtrip.grafana.root-url"])
         assertEquals("http://127.0.0.1:8765", props["roadtrip.web.root-url"])
+        assertEquals("http://recgov-companion:8770", props["roadtrip.booking.recgov-atc.companion-base-url"])
+        assertEquals("180s", props["roadtrip.booking.recgov-atc.companion-timeout"])
     }
 
     @Test

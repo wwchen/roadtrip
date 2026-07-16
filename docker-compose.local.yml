@@ -1,8 +1,3 @@
-# Pin the compose project name so container names don't drift with the
-# parent directory, regardless of whether the repo is checked out as
-# roadtrip/, roadtrip-map/, or a worktree.
-name: roadtrip
-
 services:
   # Expose local-only service ports for host tools, browser QA, and Gradle loops.
   postgres:
@@ -17,6 +12,11 @@ services:
     ports:
       - "127.0.0.1:8765:8765"
       - "127.0.0.1:8766:8766"
+
+  recgov-companion:
+    restart: "no"
+    ports:
+      - "127.0.0.1:8770:8770"
 
   grafana:
     restart: "no"

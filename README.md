@@ -14,17 +14,15 @@ Personal web map for roadtripping a Tesla. Live at [roadtrip.floo.ca](https://ro
 ## Local dev
 
 ```sh
-tilt up                  # Compose stack (Postgres/backend/Grafana/observability) + host companion
+tilt up                  # Compose stack (Postgres/backend/Grafana/observability/Rec.gov companion)
 make run                 # Kotlin/Ktor backend on http://127.0.0.1:8765 (serves static + /api)
-make companion           # campsite Playwright companion against the local backend
 make run env=prod        # on the deploy host: build image + docker compose up
 make fetch-tesla-supercharger-pricing  # mint cookies + crawl Tesla Supercharger pricing into data/raw/
 ```
 
 `tilt up` is the easiest path for full-stack dev: Tilt uses Docker Compose
-for Postgres, the backend container, Grafana, Loki, Tempo, Prometheus, and
-Alloy, then runs the campsite companion as a host Node process so Playwright
-can drive a real Chromium. The backend still serves the app on
+for Postgres, the backend container, Grafana, Loki, Tempo, Prometheus, Alloy,
+and the Rec.gov companion HTTP executor. The backend still serves the app on
 <http://127.0.0.1:8765>. Grafana is available at <http://127.0.0.1:3000>,
 Tempo at <http://127.0.0.1:3200>, Prometheus at
 <http://127.0.0.1:9090>, and Alloy at <http://127.0.0.1:12345>. Local
@@ -300,31 +298,30 @@ ones automatically.
 The campsite sub-app polls recreation.gov for matching availability against
 operator-defined alerts and (optionally) auto-claims matches by adding them
 to a real recreation.gov shopping cart. **The cart-add path requires a
-separate companion process** — recreation.gov sits behind Akamai, which
+separate companion process or container** — recreation.gov sits behind Akamai, which
 flags datacenter IPs and headless Chromium, so a real Chromium running on
 the operator's machine is the only thing that lands cart adds reliably. The
 backend never touches a browser; it only polls the public availability API,
-queues authenticated dispatches for the companion, and tracks lease state.
+then calls the companion's one-shot executor.
 
-- **`companion/`** — Node 22.9+ Playwright client. Claims backend dispatches via
-  `POST /api/dispatches/claim`, drives Chromium to add the site to the
-  operator's rec.gov cart, and reports completion or failure to
-  `/api/dispatches/{id}/complete` or `/api/dispatches/{id}/fail`. Set
-  `DISPATCH_COMPANION_TOKEN` in the repo `.env`; `npm start` loads it for the
-  companion, and the Tilt/Compose backend reads the same file. Exported env
-  vars still win for one-off overrides.
+- **`companion/`** — Node 22.9+ Playwright HTTP executor. It exposes
+  `POST /recgov/atc`, drives Chromium to add the site to the operator's
+  rec.gov cart, and returns a terminal JSON success/failure response to the
+  backend.
   ```sh
   cd companion
   npm install
-  BACKEND_URL=http://127.0.0.1:8765 npm start
+  npm start
   ```
 - **Recreation.gov login** happens in the companion's persistent Chromium
   profile. Run the companion headed, log in to recreation.gov in that window
   once, and the companion manages `localStorage.recaccount` and refreshes in
-  that same browser context. You can also let the companion attempt the real
-  login form by setting `RECGOV_EMAIL` and `RECGOV_PASSWORD` in the companion
-  process environment. If Recreation.gov asks for 2FA, set `RECGOV_MFA_CODE`
-  for that login run; without a current code the companion fails closed with
+  that same browser context. The backend never receives the Recreation.gov JWT;
+  it only sends ATC payloads to the companion and records terminal
+  success/failure. You can also let the companion attempt the real login form
+  by setting `RECGOV_EMAIL` and `RECGOV_PASSWORD` in the companion process
+  environment. If Recreation.gov asks for 2FA, set `RECGOV_MFA_CODE` for that
+  login run; without a current code the companion fails closed with
   `mfa_required` in its logs. With 1Password CLI, resolve the current OTP into
   the companion environment:
   ```sh
@@ -349,34 +346,34 @@ queues authenticated dispatches for the companion, and tracks lease state.
   `0` after `REC_GOV_AUTH_REFRESH_OK` only after the browser session has
   successfully refreshed through Recreation.gov. If the stored access token is
   still valid but its `refresh_id` has gone stale, `recgov:refresh` clears that
-  stale browser `recaccount` and prompts for a fresh headed login. Both
-  commands return non-zero after `REC_GOV_AUTH_FAILED` / `REC_GOV_AUTH_ERROR`.
-  The Make targets set `COMPANION_BROWSER_PROFILE` from
+  stale browser `recaccount` and prompts for a fresh headed login. Both commands
+  return non-zero after `REC_GOV_AUTH_FAILED` / `REC_GOV_AUTH_ERROR`. The Make
+  targets set `COMPANION_BROWSER_PROFILE` from
   `RECGOV_COMPANION_BROWSER_PROFILE`, falling back to
-  `$HOME/.campsite-companion/browser-session`. The optional `RECGOV_*` login
-  variables are consumed by the companion only; backend config does not read
-  Recreation.gov credentials.
-- **One-shot Rec.gov ATC** runs the same browser add-to-cart code as the
-  dispatch companion. This can place a real hold in the operator's
-  Recreation.gov cart, so use a real payload only when that side effect is
-  intended.
+  `$HOME/.campsite-companion/browser-session`, which is the same host path the
+  Docker companion mounts. The optional `RECGOV_*` login variables are consumed
+  by the companion only; backend config does not read Recreation.gov
+  credentials.
+- **One-shot Rec.gov ATC** runs the same browser add-to-cart code as the HTTP
+  executor. This can place a real hold in the operator's Recreation.gov cart,
+  so use a real payload only when that side effect is intended.
   ```json
   {
-    "watch_id": 12,
-    "vendor": "recgov",
-    "payload_version": "atc.recgov.v1",
-    "start_date": "2026-07-23",
-    "end_date": "2026-07-24",
-    "openings": [
-      {
-        "label": "Site 116",
-        "date": "2026-07-23",
-        "vendor": "recgov",
-        "campsite_id": 85735,
-        "vendor_id": "85735",
-        "booking_url": "https://www.recreation.gov/camping/campsites/85735?startDate=2026-07-23&endDate=2026-07-24"
-      }
-    ]
+    "payload": {
+      "watch_id": 12,
+      "start_date": "2026-07-15",
+      "end_date": "2026-07-16",
+      "openings": [
+        {
+          "label": "116",
+          "date": "2026-07-15",
+          "booking_url": "https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16",
+          "campground_id": 232447,
+          "campsite_id": 131925,
+          "vendor_id": "300"
+        }
+      ]
+    }
   }
   ```
   ```sh
@@ -385,9 +382,27 @@ queues authenticated dispatches for the companion, and tracks lease state.
   # or from repo root:
   make recgov-atc PAYLOAD=/tmp/recgov-atc.json
   ```
-  Browser logs go to stderr. Stdout is one JSON result; exit `0` means
-  `cart_added=true`, exit `1` means the browser ran but did not confirm a cart
-  hold, and exit `2` means invalid input.
+  Browser logs go to stderr. Stdout is one JSON result, suitable for a backend
+  process caller; exit `0` means `cart_added=true`, exit `1` means the browser
+  ran but did not confirm a cart hold, and exit `2` means invalid input.
+- **Docker Rec.gov ATC executor** runs the companion HTTP executor as a Compose
+  service. Start the service with the `recgov-companion` profile; the backend
+  companion URL and timeout live in `backend/src/main/resources/application*.yml`.
+  ```sh
+  RECGOV_COMPANION_BROWSER_PROFILE=$HOME/.campsite-companion/browser-session
+  # optional companion-only auto-login:
+  RECGOV_EMAIL=you@example.com
+  RECGOV_PASSWORD=...
+  # set only for the login run when 2FA is required:
+  RECGOV_MFA_CODE="$(op read 'op://Private/recreation.gov/one-time password?attribute=otp')"
+
+  docker compose --profile pois --profile recgov-companion up -d recgov-companion backend
+  ```
+  The mounted browser profile is the same persistent profile used by
+  `recgov:login`. The companion container name is under the `roadtrip-*`
+  Compose project, so Alloy's Docker log discovery ships its stdout/stderr to
+  Loki; the backend also records the terminal ATC result and sends Slack for
+  direct success/failure.
 - **Slack notifications** are optional. Create a Slack app with the
   `chat:write` scope, install it to the workspace, and paste the bot
   token (`xoxb-…`) plus a channel name (`#camping-alerts`) or channel ID
