@@ -9,6 +9,7 @@
   "scripts": {
     "start": "node --env-file-if-exists=../.env --experimental-eventsource src/index.js",
     "recgov:login": "node --env-file-if-exists=../.env src/checkRecgovAuth.js",
+    "recgov:refresh": "node --env-file-if-exists=../.env src/checkRecgovAuth.js --force-refresh",
     "spike:client": "node spike/client.js",
     "spike:test": "node --test spike/test.js",
     "test": "node --test 'test/*.test.js'"

@@ -7,6 +7,7 @@ const JWT_HEADER = { alg: 'none' }
 const JWT_SIGNATURE = 'sig'
 const FRESH_OFFSET_SECONDS = 60 * 60
 const NEAR_EXPIRY_OFFSET_SECONDS = 60
+const REFRESH_RETRY_DELAY_MS = 1000
 
 test('resolveRecaccount uses the existing companion browser recaccount', async () => {
   const recaccount = testRecaccount({
@@ -53,7 +54,65 @@ test('resolveRecaccount refreshes near-expiry recaccount in the companion browse
   })
 })
 
-function fakePage ({ rawRecaccount, refreshRecaccount = null }) {
+test('resolveRecaccount force-refreshes a fresh browser recaccount', async () => {
+  const fresh = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-old' }),
+  })
+  const refreshed = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-new' }),
+  })
+  const page = fakePage({
+    rawRecaccount: JSON.stringify(fresh),
+    refreshRecaccount: refreshed,
+  })
+
+  const resolved = await resolveRecaccount(page, { forceRefresh: true })
+
+  assert.equal(resolved.access_token, refreshed.access_token)
+  assert.equal(page.refreshCalls.length, 1)
+  assert.equal(page.refreshCalls[0].token, fresh.access_token)
+  assert.equal(page.context().cookies.at(-1).value, 'fp-new')
+})
+
+test('resolveRecaccount retries transient forced browser refresh failures', async () => {
+  const fresh = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-old' }),
+  })
+  const refreshed = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-new' }),
+  })
+  const page = fakePage({
+    rawRecaccount: JSON.stringify(fresh),
+    refreshResponses: [
+      { ok: false, error: 'Failed to fetch' },
+      { ok: true, recaccount: refreshed },
+    ],
+  })
+
+  const resolved = await resolveRecaccount(page, { forceRefresh: true })
+
+  assert.equal(resolved.access_token, refreshed.access_token)
+  assert.equal(page.refreshCalls.length, 2)
+  assert.deepEqual(page.waits, [REFRESH_RETRY_DELAY_MS])
+})
+
+test('resolveRecaccount fails closed when forced browser refresh is rejected', async () => {
+  const fresh = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-old' }),
+  })
+  const page = fakePage({
+    rawRecaccount: JSON.stringify(fresh),
+    refreshResponse: { ok: false, status: 401, body: 'unauthorized' },
+  })
+
+  const resolved = await resolveRecaccount(page, { forceRefresh: true })
+
+  assert.equal(resolved, null)
+  assert.equal(page.refreshCalls.length, 1)
+})
+
+function fakePage ({ rawRecaccount, refreshRecaccount = null, refreshResponse = null, refreshResponses = null }) {
+  let refreshResponseIndex = 0
   const context = {
     cookies: [],
     pages: () => [page],
@@ -64,15 +123,20 @@ function fakePage ({ rawRecaccount, refreshRecaccount = null }) {
   const page = {
     gotos: [],
     refreshCalls: [],
+    waits: [],
     context: () => context,
     goto: async (url) => {
       page.gotos.push(url)
+    },
+    waitForTimeout: async (ms) => {
+      page.waits.push(ms)
     },
     evaluate: async (_fn, arg) => {
       if (arg === 'recaccount') return rawRecaccount
       if (arg?.url) {
         page.refreshCalls.push(arg)
-        return { ok: true, recaccount: refreshRecaccount }
+        if (refreshResponses) return refreshResponses[refreshResponseIndex++]
+        return refreshResponse || { ok: true, recaccount: refreshRecaccount }
       }
       throw new Error('unexpected evaluate call')
     },

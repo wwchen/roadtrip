@@ -327,11 +327,15 @@ queues authenticated dispatches for the companion, and tracks lease state.
   ```sh
   cd companion
   npm run recgov:login
+  npm run recgov:refresh   # force the real Recreation.gov refresh endpoint
   # or from repo root:
   make recgov-login
+  make recgov-refresh
   ```
-  The command exits `0` after `REC_GOV_AUTH_OK`, or non-zero after
-  `REC_GOV_AUTH_FAILED` / `REC_GOV_AUTH_ERROR`.
+  `recgov:login` exits `0` after `REC_GOV_AUTH_OK`. `recgov:refresh` exits
+  `0` after `REC_GOV_AUTH_REFRESH_OK` only after the browser session has
+  successfully refreshed through Recreation.gov. Both commands return non-zero
+  after `REC_GOV_AUTH_FAILED` / `REC_GOV_AUTH_ERROR`.
 - **Slack notifications** are optional. Create a Slack app with the
   `chat:write` scope, install it to the workspace, and paste the bot
   token (`xoxb-…`) plus a channel name (`#camping-alerts`) or channel ID

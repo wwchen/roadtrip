@@ -19,6 +19,8 @@ const DEFAULT_RECGOV_LOGIN_TIMEOUT_MS = 120_000
 const RECGOV_LOGIN_POLL_MS = 1_000
 const RECGOV_LOGIN_BUTTON_TIMEOUT_MS = 5_000
 const RECGOV_REFRESH_AHEAD_MS = 5 * 60 * 1_000
+const RECGOV_REFRESH_MAX_ATTEMPTS = 3
+const RECGOV_REFRESH_RETRY_DELAY_MS = 1_000
 const RECGOV_JWT_PAYLOAD_INDEX = 1
 const RECGOV_JWT_MIN_PARTS = 2
 const RECGOV_REFRESH_LOG_BODY_LIMIT = 200
@@ -27,12 +29,13 @@ const MIN_LOGIN_TIMEOUT_MS = 1
 
 const LOGIN_LINK_SEL = 'button:has-text("Sign Up / Log In"), a:has-text("Sign Up / Log In")'
 
-export async function resolveRecaccount (page) {
-  const browserRecaccount = await recaccountFromBrowser(page)
-  if (browserRecaccount) return browserRecaccount
+export async function resolveRecaccount (page, options = {}) {
+  const browserSession = await recaccountFromBrowser(page, options)
+  if (browserSession.recaccount) return browserSession.recaccount
+  if (options.forceRefresh === true && browserSession.foundSession) return null
 
   if (!IS_HEADLESS) {
-    const loginRecaccount = await recaccountFromManualLogin(page)
+    const loginRecaccount = await recaccountFromManualLogin(page, options)
     if (loginRecaccount) return loginRecaccount
   }
 
@@ -57,7 +60,7 @@ export function recaccountNeedsRefresh (recaccount, nowMs = Date.now()) {
   return expiresAt !== null && nowMs >= expiresAt - RECGOV_REFRESH_AHEAD_MS
 }
 
-async function recaccountFromBrowser (page) {
+async function recaccountFromBrowser (page, options) {
   await page.goto(RECGOV_HOME_URL, {
     waitUntil: 'domcontentloaded',
     timeout: RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS,
@@ -66,12 +69,15 @@ async function recaccountFromBrowser (page) {
   })
 
   const browserSession = await readRecaccountFromOpenPages(page)
-  if (!browserSession) return null
+  if (!browserSession) return { foundSession: false, recaccount: null }
   console.log('Cart: found Recreation.gov session in companion browser')
-  return activateBrowserRecaccount(browserSession.page, browserSession.raw)
+  return {
+    foundSession: true,
+    recaccount: await activateBrowserRecaccount(browserSession.page, browserSession.raw, options),
+  }
 }
 
-async function activateBrowserRecaccount (page, raw) {
+async function activateBrowserRecaccount (page, raw, options) {
   const recaccount = parseRecaccount(raw)
   if (!recaccount?.access_token) {
     console.log('Cart: companion browser recaccount is invalid')
@@ -79,10 +85,10 @@ async function activateBrowserRecaccount (page, raw) {
   }
 
   await injectFingerprintCookie(page.context(), recaccount.access_token)
-  return refreshBrowserRecaccountIfNeeded(page, recaccount)
+  return refreshBrowserRecaccountIfNeeded(page, recaccount, options)
 }
 
-async function recaccountFromManualLogin (page) {
+async function recaccountFromManualLogin (page, options) {
   const timeoutMs = recgovLoginTimeoutMs()
   console.log(`Cart: log in to Recreation.gov in the companion browser (waiting up to ${secondsLabel(timeoutMs)}s)`)
   await openLoginIfPossible(page)
@@ -91,7 +97,7 @@ async function recaccountFromManualLogin (page) {
     console.log(`Cart: Recreation.gov login wait timed out after ${secondsLabel(timeoutMs)}s`)
     return null
   }
-  return activateBrowserRecaccount(browserSession.page, browserSession.raw)
+  return activateBrowserRecaccount(browserSession.page, browserSession.raw, options)
 }
 
 function recgovLoginTimeoutMs () {
@@ -132,11 +138,16 @@ async function readRecaccountFromOpenPages (page) {
   return null
 }
 
-async function refreshBrowserRecaccountIfNeeded (page, recaccount) {
-  if (!recaccountNeedsRefresh(recaccount)) return recaccount
+async function refreshBrowserRecaccountIfNeeded (page, recaccount, options = {}) {
+  const forceRefresh = options.forceRefresh === true
+  if (!forceRefresh && !recaccountNeedsRefresh(recaccount)) return recaccount
 
   const credentials = refreshCredentials(recaccount)
   if (!credentials) {
+    if (forceRefresh) {
+      console.log('Cart: Recreation.gov browser recaccount has no refresh credentials')
+      return null
+    }
     if (recaccountIsExpired(recaccount)) {
       console.log('Cart: Recreation.gov browser recaccount is expired and has no refresh credentials')
       return null
@@ -144,10 +155,16 @@ async function refreshBrowserRecaccountIfNeeded (page, recaccount) {
     return recaccount
   }
 
-  const refreshed = await refreshRecaccountInBrowser(page, recaccount.access_token, credentials)
+  const refreshed = await refreshRecaccountInBrowserWithRetry(page, recaccount.access_token, credentials)
   if (refreshed?.access_token) {
+    await injectFingerprintCookie(page.context(), refreshed.access_token)
     console.log(`Cart: refreshed Recreation.gov browser session (expires ${refreshed.expiration})`)
     return refreshed
+  }
+
+  if (forceRefresh) {
+    console.log('Cart: forced Recreation.gov browser refresh failed')
+    return null
   }
 
   if (recaccountIsExpired(recaccount)) {
@@ -156,6 +173,18 @@ async function refreshBrowserRecaccountIfNeeded (page, recaccount) {
   }
 
   return recaccount
+}
+
+async function refreshRecaccountInBrowserWithRetry (page, token, credentials) {
+  for (let attempt = 1; attempt <= RECGOV_REFRESH_MAX_ATTEMPTS; attempt++) {
+    const result = await refreshRecaccountInBrowser(page, token, credentials)
+    if (result.recaccount?.access_token) return result.recaccount
+    if (!result.retryable || attempt === RECGOV_REFRESH_MAX_ATTEMPTS) return null
+
+    console.log(`Cart: retrying Recreation.gov browser refresh (${attempt + 1}/${RECGOV_REFRESH_MAX_ATTEMPTS})`)
+    await page.waitForTimeout(RECGOV_REFRESH_RETRY_DELAY_MS)
+  }
+  return null
 }
 
 function refreshCredentials (recaccount) {
@@ -221,8 +250,8 @@ async function refreshRecaccountInBrowser (page, token, credentials) {
     bodyLimit: RECGOV_REFRESH_LOG_BODY_LIMIT,
   }).catch((err) => ({ ok: false, error: err.message }))
 
-  if (result.ok) return result.recaccount
+  if (result.ok) return { recaccount: result.recaccount, retryable: false }
   const detail = result.status ? `HTTP ${result.status} ${result.body || ''}` : result.error
   console.log(`Cart: Recreation.gov browser refresh failed — ${detail}`)
-  return null
+  return { recaccount: null, retryable: !result.status }
 }

@@ -5,14 +5,17 @@
 process.env.HEADLESS = 'false'
 
 const { testChromium } = await import('./cart.js')
+const args = new Set(process.argv.slice(2))
+const forceRefresh = args.has('--force-refresh')
 
 console.log('Rec.gov auth check: opening companion Chromium profile')
 console.log('Rec.gov auth check: log in if the browser prompts; waiting uses RECGOV_LOGIN_TIMEOUT_MS when set')
+if (forceRefresh) console.log('Rec.gov auth check: forcing Recreation.gov token refresh')
 
 try {
-  const result = await testChromium()
+  const result = await testChromium(null, { forceRefresh })
   if (result?.loggedIn === true) {
-    console.log('REC_GOV_AUTH_OK')
+    console.log(forceRefresh ? 'REC_GOV_AUTH_REFRESH_OK' : 'REC_GOV_AUTH_OK')
     process.exit(0)
   }
 

@@ -339,12 +339,12 @@ export async function addToCart (match) {
   }
 }
 
-export async function testChromium (rawCookieInput = null) {
+export async function testChromium (rawCookieInput = null, options = {}) {
   const context = await getContext()
   await injectStoredCookies(context, rawCookieInput)
   const page = await context.newPage()
   try {
-    const recaccount = await resolveRecaccount(page)
+    const recaccount = await resolveRecaccount(page, options)
     if (!recaccount) {
       console.log('testChromium: no logged-in Recreation.gov browser session found')
       lastLoginState = false
