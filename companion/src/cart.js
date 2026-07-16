@@ -273,11 +273,8 @@ export async function addToCart (match) {
   page.on('response', r => {
     if (/api.*(cart|reserv|booking|order)/i.test(r.url())) {
       const path = r.url().replace('https://www.recreation.gov', '').slice(0, 80)
-      const entry = { status: r.status(), path, line: '' }
+      const entry = { status: r.status(), path, line: `${r.status()} ${path}` }
       captured.push(entry)
-      r.json()
-        .then(b => { entry.line = `${entry.status} ${path} → ${JSON.stringify(b).slice(0, 100)}` })
-        .catch(() => { entry.line = `${entry.status} ${path}` })
     }
   })
 
