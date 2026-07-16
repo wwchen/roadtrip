@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.availability.provider.adapters.recgov
 
 import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
+import java.net.URI
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
@@ -30,11 +31,22 @@ internal object RecGovBookingUrl {
     fun template(vendorId: String): String =
         "$CAMPSITE_URL/${urlEncode(vendorId)}?startDate=${ReservationUrlTemplate.START_DATE}&endDate=${ReservationUrlTemplate.END_DATE}"
 
+    fun templateFromUrl(url: String?): String? = campsiteIdFromUrl(url)?.let(::template)
+
     fun campsite(
         vendorId: String,
         startDate: LocalDate,
         endDate: LocalDate,
     ): String = ReservationUrlTemplate.fill(template(vendorId), startDate, endDate)
 
+    private fun campsiteIdFromUrl(url: String?): String? {
+        val trimmed = url?.trim().orEmpty()
+        if (trimmed.isEmpty()) return null
+        val path = runCatching { URI(trimmed).path }.getOrNull() ?: trimmed
+        return CAMPSITE_PATH.find(path)?.groupValues?.get(1)
+    }
+
     private fun urlEncode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
+
+    private val CAMPSITE_PATH = Regex("""(?:^|/)campsites/([^/?#]+)""")
 }
