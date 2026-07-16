@@ -93,29 +93,26 @@ test('resolveSessionDir uses mounted companion profile env before legacy session
   assert.equal(resolveSessionDir({}, '/home/test'), '/home/test/.campsite-companion/browser-session')
 })
 
-test('recgovAuthenticationFailure reports the operator action for headless missing credentials', () => {
+test('recgovAuthenticationFailure reports the operator action for headless missing session', () => {
   const failure = recgovAuthenticationFailure({
-    env: {},
     headless: true,
   })
 
   assert.equal(failure.error, 'recgov_not_authenticated')
-  assert.match(failure.detail, /headless companion has no RECGOV_EMAIL\/RECGOV_PASSWORD/)
-  assert.match(failure.corrective_action, /make recgov-login/)
-  assert.equal(failure.auth.credentials_reason, 'credentials_not_configured')
-  assert.equal(failure.auth.credentials_configured, false)
+  assert.match(failure.detail, /headless companion is not logged in/)
+  assert.match(failure.corrective_action, /\/login/)
+  assert.deepEqual(failure.auth, { headless: true })
 })
 
-test('recgovAuthenticationFailure distinguishes incomplete credential config', () => {
+test('recgovAuthenticationFailure reports failed login attempts distinctly', () => {
   const failure = recgovAuthenticationFailure({
-    env: { RECGOV_EMAIL: 'camper@example.test' },
     headless: true,
+    attemptedLogin: true,
   })
 
-  assert.equal(failure.error, 'recgov_credentials_incomplete')
-  assert.match(failure.detail, /set both RECGOV_EMAIL and RECGOV_PASSWORD/)
-  assert.equal(failure.auth.email_configured, true)
-  assert.equal(failure.auth.password_configured, false)
+  assert.equal(failure.error, 'recgov_login_failed')
+  assert.match(failure.detail, /MFA code/)
+  assert.match(failure.corrective_action, /\/login/)
 })
 
 test('cartHoldCompletionObserved ignores pre-confirmation cart and multi responses', () => {
@@ -165,7 +162,7 @@ test('testChromium falls back after a stored recaccount is rejected by the SPA',
   const resolveCalls = []
 
   const result = await testChromium(null, {
-    env: { RECGOV_EMAIL: 'user@example.test', RECGOV_PASSWORD: 'secret' },
+    credentials: { username: 'user@example.test', password: 'secret' },
     forceRefresh: true,
     getContextFn: async () => context,
     injectStoredCookiesFn: async () => 0,
@@ -192,7 +189,7 @@ test('testChromium falls back after a stored recaccount is rejected by the SPA',
   assert.equal(resolveCalls[0].options.forceRefresh, true)
   assert.equal(resolveCalls[1].options.forceRefresh, false)
   assert.equal(resolveCalls[1].options.allowManualLoginAfterRefreshFailure, true)
-  assert.equal(resolveCalls[1].options.env.RECGOV_EMAIL, 'user@example.test')
+  assert.equal(resolveCalls[1].options.credentials.username, 'user@example.test')
   assert.deepEqual(pages[0].injectedRecaccounts, ['stale-token'])
   assert.deepEqual(pages[1].injectedRecaccounts, ['fresh-token'])
 })

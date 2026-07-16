@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import {
   getRecgovSessionStatus,
-  recgovLoginCredentialsFromEnv,
+  recgovLoginCredentialsFromInput,
   resolveRecaccount,
 } from '../src/recgovSession.js'
 
@@ -13,9 +13,9 @@ const FRESH_OFFSET_SECONDS = 60 * 60
 const NEAR_EXPIRY_OFFSET_SECONDS = 60
 const REFRESH_RETRY_DELAY_MS = 1000
 
-test('recgovLoginCredentialsFromEnv requires email and password and accepts MFA code', () => {
+test('recgovLoginCredentialsFromInput requires username/email and password and accepts MFA code', () => {
   assert.deepEqual(
-    recgovLoginCredentialsFromEnv({}),
+    recgovLoginCredentialsFromInput({}),
     {
       configured: false,
       reason: 'credentials_not_configured',
@@ -25,7 +25,7 @@ test('recgovLoginCredentialsFromEnv requires email and password and accepts MFA 
     },
   )
   assert.deepEqual(
-    recgovLoginCredentialsFromEnv({ RECGOV_EMAIL: 'user@example.com' }),
+    recgovLoginCredentialsFromInput({ username: 'user@example.com' }),
     {
       configured: false,
       reason: 'credentials_incomplete',
@@ -35,10 +35,10 @@ test('recgovLoginCredentialsFromEnv requires email and password and accepts MFA 
     },
   )
 
-  const credentials = recgovLoginCredentialsFromEnv({
-    RECGOV_EMAIL: ' user@example.com ',
-    RECGOV_PASSWORD: 'secret',
-    RECGOV_MFA_CODE: '123456',
+  const credentials = recgovLoginCredentialsFromInput({
+    username: ' user@example.com ',
+    password: 'secret',
+    mfa_code: '123456',
   })
 
   assert.equal(credentials.configured, true)
@@ -182,7 +182,7 @@ test('resolveRecaccount prompts manual login after allowed forced refresh failur
   assert.equal(page.loginClicks, 1)
 })
 
-test('resolveRecaccount can log in with Recreation.gov credentials from env', async () => {
+test('resolveRecaccount can log in with request-scoped Recreation.gov credentials', async () => {
   const recaccount = testRecaccount({
     token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-credential' }),
   })
@@ -191,10 +191,7 @@ test('resolveRecaccount can log in with Recreation.gov credentials from env', as
   })
 
   const resolved = await resolveRecaccount(page, {
-    env: {
-      RECGOV_EMAIL: 'user@example.com',
-      RECGOV_PASSWORD: 'secret',
-    },
+    credentials: { username: 'user@example.com', password: 'secret' },
   })
 
   assert.equal(resolved.access_token, recaccount.access_token)
@@ -213,10 +210,7 @@ test('resolveRecaccount can submit credentials with Enter when the login button 
   })
 
   const resolved = await resolveRecaccount(page, {
-    env: {
-      RECGOV_EMAIL: 'user@example.com',
-      RECGOV_PASSWORD: 'secret',
-    },
+    credentials: { username: 'user@example.com', password: 'secret' },
   })
 
   assert.equal(resolved.access_token, recaccount.access_token)
@@ -236,11 +230,7 @@ test('resolveRecaccount can submit a provided Recreation.gov 2FA code', async ()
   })
 
   const resolved = await resolveRecaccount(page, {
-    env: {
-      RECGOV_EMAIL: 'user@example.com',
-      RECGOV_PASSWORD: 'secret',
-      RECGOV_MFA_CODE: '123456',
-    },
+    credentials: { username: 'user@example.com', password: 'secret', mfa_code: '123456' },
   })
 
   assert.equal(resolved.access_token, recaccount.access_token)
@@ -259,11 +249,8 @@ test('resolveRecaccount fails closed when Recreation.gov 2FA has no supplied cod
   })
 
   const resolved = await resolveRecaccount(page, {
-    env: {
-      RECGOV_EMAIL: 'user@example.com',
-      RECGOV_PASSWORD: 'secret',
-      RECGOV_LOGIN_TIMEOUT_MS: '1',
-    },
+    credentials: { username: 'user@example.com', password: 'secret' },
+    loginTimeoutMs: '1',
   })
 
   assert.equal(resolved, null)

@@ -27,9 +27,6 @@ const RECGOV_JWT_MIN_PARTS = 2
 const RECGOV_REFRESH_LOG_BODY_LIMIT = 200
 const MILLISECONDS_PER_SECOND = 1_000
 const MIN_LOGIN_TIMEOUT_MS = 1
-const RECGOV_EMAIL_ENV = 'RECGOV_EMAIL'
-const RECGOV_PASSWORD_ENV = 'RECGOV_PASSWORD'
-const RECGOV_MFA_CODE_ENV = 'RECGOV_MFA_CODE'
 const LOGIN_FIELD_TIMEOUT_MS = 5_000
 const LOGIN_SUBMIT_TIMEOUT_MS = 5_000
 const LOGIN_BLOCKER_TIMEOUT_MS = 1_000
@@ -132,7 +129,7 @@ let recgovSessionStatus = {
 export async function resolveRecaccount (page, options = {}) {
   const browserSession = await recaccountFromBrowser(page, options)
   if (browserSession.recaccount) return browserSession.recaccount
-  const credentialState = recgovLoginCredentialsFromEnv(options.env)
+  const credentialState = recgovLoginCredentialsFromInput(options.credentials)
   if (
     options.forceRefresh === true &&
     browserSession.foundSession &&
@@ -146,7 +143,7 @@ export async function resolveRecaccount (page, options = {}) {
   const credentialRecaccount = await recaccountFromCredentialLogin(page, options, credentialState)
   if (credentialRecaccount) return credentialRecaccount
 
-  if (!IS_HEADLESS) {
+  if (options.allowManualLogin !== false && !IS_HEADLESS) {
     const loginRecaccount = await recaccountFromManualLogin(page, options)
     if (loginRecaccount) return loginRecaccount
   }
@@ -161,10 +158,10 @@ export function getRecgovSessionStatus () {
   return { ...recgovSessionStatus }
 }
 
-export function recgovLoginCredentialsFromEnv (env = process.env) {
-  const email = String(env?.[RECGOV_EMAIL_ENV] || '').trim()
-  const password = String(env?.[RECGOV_PASSWORD_ENV] || '')
-  const mfaCode = String(env?.[RECGOV_MFA_CODE_ENV] || '').trim()
+export function recgovLoginCredentialsFromInput (input = {}) {
+  const email = String(input?.email || input?.username || '').trim()
+  const password = String(input?.password || '')
+  const mfaCode = String(input?.mfaCode || input?.mfa_code || '').trim()
   const emailConfigured = Boolean(email)
   const passwordConfigured = Boolean(password)
   const mfaConfigured = Boolean(mfaCode)
@@ -221,7 +218,7 @@ async function activateBrowserRecaccount (page, raw, options) {
 }
 
 async function recaccountFromManualLogin (page, options) {
-  const timeoutMs = recgovLoginTimeoutMs(options.env)
+  const timeoutMs = recgovLoginTimeoutMs(options)
   console.log(`Cart: log in to Recreation.gov in the companion browser (waiting up to ${secondsLabel(timeoutMs)}s)`)
   await page.goto(RECGOV_HOME_URL, {
     waitUntil: 'domcontentloaded',
@@ -241,15 +238,12 @@ async function recaccountFromManualLogin (page, options) {
 async function recaccountFromCredentialLogin (page, options, credentialState) {
   if (!credentialState.configured) {
     if (credentialState.reason === 'credentials_incomplete') {
-      console.log(
-        'Cart: Recreation.gov credential login not attempted — set both ' +
-        `${RECGOV_EMAIL_ENV} and ${RECGOV_PASSWORD_ENV}`
-      )
+      console.log('Cart: Recreation.gov credential login not attempted — username/email and password are required')
     }
     return null
   }
 
-  const timeoutMs = recgovLoginTimeoutMs(options.env)
+  const timeoutMs = recgovLoginTimeoutMs(options)
   console.log(
     `Cart: attempting Recreation.gov credential login for ${maskLoginEmail(credentialState.email)} ` +
     `(waiting up to ${secondsLabel(timeoutMs)}s)`
@@ -293,8 +287,8 @@ async function recaccountFromCredentialLogin (page, options, credentialState) {
   return activateBrowserRecaccount(browserSession.page, browserSession.raw, options)
 }
 
-function recgovLoginTimeoutMs (env = process.env) {
-  const configured = Number.parseInt(env?.RECGOV_LOGIN_TIMEOUT_MS || '', 10)
+function recgovLoginTimeoutMs (options = {}) {
+  const configured = Number.parseInt(options.loginTimeoutMs || process.env.RECGOV_LOGIN_TIMEOUT_MS || '', 10)
   return Number.isFinite(configured) && configured >= MIN_LOGIN_TIMEOUT_MS
     ? configured
     : DEFAULT_RECGOV_LOGIN_TIMEOUT_MS

@@ -8,7 +8,10 @@ import {
   recgovAuthenticationFailure,
   testChromium,
 } from './cart.js'
-import { getRecgovSessionStatus } from './recgovSession.js'
+import {
+  getRecgovSessionStatus,
+  recgovLoginCredentialsFromInput,
+} from './recgovSession.js'
 import { runAtcOnce } from './runAtcOnce.js'
 
 const DEFAULT_HOST = '0.0.0.0'
@@ -16,6 +19,7 @@ const DEFAULT_PORT = 8770
 const MAX_BODY_BYTES = 64 * 1024
 const HTTP_OK = 200
 const HTTP_BAD_REQUEST = 400
+const HTTP_UNAUTHORIZED = 401
 const HTTP_CONFLICT = 409
 const HTTP_PAYLOAD_TOO_LARGE = 413
 const HTTP_UNPROCESSABLE_ENTITY = 422
@@ -25,7 +29,8 @@ const EXIT_USAGE = 2
 const LOG_DETAIL_MAX_CHARS = 160
 const AUTH_CHECK_EXCEPTION_ERROR = 'recgov_auth_check_exception'
 const AUTH_CHECK_EXCEPTION_ACTION =
-  'Check the companion startup logs, then run make recgov-login or set RECGOV_EMAIL and RECGOV_PASSWORD before restarting.'
+  'Check the companion logs, then open the companion /login page or run make recgov-login from the host profile.'
+const LOGIN_FORM_TITLE = 'Recreation.gov Login'
 
 const HOST = process.env.COMPANION_HOST || DEFAULT_HOST
 const PORT = Number.parseInt(process.env.COMPANION_PORT || String(DEFAULT_PORT), 10)
@@ -46,6 +51,14 @@ function jsonResponse (res, status, body) {
     'content-length': Buffer.byteLength(rendered),
   })
   res.end(rendered)
+}
+
+function htmlResponse (res, status, body) {
+  res.writeHead(status, {
+    'content-type': 'text/html; charset=utf-8',
+    'content-length': Buffer.byteLength(body),
+  })
+  res.end(body)
 }
 
 async function readBody (req) {
@@ -77,26 +90,30 @@ function payloadSummary (raw) {
   }
 }
 
-export async function runStartupAuthCheck ({
+export async function runRecgovAuthCheck ({
+  operation = 'check',
+  options = {},
   testChromiumFn = testChromium,
   authFailureFn = recgovAuthenticationFailure,
   logger = log,
 } = {}) {
   recgovAuthStatus = {
     state: 'checking',
+    operation,
     checked_at: new Date().toISOString(),
   }
-  logger('recgov auth startup check start')
+  logger('recgov auth', operation, 'start')
 
   try {
-    const result = await testChromiumFn()
+    const result = await testChromiumFn(null, options)
     if (result?.loggedIn === true) {
       recgovAuthStatus = {
         state: 'ok',
         logged_in: true,
+        operation,
         checked_at: new Date().toISOString(),
       }
-      logger('recgov auth startup check ok')
+      logger('recgov auth', operation, 'ok')
       return recgovAuthStatus
     }
 
@@ -104,23 +121,32 @@ export async function runStartupAuthCheck ({
     recgovAuthStatus = {
       state: 'failed',
       logged_in: false,
+      operation,
       checked_at: new Date().toISOString(),
       ...failure,
     }
-    logger('recgov auth startup check fail', ...authLogFields(failure))
+    logger('recgov auth', operation, 'fail', ...authLogFields(failure))
     return recgovAuthStatus
   } catch (error) {
     recgovAuthStatus = {
       state: 'failed',
       logged_in: false,
+      operation,
       checked_at: new Date().toISOString(),
       error: AUTH_CHECK_EXCEPTION_ERROR,
       detail: error.message,
       corrective_action: AUTH_CHECK_EXCEPTION_ACTION,
     }
-    logger('recgov auth startup check exception', `detail="${truncateLogField(error.message, LOG_DETAIL_MAX_CHARS)}"`)
+    logger('recgov auth', operation, 'exception', `detail="${truncateLogField(error.message, LOG_DETAIL_MAX_CHARS)}"`)
     return recgovAuthStatus
   }
+}
+
+export async function runStartupAuthCheck (options = {}) {
+  return runRecgovAuthCheck({
+    operation: 'startup check',
+    ...options,
+  })
 }
 
 export function getRecgovAuthStatus () {
@@ -197,6 +223,238 @@ async function handleAtc (req, res) {
   }
 }
 
+async function handleRefresh (req, res, deps) {
+  if (busy) {
+    jsonResponse(res, HTTP_CONFLICT, {
+      ok: false,
+      error: 'companion_busy',
+      detail: 'companion is already running work',
+    })
+    return
+  }
+
+  busy = true
+  const startedAt = Date.now()
+  try {
+    log('recgov auth refresh request start')
+    await waitForStartupAuthCheck()
+    const status = await runRecgovAuthCheck({
+      operation: 'refresh',
+      testChromiumFn: deps.testChromiumFn,
+      authFailureFn: () => recgovAuthenticationFailure({ attemptedRefresh: true }),
+      options: {
+        forceRefresh: true,
+        allowManualLogin: false,
+      },
+    })
+    log('recgov auth refresh request result', status.state, `duration_ms=${Date.now() - startedAt}`)
+    respondAuthResult(req, res, authHttpStatus(status), authResponseBody(status))
+  } catch (error) {
+    log('recgov auth refresh request exception', error.message)
+    jsonResponse(res, HTTP_INTERNAL_ERROR, {
+      ok: false,
+      error: AUTH_CHECK_EXCEPTION_ERROR,
+      detail: error.message,
+    })
+  } finally {
+    busy = false
+  }
+}
+
+async function handleLoginPost (req, res, deps) {
+  if (busy) {
+    jsonResponse(res, HTTP_CONFLICT, {
+      ok: false,
+      error: 'companion_busy',
+      detail: 'companion is already running work',
+    })
+    return
+  }
+
+  let raw
+  try {
+    raw = await readBody(req)
+  } catch (error) {
+    respondAuthResult(req, res, error.status || HTTP_BAD_REQUEST, {
+      ok: false,
+      error: 'invalid_request',
+      detail: error.message,
+    })
+    return
+  }
+
+  let credentials
+  try {
+    credentials = loginCredentialsFromRequestBody(raw, req.headers['content-type'] || '')
+  } catch (error) {
+    respondAuthResult(req, res, HTTP_BAD_REQUEST, {
+      ok: false,
+      error: 'invalid_request',
+      detail: error.message,
+    })
+    return
+  }
+
+  const credentialState = recgovLoginCredentialsFromInput(credentials)
+  if (!credentialState.configured) {
+    respondAuthResult(req, res, HTTP_BAD_REQUEST, {
+      ok: false,
+      error: credentialState.reason,
+      detail: 'username/email and password are required',
+    })
+    return
+  }
+
+  busy = true
+  const startedAt = Date.now()
+  try {
+    log('recgov auth login request start', `user=${maskLoginUsername(credentialState.email)}`, `mfa=${credentialState.mfaConfigured}`)
+    await waitForStartupAuthCheck()
+    const status = await runRecgovAuthCheck({
+      operation: 'login',
+      testChromiumFn: deps.testChromiumFn,
+      authFailureFn: () => recgovAuthenticationFailure({ attemptedLogin: true }),
+      options: {
+        credentials,
+        allowManualLogin: false,
+      },
+    })
+    log('recgov auth login request result', status.state, `duration_ms=${Date.now() - startedAt}`)
+    respondAuthResult(req, res, authHttpStatus(status), authResponseBody(status))
+  } catch (error) {
+    log('recgov auth login request exception', error.message)
+    respondAuthResult(req, res, HTTP_INTERNAL_ERROR, {
+      ok: false,
+      error: AUTH_CHECK_EXCEPTION_ERROR,
+      detail: error.message,
+    })
+  } finally {
+    busy = false
+  }
+}
+
+function loginCredentialsFromRequestBody (raw, contentType) {
+  if (contentType.includes('application/json')) {
+    const body = raw.trim() ? JSON.parse(raw) : {}
+    return {
+      email: body.email || body.username,
+      password: body.password,
+      mfaCode: body.mfaCode || body.mfa_code,
+    }
+  }
+
+  const params = new URLSearchParams(raw)
+  return {
+    email: params.get('email') || params.get('username'),
+    password: params.get('password'),
+    mfaCode: params.get('mfa_code') || params.get('mfaCode'),
+  }
+}
+
+function authHttpStatus (status) {
+  return status.logged_in === true ? HTTP_OK : HTTP_UNAUTHORIZED
+}
+
+function authResponseBody (status) {
+  return {
+    ok: status.logged_in === true,
+    recgov_auth: status,
+  }
+}
+
+function respondAuthResult (req, res, status, body) {
+  if (wantsHtml(req)) {
+    htmlResponse(res, status, renderLoginPage({ result: body }))
+    return
+  }
+  jsonResponse(res, status, body)
+}
+
+function wantsHtml (req) {
+  const accept = String(req.headers.accept || '')
+  return accept.includes('text/html') && !accept.includes('application/json')
+}
+
+function renderLoginPage ({ result = null } = {}) {
+  const status = result?.recgov_auth
+  const ok = result?.ok === true
+  const error = result && !ok ? result.detail || status?.detail || result.error || status?.error : null
+  const operation = status?.operation === 'refresh' ? 'Refresh' : 'Login'
+  const statusHtml = result
+    ? `<p class="${ok ? 'ok' : 'error'}">${escapeHtml(ok ? `${operation} succeeded.` : `${operation} failed: ${error}`)}</p>`
+    : ''
+  const healthHtml = status
+    ? `<pre>${escapeHtml(JSON.stringify(status, null, 2))}</pre>`
+    : ''
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${LOGIN_FORM_TITLE}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 36rem; margin: 3rem auto; padding: 0 1rem; color: #172033; }
+    label { display: block; font-weight: 650; margin-top: 1rem; }
+    input { box-sizing: border-box; width: 100%; padding: .7rem; margin-top: .35rem; border: 1px solid #c8d0dc; border-radius: 6px; font: inherit; }
+    button { margin-top: 1.25rem; padding: .75rem 1rem; border: 0; border-radius: 6px; background: #24579a; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+    .row { display: flex; gap: .75rem; align-items: center; }
+    .row form { margin: 0; }
+    .secondary { background: #eef2f7; color: #172033; }
+    .ok { color: #166534; font-weight: 700; }
+    .error { color: #b42318; font-weight: 700; }
+    pre { overflow: auto; background: #f6f8fb; padding: .75rem; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h1>${LOGIN_FORM_TITLE}</h1>
+  ${statusHtml}
+  <form method="post" action="/login">
+    <label for="username">Username or email</label>
+    <input id="username" name="username" type="email" autocomplete="username" required>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <label for="mfa_code">MFA code</label>
+    <input id="mfa_code" name="mfa_code" inputmode="numeric" autocomplete="one-time-code">
+    <button type="submit">Log in</button>
+  </form>
+  <div class="row">
+    <form method="post" action="/refresh"><button class="secondary" type="submit">Refresh session</button></form>
+    <a href="/health">Health JSON</a>
+  </div>
+  ${healthHtml}
+</body>
+</html>`
+}
+
+function renderRefreshPage () {
+  return `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Refresh Recreation.gov Session</title></head>
+<body>
+  <h1>Refresh Recreation.gov Session</h1>
+  <form method="post" action="/refresh"><button type="submit">Refresh session</button></form>
+  <p><a href="/login">Login</a> <a href="/health">Health JSON</a></p>
+</body>
+</html>`
+}
+
+function escapeHtml (value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function maskLoginUsername (email) {
+  const [name, domain] = String(email || '').split('@')
+  if (!domain) return 'configured account'
+  const visible = name.length <= 2 ? name[0] || '*' : `${name[0]}***${name.at(-1)}`
+  return `${visible}@${domain}`
+}
+
 function authLogFields (failure) {
   const fields = [
     `error=${failure?.error || '?'}`,
@@ -207,7 +465,6 @@ function authLogFields (failure) {
   }
   if (failure?.auth) {
     fields.push(`headless=${failure.auth.headless}`)
-    fields.push(`credentials=${failure.auth.credentials_reason || '?'}`)
   }
   return fields
 }
@@ -258,13 +515,33 @@ function truncateLogField (value, maxLength) {
   return rendered.length <= maxLength ? rendered : `${rendered.slice(0, maxLength)}...`
 }
 
-export function createCompanionServer () {
+export function createCompanionServer ({
+  testChromiumFn = testChromium,
+} = {}) {
+  const deps = { testChromiumFn }
   return http.createServer(async (req, res) => {
-    if (req.method === 'GET' && req.url === '/health') {
+    const url = new URL(req.url || '/', 'http://companion.local')
+    if (req.method === 'GET' && url.pathname === '/health') {
       jsonResponse(res, HTTP_OK, { ok: true, busy, recgov_auth: getRecgovHealthStatus() })
       return
     }
-    if (req.method === 'POST' && req.url === '/recgov/atc') {
+    if (req.method === 'GET' && url.pathname === '/login') {
+      htmlResponse(res, HTTP_OK, renderLoginPage())
+      return
+    }
+    if (req.method === 'POST' && url.pathname === '/login') {
+      await handleLoginPost(req, res, deps)
+      return
+    }
+    if (req.method === 'GET' && url.pathname === '/refresh') {
+      htmlResponse(res, HTTP_OK, renderRefreshPage())
+      return
+    }
+    if (req.method === 'POST' && url.pathname === '/refresh') {
+      await handleRefresh(req, res, deps)
+      return
+    }
+    if (req.method === 'POST' && url.pathname === '/recgov/atc') {
       await handleAtc(req, res)
       return
     }

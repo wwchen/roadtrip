@@ -9,8 +9,6 @@ const args = new Set(process.argv.slice(2))
 const forceRefresh = args.has('--force-refresh')
 
 console.log('Rec.gov auth check: opening companion Chromium profile')
-console.log('Rec.gov auth check: set RECGOV_EMAIL + RECGOV_PASSWORD to attempt credential login')
-console.log('Rec.gov auth check: set RECGOV_MFA_CODE when Recreation.gov requires 2FA')
 console.log('Rec.gov auth check: log in manually if the browser prompts; waiting uses RECGOV_LOGIN_TIMEOUT_MS when set')
 if (forceRefresh) console.log('Rec.gov auth check: forcing Recreation.gov token refresh')
 

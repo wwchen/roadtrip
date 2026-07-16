@@ -146,9 +146,6 @@ services:
       - HEADLESS=${COMPANION_HEADLESS:-true}
       - COMPANION_BROWSER_PROFILE=/var/lib/campsite-companion/browser-session
       - RECGOV_LOGIN_TIMEOUT_MS=${RECGOV_LOGIN_TIMEOUT_MS:-120000}
-      - RECGOV_EMAIL=${RECGOV_EMAIL:-}
-      - RECGOV_PASSWORD=${RECGOV_PASSWORD:-}
-      - RECGOV_MFA_CODE=${RECGOV_MFA_CODE:-}
     volumes:
       - ${RECGOV_COMPANION_BROWSER_PROFILE:-$HOME/.campsite-companion/browser-session}:/var/lib/campsite-companion/browser-session
     healthcheck:

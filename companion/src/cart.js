@@ -18,7 +18,6 @@ import {
   RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS,
   RECGOV_LOGIN_STATE_SETTLE_MS,
   clearBrowserRecaccount,
-  recgovLoginCredentialsFromEnv,
   resolveRecaccount,
 } from './recgovSession.js'
 
@@ -175,23 +174,23 @@ const CART_VERIFY_HTTP_ERROR = 'cart_http_error'
 const CART_VERIFY_EMPTY = 'cart_empty'
 const CART_VERIFY_MISSING_ITEM = 'missing_expected_item'
 const ERROR_RECGOV_NOT_AUTHENTICATED = 'recgov_not_authenticated'
-const ERROR_RECGOV_CREDENTIALS_INCOMPLETE = 'recgov_credentials_incomplete'
 const ERROR_RECGOV_LOGIN_FAILED = 'recgov_login_failed'
+const ERROR_RECGOV_REFRESH_FAILED = 'recgov_refresh_failed'
 const ERROR_RECGOV_SPA_LOGGED_OUT = 'recgov_spa_logged_out'
-const HEADLESS_NO_CREDENTIALS_DETAIL =
-  'No Recreation.gov browser session is available in the companion profile, and the headless companion has no RECGOV_EMAIL/RECGOV_PASSWORD credentials configured.'
+const HEADLESS_NO_SESSION_DETAIL =
+  'No Recreation.gov browser session is available in the companion profile, and the headless companion is not logged in.'
 const HEADED_NO_SESSION_DETAIL =
   'No Recreation.gov browser session is available in the companion profile.'
-const INCOMPLETE_CREDENTIALS_DETAIL =
-  'Recreation.gov credential login is incomplete; set both RECGOV_EMAIL and RECGOV_PASSWORD, or leave both unset and log in manually.'
 const LOGIN_FAILED_DETAIL =
-  'Recreation.gov credential login did not produce a browser session. If Recreation.gov prompts for 2FA, provide a current RECGOV_MFA_CODE for that login run.'
+  'Recreation.gov credential login did not produce a browser session. If Recreation.gov prompts for 2FA, submit a current MFA code on the companion /login form.'
+const REFRESH_FAILED_DETAIL =
+  'Recreation.gov browser session refresh failed. The stored session may be expired or rejected.'
 const SPA_LOGGED_OUT_DETAIL =
   'Recreation.gov rejected the companion browser session after page load; the SPA still shows a logged-out state.'
 const LOGIN_ON_HOST_ACTION =
   'Run make recgov-login on the host profile mounted by the companion, or start the companion headed and log in once.'
-const CONFIGURE_CREDENTIALS_ACTION =
-  'Set RECGOV_EMAIL and RECGOV_PASSWORD for companion auto-login; set RECGOV_MFA_CODE only for a login run that prompts for 2FA.'
+const LOGIN_ON_COMPANION_ACTION =
+  'Open the companion /login page and submit the Recreation.gov username, password, and MFA code when required.'
 
 export function cartHoldCompletionObserved (responses) {
   return responses.some(e => e.status >= 200 && e.status < 300 &&
@@ -243,32 +242,31 @@ export function verifyCartContainsMatch (cart, match) {
   return { ok: false, reason: CART_VERIFY_MISSING_ITEM, best_match: bestMatch, ...base }
 }
 
-export function recgovAuthenticationFailure ({ env = process.env, headless = IS_HEADLESS } = {}) {
-  const credentials = recgovLoginCredentialsFromEnv(env)
-  if (credentials.reason === 'credentials_incomplete') {
-    return {
-      error: ERROR_RECGOV_CREDENTIALS_INCOMPLETE,
-      detail: INCOMPLETE_CREDENTIALS_DETAIL,
-      corrective_action: CONFIGURE_CREDENTIALS_ACTION,
-      auth: authFields(credentials, headless),
-    }
-  }
-
-  if (headless && credentials.reason === 'credentials_not_configured') {
-    return {
-      error: ERROR_RECGOV_NOT_AUTHENTICATED,
-      detail: HEADLESS_NO_CREDENTIALS_DETAIL,
-      corrective_action: `${LOGIN_ON_HOST_ACTION} ${CONFIGURE_CREDENTIALS_ACTION}`,
-      auth: authFields(credentials, headless),
-    }
-  }
-
-  if (credentials.configured) {
+export function recgovAuthenticationFailure ({ headless = IS_HEADLESS, attemptedLogin = false, attemptedRefresh = false } = {}) {
+  if (attemptedLogin) {
     return {
       error: ERROR_RECGOV_LOGIN_FAILED,
       detail: LOGIN_FAILED_DETAIL,
-      corrective_action: `${LOGIN_ON_HOST_ACTION} ${CONFIGURE_CREDENTIALS_ACTION}`,
-      auth: authFields(credentials, headless),
+      corrective_action: LOGIN_ON_COMPANION_ACTION,
+      auth: authFields(headless),
+    }
+  }
+
+  if (attemptedRefresh) {
+    return {
+      error: ERROR_RECGOV_REFRESH_FAILED,
+      detail: REFRESH_FAILED_DETAIL,
+      corrective_action: LOGIN_ON_COMPANION_ACTION,
+      auth: authFields(headless),
+    }
+  }
+
+  if (headless) {
+    return {
+      error: ERROR_RECGOV_NOT_AUTHENTICATED,
+      detail: HEADLESS_NO_SESSION_DETAIL,
+      corrective_action: LOGIN_ON_COMPANION_ACTION,
+      auth: authFields(headless),
     }
   }
 
@@ -276,18 +274,13 @@ export function recgovAuthenticationFailure ({ env = process.env, headless = IS_
     error: ERROR_RECGOV_NOT_AUTHENTICATED,
     detail: HEADED_NO_SESSION_DETAIL,
     corrective_action: LOGIN_ON_HOST_ACTION,
-    auth: authFields(credentials, headless),
+    auth: authFields(headless),
   }
 }
 
-function authFields (credentials, headless) {
+function authFields (headless) {
   return {
     headless,
-    credentials_configured: credentials.configured,
-    credentials_reason: credentials.reason,
-    email_configured: credentials.emailConfigured,
-    password_configured: credentials.passwordConfigured,
-    mfa_configured: credentials.mfaConfigured,
   }
 }
 

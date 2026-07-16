@@ -116,11 +116,6 @@ test('runAtcOnce preserves actionable auth failure details', async () => {
       corrective_action: 'Run make recgov-login on the host profile mounted by the companion.',
       auth: {
         headless: true,
-        credentials_configured: false,
-        credentials_reason: 'credentials_not_configured',
-        email_configured: false,
-        password_configured: false,
-        mfa_configured: false,
       },
     }),
   })
@@ -134,11 +129,6 @@ test('runAtcOnce preserves actionable auth failure details', async () => {
   assert.equal(result.corrective_action, 'Run make recgov-login on the host profile mounted by the companion.')
   assert.deepEqual(result.auth, {
     headless: true,
-    credentials_configured: false,
-    credentials_reason: 'credentials_not_configured',
-    email_configured: false,
-    password_configured: false,
-    mfa_configured: false,
   })
 })
 

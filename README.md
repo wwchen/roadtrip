@@ -318,22 +318,11 @@ then calls the companion's one-shot executor.
   once, and the companion manages `localStorage.recaccount` and refreshes in
   that same browser context. The backend never receives the Recreation.gov JWT;
   it only sends ATC payloads to the companion and records terminal
-  success/failure. You can also let the companion attempt the real login form
-  by setting `RECGOV_EMAIL` and `RECGOV_PASSWORD` in the companion process
-  environment. If Recreation.gov asks for 2FA, set `RECGOV_MFA_CODE` for that
-  login run; without a current code the companion fails closed with
-  `mfa_required` in its logs. With 1Password CLI, resolve the current OTP into
-  the companion environment:
-  ```sh
-  RECGOV_EMAIL=you@example.com \
-  RECGOV_PASSWORD=... \
-  RECGOV_MFA_CODE="$(op read 'op://Private/recreation.gov/one-time password?attribute=otp')" \
-  make recgov-login
-  ```
-  The `op read` form resolves the current short-lived 1Password OTP before the
-  companion starts. Run it only when Recreation.gov is expected to prompt for
-  2FA; otherwise leave `RECGOV_MFA_CODE` unset. To test the real browser auth
-  integration, run:
+  success/failure. The companion exposes `GET /login` as an operator form for
+  a Recreation.gov username, password, and optional MFA code. The submitted
+  credentials are used only for that request and are not stored in the backend,
+  companion config, or environment. To test the real browser auth integration,
+  run:
   ```sh
   cd companion
   npm run recgov:login
@@ -351,9 +340,7 @@ then calls the companion's one-shot executor.
   targets set `COMPANION_BROWSER_PROFILE` from
   `RECGOV_COMPANION_BROWSER_PROFILE`, falling back to
   `$HOME/.campsite-companion/browser-session`, which is the same host path the
-  Docker companion mounts. The optional `RECGOV_*` login variables are consumed
-  by the companion only; backend config does not read Recreation.gov
-  credentials.
+  Docker companion mounts.
 - **One-shot Rec.gov ATC** runs the same browser add-to-cart code as the HTTP
   executor. This can place a real hold in the operator's Recreation.gov cart,
   so use a real payload only when that side effect is intended.
@@ -390,16 +377,13 @@ then calls the companion's one-shot executor.
   companion URL and timeout live in `backend/src/main/resources/application*.yml`.
   ```sh
   RECGOV_COMPANION_BROWSER_PROFILE=$HOME/.campsite-companion/browser-session
-  # optional companion-only auto-login:
-  RECGOV_EMAIL=you@example.com
-  RECGOV_PASSWORD=...
-  # set only for the login run when 2FA is required:
-  RECGOV_MFA_CODE="$(op read 'op://Private/recreation.gov/one-time password?attribute=otp')"
 
   docker compose --profile pois --profile recgov-companion up -d recgov-companion backend
   ```
   The mounted browser profile is the same persistent profile used by
-  `recgov:login`. The companion container name is under the `roadtrip-*`
+  `recgov:login`. Open `http://localhost:8770/login` to submit Recreation.gov
+  credentials to the companion container for a one-request login. The companion
+  container name is under the `roadtrip-*`
   Compose project, so Alloy's Docker log discovery ships its stdout/stderr to
   Loki; the backend also records the terminal ATC result and sends Slack for
   direct success/failure.
