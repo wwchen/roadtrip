@@ -1,3 +1,7 @@
+# Pin the compose project name so Alloy's Docker log discovery keeps these
+# containers (`/roadtrip-*`) regardless of the checkout directory.
+name: roadtrip
+
 services:
   # cookie-bot sidecar — kept for future use but not started by default on
   # aarch64 hosts (see memory: akamai_http2_fingerprinting.md). To enable,
@@ -124,6 +128,35 @@ services:
         condition: service_healthy
       alloy:
         condition: service_started
+
+  recgov-companion:
+    profiles: [recgov-companion]
+    build:
+      context: ./companion
+    image: roadtrip/recgov-companion
+    restart: unless-stopped
+    hostname: recgov-companion
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - COMPANION_ID=${COMPANION_ID:-recgov-companion}
+      - COMPANION_HOST=0.0.0.0
+      - COMPANION_PORT=8770
+      - HEADLESS=${COMPANION_HEADLESS:-true}
+      - COMPANION_BROWSER_PROFILE=/var/lib/campsite-companion/browser-session
+      - RECGOV_LOGIN_TIMEOUT_MS=${RECGOV_LOGIN_TIMEOUT_MS:-120000}
+      - RECGOV_EMAIL=${RECGOV_EMAIL:-}
+      - RECGOV_PASSWORD=${RECGOV_PASSWORD:-}
+      - RECGOV_MFA_CODE=${RECGOV_MFA_CODE:-}
+    volumes:
+      - ${RECGOV_COMPANION_BROWSER_PROFILE:-$HOME/.campsite-companion/browser-session}:/var/lib/campsite-companion/browser-session
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8770/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
 
   grafana:
     profiles: [pois]

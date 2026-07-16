@@ -8,6 +8,7 @@ import ca.floo.roadtrip.models.booking.BookingProviderId
 import ca.floo.roadtrip.models.booking.BookingTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonObject
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import kotlin.test.assertEquals
@@ -15,7 +16,6 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-private const val TEST_DISPATCH_ID = 123L
 private const val TEST_WATCH_ID = 42L
 private const val TEST_CAMPSITE_ID = 7L
 private const val TEST_VENDOR_ID = "site-7"
@@ -69,7 +69,14 @@ class BookingProviderRegistryTest {
 
             val result = registry.addToCart(request())
 
-            assertEquals(AddToCartResult.Queued(TEST_DISPATCH_ID, BookingProviderId.RECGOV, notifiedWaiters = 1), result)
+            assertEquals(
+                AddToCartResult.Completed(
+                    providerId = BookingProviderId.RECGOV,
+                    request = JsonObject(emptyMap()),
+                    response = JsonObject(emptyMap()),
+                ),
+                result,
+            )
             assertEquals(1, provider.addToCartCalls)
         }
 
@@ -106,7 +113,11 @@ class BookingProviderRegistryTest {
 
         override suspend fun addToCart(request: AddToCartRequest): AddToCartResult {
             addToCartCalls += 1
-            return AddToCartResult.Queued(TEST_DISPATCH_ID, BookingProviderId.RECGOV, notifiedWaiters = 1)
+            return AddToCartResult.Completed(
+                providerId = BookingProviderId.RECGOV,
+                request = JsonObject(emptyMap()),
+                response = JsonObject(emptyMap()),
+            )
         }
     }
 

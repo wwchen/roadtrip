@@ -4,9 +4,9 @@ import java.time.Duration
 
 data class AppConfig(
     val availability: AvailabilityConfig,
+    val booking: BookingConfig,
     val cache: ApiCacheConfig,
     val campflare: CampflareConfig,
-    val dispatch: DispatchConfig,
     val readPathProviders: ReadPathProviderConfig,
     val slack: SlackConfig?,
     val grafana: GrafanaConfig?,
@@ -18,9 +18,9 @@ data class AppConfig(
             val roadtrip = ConfigSection(properties).section("roadtrip")
             return AppConfig(
                 availability = AvailabilityConfig.fromConfig(roadtrip.section("availability")),
+                booking = BookingConfig.fromConfig(roadtrip.section("booking")),
                 cache = ApiCacheConfig.fromConfig(roadtrip.section("cache")),
                 campflare = CampflareConfig.fromConfig(roadtrip.section("campflare")),
-                dispatch = DispatchConfig.fromConfig(roadtrip.section("dispatch")),
                 readPathProviders = ReadPathProviderConfig.fromConfig(roadtrip.section("read-path")),
                 slack = SlackConfig.fromConfig(roadtrip.section("slack")),
                 grafana = GrafanaConfig.fromConfig(roadtrip.section("grafana")),

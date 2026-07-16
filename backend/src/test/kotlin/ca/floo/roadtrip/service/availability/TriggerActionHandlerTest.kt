@@ -23,6 +23,8 @@ import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -107,9 +109,9 @@ class TriggerActionHandlerTest {
         }
 
     @Test
-    fun `AtcTriggerActionHandler queues first supported opening through booking provider`() =
+    fun `AtcTriggerActionHandler executes first supported opening through booking provider`() =
         runBlocking {
-            val bookingProvider = RecordingBookingProvider(notifiedWaiters = 1)
+            val bookingProvider = RecordingBookingProvider()
             val registry = BookingProviderRegistry(listOf(bookingProvider))
             val handler =
                 AtcTriggerActionHandler(
@@ -121,7 +123,7 @@ class TriggerActionHandlerTest {
 
             val delivered = handler.fire(watch, openings = listOf(triggerOpening()))
 
-            assertFalse(delivered)
+            assertTrue(delivered)
             val request = bookingProvider.requests.single()
             assertEquals(42L, request.watchId)
             assertEquals(BookingProviderId.RECGOV, request.target.providerId)
@@ -134,9 +136,22 @@ class TriggerActionHandlerTest {
         }
 
     @Test
-    fun `AtcTriggerActionHandler sends offline slack when no companion waiter is connected`() =
+    fun `AtcTriggerActionHandler reports direct companion success and marks fired`() =
         runBlocking {
-            val bookingProvider = RecordingBookingProvider(notifiedWaiters = 0)
+            val bookingProvider =
+                RecordingBookingProvider(
+                    resultFactory = { request: AddToCartRequest ->
+                        AddToCartResult.Completed(
+                            providerId = BookingProviderId.RECGOV,
+                            request = buildJsonObject { put("watch_id", request.watchId) },
+                            response =
+                                buildJsonObject {
+                                    put("ok", true)
+                                    put("cart_added", true)
+                                },
+                        )
+                    },
+                )
             val registry = BookingProviderRegistry(listOf(bookingProvider))
             val slack = CapturingSlack(result = true)
             val handler =
@@ -150,21 +165,61 @@ class TriggerActionHandlerTest {
                     id = 42L,
                     triggerKinds = listOf(AtcTriggerActionHandler.KIND),
                     triggerConfig = JsonObject(mapOf("channel" to JsonPrimitive("#custom"))),
+                    stopWhenTriggered = true,
                 )
 
-            handler.fire(watch, openings = listOf(triggerOpening()))
+            val delivered = handler.fire(watch, openings = listOf(triggerOpening()))
 
-            val alert = slack.offlineAlerts.single()
-            assertEquals(42L, alert.watchId)
-            assertEquals("recgov", alert.vendor)
-            assertEquals("#custom", alert.channel)
-            assertEquals("Site 12", alert.openings.single().label)
+            assertTrue(delivered)
+            val result = slack.atcResults.single()
+            assertEquals(42L, result.watchId)
+            assertEquals("recgov", result.vendor)
+            assertEquals("completed", result.status)
+            assertEquals("#custom", result.channel)
+        }
+
+    @Test
+    fun `AtcTriggerActionHandler reports direct companion failure without marking fired`() =
+        runBlocking {
+            val bookingProvider =
+                RecordingBookingProvider(
+                    resultFactory = { request: AddToCartRequest ->
+                        AddToCartResult.Failed(
+                            providerId = BookingProviderId.RECGOV,
+                            error = "cart_not_added",
+                            detail = "cart automation did not confirm a cart hold",
+                            request = buildJsonObject { put("watch_id", request.watchId) },
+                            response =
+                                buildJsonObject {
+                                    put("ok", false)
+                                    put("error", "cart_not_added")
+                                },
+                        )
+                    },
+                )
+            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val slack = CapturingSlack(result = true)
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    slack = slack,
+                )
+
+            val delivered =
+                handler.fire(
+                    fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                    openings = listOf(triggerOpening()),
+                )
+
+            assertFalse(delivered)
+            assertEquals("failed", slack.atcResults.single().status)
         }
 
     @Test
     fun `AtcTriggerActionHandler leaves unsupported openings inert`() =
         runBlocking {
-            val bookingProvider = RecordingBookingProvider(notifiedWaiters = 1)
+            val bookingProvider = RecordingBookingProvider()
             val registry = BookingProviderRegistry(listOf(bookingProvider))
             val slack = CapturingSlack(result = true)
             val handler =
@@ -182,7 +237,7 @@ class TriggerActionHandlerTest {
 
             assertFalse(delivered)
             assertTrue(bookingProvider.requests.isEmpty())
-            assertTrue(slack.offlineAlerts.isEmpty())
+            assertTrue(slack.atcResults.isEmpty())
         }
 
     private class FakeHandler(
@@ -206,17 +261,17 @@ class TriggerActionHandlerTest {
     private class CapturingSlack(
         private val result: Boolean,
     ) : SlackNotificationService {
-        data class OfflineAlert(
+        data class AtcResult(
             val watchId: Long,
             val vendor: String,
-            val openings: List<WatchOpening>,
+            val status: String,
             val channel: String?,
         )
 
         var lastWatchId: Long? = null
         var lastChannel: String? = null
         var lastAppRootUrl: String? = null
-        val offlineAlerts = mutableListOf<OfflineAlert>()
+        val atcResults = mutableListOf<AtcResult>()
 
         override suspend fun sendWatchOpenings(
             watchId: Long,
@@ -237,13 +292,15 @@ class TriggerActionHandlerTest {
             channel: String?,
         ): Boolean = result
 
-        override suspend fun sendAtcCompanionOffline(
+        override suspend fun sendAtcResult(
             watchId: Long,
             vendor: String,
-            openings: List<WatchOpening>,
+            status: String,
+            request: JsonObject,
+            response: JsonObject?,
             channel: String?,
         ): Boolean {
-            offlineAlerts += OfflineAlert(watchId, vendor, openings, channel)
+            atcResults += AtcResult(watchId, vendor, status, channel)
             return result
         }
 
@@ -280,7 +337,7 @@ class TriggerActionHandlerTest {
         )
 
     private class RecordingBookingProvider(
-        private val notifiedWaiters: Int,
+        private val resultFactory: ((AddToCartRequest) -> AddToCartResult)? = null,
     ) : BookingProvider {
         val requests = mutableListOf<AddToCartRequest>()
 
@@ -308,7 +365,16 @@ class TriggerActionHandlerTest {
 
         override suspend fun addToCart(request: AddToCartRequest): AddToCartResult {
             requests += request
-            return AddToCartResult.Queued(dispatchId = 99L, providerId = BookingProviderId.RECGOV, notifiedWaiters = notifiedWaiters)
+            resultFactory?.let { return it(request) }
+            return AddToCartResult.Completed(
+                providerId = BookingProviderId.RECGOV,
+                request = buildJsonObject { put("watch_id", request.watchId) },
+                response =
+                    buildJsonObject {
+                        put("ok", true)
+                        put("cart_added", true)
+                    },
+            )
         }
     }
 

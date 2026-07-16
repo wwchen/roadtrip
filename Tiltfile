@@ -2,14 +2,15 @@
 #
 # Compose owns the database, backend container, and Grafana services. Tilt
 # watches the backend source, builds the fat jar, rebuilds the backend image,
-# and keeps the host-side companion plus manual data resources available.
+# and keeps the Dockerized Rec.gov companion plus manual data resources
+# available.
 
 PORT = '8765'
 ADMIN_PORT = '8766'
 COMPOSE_PROJECT = 'roadtrip'
-COMPOSE = 'docker compose -p ' + COMPOSE_PROJECT + ' --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois'
+COMPOSE = 'docker compose -p ' + COMPOSE_PROJECT + ' --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois --profile recgov-companion'
 COMPOSE_INFRA_SERVICES = ['postgres', 'loki', 'tempo', 'prometheus', 'alloy']
-COMPOSE_APP_SERVICES = ['backend', 'grafana']
+COMPOSE_APP_SERVICES = ['backend', 'recgov-companion', 'grafana']
 COMPOSE_DEV_SERVICES = ' '.join(COMPOSE_INFRA_SERVICES + COMPOSE_APP_SERVICES)
 COMPOSE_DOWN = COMPOSE + ' down --timeout 10 ' + COMPOSE_DEV_SERVICES
 DETACHED_COMPOSE_DOWN = (
@@ -91,7 +92,7 @@ local_resource(
 docker_compose(
     ['docker-compose.yml', 'docker-compose.local.yml'],
     project_name=COMPOSE_PROJECT,
-    profiles=['pois'],
+    profiles=['pois', 'recgov-companion'],
 )
 
 # When `backend-jar` produces a new fat jar, Tilt rebuilds this image and
@@ -122,6 +123,18 @@ docker_build(
     ],
 )
 
+docker_build(
+    'roadtrip/recgov-companion',
+    'companion',
+    dockerfile='companion/Dockerfile',
+    only=[
+        'Dockerfile',
+        'package.json',
+        'package-lock.json',
+        'src',
+    ],
+)
+
 for service in ['postgres', 'loki', 'tempo', 'prometheus']:
     dc_resource(service, resource_deps=['compose-cleanup'], labels=['infra'])
 
@@ -133,30 +146,18 @@ dc_resource(
     links=['http://127.0.0.1:' + PORT],
 )
 dc_resource(
+    'recgov-companion',
+    resource_deps=['alloy'],
+    labels=['app'],
+    links=['http://127.0.0.1:8770'],
+)
+dc_resource(
     'grafana',
     # R__grafana_reader_grants.sql runs during backend's Flyway migrate; wait
     # for backend to be healthy before Grafana tries to connect as grafana_reader.
     resource_deps=['postgres', 'backend'],
     labels=['infra'],
     links=['http://127.0.0.1:3000'],
-)
-
-# --- companion (host Node) ---------------------------------------------------
-# `cmd` runs the same npm + playwright install pair as `make install` does,
-# but scoped to the companion (idempotent: `npm install` is a no-op when
-# node_modules is fresh; `playwright install chromium` likewise skips when
-# the browser is already on disk). Re-runs when package.json changes.
-# `serve_cmd` then keeps the Node process attached for log streaming.
-
-local_resource(
-    'companion',
-    cmd='cd companion && npm install && npx playwright install chromium',
-    serve_cmd='cd companion && npm start',
-    serve_env={'BACKEND_URL': 'http://127.0.0.1:' + PORT},
-    deps=['companion/src', 'companion/package.json'],
-    ignore=['companion/node_modules'],
-    resource_deps=['backend'],
-    labels=['app'],
 )
 
 # --- UI shortcut -------------------------------------------------------------

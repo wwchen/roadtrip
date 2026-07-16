@@ -8,6 +8,9 @@ roadtrip:
     url: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
     user: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
+  booking:
+    recgov-atc:
+      companion-base-url: http://recgov-companion:8770
   grafana:
     root-url: https://roadtrip.floo.ca/dash/
   web:
