@@ -156,8 +156,6 @@ services:
       - RECGOV_MFA_CODE=${RECGOV_MFA_CODE:-}
       - RECGOV_OTP=${RECGOV_OTP:-}
       - RECGOV_TWO_FACTOR_CODE=${RECGOV_TWO_FACTOR_CODE:-}
-      - RECGOV_TOTP_SECRET=${RECGOV_TOTP_SECRET:-}
-      - RECGOV_TOTP_SECRET_FILE=${RECGOV_TOTP_SECRET_FILE:-}
     volumes:
       - ${RECGOV_COMPANION_BROWSER_PROFILE:-$HOME/.campsite-companion/browser-session}:/var/lib/campsite-companion/browser-session
     healthcheck:

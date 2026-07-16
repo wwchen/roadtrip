@@ -322,11 +322,9 @@ then calls the companion's one-shot executor.
   success/failure. You can also let the companion attempt the real login form
   by setting `RECGOV_EMAIL` and `RECGOV_PASSWORD` in the companion process
   environment. If Recreation.gov asks for 2FA, set `RECGOV_MFA_CODE` or
-  `RECGOV_OTP` for that login run, or set `RECGOV_TOTP_SECRET_FILE` to a file
-  containing the authenticator Base32 secret or `otpauth://` URL. A one-off
-  code wins over generated TOTP. Without a current code or TOTP secret, the
-  companion fails closed with `mfa_required` in its logs. To test the real
-  browser auth integration, run:
+  `RECGOV_OTP` for that login run; without a current code the companion fails
+  closed with `mfa_required` in its logs. To test the real browser auth
+  integration, run:
   ```sh
   cd companion
   npm run recgov:login
@@ -389,10 +387,8 @@ then calls the companion's one-shot executor.
   # optional companion-only auto-login:
   RECGOV_EMAIL=you@example.com
   RECGOV_PASSWORD=...
-  # set only for the login run when 2FA is required, or use TOTP below:
+  # set only for the login run when 2FA is required:
   RECGOV_MFA_CODE=123456
-  # optional generated 2FA; file must be readable inside the companion container:
-  RECGOV_TOTP_SECRET_FILE=/run/secrets/recgov_totp_secret
 
   docker compose --profile pois --profile recgov-companion up -d recgov-companion backend
   ```

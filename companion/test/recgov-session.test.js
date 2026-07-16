@@ -1,9 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { recgovLoginCredentialsFromEnv, resolveRecaccount } from '../src/recgovSession.js'
 
 const JWT_HEADER = { alg: 'none' }
@@ -11,8 +8,6 @@ const JWT_SIGNATURE = 'sig'
 const FRESH_OFFSET_SECONDS = 60 * 60
 const NEAR_EXPIRY_OFFSET_SECONDS = 60
 const REFRESH_RETRY_DELAY_MS = 1000
-const RFC_TOTP_SECRET = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'
-const RFC_TOTP_AT_59_SECONDS = '287082'
 
 test('recgovLoginCredentialsFromEnv requires email and password and accepts 2FA aliases', () => {
   assert.deepEqual(
@@ -23,7 +18,6 @@ test('recgovLoginCredentialsFromEnv requires email and password and accepts 2FA 
       emailConfigured: false,
       passwordConfigured: false,
       mfaConfigured: false,
-      totpConfigured: false,
     },
   )
   assert.deepEqual(
@@ -34,7 +28,6 @@ test('recgovLoginCredentialsFromEnv requires email and password and accepts 2FA 
       emailConfigured: true,
       passwordConfigured: false,
       mfaConfigured: false,
-      totpConfigured: false,
     },
   )
 
@@ -49,23 +42,6 @@ test('recgovLoginCredentialsFromEnv requires email and password and accepts 2FA 
   assert.equal(credentials.password, 'secret')
   assert.equal(credentials.mfaCode, '123456')
   assert.equal(credentials.mfaConfigured, true)
-  assert.equal(credentials.totpConfigured, false)
-})
-
-test('recgovLoginCredentialsFromEnv accepts a TOTP secret reference', () => {
-  const credentials = recgovLoginCredentialsFromEnv({
-    RECGOV_EMAIL: 'user@example.com',
-    RECGOV_PASSWORD: 'secret',
-    RECGOV_TOTP_SECRET_FILE: '/run/secrets/recgov_totp_secret',
-  })
-
-  assert.equal(credentials.configured, true)
-  assert.equal(credentials.email, 'user@example.com')
-  assert.equal(credentials.password, 'secret')
-  assert.equal(credentials.totpSecret, '')
-  assert.equal(credentials.totpSecretFile, '/run/secrets/recgov_totp_secret')
-  assert.equal(credentials.mfaConfigured, true)
-  assert.equal(credentials.totpConfigured, true)
 })
 
 test('resolveRecaccount uses the existing companion browser recaccount', async () => {
@@ -242,66 +218,6 @@ test('resolveRecaccount can submit a provided Recreation.gov 2FA code', async ()
   assert.equal(page.credentialSubmitClicks, 1)
   assert.equal(page.mfaSubmitClicks, 1)
   assert.deepEqual(page.fills.map(({ value }) => value), ['user@example.com', 'secret', '123456'])
-})
-
-test('resolveRecaccount can generate Recreation.gov 2FA from a TOTP secret reference', async () => {
-  const secretDir = await mkdtemp(join(tmpdir(), 'recgov-secrets-'))
-  try {
-    const totpFile = join(secretDir, 'totp')
-    await writeFile(totpFile, `${RFC_TOTP_SECRET}\n`)
-
-    const recaccount = testRecaccount({
-      token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-totp' }),
-    })
-    const page = fakePage({
-      credentialRawRecaccount: JSON.stringify(recaccount),
-      mfaRequired: true,
-      expectedMfaCode: RFC_TOTP_AT_59_SECONDS,
-    })
-
-    const resolved = await resolveRecaccount(page, {
-      env: {
-        RECGOV_EMAIL: 'user@example.com',
-        RECGOV_PASSWORD: 'secret',
-        RECGOV_TOTP_SECRET_FILE: totpFile,
-      },
-      totpNowMs: 59_000,
-    })
-
-    assert.equal(resolved.access_token, recaccount.access_token)
-    assert.equal(page.credentialSubmitClicks, 1)
-    assert.equal(page.mfaSubmitClicks, 1)
-    assert.deepEqual(page.fills.map(({ value }) => value), [
-      'user@example.com',
-      'secret',
-      RFC_TOTP_AT_59_SECONDS,
-    ])
-  } finally {
-    await rm(secretDir, { recursive: true, force: true })
-  }
-})
-
-test('resolveRecaccount fails closed when generated Recreation.gov 2FA secret is invalid', async () => {
-  const recaccount = testRecaccount({
-    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-invalid-totp' }),
-  })
-  const page = fakePage({
-    credentialRawRecaccount: JSON.stringify(recaccount),
-    mfaRequired: true,
-  })
-
-  const resolved = await resolveRecaccount(page, {
-    env: {
-      RECGOV_EMAIL: 'user@example.com',
-      RECGOV_PASSWORD: 'secret',
-      RECGOV_TOTP_SECRET: 'not base32!',
-      RECGOV_LOGIN_TIMEOUT_MS: '1',
-    },
-  })
-
-  assert.equal(resolved, null)
-  assert.equal(page.credentialSubmitClicks, 1)
-  assert.equal(page.mfaSubmitClicks, 0)
 })
 
 test('resolveRecaccount fails closed when Recreation.gov 2FA has no supplied code', async () => {
