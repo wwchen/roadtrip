@@ -213,9 +213,10 @@ Booking targets compose two identities:
 - Concrete campsite/site/unit ref, which is the item added to cart.
 
 Provider implementations own fulfillment. Rec.gov currently fulfills
-`ADD_TO_CART` by dispatching companion work; a future Aspira implementation may
-call a backend HTTP API instead. Companion presence is runtime readiness for
-companion-backed providers, not durable booking capability.
+`ADD_TO_CART` by calling the companion HTTP executor; a future Aspira
+implementation may call a backend HTTP API instead. Companion configuration is
+runtime readiness for companion-backed providers, not durable booking
+capability.
 
 Watch create/update validates `atc` trigger support against the booking-provider
 registry after resolving the watch scope to concrete campsites. Unsupported

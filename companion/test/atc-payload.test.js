@@ -3,32 +3,28 @@ import assert from 'node:assert/strict'
 import {
   cartMatchFromArgs,
   cartMatchFromAtcInput,
-  cartMatchFromDispatch,
+  cartMatchFromPayload,
   validateCartMatch,
 } from '../src/atcPayload.js'
 
-const DISPATCH = {
-  id: 1,
-  kind: 'atc',
-  payload: {
-    watch_id: 12,
-    start_date: '2026-07-15',
-    end_date: '2026-07-16',
-    openings: [
-      {
-        label: '116',
-        date: '2026-07-15',
-        booking_url: 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16',
-        campground_id: 232447,
-        campsite_id: 131925,
-        vendor_id: '300',
-      },
-    ],
-  },
+const PAYLOAD = {
+  watch_id: 12,
+  start_date: '2026-07-15',
+  end_date: '2026-07-16',
+  openings: [
+    {
+      label: '116',
+      date: '2026-07-15',
+      booking_url: 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16',
+      campground_id: 232447,
+      campsite_id: 131925,
+      vendor_id: '300',
+    },
+  ],
 }
 
-test('cartMatchFromDispatch maps backend ATC dispatch payload to addToCart match', () => {
-  assert.deepEqual(cartMatchFromDispatch(DISPATCH), {
+test('cartMatchFromPayload maps backend ATC payload to addToCart match', () => {
+  assert.deepEqual(cartMatchFromPayload(PAYLOAD), {
     booking_url: 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16',
     campground_id: 232447,
     campsite_id: 131925,
@@ -40,14 +36,14 @@ test('cartMatchFromDispatch maps backend ATC dispatch payload to addToCart match
   })
 })
 
-test('cartMatchFromAtcInput accepts raw payload or dispatch wrapper', () => {
+test('cartMatchFromAtcInput accepts raw payload or payload envelope', () => {
   assert.deepEqual(
-    cartMatchFromAtcInput(DISPATCH.payload),
-    cartMatchFromDispatch(DISPATCH),
+    cartMatchFromAtcInput(PAYLOAD),
+    cartMatchFromPayload(PAYLOAD),
   )
   assert.deepEqual(
-    cartMatchFromAtcInput(DISPATCH),
-    cartMatchFromDispatch(DISPATCH),
+    cartMatchFromAtcInput({ payload: PAYLOAD }),
+    cartMatchFromPayload(PAYLOAD),
   )
 })
 

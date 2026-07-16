@@ -24,7 +24,7 @@ internal class AtcTriggerActionHandler(
     ): Boolean {
         val pending =
             openings.mapNotNull { opening ->
-                addToCartRequest(watch, opening)?.let { PendingAddToCart(it, opening) }
+                addToCartRequest(watch, opening)?.let { PendingAddToCart(it) }
             }
         if (pending.isEmpty()) {
             log.warn("ATC trigger unsupported for watch_id={} openings={}", watch.id, openings.size)
@@ -39,7 +39,7 @@ internal class AtcTriggerActionHandler(
             runCatching { bookings.addToCart(next.request) }
                 .onFailure {
                     log.error(
-                        "failed to enqueue ATC booking action for watch_id={} campsite_id={} date={}",
+                        "failed to execute ATC booking action for watch_id={} campsite_id={} date={}",
                         watch.id,
                         next.request.target.campsiteRef.campsiteId,
                         next.request.arrivalDate,
@@ -48,19 +48,6 @@ internal class AtcTriggerActionHandler(
                 }.getOrNull()
 
         return when (result) {
-            is AddToCartResult.Queued -> {
-                log.info(
-                    "ATC dispatch queued: watch_id={} provider={} dispatch_id={} notified_waiters={}",
-                    watch.id,
-                    result.providerId,
-                    result.dispatchId,
-                    result.notifiedWaiters,
-                )
-                if (result.notifiedWaiters == 0) {
-                    notifyOffline(watch, result.providerId.vendorSlug(), next.opening)
-                }
-                false
-            }
             is AddToCartResult.Completed -> {
                 log.info(
                     "ATC completed: watch_id={} provider={} campsite_id={} date={}",
@@ -134,29 +121,8 @@ internal class AtcTriggerActionHandler(
         )
     }
 
-    private suspend fun notifyOffline(
-        watch: AvailabilityWatchRepo.Watch,
-        vendor: String,
-        opening: TriggerOpening,
-    ) {
-        log.error(
-            "ATC companion offline: watch_id={} vendor={} campsite_id={} date={}",
-            watch.id,
-            vendor,
-            opening.campsite.id,
-            opening.date,
-        )
-        slack.sendAtcCompanionOffline(
-            watchId = watch.id,
-            vendor = vendor,
-            openings = listOf(opening.notification),
-            channel = watch.channelOverride(),
-        )
-    }
-
     private data class PendingAddToCart(
         val request: AddToCartRequest,
-        val opening: TriggerOpening,
     )
 
     private fun BookingProviderId.vendorSlug(): String = name.lowercase()

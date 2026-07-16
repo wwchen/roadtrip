@@ -13,15 +13,6 @@ roadtrip:
     recgov-atc:
       companion-base-url: ${RECGOV_ATC_COMPANION_BASE_URL}
       companion-timeout: ${RECGOV_ATC_COMPANION_TIMEOUT}
-  dispatch:
-    pending-ttl: 30s
-    max-claim-wait: 30s
-    min-claim-wait: 1ms
-    default-lease: 30s
-    min-lease: 1s
-    max-lease: 120s
-    companion-token: ${DISPATCH_COMPANION_TOKEN}
-    test-endpoint-enabled: false
   mapbox:
     token: ${MAPBOX_TOKEN}
   campflare:

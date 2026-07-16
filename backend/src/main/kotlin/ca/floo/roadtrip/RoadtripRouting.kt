@@ -10,7 +10,6 @@ import ca.floo.roadtrip.routes.adminIngestRoutes
 import ca.floo.roadtrip.routes.availabilityDashboardRoutes
 import ca.floo.roadtrip.routes.availabilityWatchRoutes
 import ca.floo.roadtrip.routes.campsiteRoutes
-import ca.floo.roadtrip.routes.dispatchRoutes
 import ca.floo.roadtrip.routes.geocodeRoutes
 import ca.floo.roadtrip.routes.healthRoutes
 import ca.floo.roadtrip.routes.poiRoutes
@@ -148,7 +147,6 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
             runtime.watchAlertDispatcher,
             runtime.schedulerScope,
         )
-        dispatchRoutes(runtime.dispatchService, runtime.dispatchTestEventService, runtime.appConfig.dispatch)
         campsiteRoutes(
             ctx = runtime.ctx,
             availabilityProviders = runtime.availabilityProviderRegistry,

@@ -160,26 +160,6 @@ dc_resource(
     links=['http://127.0.0.1:3000'],
 )
 
-# --- legacy companion (host Node long-poll) ----------------------------------
-# `cmd` runs the same npm + playwright install pair as `make install` does,
-# but scoped to the companion (idempotent: `npm install` is a no-op when
-# node_modules is fresh; `playwright install chromium` likewise skips when
-# the browser is already on disk). Re-runs when package.json changes.
-# `serve_cmd` then keeps the Node process attached for log streaming.
-
-local_resource(
-    'companion-long-poll',
-    cmd='cd companion && npm install && npx playwright install chromium',
-    serve_cmd='cd companion && npm start',
-    serve_env={'BACKEND_URL': 'http://127.0.0.1:' + PORT},
-    deps=['companion/src', 'companion/package.json'],
-    ignore=['companion/node_modules'],
-    resource_deps=['backend'],
-    auto_init=False,
-    trigger_mode=TRIGGER_MODE_MANUAL,
-    labels=['app'],
-)
-
 # --- UI shortcut -------------------------------------------------------------
 # Tilt's web UI surfaces this as a clickable link.
 

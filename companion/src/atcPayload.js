@@ -1,7 +1,3 @@
-export function cartMatchFromDispatch (dispatch) {
-  return cartMatchFromPayload(dispatch?.payload || {})
-}
-
 export function cartMatchFromPayload (payload) {
   const opening = payload.openings?.[0] || {}
   const dates = [...new Set((payload.openings || []).map((o) => o.date).filter(Boolean))]
@@ -19,7 +15,7 @@ export function cartMatchFromPayload (payload) {
 }
 
 export function cartMatchFromAtcInput (input) {
-  if (input?.payload) return cartMatchFromDispatch(input)
+  if (input?.payload) return cartMatchFromPayload(input.payload)
   if (input?.openings || input?.start_date || input?.end_date) return cartMatchFromPayload(input)
   return normalizeCartMatch(input || {})
 }

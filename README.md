@@ -14,17 +14,16 @@ Personal web map for roadtripping a Tesla. Live at [roadtrip.floo.ca](https://ro
 ## Local dev
 
 ```sh
-tilt up                  # Compose stack (Postgres/backend/Grafana/observability) + host companion
+tilt up                  # Compose stack (Postgres/backend/Grafana/observability/Rec.gov companion)
 make run                 # Kotlin/Ktor backend on http://127.0.0.1:8765 (serves static + /api)
-make companion           # campsite Playwright companion against the local backend
+make companion           # Rec.gov companion HTTP executor on the host
 make run env=prod        # on the deploy host: build image + docker compose up
 make fetch-tesla-supercharger-pricing  # mint cookies + crawl Tesla Supercharger pricing into data/raw/
 ```
 
 `tilt up` is the easiest path for full-stack dev: Tilt uses Docker Compose
-for Postgres, the backend container, Grafana, Loki, Tempo, Prometheus, and
-Alloy, then runs the campsite companion as a host Node process so Playwright
-can drive a real Chromium. The backend still serves the app on
+for Postgres, the backend container, Grafana, Loki, Tempo, Prometheus, Alloy,
+and the Rec.gov companion HTTP executor. The backend still serves the app on
 <http://127.0.0.1:8765>. Grafana is available at <http://127.0.0.1:3000>,
 Tempo at <http://127.0.0.1:3200>, Prometheus at
 <http://127.0.0.1:9090>, and Alloy at <http://127.0.0.1:12345>. Local
@@ -304,27 +303,23 @@ separate companion process or container** — recreation.gov sits behind Akamai,
 flags datacenter IPs and headless Chromium, so a real Chromium running on
 the operator's machine is the only thing that lands cart adds reliably. The
 backend never touches a browser; it only polls the public availability API,
-then either queues authenticated dispatches for the companion or calls the
-companion's one-shot executor.
+then calls the companion's one-shot executor.
 
-- **`companion/`** — Node 22.9+ Playwright client. Claims backend dispatches via
-  `POST /api/dispatches/claim`, drives Chromium to add the site to the
-  operator's rec.gov cart, and reports completion or failure to
-  `/api/dispatches/{id}/complete` or `/api/dispatches/{id}/fail`. Set
-  `DISPATCH_COMPANION_TOKEN` in the repo `.env`; `npm start` loads it for the
-  companion, and the Tilt/Compose backend reads the same file. Exported env
-  vars still win for one-off overrides.
+- **`companion/`** — Node 22.9+ Playwright HTTP executor. It exposes
+  `POST /recgov/atc`, drives Chromium to add the site to the operator's
+  rec.gov cart, and returns a terminal JSON success/failure response to the
+  backend.
   ```sh
   cd companion
   npm install
-  BACKEND_URL=http://127.0.0.1:8765 npm start
+  npm start
   ```
 - **Recreation.gov login** happens in the companion's persistent Chromium
   profile. Run the companion headed, log in to recreation.gov in that window
   once, and the companion manages `localStorage.recaccount` and refreshes in
   that same browser context. The backend never receives the Recreation.gov JWT;
-  it only queues dispatches and records completion/failure. To test the real
-  browser auth integration without claiming dispatches, run:
+  it only sends ATC payloads to the companion and records terminal
+  success/failure. To test the real browser auth integration, run:
   ```sh
   cd companion
   npm run recgov:login
@@ -337,10 +332,9 @@ companion's one-shot executor.
   `0` after `REC_GOV_AUTH_REFRESH_OK` only after the browser session has
   successfully refreshed through Recreation.gov. Both commands return non-zero
   after `REC_GOV_AUTH_FAILED` / `REC_GOV_AUTH_ERROR`.
-- **One-shot Rec.gov ATC** runs the same browser add-to-cart code without
-  claiming backend dispatches. This can place a real hold in the operator's
-  Recreation.gov cart, so use a real payload only when that side effect is
-  intended.
+- **One-shot Rec.gov ATC** runs the same browser add-to-cart code as the HTTP
+  executor. This can place a real hold in the operator's Recreation.gov cart,
+  so use a real payload only when that side effect is intended.
   ```json
   {
     "payload": {
@@ -369,9 +363,9 @@ companion's one-shot executor.
   Browser logs go to stderr. Stdout is one JSON result, suitable for a backend
   process caller; exit `0` means `cart_added=true`, exit `1` means the browser
   ran but did not confirm a cart hold, and exit `2` means invalid input.
-- **Docker Rec.gov ATC executor** runs the one-shot path as a Compose service
-  instead of the long-poll companion. Start the service with the
-  `recgov-companion` profile, then opt the backend into direct ATC by setting
+- **Docker Rec.gov ATC executor** runs the companion HTTP executor as a Compose
+  service. Start the service with the `recgov-companion` profile, then opt the
+  backend into ATC by setting
   the companion base URL:
   ```sh
   RECGOV_ATC_COMPANION_BASE_URL=http://recgov-companion:8770

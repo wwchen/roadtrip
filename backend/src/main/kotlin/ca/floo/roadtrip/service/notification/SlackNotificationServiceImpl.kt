@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.time.LocalDate
 
-private const val DISPATCH_STATUS_COMPLETED = "completed"
+private const val ATC_STATUS_COMPLETED = "completed"
 private const val MAX_JSON_REPORT_CHARS = 2500
 private const val TRUNCATED_REPORT_SUFFIX = "\n..."
 
@@ -67,74 +67,6 @@ class SlackNotificationServiceImpl(
         return send(channel, fallback, attachments)
     }
 
-    override suspend fun sendAtcCompanionOffline(
-        watchId: Long,
-        vendor: String,
-        openings: List<WatchOpening>,
-        channel: String?,
-    ): Boolean {
-        val siteCount = openings.map { it.label }.distinct().size
-        val nightCount = openings.map { it.date }.distinct().size
-        val text = "ATC companion offline for watch #$watchId ($vendor)"
-        val attachments =
-            listOf(
-                SlackAttachmentDto(
-                    color = SlackWatchCard.COLOR_ERROR,
-                    fallback = text,
-                    blocks =
-                        listOf(
-                            SlackBlocks.header("ATC companion offline"),
-                            SlackBlocks.fields(
-                                listOf(
-                                    "*Watch*\n#$watchId",
-                                    "*Vendor*\n$vendor",
-                                    "*Sites*\n$siteCount",
-                                    "*Nights*\n$nightCount",
-                                ),
-                            ),
-                            SlackBlocks.section("No matching companion long-poll was connected when an opening dispatch was queued."),
-                        ),
-                ),
-            )
-        return send(channel, text, attachments)
-    }
-
-    override suspend fun sendDispatchResult(
-        dispatchId: Long,
-        kind: String,
-        vendor: String,
-        payloadVersion: String,
-        status: String,
-        request: JsonObject,
-        channel: String?,
-    ): Boolean {
-        val text = "Dispatch #$dispatchId $status ($kind/$vendor)"
-        val attachments =
-            listOf(
-                SlackAttachmentDto(
-                    color = dispatchResultColor(status),
-                    fallback = text,
-                    blocks =
-                        listOf(
-                            SlackBlocks.header("Dispatch $status"),
-                            SlackBlocks.fields(
-                                listOf(
-                                    "*Dispatch*\n#$dispatchId",
-                                    "*Status*\n$status",
-                                    "*Kind*\n$kind",
-                                    "*Vendor*\n$vendor",
-                                    "*Payload version*\n$payloadVersion",
-                                ),
-                            ),
-                            SlackBlocks.section(
-                                "*Request body*\n```${formatJsonReport(request)}```",
-                            ),
-                        ),
-                ),
-            )
-        return send(channel, text, attachments)
-    }
-
     override suspend fun sendAtcResult(
         watchId: Long,
         vendor: String,
@@ -162,7 +94,7 @@ class SlackNotificationServiceImpl(
         val attachments =
             listOf(
                 SlackAttachmentDto(
-                    color = dispatchResultColor(status),
+                    color = atcResultColor(status),
                     fallback = text,
                     blocks = blocks,
                 ),
@@ -217,8 +149,8 @@ class SlackNotificationServiceImpl(
         client?.close()
     }
 
-    private fun dispatchResultColor(status: String): String =
-        if (status == DISPATCH_STATUS_COMPLETED) {
+    private fun atcResultColor(status: String): String =
+        if (status == ATC_STATUS_COMPLETED) {
             SlackWatchCard.COLOR_AVAIL
         } else {
             SlackWatchCard.COLOR_ERROR

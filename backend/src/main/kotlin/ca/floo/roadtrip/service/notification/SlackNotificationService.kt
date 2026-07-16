@@ -43,35 +43,7 @@ interface SlackNotificationService {
     ): Boolean
 
     /**
-     * Reports that an ATC dispatch was produced while no matching companion
-     * long-poll was connected. Default no-op keeps tests and alternate Slack
-     * implementations focused on the notification paths they exercise.
-     */
-    suspend fun sendAtcCompanionOffline(
-        watchId: Long,
-        vendor: String,
-        openings: List<WatchOpening>,
-        channel: String? = null,
-    ): Boolean = false
-
-    /**
-     * Reports the companion's terminal callback for a dispatch. [request] is
-     * the decoded complete/fail request body the backend received.
-     */
-    suspend fun sendDispatchResult(
-        dispatchId: Long,
-        kind: String,
-        vendor: String,
-        payloadVersion: String,
-        status: String,
-        request: JsonObject,
-        channel: String? = null,
-    ): Boolean = false
-
-    /**
-     * Reports a backend-owned one-shot ATC result. Unlike [sendDispatchResult],
-     * this path has no dispatch id because the backend called the companion
-     * executor directly.
+     * Reports a backend-owned one-shot ATC result.
      */
     suspend fun sendAtcResult(
         watchId: Long,

@@ -1,5 +1,5 @@
 // Add-to-cart orchestration. Owns Playwright-driven rec.gov interaction.
-// Reports the result back to the backend; the backend persists, the companion does not.
+// Returns the browser result to the CLI/HTTP caller; the companion does not persist.
 
 import {
   IS_HEADLESS,

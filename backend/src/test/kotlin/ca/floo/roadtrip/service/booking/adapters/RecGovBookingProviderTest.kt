@@ -7,9 +7,6 @@ import ca.floo.roadtrip.models.booking.BookingAction
 import ca.floo.roadtrip.models.booking.BookingProviderId
 import ca.floo.roadtrip.models.booking.BookingTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.availability.DispatchCreateInput
-import ca.floo.roadtrip.service.availability.DispatchEnqueuer
-import ca.floo.roadtrip.service.availability.DispatchQueued
 import ca.floo.roadtrip.service.booking.RecGovAtcExecutor
 import ca.floo.roadtrip.service.booking.RecGovAtcOutcome
 import kotlinx.coroutines.runBlocking
@@ -20,7 +17,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
-import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -33,10 +29,7 @@ private const val TEST_VENDOR_ID = "300"
 private const val TEST_RECGOV_CAMPGROUND_ID = "232447"
 private const val TEST_RECGOV_CAMPSITE_URL =
     "https://www.recreation.gov/camping/campsites/300?startDate=2026-07-04&endDate=2026-07-05"
-private const val TEST_DISPATCH_ID = 99L
-private const val TEST_NOTIFIED_WAITERS = 1
 private const val TEST_RECGOV_VENDOR = "recgov"
-private const val TEST_ADD_TO_CART_KIND = "atc"
 private const val TEST_ADD_TO_CART_PAYLOAD_VERSION = "atc.recgov.v1"
 
 class RecGovBookingProviderTest {
@@ -81,29 +74,25 @@ class RecGovBookingProviderTest {
     }
 
     @Test
-    fun `add to cart forwards supported request to dispatch port`() =
+    fun `add to cart forwards supported request to companion executor`() =
         runBlocking {
-            val dispatches = RecordingDispatches()
-            val provider = provider(dispatches)
+            val executor = RecordingAtcExecutor(completedOutcome())
+            val provider = provider(executor)
             val request = request(recgovTarget())
 
             val result = provider.addToCart(request)
 
-            assertEquals(
-                AddToCartResult.Queued(
-                    dispatchId = TEST_DISPATCH_ID,
-                    providerId = BookingProviderId.RECGOV,
-                    notifiedWaiters = TEST_NOTIFIED_WAITERS,
-                ),
-                result,
-            )
-            val input = dispatches.input
-            assertEquals(TEST_ADD_TO_CART_KIND, input?.kind)
-            assertEquals(TEST_RECGOV_VENDOR, input?.vendor)
-            assertEquals(TEST_ADD_TO_CART_PAYLOAD_VERSION, input?.payloadVersion)
-            assertEquals(TEST_WATCH_ID, input?.watchId)
-            assertEquals(true, input?.stopWhenTriggered)
-            val payload = input?.payload
+            val completed = result as AddToCartResult.Completed
+            assertEquals(BookingProviderId.RECGOV, completed.providerId)
+            assertEquals(executor.payload, completed.request)
+            val ok =
+                completed.response
+                    .get("ok")
+                    ?.jsonPrimitive
+                    ?.content
+                    ?.toBoolean()
+            assertEquals(true, ok)
+            val payload = executor.payload
             assertEquals(TEST_WATCH_ID.toString(), payload?.get("watch_id")?.jsonPrimitive?.content)
             assertEquals(TEST_RECGOV_VENDOR, payload?.get("vendor")?.jsonPrimitive?.content)
             assertEquals(TEST_ADD_TO_CART_PAYLOAD_VERSION, payload?.get("payload_version")?.jsonPrimitive?.content)
@@ -124,8 +113,8 @@ class RecGovBookingProviderTest {
     @Test
     fun `add to cart uses recgov campsite page for companion booking url`() =
         runBlocking {
-            val dispatches = RecordingDispatches()
-            val provider = provider(dispatches)
+            val executor = RecordingAtcExecutor(completedOutcome())
+            val provider = provider(executor)
             val request =
                 request(
                     recgovTarget(),
@@ -137,8 +126,7 @@ class RecGovBookingProviderTest {
             provider.addToCart(request)
 
             val opening =
-                dispatches.input
-                    ?.payload
+                executor.payload
                     ?.get("openings")
                     ?.jsonArray
                     ?.single()
@@ -149,18 +137,11 @@ class RecGovBookingProviderTest {
     @Test
     fun `add to cart uses companion executor when configured`() =
         runBlocking {
-            val dispatches = RecordingDispatches()
             val executor =
                 RecordingAtcExecutor(
-                    RecGovAtcOutcome.Completed(
-                        response =
-                            buildJsonObject {
-                                put("ok", true)
-                                put("cart_added", true)
-                            },
-                    ),
+                    completedOutcome(),
                 )
-            val provider = RecGovBookingProvider(dispatches, executor)
+            val provider = provider(executor)
             val request = request(recgovTarget())
 
             val result = provider.addToCart(request)
@@ -175,7 +156,6 @@ class RecGovBookingProviderTest {
                     ?.content
                     ?.toBoolean()
             assertEquals(true, ok)
-            assertNull(dispatches.input)
             val opening =
                 executor.payload
                     ?.get("openings")
@@ -186,18 +166,28 @@ class RecGovBookingProviderTest {
         }
 
     @Test
-    fun `add to cart returns unsupported without calling dispatch for unsupported target`() =
+    fun `add to cart returns unsupported without calling companion for unsupported target`() =
         runBlocking {
-            val dispatches = RecordingDispatches()
-            val provider = provider(dispatches)
+            val executor = RecordingAtcExecutor(completedOutcome())
+            val provider = provider(executor)
 
             val result = provider.addToCart(request(recgovTarget(vendorId = "")))
 
             assertEquals(AddToCartResult.Unsupported, result)
-            assertNull(dispatches.input)
+            assertNull(executor.payload)
         }
 
-    private fun provider(dispatches: RecordingDispatches = RecordingDispatches()): RecGovBookingProvider = RecGovBookingProvider(dispatches)
+    private fun provider(executor: RecordingAtcExecutor = RecordingAtcExecutor(completedOutcome())): RecGovBookingProvider =
+        RecGovBookingProvider(executor)
+
+    private fun completedOutcome(): RecGovAtcOutcome.Completed =
+        RecGovAtcOutcome.Completed(
+            response =
+                buildJsonObject {
+                    put("ok", true)
+                    put("cart_added", true)
+                },
+        )
 
     private class RecordingAtcExecutor(
         private val outcome: RecGovAtcOutcome,
@@ -207,22 +197,6 @@ class RecGovBookingProviderTest {
         override suspend fun addToCart(payload: JsonObject): RecGovAtcOutcome {
             this.payload = payload
             return outcome
-        }
-    }
-
-    private class RecordingDispatches : DispatchEnqueuer {
-        var input: DispatchCreateInput? = null
-
-        override suspend fun enqueue(input: DispatchCreateInput): DispatchQueued {
-            this.input = input
-            return DispatchQueued(
-                id = TEST_DISPATCH_ID,
-                kind = input.kind,
-                vendor = input.vendor,
-                payloadVersion = input.payloadVersion,
-                expiresAt = Instant.parse("2026-07-14T00:00:30Z"),
-                notifiedWaiters = TEST_NOTIFIED_WAITERS,
-            )
         }
     }
 

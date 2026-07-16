@@ -20,7 +20,7 @@ help:
 	@echo "  make install-hooks    Point this clone's git hooks at .githooks/ (per-clone)"
 	@echo "  make run              Run backend locally + Docker Rec.gov companion"
 	@echo "  make run env=prod     Build backend/companion images + run production Compose profiles"
-	@echo "  make companion        Run the legacy host long-poll Playwright companion"
+	@echo "  make companion        Run the Rec.gov companion HTTP executor on host"
 	@echo "  make recgov-companion Run the Docker one-shot Rec.gov companion"
 	@echo "  make recgov-login     Open companion Chromium and verify Recreation.gov login"
 	@echo "  make recgov-refresh   Force-refresh the companion Recreation.gov session"
@@ -57,7 +57,7 @@ else
 endif
 
 companion: _ensure-hooks
-	cd companion && BACKEND_URL=http://127.0.0.1:$(PORT) npm start
+	cd companion && npm start
 
 recgov-companion: _ensure-hooks
 	$(LOCAL_COMPOSE) up -d --build recgov-companion

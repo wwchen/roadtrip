@@ -109,9 +109,9 @@ class TriggerActionHandlerTest {
         }
 
     @Test
-    fun `AtcTriggerActionHandler queues first supported opening through booking provider`() =
+    fun `AtcTriggerActionHandler executes first supported opening through booking provider`() =
         runBlocking {
-            val bookingProvider = RecordingBookingProvider(notifiedWaiters = 1)
+            val bookingProvider = RecordingBookingProvider()
             val registry = BookingProviderRegistry(listOf(bookingProvider))
             val handler =
                 AtcTriggerActionHandler(
@@ -123,7 +123,7 @@ class TriggerActionHandlerTest {
 
             val delivered = handler.fire(watch, openings = listOf(triggerOpening()))
 
-            assertFalse(delivered)
+            assertTrue(delivered)
             val request = bookingProvider.requests.single()
             assertEquals(42L, request.watchId)
             assertEquals(BookingProviderId.RECGOV, request.target.providerId)
@@ -133,34 +133,6 @@ class TriggerActionHandlerTest {
             assertEquals(LocalDate.parse("2026-07-06"), request.checkoutDate)
             assertEquals("Site 12", request.campsiteLabel)
             assertTrue(request.stopWhenTriggered)
-        }
-
-    @Test
-    fun `AtcTriggerActionHandler sends offline slack when no companion waiter is connected`() =
-        runBlocking {
-            val bookingProvider = RecordingBookingProvider(notifiedWaiters = 0)
-            val registry = BookingProviderRegistry(listOf(bookingProvider))
-            val slack = CapturingSlack(result = true)
-            val handler =
-                AtcTriggerActionHandler(
-                    bookings = registry,
-                    bookingTargets = AvailabilityBookingTargetResolver(registry),
-                    slack = slack,
-                )
-            val watch =
-                fakeWatch(
-                    id = 42L,
-                    triggerKinds = listOf(AtcTriggerActionHandler.KIND),
-                    triggerConfig = JsonObject(mapOf("channel" to JsonPrimitive("#custom"))),
-                )
-
-            handler.fire(watch, openings = listOf(triggerOpening()))
-
-            val alert = slack.offlineAlerts.single()
-            assertEquals(42L, alert.watchId)
-            assertEquals("recgov", alert.vendor)
-            assertEquals("#custom", alert.channel)
-            assertEquals("Site 12", alert.openings.single().label)
         }
 
     @Test
@@ -247,7 +219,7 @@ class TriggerActionHandlerTest {
     @Test
     fun `AtcTriggerActionHandler leaves unsupported openings inert`() =
         runBlocking {
-            val bookingProvider = RecordingBookingProvider(notifiedWaiters = 1)
+            val bookingProvider = RecordingBookingProvider()
             val registry = BookingProviderRegistry(listOf(bookingProvider))
             val slack = CapturingSlack(result = true)
             val handler =
@@ -265,7 +237,7 @@ class TriggerActionHandlerTest {
 
             assertFalse(delivered)
             assertTrue(bookingProvider.requests.isEmpty())
-            assertTrue(slack.offlineAlerts.isEmpty())
+            assertTrue(slack.atcResults.isEmpty())
         }
 
     private class FakeHandler(
@@ -289,13 +261,6 @@ class TriggerActionHandlerTest {
     private class CapturingSlack(
         private val result: Boolean,
     ) : SlackNotificationService {
-        data class OfflineAlert(
-            val watchId: Long,
-            val vendor: String,
-            val openings: List<WatchOpening>,
-            val channel: String?,
-        )
-
         data class AtcResult(
             val watchId: Long,
             val vendor: String,
@@ -306,7 +271,6 @@ class TriggerActionHandlerTest {
         var lastWatchId: Long? = null
         var lastChannel: String? = null
         var lastAppRootUrl: String? = null
-        val offlineAlerts = mutableListOf<OfflineAlert>()
         val atcResults = mutableListOf<AtcResult>()
 
         override suspend fun sendWatchOpenings(
@@ -327,16 +291,6 @@ class TriggerActionHandlerTest {
             notice: WatchStatusNotice,
             channel: String?,
         ): Boolean = result
-
-        override suspend fun sendAtcCompanionOffline(
-            watchId: Long,
-            vendor: String,
-            openings: List<WatchOpening>,
-            channel: String?,
-        ): Boolean {
-            offlineAlerts += OfflineAlert(watchId, vendor, openings, channel)
-            return result
-        }
 
         override suspend fun sendAtcResult(
             watchId: Long,
@@ -384,10 +338,7 @@ class TriggerActionHandlerTest {
 
     private class RecordingBookingProvider(
         private val resultFactory: ((AddToCartRequest) -> AddToCartResult)? = null,
-        private val notifiedWaiters: Int = 1,
     ) : BookingProvider {
-        constructor(notifiedWaiters: Int) : this(resultFactory = null, notifiedWaiters = notifiedWaiters)
-
         val requests = mutableListOf<AddToCartRequest>()
 
         override val id: BookingProviderId = BookingProviderId.RECGOV
@@ -415,7 +366,15 @@ class TriggerActionHandlerTest {
         override suspend fun addToCart(request: AddToCartRequest): AddToCartResult {
             requests += request
             resultFactory?.let { return it(request) }
-            return AddToCartResult.Queued(dispatchId = 99L, providerId = BookingProviderId.RECGOV, notifiedWaiters = notifiedWaiters)
+            return AddToCartResult.Completed(
+                providerId = BookingProviderId.RECGOV,
+                request = buildJsonObject { put("watch_id", request.watchId) },
+                response =
+                    buildJsonObject {
+                        put("ok", true)
+                        put("cart_added", true)
+                    },
+            )
         }
     }
 

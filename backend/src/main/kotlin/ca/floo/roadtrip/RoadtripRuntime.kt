@@ -37,14 +37,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
-import ca.floo.roadtrip.service.availability.DispatchCreateInput
-import ca.floo.roadtrip.service.availability.DispatchEnqueuer
-import ca.floo.roadtrip.service.availability.DispatchService
-import ca.floo.roadtrip.service.availability.DispatchTestEventService
-import ca.floo.roadtrip.service.availability.DispatchWaiterRegistry
-import ca.floo.roadtrip.service.availability.DispatchWatchCompletion
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
-import ca.floo.roadtrip.service.availability.InMemoryDispatchStore
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.SlackNotifyHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
@@ -100,8 +93,6 @@ internal class RoadtripRuntime(
     val availabilityDateResolver: AvailabilityDateResolver,
     val availabilityWatchService: AvailabilityWatchService,
     val watchAlertDispatcher: WatchAlertDispatcher,
-    val dispatchService: DispatchService,
-    val dispatchTestEventService: DispatchTestEventService,
     val bookingProviderRegistry: BookingProviderRegistry,
     val watchCapabilities: WatchCapabilityService,
     val schedulerScope: CoroutineScope,
@@ -216,13 +207,17 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
     PollerBackfill(boot.ctx, pollerMembership).run()
 
     val slackNotifications = SlackNotificationServiceImpl(boot.appConfig.slack)
-    val dispatchEnqueuer = DeferredDispatchEnqueuer()
     val recgovAtcExecutor =
         boot.appConfig.booking.recgovAtc
             .takeIf { it.companionEnabled }
             ?.also { log.info("Rec.gov ATC companion executor enabled at {}", it.companionBaseUrl) }
             ?.let(::HttpRecGovAtcExecutor)
-    val bookingProviderRegistry = BookingProviderRegistry(listOf(RecGovBookingProvider(dispatchEnqueuer, recgovAtcExecutor)))
+    val bookingProviderRegistry =
+        BookingProviderRegistry(
+            listOfNotNull(
+                recgovAtcExecutor?.let(::RecGovBookingProvider),
+            ),
+        )
     val bookingTargets = AvailabilityBookingTargetResolver(bookingProviderRegistry)
     val watchCapabilities = WatchCapabilityService(availabilityTargets, bookingTargets)
     val availabilityWatchService =
@@ -235,19 +230,6 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                     capabilities = watchCapabilities,
                 ),
         )
-    val dispatchService =
-        DispatchService(
-            store = InMemoryDispatchStore(),
-            waiters = DispatchWaiterRegistry(),
-            slack = slackNotifications,
-            watchCompletion =
-                DispatchWatchCompletion { watchId ->
-                    availabilityWatchService.update(watchId, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE)) != null
-                },
-            config = boot.appConfig.dispatch,
-        )
-    val dispatchTestEventService = DispatchTestEventService(dispatchService)
-    dispatchEnqueuer.delegate = dispatchService
     val triggerActions =
         TriggerActionRegistry(
             listOf(
@@ -284,7 +266,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                 object : SlackInteractivityHandler.Watches {
                     override fun setStatus(
                         id: Long,
-                        status: ca.floo.roadtrip.service.availability.WatchStatus,
+                        status: WatchStatus,
                     ) = availabilityWatchService.update(id, AvailabilityWatchRepo.UpdateInput(status = status))
 
                     override fun snapshotAndDelete(id: Long): AvailabilityWatchRepo.Watch? {
@@ -356,8 +338,6 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         availabilityDateResolver = availabilityDateResolver,
         availabilityWatchService = availabilityWatchService,
         watchAlertDispatcher = watchAlertDispatcher,
-        dispatchService = dispatchService,
-        dispatchTestEventService = dispatchTestEventService,
         bookingProviderRegistry = bookingProviderRegistry,
         watchCapabilities = watchCapabilities,
         schedulerScope = schedulerScope,
@@ -365,14 +345,6 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         failoverFetcher = sharedFailoverFetcher,
         slackNotifications = slackNotifications,
     )
-}
-
-private class DeferredDispatchEnqueuer : DispatchEnqueuer {
-    var delegate: DispatchEnqueuer? = null
-
-    override suspend fun enqueue(input: DispatchCreateInput) =
-        checkNotNull(delegate) { "dispatch enqueuer used before runtime wiring completed" }
-            .enqueue(input)
 }
 
 private fun AppConfig.isProviderEnabled(id: AvailabilityProviderId): Boolean =

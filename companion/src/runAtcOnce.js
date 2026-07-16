@@ -154,7 +154,7 @@ function usage () {
     '  npm run recgov:atc -- --payload-json \'{"start_date":"2026-07-15",...}\'',
     '  npm run recgov:atc -- --booking-url URL --start-date YYYY-MM-DD --end-date YYYY-MM-DD',
     '',
-    'Payload may be either the backend dispatch wrapper ({ "payload": ... }) or the raw ATC payload.',
+    'Payload may be either a { "payload": ... } envelope or the raw ATC payload.',
     '',
   ].join('\n')
 }

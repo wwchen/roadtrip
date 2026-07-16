@@ -7,9 +7,6 @@ import ca.floo.roadtrip.models.booking.BookingAction
 import ca.floo.roadtrip.models.booking.BookingProviderId
 import ca.floo.roadtrip.models.booking.BookingTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.availability.DispatchCreateInput
-import ca.floo.roadtrip.service.availability.DispatchEnqueuer
-import ca.floo.roadtrip.service.availability.dispatchPayloadVersion
 import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovBookingUrl
 import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.RecGovAtcExecutor
@@ -20,15 +17,12 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 
-private const val ADD_TO_CART_DISPATCH_KIND = "atc"
 private const val RECGOV_VENDOR = "recgov"
 private const val ERROR_COMPANION_EXCEPTION = "companion_exception"
-
-private val RECGOV_ADD_TO_CART_PAYLOAD_VERSION = dispatchPayloadVersion(ADD_TO_CART_DISPATCH_KIND, RECGOV_VENDOR)
+private const val RECGOV_ADD_TO_CART_PAYLOAD_VERSION = "atc.recgov.v1"
 
 internal class RecGovBookingProvider(
-    private val dispatches: DispatchEnqueuer,
-    private val companionAtc: RecGovAtcExecutor? = null,
+    private val companionAtc: RecGovAtcExecutor,
 ) : BookingProvider {
     override val id: BookingProviderId = BookingProviderId.RECGOV
 
@@ -55,32 +49,14 @@ internal class RecGovBookingProvider(
 
     override suspend fun addToCart(request: AddToCartRequest): AddToCartResult {
         if (!can(BookingAction.ADD_TO_CART, request.target)) return AddToCartResult.Unsupported
-        val payload = request.toDispatchPayload()
-        if (companionAtc != null) {
-            return request.addToCartViaCompanion(payload)
-        }
-        val queued =
-            dispatches.enqueue(
-                DispatchCreateInput(
-                    kind = ADD_TO_CART_DISPATCH_KIND,
-                    vendor = RECGOV_VENDOR,
-                    payloadVersion = RECGOV_ADD_TO_CART_PAYLOAD_VERSION,
-                    payload = payload,
-                    watchId = request.watchId,
-                    stopWhenTriggered = request.stopWhenTriggered,
-                ),
-            )
-        return AddToCartResult.Queued(
-            dispatchId = queued.id,
-            providerId = id,
-            notifiedWaiters = queued.notifiedWaiters,
-        )
+        val payload = request.toAtcPayload()
+        return request.addToCartViaCompanion(payload)
     }
 
     private suspend fun AddToCartRequest.addToCartViaCompanion(payload: JsonObject): AddToCartResult =
         when (
             val outcome =
-                runCatching { checkNotNull(companionAtc).addToCart(payload) }
+                runCatching { companionAtc.addToCart(payload) }
                     .getOrElse { RecGovAtcOutcome.Failed(error = ERROR_COMPANION_EXCEPTION, detail = it.message) }
         ) {
             is RecGovAtcOutcome.Completed ->
@@ -99,7 +75,7 @@ internal class RecGovBookingProvider(
                 )
         }
 
-    private fun AddToCartRequest.toDispatchPayload(): JsonObject =
+    private fun AddToCartRequest.toAtcPayload(): JsonObject =
         buildJsonObject {
             put("watch_id", watchId)
             put("vendor", RECGOV_VENDOR)
