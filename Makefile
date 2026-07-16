@@ -8,6 +8,8 @@ POSTGRES_USER ?= roadtrip
 POSTGRES_PASSWORD ?= roadtrip
 RECGOV_ATC_DOCKER_URL ?= http://recgov-companion:8770
 RECGOV_ATC_LOCAL_URL ?= http://127.0.0.1:8770
+RECGOV_COMPANION_BROWSER_PROFILE ?= $(HOME)/.campsite-companion/browser-session
+RECGOV_COMPANION_PROFILE_ENV := COMPANION_BROWSER_PROFILE="$${COMPANION_BROWSER_PROFILE:-$${RECGOV_COMPANION_BROWSER_PROFILE:-$(RECGOV_COMPANION_BROWSER_PROFILE)}}"
 PROD_COMPOSE_PROFILES ?= --profile tunnel --profile pois --profile recgov-companion
 LOCAL_COMPOSE_PROFILES ?= --profile pois --profile recgov-companion
 PROD_COMPOSE := docker compose $(PROD_COMPOSE_PROFILES)
@@ -64,14 +66,14 @@ recgov-companion: _ensure-hooks
 	@echo "Rec.gov companion listening on $(RECGOV_ATC_LOCAL_URL)"
 
 recgov-login: _ensure-hooks
-	cd companion && npm run recgov:login
+	cd companion && $(RECGOV_COMPANION_PROFILE_ENV) npm run recgov:login
 
 recgov-refresh: _ensure-hooks
-	cd companion && npm run recgov:refresh
+	cd companion && $(RECGOV_COMPANION_PROFILE_ENV) npm run recgov:refresh
 
 recgov-atc: _ensure-hooks
 	@if [ -z "$(PAYLOAD)" ]; then echo "Usage: make recgov-atc PAYLOAD=/path/to/atc.json"; exit 2; fi
-	cd companion && npm run --silent recgov:atc -- --payload-file "$(PAYLOAD)"
+	cd companion && $(RECGOV_COMPANION_PROFILE_ENV) npm run --silent recgov:atc -- --payload-file "$(PAYLOAD)"
 
 # One-time host setup for a fresh clone. Idempotent: brew is no-op when
 # packages are present, npm install + playwright install are no-op when the

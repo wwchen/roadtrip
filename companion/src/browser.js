@@ -12,8 +12,13 @@ export const IS_HEADLESS = process.env.HEADLESS !== undefined
   ? process.env.HEADLESS !== 'false'
   : fs.existsSync('/.dockerenv')
 
-const SESSION_DIR = process.env.SESSION_DIR
-  || path.join(os.homedir(), '.campsite-companion', 'browser-session')
+export function resolveSessionDir (env = process.env, homeDir = os.homedir()) {
+  return env.COMPANION_BROWSER_PROFILE ||
+    env.SESSION_DIR ||
+    path.join(homeDir, '.campsite-companion', 'browser-session')
+}
+
+const SESSION_DIR = resolveSessionDir()
 const RECGOV_RECACCOUNT_STORAGE_KEY = 'recaccount'
 export const COMPANION_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'

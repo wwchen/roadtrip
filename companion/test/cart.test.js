@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
-import { COMPANION_USER_AGENT } from '../src/browser.js'
+import { COMPANION_USER_AGENT, resolveSessionDir } from '../src/browser.js'
 import { bookingUrlForMatch } from '../src/cart.js'
 import { parseRecaccount, recaccountNeedsRefresh } from '../src/recgovSession.js'
 
@@ -68,6 +68,21 @@ test('companion user agent stays on a current Chrome major', () => {
 
   assert.ok(Number.isFinite(chromeMajor))
   assert.ok(chromeMajor >= MIN_CHROME_MAJOR_VERSION)
+})
+
+test('resolveSessionDir uses mounted companion profile env before legacy session dir', () => {
+  assert.equal(
+    resolveSessionDir(
+      {
+        COMPANION_BROWSER_PROFILE: '/var/lib/campsite-companion/browser-session',
+        SESSION_DIR: '/legacy/session',
+      },
+      '/home/test',
+    ),
+    '/var/lib/campsite-companion/browser-session',
+  )
+  assert.equal(resolveSessionDir({ SESSION_DIR: '/legacy/session' }, '/home/test'), '/legacy/session')
+  assert.equal(resolveSessionDir({}, '/home/test'), '/home/test/.campsite-companion/browser-session')
 })
 
 function fakeJwt (nowMs, offsetSeconds) {

@@ -331,7 +331,10 @@ then calls the companion's one-shot executor.
   `recgov:login` exits `0` after `REC_GOV_AUTH_OK`. `recgov:refresh` exits
   `0` after `REC_GOV_AUTH_REFRESH_OK` only after the browser session has
   successfully refreshed through Recreation.gov. Both commands return non-zero
-  after `REC_GOV_AUTH_FAILED` / `REC_GOV_AUTH_ERROR`.
+  after `REC_GOV_AUTH_FAILED` / `REC_GOV_AUTH_ERROR`. The Make targets set
+  `COMPANION_BROWSER_PROFILE` from `RECGOV_COMPANION_BROWSER_PROFILE`, falling
+  back to `$HOME/.campsite-companion/browser-session`, which is the same host
+  path the Docker companion mounts.
 - **One-shot Rec.gov ATC** runs the same browser add-to-cart code as the HTTP
   executor. This can place a real hold in the operator's Recreation.gov cart,
   so use a real payload only when that side effect is intended.
