@@ -12,7 +12,7 @@ import java.io.Closeable
 import java.time.LocalDate
 
 private const val DISPATCH_STATUS_COMPLETED = "completed"
-private const val MAX_DISPATCH_REPORT_CHARS = 2500
+private const val MAX_JSON_REPORT_CHARS = 2500
 private const val TRUNCATED_REPORT_SUFFIX = "\n..."
 
 private val slackJson =
@@ -127,9 +127,44 @@ class SlackNotificationServiceImpl(
                                 ),
                             ),
                             SlackBlocks.section(
-                                "*Request body*\n```${formatDispatchRequest(request)}```",
+                                "*Request body*\n```${formatJsonReport(request)}```",
                             ),
                         ),
+                ),
+            )
+        return send(channel, text, attachments)
+    }
+
+    override suspend fun sendAtcResult(
+        watchId: Long,
+        vendor: String,
+        status: String,
+        request: JsonObject,
+        response: JsonObject?,
+        channel: String?,
+    ): Boolean {
+        val text = "ATC $status for watch #$watchId ($vendor)"
+        val blocks =
+            mutableListOf(
+                SlackBlocks.header("ATC $status"),
+                SlackBlocks.fields(
+                    listOf(
+                        "*Watch*\n#$watchId",
+                        "*Status*\n$status",
+                        "*Vendor*\n$vendor",
+                    ),
+                ),
+                SlackBlocks.section("*Request body*\n```${formatJsonReport(request)}```"),
+            )
+        if (response != null) {
+            blocks += SlackBlocks.section("*Companion response*\n```${formatJsonReport(response)}```")
+        }
+        val attachments =
+            listOf(
+                SlackAttachmentDto(
+                    color = dispatchResultColor(status),
+                    fallback = text,
+                    blocks = blocks,
                 ),
             )
         return send(channel, text, attachments)
@@ -189,10 +224,10 @@ class SlackNotificationServiceImpl(
             SlackWatchCard.COLOR_ERROR
         }
 
-    private fun formatDispatchRequest(request: JsonObject): String {
-        val rendered = slackJson.encodeToString(request)
-        if (rendered.length <= MAX_DISPATCH_REPORT_CHARS) return rendered
-        return rendered.take(MAX_DISPATCH_REPORT_CHARS - TRUNCATED_REPORT_SUFFIX.length) +
+    private fun formatJsonReport(body: JsonObject): String {
+        val rendered = slackJson.encodeToString(body)
+        if (rendered.length <= MAX_JSON_REPORT_CHARS) return rendered
+        return rendered.take(MAX_JSON_REPORT_CHARS - TRUNCATED_REPORT_SUFFIX.length) +
             TRUNCATED_REPORT_SUFFIX
     }
 }

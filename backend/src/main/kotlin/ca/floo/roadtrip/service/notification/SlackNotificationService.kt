@@ -69,6 +69,20 @@ interface SlackNotificationService {
     ): Boolean = false
 
     /**
+     * Reports a backend-owned one-shot ATC result. Unlike [sendDispatchResult],
+     * this path has no dispatch id because the backend called the companion
+     * executor directly.
+     */
+    suspend fun sendAtcResult(
+        watchId: Long,
+        vendor: String,
+        status: String,
+        request: JsonObject,
+        response: JsonObject?,
+        channel: String? = null,
+    ): Boolean = false
+
+    /**
      * Updates a Slack card in place after a user pressed an interactive button
      * (pause / resume / delete): re-renders [notice] and posts it to Slack's
      * `response_url` from the interaction payload. Never throws.

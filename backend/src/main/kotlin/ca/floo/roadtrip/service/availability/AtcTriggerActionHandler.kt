@@ -47,7 +47,7 @@ internal class AtcTriggerActionHandler(
                     )
                 }.getOrNull()
 
-        when (result) {
+        return when (result) {
             is AddToCartResult.Queued -> {
                 log.info(
                     "ATC dispatch queued: watch_id={} provider={} dispatch_id={} notified_waiters={}",
@@ -59,17 +59,57 @@ internal class AtcTriggerActionHandler(
                 if (result.notifiedWaiters == 0) {
                     notifyOffline(watch, result.providerId.vendorSlug(), next.opening)
                 }
+                false
             }
-            AddToCartResult.Unsupported ->
+            is AddToCartResult.Completed -> {
+                log.info(
+                    "ATC completed: watch_id={} provider={} campsite_id={} date={}",
+                    watch.id,
+                    result.providerId,
+                    next.request.target.campsiteRef.campsiteId,
+                    next.request.arrivalDate,
+                )
+                slack.sendAtcResult(
+                    watchId = watch.id,
+                    vendor = result.providerId.vendorSlug(),
+                    status = ATC_RESULT_COMPLETED,
+                    request = result.request,
+                    response = result.response,
+                    channel = watch.channelOverride(),
+                )
+                true
+            }
+            is AddToCartResult.Failed -> {
+                log.warn(
+                    "ATC failed: watch_id={} provider={} campsite_id={} date={} error={} detail={}",
+                    watch.id,
+                    result.providerId,
+                    next.request.target.campsiteRef.campsiteId,
+                    next.request.arrivalDate,
+                    result.error,
+                    result.detail,
+                )
+                slack.sendAtcResult(
+                    watchId = watch.id,
+                    vendor = result.providerId.vendorSlug(),
+                    status = ATC_RESULT_FAILED,
+                    request = result.request,
+                    response = result.response,
+                    channel = watch.channelOverride(),
+                )
+                false
+            }
+            AddToCartResult.Unsupported -> {
                 log.warn(
                     "ATC booking action unsupported for watch_id={} provider={} campsite_id={}",
                     watch.id,
                     next.request.target.providerId,
                     next.request.target.campsiteRef.campsiteId,
                 )
-            null -> Unit
+                false
+            }
+            null -> false
         }
-        return false
     }
 
     private fun addToCartRequest(
@@ -123,5 +163,7 @@ internal class AtcTriggerActionHandler(
 
     companion object {
         const val KIND = AvailabilityTriggerKinds.ATC
+        private const val ATC_RESULT_COMPLETED = "completed"
+        private const val ATC_RESULT_FAILED = "failed"
     }
 }

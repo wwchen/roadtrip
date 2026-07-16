@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test
 import java.time.Duration
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 class AppConfigTest {
     private val requiredAvailabilityProperties =
@@ -148,6 +149,30 @@ class AppConfigTest {
             }
 
         assertEquals("roadtrip.dispatch.test-endpoint-enabled must be true or false", err.message)
+    }
+
+    @Test
+    fun `booking config disables recgov companion by default`() {
+        val config = appConfig().booking.recgovAtc
+
+        assertNull(config.companionBaseUrl)
+        assertEquals(false, config.companionEnabled)
+        assertEquals(Duration.ofSeconds(180), config.companionTimeout)
+    }
+
+    @Test
+    fun `booking config parses recgov companion settings`() {
+        val config =
+            appConfig(
+                mapOf(
+                    "roadtrip.booking.recgov-atc.companion-base-url" to " http://recgov-companion:8770/ ",
+                    "roadtrip.booking.recgov-atc.companion-timeout" to "45s",
+                ),
+            ).booking.recgovAtc
+
+        assertEquals("http://recgov-companion:8770", config.companionBaseUrl)
+        assertEquals(true, config.companionEnabled)
+        assertEquals(Duration.ofSeconds(45), config.companionTimeout)
     }
 
     @Test

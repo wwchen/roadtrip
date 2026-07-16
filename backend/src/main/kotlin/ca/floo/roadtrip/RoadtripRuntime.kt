@@ -2,6 +2,7 @@ package ca.floo.roadtrip
 
 import ca.floo.roadtrip.clients.aspira.HttpAspiraAvailabilityClient
 import ca.floo.roadtrip.clients.campflare.HttpCampflareAvailabilityClient
+import ca.floo.roadtrip.clients.companion.HttpRecGovAtcExecutor
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
 import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.clients.recgov.HttpRecgovAvailabilityClient
@@ -216,7 +217,12 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
 
     val slackNotifications = SlackNotificationServiceImpl(boot.appConfig.slack)
     val dispatchEnqueuer = DeferredDispatchEnqueuer()
-    val bookingProviderRegistry = BookingProviderRegistry(listOf(RecGovBookingProvider(dispatchEnqueuer)))
+    val recgovAtcExecutor =
+        boot.appConfig.booking.recgovAtc
+            .takeIf { it.companionEnabled }
+            ?.also { log.info("Rec.gov ATC companion executor enabled at {}", it.companionBaseUrl) }
+            ?.let(::HttpRecGovAtcExecutor)
+    val bookingProviderRegistry = BookingProviderRegistry(listOf(RecGovBookingProvider(dispatchEnqueuer, recgovAtcExecutor)))
     val bookingTargets = AvailabilityBookingTargetResolver(bookingProviderRegistry)
     val watchCapabilities = WatchCapabilityService(availabilityTargets, bookingTargets)
     val availabilityWatchService =

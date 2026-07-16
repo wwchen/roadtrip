@@ -23,6 +23,8 @@ import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -162,6 +164,87 @@ class TriggerActionHandlerTest {
         }
 
     @Test
+    fun `AtcTriggerActionHandler reports direct companion success and marks fired`() =
+        runBlocking {
+            val bookingProvider =
+                RecordingBookingProvider(
+                    resultFactory = { request: AddToCartRequest ->
+                        AddToCartResult.Completed(
+                            providerId = BookingProviderId.RECGOV,
+                            request = buildJsonObject { put("watch_id", request.watchId) },
+                            response =
+                                buildJsonObject {
+                                    put("ok", true)
+                                    put("cart_added", true)
+                                },
+                        )
+                    },
+                )
+            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val slack = CapturingSlack(result = true)
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    slack = slack,
+                )
+            val watch =
+                fakeWatch(
+                    id = 42L,
+                    triggerKinds = listOf(AtcTriggerActionHandler.KIND),
+                    triggerConfig = JsonObject(mapOf("channel" to JsonPrimitive("#custom"))),
+                    stopWhenTriggered = true,
+                )
+
+            val delivered = handler.fire(watch, openings = listOf(triggerOpening()))
+
+            assertTrue(delivered)
+            val result = slack.atcResults.single()
+            assertEquals(42L, result.watchId)
+            assertEquals("recgov", result.vendor)
+            assertEquals("completed", result.status)
+            assertEquals("#custom", result.channel)
+        }
+
+    @Test
+    fun `AtcTriggerActionHandler reports direct companion failure without marking fired`() =
+        runBlocking {
+            val bookingProvider =
+                RecordingBookingProvider(
+                    resultFactory = { request: AddToCartRequest ->
+                        AddToCartResult.Failed(
+                            providerId = BookingProviderId.RECGOV,
+                            error = "cart_not_added",
+                            detail = "cart automation did not confirm a cart hold",
+                            request = buildJsonObject { put("watch_id", request.watchId) },
+                            response =
+                                buildJsonObject {
+                                    put("ok", false)
+                                    put("error", "cart_not_added")
+                                },
+                        )
+                    },
+                )
+            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val slack = CapturingSlack(result = true)
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    slack = slack,
+                )
+
+            val delivered =
+                handler.fire(
+                    fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                    openings = listOf(triggerOpening()),
+                )
+
+            assertFalse(delivered)
+            assertEquals("failed", slack.atcResults.single().status)
+        }
+
+    @Test
     fun `AtcTriggerActionHandler leaves unsupported openings inert`() =
         runBlocking {
             val bookingProvider = RecordingBookingProvider(notifiedWaiters = 1)
@@ -213,10 +296,18 @@ class TriggerActionHandlerTest {
             val channel: String?,
         )
 
+        data class AtcResult(
+            val watchId: Long,
+            val vendor: String,
+            val status: String,
+            val channel: String?,
+        )
+
         var lastWatchId: Long? = null
         var lastChannel: String? = null
         var lastAppRootUrl: String? = null
         val offlineAlerts = mutableListOf<OfflineAlert>()
+        val atcResults = mutableListOf<AtcResult>()
 
         override suspend fun sendWatchOpenings(
             watchId: Long,
@@ -244,6 +335,18 @@ class TriggerActionHandlerTest {
             channel: String?,
         ): Boolean {
             offlineAlerts += OfflineAlert(watchId, vendor, openings, channel)
+            return result
+        }
+
+        override suspend fun sendAtcResult(
+            watchId: Long,
+            vendor: String,
+            status: String,
+            request: JsonObject,
+            response: JsonObject?,
+            channel: String?,
+        ): Boolean {
+            atcResults += AtcResult(watchId, vendor, status, channel)
             return result
         }
 
@@ -280,8 +383,11 @@ class TriggerActionHandlerTest {
         )
 
     private class RecordingBookingProvider(
-        private val notifiedWaiters: Int,
+        private val resultFactory: ((AddToCartRequest) -> AddToCartResult)? = null,
+        private val notifiedWaiters: Int = 1,
     ) : BookingProvider {
+        constructor(notifiedWaiters: Int) : this(resultFactory = null, notifiedWaiters = notifiedWaiters)
+
         val requests = mutableListOf<AddToCartRequest>()
 
         override val id: BookingProviderId = BookingProviderId.RECGOV
@@ -308,6 +414,7 @@ class TriggerActionHandlerTest {
 
         override suspend fun addToCart(request: AddToCartRequest): AddToCartResult {
             requests += request
+            resultFactory?.let { return it(request) }
             return AddToCartResult.Queued(dispatchId = 99L, providerId = BookingProviderId.RECGOV, notifiedWaiters = notifiedWaiters)
         }
     }
