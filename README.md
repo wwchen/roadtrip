@@ -336,6 +336,38 @@ queues authenticated dispatches for the companion, and tracks lease state.
   `0` after `REC_GOV_AUTH_REFRESH_OK` only after the browser session has
   successfully refreshed through Recreation.gov. Both commands return non-zero
   after `REC_GOV_AUTH_FAILED` / `REC_GOV_AUTH_ERROR`.
+- **One-shot Rec.gov ATC** runs the same browser add-to-cart code without
+  claiming backend dispatches. This can place a real hold in the operator's
+  Recreation.gov cart, so use a real payload only when that side effect is
+  intended.
+  ```json
+  {
+    "payload": {
+      "watch_id": 12,
+      "start_date": "2026-07-15",
+      "end_date": "2026-07-16",
+      "openings": [
+        {
+          "label": "116",
+          "date": "2026-07-15",
+          "booking_url": "https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16",
+          "campground_id": 232447,
+          "campsite_id": 131925,
+          "vendor_id": "300"
+        }
+      ]
+    }
+  }
+  ```
+  ```sh
+  cd companion
+  npm run --silent recgov:atc -- --payload-file /tmp/recgov-atc.json
+  # or from repo root:
+  make recgov-atc PAYLOAD=/tmp/recgov-atc.json
+  ```
+  Browser logs go to stderr. Stdout is one JSON result, suitable for a backend
+  process caller; exit `0` means `cart_added=true`, exit `1` means the browser
+  ran but did not confirm a cart hold, and exit `2` means invalid input.
 - **Slack notifications** are optional. Create a Slack app with the
   `chat:write` scope, install it to the workspace, and paste the bot
   token (`xoxb-…`) plus a channel name (`#camping-alerts`) or channel ID

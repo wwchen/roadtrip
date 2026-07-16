@@ -9,6 +9,7 @@
 
 import { setTimeout as sleep } from 'node:timers/promises'
 import { addToCart } from './cart.js'
+import { cartMatchFromDispatch } from './atcPayload.js'
 import { claimDispatch, completeDispatch, failDispatch, backendBase } from './backend.js'
 
 const args = Object.fromEntries(
@@ -188,7 +189,7 @@ async function runTestDispatch (dispatch) {
 
 async function runAtcDispatch (dispatch) {
   let result
-  const match = dispatchToCartMatch(dispatch)
+  const match = cartMatchFromDispatch(dispatch)
   log('atc dispatch start', dispatch.id, `site="${match.campsite_site}"`, `date=${match.first_date}`, `url=${match.booking_url ?? '(derived)'}`)
   try {
     result = await addToCart(match)
@@ -208,23 +209,6 @@ async function runAtcDispatch (dispatch) {
       })
   log('atc dispatch result', dispatch.id, ok ? 'complete' : 'fail', responseDetail(reported))
   if (result?.page) await result.page.close().catch(() => {})
-}
-
-function dispatchToCartMatch (dispatch) {
-  const payload = dispatch.payload || {}
-  const opening = payload.openings?.[0] || {}
-  const dates = [...new Set((payload.openings || []).map((o) => o.date).filter(Boolean))]
-  const firstDate = opening.date || payload.start_date
-  return {
-    booking_url: opening.booking_url,
-    campground_id: opening.campground_id,
-    campsite_id: opening.campsite_id,
-    provider_campsite_id: opening.vendor_id,
-    first_date: firstDate,
-    checkout_date: payload.end_date,
-    available_dates: dates.length ? dates : (firstDate ? [firstDate] : []),
-    campsite_site: opening.label || '',
-  }
 }
 
 async function main () {

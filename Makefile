@@ -1,4 +1,4 @@
-.PHONY: help run data-fetch data-import reset-db qa install install-hooks _ensure-hooks companion recgov-login recgov-refresh grafana-export
+.PHONY: help run data-fetch data-import reset-db qa install install-hooks _ensure-hooks companion recgov-login recgov-refresh recgov-atc grafana-export
 
 PORT       ?= 8765
 BACKEND_IMAGE ?= roadtrip/backend
@@ -20,6 +20,7 @@ help:
 	@echo "  make companion        Run the campsite Playwright companion (against the local backend)"
 	@echo "  make recgov-login     Open companion Chromium and verify Recreation.gov login"
 	@echo "  make recgov-refresh   Force-refresh the companion Recreation.gov session"
+	@echo "  make recgov-atc       Run one Rec.gov add-to-cart attempt (PAYLOAD=/path/to/atc.json)"
 	@echo "  make data-fetch       Fetch upstream data via admin API (TARGET=<data_source slug> for one)."
 	@echo "  make data-import      Import data/ files into Postgres (TARGET=<row name> for one). Routes by YAML section (poi_data / reservable_data / poi_reservable_joiner)."
 	@echo "  make reset-db         Drop/recreate the local schema and Flyway history for a full migration replay."
@@ -58,6 +59,10 @@ recgov-login: _ensure-hooks
 
 recgov-refresh: _ensure-hooks
 	cd companion && npm run recgov:refresh
+
+recgov-atc: _ensure-hooks
+	@if [ -z "$(PAYLOAD)" ]; then echo "Usage: make recgov-atc PAYLOAD=/path/to/atc.json"; exit 2; fi
+	cd companion && npm run --silent recgov:atc -- --payload-file "$(PAYLOAD)"
 
 # One-time host setup for a fresh clone. Idempotent: brew is no-op when
 # packages are present, npm install + playwright install are no-op when the
