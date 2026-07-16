@@ -162,6 +162,22 @@ const RESERVE_SELECTORS = [
 ]
 const RESERVE_COMBINED = RESERVE_SELECTORS.join(', ')
 const ENTER_DATES_SEL = 'button:has-text("Enter Dates"), button:has-text("Change Dates")'
+const CART_ACCEPTED_WAIT_MS = 10_000
+const CART_ACCEPTED_POLL_MS = 250
+
+export function cartAcceptedFromResponses (responses) {
+  return responses.some(e => e.status >= 200 && e.status < 300 &&
+    (/\/api\/camps\/reservations\?id=/.test(e.path) || /\/api\/cart\/buy-now/.test(e.path)))
+}
+
+async function waitForCartAccepted (page, responses) {
+  const deadline = Date.now() + CART_ACCEPTED_WAIT_MS
+  while (Date.now() < deadline) {
+    if (cartAcceptedFromResponses(responses)) return true
+    await page.waitForTimeout(Math.min(CART_ACCEPTED_POLL_MS, deadline - Date.now()))
+  }
+  return cartAcceptedFromResponses(responses)
+}
 
 async function clickReserveButton (page) {
   for (const sel of RESERVE_SELECTORS) {
@@ -278,13 +294,6 @@ export async function addToCart (match) {
     }
   })
 
-  // Returns true if any captured cart/reservation API call returned 2xx.
-  // Click-the-button succeeded does not mean the cart actually accepted —
-  // 401 'bad fingerprint' / 4xx still leaves the SPA in a "Reserved!"
-  // momentary state on some flows.
-  const cartAccepted = () => captured.some(e => e.status >= 200 && e.status < 300 &&
-    /\/api\/(cart|camps\/reservations)/.test(e.path))
-
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
     await waitForCaptchaIfPresent(page)
@@ -303,8 +312,7 @@ export async function addToCart (match) {
 
     if (await clickReserveButton(page)) {
       await waitForCaptchaIfPresent(page)
-      await page.waitForTimeout(500)
-      const ok = cartAccepted()
+      const ok = await waitForCartAccepted(page, captured)
       if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
       return { ok, page }
     }
@@ -314,8 +322,7 @@ export async function addToCart (match) {
       await page.waitForSelector(RESERVE_COMBINED, { timeout: 12000 }).catch(() => {})
       if (await clickReserveButton(page)) {
         await waitForCaptchaIfPresent(page)
-        await page.waitForTimeout(500)
-        const ok = cartAccepted()
+        const ok = await waitForCartAccepted(page, captured)
         if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
         return { ok, page }
       }

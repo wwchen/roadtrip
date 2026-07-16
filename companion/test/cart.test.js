@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import { COMPANION_USER_AGENT, resolveSessionDir } from '../src/browser.js'
-import { bookingUrlForMatch } from '../src/cart.js'
+import { bookingUrlForMatch, cartAcceptedFromResponses } from '../src/cart.js'
 import { parseRecaccount, recaccountNeedsRefresh } from '../src/recgovSession.js'
 
 const TEST_NOW_MS = Date.parse('2026-07-15T20:00:00Z')
@@ -85,9 +85,38 @@ test('resolveSessionDir uses mounted companion profile env before legacy session
   assert.equal(resolveSessionDir({}, '/home/test'), '/home/test/.campsite-companion/browser-session')
 })
 
+test('cartAcceptedFromResponses ignores pre-confirmation cart and multi responses', () => {
+  assert.equal(
+    cartAcceptedFromResponses([
+      api(200, '/api/cart/shoppingcart/header'),
+      api(200, '/api/cart/shoppingcart/header'),
+      api(200, '/api/camps/reservations/campgrounds/10083845/multi'),
+      api(200, '/api/cart/shoppingcart'),
+    ]),
+    false,
+  )
+})
+
+test('cartAcceptedFromResponses accepts reservation detail or buy-now responses', () => {
+  assert.equal(
+    cartAcceptedFromResponses([
+      api(200, '/api/cart/shoppingcart/header'),
+      api(200, '/api/camps/reservations/campgrounds/10083845/multi'),
+      api(200, '/api/cart/shoppingcart'),
+      api(200, '/api/camps/reservations?id=de5cd7f7-ea09-4d92-9f6d-80f6d2af17dc'),
+    ]),
+    true,
+  )
+  assert.equal(cartAcceptedFromResponses([api(200, '/api/cart/buy-now')]), true)
+})
+
 function fakeJwt (nowMs, offsetSeconds) {
   const exp = Math.floor(nowMs / 1000) + offsetSeconds
   return `${base64Url(JWT_HEADER)}.${base64Url({ exp })}.${JWT_SIGNATURE}`
+}
+
+function api (status, path) {
+  return { status, path }
 }
 
 function base64Url (value) {
