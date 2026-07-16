@@ -323,7 +323,17 @@ then calls the companion's one-shot executor.
   by setting `RECGOV_EMAIL` and `RECGOV_PASSWORD` in the companion process
   environment. If Recreation.gov asks for 2FA, set `RECGOV_MFA_CODE` or
   `RECGOV_OTP` for that login run; without a current code the companion fails
-  closed with `mfa_required` in its logs. To test the real browser auth
+  closed with `mfa_required` in its logs. With 1Password CLI, resolve the
+  current OTP into the companion environment:
+  ```sh
+  RECGOV_EMAIL=you@example.com \
+  RECGOV_PASSWORD=... \
+  RECGOV_OTP="$(op read 'op://Private/recreation.gov/one-time password?attribute=otp')" \
+  make recgov-login
+  ```
+  The `op read` form resolves the current short-lived 1Password OTP before the
+  companion starts. Run it only when Recreation.gov is expected to prompt for
+  2FA; otherwise leave `RECGOV_OTP` unset. To test the real browser auth
   integration, run:
   ```sh
   cd companion
@@ -388,7 +398,7 @@ then calls the companion's one-shot executor.
   RECGOV_EMAIL=you@example.com
   RECGOV_PASSWORD=...
   # set only for the login run when 2FA is required:
-  RECGOV_MFA_CODE=123456
+  RECGOV_OTP="$(op read 'op://Private/recreation.gov/one-time password?attribute=otp')"
 
   docker compose --profile pois --profile recgov-companion up -d recgov-companion backend
   ```
