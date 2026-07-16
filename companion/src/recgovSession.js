@@ -537,7 +537,7 @@ function decodeJwtPayload (token) {
   }
 }
 
-async function clearBrowserRecaccount (page) {
+export async function clearBrowserRecaccount (page) {
   await page.evaluate(({ key }) => {
     localStorage.removeItem(key)
   }, { key: RECGOV_RECACCOUNT_STORAGE_KEY, clearRecaccount: true }).catch(() => {})

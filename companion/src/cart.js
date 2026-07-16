@@ -17,6 +17,7 @@ import {
   RECGOV_HOME_URL,
   RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS,
   RECGOV_LOGIN_STATE_SETTLE_MS,
+  clearBrowserRecaccount,
   recgovLoginCredentialsFromEnv,
   resolveRecaccount,
 } from './recgovSession.js'
@@ -613,27 +614,80 @@ export async function addToCart (match) {
 }
 
 export async function testChromium (rawCookieInput = null, options = {}) {
-  const context = await getContext()
-  await injectStoredCookies(context, rawCookieInput)
-  const page = await context.newPage()
+  const {
+    getContextFn = getContext,
+    injectStoredCookiesFn = injectStoredCookies,
+    resolveRecaccountFn = resolveRecaccount,
+    clearBrowserRecaccountFn = clearBrowserRecaccount,
+    injectRecaccountFn = injectRecaccount,
+    injectBearerRouteFn = injectBearerRoute,
+    isSpaLoggedInFn = isSpaLoggedIn,
+    ...resolveOptions
+  } = options
+
+  const context = await getContextFn()
+  await injectStoredCookiesFn(context, rawCookieInput)
+  let page = await context.newPage()
   try {
-    const recaccount = await resolveRecaccount(page, options)
-    if (!recaccount) {
+    const first = await resolveAndVerifyRecgovSession(page, resolveOptions, {
+      resolveRecaccountFn,
+      injectRecaccountFn,
+      injectBearerRouteFn,
+      isSpaLoggedInFn,
+    })
+    if (first.loggedIn) {
+      lastLoginState = true
+      console.log(`Logged in to recreation.gov ✓ (token expires ${first.recaccount.expiration})`)
+      return { ok: true, loggedIn: true }
+    }
+    if (!first.recaccount) {
       console.log('testChromium: no logged-in Recreation.gov browser session found')
       lastLoginState = false
       return { ok: true, loggedIn: false }
     }
 
-    await injectRecaccount(page, recaccount)
-    await injectBearerRoute(page, recaccount.access_token)
-    await page.goto(RECGOV_HOME_URL, { waitUntil: 'domcontentloaded', timeout: RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS })
-    await page.waitForTimeout(RECGOV_LOGIN_STATE_SETTLE_MS)
-    const loggedIn = (await isSpaLoggedIn(page)) === true
-    lastLoginState = loggedIn
-    if (loggedIn) console.log(`Logged in to recreation.gov ✓ (token expires ${recaccount.expiration})`)
-    else console.log('Companion browser recaccount injected but SPA still shows logged-out — token may have been rejected')
-    return { ok: true, loggedIn }
+    console.log('Companion browser recaccount injected but SPA still shows logged-out — token may have been rejected')
+    console.log('Cart: clearing stale Recreation.gov browser session and retrying auth flow')
+    await clearBrowserRecaccountFn(page)
+    await page.close().catch(() => {})
+    page = await context.newPage()
+
+    const recovered = await resolveAndVerifyRecgovSession(page, recgovAuthRecoveryOptions(resolveOptions), {
+      resolveRecaccountFn,
+      injectRecaccountFn,
+      injectBearerRouteFn,
+      isSpaLoggedInFn,
+    })
+    lastLoginState = recovered.loggedIn
+    if (recovered.loggedIn) {
+      console.log(`Logged in to recreation.gov ✓ (token expires ${recovered.recaccount.expiration})`)
+    } else {
+      console.log('testChromium: no logged-in Recreation.gov browser session found after fallback')
+    }
+    return { ok: true, loggedIn: recovered.loggedIn }
   } finally {
     await page.close().catch(() => {})
+  }
+}
+
+async function resolveAndVerifyRecgovSession (page, options, helpers) {
+  const recaccount = await helpers.resolveRecaccountFn(page, options)
+  if (!recaccount) return { recaccount: null, loggedIn: false }
+
+  await helpers.injectRecaccountFn(page, recaccount)
+  await helpers.injectBearerRouteFn(page, recaccount.access_token)
+  await page.goto(RECGOV_HOME_URL, { waitUntil: 'domcontentloaded', timeout: RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS })
+  await page.waitForTimeout(RECGOV_LOGIN_STATE_SETTLE_MS)
+  return {
+    recaccount,
+    loggedIn: (await helpers.isSpaLoggedInFn(page)) === true,
+  }
+}
+
+function recgovAuthRecoveryOptions (options) {
+  return {
+    ...options,
+    forceRefresh: false,
+    allowManualLoginAfterRefreshFailure: true,
   }
 }

@@ -8,6 +8,7 @@ import {
   cartHoldCompletionObserved,
   clickReserveButton,
   recgovAuthenticationFailure,
+  testChromium,
   verifyCartContainsMatch,
 } from '../src/cart.js'
 import { parseRecaccount, recaccountNeedsRefresh } from '../src/recgovSession.js'
@@ -152,6 +153,48 @@ test('clickReserveButton surfaces a login modal as an auth failure', async () =>
   assert.match(result.failure.detail, /logged-out state/)
   assert.match(result.failure.corrective_action, /recgov-login/)
   assert.deepEqual(page.clickedSelectors, ['button:has-text("Add to Cart")'])
+})
+
+test('testChromium falls back after a stored recaccount is rejected by the SPA', async () => {
+  const { context, pages } = authCheckContext()
+  const stale = { access_token: 'stale-token', expiration: '2026-07-16T20:00:00Z' }
+  const fresh = { access_token: 'fresh-token', expiration: '2026-07-16T21:00:00Z' }
+  const resolved = [stale, fresh]
+  const loginStates = [false, true]
+  const clearedPages = []
+  const resolveCalls = []
+
+  const result = await testChromium(null, {
+    env: { RECGOV_EMAIL: 'user@example.test', RECGOV_PASSWORD: 'secret' },
+    forceRefresh: true,
+    getContextFn: async () => context,
+    injectStoredCookiesFn: async () => 0,
+    resolveRecaccountFn: async (page, options) => {
+      resolveCalls.push({ page, options })
+      return resolved.shift()
+    },
+    clearBrowserRecaccountFn: async (page) => {
+      clearedPages.push(page)
+    },
+    injectRecaccountFn: async (page, recaccount) => {
+      page.injectedRecaccounts.push(recaccount.access_token)
+    },
+    injectBearerRouteFn: async (page, token) => {
+      page.bearerRoutes.push(token)
+    },
+    isSpaLoggedInFn: async () => loginStates.shift(),
+  })
+
+  assert.deepEqual(result, { ok: true, loggedIn: true })
+  assert.equal(pages.length, 2)
+  assert.equal(pages[0].closed, true)
+  assert.deepEqual(clearedPages, [pages[0]])
+  assert.equal(resolveCalls[0].options.forceRefresh, true)
+  assert.equal(resolveCalls[1].options.forceRefresh, false)
+  assert.equal(resolveCalls[1].options.allowManualLoginAfterRefreshFailure, true)
+  assert.equal(resolveCalls[1].options.env.RECGOV_EMAIL, 'user@example.test')
+  assert.deepEqual(pages[0].injectedRecaccounts, ['stale-token'])
+  assert.deepEqual(pages[1].injectedRecaccounts, ['fresh-token'])
 })
 
 test('cartContainsMatch requires the requested campsite and dates in a nonempty cart', () => {
@@ -321,6 +364,34 @@ function reserveClickPage ({ loginModalVisible }) {
     async waitForTimeout () {},
     async waitForSelector () {},
   }
+}
+
+function authCheckContext () {
+  const pages = []
+  const context = {
+    addCookies: async () => {},
+    newPage: async () => {
+      const page = {
+        bearerRoutes: [],
+        closed: false,
+        gotos: [],
+        injectedRecaccounts: [],
+        waits: [],
+        close: async () => {
+          page.closed = true
+        },
+        goto: async (url) => {
+          page.gotos.push(url)
+        },
+        waitForTimeout: async (ms) => {
+          page.waits.push(ms)
+        },
+      }
+      pages.push(page)
+      return page
+    },
+  }
+  return { context, pages }
 }
 
 function pickFailureFields (check) {
