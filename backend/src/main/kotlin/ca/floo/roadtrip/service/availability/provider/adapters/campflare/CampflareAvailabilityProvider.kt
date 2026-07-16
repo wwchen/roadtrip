@@ -10,10 +10,15 @@ import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.CampsiteDayObservation
 import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.availability.campflare.CampflareAvailability
+import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import ca.floo.roadtrip.service.availability.provider.RecGovBookingUrl
 import kotlinx.coroutines.CancellationException
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -33,6 +38,11 @@ class CampflareAvailabilityProvider(
     override fun isEnabled(): Boolean = enabled
 
     override fun supportsRef(ref: ProviderRef): Boolean = isEnabled() && ref is ProviderRef.Campflare
+
+    override fun reservationUrlTemplate(
+        campsite: CampsiteAvailabilityTarget,
+        parentRef: ProviderRef,
+    ): String? = RecGovBookingUrl.templateFromUrl(campsite.rawField(RESERVATION_URL_FIELD))
 
     override suspend fun availability(
         ref: ProviderRef,
@@ -166,8 +176,16 @@ class CampflareAvailabilityProvider(
         private const val CAMPFLARE_PROVIDER = "campflare"
         private const val CAMPFLARE_BOOKING_HORIZON_DAYS = 365
         private const val CAMPFLARE_MAX_POLL_WINDOW_DAYS = 60
+        private const val RESERVATION_URL_FIELD = "reservation_url"
     }
 }
+
+private fun CampsiteAvailabilityTarget.rawField(name: String): String? =
+    ((raw as? JsonObject)?.get(name))
+        ?.jsonPrimitive
+        ?.contentOrNull
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
 
 private fun dates(
     startDate: LocalDate,

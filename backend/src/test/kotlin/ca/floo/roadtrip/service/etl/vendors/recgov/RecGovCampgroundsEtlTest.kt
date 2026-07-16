@@ -42,6 +42,11 @@ class RecGovCampgroundsEtlTest {
         val reservableRef = reservable.vendorRefPayload!!.jsonObject
         assertEquals("232447", reservableRef["recgov_id"]!!.jsonPrimitive.content)
 
+        val reservableWithoutUpstreamUrl = campgrounds.getValue("recgov-10083567")
+        assertEquals("https://www.recreation.gov/camping/campgrounds/10083567", reservableWithoutUpstreamUrl.reservationUrl)
+        val defaultedReservableRef = reservableWithoutUpstreamUrl.vendorRefPayload!!.jsonObject
+        assertEquals("10083567", defaultedReservableRef["recgov_id"]!!.jsonPrimitive.content)
+
         val nonReservable = campgrounds.getValue("recgov-248965")
         assertNull(nonReservable.vendorRefPayload)
         assertEquals("https://www.fs.usda.gov/recarea/lassen/recarea/?recid=11276", nonReservable.reservationUrl)
@@ -170,6 +175,21 @@ class RecGovCampgroundsEtlTest {
                               "IsPrimary": true
                             }
                           ],
+                          "ORGANIZATION": [{"OrgAbbrevName": "NPS", "OrgName": "National Park Service"}],
+                          "FACILITYADDRESS": [
+                            {
+                              "AddressStateCode": "CA",
+                              "AddressCountryCode": "USA"
+                            }
+                          ]
+                        },
+                        {
+                          "FacilityID": 10083567,
+                          "FacilityName": "White Wolf",
+                          "FacilityLatitude": 37.869,
+                          "FacilityLongitude": -119.647,
+                          "FacilityReservationURL": "",
+                          "Reservable": true,
                           "ORGANIZATION": [{"OrgAbbrevName": "NPS", "OrgName": "National Park Service"}],
                           "FACILITYADDRESS": [
                             {

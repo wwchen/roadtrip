@@ -16,8 +16,14 @@ class CampgroundCtaTest {
     private val cta = CampgroundCta(clock = fixedClock)
 
     @Test
-    fun `recgov reservable provider_ref produces booking URL`() {
-        val out = cta.computeCta(row(providerRefJson = """{"recgov_id":"232450"}"""))
+    fun `recgov reservable provider_ref labels stored booking URL`() {
+        val out =
+            cta.computeCta(
+                row(
+                    providerRefJson = """{"recgov_id":"232450"}""",
+                    reserveUrl = "https://www.recreation.gov/camping/campgrounds/232450",
+                ),
+            )
         assertEquals("https://www.recreation.gov/camping/campgrounds/232450", out?.url)
         assertEquals("Reserve on recreation.gov", out?.label)
         assertEquals("reserve", out?.kind)
@@ -221,6 +227,25 @@ class CampgroundCtaTest {
     }
 
     @Test
+    fun `campflare provider_ref with stored reserve_url does not infer recgov CTA`() {
+        val out =
+            cta.computeCtas(
+                row(
+                    providerRefJson = """{"campflare_id":"white-wolf-campground-567"}""",
+                    reserveUrl = "https://www.recreation.gov/camping/campgrounds/10083567",
+                    infoUrl = "https://www.nps.gov/yose/planyourvisit/wwcamp.htm",
+                ),
+            )
+
+        assertEquals(2, out.size)
+        assertEquals("https://www.nps.gov/yose/planyourvisit/wwcamp.htm", out[0].url)
+        assertEquals("Park info on nps.gov", out[0].label)
+        assertEquals("info", out[0].kind)
+        assertEquals("https://campflare.com/campground/white-wolf-campground-567", out[1].url)
+        assertEquals("View on Campflare", out[1].label)
+    }
+
+    @Test
     fun `campflare provider_ref without primary link returns public Campflare CTA`() {
         val out = cta.computeCtas(row(providerRefJson = """{"campflare_id":"cranberry-lake-wsp"}"""))
 
@@ -231,7 +256,15 @@ class CampgroundCtaTest {
 
     @Test
     fun `bookingSystem labels`() {
-        assertEquals("Recreation.gov", cta.bookingSystem(row(providerRefJson = """{"recgov_id":"232450"}""")))
+        assertEquals(
+            "Recreation.gov",
+            cta.bookingSystem(
+                row(
+                    providerRefJson = """{"recgov_id":"232450"}""",
+                    reserveUrl = "https://www.recreation.gov/camping/campgrounds/232450",
+                ),
+            ),
+        )
         assertEquals(
             "Aspira NextGen (Parks Canada)",
             cta.bookingSystem(

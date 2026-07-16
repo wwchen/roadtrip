@@ -7,7 +7,7 @@ import ca.floo.roadtrip.models.booking.BookingAction
 import ca.floo.roadtrip.models.booking.BookingProviderId
 import ca.floo.roadtrip.models.booking.BookingTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovBookingUrl
+import ca.floo.roadtrip.service.availability.provider.RecGovBookingUrl
 import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.RecGovAtcExecutor
 import ca.floo.roadtrip.service.booking.RecGovAtcOutcome
