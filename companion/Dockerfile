@@ -15,4 +15,4 @@ ENV COMPANION_BROWSER_PROFILE=/var/lib/campsite-companion/browser-session
 
 EXPOSE 8770
 
-CMD ["npm", "run", "serve"]
+CMD ["node", "--env-file-if-exists=../.env", "src/server.js"]
