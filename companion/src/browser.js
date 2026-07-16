@@ -15,6 +15,8 @@ export const IS_HEADLESS = process.env.HEADLESS !== undefined
 const SESSION_DIR = process.env.SESSION_DIR
   || path.join(os.homedir(), '.campsite-companion', 'browser-session')
 const RECGOV_RECACCOUNT_STORAGE_KEY = 'recaccount'
+export const COMPANION_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
 
 let sharedContext = null
 
@@ -35,7 +37,7 @@ export async function getContext () {
     headless: IS_HEADLESS,
     slowMo: IS_HEADLESS ? 0 : 200,
     viewport: { width: 1280, height: 900 },
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    userAgent: COMPANION_USER_AGENT,
     args: ['--disable-blink-features=AutomationControlled'],
     ignoreDefaultArgs: ['--enable-automation'],
   })

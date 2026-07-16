@@ -1,6 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
+import { COMPANION_USER_AGENT } from '../src/browser.js'
 import { bookingUrlForMatch } from '../src/cart.js'
 import { parseRecaccount, recaccountNeedsRefresh } from '../src/recgovSession.js'
 
@@ -9,6 +10,7 @@ const FRESH_OFFSET_SECONDS = 60 * 60
 const NEAR_EXPIRY_OFFSET_SECONDS = 60
 const JWT_HEADER = { alg: 'none' }
 const JWT_SIGNATURE = 'sig'
+const MIN_CHROME_MAJOR_VERSION = 140
 
 test('bookingUrlForMatch prefers explicit booking_url', () => {
   const url = 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16'
@@ -59,6 +61,13 @@ test('recaccountNeedsRefresh uses the browser JWT expiration', () => {
     ),
     true,
   )
+})
+
+test('companion user agent stays on a current Chrome major', () => {
+  const chromeMajor = Number(COMPANION_USER_AGENT.match(/Chrome\/(\d+)/)?.[1])
+
+  assert.ok(Number.isFinite(chromeMajor))
+  assert.ok(chromeMajor >= MIN_CHROME_MAJOR_VERSION)
 })
 
 function fakeJwt (nowMs, offsetSeconds) {
