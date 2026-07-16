@@ -1,13 +1,48 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
-import { resolveRecaccount } from '../src/recgovSession.js'
+import { recgovLoginCredentialsFromEnv, resolveRecaccount } from '../src/recgovSession.js'
 
 const JWT_HEADER = { alg: 'none' }
 const JWT_SIGNATURE = 'sig'
 const FRESH_OFFSET_SECONDS = 60 * 60
 const NEAR_EXPIRY_OFFSET_SECONDS = 60
 const REFRESH_RETRY_DELAY_MS = 1000
+
+test('recgovLoginCredentialsFromEnv requires email and password and accepts 2FA aliases', () => {
+  assert.deepEqual(
+    recgovLoginCredentialsFromEnv({}),
+    {
+      configured: false,
+      reason: 'credentials_not_configured',
+      emailConfigured: false,
+      passwordConfigured: false,
+      mfaConfigured: false,
+    },
+  )
+  assert.deepEqual(
+    recgovLoginCredentialsFromEnv({ RECGOV_EMAIL: 'user@example.com' }),
+    {
+      configured: false,
+      reason: 'credentials_incomplete',
+      emailConfigured: true,
+      passwordConfigured: false,
+      mfaConfigured: false,
+    },
+  )
+
+  const credentials = recgovLoginCredentialsFromEnv({
+    RECGOV_USERNAME: ' user@example.com ',
+    RECGOV_PASSWORD: 'secret',
+    RECGOV_OTP: '123456',
+  })
+
+  assert.equal(credentials.configured, true)
+  assert.equal(credentials.email, 'user@example.com')
+  assert.equal(credentials.password, 'secret')
+  assert.equal(credentials.mfaCode, '123456')
+  assert.equal(credentials.mfaConfigured, true)
+})
 
 test('resolveRecaccount uses the existing companion browser recaccount', async () => {
   const recaccount = testRecaccount({
@@ -140,15 +175,88 @@ test('resolveRecaccount prompts manual login after allowed forced refresh failur
   assert.equal(page.loginClicks, 1)
 })
 
+test('resolveRecaccount can log in with Recreation.gov credentials from env', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-credential' }),
+  })
+  const page = fakePage({
+    credentialRawRecaccount: JSON.stringify(recaccount),
+  })
+
+  const resolved = await resolveRecaccount(page, {
+    env: {
+      RECGOV_EMAIL: 'user@example.com',
+      RECGOV_PASSWORD: 'secret',
+    },
+  })
+
+  assert.equal(resolved.access_token, recaccount.access_token)
+  assert.equal(page.loginClicks, 1)
+  assert.equal(page.credentialSubmitClicks, 1)
+  assert.deepEqual(page.fills.map(({ value }) => value), ['user@example.com', 'secret'])
+})
+
+test('resolveRecaccount can submit a provided Recreation.gov 2FA code', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-mfa' }),
+  })
+  const page = fakePage({
+    credentialRawRecaccount: JSON.stringify(recaccount),
+    mfaRequired: true,
+    expectedMfaCode: '123456',
+  })
+
+  const resolved = await resolveRecaccount(page, {
+    env: {
+      RECGOV_EMAIL: 'user@example.com',
+      RECGOV_PASSWORD: 'secret',
+      RECGOV_MFA_CODE: '123456',
+    },
+  })
+
+  assert.equal(resolved.access_token, recaccount.access_token)
+  assert.equal(page.credentialSubmitClicks, 1)
+  assert.equal(page.mfaSubmitClicks, 1)
+  assert.deepEqual(page.fills.map(({ value }) => value), ['user@example.com', 'secret', '123456'])
+})
+
+test('resolveRecaccount fails closed when Recreation.gov 2FA has no supplied code', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-mfa' }),
+  })
+  const page = fakePage({
+    credentialRawRecaccount: JSON.stringify(recaccount),
+    mfaRequired: true,
+  })
+
+  const resolved = await resolveRecaccount(page, {
+    env: {
+      RECGOV_EMAIL: 'user@example.com',
+      RECGOV_PASSWORD: 'secret',
+      RECGOV_LOGIN_TIMEOUT_MS: '1',
+    },
+  })
+
+  assert.equal(resolved, null)
+  assert.equal(page.credentialSubmitClicks, 1)
+  assert.equal(page.mfaSubmitClicks, 0)
+})
+
 function fakePage ({
   rawRecaccount,
   rawRecaccountAfterClear = null,
   refreshRecaccount = null,
   refreshResponse = null,
   refreshResponses = null,
+  credentialRawRecaccount = null,
+  mfaRequired = false,
+  expectedMfaCode = null,
 }) {
   let refreshResponseIndex = 0
   let currentRawRecaccount = rawRecaccount
+  let loginOpened = false
+  let mfaPromptVisible = false
+  let submittedMfaCode = null
   const context = {
     cookies: [],
     pages: () => [page],
@@ -161,16 +269,44 @@ function fakePage ({
     refreshCalls: [],
     clearCalls: 0,
     loginClicks: 0,
+    credentialSubmitClicks: 0,
+    mfaSubmitClicks: 0,
+    fills: [],
     waits: [],
     context: () => context,
     goto: async (url) => {
       page.gotos.push(url)
     },
-    locator: () => ({
+    locator: (selector) => ({
       first: () => ({
-        click: async () => {
-          page.loginClicks += 1
+        waitFor: async () => {
+          if (!selectorVisible(selector)) throw new Error(`selector not visible: ${selector}`)
         },
+        fill: async (value) => {
+          if (!selectorVisible(selector)) throw new Error(`selector not visible: ${selector}`)
+          page.fills.push({ selector, value })
+          if (isMfaInputSelector(selector)) submittedMfaCode = value
+        },
+        click: async () => {
+          if (selector.includes('Sign Up / Log In')) {
+            page.loginClicks += 1
+            loginOpened = true
+            return
+          }
+          if (isSubmitSelector(selector)) {
+            if (mfaPromptVisible) {
+              page.mfaSubmitClicks += 1
+              if (!expectedMfaCode || submittedMfaCode === expectedMfaCode) currentRawRecaccount = credentialRawRecaccount
+              return
+            }
+
+            page.credentialSubmitClicks += 1
+            if (mfaRequired) mfaPromptVisible = true
+            else currentRawRecaccount = credentialRawRecaccount
+          }
+        },
+        isVisible: async () => selectorVisible(selector),
+        textContent: async () => '',
       }),
     }),
     waitForTimeout: async (ms) => {
@@ -191,7 +327,30 @@ function fakePage ({
       throw new Error('unexpected evaluate call')
     },
   }
+  function selectorVisible (selector) {
+    if (selector.includes('Sign Up / Log In')) return true
+    if (isMfaInputSelector(selector)) return mfaPromptVisible
+    if (isEmailSelector(selector) || isPasswordSelector(selector)) return loginOpened
+    if (isSubmitSelector(selector)) return loginOpened
+    return false
+  }
   return page
+}
+
+function isEmailSelector (selector) {
+  return /email|username/.test(selector)
+}
+
+function isPasswordSelector (selector) {
+  return /password/.test(selector)
+}
+
+function isMfaInputSelector (selector) {
+  return /one-time-code|code/.test(selector) && /input/.test(selector)
+}
+
+function isSubmitSelector (selector) {
+  return /button/.test(selector)
 }
 
 function testRecaccount ({ token }) {
