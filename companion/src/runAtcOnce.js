@@ -76,9 +76,14 @@ export async function runAtcOnce ({
   }
 
   writeResult(stdout, failureResult(
-    ERROR_CART_NOT_ADDED,
-    cartNotAddedDetail(result?.cart_check),
-    { ...base, cart_check: result?.cart_check },
+    result?.error || ERROR_CART_NOT_ADDED,
+    result?.detail || cartNotAddedDetail(result?.cart_check),
+    {
+      ...base,
+      corrective_action: result?.corrective_action,
+      auth: result?.auth,
+      cart_check: result?.cart_check,
+    },
   ))
   return EXIT_RUNTIME_FAILURE
 }

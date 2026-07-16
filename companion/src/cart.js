@@ -17,6 +17,7 @@ import {
   RECGOV_HOME_URL,
   RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS,
   RECGOV_LOGIN_STATE_SETTLE_MS,
+  recgovLoginCredentialsFromEnv,
   resolveRecaccount,
 } from './recgovSession.js'
 
@@ -172,6 +173,24 @@ const CART_VERIFY_FETCH_FAILED = 'cart_fetch_failed'
 const CART_VERIFY_HTTP_ERROR = 'cart_http_error'
 const CART_VERIFY_EMPTY = 'cart_empty'
 const CART_VERIFY_MISSING_ITEM = 'missing_expected_item'
+const ERROR_RECGOV_NOT_AUTHENTICATED = 'recgov_not_authenticated'
+const ERROR_RECGOV_CREDENTIALS_INCOMPLETE = 'recgov_credentials_incomplete'
+const ERROR_RECGOV_LOGIN_FAILED = 'recgov_login_failed'
+const ERROR_RECGOV_SPA_LOGGED_OUT = 'recgov_spa_logged_out'
+const HEADLESS_NO_CREDENTIALS_DETAIL =
+  'No Recreation.gov browser session is available in the companion profile, and the headless companion has no RECGOV_EMAIL/RECGOV_PASSWORD credentials configured.'
+const HEADED_NO_SESSION_DETAIL =
+  'No Recreation.gov browser session is available in the companion profile.'
+const INCOMPLETE_CREDENTIALS_DETAIL =
+  'Recreation.gov credential login is incomplete; set both RECGOV_EMAIL and RECGOV_PASSWORD, or leave both unset and log in manually.'
+const LOGIN_FAILED_DETAIL =
+  'Recreation.gov credential login did not produce a browser session. If Recreation.gov prompts for 2FA, provide a current RECGOV_MFA_CODE for that login run.'
+const SPA_LOGGED_OUT_DETAIL =
+  'Recreation.gov rejected the companion browser session after page load; the SPA still shows a logged-out state.'
+const LOGIN_ON_HOST_ACTION =
+  'Run make recgov-login on the host profile mounted by the companion, or start the companion headed and log in once.'
+const CONFIGURE_CREDENTIALS_ACTION =
+  'Set RECGOV_EMAIL and RECGOV_PASSWORD for companion auto-login; set RECGOV_MFA_CODE only for a login run that prompts for 2FA.'
 
 export function cartHoldCompletionObserved (responses) {
   return responses.some(e => e.status >= 200 && e.status < 300 &&
@@ -221,6 +240,62 @@ export function verifyCartContainsMatch (cart, match) {
   }
 
   return { ok: false, reason: CART_VERIFY_MISSING_ITEM, best_match: bestMatch, ...base }
+}
+
+export function recgovAuthenticationFailure ({ env = process.env, headless = IS_HEADLESS } = {}) {
+  const credentials = recgovLoginCredentialsFromEnv(env)
+  if (credentials.reason === 'credentials_incomplete') {
+    return {
+      error: ERROR_RECGOV_CREDENTIALS_INCOMPLETE,
+      detail: INCOMPLETE_CREDENTIALS_DETAIL,
+      corrective_action: CONFIGURE_CREDENTIALS_ACTION,
+      auth: authFields(credentials, headless),
+    }
+  }
+
+  if (headless && credentials.reason === 'credentials_not_configured') {
+    return {
+      error: ERROR_RECGOV_NOT_AUTHENTICATED,
+      detail: HEADLESS_NO_CREDENTIALS_DETAIL,
+      corrective_action: `${LOGIN_ON_HOST_ACTION} ${CONFIGURE_CREDENTIALS_ACTION}`,
+      auth: authFields(credentials, headless),
+    }
+  }
+
+  if (credentials.configured) {
+    return {
+      error: ERROR_RECGOV_LOGIN_FAILED,
+      detail: LOGIN_FAILED_DETAIL,
+      corrective_action: `${LOGIN_ON_HOST_ACTION} ${CONFIGURE_CREDENTIALS_ACTION}`,
+      auth: authFields(credentials, headless),
+    }
+  }
+
+  return {
+    error: ERROR_RECGOV_NOT_AUTHENTICATED,
+    detail: HEADED_NO_SESSION_DETAIL,
+    corrective_action: LOGIN_ON_HOST_ACTION,
+    auth: authFields(credentials, headless),
+  }
+}
+
+function authFields (credentials, headless) {
+  return {
+    headless,
+    credentials_configured: credentials.configured,
+    credentials_reason: credentials.reason,
+    email_configured: credentials.emailConfigured,
+    password_configured: credentials.passwordConfigured,
+    mfa_configured: credentials.mfaConfigured,
+  }
+}
+
+function spaLoggedOutFailure () {
+  return {
+    error: ERROR_RECGOV_SPA_LOGGED_OUT,
+    detail: SPA_LOGGED_OUT_DETAIL,
+    corrective_action: LOGIN_ON_HOST_ACTION,
+  }
 }
 
 function cartReservationMatchResult (reservation, expected) {
@@ -350,7 +425,7 @@ function cartVerificationSummary (check) {
   return fields.join(' ')
 }
 
-async function clickReserveButton (page) {
+export async function clickReserveButton (page) {
   for (const sel of RESERVE_SELECTORS) {
     if (!await page.locator(sel).first().isVisible().catch(() => false)) continue
 
@@ -363,7 +438,10 @@ async function clickReserveButton (page) {
     ).first().isVisible().catch(() => false)
     if (loginModal) {
       console.log('Cart: login modal appeared after ATC click — SPA still considers user logged out')
-      return false
+      return {
+        clicked: false,
+        failure: spaLoggedOutFailure(),
+      }
     }
 
     const confirmSel = 'button:has-text("Continue"), button:has-text("Confirm"), button:has-text("Book Now"), button:has-text("Next")'
@@ -378,9 +456,9 @@ async function clickReserveButton (page) {
       await page.waitForTimeout(2000)
     }
 
-    return true
+    return { clicked: true }
   }
-  return false
+  return { clicked: false }
 }
 
 export async function setupAuthPage () {
@@ -389,17 +467,19 @@ export async function setupAuthPage () {
   const page = await context.newPage()
 
   const recaccount = await resolveRecaccount(page)
+  const authFailure = recaccount ? null : recgovAuthenticationFailure()
   if (recaccount) {
     console.log(`Cart: session ready (expires ${recaccount.expiration})`)
   } else {
     console.log('Cart: no Recreation.gov login session available — cannot add to cart')
+    console.log(`Cart: corrective action — ${authFailure.corrective_action}`)
   }
 
   if (recaccount) await injectRecaccount(page, recaccount)
   await injectBearerRoute(page, recaccount?.access_token)
   await injectFingerprintCookie(context, recaccount?.access_token)
 
-  return { context, page, recaccount }
+  return { context, page, recaccount, authFailure }
 }
 
 const CAPTCHA_SELECTORS = [
@@ -453,8 +533,8 @@ export async function addToCart (match) {
   const url = bookingUrlForMatch(match)
   console.log(`Cart: opening ${url}`)
 
-  const { page, recaccount } = await setupAuthPage()
-  if (!recaccount) return { ok: false, page }
+  const { page, recaccount, authFailure } = await setupAuthPage()
+  if (!recaccount) return { ok: false, page, ...authFailure }
 
   const captured = []
   let cartVerificationRequests = 0
@@ -487,11 +567,17 @@ export async function addToCart (match) {
 
     if (await page.locator(signInSel).first().isVisible().catch(() => false)) {
       console.log('Cart: SPA shows logged-out state — cannot add to cart')
-      return { ok: false, page }
+      return {
+        ok: false,
+        page,
+        ...spaLoggedOutFailure(),
+      }
     }
     console.log('Cart: SPA logged-in ✓')
 
-    if (await clickReserveButton(page)) {
+    const reserveClick = await clickReserveButton(page)
+    if (reserveClick.failure) return { ok: false, page, ...reserveClick.failure }
+    if (reserveClick.clicked) {
       await waitForCaptchaIfPresent(page)
       const verification = await waitForRequestedCartItem(page, captured, match, getCartForVerification)
       if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
@@ -501,7 +587,9 @@ export async function addToCart (match) {
     if (await page.locator(ENTER_DATES_SEL).first().isVisible().catch(() => false)) {
       await enterDates(page, firstDate, checkout)
       await page.waitForSelector(RESERVE_COMBINED, { timeout: 12000 }).catch(() => {})
-      if (await clickReserveButton(page)) {
+      const datedReserveClick = await clickReserveButton(page)
+      if (datedReserveClick.failure) return { ok: false, page, ...datedReserveClick.failure }
+      if (datedReserveClick.clicked) {
         await waitForCaptchaIfPresent(page)
         const verification = await waitForRequestedCartItem(page, captured, match, getCartForVerification)
         if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)

@@ -24,7 +24,10 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -217,6 +220,51 @@ class TriggerActionHandlerTest {
         }
 
     @Test
+    fun `AtcTriggerActionHandler slack-notifies recgov health preflight failure`() =
+        runBlocking {
+            val bookingProvider =
+                RecordingBookingProvider(
+                    resultFactory = { request: AddToCartRequest ->
+                        AddToCartResult.Failed(
+                            providerId = BookingProviderId.RECGOV,
+                            error = "recgov_not_authenticated",
+                            detail = "run make recgov-login",
+                            request = buildJsonObject { put("watch_id", request.watchId) },
+                            response =
+                                buildJsonObject {
+                                    put("ok", true)
+                                    putJsonObject("recgov_auth") {
+                                        put("login_status", "failed")
+                                        put("error", "recgov_not_authenticated")
+                                        put("detail", "run make recgov-login")
+                                    }
+                                },
+                        )
+                    },
+                )
+            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val slack = CapturingSlack(result = true)
+            val handler =
+                AtcTriggerActionHandler(
+                    bookings = registry,
+                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    slack = slack,
+                )
+
+            val delivered =
+                handler.fire(
+                    fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
+                    openings = listOf(triggerOpening()),
+                )
+
+            assertFalse(delivered)
+            val result = slack.atcResults.single()
+            assertEquals("failed", result.status)
+            val auth = result.response!!["recgov_auth"]!!.jsonObject
+            assertEquals("recgov_not_authenticated", auth["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
     fun `AtcTriggerActionHandler leaves unsupported openings inert`() =
         runBlocking {
             val bookingProvider = RecordingBookingProvider()
@@ -265,6 +313,7 @@ class TriggerActionHandlerTest {
             val watchId: Long,
             val vendor: String,
             val status: String,
+            val response: JsonObject?,
             val channel: String?,
         )
 
@@ -300,7 +349,7 @@ class TriggerActionHandlerTest {
             response: JsonObject?,
             channel: String?,
         ): Boolean {
-            atcResults += AtcResult(watchId, vendor, status, channel)
+            atcResults += AtcResult(watchId, vendor, status, response, channel)
             return result
         }
 

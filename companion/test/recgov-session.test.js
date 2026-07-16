@@ -1,7 +1,11 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
-import { recgovLoginCredentialsFromEnv, resolveRecaccount } from '../src/recgovSession.js'
+import {
+  getRecgovSessionStatus,
+  recgovLoginCredentialsFromEnv,
+  resolveRecaccount,
+} from '../src/recgovSession.js'
 
 const JWT_HEADER = { alg: 'none' }
 const JWT_SIGNATURE = 'sig'
@@ -87,6 +91,9 @@ test('resolveRecaccount refreshes near-expiry recaccount in the companion browse
     account_id: 'acct-1',
     refresh_id: 'refresh-1',
   })
+  const sessionStatus = getRecgovSessionStatus()
+  assert.ok(Date.parse(sessionStatus.last_refresh_at) > 0)
+  assert.equal(sessionStatus.last_refresh_expires_at, refreshed.expiration)
 })
 
 test('resolveRecaccount force-refreshes a fresh browser recaccount', async () => {

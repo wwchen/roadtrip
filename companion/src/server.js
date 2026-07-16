@@ -3,6 +3,12 @@
 // and returns the same JSON result as the recgov:atc CLI.
 
 import http from 'node:http'
+import { pathToFileURL } from 'node:url'
+import {
+  recgovAuthenticationFailure,
+  testChromium,
+} from './cart.js'
+import { getRecgovSessionStatus } from './recgovSession.js'
 import { runAtcOnce } from './runAtcOnce.js'
 
 const DEFAULT_HOST = '0.0.0.0'
@@ -17,12 +23,17 @@ const HTTP_INTERNAL_ERROR = 500
 const EXIT_SUCCESS = 0
 const EXIT_USAGE = 2
 const LOG_DETAIL_MAX_CHARS = 160
+const AUTH_CHECK_EXCEPTION_ERROR = 'recgov_auth_check_exception'
+const AUTH_CHECK_EXCEPTION_ACTION =
+  'Check the companion startup logs, then run make recgov-login or set RECGOV_EMAIL and RECGOV_PASSWORD before restarting.'
 
 const HOST = process.env.COMPANION_HOST || DEFAULT_HOST
 const PORT = Number.parseInt(process.env.COMPANION_PORT || String(DEFAULT_PORT), 10)
 const COMPANION_ID = process.env.COMPANION_ID || 'recgov-companion'
 
 let busy = false
+let recgovAuthStatus = { state: 'unchecked' }
+let startupAuthCheck = null
 
 function log (...items) {
   console.log(new Date().toISOString(), `[${COMPANION_ID}]`, ...items)
@@ -66,6 +77,69 @@ function payloadSummary (raw) {
   }
 }
 
+export async function runStartupAuthCheck ({
+  testChromiumFn = testChromium,
+  authFailureFn = recgovAuthenticationFailure,
+  logger = log,
+} = {}) {
+  recgovAuthStatus = {
+    state: 'checking',
+    checked_at: new Date().toISOString(),
+  }
+  logger('recgov auth startup check start')
+
+  try {
+    const result = await testChromiumFn()
+    if (result?.loggedIn === true) {
+      recgovAuthStatus = {
+        state: 'ok',
+        logged_in: true,
+        checked_at: new Date().toISOString(),
+      }
+      logger('recgov auth startup check ok')
+      return recgovAuthStatus
+    }
+
+    const failure = authFailureFn()
+    recgovAuthStatus = {
+      state: 'failed',
+      logged_in: false,
+      checked_at: new Date().toISOString(),
+      ...failure,
+    }
+    logger('recgov auth startup check fail', ...authLogFields(failure))
+    return recgovAuthStatus
+  } catch (error) {
+    recgovAuthStatus = {
+      state: 'failed',
+      logged_in: false,
+      checked_at: new Date().toISOString(),
+      error: AUTH_CHECK_EXCEPTION_ERROR,
+      detail: error.message,
+      corrective_action: AUTH_CHECK_EXCEPTION_ACTION,
+    }
+    logger('recgov auth startup check exception', `detail="${truncateLogField(error.message, LOG_DETAIL_MAX_CHARS)}"`)
+    return recgovAuthStatus
+  }
+}
+
+export function getRecgovAuthStatus () {
+  return recgovAuthStatus
+}
+
+export function getRecgovHealthStatus () {
+  return {
+    login_status: recgovAuthStatus.state,
+    ...recgovAuthStatus,
+    ...getRecgovSessionStatus(),
+  }
+}
+
+async function waitForStartupAuthCheck () {
+  if (!startupAuthCheck) return
+  await startupAuthCheck.catch(() => {})
+}
+
 async function handleAtc (req, res) {
   if (busy) {
     jsonResponse(res, HTTP_CONFLICT, {
@@ -95,6 +169,7 @@ async function handleAtc (req, res) {
     }
 
     log('recgov atc start', payloadSummary(raw))
+    await waitForStartupAuthCheck()
     const code = await runAtcOnce({
       argv: ['--payload-json', raw],
       stdout,
@@ -120,6 +195,21 @@ async function handleAtc (req, res) {
   } finally {
     busy = false
   }
+}
+
+function authLogFields (failure) {
+  const fields = [
+    `error=${failure?.error || '?'}`,
+    `detail="${truncateLogField(failure?.detail || '', LOG_DETAIL_MAX_CHARS)}"`,
+  ]
+  if (failure?.corrective_action) {
+    fields.push(`corrective_action="${truncateLogField(failure.corrective_action, LOG_DETAIL_MAX_CHARS)}"`)
+  }
+  if (failure?.auth) {
+    fields.push(`headless=${failure.auth.headless}`)
+    fields.push(`credentials=${failure.auth.credentials_reason || '?'}`)
+  }
+  return fields
 }
 
 function captureStdout () {
@@ -168,30 +258,45 @@ function truncateLogField (value, maxLength) {
   return rendered.length <= maxLength ? rendered : `${rendered.slice(0, maxLength)}...`
 }
 
-const server = http.createServer(async (req, res) => {
-  if (req.method === 'GET' && req.url === '/health') {
-    jsonResponse(res, HTTP_OK, { ok: true, busy })
-    return
-  }
-  if (req.method === 'POST' && req.url === '/recgov/atc') {
-    await handleAtc(req, res)
-    return
-  }
-  jsonResponse(res, HTTP_BAD_REQUEST, {
-    ok: false,
-    error: 'unsupported_route',
-    detail: `${req.method} ${req.url}`,
+export function createCompanionServer () {
+  return http.createServer(async (req, res) => {
+    if (req.method === 'GET' && req.url === '/health') {
+      jsonResponse(res, HTTP_OK, { ok: true, busy, recgov_auth: getRecgovHealthStatus() })
+      return
+    }
+    if (req.method === 'POST' && req.url === '/recgov/atc') {
+      await handleAtc(req, res)
+      return
+    }
+    jsonResponse(res, HTTP_BAD_REQUEST, {
+      ok: false,
+      error: 'unsupported_route',
+      detail: `${req.method} ${req.url}`,
+    })
   })
-})
+}
 
-server.listen(PORT, HOST, () => {
-  log('listening', `http://${HOST}:${PORT}`)
-})
+export const server = createCompanionServer()
 
-for (const sig of ['SIGINT', 'SIGTERM']) {
-  process.on(sig, () => {
-    log('shutting down')
-    server.close(() => process.exit(0))
-    setTimeout(() => process.exit(0), 1000)
+export function startServer () {
+  server.listen(PORT, HOST, () => {
+    log('listening', `http://${HOST}:${PORT}`)
+    startupAuthCheck = runStartupAuthCheck()
   })
+  return server
+}
+
+function installShutdownHandlers (runningServer) {
+  for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, () => {
+      log('shutting down')
+      runningServer.close(() => process.exit(0))
+      setTimeout(() => process.exit(0), 1000)
+    })
+  }
+}
+
+const entrypointUrl = process.argv[1] ? pathToFileURL(process.argv[1]).href : null
+if (entrypointUrl && import.meta.url === entrypointUrl) {
+  installShutdownHandlers(startServer())
 }

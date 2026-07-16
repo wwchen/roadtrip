@@ -6,6 +6,8 @@ import {
   bookingUrlForMatch,
   cartContainsMatch,
   cartHoldCompletionObserved,
+  clickReserveButton,
+  recgovAuthenticationFailure,
   verifyCartContainsMatch,
 } from '../src/cart.js'
 import { parseRecaccount, recaccountNeedsRefresh } from '../src/recgovSession.js'
@@ -90,6 +92,31 @@ test('resolveSessionDir uses mounted companion profile env before legacy session
   assert.equal(resolveSessionDir({}, '/home/test'), '/home/test/.campsite-companion/browser-session')
 })
 
+test('recgovAuthenticationFailure reports the operator action for headless missing credentials', () => {
+  const failure = recgovAuthenticationFailure({
+    env: {},
+    headless: true,
+  })
+
+  assert.equal(failure.error, 'recgov_not_authenticated')
+  assert.match(failure.detail, /headless companion has no RECGOV_EMAIL\/RECGOV_PASSWORD/)
+  assert.match(failure.corrective_action, /make recgov-login/)
+  assert.equal(failure.auth.credentials_reason, 'credentials_not_configured')
+  assert.equal(failure.auth.credentials_configured, false)
+})
+
+test('recgovAuthenticationFailure distinguishes incomplete credential config', () => {
+  const failure = recgovAuthenticationFailure({
+    env: { RECGOV_EMAIL: 'camper@example.test' },
+    headless: true,
+  })
+
+  assert.equal(failure.error, 'recgov_credentials_incomplete')
+  assert.match(failure.detail, /set both RECGOV_EMAIL and RECGOV_PASSWORD/)
+  assert.equal(failure.auth.email_configured, true)
+  assert.equal(failure.auth.password_configured, false)
+})
+
 test('cartHoldCompletionObserved ignores pre-confirmation cart and multi responses', () => {
   assert.equal(
     cartHoldCompletionObserved([
@@ -113,6 +140,18 @@ test('cartHoldCompletionObserved accepts reservation detail or buy-now responses
     true,
   )
   assert.equal(cartHoldCompletionObserved([api(200, '/api/cart/buy-now')]), true)
+})
+
+test('clickReserveButton surfaces a login modal as an auth failure', async () => {
+  const page = reserveClickPage({ loginModalVisible: true })
+
+  const result = await clickReserveButton(page)
+
+  assert.equal(result.clicked, false)
+  assert.equal(result.failure.error, 'recgov_spa_logged_out')
+  assert.match(result.failure.detail, /logged-out state/)
+  assert.match(result.failure.corrective_action, /recgov-login/)
+  assert.deepEqual(page.clickedSelectors, ['button:has-text("Add to Cart")'])
 })
 
 test('cartContainsMatch requires the requested campsite and dates in a nonempty cart', () => {
@@ -256,6 +295,32 @@ function recgovMatch () {
 
 function api (status, path) {
   return { status, path }
+}
+
+function reserveClickPage ({ loginModalVisible }) {
+  return {
+    clickedSelectors: [],
+    locator (selector) {
+      const page = this
+      return {
+        first () {
+          return this
+        },
+        async isVisible () {
+          if (selector.includes('Sign In') || selector.includes('Log In') || selector.includes('login-modal')) {
+            return loginModalVisible
+          }
+          return selector === 'button:has-text("Add to Cart")'
+        },
+        async click () {
+          page.clickedSelectors.push(selector)
+        },
+        async waitFor () {},
+      }
+    },
+    async waitForTimeout () {},
+    async waitForSelector () {},
+  }
 }
 
 function pickFailureFields (check) {

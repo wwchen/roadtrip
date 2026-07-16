@@ -102,6 +102,46 @@ test('runAtcOnce includes cart verification details on ATC failure', async () =>
   })
 })
 
+test('runAtcOnce preserves actionable auth failure details', async () => {
+  const stdout = bufferWriter()
+
+  const code = await runAtcOnce({
+    argv: ['--payload-json', PAYLOAD_JSON],
+    stdout,
+    stderr: bufferWriter(),
+    addToCartFn: async () => ({
+      ok: false,
+      error: 'recgov_not_authenticated',
+      detail: 'No Recreation.gov browser session is available in the companion profile.',
+      corrective_action: 'Run make recgov-login on the host profile mounted by the companion.',
+      auth: {
+        headless: true,
+        credentials_configured: false,
+        credentials_reason: 'credentials_not_configured',
+        email_configured: false,
+        password_configured: false,
+        mfa_configured: false,
+      },
+    }),
+  })
+
+  const result = JSON.parse(stdout.text())
+  assert.equal(code, 1)
+  assert.equal(result.ok, false)
+  assert.equal(result.cart_added, false)
+  assert.equal(result.error, 'recgov_not_authenticated')
+  assert.equal(result.detail, 'No Recreation.gov browser session is available in the companion profile.')
+  assert.equal(result.corrective_action, 'Run make recgov-login on the host profile mounted by the companion.')
+  assert.deepEqual(result.auth, {
+    headless: true,
+    credentials_configured: false,
+    credentials_reason: 'credentials_not_configured',
+    email_configured: false,
+    password_configured: false,
+    mfa_configured: false,
+  })
+})
+
 test('runAtcOnce exits two for invalid payloads', async () => {
   const stdout = bufferWriter()
 

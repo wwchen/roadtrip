@@ -109,6 +109,11 @@ const LOGIN_ERROR_SELECTORS = [
   '[data-error]',
 ]
 
+let recgovSessionStatus = {
+  last_refresh_at: null,
+  last_refresh_expires_at: null,
+}
+
 export async function resolveRecaccount (page, options = {}) {
   const browserSession = await recaccountFromBrowser(page, options)
   if (browserSession.recaccount) return browserSession.recaccount
@@ -135,6 +140,10 @@ export async function resolveRecaccount (page, options = {}) {
     console.log('Cart: no Recreation.gov browser session and companion is headless — run the companion headed and log in once')
   }
   return null
+}
+
+export function getRecgovSessionStatus () {
+  return { ...recgovSessionStatus }
 }
 
 export function recgovLoginCredentialsFromEnv (env = process.env) {
@@ -440,6 +449,7 @@ async function refreshBrowserRecaccountIfNeeded (page, recaccount, options = {})
   const refreshed = await refreshRecaccountInBrowserWithRetry(page, recaccount.access_token, credentials)
   if (refreshed?.access_token) {
     await injectFingerprintCookie(page.context(), refreshed.access_token)
+    recordRecgovRefresh(refreshed)
     console.log(`Cart: refreshed Recreation.gov browser session (expires ${refreshed.expiration})`)
     return refreshed
   }
@@ -544,4 +554,11 @@ async function refreshRecaccountInBrowser (page, token, credentials) {
   const detail = result.status ? `HTTP ${result.status} ${result.body || ''}` : result.error
   console.log(`Cart: Recreation.gov browser refresh failed — ${detail}`)
   return { recaccount: null, retryable: !result.status }
+}
+
+function recordRecgovRefresh (recaccount) {
+  recgovSessionStatus = {
+    last_refresh_at: new Date().toISOString(),
+    last_refresh_expires_at: recaccount?.expiration || null,
+  }
 }
