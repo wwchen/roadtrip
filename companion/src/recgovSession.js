@@ -15,6 +15,7 @@ export const RECGOV_LOGIN_STATE_SETTLE_MS = 2_000
 
 const RECGOV_REFRESH_URL = 'https://www.recreation.gov/api/accounts/login/v2/refresh'
 const RECGOV_REFRESH_CONTENT_TYPE = 'text/plain;charset=UTF-8'
+const RECGOV_RECACCOUNT_STORAGE_KEY = 'recaccount'
 const DEFAULT_RECGOV_LOGIN_TIMEOUT_MS = 120_000
 const RECGOV_LOGIN_POLL_MS = 1_000
 const RECGOV_LOGIN_BUTTON_TIMEOUT_MS = 5_000
@@ -32,7 +33,10 @@ const LOGIN_LINK_SEL = 'button:has-text("Sign Up / Log In"), a:has-text("Sign Up
 export async function resolveRecaccount (page, options = {}) {
   const browserSession = await recaccountFromBrowser(page, options)
   if (browserSession.recaccount) return browserSession.recaccount
-  if (options.forceRefresh === true && browserSession.foundSession) return null
+  if (options.forceRefresh === true && browserSession.foundSession && !options.allowManualLoginAfterRefreshFailure) return null
+  if (options.forceRefresh === true && browserSession.foundSession && options.allowManualLoginAfterRefreshFailure && !IS_HEADLESS) {
+    console.log('Cart: Recreation.gov refresh failed; log in again to replace the stale browser session')
+  }
 
   if (!IS_HEADLESS) {
     const loginRecaccount = await recaccountFromManualLogin(page, options)
@@ -91,6 +95,12 @@ async function activateBrowserRecaccount (page, raw, options) {
 async function recaccountFromManualLogin (page, options) {
   const timeoutMs = recgovLoginTimeoutMs()
   console.log(`Cart: log in to Recreation.gov in the companion browser (waiting up to ${secondsLabel(timeoutMs)}s)`)
+  await page.goto(RECGOV_HOME_URL, {
+    waitUntil: 'domcontentloaded',
+    timeout: RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS,
+  }).catch((err) => {
+    console.log(`Cart: could not reopen Recreation.gov login page — ${err.message}`)
+  })
   await openLoginIfPossible(page)
   const browserSession = await waitForBrowserRecaccount(page, timeoutMs)
   if (!browserSession) {
@@ -164,11 +174,13 @@ async function refreshBrowserRecaccountIfNeeded (page, recaccount, options = {})
 
   if (forceRefresh) {
     console.log('Cart: forced Recreation.gov browser refresh failed')
+    await clearBrowserRecaccount(page)
     return null
   }
 
   if (recaccountIsExpired(recaccount)) {
     console.log('Cart: Recreation.gov browser recaccount is expired and refresh failed — log in again')
+    await clearBrowserRecaccount(page)
     return null
   }
 
@@ -217,6 +229,12 @@ function decodeJwtPayload (token) {
   } catch {
     return null
   }
+}
+
+async function clearBrowserRecaccount (page) {
+  await page.evaluate(({ key }) => {
+    localStorage.removeItem(key)
+  }, { key: RECGOV_RECACCOUNT_STORAGE_KEY, clearRecaccount: true }).catch(() => {})
 }
 
 async function refreshRecaccountInBrowser (page, token, credentials) {

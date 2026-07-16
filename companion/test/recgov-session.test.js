@@ -109,10 +109,46 @@ test('resolveRecaccount fails closed when forced browser refresh is rejected', a
 
   assert.equal(resolved, null)
   assert.equal(page.refreshCalls.length, 1)
+  assert.equal(page.clearCalls, 1)
+  assert.equal(page.loginClicks, 0)
 })
 
-function fakePage ({ rawRecaccount, refreshRecaccount = null, refreshResponse = null, refreshResponses = null }) {
+test('resolveRecaccount prompts manual login after allowed forced refresh failure', async () => {
+  const stale = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-old' }),
+  })
+  const relogged = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-new' }),
+  })
+  const page = fakePage({
+    rawRecaccount: JSON.stringify(stale),
+    rawRecaccountAfterClear: JSON.stringify(relogged),
+    refreshResponses: [
+      { ok: false, status: 404, body: '{"error":"Item not found"}' },
+      { ok: true, recaccount: relogged },
+    ],
+  })
+
+  const resolved = await resolveRecaccount(page, {
+    forceRefresh: true,
+    allowManualLoginAfterRefreshFailure: true,
+  })
+
+  assert.equal(resolved.access_token, relogged.access_token)
+  assert.equal(page.refreshCalls.length, 2)
+  assert.equal(page.clearCalls, 1)
+  assert.equal(page.loginClicks, 1)
+})
+
+function fakePage ({
+  rawRecaccount,
+  rawRecaccountAfterClear = null,
+  refreshRecaccount = null,
+  refreshResponse = null,
+  refreshResponses = null,
+}) {
   let refreshResponseIndex = 0
+  let currentRawRecaccount = rawRecaccount
   const context = {
     cookies: [],
     pages: () => [page],
@@ -123,16 +159,30 @@ function fakePage ({ rawRecaccount, refreshRecaccount = null, refreshResponse = 
   const page = {
     gotos: [],
     refreshCalls: [],
+    clearCalls: 0,
+    loginClicks: 0,
     waits: [],
     context: () => context,
     goto: async (url) => {
       page.gotos.push(url)
     },
+    locator: () => ({
+      first: () => ({
+        click: async () => {
+          page.loginClicks += 1
+        },
+      }),
+    }),
     waitForTimeout: async (ms) => {
       page.waits.push(ms)
     },
     evaluate: async (_fn, arg) => {
-      if (arg === 'recaccount') return rawRecaccount
+      if (arg === 'recaccount') return currentRawRecaccount
+      if (arg?.clearRecaccount) {
+        page.clearCalls += 1
+        currentRawRecaccount = rawRecaccountAfterClear
+        return undefined
+      }
       if (arg?.url) {
         page.refreshCalls.push(arg)
         if (refreshResponses) return refreshResponses[refreshResponseIndex++]

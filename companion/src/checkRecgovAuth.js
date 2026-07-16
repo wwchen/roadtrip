@@ -13,7 +13,10 @@ console.log('Rec.gov auth check: log in if the browser prompts; waiting uses REC
 if (forceRefresh) console.log('Rec.gov auth check: forcing Recreation.gov token refresh')
 
 try {
-  const result = await testChromium(null, { forceRefresh })
+  const result = await testChromium(null, {
+    forceRefresh,
+    allowManualLoginAfterRefreshFailure: forceRefresh,
+  })
   if (result?.loggedIn === true) {
     console.log(forceRefresh ? 'REC_GOV_AUTH_REFRESH_OK' : 'REC_GOV_AUTH_OK')
     process.exit(0)
