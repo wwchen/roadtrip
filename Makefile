@@ -1,4 +1,4 @@
-.PHONY: help run data-fetch data-import reset-db qa install install-hooks _ensure-hooks companion grafana-export
+.PHONY: help run data-fetch data-import reset-db qa install install-hooks _ensure-hooks companion recgov-login recgov-refresh recgov-atc grafana-export
 
 PORT       ?= 8765
 BACKEND_IMAGE ?= roadtrip/backend
@@ -6,6 +6,8 @@ RUN_ENV ?= $(or $(env),dev)
 POSTGRES_DB ?= roadtrip
 POSTGRES_USER ?= roadtrip
 POSTGRES_PASSWORD ?= roadtrip
+RECGOV_COMPANION_BROWSER_PROFILE ?= $(HOME)/.campsite-companion/browser-session
+RECGOV_COMPANION_PROFILE_ENV := COMPANION_BROWSER_PROFILE="$${COMPANION_BROWSER_PROFILE:-$${RECGOV_COMPANION_BROWSER_PROFILE:-$(RECGOV_COMPANION_BROWSER_PROFILE)}}"
 PROD_COMPOSE_PROFILES ?= --profile tunnel --profile pois
 PROD_COMPOSE := docker compose $(PROD_COMPOSE_PROFILES)
 LOCAL_COMPOSE := docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois
@@ -18,6 +20,9 @@ help:
 	@echo "  make run              Build + run backend locally on 127.0.0.1:8765 (serves static + /api)"
 	@echo "  make run env=prod     Build backend image + run production Compose profiles"
 	@echo "  make companion        Run the campsite Playwright companion (against the local backend)"
+	@echo "  make recgov-login     Open companion Chromium and verify Recreation.gov login"
+	@echo "  make recgov-refresh   Force-refresh the companion Recreation.gov session"
+	@echo "  make recgov-atc       Run one Rec.gov add-to-cart attempt (PAYLOAD=/path/to/atc.json)"
 	@echo "  make data-fetch       Fetch upstream data via admin API (TARGET=<data_source slug> for one)."
 	@echo "  make data-import      Import data/ files into Postgres (TARGET=<row name> for one). Routes by YAML section (poi_data / reservable_data / poi_reservable_joiner)."
 	@echo "  make reset-db         Drop/recreate the local schema and Flyway history for a full migration replay."
@@ -50,6 +55,16 @@ endif
 
 companion: _ensure-hooks
 	cd companion && BACKEND_URL=http://127.0.0.1:$(PORT) npm start
+
+recgov-login: _ensure-hooks
+	cd companion && $(RECGOV_COMPANION_PROFILE_ENV) npm run recgov:login
+
+recgov-refresh: _ensure-hooks
+	cd companion && $(RECGOV_COMPANION_PROFILE_ENV) npm run recgov:refresh
+
+recgov-atc: _ensure-hooks
+	@if [ -z "$(PAYLOAD)" ]; then echo "Usage: make recgov-atc PAYLOAD=/path/to/atc.json"; exit 2; fi
+	cd companion && $(RECGOV_COMPANION_PROFILE_ENV) npm run --silent recgov:atc -- --payload-file "$(PAYLOAD)"
 
 # One-time host setup for a fresh clone. Idempotent: brew is no-op when
 # packages are present, npm install + playwright install are no-op when the

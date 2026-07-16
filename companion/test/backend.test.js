@@ -33,15 +33,6 @@ before(async () => {
       } else if (req.url === '/api/dispatches/9/fail') {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end('{"id":9,"status":"failed"}')
-      } else if (req.url === '/api/campsite/booking/session/fresh-token') {
-        res.writeHead(200, { 'content-type': 'application/json' })
-        res.end(JSON.stringify({
-          access_token: 'fake-jwt',
-          expiration: '2026-06-04T13:00:00Z',
-          account: { account_id: 'A-1', email: 'a@b.c' },
-          is_guest: false,
-          refresh_id: '',
-        }))
       } else {
         res.writeHead(404); res.end()
       }
@@ -56,14 +47,6 @@ before(async () => {
 
 after(async () => {
   await new Promise((resolve) => server.close(resolve))
-})
-
-test('fetchFreshRecaccount returns the recaccount-shaped JSON from backend', async () => {
-  const { fetchFreshRecaccount } = await import('../src/backend.js')
-  const ra = await fetchFreshRecaccount()
-  assert.equal(ra.access_token, 'fake-jwt')
-  assert.equal(ra.account.account_id, 'A-1')
-  assert.equal(ra.is_guest, false)
 })
 
 test('claimDispatch posts dispatch selector', async () => {
