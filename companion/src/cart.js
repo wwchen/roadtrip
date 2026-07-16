@@ -445,7 +445,7 @@ export async function clickReserveButton (page) {
       console.log('Cart: clicking confirmation overlay')
       await confirmBtn.waitFor({ state: 'enabled', timeout: 5000 }).catch(() => {})
       await confirmBtn.click({ timeout: 3000 }).catch(() => {
-        console.log('Cart: confirmation button still disabled — proceeding (item may already be in cart)')
+        console.log('Cart: confirmation button still disabled — not a success signal; verifying cart contents next')
       })
       await page.waitForTimeout(2000)
     }
@@ -573,6 +573,7 @@ export async function addToCart (match) {
     if (reserveClick.failure) return { ok: false, page, ...reserveClick.failure }
     if (reserveClick.clicked) {
       await waitForCaptchaIfPresent(page)
+      console.log('Cart: verifying requested campsite/date in cart after reserve click')
       const verification = await waitForRequestedCartItem(page, captured, match, getCartForVerification)
       if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
       return { ok: verification.ok, page, cart_check: verification.check }
@@ -585,6 +586,7 @@ export async function addToCart (match) {
       if (datedReserveClick.failure) return { ok: false, page, ...datedReserveClick.failure }
       if (datedReserveClick.clicked) {
         await waitForCaptchaIfPresent(page)
+        console.log('Cart: verifying requested campsite/date in cart after dated reserve click')
         const verification = await waitForRequestedCartItem(page, captured, match, getCartForVerification)
         if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
         return { ok: verification.ok, page, cart_check: verification.check }

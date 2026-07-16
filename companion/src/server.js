@@ -4,6 +4,7 @@
 
 import http from 'node:http'
 import { pathToFileURL } from 'node:url'
+import { IS_HEADLESS } from './browser.js'
 import {
   recgovAuthenticationFailure,
   testChromium,
@@ -559,7 +560,7 @@ export const server = createCompanionServer()
 
 export function startServer () {
   server.listen(PORT, HOST, () => {
-    log('listening', `http://${HOST}:${PORT}`)
+    log('listening', `http://${HOST}:${PORT}`, `headless=${IS_HEADLESS}`)
     startupAuthCheck = runStartupAuthCheck()
   })
   return server
