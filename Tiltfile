@@ -128,10 +128,10 @@ docker_build(
     'companion',
     dockerfile='companion/Dockerfile',
     only=[
-        'companion/Dockerfile',
-        'companion/package.json',
-        'companion/package-lock.json',
-        'companion/src',
+        'Dockerfile',
+        'package.json',
+        'package-lock.json',
+        'src',
     ],
 )
 
