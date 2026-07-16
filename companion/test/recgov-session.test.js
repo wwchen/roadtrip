@@ -203,6 +203,28 @@ test('resolveRecaccount can log in with Recreation.gov credentials from env', as
   assert.deepEqual(page.fills.map(({ value }) => value), ['user@example.com', 'secret'])
 })
 
+test('resolveRecaccount can submit credentials with Enter when the login button is not found', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-enter-submit' }),
+  })
+  const page = fakePage({
+    credentialRawRecaccount: JSON.stringify(recaccount),
+    submitSelectorVisible: false,
+  })
+
+  const resolved = await resolveRecaccount(page, {
+    env: {
+      RECGOV_EMAIL: 'user@example.com',
+      RECGOV_PASSWORD: 'secret',
+    },
+  })
+
+  assert.equal(resolved.access_token, recaccount.access_token)
+  assert.equal(page.credentialSubmitClicks, 0)
+  assert.equal(page.enterPresses, 1)
+  assert.deepEqual(page.fills.map(({ value }) => value), ['user@example.com', 'secret'])
+})
+
 test('resolveRecaccount can submit a provided Recreation.gov 2FA code', async () => {
   const recaccount = testRecaccount({
     token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-mfa' }),
@@ -258,6 +280,7 @@ function fakePage ({
   credentialRawRecaccount = null,
   mfaRequired = false,
   expectedMfaCode = null,
+  submitSelectorVisible = true,
 }) {
   let refreshResponseIndex = 0
   let currentRawRecaccount = rawRecaccount
@@ -280,6 +303,7 @@ function fakePage ({
     mfaSubmitClicks: 0,
     fills: [],
     waits: [],
+    enterPresses: 0,
     context: () => context,
     goto: async (url) => {
       page.gotos.push(url)
@@ -319,6 +343,18 @@ function fakePage ({
     waitForTimeout: async (ms) => {
       page.waits.push(ms)
     },
+    keyboard: {
+      press: async (key) => {
+        if (key !== 'Enter') throw new Error(`unexpected key: ${key}`)
+        page.enterPresses += 1
+        if (mfaPromptVisible) {
+          if (!expectedMfaCode || submittedMfaCode === expectedMfaCode) currentRawRecaccount = credentialRawRecaccount
+          return
+        }
+        if (mfaRequired) mfaPromptVisible = true
+        else currentRawRecaccount = credentialRawRecaccount
+      },
+    },
     evaluate: async (_fn, arg) => {
       if (arg === 'recaccount') return currentRawRecaccount
       if (arg?.clearRecaccount) {
@@ -338,7 +374,7 @@ function fakePage ({
     if (selector.includes('Sign Up / Log In')) return true
     if (isMfaInputSelector(selector)) return mfaPromptVisible
     if (isEmailSelector(selector) || isPasswordSelector(selector)) return loginOpened
-    if (isSubmitSelector(selector)) return loginOpened
+    if (isSubmitSelector(selector)) return loginOpened && submitSelectorVisible
     return false
   }
   return page

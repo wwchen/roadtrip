@@ -58,13 +58,28 @@ const LOGIN_PASSWORD_SELECTORS = [
 ]
 const LOGIN_SUBMIT_SELECTORS = [
   '[role="dialog"] button[type="submit"]',
+  '[role="dialog"] input[type="submit"]',
+  '[role="dialog"] [role="button"]:has-text("Log In")',
   '[role="dialog"] button:has-text("Log In")',
+  '[role="dialog"] [role="button"]:has-text("Sign In")',
   '[role="dialog"] button:has-text("Sign In")',
+  '[role="dialog"] [role="button"]:has-text("Continue")',
+  '[role="dialog"] button:has-text("Continue")',
   'form button[type="submit"]',
+  'form input[type="submit"]',
+  'form [role="button"]:has-text("Log In")',
   'form button:has-text("Log In")',
+  'form [role="button"]:has-text("Sign In")',
   'form button:has-text("Sign In")',
+  'form [role="button"]:has-text("Continue")',
+  'form button:has-text("Continue")',
+  'input[type="submit"]',
+  '[role="button"]:has-text("Log In")',
   'button:has-text("Log In")',
+  '[role="button"]:has-text("Sign In")',
   'button:has-text("Sign In")',
+  '[role="button"]:has-text("Continue")',
+  'button:has-text("Continue")',
 ]
 const LOGIN_MFA_SELECTORS = [
   'input[autocomplete="one-time-code"]',
@@ -307,7 +322,7 @@ async function submitCredentialLoginForm (page, credentials) {
   if (!password) return { ok: false, reason: 'password_input_not_found' }
 
   const submit = await clickFirstVisible(page, LOGIN_SUBMIT_SELECTORS)
-  if (!submit) return { ok: false, reason: 'submit_button_not_found' }
+  if (!submit && !(await pressEnterToSubmit(page))) return { ok: false, reason: 'submit_button_not_found' }
 
   return { ok: true }
 }
@@ -357,6 +372,15 @@ async function clickFirstVisible (page, selectors) {
     return selector
   } catch {
     return null
+  }
+}
+
+async function pressEnterToSubmit (page) {
+  try {
+    await page.keyboard.press('Enter')
+    return true
+  } catch {
+    return false
   }
 }
 
