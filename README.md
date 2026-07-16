@@ -79,9 +79,8 @@ just that one). Adding a vendor = appending a YAML row + writing the
 Kotlin ETL impl. Adding a governing body = appending a YAML row.
 
 > Note: `refresh-tesla-cookies` is **Tesla-only**. Recreation.gov auth is
-> backend-owned via `TokenManager` — paste a fresh cURL in the campsite
-> Settings UI and the backend handles refresh on its own cadence. Two
-> unrelated systems that both happen to use the word "cookies."
+> owned by the companion's logged-in Chromium profile. Two unrelated systems
+> that both happen to use the word "cookies."
 
 First time only:
 
@@ -319,12 +318,76 @@ queues authenticated dispatches for the companion, and tracks lease state.
   npm install
   BACKEND_URL=http://127.0.0.1:8765 npm start
   ```
-- **`RECGOV_RECACCOUNT`** seeds the backend's persisted refresh token on
-  first run (subsequent runs reuse the DB-backed token). To get it: log in
-  on recreation.gov in your browser, open DevTools console, run
-  `localStorage.getItem('recaccount')`, and paste the JSON blob into the
-  env var (or into Settings → Recreation.gov in the `/campsite/` UI, which
-  writes it to the `campsite_settings` table via the same path).
+- **Recreation.gov login** happens in the companion's persistent Chromium
+  profile. Run the companion headed, log in to recreation.gov in that window
+  once, and the companion manages `localStorage.recaccount` and refreshes in
+  that same browser context. You can also let the companion attempt the real
+  login form by setting `RECGOV_EMAIL` and `RECGOV_PASSWORD` in the companion
+  process environment. If Recreation.gov asks for 2FA, set `RECGOV_MFA_CODE`
+  for that login run; without a current code the companion fails closed with
+  `mfa_required` in its logs. With 1Password CLI, resolve the current OTP into
+  the companion environment:
+  ```sh
+  RECGOV_EMAIL=you@example.com \
+  RECGOV_PASSWORD=... \
+  RECGOV_MFA_CODE="$(op read 'op://Private/recreation.gov/one-time password?attribute=otp')" \
+  make recgov-login
+  ```
+  The `op read` form resolves the current short-lived 1Password OTP before the
+  companion starts. Run it only when Recreation.gov is expected to prompt for
+  2FA; otherwise leave `RECGOV_MFA_CODE` unset. To test the real browser auth
+  integration, run:
+  ```sh
+  cd companion
+  npm run recgov:login
+  npm run recgov:refresh   # force the real Recreation.gov refresh endpoint
+  # or from repo root:
+  make recgov-login
+  make recgov-refresh
+  ```
+  `recgov:login` exits `0` after `REC_GOV_AUTH_OK`. `recgov:refresh` exits
+  `0` after `REC_GOV_AUTH_REFRESH_OK` only after the browser session has
+  successfully refreshed through Recreation.gov. If the stored access token is
+  still valid but its `refresh_id` has gone stale, `recgov:refresh` clears that
+  stale browser `recaccount` and prompts for a fresh headed login. Both
+  commands return non-zero after `REC_GOV_AUTH_FAILED` / `REC_GOV_AUTH_ERROR`.
+  The Make targets set `COMPANION_BROWSER_PROFILE` from
+  `RECGOV_COMPANION_BROWSER_PROFILE`, falling back to
+  `$HOME/.campsite-companion/browser-session`. The optional `RECGOV_*` login
+  variables are consumed by the companion only; backend config does not read
+  Recreation.gov credentials.
+- **One-shot Rec.gov ATC** runs the same browser add-to-cart code as the
+  dispatch companion. This can place a real hold in the operator's
+  Recreation.gov cart, so use a real payload only when that side effect is
+  intended.
+  ```json
+  {
+    "watch_id": 12,
+    "vendor": "recgov",
+    "payload_version": "atc.recgov.v1",
+    "start_date": "2026-07-23",
+    "end_date": "2026-07-24",
+    "openings": [
+      {
+        "label": "Site 116",
+        "date": "2026-07-23",
+        "vendor": "recgov",
+        "campsite_id": 85735,
+        "vendor_id": "85735",
+        "booking_url": "https://www.recreation.gov/camping/campsites/85735?startDate=2026-07-23&endDate=2026-07-24"
+      }
+    ]
+  }
+  ```
+  ```sh
+  cd companion
+  npm run --silent recgov:atc -- --payload-file /tmp/recgov-atc.json
+  # or from repo root:
+  make recgov-atc PAYLOAD=/tmp/recgov-atc.json
+  ```
+  Browser logs go to stderr. Stdout is one JSON result; exit `0` means
+  `cart_added=true`, exit `1` means the browser ran but did not confirm a cart
+  hold, and exit `2` means invalid input.
 - **Slack notifications** are optional. Create a Slack app with the
   `chat:write` scope, install it to the workspace, and paste the bot
   token (`xoxb-…`) plus a channel name (`#camping-alerts`) or channel ID

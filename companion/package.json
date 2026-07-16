@@ -8,8 +8,9 @@
   },
   "scripts": {
     "start": "node --env-file-if-exists=../.env --experimental-eventsource src/index.js",
-    "spike:client": "node spike/client.js",
-    "spike:test": "node --test spike/test.js",
+    "recgov:login": "node --env-file-if-exists=../.env src/checkRecgovAuth.js",
+    "recgov:refresh": "node --env-file-if-exists=../.env src/checkRecgovAuth.js --force-refresh",
+    "recgov:atc": "node --env-file-if-exists=../.env src/runAtcOnce.js",
     "test": "node --test 'test/*.test.js'"
   },
   "dependencies": {

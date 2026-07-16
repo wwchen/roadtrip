@@ -12,8 +12,16 @@ export const IS_HEADLESS = process.env.HEADLESS !== undefined
   ? process.env.HEADLESS !== 'false'
   : fs.existsSync('/.dockerenv')
 
-const SESSION_DIR = process.env.SESSION_DIR
-  || path.join(os.homedir(), '.campsite-companion', 'browser-session')
+export function resolveSessionDir (env = process.env, homeDir = os.homedir()) {
+  return env.COMPANION_BROWSER_PROFILE ||
+    env.SESSION_DIR ||
+    path.join(homeDir, '.campsite-companion', 'browser-session')
+}
+
+const SESSION_DIR = resolveSessionDir()
+const RECGOV_RECACCOUNT_STORAGE_KEY = 'recaccount'
+export const COMPANION_USER_AGENT =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
 
 let sharedContext = null
 
@@ -34,7 +42,7 @@ export async function getContext () {
     headless: IS_HEADLESS,
     slowMo: IS_HEADLESS ? 0 : 200,
     viewport: { width: 1280, height: 900 },
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    userAgent: COMPANION_USER_AGENT,
     args: ['--disable-blink-features=AutomationControlled'],
     ignoreDefaultArgs: ['--enable-automation'],
   })
@@ -151,6 +159,17 @@ export async function injectRecaccount (page, recaccount) {
   await page.addInitScript(({ v }) => {
     try { localStorage.setItem('recaccount', v) } catch {}
   }, { v })
+}
+
+export async function readRecaccount (page) {
+  return page.evaluate((key) => {
+    try {
+      const value = localStorage.getItem(key)
+      return typeof value === 'string' && value.trim() ? value : null
+    } catch {
+      return null
+    }
+  }, RECGOV_RECACCOUNT_STORAGE_KEY).catch(() => null)
 }
 
 export async function isSpaLoggedIn (page) {

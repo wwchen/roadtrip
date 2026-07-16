@@ -1,5 +1,5 @@
 // Add-to-cart orchestration. Owns Playwright-driven rec.gov interaction.
-// Reports the result back to the backend; the backend persists, the companion does not.
+// Returns the browser result to the CLI/HTTP caller; the companion does not persist.
 
 import {
   IS_HEADLESS,
@@ -13,7 +13,12 @@ import {
   campsiteUrl,
   toCheckoutDate,
 } from './browser.js'
-import { fetchFreshRecaccount } from './backend.js'
+import {
+  RECGOV_HOME_URL,
+  RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS,
+  RECGOV_LOGIN_STATE_SETTLE_MS,
+  resolveRecaccount,
+} from './recgovSession.js'
 
 let lastLoginState = null
 export function getLastLoginState () { return lastLoginState }
@@ -21,9 +26,11 @@ export function getLastLoginState () { return lastLoginState }
 export async function getCartItems (page) {
   return page.evaluate(async () => {
     try {
-      const resp = await fetch('https://www.recreation.gov/api/cart/shoppingcart', { credentials: 'include' })
+      const resp = await fetch('https://www.recreation.gov/api/cart/shoppingcart', {
+        credentials: 'include',
+      })
       const body = await resp.json().catch(() => ({}))
-      return { status: resp.status, reservations: body?.reservations ?? null }
+      return { status: resp.status, reservations: body?.reservations ?? null, body }
     } catch (e) { return { error: e.message } }
   })
 }
@@ -157,6 +164,191 @@ const RESERVE_SELECTORS = [
 ]
 const RESERVE_COMBINED = RESERVE_SELECTORS.join(', ')
 const ENTER_DATES_SEL = 'button:has-text("Enter Dates"), button:has-text("Change Dates")'
+const CART_VERIFY_WAIT_MS = 10_000
+const CART_VERIFY_POLL_MS = 1_000
+const CART_URL_CAMPSITE_ID_RE = /\/camping\/campsites\/([^/?#]+)/
+const CART_VERIFY_MATCHED = 'matched'
+const CART_VERIFY_FETCH_FAILED = 'cart_fetch_failed'
+const CART_VERIFY_HTTP_ERROR = 'cart_http_error'
+const CART_VERIFY_EMPTY = 'cart_empty'
+const CART_VERIFY_MISSING_ITEM = 'missing_expected_item'
+
+export function cartHoldCompletionObserved (responses) {
+  return responses.some(e => e.status >= 200 && e.status < 300 &&
+    (/\/api\/camps\/reservations\?id=/.test(e.path) || /\/api\/cart\/buy-now/.test(e.path)))
+}
+
+export function cartContainsMatch (cart, match) {
+  return verifyCartContainsMatch(cart, match).ok
+}
+
+export function verifyCartContainsMatch (cart, match) {
+  const reservations = Array.isArray(cart?.reservations)
+    ? cart.reservations
+    : Array.isArray(cart?.body?.reservations) ? cart.body.reservations : []
+
+  const base = {
+    status: cart?.status ?? null,
+    reservation_count: reservations.length,
+    expected: expectedCartMatch(match),
+  }
+
+  if (cart?.error) {
+    return { ok: false, reason: CART_VERIFY_FETCH_FAILED, detail: cart.error, ...base }
+  }
+  if (Number.isFinite(cart?.status) && (cart.status < 200 || cart.status >= 300)) {
+    return { ok: false, reason: CART_VERIFY_HTTP_ERROR, ...base }
+  }
+  if (!reservations.length) {
+    return { ok: false, reason: CART_VERIFY_EMPTY, ...base }
+  }
+
+  let bestMatch = null
+  for (let index = 0; index < reservations.length; index++) {
+    const result = cartReservationMatchResult(reservations[index], base.expected)
+    if (result.ok) {
+      return {
+        ok: true,
+        reason: CART_VERIFY_MATCHED,
+        reservation_index: index,
+        matched: result.matched,
+        ...base,
+      }
+    }
+    if (!bestMatch || result.score > bestMatch.score) {
+      bestMatch = { reservation_index: index, score: result.score, matched: result.matched }
+    }
+  }
+
+  return { ok: false, reason: CART_VERIFY_MISSING_ITEM, best_match: bestMatch, ...base }
+}
+
+function cartReservationMatchResult (reservation, expected) {
+  const values = primitiveStrings(reservation)
+  if (!values.length) return { ok: false, score: 0, matched: {} }
+
+  const campsiteId = firstMatchingToken(values, expected.campsite_ids)
+  const campsiteLabel = firstMatchingToken(values, expected.campsite_labels)
+  const campgroundId = firstMatchingToken(values, expected.campground_ids)
+  const arrivalDate = firstMatchingDate(values, expected.arrival_date)
+  const checkoutDate = firstMatchingDate(values, expected.checkout_date)
+  const campsiteMatched = campsiteId || (campsiteLabel && campgroundId)
+  const score = [campsiteMatched, arrivalDate, checkoutDate].filter(Boolean).length
+
+  return {
+    ok: Boolean(campsiteMatched && arrivalDate && checkoutDate),
+    score,
+    matched: {
+      campsite_id: campsiteId,
+      campsite_label: campsiteLabel,
+      campground_id: campgroundId,
+      arrival_date: arrivalDate,
+      checkout_date: checkoutDate,
+    },
+  }
+}
+
+function expectedCartMatch (match) {
+  const bookingUrlCampsiteId = String(match.booking_url || '').match(CART_URL_CAMPSITE_ID_RE)?.[1]
+  const preferredIds = compactStrings([
+    match.provider_campsite_id,
+    match.vendor_id,
+    bookingUrlCampsiteId,
+  ])
+  const campsiteIds = preferredIds.length ? preferredIds : compactStrings([match.campsite_id])
+
+  return {
+    campsite_ids: campsiteIds,
+    campsite_labels: compactStrings([match.campsite_site]),
+    campground_ids: compactStrings([match.provider_campground_id, match.campground_id]),
+    arrival_date: normalizeNeedle(match.first_date),
+    checkout_date: normalizeNeedle(match.checkout_date || checkoutDateForMatch(match)),
+  }
+}
+
+function checkoutDateForMatch (match) {
+  const availableDates = match.available_dates || (match.first_date ? [match.first_date] : [])
+  const lastNight = availableDates[availableDates.length - 1]
+  return lastNight ? toCheckoutDate(lastNight) : null
+}
+
+function compactStrings (values) {
+  return [...new Set(values.map(value => normalizeNeedle(value)).filter(Boolean))]
+}
+
+function primitiveStrings (value, seen = new Set(), out = []) {
+  if (value === null || value === undefined) return out
+  if (typeof value === 'object') {
+    if (seen.has(value)) return out
+    seen.add(value)
+    const children = Array.isArray(value) ? value : Object.values(value)
+    for (const child of children) primitiveStrings(child, seen, out)
+    return out
+  }
+  out.push(String(value).toLowerCase())
+  return out
+}
+
+function firstMatchingDate (values, date) {
+  const expected = normalizeNeedle(date)
+  if (!expected) return null
+  return values.some(value => value.includes(expected)) ? expected : null
+}
+
+function firstMatchingToken (values, needles) {
+  return needles.find(needle => {
+    const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const tokenRe = new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i')
+    return values.some(value => value === needle || tokenRe.test(value))
+  }) || null
+}
+
+function normalizeNeedle (value) {
+  if (value === null || value === undefined) return ''
+  return String(value).trim().toLowerCase()
+}
+
+async function waitForRequestedCartItem (page, responses, match, getCart = () => getCartItems(page)) {
+  const deadline = Date.now() + CART_VERIFY_WAIT_MS
+  let lastCheck = null
+  while (Date.now() < deadline) {
+    const cart = await getCart()
+    lastCheck = verifyCartContainsMatch(cart, match)
+    if (lastCheck.ok) {
+      console.log(`Cart: verified requested campsite/date in cart ${cartVerificationSummary(lastCheck)}`)
+      return { ok: true, check: lastCheck }
+    }
+    await page.waitForTimeout(Math.min(CART_VERIFY_POLL_MS, deadline - Date.now()))
+  }
+
+  const responseSignal = cartHoldCompletionObserved(responses)
+  const check = { ...lastCheck, response_signal: responseSignal }
+  console.log(`Cart: verification failed ${cartVerificationSummary(check)}`)
+  return { ok: false, check }
+}
+
+function cartVerificationSummary (check) {
+  const expected = check?.expected || {}
+  const fields = [
+    `reason=${check?.reason || 'unknown'}`,
+    `status=${check?.status ?? '?'}`,
+    `reservations=${check?.reservation_count ?? '?'}`,
+    `response_signal=${check?.response_signal ?? '?'}`,
+    `campsite_ids="${expected.campsite_ids?.join(',') || ''}"`,
+    `site_labels="${expected.campsite_labels?.join(',') || ''}"`,
+    `campground_ids="${expected.campground_ids?.join(',') || ''}"`,
+    `arrival=${expected.arrival_date || '?'}`,
+    `checkout=${expected.checkout_date || '?'}`,
+  ]
+  if (check?.best_match) {
+    fields.push(`best_score=${check.best_match.score}`)
+    fields.push(`best_index=${check.best_match.reservation_index}`)
+    fields.push(`best_campsite_id=${check.best_match.matched?.campsite_id || '?'}`)
+    fields.push(`best_arrival=${check.best_match.matched?.arrival_date || '?'}`)
+    fields.push(`best_checkout=${check.best_match.matched?.checkout_date || '?'}`)
+  }
+  return fields.join(' ')
+}
 
 async function clickReserveButton (page) {
   for (const sel of RESERVE_SELECTORS) {
@@ -194,20 +386,14 @@ async function clickReserveButton (page) {
 export async function setupAuthPage () {
   const context = await getContext()
   await injectStoredCookies(context)
-
-  // Backend owns the recgov token lifecycle (RFC 0001). Fetch a non-expired
-  // recaccount-shaped JSON from the backend; companion no longer talks to
-  // recreation.gov's refresh endpoint directly. Fail closed: if the backend
-  // is unreachable or has no token saved, the SPA will show logged-out and
-  // we won't be able to ATC, but we won't run with stale creds either.
-  const recaccount = await fetchFreshRecaccount()
-  if (recaccount) {
-    console.log(`Cart: session ready via backend (expires ${recaccount.expiration})`)
-  } else {
-    console.log('Cart: backend returned no recaccount — proceeding without injection (likely will fail to ATC)')
-  }
-
   const page = await context.newPage()
+
+  const recaccount = await resolveRecaccount(page)
+  if (recaccount) {
+    console.log(`Cart: session ready (expires ${recaccount.expiration})`)
+  } else {
+    console.log('Cart: no Recreation.gov login session available — cannot add to cart')
+  }
 
   if (recaccount) await injectRecaccount(page, recaccount)
   await injectBearerRoute(page, recaccount?.access_token)
@@ -247,40 +433,47 @@ async function waitForCaptchaIfPresent (page, solveTimeout = 90000) {
 
 // Adds a match to the cart on rec.gov. Returns true if the cart now has the reservation.
 // `match` is the backend Match shape (snake_case fields from /api/campsite/matches).
+export function bookingUrlForMatch (match) {
+  const firstDate = match.first_date
+  const availableDates = match.available_dates || (firstDate ? [firstDate] : [])
+  const checkout = match.checkout_date || toCheckoutDate(availableDates[availableDates.length - 1])
+  const campsiteId = match.provider_campsite_id || match.vendor_id || match.campsite_id
+  return match.booking_url || (
+    campsiteId
+      ? campsiteUrl(campsiteId, firstDate, checkout)
+      : reservationUrl(match.campground_id, firstDate, checkout)
+  )
+}
+
 export async function addToCart (match) {
-  const campgroundId = match.campground_id
-  const campsiteId = match.campsite_id
   const firstDate = match.first_date
   const availableDates = match.available_dates || (firstDate ? [firstDate] : [])
   const site = match.campsite_site
   const checkout = match.checkout_date || toCheckoutDate(availableDates[availableDates.length - 1])
-  const url = match.booking_url || (
-    campsiteId
-      ? campsiteUrl(campsiteId, firstDate, checkout)
-      : reservationUrl(campgroundId, firstDate, checkout)
-  )
+  const url = bookingUrlForMatch(match)
   console.log(`Cart: opening ${url}`)
 
-  const { page } = await setupAuthPage()
+  const { page, recaccount } = await setupAuthPage()
+  if (!recaccount) return { ok: false, page }
 
   const captured = []
+  let cartVerificationRequests = 0
+  const getCartForVerification = async () => {
+    cartVerificationRequests += 1
+    try {
+      return await getCartItems(page)
+    } finally {
+      cartVerificationRequests -= 1
+    }
+  }
   page.on('response', r => {
     if (/api.*(cart|reserv|booking|order)/i.test(r.url())) {
+      if (cartVerificationRequests > 0 && r.url().includes('/api/cart/shoppingcart')) return
       const path = r.url().replace('https://www.recreation.gov', '').slice(0, 80)
-      const entry = { status: r.status(), path, line: '' }
+      const entry = { status: r.status(), path, line: `${r.status()} ${path}` }
       captured.push(entry)
-      r.json()
-        .then(b => { entry.line = `${entry.status} ${path} → ${JSON.stringify(b).slice(0, 100)}` })
-        .catch(() => { entry.line = `${entry.status} ${path}` })
     }
   })
-
-  // Returns true if any captured cart/reservation API call returned 2xx.
-  // Click-the-button succeeded does not mean the cart actually accepted —
-  // 401 'bad fingerprint' / 4xx still leaves the SPA in a "Reserved!"
-  // momentary state on some flows.
-  const cartAccepted = () => captured.some(e => e.status >= 200 && e.status < 300 &&
-    /\/api\/(cart|camps\/reservations)/.test(e.path))
 
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
@@ -300,10 +493,9 @@ export async function addToCart (match) {
 
     if (await clickReserveButton(page)) {
       await waitForCaptchaIfPresent(page)
-      await page.waitForTimeout(500)
-      const ok = cartAccepted()
+      const verification = await waitForRequestedCartItem(page, captured, match, getCartForVerification)
       if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
-      return { ok, page }
+      return { ok: verification.ok, page, cart_check: verification.check }
     }
 
     if (await page.locator(ENTER_DATES_SEL).first().isVisible().catch(() => false)) {
@@ -311,10 +503,9 @@ export async function addToCart (match) {
       await page.waitForSelector(RESERVE_COMBINED, { timeout: 12000 }).catch(() => {})
       if (await clickReserveButton(page)) {
         await waitForCaptchaIfPresent(page)
-        await page.waitForTimeout(500)
-        const ok = cartAccepted()
+        const verification = await waitForRequestedCartItem(page, captured, match, getCartForVerification)
         if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
-        return { ok, page }
+        return { ok: verification.ok, page, cart_check: verification.check }
       }
     }
 
@@ -333,27 +524,26 @@ export async function addToCart (match) {
   }
 }
 
-export async function testChromium (rawCookieInput = null) {
+export async function testChromium (rawCookieInput = null, options = {}) {
   const context = await getContext()
   await injectStoredCookies(context, rawCookieInput)
-
-  const recaccount = await fetchFreshRecaccount()
-  if (!recaccount) {
-    console.log('testChromium: backend returned no recaccount — paste a fresh cURL in Settings to seed one')
-    lastLoginState = false
-    return { ok: true, loggedIn: false }
-  }
-
   const page = await context.newPage()
   try {
+    const recaccount = await resolveRecaccount(page, options)
+    if (!recaccount) {
+      console.log('testChromium: no logged-in Recreation.gov browser session found')
+      lastLoginState = false
+      return { ok: true, loggedIn: false }
+    }
+
     await injectRecaccount(page, recaccount)
     await injectBearerRoute(page, recaccount.access_token)
-    await page.goto('https://www.recreation.gov/', { waitUntil: 'domcontentloaded', timeout: 20000 })
-    await page.waitForTimeout(2000)
+    await page.goto(RECGOV_HOME_URL, { waitUntil: 'domcontentloaded', timeout: RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS })
+    await page.waitForTimeout(RECGOV_LOGIN_STATE_SETTLE_MS)
     const loggedIn = (await isSpaLoggedIn(page)) === true
     lastLoginState = loggedIn
     if (loggedIn) console.log(`Logged in to recreation.gov ✓ (token expires ${recaccount.expiration})`)
-    else console.log('Backend recaccount injected but SPA still shows logged-out — token may have been rejected')
+    else console.log('Companion browser recaccount injected but SPA still shows logged-out — token may have been rejected')
     return { ok: true, loggedIn }
   } finally {
     await page.close().catch(() => {})
