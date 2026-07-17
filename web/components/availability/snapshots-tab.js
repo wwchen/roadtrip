@@ -26,6 +26,10 @@ export async function mount(rootEl, { urlParams }) {
       <h2>Stats</h2>
       <div id="snap-stats"></div>
     </section>
+    <section class="panel" id="snap-chart-panel" hidden>
+      <h2>Timeline</h2>
+      <div style="position:relative;height:300px"><canvas id="snap-chart"></canvas></div>
+    </section>
     <section class="panel" aria-live="polite">
       <div id="snap-status" class="status">Set a Campsite ID or POI ID to load changes.</div>
       <div id="snap-results"></div>
@@ -35,8 +39,11 @@ export async function mount(rootEl, { urlParams }) {
   const filterForm = rootEl.querySelector('#snap-filter');
   const statusEl = rootEl.querySelector('#snap-status');
   const resultsEl = rootEl.querySelector('#snap-results');
+  const chartPanel = rootEl.querySelector('#snap-chart-panel');
+  const chartCanvas = rootEl.querySelector('#snap-chart');
   const statsPanel = rootEl.querySelector('#snap-stats-panel');
   const statsEl = rootEl.querySelector('#snap-stats');
+  let chart = null;
 
   if (urlParams.campsite_id) filterForm.querySelector('[name=campsite_id]').value = urlParams.campsite_id;
   if (urlParams.poi_id) filterForm.querySelector('[name=poi_id]').value = urlParams.poi_id;
@@ -60,6 +67,7 @@ export async function mount(rootEl, { urlParams }) {
     if (!campsiteId === !poiId) {
       statusEl.textContent = 'Set exactly one of Campsite ID or POI ID.';
       resultsEl.innerHTML = '';
+      renderChart([]);
       hideStats();
       return;
     }
@@ -70,6 +78,7 @@ export async function mount(rootEl, { urlParams }) {
         : await listChangesForPoi(poiId, { targetDate: targetDate || undefined });
       statusEl.textContent = `${data.changes.length} change${data.changes.length === 1 ? '' : 's'}.`;
       render(data.changes);
+      renderChart(data.changes);
       if (campsiteId) {
         await refreshStats(campsiteId);
       } else {
@@ -78,6 +87,7 @@ export async function mount(rootEl, { urlParams }) {
     } catch (err) {
       statusEl.textContent = `Error: ${err.message}`;
       resultsEl.innerHTML = '';
+      renderChart([]);
       hideStats();
     }
   }
@@ -110,6 +120,87 @@ export async function mount(rootEl, { urlParams }) {
         <td>${escapeHtml(s.to_status)}</td>
       </tr>
     `;
+  }
+
+  function renderChart(changes) {
+    if (chart) { chart.destroy(); chart = null; }
+    if (changes.length === 0 || typeof Chart === 'undefined') {
+      chartPanel.hidden = true;
+      return;
+    }
+    chartPanel.hidden = false;
+
+    const STATUS_Y = { available: 2, first_come: 1.5, reserved: 1, closed: 0, unknown: -1, past: -1 };
+    const COLORS = [
+      '#4dc9f6', '#f67019', '#f53794', '#537bc4', '#acc236',
+      '#166a8f', '#00a950', '#58595b', '#8549ba',
+    ];
+
+    // Group by "campsite_name / target_date"
+    const groups = new Map();
+    for (const c of changes) {
+      const key = `${c.campsite_name || c.campsite_id} @ ${c.target_date}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(c);
+    }
+
+    const datasets = [];
+    let colorIdx = 0;
+    for (const [label, rows] of groups) {
+      // Sort chronologically and build stepped data from to_status
+      const sorted = rows.slice().sort((a, b) => new Date(a.observed_at) - new Date(b.observed_at));
+      const points = sorted.map(r => ({ x: new Date(r.observed_at), y: STATUS_Y[r.to_status] ?? -1 }));
+      datasets.push({
+        label,
+        data: points,
+        stepped: 'before',
+        borderColor: COLORS[colorIdx % COLORS.length],
+        backgroundColor: COLORS[colorIdx % COLORS.length],
+        borderWidth: 2,
+        pointRadius: 4,
+        fill: false,
+      });
+      colorIdx++;
+    }
+
+    chart = new Chart(chartCanvas, {
+      type: 'line',
+      data: { datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'nearest', intersect: false },
+        scales: {
+          x: {
+            type: 'time',
+            time: { tooltipFormat: 'yyyy-MM-dd HH:mm' },
+            title: { display: true, text: 'Observed at' },
+          },
+          y: {
+            title: { display: true, text: 'Status' },
+            ticks: {
+              callback: (v) => {
+                const labels = { 2: 'available', 1.5: 'first_come', 1: 'reserved', 0: 'closed', '-1': 'unknown' };
+                return labels[v] || '';
+              },
+              stepSize: 0.5,
+            },
+            min: -1,
+            max: 2.5,
+          },
+        },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const labels = { 2: 'available', 1.5: 'first_come', 1: 'reserved', 0: 'closed', '-1': 'unknown' };
+                return `${ctx.dataset.label}: ${labels[ctx.parsed.y] || ctx.parsed.y}`;
+              },
+            },
+          },
+        },
+      },
+    });
   }
 
   async function refreshStats(campsiteId) {
