@@ -7,7 +7,6 @@ import ca.floo.roadtrip.clients.slack.SlackClient
 import ca.floo.roadtrip.config.SlackConfig
 import ca.floo.roadtrip.service.notification.common.NotificationService
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
-import ca.floo.roadtrip.service.notification.common.SlackResponseSender
 import ca.floo.roadtrip.service.notification.common.WatchOpening
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import kotlinx.serialization.encodeToString

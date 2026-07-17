@@ -3,9 +3,9 @@ package ca.floo.roadtrip.routes
 import ca.floo.roadtrip.clients.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.availability.WatchStatus
-import ca.floo.roadtrip.service.notification.common.SlackResponseSender
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler
+import ca.floo.roadtrip.service.notification.slack.SlackResponseSender
 import ca.floo.roadtrip.service.notification.slack.SlackWatchCard
 import io.ktor.client.request.header
 import io.ktor.client.request.post

@@ -2,10 +2,11 @@ package ca.floo.roadtrip.service.notification.slack
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.availability.WatchStatus
-import ca.floo.roadtrip.service.notification.common.SlackResponseSender
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
+
+private val blockActionsJson = Json { ignoreUnknownKeys = true }
 
 /**
  * Server-side dispatch for a Slack interactivity `block_actions` payload — the
@@ -148,7 +149,7 @@ internal class SlackInteractivityHandler(
          * button-in-a-card shape our cards use.
          */
         fun parse(json: String): BlockActionsPayload? =
-            runCatching { Json { ignoreUnknownKeys = true }.decodeFromString(BlockActionsPayload.serializer(), json) }
+            runCatching { blockActionsJson.decodeFromString(BlockActionsPayload.serializer(), json) }
                 .getOrNull()
     }
 }

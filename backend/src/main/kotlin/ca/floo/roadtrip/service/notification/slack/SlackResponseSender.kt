@@ -1,4 +1,6 @@
-package ca.floo.roadtrip.service.notification.common
+package ca.floo.roadtrip.service.notification.slack
+
+import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 
 /**
  * Slack-only response URL surface for interactivity updates. This stays out of
