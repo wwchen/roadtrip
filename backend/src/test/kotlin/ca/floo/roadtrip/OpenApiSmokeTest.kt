@@ -10,7 +10,9 @@ import ca.floo.roadtrip.routes.healthRoutes
 import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.testEmailRoutes
+import ca.floo.roadtrip.routes.testSlackRoutes
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
+import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiService
@@ -198,7 +200,7 @@ class OpenApiSmokeTest {
         }
 
     @Test
-    fun `main openapi spec lists test email route`() =
+    fun `main openapi spec lists test routes`() =
         testApplication {
             application {
                 install(SwaggerUI) {
@@ -208,6 +210,7 @@ class OpenApiSmokeTest {
                     route("/api/docs") { swaggerUI("/api/docs/openapi.json") }
                     route("/api/docs/openapi.json") { openApiSpec() }
                     testEmailRoutes(EmailNotificationService(config = null))
+                    testSlackRoutes(SlackNotificationService(config = null))
                 }
             }
 
@@ -227,6 +230,19 @@ class OpenApiSmokeTest {
             assertEquals(
                 "test",
                 testEmailPost["tags"]!!
+                    .jsonArray
+                    .single()
+                    .jsonPrimitive
+                    .content,
+            )
+            val testSlackPost =
+                paths["/test/slack"]!!
+                    .jsonObject["post"]!!
+                    .jsonObject
+            assertEquals("Send a test Slack message", testSlackPost["summary"]!!.jsonPrimitive.content)
+            assertEquals(
+                "test",
+                testSlackPost["tags"]!!
                     .jsonArray
                     .single()
                     .jsonPrimitive

@@ -46,6 +46,11 @@ class SlackNotificationService(
 
     override fun canHandle(target: NotificationTarget): Boolean = target is NotificationTarget.Slack
 
+    suspend fun sendTestMessage(channel: String? = null): Boolean {
+        val (fallback, attachments) = SlackContentTestRenderer.render()
+        return send(channel?.trim()?.takeIf { it.isNotEmpty() }, fallback, attachments)
+    }
+
     override suspend fun sendWatchStatus(
         notice: WatchStatusNotice,
         target: NotificationTarget,

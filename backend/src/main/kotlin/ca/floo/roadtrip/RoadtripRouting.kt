@@ -17,6 +17,7 @@ import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.routes.slackInteractivityRoute
 import ca.floo.roadtrip.routes.testEmailRoutes
+import ca.floo.roadtrip.routes.testSlackRoutes
 import ca.floo.roadtrip.service.availability.CampgroundAvailabilitySupport
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.poi.CampgroundService
@@ -173,6 +174,7 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
         healthRoutes()
         adminIngestRoutes(runtime.ingestController, runtime.ctx)
         testEmailRoutes(EmailNotificationService(runtime.appConfig.email))
+        testSlackRoutes(runtime.slackNotifications)
         staticSiteRoutes(runtime.staticDir)
     }
 }
