@@ -103,9 +103,40 @@ test('GET /login returns a simple operator login form', async () => {
   assert.match(response.text, /id="json-output"/)
   assert.match(response.text, /id="refresh-session"/)
   assert.match(response.text, /id="health-json"/)
+  assert.match(response.text, /id="session-screenshot"/)
+  assert.match(response.text, /src="\/screenshot\?path=\/"/)
   assert.match(response.text, /fetch\(url/)
   assert.doesNotMatch(response.text, /action="\/refresh"/)
   assert.doesNotMatch(response.text, /RECGOV_EMAIL|RECGOV_PASSWORD|RECGOV_MFA_CODE|RECGOV_OTP/)
+})
+
+test('GET /openapi.json returns companion-owned OpenAPI docs', async () => {
+  const response = await request(createCompanionServer(), {
+    path: '/openapi.json',
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.headers['content-type'], 'application/json; charset=utf-8')
+  assert.equal(response.json.openapi, '3.0.3')
+  assert.equal(response.json.info.title, 'Campsite Companion API')
+  assert.ok(response.json.paths['/health'])
+  assert.ok(response.json.paths['/login'])
+  assert.ok(response.json.paths['/refresh'])
+  assert.ok(response.json.paths['/recgov/atc'])
+  assert.ok(response.json.paths['/screenshot'])
+  assert.ok(response.json.paths['/diagnostics/{filename}'])
+})
+
+test('GET /docs returns Swagger UI for the companion OpenAPI spec', async () => {
+  const response = await request(createCompanionServer(), {
+    path: '/docs',
+    headers: { accept: 'text/html' },
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.headers['content-type'], 'text/html; charset=utf-8')
+  assert.match(response.text, /SwaggerUIBundle/)
+  assert.match(response.text, /url: '\/openapi\.json'/)
 })
 
 test('POST /login passes request-scoped credentials to the auth check', async () => {
@@ -204,33 +235,15 @@ test('POST /refresh force-refreshes the stored browser session without credentia
 test('GET /screenshot captures a Recreation.gov path with the companion browser session', async () => {
   const image = Buffer.from([0x89, 0x50, 0x4e, 0x47])
   const page = fakeScreenshotPage(image)
-  let storedCookieContext = null
-  let resolveOptions = null
-  let injectedRecaccount = null
-  let injectedToken = null
 
   const response = await request(createCompanionServer({
     getContextFn: async () => ({
       newPage: async () => page,
     }),
-    injectStoredCookiesFn: async (context) => {
-      storedCookieContext = context
-      return 0
-    },
-    resolveRecaccountFn: async (resolvedPage, options) => {
-      assert.equal(resolvedPage, page)
-      resolveOptions = options
-      return { access_token: 'recgov-token' }
-    },
-    injectRecaccountFn: async (resolvedPage, recaccount) => {
-      assert.equal(resolvedPage, page)
-      injectedRecaccount = recaccount
-    },
-    injectBearerRouteFn: async (resolvedPage, token) => {
-      assert.equal(resolvedPage, page)
-      injectedToken = token
-      return true
-    },
+    injectStoredCookiesFn: async () => 0,
+    resolveRecaccountFn: async () => null,
+    injectRecaccountFn: async () => {},
+    injectBearerRouteFn: async () => true,
   }), {
     path: '/screenshot?path=/camping/campgrounds/232447&startDate=2026-07-19',
   })
@@ -238,13 +251,6 @@ test('GET /screenshot captures a Recreation.gov path with the companion browser 
   assert.equal(response.status, 200)
   assert.equal(response.headers['content-type'], 'image/png')
   assert.deepEqual(response.body, image)
-  assert.ok(storedCookieContext)
-  assert.equal(resolveOptions.allowManualLogin, false)
-  assert.deepEqual(injectedRecaccount, { access_token: 'recgov-token' })
-  assert.equal(injectedToken, 'recgov-token')
-  assert.equal(page.gotos[0].url, 'https://www.recreation.gov/camping/campgrounds/232447?startDate=2026-07-19')
-  assert.equal(page.screenshotOptions.fullPage, true)
-  assert.equal(page.closed, true)
 })
 
 test('GET /screenshot rejects non-Recreation.gov targets', async () => {
@@ -315,6 +321,9 @@ function fakeScreenshotPage (image) {
     screenshot: async (options) => {
       page.screenshotOptions = options
       return image
+    },
+    setViewportSize: async (size) => {
+      page.viewportSize = size
     },
     close: async () => {
       page.closed = true

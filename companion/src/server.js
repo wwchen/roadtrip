@@ -3,29 +3,37 @@
 // and returns the same JSON result as the recgov:atc CLI.
 
 import http from 'node:http'
-import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import {
-  IS_HEADLESS,
-  getContext,
-  injectBearerRoute,
-  injectRecaccount,
-  injectStoredCookies,
-} from './browser.js'
+import { IS_HEADLESS } from './browser.js'
 import {
   recgovAuthenticationFailure,
   testChromium,
 } from './cart.js'
 import {
   RECGOV_DIAGNOSTIC_DIR,
-  RECGOV_HOME_URL,
   getRecgovSessionStatus,
   recgovLoginCredentialsFromInput,
-  resolveRecaccount,
 } from './recgovSession.js'
+import {
+  COMPANION_OPENAPI_SPEC,
+  OPENAPI_ROUTE,
+  SWAGGER_DOCS_ROUTE,
+} from './openapi.js'
+import {
+  SCREENSHOT_ROUTE,
+  SCREENSHOT_ROUTE_PREFIX,
+  captureRecgovScreenshot,
+  createRecgovScreenshotDeps,
+  recgovScreenshotTargetUrl,
+} from './recgovScreenshot.js'
 import { runAtcOnce } from './runAtcOnce.js'
+import {
+  renderLoginPage,
+  renderRefreshPage,
+  renderSwaggerPage,
+} from './templates.js'
 
 const DEFAULT_HOST = '0.0.0.0'
 const DEFAULT_PORT = 8770
@@ -44,17 +52,8 @@ const LOG_DETAIL_MAX_CHARS = 160
 const AUTH_CHECK_EXCEPTION_ERROR = 'recgov_auth_check_exception'
 const AUTH_CHECK_EXCEPTION_ACTION =
   'Check the companion logs, then open the companion /login page or run make recgov-login from the host profile.'
-const LOGIN_FORM_TITLE = 'Recreation.gov Login'
 const DIAGNOSTIC_ROUTE_PREFIX = '/diagnostics/'
-const SCREENSHOT_ROUTE = '/screenshot'
-const SCREENSHOT_ROUTE_PREFIX = `${SCREENSHOT_ROUTE}/`
 const PNG_CONTENT_TYPE = 'image/png'
-const RECGOV_ORIGIN = new URL(RECGOV_HOME_URL).origin
-const SCREENSHOT_NAVIGATION_TIMEOUT_MS = 30_000
-const SCREENSHOT_SETTLE_MS = 2_000
-const LOGIN_PAGE_TEMPLATE = readTemplate('./loginPage.html')
-const REFRESH_PAGE_TEMPLATE = readTemplate('./refreshPage.html')
-const LOGIN_DIAGNOSTIC_TEMPLATE = readTemplate('./loginDiagnostic.html')
 
 const HOST = process.env.COMPANION_HOST || DEFAULT_HOST
 const PORT = Number.parseInt(process.env.COMPANION_PORT || String(DEFAULT_PORT), 10)
@@ -411,58 +410,6 @@ function wantsHtml (req) {
   return accept.includes('text/html') && !accept.includes('application/json')
 }
 
-function renderLoginPage ({ result = null } = {}) {
-  const status = result?.recgov_auth
-  const ok = result?.ok === true
-  const error = result && !ok ? result.detail || status?.detail || result.error || status?.error : null
-  const operation = status?.operation === 'refresh' ? 'Refresh' : 'Login'
-  const diagnostic = status?.diagnostic || status?.last_login_diagnostic || null
-  const statusHtml = result
-    ? `<p id="status-message" class="${ok ? 'ok' : 'error'}">${escapeHtml(ok ? `${operation} succeeded.` : `${operation} failed: ${error}`)}</p>`
-    : '<p id="status-message" class="muted">Ready.</p>'
-  const initialJson = result ? JSON.stringify(result, null, 2) : ''
-  const jsonClass = result ? '' : ' hidden'
-  const diagnosticHtml = diagnostic?.screenshot_url
-    ? renderDiagnosticHtml(diagnostic)
-    : ''
-
-  return renderTemplate(LOGIN_PAGE_TEMPLATE, {
-    LOGIN_FORM_TITLE: escapeHtml(LOGIN_FORM_TITLE),
-    STATUS_HTML: statusHtml,
-    JSON_CLASS: jsonClass,
-    INITIAL_JSON: escapeHtml(initialJson),
-    DIAGNOSTIC_HTML: diagnosticHtml,
-  })
-}
-
-function renderDiagnosticHtml (diagnostic) {
-  return renderTemplate(LOGIN_DIAGNOSTIC_TEMPLATE, {
-    DIAGNOSTIC_REASON: escapeHtml(diagnostic.reason || 'unknown'),
-    DIAGNOSTIC_SCREENSHOT_URL: escapeHtml(diagnostic.screenshot_url),
-  })
-}
-
-function renderRefreshPage () {
-  return REFRESH_PAGE_TEMPLATE
-}
-
-function renderTemplate (template, values) {
-  return template.replace(/\{\{([A-Z_]+)\}\}/g, (_match, key) => String(values[key] ?? ''))
-}
-
-function readTemplate (filename) {
-  return readFileSync(new URL(filename, import.meta.url), 'utf8')
-}
-
-function escapeHtml (value) {
-  return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;')
-}
-
 function maskLoginUsername (email) {
   const [name, domain] = String(email || '').split('@')
   if (!domain) return 'configured account'
@@ -538,19 +485,11 @@ function truncateLogField (value, maxLength) {
 
 export function createCompanionServer ({
   testChromiumFn = testChromium,
-  getContextFn = getContext,
-  injectStoredCookiesFn = injectStoredCookies,
-  resolveRecaccountFn = resolveRecaccount,
-  injectRecaccountFn = injectRecaccount,
-  injectBearerRouteFn = injectBearerRoute,
+  ...screenshotOverrides
 } = {}) {
   const deps = {
     testChromiumFn,
-    getContextFn,
-    injectStoredCookiesFn,
-    resolveRecaccountFn,
-    injectRecaccountFn,
-    injectBearerRouteFn,
+    recgovScreenshotDeps: createRecgovScreenshotDeps(screenshotOverrides),
   }
   return http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://companion.local')
@@ -560,6 +499,14 @@ export function createCompanionServer ({
     }
     if (req.method === 'GET' && (url.pathname === SCREENSHOT_ROUTE || url.pathname.startsWith(SCREENSHOT_ROUTE_PREFIX))) {
       await handleLiveScreenshot(url, res, deps)
+      return
+    }
+    if (req.method === 'GET' && url.pathname === OPENAPI_ROUTE) {
+      jsonResponse(res, HTTP_OK, COMPANION_OPENAPI_SPEC)
+      return
+    }
+    if (req.method === 'GET' && url.pathname === SWAGGER_DOCS_ROUTE) {
+      htmlResponse(res, HTTP_OK, renderSwaggerPage())
       return
     }
     if (req.method === 'GET' && url.pathname === '/health') {
@@ -595,8 +542,8 @@ export function createCompanionServer ({
 }
 
 async function handleDiagnosticImage (url, res) {
-  const filename = path.basename(url.pathname)
-  if (!filename || filename !== decodeURIComponent(url.pathname.slice(DIAGNOSTIC_ROUTE_PREFIX.length)) || !filename.endsWith('.png')) {
+  const filename = diagnosticFilename(url)
+  if (!filename) {
     jsonResponse(res, HTTP_BAD_REQUEST, {
       ok: false,
       error: 'invalid_diagnostic_path',
@@ -617,7 +564,7 @@ async function handleDiagnosticImage (url, res) {
 }
 
 async function handleLiveScreenshot (url, res, deps) {
-  const target = screenshotTargetUrl(url)
+  const target = recgovScreenshotTargetUrl(url)
   if (!target) {
     jsonResponse(res, HTTP_BAD_REQUEST, {
       ok: false,
@@ -629,23 +576,9 @@ async function handleLiveScreenshot (url, res, deps) {
 
   log('recgov screenshot start', `target=${target.href}`)
   const startedAt = Date.now()
-  let page = null
   try {
-    const context = await deps.getContextFn()
-    await deps.injectStoredCookiesFn(context)
-    page = await context.newPage()
-    const recaccount = await deps.resolveRecaccountFn(page, { allowManualLogin: false })
-    if (recaccount?.access_token) {
-      await deps.injectRecaccountFn(page, recaccount)
-      await deps.injectBearerRouteFn(page, recaccount.access_token)
-    }
-    await page.goto(target.href, {
-      waitUntil: 'domcontentloaded',
-      timeout: SCREENSHOT_NAVIGATION_TIMEOUT_MS,
-    })
-    await page.waitForTimeout(SCREENSHOT_SETTLE_MS)
-    const image = await page.screenshot({ type: 'png', fullPage: true })
-    log('recgov screenshot result ok', `target=${target.href}`, `recaccount=${Boolean(recaccount?.access_token)}`, `duration_ms=${Date.now() - startedAt}`)
+    const { image, recaccountPresent } = await captureRecgovScreenshot(target, deps.recgovScreenshotDeps)
+    log('recgov screenshot result ok', `target=${target.href}`, `recaccount=${recaccountPresent}`, `duration_ms=${Date.now() - startedAt}`)
     imageResponse(res, HTTP_OK, image, PNG_CONTENT_TYPE)
   } catch (error) {
     log('recgov screenshot result fail', `target=${target.href}`, `detail="${truncateLogField(error.message, LOG_DETAIL_MAX_CHARS)}"`, `duration_ms=${Date.now() - startedAt}`)
@@ -655,8 +588,6 @@ async function handleLiveScreenshot (url, res, deps) {
       detail: error.message,
       target_url: target.href,
     })
-  } finally {
-    if (page) await page.close().catch(() => {})
   }
 }
 
@@ -672,57 +603,15 @@ async function serveScreenshotImage (imagePath, res, notFoundError) {
   }
 }
 
+function diagnosticFilename (url) {
+  const filename = path.basename(url.pathname)
+  const requested = decodeURIComponent(url.pathname.slice(DIAGNOSTIC_ROUTE_PREFIX.length))
+  if (!filename || filename !== requested || !filename.endsWith('.png')) return null
+  return filename
+}
+
 function diagnosticImagePath (filename) {
-  return screenshotImagePathForRequest(filename)
-}
-
-function screenshotImagePathForRequest (requestedPath) {
-  if (!requestedPath) return null
-  if (requestedPath.startsWith(DIAGNOSTIC_ROUTE_PREFIX)) {
-    return diagnosticImagePath(requestedPath.slice(DIAGNOSTIC_ROUTE_PREFIX.length))
-  }
-  const root = path.resolve(RECGOV_DIAGNOSTIC_DIR)
-  const candidate = path.isAbsolute(requestedPath)
-    ? path.resolve(requestedPath)
-    : path.resolve(root, requestedPath)
-  if (!candidate.endsWith('.png')) return null
-  const relative = path.relative(root, candidate)
-  if (relative.startsWith('..') || path.isAbsolute(relative)) return null
-  return candidate
-}
-
-function screenshotTargetUrl (url) {
-  const raw = screenshotTargetInput(url)
-  if (!raw) return new URL(RECGOV_HOME_URL)
-  try {
-    const target = /^https?:\/\//i.test(raw)
-      ? new URL(raw)
-      : new URL(raw.startsWith('/') ? raw : `/${raw}`, RECGOV_HOME_URL)
-    if (target.origin !== RECGOV_ORIGIN) return null
-    target.hash = ''
-    return target
-  } catch {
-    return null
-  }
-}
-
-function screenshotTargetInput (url) {
-  const urlParam = url.searchParams.get('url')
-  if (urlParam) return urlParam
-  const pathParam = url.searchParams.get('path')
-  if (pathParam) return screenshotPathWithExtraParams(pathParam, url.searchParams)
-  if (!url.pathname.startsWith(SCREENSHOT_ROUTE_PREFIX)) return null
-  return `/${decodeURIComponent(url.pathname.slice(SCREENSHOT_ROUTE_PREFIX.length))}${url.search}`
-}
-
-function screenshotPathWithExtraParams (pathParam, searchParams) {
-  const extra = new URLSearchParams(searchParams)
-  extra.delete('path')
-  extra.delete('url')
-  const renderedExtra = extra.toString()
-  if (!renderedExtra) return pathParam
-  const separator = pathParam.includes('?') ? '&' : '?'
-  return `${pathParam}${separator}${renderedExtra}`
+  return path.join(RECGOV_DIAGNOSTIC_DIR, filename)
 }
 
 export const server = createCompanionServer()
