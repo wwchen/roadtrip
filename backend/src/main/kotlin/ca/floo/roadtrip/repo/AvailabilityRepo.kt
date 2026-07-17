@@ -251,21 +251,7 @@ class AvailabilityRepo(
         campsiteId: Long,
         targetDate: LocalDate? = null,
         limit: Int = 200,
-    ): List<StatusRun> {
-        val dateClause = if (targetDate != null) " AND target_date = ?" else ""
-        val sql =
-            "SELECT * FROM ($statusRunSelect) t WHERE campsite_id = ?" +
-                "$dateClause ORDER BY target_date DESC, last_observed_at DESC LIMIT ?"
-        return if (targetDate != null) {
-            ctx
-                .resultQuery(sql, campsiteId, targetDate, limit.coerceIn(1, 1000))
-                .fetch { mapStatusRun(it) }
-        } else {
-            ctx
-                .resultQuery(sql, campsiteId, limit.coerceIn(1, 1000))
-                .fetch { mapStatusRun(it) }
-        }
-    }
+    ): List<StatusRun> = listForCampsites(listOf(campsiteId), targetDate, limit)
 
     fun listForCampsites(
         campsiteIds: List<Long>,

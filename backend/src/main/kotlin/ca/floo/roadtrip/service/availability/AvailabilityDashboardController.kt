@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.api.AvailabilityChangeSchema
-import ca.floo.roadtrip.model.api.AvailabilityChangesListResponse
 import ca.floo.roadtrip.model.api.AvailabilityPollerSchema
 import ca.floo.roadtrip.model.api.AvailabilityPollersListResponse
 import ca.floo.roadtrip.model.api.AvailabilityPollersSummary
@@ -11,6 +10,7 @@ import ca.floo.roadtrip.model.api.AvailabilitySnapshotStatsSchema
 import ca.floo.roadtrip.model.api.AvailabilitySnapshotsSummaryResponse
 import ca.floo.roadtrip.model.api.CheckNowCooldownDto
 import ca.floo.roadtrip.model.api.CheckNowResponseDto
+import ca.floo.roadtrip.model.api.ListAvailabilityChangesResponse
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
@@ -120,7 +120,7 @@ internal class AvailabilityDashboardController(
         poiId: Long?,
         targetDate: LocalDate?,
         limit: Int,
-    ): AvailabilityDashboardResult<AvailabilityChangesListResponse> {
+    ): AvailabilityDashboardResult<ListAvailabilityChangesResponse> {
         if ((campsiteId == null) == (poiId == null)) {
             return AvailabilityDashboardResult.Invalid(
                 "invalid_filter",
@@ -150,7 +150,7 @@ internal class AvailabilityDashboardController(
                 )
             }
         return AvailabilityDashboardResult.Ok(
-            AvailabilityChangesListResponse(changes = rows.map { it.toSchema() }),
+            ListAvailabilityChangesResponse(changes = rows.map { it.toSchema() }),
         )
     }
 
