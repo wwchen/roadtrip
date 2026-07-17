@@ -6,7 +6,7 @@ import {
   listChangesForCampsite,
   listChangesForPoi,
 } from '/web/api/availability-dashboard-api.js';
-import { availabilityStatusLabel } from '/web/utils/availability-status.js';
+
 
 export async function mount(rootEl, { urlParams }) {
   rootEl.innerHTML = `
@@ -101,15 +101,13 @@ export async function mount(rootEl, { urlParams }) {
   }
 
   function renderRow(s) {
-    const from = s.from_status ? availabilityStatusLabel(s.from_status) : '—';
-    const to = availabilityStatusLabel(s.to_status);
     return `
       <tr>
         <td>${s.campsite_name ? escapeHtml(s.campsite_name) : (s.campsite_id != null ? `#${s.campsite_id}` : '—')}</td>
         <td>${escapeHtml(s.target_date)}</td>
         <td>${escapeHtml(formatTimestamp(s.observed_at))}</td>
-        <td>${escapeHtml(from)}</td>
-        <td>${escapeHtml(to)}</td>
+        <td>${escapeHtml(s.from_status || '—')}</td>
+        <td>${escapeHtml(s.to_status)}</td>
       </tr>
     `;
   }
