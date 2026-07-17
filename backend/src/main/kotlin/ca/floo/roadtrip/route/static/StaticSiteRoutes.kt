@@ -19,13 +19,7 @@ internal fun Route.staticSiteRoutes(staticDir: File) {
     get("/availability") {
         call.respondFile(File(staticDir, "availability.html"))
     }
-    get("/availability/") {
-        call.respondFile(File(staticDir, "availability.html"))
-    }
     get("/watches") {
-        call.respondFile(File(staticDir, "watches.html"))
-    }
-    get("/watches/") {
         call.respondFile(File(staticDir, "watches.html"))
     }
     staticFiles("/", staticDir) {
