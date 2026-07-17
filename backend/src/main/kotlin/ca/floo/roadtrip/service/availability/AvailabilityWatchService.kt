@@ -88,8 +88,10 @@ internal class AvailabilityWatchService(
                     status = status,
                 )
             WatchTriggerConfig.validateUpdate(input)
+            val triggerIntentTouched = input.triggerKinds != null || input.triggerConfig != null
             val txn = DSL.using(config)
             val updated = AvailabilityWatchRepo(txn).update(id, input) ?: return@transactionResult null
+            if (triggerIntentTouched) WatchTriggerConfig.validateSnapshot(updated)
             capabilityValidator.validate(updated)
             // ACTIVE → the alert provider (re)subscribes / re-syncs poller links;
             // any non-ACTIVE status is a deactivate as far as opening-detection

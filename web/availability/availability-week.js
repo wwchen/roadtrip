@@ -224,7 +224,7 @@ function renderDetail(ctx) {
   return renderDayDetail({
     day,
     watching: ctx.watchesByWindow.has(watchWindowKey(day.date, stayEndDate(ctx, day.date))),
-    canWatch: ctx.poiId != null && supportsWatchAlerts(ctx),
+    canWatch: ctx.poiId != null && ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY),
   });
 }
 
@@ -917,7 +917,7 @@ async function toggleWatch(ctx, button) {
       await deleteWatch(existing.id, { signal: ctx.signal });
       ctx.watchesByWindow.delete(key);
     } else {
-      if (!supportsWatchAlerts(ctx)) {
+      if (!ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY)) {
         button.textContent = previousLabel;
         button.disabled = false;
         rerender(ctx);
@@ -956,8 +956,6 @@ function defaultTriggerPayload(ctx) {
   const triggerKinds = [];
   if (ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY)) {
     triggerKinds.push(TRIGGER_KIND_SLACK_NOTIFY);
-  } else if (ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_EMAIL_NOTIFY)) {
-    triggerKinds.push(TRIGGER_KIND_EMAIL_NOTIFY);
   }
   return {
     trigger_kinds: triggerKinds,

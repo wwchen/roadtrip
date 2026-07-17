@@ -81,18 +81,15 @@ class NotificationServicesTest {
         client = client,
     )
 
-    private fun emailService(
-        client: RecordingEmailClient,
-        resultRecipients: List<String> = listOf("one@example.test", "two@example.test"),
-    ) = EmailNotificationService(
-        config =
-            EmailConfig(
-                resendApiKey = "re_test",
-                from = "Roadtrip Alerts <alerts@example.test>",
-                defaultTo = resultRecipients,
-            ),
-        client = client,
-    )
+    private fun emailService(client: RecordingEmailClient) =
+        EmailNotificationService(
+            config =
+                EmailConfig(
+                    resendApiKey = "re_test",
+                    from = "Roadtrip Alerts <alerts@example.test>",
+                ),
+            client = client,
+        )
 
     private fun fanout(
         slackClient: RecordingSlackClient,
@@ -108,7 +105,6 @@ class NotificationServicesTest {
                     EmailConfig(
                         resendApiKey = "re_test",
                         from = "Roadtrip Alerts <alerts@example.test>",
-                        defaultTo = listOf("one@example.test"),
                     ),
                 client = emailClient,
             ),
@@ -187,7 +183,7 @@ class NotificationServicesTest {
         }
 
     @Test
-    fun `sendWatchOpenings sends one email per configured recipient`() =
+    fun `sendWatchOpenings sends one email per target recipient`() =
         runBlocking {
             val client = RecordingEmailClient()
             val ok =
@@ -196,7 +192,7 @@ class NotificationServicesTest {
                     startDate = LocalDate.of(2026, 8, 1),
                     endDate = LocalDate.of(2026, 8, 3),
                     openings = listOf(opening()),
-                    target = NotificationTarget.Email(),
+                    target = NotificationTarget.Email(listOf("one@example.test", "two@example.test")),
                     appRootUrl = "https://roadtrip.example",
                 )
 
@@ -220,7 +216,7 @@ class NotificationServicesTest {
                     startDate = LocalDate.of(2026, 8, 1),
                     endDate = LocalDate.of(2026, 8, 3),
                     openings = listOf(opening()),
-                    targets = listOf(NotificationTarget.Slack("#camping"), NotificationTarget.Email()),
+                    targets = listOf(NotificationTarget.Slack("#camping"), NotificationTarget.Email(listOf("one@example.test"))),
                 )
 
             assertFalse(ok)

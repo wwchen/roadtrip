@@ -18,7 +18,7 @@ private const val WATCH_DASHBOARD_UID = "reservable-watch-drill"
 private const val CELL_MATRIX_UID = "availability-cell-matrix"
 
 /**
- * Turns cube edges into Slack alerts. Called once per poller run, after the
+ * Turns cube edges into watch alerts. Called once per poller run, after the
  * cube write, with the transitions that tick produced and the poller's live
  * watches (both already in the executor's hand).
  *

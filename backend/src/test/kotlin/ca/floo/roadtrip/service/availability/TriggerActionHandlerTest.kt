@@ -147,6 +147,34 @@ class TriggerActionHandlerTest {
         }
 
     @Test
+    fun `NotifyTriggerActionHandler sends email target`() =
+        runBlocking {
+            val notifications = CapturingNotifications(result = true)
+            val handler = NotifyTriggerActionHandler(notifications = notifications, appRootUrl = "https://app.example")
+
+            val delivered =
+                handler.fire(
+                    fakeWatch(
+                        id = 42L,
+                        triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY),
+                        triggerConfig =
+                            JsonObject(
+                                mapOf(
+                                    AvailabilityTriggerKinds.EMAIL_NOTIFY to
+                                        JsonObject(
+                                            mapOf("to" to JsonPrimitive("alerts@example.test")),
+                                        ),
+                                ),
+                            ),
+                    ),
+                    openings = listOf(triggerOpening()),
+                )
+
+            assertTrue(delivered)
+            assertEquals(listOf(NotificationTarget.Email(listOf("alerts@example.test"))), notifications.lastTargets)
+        }
+
+    @Test
     fun `NotifyTriggerActionHandler combines slack and email targets into one send`() =
         runBlocking {
             val notifications = CapturingNotifications(result = true)
@@ -157,14 +185,23 @@ class TriggerActionHandlerTest {
                     fakeWatch(
                         id = 42L,
                         triggerKinds = listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.EMAIL_NOTIFY),
-                        triggerConfig = JsonObject(mapOf("channel" to JsonPrimitive("#custom"))),
+                        triggerConfig =
+                            JsonObject(
+                                mapOf(
+                                    "channel" to JsonPrimitive("#custom"),
+                                    AvailabilityTriggerKinds.EMAIL_NOTIFY to
+                                        JsonObject(
+                                            mapOf("to" to JsonPrimitive("alerts@example.test")),
+                                        ),
+                                ),
+                            ),
                     ),
                     openings = listOf(triggerOpening()),
                 )
 
             assertTrue(delivered)
             assertEquals(
-                listOf(NotificationTarget.Slack("#custom"), NotificationTarget.Email()),
+                listOf(NotificationTarget.Slack("#custom"), NotificationTarget.Email(listOf("alerts@example.test"))),
                 notifications.lastTargets,
             )
             assertEquals(1, notifications.openingSends)

@@ -227,10 +227,13 @@ fulfill its trigger.
 
 The campsite availability API exposes proposed-watch capabilities for the
 current POI scope as provider-neutral `watch_capabilities`:
-`trigger_kinds` always includes `slack_notify`, and includes `atc` only when
-the resolved watch scope supports `BookingAction.ADD_TO_CART`. The FE renders
-the Add to cart toggle from that contract; create/update validation still uses
-the same booking capability service as the authoritative gate.
+`trigger_kinds` includes configured notification triggers such as
+`slack_notify` and `email_notify`, and includes `atc` only when the resolved
+watch scope supports `BookingAction.ADD_TO_CART`. Email notification watches
+carry their recipient on the watch itself as `trigger_config.email_notify.to`;
+there is no environment-level recipient fallback. The FE renders the Email and
+Add to cart toggles from this contract; create/update validation still uses the
+same capability service and trigger-config validator as the authoritative gate.
 
 ## Capabilities
 
@@ -260,7 +263,7 @@ drawer can hide affordances the provider doesn't support.
 | Capability probe | `AvailabilityProvider.capabilities` | Static per adapter; cheap. |
 | Watch evaluation on poll | watch evaluator | `same_site` requires one site bookable across all N nights; `any_combination` succeeds if at least one site is open per night. |
 | Record availability history | poller writes status-run rows to the `availability` interval table | Provider-agnostic; uses `AvailabilityObservationBatch` observations. |
-| Notify on match | poller dispatches via Slack (`slack_notify`; push future) | Channels are not provider-specific. See `docs/superpowers/specs/2026-07-03-availability-alerts-design.md`. |
+| Notify on match | poller dispatches via configured notification triggers (`slack_notify`, `email_notify`; push future) | Channels and email recipients are not provider-specific. See `docs/superpowers/specs/2026-07-03-availability-alerts-design.md`. |
 
 Availability providers do not model cart automation, payment, or booking on
 the user's behalf. Watch flows produce matches, notifications, and
@@ -421,7 +424,7 @@ week pages                         ↓
                                    ↓
                                    watch evaluator
   ↓                                  ↓ (match)
-"Set watch" click                  notify (Slack / push)
+"Set watch" click                  notify (Slack / email / push)
   ↓                                  ↓
 POST /api/availability/watches     record availability status-runs
                                                                    list watches, pause,

@@ -5,6 +5,7 @@ import {
   buildTriggerPayload,
   mountWatchEditor,
   normalizeWatchCapabilities,
+  watchEmailTo,
   watchSlackChannel,
 } from './availability/watch-editor.js';
 import { mountWatchPopover } from './availability/watch-popover.js';
@@ -34,12 +35,17 @@ test('buildTriggerPayload emits email notification trigger', () => {
     buildTriggerPayload({
       slackNotify: false,
       emailNotify: true,
+      emailTo: ' alerts@example.test ',
       addToCart: false,
       stopWhenTriggered: true,
     }),
     {
       trigger_kinds: ['email_notify'],
-      trigger_config: {},
+      trigger_config: {
+        email_notify: {
+          to: 'alerts@example.test',
+        },
+      },
       stop_when_triggered: true,
     },
   );
@@ -56,6 +62,19 @@ test('watchSlackChannel reads nested config before legacy flat config', () => {
       },
     }),
     '#nested',
+  );
+});
+
+test('watchEmailTo reads nested email recipient config', () => {
+  assert.equal(
+    watchEmailTo({
+      trigger_config: {
+        email_notify: {
+          to: ' alerts@example.test ',
+        },
+      },
+    }),
+    'alerts@example.test',
   );
 });
 
@@ -107,6 +126,7 @@ test('mountWatchEditor renders email, hides Slack channel override, and uses dar
 
     assert.match(host.innerHTML, /name="email_notify"/);
     assert.match(host.innerHTML, />Email</);
+    assert.doesNotMatch(host.innerHTML, /name="email_to"/);
     assert.doesNotMatch(host.innerHTML, /Channel override|name="slack_channel"/);
     assert.match(styleTag.textContent, /background: var\(--rt-surface, #26272d\)/);
 

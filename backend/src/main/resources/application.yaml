@@ -31,7 +31,6 @@ roadtrip:
   email:
     resend-api-key: "${RESEND_API_KEY:}"
     from: "${ROADTRIP_EMAIL_FROM:Campsite Alerts <alerts@roadtrip.floo.ca>}"
-    default-to: "${ROADTRIP_EMAIL_DEFAULT_TO:}"
   poi-registry:
     resource: poi-registry.yaml
     path:

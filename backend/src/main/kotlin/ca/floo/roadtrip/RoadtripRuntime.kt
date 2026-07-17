@@ -215,6 +215,9 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                 EmailNotificationService(boot.appConfig.email),
             ),
         )
+    boot.appConfig.email
+        ?.also { log.info("Email notifications ENABLED: Resend sender configured, watch recipients come from trigger_config") }
+        ?: log.warn("Email notifications DISABLED: roadtrip.email.resend-api-key/from unset")
     val recgovAtcExecutor =
         boot.appConfig.booking.recgovAtc
             .takeIf { it.companionEnabled }
@@ -227,17 +230,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             ),
         )
     val bookingTargets = AvailabilityBookingTargetResolver(bookingProviderRegistry)
-    val notificationTriggerKinds =
-        buildList {
-            add(AvailabilityTriggerKinds.SLACK_NOTIFY)
-            if (
-                boot.appConfig.email
-                    ?.defaultTo
-                    ?.isNotEmpty() == true
-            ) {
-                add(AvailabilityTriggerKinds.EMAIL_NOTIFY)
-            }
-        }
+    val notificationTriggerKinds = notificationTriggerKinds(emailConfigured = boot.appConfig.email != null)
     val watchCapabilities =
         WatchCapabilityService(
             availabilityTargets = availabilityTargets,
@@ -322,7 +315,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                     else ->
                         "roadtrip.slack.signing-secret is not set — outbound Slack works, but the interactivity endpoint stays unregistered"
                 }
-            log.info("Slack interactivity DISABLED: {}", reason)
+            log.warn("Slack interactivity DISABLED: {}", reason)
             null
         }
     // One in-process cooldown tracker shared by both the poller and the live
@@ -371,6 +364,14 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         notifications = notifications,
     )
 }
+
+internal fun notificationTriggerKinds(emailConfigured: Boolean): List<String> =
+    buildList {
+        add(AvailabilityTriggerKinds.SLACK_NOTIFY)
+        if (emailConfigured) {
+            add(AvailabilityTriggerKinds.EMAIL_NOTIFY)
+        }
+    }
 
 private fun AppConfig.isProviderEnabled(id: AvailabilityProviderId): Boolean =
     readPathProviders.isAvailabilityProviderEnabled(id.name.lowercase()) &&
