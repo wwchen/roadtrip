@@ -100,6 +100,7 @@ internal class RoadtripRuntime(
     val watchCapabilities: WatchCapabilityService,
     val schedulerScope: CoroutineScope,
     val slackInteractivity: SlackInteractivityWiring?,
+    val slackNotifications: SlackNotificationService,
     val failoverFetcher: FailoverAvailabilityFetcher,
     private val notifications: NotificationFanout,
 ) {
@@ -232,7 +233,13 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
     val notificationTriggerKinds =
         buildList {
             add(AvailabilityTriggerKinds.SLACK_NOTIFY)
-            if (boot.appConfig.email != null) add(AvailabilityTriggerKinds.EMAIL_NOTIFY)
+            if (
+                boot.appConfig.email
+                    ?.defaultTo
+                    ?.isNotEmpty() == true
+            ) {
+                add(AvailabilityTriggerKinds.EMAIL_NOTIFY)
+            }
         }
     val watchCapabilities =
         WatchCapabilityService(
@@ -362,6 +369,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         watchCapabilities = watchCapabilities,
         schedulerScope = schedulerScope,
         slackInteractivity = slackInteractivity,
+        slackNotifications = slackNotifications,
         failoverFetcher = sharedFailoverFetcher,
         notifications = notifications,
     )

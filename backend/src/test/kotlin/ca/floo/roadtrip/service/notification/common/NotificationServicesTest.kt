@@ -374,6 +374,7 @@ class NotificationServicesTest {
             val service = NotificationFanout(listOf(slack, email))
             assertFalse(slack.sendWatchStatus(watchStatus(), NotificationTarget.Slack()))
             assertFalse(slack.sendWatchStatus(watchStatus(), NotificationTarget.Slack("#camping")))
+            assertFalse(slack.sendTestMessage("#camping"))
             assertFalse(
                 service.sendWatchOpenings(
                     1L,
