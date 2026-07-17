@@ -425,16 +425,16 @@ async function fillFirstVisible (page, selectors, value) {
 }
 
 async function clickFirstVisible (page, selectors) {
-  const selector = selectors.join(', ')
-  const locator = page.locator(selector).first()
-  try {
-    await locator.waitFor({ state: 'visible', timeout: LOGIN_SUBMIT_TIMEOUT_MS })
-    await locator.waitFor({ state: 'enabled', timeout: LOGIN_SUBMIT_TIMEOUT_MS }).catch(() => {})
-    await locator.click({ timeout: LOGIN_SUBMIT_TIMEOUT_MS })
-    return selector
-  } catch {
-    return null
+  for (const selector of selectors) {
+    const locator = page.locator(selector).first()
+    if (!await locator.isVisible({ timeout: LOGIN_BLOCKER_TIMEOUT_MS }).catch(() => false)) continue
+    try {
+      await locator.waitFor({ state: 'enabled', timeout: LOGIN_SUBMIT_TIMEOUT_MS }).catch(() => {})
+      await locator.click({ timeout: LOGIN_SUBMIT_TIMEOUT_MS })
+      return selector
+    } catch {}
   }
+  return null
 }
 
 async function pressEnterToSubmit (page) {
