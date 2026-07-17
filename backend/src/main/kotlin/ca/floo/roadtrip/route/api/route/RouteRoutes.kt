@@ -9,6 +9,9 @@ import ca.floo.roadtrip.model.api.RouteLegDto
 import ca.floo.roadtrip.model.api.RouteLineGeometryDto
 import ca.floo.roadtrip.model.api.RoutePropertiesDto
 import ca.floo.roadtrip.model.routing.RouteResponse
+import ca.floo.roadtrip.route.common.OptionalQuery
+import ca.floo.roadtrip.route.common.optionalDoubleQuery
+import ca.floo.roadtrip.route.common.trimmedQuery
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_CORRIDOR_RADIUS_MILES
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_WAYPOINTS
 import ca.floo.roadtrip.service.routing.MIN_ROUTE_CORRIDOR_RADIUS_MILES
@@ -62,7 +65,7 @@ internal fun Route.routeRoutes(
                 return@get
             }
 
-            val raw = call.request.queryParameters["coords"].orEmpty()
+            val raw = call.trimmedQuery("coords")
             val pieces = raw.split(";").map { it.trim() }.filter { it.isNotEmpty() }
 
             if (pieces.size < 2) {
@@ -114,22 +117,25 @@ internal fun Route.routeRoutes(
                 coords.add(lng to lat)
             }
             val corridorRadiusMiles =
-                call.request.queryParameters["radius_miles"]?.let { rawRadius ->
-                    val radius =
-                        rawRadius.toDoubleOrNull()
-                            ?: return@get call.respondRouteError(
-                                error = "bad_radius",
-                                detail = "radius_miles must be a number",
-                                status = HttpStatusCode.BadRequest,
-                            )
-                    if (radius !in MIN_ROUTE_CORRIDOR_RADIUS_MILES..MAX_ROUTE_CORRIDOR_RADIUS_MILES) {
+                when (val radiusQuery = call.optionalDoubleQuery("radius_miles")) {
+                    OptionalQuery.Missing -> null
+                    is OptionalQuery.Invalid ->
                         return@get call.respondRouteError(
                             error = "bad_radius",
-                            detail = "radius_miles must be in [$MIN_ROUTE_CORRIDOR_RADIUS_MILES, $MAX_ROUTE_CORRIDOR_RADIUS_MILES]",
+                            detail = "radius_miles must be a number",
                             status = HttpStatusCode.BadRequest,
                         )
+                    is OptionalQuery.Parsed -> {
+                        val radius = radiusQuery.value
+                        if (radius !in MIN_ROUTE_CORRIDOR_RADIUS_MILES..MAX_ROUTE_CORRIDOR_RADIUS_MILES) {
+                            return@get call.respondRouteError(
+                                error = "bad_radius",
+                                detail = "radius_miles must be in [$MIN_ROUTE_CORRIDOR_RADIUS_MILES, $MAX_ROUTE_CORRIDOR_RADIUS_MILES]",
+                                status = HttpStatusCode.BadRequest,
+                            )
+                        }
+                        radius
                     }
-                    radius
                 }
             // Mapbox rejects identical adjacent waypoints with code:"InvalidInput".
             // Catch it before the round-trip.

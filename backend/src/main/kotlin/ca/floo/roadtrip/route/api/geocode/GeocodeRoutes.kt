@@ -5,7 +5,10 @@ import ca.floo.roadtrip.model.api.GeocodeResponseDto
 import ca.floo.roadtrip.model.api.GeocodeResultDto
 import ca.floo.roadtrip.model.routing.GeocodeResult
 import ca.floo.roadtrip.route.common.boundedIntQuery
+import ca.floo.roadtrip.route.common.matchingQuery
+import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.respondApiError
+import ca.floo.roadtrip.route.common.trimmedQuery
 import ca.floo.roadtrip.support.GeocodeException
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -53,18 +56,15 @@ fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
                 return@get
             }
 
-            val q =
-                call.request.queryParameters["q"]
-                    ?.trim()
-                    .orEmpty()
+            val q = call.trimmedQuery("q")
             if (q.isBlank() || q.length > 200) {
                 call.respondGeocodeError("bad_query", HttpStatusCode.BadRequest)
                 return@get
             }
 
-            val autocomplete = call.request.queryParameters["autocomplete"] != "0"
+            val autocomplete = call.queryParam("autocomplete") != "0"
             val limit = call.boundedIntQuery("limit", DEFAULT_GEOCODE_LIMIT, geocodeLimitRange)
-            val proximity = call.request.queryParameters["proximity"]?.takeIf { LNGLAT_RE.matches(it) }
+            val proximity = call.matchingQuery("proximity", LNGLAT_RE)
 
             val results =
                 try {

@@ -8,6 +8,8 @@ import ca.floo.roadtrip.route.common.boundedIntQuery
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.respondApiError
+import ca.floo.roadtrip.route.common.splitQueryValues
+import ca.floo.roadtrip.route.common.trimmedQuery
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.POI_LIMIT
 import ca.floo.roadtrip.service.poi.PoiReader
@@ -86,17 +88,9 @@ internal fun Route.poiRoutes(poiService: PoiReader) {
             // Text-search across the full POI index by name. Used by the topbar
             // dropdown so a user can find a POI without panning to it first.
             get("/search") {
-                val q =
-                    call.request.queryParameters["q"]
-                        ?.trim()
-                        .orEmpty()
+                val q = call.trimmedQuery("q")
                 val limit = call.boundedIntQuery("limit", DEFAULT_SEARCH_LIMIT, searchLimitRange)
-                val categories =
-                    parseSearchCategories(
-                        call.request.queryParameters
-                            .getAll("categories")
-                            .orEmpty(),
-                    )
+                val categories = call.splitQueryValues("categories")
                 call.respondPoiJson(
                     poiService.search(
                         query = q,
@@ -141,12 +135,6 @@ internal fun Route.poiRoutes(poiService: PoiReader) {
         }
     }
 }
-
-private fun parseSearchCategories(values: List<String>): List<String> =
-    values
-        .flatMap { it.split(",") }
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
 
 private data class PoiRequest(
     val bbox: Bbox,

@@ -15,13 +15,16 @@ import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.route.common.OptionalQuery
 import ca.floo.roadtrip.route.common.boundedIntQuery
 import ca.floo.roadtrip.route.common.dateQueryValues
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.intQueryAtLeast
 import ca.floo.roadtrip.route.common.longPath
+import ca.floo.roadtrip.route.common.optionalBooleanQuery
 import ca.floo.roadtrip.route.common.optionalLongQuery
 import ca.floo.roadtrip.route.common.optionalOffsetDateTimeQuery
+import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.respondApiError
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -76,9 +79,15 @@ fun Route.availabilityDashboardRoutes(
             route("/pollers") {
                 get {
                     val active =
-                        call.request.queryParameters["active"]?.let {
-                            it.toBooleanStrictOrNull()
-                                ?: return@get call.respondError("invalid_active", HttpStatusCode.BadRequest, "active must be true or false")
+                        when (val activeQuery = call.optionalBooleanQuery("active")) {
+                            OptionalQuery.Missing -> null
+                            is OptionalQuery.Invalid ->
+                                return@get call.respondError(
+                                    "invalid_active",
+                                    HttpStatusCode.BadRequest,
+                                    "active must be true or false",
+                                )
+                            is OptionalQuery.Parsed -> activeQuery.value
                         }
                     val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)
                     val offset = call.intQueryAtLeast("offset", DEFAULT_LIST_OFFSET, MIN_LIST_OFFSET)
@@ -141,7 +150,7 @@ fun Route.availabilityDashboardRoutes(
 
             route("/runs") {
                 get {
-                    val status = call.request.queryParameters["status"]
+                    val status = call.queryParam("status")
                     val pollerId = call.optionalLongQuery("poller_id")
                     val since = call.optionalOffsetDateTimeQuery("since")
                     val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)

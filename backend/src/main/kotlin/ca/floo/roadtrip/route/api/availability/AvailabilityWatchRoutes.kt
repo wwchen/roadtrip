@@ -9,6 +9,7 @@ import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.intQueryAtLeast
 import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.optionalLongQuery
+import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchRequestMapper
@@ -64,7 +65,7 @@ internal fun Route.availabilityWatchRoutes(
         route("/watches") {
             get {
                 val status =
-                    call.request.queryParameters["status"]?.let {
+                    call.queryParam("status")?.let {
                         WatchStatus.parse(it)
                             ?: return@get call.respondError(
                                 "invalid_status",
