@@ -43,6 +43,6 @@ internal fun AvailabilityWatchRepo.Watch.openingNotificationTargets(): List<Noti
             add(NotificationTarget.Slack(channel = channelOverride()))
         }
         if (AvailabilityTriggerKinds.EMAIL_NOTIFY in triggerKinds) {
-            add(NotificationTarget.Email())
+            add(NotificationTarget.Email(recipients = emailRecipients()))
         }
     }

@@ -599,6 +599,20 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonPrimitive.content,
             )
 
+            val badEmailTrigger =
+                client.patch("/api/availability/watches/$id") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"trigger_kinds": ["email_notify"]}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, badEmailTrigger.status)
+            assertEquals(
+                "invalid_trigger_config",
+                Json
+                    .parseToJsonElement(badEmailTrigger.bodyAsText())
+                    .jsonObject["error"]!!
+                    .jsonPrimitive.content,
+            )
+
             val badConfig =
                 client.patch("/api/availability/watches/$id") {
                     contentType(ContentType.Application.Json)
@@ -650,8 +664,11 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     setBody(
                         """
                         {
-                          "trigger_kinds": ["slack_notify", "atc"],
-                          "trigger_config": {"slack_notify": {"channel": "#camping"}},
+                          "trigger_kinds": ["slack_notify", "email_notify", "atc"],
+                          "trigger_config": {
+                            "slack_notify": {"channel": "#camping"},
+                            "email_notify": {"to": "alerts@example.test"}
+                          },
                           "stop_when_triggered": false
                         }
                         """.trimIndent(),
@@ -660,12 +677,19 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
             assertEquals(HttpStatusCode.OK, resp.status)
             val watch = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
-            assertEquals(listOf("slack_notify", "atc"), watch["trigger_kinds"]!!.jsonArray.map { it.jsonPrimitive.content })
+            assertEquals(listOf("slack_notify", "email_notify", "atc"), watch["trigger_kinds"]!!.jsonArray.map { it.jsonPrimitive.content })
             assertEquals(
                 "#camping",
                 watch["trigger_config"]!!
                     .jsonObject["slack_notify"]!!
                     .jsonObject["channel"]!!
+                    .jsonPrimitive.content,
+            )
+            assertEquals(
+                "alerts@example.test",
+                watch["trigger_config"]!!
+                    .jsonObject["email_notify"]!!
+                    .jsonObject["to"]!!
                     .jsonPrimitive.content,
             )
             assertEquals(false, watch["stop_when_triggered"]!!.jsonPrimitive.boolean)

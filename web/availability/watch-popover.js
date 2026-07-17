@@ -74,10 +74,17 @@ function watchForEditor({ watch, watching, stopWhenFound, capabilities }) {
   if (watching && watch) return watch;
   if (!watching) return null;
   return {
-    trigger_kinds: Array.from(capabilities.triggerKinds),
+    trigger_kinds: defaultTriggerKindsForEditor(capabilities),
     trigger_config: {},
     stop_when_triggered: stopWhenFound !== false,
   };
+}
+
+function defaultTriggerKindsForEditor(capabilities) {
+  const triggerKinds = [];
+  if (capabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY)) triggerKinds.push(TRIGGER_KIND_SLACK_NOTIFY);
+  if (capabilities.triggerKinds.has(TRIGGER_KIND_ATC)) triggerKinds.push(TRIGGER_KIND_ATC);
+  return triggerKinds;
 }
 
 function capabilitiesForEditor(watchCapabilities, supportsAddToCart) {

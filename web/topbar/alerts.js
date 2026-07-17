@@ -40,11 +40,17 @@ const SLACK_ICON =
   '<path fill="#2EB67D" d="M97 45.2c0-7.1 5.8-12.9 12.9-12.9s12.9 5.8 12.9 12.9-5.8 12.9-12.9 12.9H97V45.2zm-6.5 0c0 7.1-5.8 12.9-12.9 12.9s-12.9-5.8-12.9-12.9V12.9C64.7 5.8 70.5 0 77.6 0s12.9 5.8 12.9 12.9v32.3z"/>' +
   '<path fill="#ECB22E" d="M77.6 97c7.1 0 12.9 5.8 12.9 12.9s-5.8 12.9-12.9 12.9-12.9-5.8-12.9-12.9V97h12.9zm0-6.5c-7.1 0-12.9-5.8-12.9-12.9s5.8-12.9 12.9-12.9h32.3c7.1 0 12.9 5.8 12.9 12.9s-5.8 12.9-12.9 12.9H77.6z"/>' +
   '</svg>';
+const EMAIL_ICON =
+  '<svg class="tb-alerts-email" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Email"><title>Email</title>' +
+  '<rect width="20" height="16" x="2" y="4" rx="2"/>' +
+  '<path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>' +
+  '</svg>';
 // Trigger-kind → display markup. Data-driven so future kinds (config'd Slack
 // channel, an ATC action) render without touching the table code. Values are
-// trusted markup (icons/emoji constants), injected unescaped by triggerHtml.
+// trusted markup (icon/emoji constants), injected unescaped by triggerHtml.
 const TRIGGER_HTML = {
   slack_notify: SLACK_ICON,
+  email_notify: EMAIL_ICON,
   atc: '🛒 ATC',
 };
 
@@ -469,7 +475,8 @@ function injectAlertsStyles() {
   .tb-alerts-row.is-paused, .tb-alerts-row.is-done { opacity: 0.55; }
   .tb-alerts-poi { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--rt-text); }
   .tb-alerts-date, .tb-alerts-trigger { white-space: nowrap; color: var(--rt-muted); }
-  .tb-alerts-slack { width: 14px; height: 14px; vertical-align: -2px; }
+  .tb-alerts-slack,
+  .tb-alerts-email { width: 14px; height: 14px; vertical-align: -2px; }
   .tb-alerts-checked { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--rt-muted); }
   .tb-alerts-err { color: var(--rt-warn); }
   .tb-alerts-faint { color: var(--rt-faint); }

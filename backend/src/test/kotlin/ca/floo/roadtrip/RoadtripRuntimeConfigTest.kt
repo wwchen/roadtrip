@@ -4,6 +4,7 @@ import ca.floo.roadtrip.config.ReadPathProviderConfig
 import ca.floo.roadtrip.models.metadata.registry.EtlEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -46,6 +47,18 @@ class RoadtripRuntimeConfigTest {
             "roadtrip.read-path.enabled-data-sources contains unknown source(s): " +
                 "[recgvo]. Expected one of: [federal-campgrounds, planet_fitness_location, recgov, tesla_supercharger].",
             err.message,
+        )
+    }
+
+    @Test
+    fun `notification trigger kinds include email only when email transport is configured`() {
+        assertEquals(
+            listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.EMAIL_NOTIFY),
+            notificationTriggerKinds(emailConfigured = true),
+        )
+        assertEquals(
+            listOf(AvailabilityTriggerKinds.SLACK_NOTIFY),
+            notificationTriggerKinds(emailConfigured = false),
         )
     }
 

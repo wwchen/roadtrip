@@ -28,6 +28,8 @@ import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -97,6 +99,11 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     private fun bookingValidatedService(
         bookingProviders: BookingProviderRegistry,
         availabilityProvider: AvailabilityProvider = FakeProvider,
+        notificationTriggerKinds: List<String> =
+            listOf(
+                AvailabilityTriggerKinds.SLACK_NOTIFY,
+                AvailabilityTriggerKinds.EMAIL_NOTIFY,
+            ),
     ): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
         val registry = AvailabilityProviderRegistry(mapOf("test" to availabilityProvider))
@@ -126,6 +133,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                         WatchCapabilityService(
                             availabilityTargets = targets,
                             bookingTargets = AvailabilityBookingTargetResolver(bookingProviders),
+                            notificationTriggerKinds = notificationTriggerKinds,
                         ),
                 ),
         )
@@ -134,6 +142,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     private fun poiInput(
         poiId: Long,
         triggerKinds: List<String> = listOf("atc"),
+        triggerConfig: JsonObject = JsonObject(emptyMap()),
     ): AvailabilityWatchRepo.CreateInput =
         AvailabilityWatchRepo.CreateInput(
             targets = listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiId, campsiteId = null)),
@@ -142,8 +151,18 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
             endDate = LocalDate.parse("2026-07-06"),
             cadenceSec = 60,
             triggerKinds = triggerKinds,
-            triggerConfig = JsonObject(emptyMap()),
+            triggerConfig = triggerConfig,
             stopWhenTriggered = false,
+        )
+
+    private fun emailTriggerConfig(to: String): JsonObject =
+        JsonObject(
+            mapOf(
+                AvailabilityTriggerKinds.EMAIL_NOTIFY to
+                    JsonObject(
+                        mapOf("to" to JsonPrimitive(to)),
+                    ),
+            ),
         )
 
     private fun AvailabilityWatchService.createForTest(input: AvailabilityWatchRepo.CreateInput) =
@@ -235,6 +254,73 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     }
 
     @Test
+    fun `create rejects email notify without a to address`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+
+        val error =
+            assertFailsWith<AvailabilityWatchValidationException> {
+                service().createForTest(
+                    poiInput(
+                        poiId,
+                        triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY),
+                    ),
+                )
+            }
+
+        assertEquals("invalid_trigger_config", error.error)
+        assertEquals(0, AvailabilityWatchRepo(ctx).count())
+    }
+
+    @Test
+    fun `create stores email notify to address`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+
+        val watch =
+            service().createForTest(
+                poiInput(
+                    poiId,
+                    triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY),
+                    triggerConfig = emailTriggerConfig("alerts@example.test"),
+                ),
+            )
+
+        assertEquals(listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY), watch.triggerKinds)
+        assertEquals(
+            "alerts@example.test",
+            watch.triggerConfig[AvailabilityTriggerKinds.EMAIL_NOTIFY]!!
+                .jsonObject["to"]!!
+                .jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `create rejects email notify when email transport is not configured`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val svc =
+            bookingValidatedService(
+                bookingProviders = BookingProviderRegistry(emptyList()),
+                notificationTriggerKinds = listOf(AvailabilityTriggerKinds.SLACK_NOTIFY),
+            )
+
+        val error =
+            assertFailsWith<AvailabilityWatchValidationException> {
+                svc.createForTest(
+                    poiInput(
+                        poiId,
+                        triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY),
+                        triggerConfig = emailTriggerConfig("alerts@example.test"),
+                    ),
+                )
+            }
+
+        assertEquals("unsupported_trigger", error.error)
+        assertEquals(0, AvailabilityWatchRepo(ctx).count())
+    }
+
+    @Test
     fun `update rejects adding atc when no booking provider supports the scoped campsite`() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
@@ -274,6 +360,27 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
 
         assertEquals("invalid_trigger_config", error.error)
         assertEquals(JsonObject(emptyMap()), AvailabilityWatchRepo(ctx).findById(watch.id)!!.triggerConfig)
+    }
+
+    @Test
+    fun `update rejects adding email notify without a to address`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val svc = service()
+        val watch = svc.createForTest(poiInput(poiId, triggerKinds = listOf(AvailabilityTriggerKinds.SLACK_NOTIFY)))
+
+        val error =
+            assertFailsWith<AvailabilityWatchValidationException> {
+                svc.updateForTest(
+                    watch.id,
+                    AvailabilityWatchRepo.UpdateInput(
+                        triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY),
+                    ),
+                )
+            }
+
+        assertEquals("invalid_trigger_config", error.error)
+        assertEquals(listOf(AvailabilityTriggerKinds.SLACK_NOTIFY), AvailabilityWatchRepo(ctx).findById(watch.id)!!.triggerKinds)
     }
 
     @Test

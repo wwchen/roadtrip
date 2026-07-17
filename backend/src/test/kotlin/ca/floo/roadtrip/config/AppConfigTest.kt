@@ -76,13 +76,11 @@ class AppConfigTest {
                 mapOf(
                     "roadtrip.email.resend-api-key" to " re_test ",
                     "roadtrip.email.from" to " Roadtrip Alerts <roadtrip@floo.ca> ",
-                    "roadtrip.email.default-to" to "",
                 ),
             ).email
 
         assertEquals("re_test", config?.resendApiKey)
         assertEquals("Roadtrip Alerts <roadtrip@floo.ca>", config?.from)
-        assertEquals(emptyList(), config?.defaultTo)
     }
 
     @Test
@@ -91,7 +89,6 @@ class AppConfigTest {
             appConfig(
                 mapOf(
                     "roadtrip.email.from" to "Roadtrip Alerts <roadtrip@floo.ca>",
-                    "roadtrip.email.default-to" to "alerts@example.test",
                 ),
             ).email,
         )
@@ -99,7 +96,6 @@ class AppConfigTest {
             appConfig(
                 mapOf(
                     "roadtrip.email.resend-api-key" to "re_test",
-                    "roadtrip.email.default-to" to "alerts@example.test",
                 ),
             ).email,
         )

@@ -67,15 +67,15 @@ internal fun Route.availabilityWatchRoutes(
     val scopeResolver = WatchScopeResolver(campsitesRepo)
     val watchMapper = AvailabilityWatchApiMapper(campsitesRepo, scopeResolver, watchCapabilities)
 
-    // The "first message": on create/update, post the current window state to
-    // Slack so an already-open site isn't stranded behind the edge-triggered
-    // poller. Fire-and-forget, outside the mutation's transaction — it must
-    // never block or fail the HTTP response. All gating (Slack configured,
-    // slack_notify kind, active status) lives in dispatchInitial.
+    // The "first message": on create/update, post the current window state so
+    // an already-open site isn't stranded behind the edge-triggered poller.
+    // Fire-and-forget, outside the mutation's transaction — it must never
+    // block or fail the HTTP response. Trigger/transport gating lives in
+    // dispatchInitial.
     fun scheduleInitialNotify(watch: Watch) {
         notifyScope.launch {
             runCatching { alertDispatcher.dispatchInitial(watch) }
-                .onFailure { log.warn("initial Slack notify for watch {} failed", watch.id, it) }
+                .onFailure { log.warn("initial notify for watch {} failed", watch.id, it) }
         }
     }
 
@@ -85,7 +85,7 @@ internal fun Route.availabilityWatchRoutes(
     fun scheduleStoppedNotify(watch: Watch) {
         notifyScope.launch {
             runCatching { alertDispatcher.dispatchStopped(watch) }
-                .onFailure { log.warn("stopped Slack notify for watch {} failed", watch.id, it) }
+                .onFailure { log.warn("stopped notify for watch {} failed", watch.id, it) }
         }
     }
 

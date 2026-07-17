@@ -62,6 +62,16 @@ internal class WatchTriggerCapabilityValidator(
             )
         }
 
+        if (
+            AvailabilityTriggerKinds.EMAIL_NOTIFY in watch.triggerKinds &&
+            AvailabilityTriggerKinds.EMAIL_NOTIFY !in capabilities.supportedTriggerKinds(campsites)
+        ) {
+            throw AvailabilityWatchValidationException(
+                error = UNSUPPORTED_TRIGGER_ERROR,
+                message = "email_notify is not configured",
+            )
+        }
+
         if (AvailabilityTriggerKinds.ATC !in watch.triggerKinds) return
 
         val bookingSupport = capabilities.bookingSupportFor(BookingAction.ADD_TO_CART, campsites)

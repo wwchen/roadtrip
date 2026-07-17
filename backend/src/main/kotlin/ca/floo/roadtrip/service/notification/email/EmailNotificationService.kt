@@ -27,9 +27,8 @@ class EmailNotificationService(
         appRootUrl: String?,
     ): Boolean {
         val emailTarget = target as? NotificationTarget.Email ?: return false
-        val recipients = emailTarget.recipients.ifEmpty { config?.defaultTo.orEmpty() }
         val content = EmailContentAvailabilityRenderer.openings(watchId, startDate, endDate, openings, appRootUrl)
-        return sendContent(content, recipients, failureContext = "watch #$watchId opening alert")
+        return sendContent(content, emailTarget.recipients, failureContext = "watch #$watchId opening alert")
     }
 
     suspend fun sendTestEmail(to: String): Boolean {

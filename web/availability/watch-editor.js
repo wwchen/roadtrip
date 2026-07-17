@@ -39,6 +39,11 @@ export function mountWatchEditor(host, args) {
       rerender();
       return;
     }
+    if (state.emailNotify && !String(state.emailTo || '').trim()) {
+      state = { ...state, error: 'Enter an email address.' };
+      rerender();
+      return;
+    }
     state = { ...state, busy: true, error: null };
     rerender();
     try {
@@ -93,6 +98,7 @@ export function mountWatchEditor(host, args) {
     const tgt = e.target;
     if (!(tgt instanceof HTMLInputElement)) return;
     if (tgt.name === 'slack_channel') state = { ...state, slackChannel: tgt.value, error: null };
+    if (tgt.name === 'email_to') state = { ...state, emailTo: tgt.value, error: null };
   }
 
   rerender();
@@ -135,6 +141,12 @@ export function watchSlackChannel(watch) {
   return typeof legacy === 'string' && legacy.trim() ? legacy : '';
 }
 
+export function watchEmailTo(watch) {
+  const config = watch?.trigger_config ?? watch?.triggerConfig ?? {};
+  const nested = config?.[TRIGGER_KIND_EMAIL_NOTIFY]?.to;
+  return typeof nested === 'string' && nested.trim() ? nested.trim() : '';
+}
+
 export function watchHasTrigger(watch, kind) {
   return Array.isArray(watch?.trigger_kinds) && watch.trigger_kinds.includes(kind);
 }
@@ -149,6 +161,10 @@ export function buildTriggerPayload(state) {
   if (state.slackNotify && channel) {
     triggerConfig[TRIGGER_KIND_SLACK_NOTIFY] = { channel };
   }
+  const emailTo = String(state.emailTo || '').trim();
+  if (state.emailNotify && emailTo) {
+    triggerConfig[TRIGGER_KIND_EMAIL_NOTIFY] = { to: emailTo };
+  }
   return {
     trigger_kinds: triggerKinds,
     trigger_config: triggerConfig,
@@ -160,10 +176,11 @@ function initialState(watch, capabilities) {
   const hasWatch = !!watch;
   return {
     slackNotify: hasWatch ? watchHasTrigger(watch, TRIGGER_KIND_SLACK_NOTIFY) : capabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY),
-    emailNotify: hasWatch ? watchHasTrigger(watch, TRIGGER_KIND_EMAIL_NOTIFY) : capabilities.triggerKinds.has(TRIGGER_KIND_EMAIL_NOTIFY),
+    emailNotify: hasWatch ? watchHasTrigger(watch, TRIGGER_KIND_EMAIL_NOTIFY) : false,
     addToCart: hasWatch ? watchHasTrigger(watch, TRIGGER_KIND_ATC) : false,
     stopWhenTriggered: watchStopWhenTriggered(watch, true),
     slackChannel: watchSlackChannel(watch),
+    emailTo: watchEmailTo(watch),
     busy: false,
     error: null,
   };
@@ -194,13 +211,25 @@ function renderEditor({ title, subtitle, watch, capabilities, state, onRemove, o
     `
     : '';
   const emailHtml = canEmail
-    ? toggleRow({
-      name: 'email_notify',
-      title: 'Email',
-      help: 'Send email when a matching site opens.',
-      checked: state.emailNotify,
-      disabled: state.busy,
-    })
+    ? `
+      ${toggleRow({
+        name: 'email_notify',
+        title: 'Email',
+        help: 'Send email when a matching site opens.',
+        checked: state.emailNotify,
+        disabled: state.busy,
+      })}
+      ${
+        state.emailNotify
+          ? `
+        <label class="rt-watch-editor-field">
+          <span>To</span>
+          <input type="email" name="email_to" value="${escapeHtml(state.emailTo)}" placeholder="you@example.com" ${busyAttr}>
+        </label>
+      `
+          : ''
+      }
+    `
     : '';
   const atcHtml = showAtc
     ? toggleRow({
