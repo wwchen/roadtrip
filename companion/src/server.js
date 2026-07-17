@@ -3,18 +3,27 @@
 // and returns the same JSON result as the recgov:atc CLI.
 
 import http from 'node:http'
+import { readFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { IS_HEADLESS } from './browser.js'
+import {
+  IS_HEADLESS,
+  getContext,
+  injectBearerRoute,
+  injectRecaccount,
+  injectStoredCookies,
+} from './browser.js'
 import {
   recgovAuthenticationFailure,
   testChromium,
 } from './cart.js'
 import {
   RECGOV_DIAGNOSTIC_DIR,
+  RECGOV_HOME_URL,
   getRecgovSessionStatus,
   recgovLoginCredentialsFromInput,
+  resolveRecaccount,
 } from './recgovSession.js'
 import { runAtcOnce } from './runAtcOnce.js'
 
@@ -37,7 +46,15 @@ const AUTH_CHECK_EXCEPTION_ACTION =
   'Check the companion logs, then open the companion /login page or run make recgov-login from the host profile.'
 const LOGIN_FORM_TITLE = 'Recreation.gov Login'
 const DIAGNOSTIC_ROUTE_PREFIX = '/diagnostics/'
+const SCREENSHOT_ROUTE = '/screenshot'
+const SCREENSHOT_ROUTE_PREFIX = `${SCREENSHOT_ROUTE}/`
 const PNG_CONTENT_TYPE = 'image/png'
+const RECGOV_ORIGIN = new URL(RECGOV_HOME_URL).origin
+const SCREENSHOT_NAVIGATION_TIMEOUT_MS = 30_000
+const SCREENSHOT_SETTLE_MS = 2_000
+const LOGIN_PAGE_TEMPLATE = readTemplate('./loginPage.html')
+const REFRESH_PAGE_TEMPLATE = readTemplate('./refreshPage.html')
+const LOGIN_DIAGNOSTIC_TEMPLATE = readTemplate('./loginDiagnostic.html')
 
 const HOST = process.env.COMPANION_HOST || DEFAULT_HOST
 const PORT = Number.parseInt(process.env.COMPANION_PORT || String(DEFAULT_PORT), 10)
@@ -405,172 +422,36 @@ function renderLoginPage ({ result = null } = {}) {
     : '<p id="status-message" class="muted">Ready.</p>'
   const initialJson = result ? JSON.stringify(result, null, 2) : ''
   const jsonClass = result ? '' : ' hidden'
-  const healthHtml = `<pre id="json-output" class="${jsonClass}">${escapeHtml(initialJson)}</pre>`
   const diagnosticHtml = diagnostic?.screenshot_url
     ? renderDiagnosticHtml(diagnostic)
     : ''
 
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${LOGIN_FORM_TITLE}</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 36rem; margin: 3rem auto; padding: 0 1rem; color: #172033; }
-    label { display: block; font-weight: 650; margin-top: 1rem; }
-    input { box-sizing: border-box; width: 100%; padding: .7rem; margin-top: .35rem; border: 1px solid #c8d0dc; border-radius: 6px; font: inherit; }
-    button { margin-top: 1.25rem; padding: .75rem 1rem; border: 0; border-radius: 6px; background: #24579a; color: white; font: inherit; font-weight: 700; cursor: pointer; }
-    button:disabled { cursor: wait; opacity: .65; }
-    .button-link { display: inline-flex; align-items: center; justify-content: center; margin-top: 1.25rem; padding: .75rem 1rem; border-radius: 6px; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
-    .row { display: flex; gap: .75rem; align-items: center; }
-    .row form { margin: 0; }
-    .secondary { background: #eef2f7; color: #172033; }
-    .secondary:visited { color: #172033; }
-    .muted { color: #536174; }
-    .ok { color: #166534; font-weight: 700; }
-    .error { color: #b42318; font-weight: 700; }
-    .diagnostic { display: block; max-width: 100%; border: 1px solid #c8d0dc; border-radius: 6px; }
-    pre { overflow: auto; background: #f6f8fb; padding: .75rem; border-radius: 6px; }
-    .hidden, [hidden] { display: none !important; }
-    .loading { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(23, 32, 51, .34); z-index: 10; }
-    .loading-card { min-width: 16rem; border-radius: 8px; background: white; padding: 1.25rem; box-shadow: 0 16px 48px rgba(23, 32, 51, .28); text-align: center; }
-    .spinner { width: 2rem; height: 2rem; margin: 0 auto .75rem; border: 3px solid #d8e0ec; border-top-color: #24579a; border-radius: 999px; animation: spin .8s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-  </style>
-</head>
-<body>
-  <h1>${LOGIN_FORM_TITLE}</h1>
-  ${statusHtml}
-  <form id="login-form" method="post" action="/login">
-    <label for="username">Username or email</label>
-    <input id="username" name="username" type="email" autocomplete="username" required>
-    <label for="password">Password</label>
-    <input id="password" name="password" type="password" autocomplete="current-password" required>
-    <label for="mfa_code">MFA code</label>
-    <input id="mfa_code" name="mfa_code" inputmode="numeric" autocomplete="one-time-code">
-    <button type="submit">Log in</button>
-  </form>
-  <div class="row">
-    <button id="refresh-session" class="secondary" type="button">Refresh session</button>
-    <button id="health-json" class="secondary" type="button">Health JSON</button>
-  </div>
-  ${healthHtml}
-  <div id="diagnostic">${diagnosticHtml}</div>
-  <div id="loading" class="loading" hidden>
-    <div class="loading-card">
-      <div class="spinner"></div>
-      <p id="loading-text">Working...</p>
-    </div>
-  </div>
-  <script>
-    const loginForm = document.getElementById('login-form')
-    const refreshButton = document.getElementById('refresh-session')
-    const healthButton = document.getElementById('health-json')
-    const statusMessage = document.getElementById('status-message')
-    const jsonOutput = document.getElementById('json-output')
-    const diagnostic = document.getElementById('diagnostic')
-    const loading = document.getElementById('loading')
-    const loadingText = document.getElementById('loading-text')
-    const actionButtons = [loginForm.querySelector('button[type="submit"]'), refreshButton, healthButton]
-
-    loginForm.addEventListener('submit', async (event) => {
-      event.preventDefault()
-      await runAction('Logging in...', 'Login', '/login', {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams(new FormData(loginForm)),
-      })
-    })
-
-    refreshButton.addEventListener('click', async () => {
-      await runAction('Refreshing session...', 'Refresh', '/refresh', { method: 'POST' })
-    })
-
-    healthButton.addEventListener('click', async () => {
-      await runAction('Loading health...', 'Health', '/health')
-    })
-
-    async function runAction (loadingLabel, actionLabel, url, options = {}) {
-      setLoading(true, loadingLabel)
-      try {
-        const response = await fetch(url, {
-          ...options,
-          headers: {
-            accept: 'application/json',
-            ...(options.headers || {}),
-          },
-        })
-        const body = await response.json().catch(() => ({
-          ok: false,
-          error: 'invalid_json_response',
-          detail: 'Companion returned a non-JSON response.',
-        }))
-        renderResult(actionLabel, response.ok, body)
-      } catch (error) {
-        renderResult(actionLabel, false, {
-          ok: false,
-          error: 'request_failed',
-          detail: error.message,
-        })
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    function setLoading (active, label = 'Working...') {
-      loading.hidden = !active
-      loadingText.textContent = label
-      for (const button of actionButtons) button.disabled = active
-    }
-
-    function renderResult (actionLabel, ok, body) {
-      const detail = body?.detail || body?.recgov_auth?.detail || body?.error || body?.recgov_auth?.error || ''
-      statusMessage.className = ok ? 'ok' : 'error'
-      statusMessage.textContent = ok ? actionLabel + ' succeeded.' : actionLabel + ' failed: ' + detail
-      jsonOutput.classList.remove('hidden')
-      jsonOutput.textContent = JSON.stringify(body, null, 2)
-      renderDiagnostic(body?.recgov_auth?.diagnostic || body?.recgov_auth?.last_login_diagnostic)
-    }
-
-    function renderDiagnostic (data) {
-      diagnostic.textContent = ''
-      if (!data?.screenshot_url) return
-      const section = document.createElement('section')
-      const heading = document.createElement('h2')
-      heading.textContent = 'Last login screenshot'
-      const reason = document.createElement('p')
-      reason.textContent = 'Reason: ' + (data.reason || 'unknown')
-      const image = document.createElement('img')
-      image.className = 'diagnostic'
-      image.src = data.screenshot_url
-      image.alt = 'Recreation.gov login diagnostic screenshot'
-      section.append(heading, reason, image)
-      diagnostic.append(section)
-    }
-  </script>
-</body>
-</html>`
+  return renderTemplate(LOGIN_PAGE_TEMPLATE, {
+    LOGIN_FORM_TITLE: escapeHtml(LOGIN_FORM_TITLE),
+    STATUS_HTML: statusHtml,
+    JSON_CLASS: jsonClass,
+    INITIAL_JSON: escapeHtml(initialJson),
+    DIAGNOSTIC_HTML: diagnosticHtml,
+  })
 }
 
 function renderDiagnosticHtml (diagnostic) {
-  return `<section>
-        <h2>Last login screenshot</h2>
-        <p>Reason: ${escapeHtml(diagnostic.reason || 'unknown')}</p>
-        <img class="diagnostic" src="${escapeHtml(diagnostic.screenshot_url)}" alt="Recreation.gov login diagnostic screenshot">
-      </section>`
+  return renderTemplate(LOGIN_DIAGNOSTIC_TEMPLATE, {
+    DIAGNOSTIC_REASON: escapeHtml(diagnostic.reason || 'unknown'),
+    DIAGNOSTIC_SCREENSHOT_URL: escapeHtml(diagnostic.screenshot_url),
+  })
 }
 
 function renderRefreshPage () {
-  return `<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Refresh Recreation.gov Session</title></head>
-<body>
-  <h1>Refresh Recreation.gov Session</h1>
-  <form method="post" action="/refresh"><button type="submit">Refresh session</button></form>
-  <p><a href="/login">Login</a> <a href="/health">Health JSON</a></p>
-</body>
-</html>`
+  return REFRESH_PAGE_TEMPLATE
+}
+
+function renderTemplate (template, values) {
+  return template.replace(/\{\{([A-Z_]+)\}\}/g, (_match, key) => String(values[key] ?? ''))
+}
+
+function readTemplate (filename) {
+  return readFileSync(new URL(filename, import.meta.url), 'utf8')
 }
 
 function escapeHtml (value) {
@@ -657,12 +538,28 @@ function truncateLogField (value, maxLength) {
 
 export function createCompanionServer ({
   testChromiumFn = testChromium,
+  getContextFn = getContext,
+  injectStoredCookiesFn = injectStoredCookies,
+  resolveRecaccountFn = resolveRecaccount,
+  injectRecaccountFn = injectRecaccount,
+  injectBearerRouteFn = injectBearerRoute,
 } = {}) {
-  const deps = { testChromiumFn }
+  const deps = {
+    testChromiumFn,
+    getContextFn,
+    injectStoredCookiesFn,
+    resolveRecaccountFn,
+    injectRecaccountFn,
+    injectBearerRouteFn,
+  }
   return http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://companion.local')
     if (req.method === 'GET' && url.pathname.startsWith(DIAGNOSTIC_ROUTE_PREFIX)) {
       await handleDiagnosticImage(url, res)
+      return
+    }
+    if (req.method === 'GET' && (url.pathname === SCREENSHOT_ROUTE || url.pathname.startsWith(SCREENSHOT_ROUTE_PREFIX))) {
+      await handleLiveScreenshot(url, res, deps)
       return
     }
     if (req.method === 'GET' && url.pathname === '/health') {
@@ -707,15 +604,125 @@ async function handleDiagnosticImage (url, res) {
     return
   }
 
+  const imagePath = diagnosticImagePath(filename)
+  if (!imagePath) {
+    jsonResponse(res, HTTP_BAD_REQUEST, {
+      ok: false,
+      error: 'invalid_diagnostic_path',
+    })
+    return
+  }
+
+  await serveScreenshotImage(imagePath, res, 'diagnostic_not_found')
+}
+
+async function handleLiveScreenshot (url, res, deps) {
+  const target = screenshotTargetUrl(url)
+  if (!target) {
+    jsonResponse(res, HTTP_BAD_REQUEST, {
+      ok: false,
+      error: 'invalid_screenshot_target',
+      detail: 'screenshot target must be a recreation.gov URL or path',
+    })
+    return
+  }
+
+  log('recgov screenshot start', `target=${target.href}`)
+  const startedAt = Date.now()
+  let page = null
   try {
-    const image = await readFile(path.join(RECGOV_DIAGNOSTIC_DIR, filename))
+    const context = await deps.getContextFn()
+    await deps.injectStoredCookiesFn(context)
+    page = await context.newPage()
+    const recaccount = await deps.resolveRecaccountFn(page, { allowManualLogin: false })
+    if (recaccount?.access_token) {
+      await deps.injectRecaccountFn(page, recaccount)
+      await deps.injectBearerRouteFn(page, recaccount.access_token)
+    }
+    await page.goto(target.href, {
+      waitUntil: 'domcontentloaded',
+      timeout: SCREENSHOT_NAVIGATION_TIMEOUT_MS,
+    })
+    await page.waitForTimeout(SCREENSHOT_SETTLE_MS)
+    const image = await page.screenshot({ type: 'png', fullPage: true })
+    log('recgov screenshot result ok', `target=${target.href}`, `recaccount=${Boolean(recaccount?.access_token)}`, `duration_ms=${Date.now() - startedAt}`)
+    imageResponse(res, HTTP_OK, image, PNG_CONTENT_TYPE)
+  } catch (error) {
+    log('recgov screenshot result fail', `target=${target.href}`, `detail="${truncateLogField(error.message, LOG_DETAIL_MAX_CHARS)}"`, `duration_ms=${Date.now() - startedAt}`)
+    jsonResponse(res, HTTP_INTERNAL_ERROR, {
+      ok: false,
+      error: 'screenshot_failed',
+      detail: error.message,
+      target_url: target.href,
+    })
+  } finally {
+    if (page) await page.close().catch(() => {})
+  }
+}
+
+async function serveScreenshotImage (imagePath, res, notFoundError) {
+  try {
+    const image = await readFile(imagePath)
     imageResponse(res, HTTP_OK, image, PNG_CONTENT_TYPE)
   } catch {
     jsonResponse(res, HTTP_NOT_FOUND, {
       ok: false,
-      error: 'diagnostic_not_found',
+      error: notFoundError,
     })
   }
+}
+
+function diagnosticImagePath (filename) {
+  return screenshotImagePathForRequest(filename)
+}
+
+function screenshotImagePathForRequest (requestedPath) {
+  if (!requestedPath) return null
+  if (requestedPath.startsWith(DIAGNOSTIC_ROUTE_PREFIX)) {
+    return diagnosticImagePath(requestedPath.slice(DIAGNOSTIC_ROUTE_PREFIX.length))
+  }
+  const root = path.resolve(RECGOV_DIAGNOSTIC_DIR)
+  const candidate = path.isAbsolute(requestedPath)
+    ? path.resolve(requestedPath)
+    : path.resolve(root, requestedPath)
+  if (!candidate.endsWith('.png')) return null
+  const relative = path.relative(root, candidate)
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return null
+  return candidate
+}
+
+function screenshotTargetUrl (url) {
+  const raw = screenshotTargetInput(url)
+  if (!raw) return new URL(RECGOV_HOME_URL)
+  try {
+    const target = /^https?:\/\//i.test(raw)
+      ? new URL(raw)
+      : new URL(raw.startsWith('/') ? raw : `/${raw}`, RECGOV_HOME_URL)
+    if (target.origin !== RECGOV_ORIGIN) return null
+    target.hash = ''
+    return target
+  } catch {
+    return null
+  }
+}
+
+function screenshotTargetInput (url) {
+  const urlParam = url.searchParams.get('url')
+  if (urlParam) return urlParam
+  const pathParam = url.searchParams.get('path')
+  if (pathParam) return screenshotPathWithExtraParams(pathParam, url.searchParams)
+  if (!url.pathname.startsWith(SCREENSHOT_ROUTE_PREFIX)) return null
+  return `/${decodeURIComponent(url.pathname.slice(SCREENSHOT_ROUTE_PREFIX.length))}${url.search}`
+}
+
+function screenshotPathWithExtraParams (pathParam, searchParams) {
+  const extra = new URLSearchParams(searchParams)
+  extra.delete('path')
+  extra.delete('url')
+  const renderedExtra = extra.toString()
+  if (!renderedExtra) return pathParam
+  const separator = pathParam.includes('?') ? '&' : '?'
+  return `${pathParam}${separator}${renderedExtra}`
 }
 
 export const server = createCompanionServer()

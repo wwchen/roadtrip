@@ -57,6 +57,7 @@ test('resolveRecaccount uses the existing companion browser recaccount', async (
   const resolved = await resolveRecaccount(page)
 
   assert.equal(resolved.access_token, recaccount.access_token)
+  assert.ok(Date.parse(getRecgovSessionStatus().next_refresh_at) > Date.now())
   assert.deepEqual(page.gotos, ['https://www.recreation.gov/'])
   assert.equal(page.refreshCalls.length, 0)
   assert.deepEqual(page.context().cookies, [{
@@ -94,6 +95,7 @@ test('resolveRecaccount refreshes near-expiry recaccount in the companion browse
   const sessionStatus = getRecgovSessionStatus()
   assert.ok(Date.parse(sessionStatus.last_refresh_at) > 0)
   assert.equal(sessionStatus.last_refresh_expires_at, refreshed.expiration)
+  assert.ok(Date.parse(sessionStatus.next_refresh_at) < Date.parse(sessionStatus.last_refresh_expires_at))
 })
 
 test('resolveRecaccount force-refreshes a fresh browser recaccount', async () => {

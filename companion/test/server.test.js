@@ -35,6 +35,7 @@ test('getRecgovHealthStatus exposes login status and refresh metadata', async ()
   assert.equal(health.logged_in, true)
   assert.equal('last_refresh_at' in health, true)
   assert.equal('last_refresh_expires_at' in health, true)
+  assert.equal('next_refresh_at' in health, true)
 })
 
 test('runStartupAuthCheck records actionable auth failure status', async () => {
@@ -200,6 +201,61 @@ test('POST /refresh force-refreshes the stored browser session without credentia
   assert.equal(authOptions.credentials, undefined)
 })
 
+test('GET /screenshot captures a Recreation.gov path with the companion browser session', async () => {
+  const image = Buffer.from([0x89, 0x50, 0x4e, 0x47])
+  const page = fakeScreenshotPage(image)
+  let storedCookieContext = null
+  let resolveOptions = null
+  let injectedRecaccount = null
+  let injectedToken = null
+
+  const response = await request(createCompanionServer({
+    getContextFn: async () => ({
+      newPage: async () => page,
+    }),
+    injectStoredCookiesFn: async (context) => {
+      storedCookieContext = context
+      return 0
+    },
+    resolveRecaccountFn: async (resolvedPage, options) => {
+      assert.equal(resolvedPage, page)
+      resolveOptions = options
+      return { access_token: 'recgov-token' }
+    },
+    injectRecaccountFn: async (resolvedPage, recaccount) => {
+      assert.equal(resolvedPage, page)
+      injectedRecaccount = recaccount
+    },
+    injectBearerRouteFn: async (resolvedPage, token) => {
+      assert.equal(resolvedPage, page)
+      injectedToken = token
+      return true
+    },
+  }), {
+    path: '/screenshot?path=/camping/campgrounds/232447&startDate=2026-07-19',
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.headers['content-type'], 'image/png')
+  assert.deepEqual(response.body, image)
+  assert.ok(storedCookieContext)
+  assert.equal(resolveOptions.allowManualLogin, false)
+  assert.deepEqual(injectedRecaccount, { access_token: 'recgov-token' })
+  assert.equal(injectedToken, 'recgov-token')
+  assert.equal(page.gotos[0].url, 'https://www.recreation.gov/camping/campgrounds/232447?startDate=2026-07-19')
+  assert.equal(page.screenshotOptions.fullPage, true)
+  assert.equal(page.closed, true)
+})
+
+test('GET /screenshot rejects non-Recreation.gov targets', async () => {
+  const response = await request(createCompanionServer(), {
+    path: '/screenshot?url=https://example.com/',
+  })
+
+  assert.equal(response.status, 400)
+  assert.equal(response.json.error, 'invalid_screenshot_target')
+})
+
 function logCapture () {
   const lines = []
   return {
@@ -228,15 +284,41 @@ async function request (server, { method = 'GET', path = '/', headers = {}, body
       },
       end (chunk = '') {
         if (chunk) chunks.push(Buffer.from(chunk))
-        const text = Buffer.concat(chunks).toString('utf8')
+        const body = Buffer.concat(chunks)
+        const text = body.toString('utf8')
         const contentType = res.headers['content-type'] || ''
         resolve({
           status: res.status,
           text,
+          body,
+          headers: res.headers,
           json: text && contentType.includes('application/json') ? JSON.parse(text) : null,
         })
       },
     }
     Promise.resolve(handler(req, res)).catch(reject)
   })
+}
+
+function fakeScreenshotPage (image) {
+  const page = {
+    gotos: [],
+    waits: [],
+    screenshotOptions: null,
+    closed: false,
+    goto: async (url, options) => {
+      page.gotos.push({ url, options })
+    },
+    waitForTimeout: async (ms) => {
+      page.waits.push(ms)
+    },
+    screenshot: async (options) => {
+      page.screenshotOptions = options
+      return image
+    },
+    close: async () => {
+      page.closed = true
+    },
+  }
+  return page
 }

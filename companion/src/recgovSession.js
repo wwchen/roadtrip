@@ -133,6 +133,7 @@ const LOGIN_ERROR_SELECTORS = [
 let recgovSessionStatus = {
   last_refresh_at: null,
   last_refresh_expires_at: null,
+  next_refresh_at: null,
   last_login_diagnostic: null,
 }
 
@@ -224,7 +225,9 @@ async function activateBrowserRecaccount (page, raw, options) {
   }
 
   await injectFingerprintCookie(page.context(), recaccount.access_token)
-  return refreshBrowserRecaccountIfNeeded(page, recaccount, options)
+  const activeRecaccount = await refreshBrowserRecaccountIfNeeded(page, recaccount, options)
+  recordRecgovSessionExpiry(activeRecaccount)
+  return activeRecaccount
 }
 
 async function recaccountFromManualLogin (page, options) {
@@ -721,4 +724,17 @@ function recordRecgovRefresh (recaccount) {
     last_refresh_at: new Date().toISOString(),
     last_refresh_expires_at: recaccount?.expiration || null,
   }
+}
+
+function recordRecgovSessionExpiry (recaccount) {
+  recgovSessionStatus = {
+    ...recgovSessionStatus,
+    next_refresh_at: nextRefreshAtIso(recaccount),
+  }
+}
+
+function nextRefreshAtIso (recaccount) {
+  const expiresAt = tokenExpiresAtMs(recaccount)
+  if (expiresAt === null) return null
+  return new Date(expiresAt - RECGOV_REFRESH_AHEAD_MS).toISOString()
 }
