@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.etl.framework
 
-import ca.floo.roadtrip.models.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.Envelope
 import kotlinx.serialization.json.JsonElement
 
 /**

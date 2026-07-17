@@ -11,7 +11,7 @@ private val blockActionsJson = Json { ignoreUnknownKeys = true }
 /**
  * Server-side dispatch for a Slack interactivity `block_actions` payload — the
  * inbound half of the outbound watch cards. The Ktor route
- * ([ca.floo.roadtrip.routes.api.slack.slackInteractivityRoute]) verifies the signature and
+ * ([ca.floo.roadtrip.route.api.slack.slackInteractivityRoute]) verifies the signature and
  * hands the parsed payload here; this handler applies the mutation (pause /
  * resume / delete), re-renders the card in place through the
  * [SlackResponseSender.postResponseWatchStatus] one-shot URL.

@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.notification.common
 
-import ca.floo.roadtrip.clients.resend.EmailDeliveryClient
-import ca.floo.roadtrip.clients.resend.EmailDeliveryMessage
-import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
-import ca.floo.roadtrip.clients.slack.SlackBlockDto
-import ca.floo.roadtrip.clients.slack.SlackClient
+import ca.floo.roadtrip.client.resend.EmailDeliveryClient
+import ca.floo.roadtrip.client.resend.EmailDeliveryMessage
+import ca.floo.roadtrip.client.slack.SlackAttachmentDto
+import ca.floo.roadtrip.client.slack.SlackBlockDto
+import ca.floo.roadtrip.client.slack.SlackClient
 import ca.floo.roadtrip.config.EmailConfig
 import ca.floo.roadtrip.config.SlackConfig
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService

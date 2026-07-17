@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 
 /**
  * Resolves an already-loaded [CampsiteAvailabilityTarget] to the provider adapter, parent

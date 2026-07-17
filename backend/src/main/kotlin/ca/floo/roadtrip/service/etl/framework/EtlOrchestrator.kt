@@ -1,14 +1,14 @@
 package ca.floo.roadtrip.service.etl.framework
 
-import ca.floo.roadtrip.models.domain.CatalogUpsertResult
-import ca.floo.roadtrip.models.etl.CampgroundEtlOutput
-import ca.floo.roadtrip.models.etl.CampsiteEtlOutput
-import ca.floo.roadtrip.models.etl.PlanetFitnessLocationEtlOutput
-import ca.floo.roadtrip.models.etl.TeslaSuperchargerEtlOutput
-import ca.floo.roadtrip.models.metadata.Envelope
-import ca.floo.roadtrip.models.metadata.ValidationResult
-import ca.floo.roadtrip.models.metadata.registry.EtlEntry
-import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.model.domain.CatalogUpsertResult
+import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
+import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
+import ca.floo.roadtrip.model.etl.PlanetFitnessLocationEtlOutput
+import ca.floo.roadtrip.model.etl.TeslaSuperchargerEtlOutput
+import ca.floo.roadtrip.model.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.model.metadata.registry.EtlEntry
+import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteParentJoinerRepo
 import ca.floo.roadtrip.repo.CampsiteRepo

@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.api.CampsiteSummarySchema
-import ca.floo.roadtrip.models.api.PoiCampsitesResponseSchema
-import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.api.CampsiteSummarySchema
+import ca.floo.roadtrip.model.api.PoiCampsitesResponseSchema
+import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 

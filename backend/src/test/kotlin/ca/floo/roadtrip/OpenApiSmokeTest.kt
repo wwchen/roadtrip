@@ -1,15 +1,15 @@
 package ca.floo.roadtrip
 
-import ca.floo.roadtrip.clients.mapbox.MapboxDirections
+import ca.floo.roadtrip.client.mapbox.MapboxDirections
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
-import ca.floo.roadtrip.routes.api.docs.apiDocsRoutes
-import ca.floo.roadtrip.routes.api.health.healthRoutes
-import ca.floo.roadtrip.routes.api.pois.poiRoutes
-import ca.floo.roadtrip.routes.api.pois.poisOnRouteRoutes
+import ca.floo.roadtrip.route.api.docs.apiDocsRoutes
+import ca.floo.roadtrip.route.api.health.healthRoutes
+import ca.floo.roadtrip.route.api.pois.poiRoutes
+import ca.floo.roadtrip.route.api.pois.poisOnRouteRoutes
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiService

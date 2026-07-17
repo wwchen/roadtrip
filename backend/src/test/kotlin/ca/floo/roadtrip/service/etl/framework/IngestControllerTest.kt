@@ -2,17 +2,17 @@ package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
-import ca.floo.roadtrip.exceptions.TargetBusyException
-import ca.floo.roadtrip.exceptions.TargetNotFoundException
-import ca.floo.roadtrip.models.etl.PlanetFitnessLocationEtlOutput
-import ca.floo.roadtrip.models.metadata.ValidationResult
-import ca.floo.roadtrip.models.metadata.ingest.Phase
-import ca.floo.roadtrip.models.metadata.ingest.RunKind
-import ca.floo.roadtrip.models.metadata.ingest.Target
-import ca.floo.roadtrip.models.metadata.registry.EtlEntry
-import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
-import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.model.etl.PlanetFitnessLocationEtlOutput
+import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.model.metadata.ingest.Phase
+import ca.floo.roadtrip.model.metadata.ingest.RunKind
+import ca.floo.roadtrip.model.metadata.ingest.Target
+import ca.floo.roadtrip.model.metadata.registry.EtlEntry
+import ca.floo.roadtrip.model.metadata.registry.PoiDataEntry
+import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.support.TargetBusyException
+import ca.floo.roadtrip.support.TargetNotFoundException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope

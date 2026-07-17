@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.models.domain.CatalogUpsertResult
-import ca.floo.roadtrip.models.domain.TeslaSupercharger
-import ca.floo.roadtrip.models.domain.TeslaSuperchargerUpsertCandidate
-import ca.floo.roadtrip.models.domain.poi.TeslaSuperchargerPoiDetail
+import ca.floo.roadtrip.model.domain.CatalogUpsertResult
+import ca.floo.roadtrip.model.domain.TeslaSupercharger
+import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
+import ca.floo.roadtrip.model.domain.poi.TeslaSuperchargerPoiDetail
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext

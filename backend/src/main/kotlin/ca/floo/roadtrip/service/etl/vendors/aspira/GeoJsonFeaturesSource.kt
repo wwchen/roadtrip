@@ -7,7 +7,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /** Generic GeoJSON FeatureCollection with `properties.name` (best-effort fallback). */
 class GeoJsonFeaturesSource(
-    private val envelopes: List<ca.floo.roadtrip.models.metadata.Envelope>,
+    private val envelopes: List<ca.floo.roadtrip.model.metadata.Envelope>,
     private val slug: String,
 ) : GeometrySource {
     override fun indexInto(byName: MutableMap<String, Pair<Double, Double>>) {

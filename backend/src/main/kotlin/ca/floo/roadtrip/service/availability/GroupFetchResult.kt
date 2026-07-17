@@ -1,11 +1,11 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.models.availability.AvailabilityProviderError
-import ca.floo.roadtrip.models.availability.PoiDateContext
-import ca.floo.roadtrip.models.availability.ResolvedDateWindow
-import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.availability.PoiDateContext
+import ca.floo.roadtrip.model.availability.ResolvedDateWindow
+import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 
 /** Result of one (provider, parentRef, dateContext) group's fetch.

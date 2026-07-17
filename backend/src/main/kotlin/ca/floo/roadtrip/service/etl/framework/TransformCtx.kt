@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.etl.framework
 
-import ca.floo.roadtrip.models.metadata.registry.AgencyConfig
-import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.model.metadata.registry.AgencyConfig
+import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import java.io.File
 
 // Read-only context handed to ETL transformers. Today: the raw-capture

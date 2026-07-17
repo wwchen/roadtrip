@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.routing
 
-import ca.floo.roadtrip.models.api.RouteLineGeometryDto
+import ca.floo.roadtrip.model.api.RouteLineGeometryDto
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 

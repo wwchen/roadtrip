@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.etl.framework
 
-import ca.floo.roadtrip.models.domain.CampsiteParentLink
+import ca.floo.roadtrip.model.domain.CampsiteParentLink
 
 /**
  * Post-import parent reconciler for vendor-specific campsite → campground

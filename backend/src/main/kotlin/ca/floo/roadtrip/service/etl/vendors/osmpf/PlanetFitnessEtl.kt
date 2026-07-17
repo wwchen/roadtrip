@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.etl.vendors.osmpf
 
-import ca.floo.roadtrip.models.domain.Address
-import ca.floo.roadtrip.models.domain.PlanetFitnessLocationUpsertCandidate
-import ca.floo.roadtrip.models.etl.PlanetFitnessLocationEtlOutput
-import ca.floo.roadtrip.models.metadata.Envelope
-import ca.floo.roadtrip.models.metadata.ValidationResult
+import ca.floo.roadtrip.model.domain.Address
+import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
+import ca.floo.roadtrip.model.etl.PlanetFitnessLocationEtlOutput
+import ca.floo.roadtrip.model.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx

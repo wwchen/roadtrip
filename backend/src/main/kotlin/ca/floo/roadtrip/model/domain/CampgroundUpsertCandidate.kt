@@ -1,0 +1,38 @@
+package ca.floo.roadtrip.model.domain
+
+import kotlinx.serialization.json.JsonElement
+
+data class CampgroundUpsertCandidate(
+    val vendor: String,
+    val vendorRefId: String,
+    val name: String,
+    val latitude: Double,
+    val longitude: Double,
+    val status: String? = null,
+    val statusDescription: String? = null,
+    val kind: String? = null,
+    val shortDescription: String? = null,
+    val mediumDescription: String? = null,
+    val longDescription: String? = null,
+    val location: JsonElement? = null,
+    val defaultCampsiteSchedule: JsonElement? = null,
+    val amenities: JsonElement? = null,
+    val maxRvLength: Double? = null,
+    val maxTrailerLength: Double? = null,
+    val hasPullThroughSites: Boolean? = null,
+    val bigRigFriendly: Boolean? = null,
+    val reservationUrl: String? = null,
+    val links: JsonElement? = null,
+    val photos: JsonElement? = null,
+    val alerts: JsonElement? = null,
+    val price: JsonElement? = null,
+    val cellService: JsonElement? = null,
+    val management: JsonElement? = null,
+    val contact: JsonElement? = null,
+    val connections: JsonElement? = null,
+    val metadata: JsonElement? = null,
+    val sourceUrl: String? = null,
+    val sourcePayload: JsonElement? = null,
+    val vendorRefPayload: JsonElement? = null,
+    val additionalVendorRefs: List<CatalogVendorRefUpsertCandidate> = emptyList(),
+)

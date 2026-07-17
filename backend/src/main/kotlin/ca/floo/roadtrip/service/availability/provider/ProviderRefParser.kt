@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.ProviderRef
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray

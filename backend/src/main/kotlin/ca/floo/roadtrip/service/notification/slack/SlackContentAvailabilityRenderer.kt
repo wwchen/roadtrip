@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.notification.slack
 
-import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
-import ca.floo.roadtrip.clients.slack.SlackBlocks
-import ca.floo.roadtrip.clients.slack.SlackButtonSpec
-import ca.floo.roadtrip.clients.slack.SlackConfirmSpec
+import ca.floo.roadtrip.client.slack.SlackAttachmentDto
+import ca.floo.roadtrip.client.slack.SlackBlocks
+import ca.floo.roadtrip.client.slack.SlackButtonSpec
+import ca.floo.roadtrip.client.slack.SlackConfirmSpec
 import ca.floo.roadtrip.service.notification.common.WatchOpening
 import java.time.LocalDate
 

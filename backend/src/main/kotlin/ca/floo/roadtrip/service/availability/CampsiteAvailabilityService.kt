@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.api.AvailabilityWatchCapabilitiesDto
-import ca.floo.roadtrip.models.api.PoiCampsitesAvailabilityResponseDto
-import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.api.AvailabilityWatchCapabilitiesDto
+import ca.floo.roadtrip.model.api.PoiCampsitesAvailabilityResponseDto
+import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import java.time.LocalDate

@@ -1,14 +1,14 @@
 package ca.floo.roadtrip.service.availability.alert
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
-import ca.floo.roadtrip.service.Dispatchable
+import ca.floo.roadtrip.support.Dispatchable
 import org.jooq.DSLContext
 
 /**
  * Who detects openings for a watch. The internal poller is the default; a
  * vendor-hosted implementation (e.g. Campflare's alert API) subscribes
  * upstream in [onWatchActivated], receives webhooks on a route it owns,
- * normalizes payloads to [ca.floo.roadtrip.models.availability.CellTransition],
+ * normalizes payloads to [ca.floo.roadtrip.model.availability.CellTransition],
  * and feeds the same [ca.floo.roadtrip.service.availability.WatchAlertDispatcher].
  * A new alert provider is one file under `alert/providers/<vendor>/` plus one
  * registry row.

@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
-import ca.floo.roadtrip.models.domain.CampsiteUpsertCandidate
-import ca.floo.roadtrip.models.etl.CampsiteEtlOutput
-import ca.floo.roadtrip.models.metadata.Envelope
-import ca.floo.roadtrip.models.metadata.ValidationResult
+import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
+import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
+import ca.floo.roadtrip.model.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx

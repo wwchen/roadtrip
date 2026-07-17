@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.Duration

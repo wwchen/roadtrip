@@ -1,5 +1,8 @@
 package ca.floo.roadtrip.service
 
+import ca.floo.roadtrip.support.Dispatchable
+import ca.floo.roadtrip.support.allHandlersFor
+import ca.floo.roadtrip.support.firstHandlerFor
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

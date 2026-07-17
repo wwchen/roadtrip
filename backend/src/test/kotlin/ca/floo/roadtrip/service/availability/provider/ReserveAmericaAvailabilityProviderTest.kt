@@ -1,12 +1,10 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailability
-import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
-import ca.floo.roadtrip.models.availability.AvailabilityStatus
-import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaAvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaTenant
+import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailability
+import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailabilityClient
+import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.domain.ProviderRef
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.LocalDate

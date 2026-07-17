@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.models.domain.cache.PersistentCacheEntry
+import ca.floo.roadtrip.model.domain.cache.PersistentCacheEntry
 import kotlinx.serialization.json.JsonElement
 import java.time.Duration
 

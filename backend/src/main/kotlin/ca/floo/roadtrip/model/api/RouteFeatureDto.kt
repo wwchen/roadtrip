@@ -1,0 +1,10 @@
+package ca.floo.roadtrip.model.api
+
+import kotlinx.serialization.Serializable
+
+@Serializable
+internal data class RouteFeatureDto(
+    val type: String = "Feature",
+    val geometry: RouteLineGeometryDto,
+    val properties: RoutePropertiesDto,
+)

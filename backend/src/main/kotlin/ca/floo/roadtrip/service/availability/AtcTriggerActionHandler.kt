@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.booking.AddToCartRequest
-import ca.floo.roadtrip.models.booking.AddToCartResult
-import ca.floo.roadtrip.models.booking.BookingAction
-import ca.floo.roadtrip.models.booking.BookingProviderId
+import ca.floo.roadtrip.model.booking.AddToCartRequest
+import ca.floo.roadtrip.model.booking.AddToCartResult
+import ca.floo.roadtrip.model.booking.BookingAction
+import ca.floo.roadtrip.model.booking.BookingProviderId
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import ca.floo.roadtrip.service.notification.common.NotificationSender

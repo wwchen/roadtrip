@@ -1,0 +1,14 @@
+package ca.floo.roadtrip.route.common
+
+import io.ktor.server.application.ApplicationCall
+import java.time.LocalDate
+
+internal fun ApplicationCall.optionalDateQuery(name: String): LocalDate? = request.queryParameters[name]?.let(LocalDate::parse)
+
+internal fun ApplicationCall.queryValues(vararg names: String): List<String> =
+    names
+        .flatMap { name -> request.queryParameters.getAll(name).orEmpty() }
+        .flatMap { value -> value.split(",") }
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()

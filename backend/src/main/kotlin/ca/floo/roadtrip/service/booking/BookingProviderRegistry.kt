@@ -1,11 +1,11 @@
 package ca.floo.roadtrip.service.booking
 
-import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.models.booking.AddToCartRequest
-import ca.floo.roadtrip.models.booking.AddToCartResult
-import ca.floo.roadtrip.models.booking.BookingAction
-import ca.floo.roadtrip.models.booking.BookingTarget
-import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.booking.AddToCartRequest
+import ca.floo.roadtrip.model.booking.AddToCartResult
+import ca.floo.roadtrip.model.booking.BookingAction
+import ca.floo.roadtrip.model.booking.BookingTarget
+import ca.floo.roadtrip.model.domain.ProviderRef
 
 internal class BookingProviderRegistry(
     providers: List<BookingProvider>,

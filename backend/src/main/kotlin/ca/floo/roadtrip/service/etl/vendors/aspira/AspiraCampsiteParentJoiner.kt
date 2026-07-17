@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
-import ca.floo.roadtrip.models.domain.AspiraCampgroundParentCandidate
-import ca.floo.roadtrip.models.domain.AspiraCampsiteParentCandidate
-import ca.floo.roadtrip.models.domain.CampsiteParentLink
+import ca.floo.roadtrip.model.domain.AspiraCampgroundParentCandidate
+import ca.floo.roadtrip.model.domain.AspiraCampsiteParentCandidate
+import ca.floo.roadtrip.model.domain.CampsiteParentLink
 import ca.floo.roadtrip.service.etl.framework.CampsiteParentJoiner
 import ca.floo.roadtrip.service.etl.framework.JoinerCtx
 

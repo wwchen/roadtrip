@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.clients.campflare.CampflareAvailabilityClient
-import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
-import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
+import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
@@ -14,7 +14,7 @@ import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
-import ca.floo.roadtrip.service.availability.provider.adapters.campflare.CampflareAvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.CampflareAvailabilityProvider
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.LocalDate

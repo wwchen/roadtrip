@@ -1,21 +1,20 @@
 package ca.floo.roadtrip.di
 
-import ca.floo.roadtrip.SlackInteractivityWiring
 import ca.floo.roadtrip.config.AppConfig
-import ca.floo.roadtrip.routes.api.admin.adminIngestRoutes
-import ca.floo.roadtrip.routes.api.availability.availabilityDashboardRoutes
-import ca.floo.roadtrip.routes.api.availability.availabilityWatchRoutes
-import ca.floo.roadtrip.routes.api.docs.apiDocsRoutes
-import ca.floo.roadtrip.routes.api.geocode.geocodeRoutes
-import ca.floo.roadtrip.routes.api.health.healthRoutes
-import ca.floo.roadtrip.routes.api.pois.campsiteRoutes
-import ca.floo.roadtrip.routes.api.pois.poiRoutes
-import ca.floo.roadtrip.routes.api.pois.poisOnRouteRoutes
-import ca.floo.roadtrip.routes.api.route.routeRoutes
-import ca.floo.roadtrip.routes.api.slack.slackInteractivityRoute
-import ca.floo.roadtrip.routes.static.staticSiteRoutes
-import ca.floo.roadtrip.routes.test.testEmailRoutes
-import ca.floo.roadtrip.routes.test.testSlackRoutes
+import ca.floo.roadtrip.route.api.admin.adminIngestRoutes
+import ca.floo.roadtrip.route.api.availability.availabilityDashboardRoutes
+import ca.floo.roadtrip.route.api.availability.availabilityWatchRoutes
+import ca.floo.roadtrip.route.api.docs.apiDocsRoutes
+import ca.floo.roadtrip.route.api.geocode.geocodeRoutes
+import ca.floo.roadtrip.route.api.health.healthRoutes
+import ca.floo.roadtrip.route.api.pois.campsiteRoutes
+import ca.floo.roadtrip.route.api.pois.poiRoutes
+import ca.floo.roadtrip.route.api.pois.poisOnRouteRoutes
+import ca.floo.roadtrip.route.api.route.routeRoutes
+import ca.floo.roadtrip.route.api.slack.slackInteractivityRoute
+import ca.floo.roadtrip.route.static.staticSiteRoutes
+import ca.floo.roadtrip.route.test.testEmailRoutes
+import ca.floo.roadtrip.route.test.testSlackRoutes
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
@@ -49,7 +48,7 @@ internal fun Application.registerKoinRoutes() {
     val poisOnRouteService: PoisOnRouteService by inject()
     val routeCache: RouteCache by inject()
     val routeCorridorService: RouteCorridorService by inject()
-    val mapboxGeocoder: ca.floo.roadtrip.clients.mapbox.MapboxGeocoder by inject()
+    val mapboxGeocoder: ca.floo.roadtrip.client.mapbox.MapboxGeocoder by inject()
     val ingestController: IngestController by inject()
     val slackInteractivity: SlackInteractivityWiring? = getKoin().getOrNull()
     val slackNotifications: SlackNotificationService by inject()

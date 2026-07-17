@@ -1,15 +1,8 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.models.domain.CampsiteProviderRefRow
-import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
-import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraAvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraTenants
-import ca.floo.roadtrip.service.availability.provider.adapters.campflare.CampflareAvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovAvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaAvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaTenant
-import ca.floo.roadtrip.service.availability.provider.adapters.reservecalifornia.ReserveCaliforniaAvailabilityProvider
+import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
+import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 
 /**
  * Holds the live availability-provider adapters and dispatches a selected

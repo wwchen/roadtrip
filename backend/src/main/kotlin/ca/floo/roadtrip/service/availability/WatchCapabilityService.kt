@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.api.AvailabilityWatchCapabilitiesDto
-import ca.floo.roadtrip.models.booking.BookingAction
-import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.api.AvailabilityWatchCapabilitiesDto
+import ca.floo.roadtrip.model.booking.BookingAction
+import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 
 internal data class WatchCapabilitySupport(
     val scopedCount: Int,

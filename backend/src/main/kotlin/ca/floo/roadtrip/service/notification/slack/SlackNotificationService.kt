@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.notification.slack
 
-import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
-import ca.floo.roadtrip.clients.slack.SlackBlockDto
-import ca.floo.roadtrip.clients.slack.SlackBlocks
-import ca.floo.roadtrip.clients.slack.SlackClient
+import ca.floo.roadtrip.client.slack.SlackAttachmentDto
+import ca.floo.roadtrip.client.slack.SlackBlockDto
+import ca.floo.roadtrip.client.slack.SlackBlocks
+import ca.floo.roadtrip.client.slack.SlackClient
 import ca.floo.roadtrip.config.SlackConfig
 import ca.floo.roadtrip.service.notification.common.NotificationService
 import ca.floo.roadtrip.service.notification.common.NotificationTarget

@@ -7,7 +7,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /** BC Parks Strapi — paginated JSON pages, rows under payload.data[]. */
 class BcParksStrapiSource(
-    private val envelopes: List<ca.floo.roadtrip.models.metadata.Envelope>,
+    private val envelopes: List<ca.floo.roadtrip.model.metadata.Envelope>,
 ) : GeometrySource {
     override fun indexInto(byName: MutableMap<String, Pair<Double, Double>>) {
         for (env in envelopes) {

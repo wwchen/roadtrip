@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.api
 
-import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.models.availability.AvailabilityStatus
-import ca.floo.roadtrip.models.availability.CampsiteDayObservation
-import ca.floo.roadtrip.models.availability.DayClassification
+import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
+import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CampsiteDayObservation
+import ca.floo.roadtrip.model.availability.DayClassification
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.boolean

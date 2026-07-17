@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.etl.framework
 
-import ca.floo.roadtrip.models.metadata.ValidationResult
+import ca.floo.roadtrip.model.metadata.ValidationResult
 
 // Contract every per-row ETL implements. Stages are pure functions
 // (no DB, no IO) — testable against captured raw fixtures.

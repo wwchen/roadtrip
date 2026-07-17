@@ -1,13 +1,12 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.clients.campflare.CampflareAvailabilityClient
-import ca.floo.roadtrip.models.availability.AvailabilityStatus
-import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.models.availability.campflare.CampflareAvailability
-import ca.floo.roadtrip.models.availability.campflare.CampflareCampgroundAvailability
-import ca.floo.roadtrip.models.availability.campflare.CampflareCampsiteAvailability
-import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.availability.provider.adapters.campflare.CampflareAvailabilityProvider
+import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
+import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
+import ca.floo.roadtrip.model.availability.campflare.CampflareCampgroundAvailability
+import ca.floo.roadtrip.model.availability.campflare.CampflareCampsiteAvailability
+import ca.floo.roadtrip.model.domain.ProviderRef
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.LocalDate

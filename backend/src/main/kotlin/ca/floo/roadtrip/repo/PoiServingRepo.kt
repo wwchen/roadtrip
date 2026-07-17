@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.models.domain.poi.Bbox
-import ca.floo.roadtrip.models.domain.poi.PoiIndexRow
-import ca.floo.roadtrip.models.domain.poi.PoiResult
-import ca.floo.roadtrip.models.domain.poi.PoiRow
-import ca.floo.roadtrip.models.domain.poi.PoiSearchHit
+import ca.floo.roadtrip.model.domain.poi.Bbox
+import ca.floo.roadtrip.model.domain.poi.PoiIndexRow
+import ca.floo.roadtrip.model.domain.poi.PoiResult
+import ca.floo.roadtrip.model.domain.poi.PoiRow
+import ca.floo.roadtrip.model.domain.poi.PoiSearchHit
 import org.jooq.DSLContext
 
 // Spatial sampling grid. 10x10 = 100 cells. row_number() PARTITION BY cell

@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.readpath
 
 import ca.floo.roadtrip.config.ReadPathProviderConfig
-import ca.floo.roadtrip.models.domain.poi.Bbox
+import ca.floo.roadtrip.model.domain.poi.Bbox
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiServingRepo

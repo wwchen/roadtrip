@@ -1,15 +1,15 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
-import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
-import ca.floo.roadtrip.models.availability.AvailabilityProviderError
-import ca.floo.roadtrip.models.availability.AvailabilityWindows
-import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.models.availability.PoiDateContext
-import ca.floo.roadtrip.models.availability.ResolvedDateWindow
-import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
+import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.availability.AvailabilityWindows
+import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.availability.PoiDateContext
+import ca.floo.roadtrip.model.availability.ResolvedDateWindow
+import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import kotlinx.coroutines.runBlocking

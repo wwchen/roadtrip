@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.notification.slack
 
-import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
-import ca.floo.roadtrip.clients.slack.SlackBlocks
+import ca.floo.roadtrip.client.slack.SlackAttachmentDto
+import ca.floo.roadtrip.client.slack.SlackBlocks
 
 /**
  * Renders the terminal in-place response for a Slack card whose interactive

@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.etl.framework
 
-import ca.floo.roadtrip.models.metadata.registry.CampsiteDataEntry
-import ca.floo.roadtrip.models.metadata.registry.CampsiteParentJoinerEntry
-import ca.floo.roadtrip.models.metadata.registry.EtlEntry
-import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
-import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.model.metadata.registry.CampsiteDataEntry
+import ca.floo.roadtrip.model.metadata.registry.CampsiteParentJoinerEntry
+import ca.floo.roadtrip.model.metadata.registry.EtlEntry
+import ca.floo.roadtrip.model.metadata.registry.PoiDataEntry
+import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

@@ -1,12 +1,12 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.models.domain.AspiraCampgroundParentCandidate
-import ca.floo.roadtrip.models.domain.AspiraCampsiteParentCandidate
-import ca.floo.roadtrip.models.domain.CampsiteParentLink
-import ca.floo.roadtrip.models.domain.ReserveAmericaCampgroundParentCandidate
-import ca.floo.roadtrip.models.domain.ReserveAmericaCampsiteParentCandidate
-import ca.floo.roadtrip.models.domain.ReserveCaliforniaCampgroundParentCandidate
-import ca.floo.roadtrip.models.domain.ReserveCaliforniaCampsiteParentCandidate
+import ca.floo.roadtrip.model.domain.AspiraCampgroundParentCandidate
+import ca.floo.roadtrip.model.domain.AspiraCampsiteParentCandidate
+import ca.floo.roadtrip.model.domain.CampsiteParentLink
+import ca.floo.roadtrip.model.domain.ReserveAmericaCampgroundParentCandidate
+import ca.floo.roadtrip.model.domain.ReserveAmericaCampsiteParentCandidate
+import ca.floo.roadtrip.model.domain.ReserveCaliforniaCampgroundParentCandidate
+import ca.floo.roadtrip.model.domain.ReserveCaliforniaCampsiteParentCandidate
 import org.jooq.DSLContext
 import org.jooq.Record
 import org.jooq.impl.DSL

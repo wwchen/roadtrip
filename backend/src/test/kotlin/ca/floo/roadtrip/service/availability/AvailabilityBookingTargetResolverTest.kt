@@ -1,16 +1,16 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
-import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.models.availability.PoiDateContext
-import ca.floo.roadtrip.models.booking.AddToCartRequest
-import ca.floo.roadtrip.models.booking.AddToCartResult
-import ca.floo.roadtrip.models.booking.BookingAction
-import ca.floo.roadtrip.models.booking.BookingProviderId
-import ca.floo.roadtrip.models.booking.BookingTarget
-import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.availability.PoiDateContext
+import ca.floo.roadtrip.model.booking.AddToCartRequest
+import ca.floo.roadtrip.model.booking.AddToCartResult
+import ca.floo.roadtrip.model.booking.BookingAction
+import ca.floo.roadtrip.model.booking.BookingProviderId
+import ca.floo.roadtrip.model.booking.BookingTarget
+import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.booking.BookingProvider
