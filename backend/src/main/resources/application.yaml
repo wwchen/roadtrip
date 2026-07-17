@@ -30,8 +30,8 @@ roadtrip:
     signing-secret: "${SLACK_SIGNING_SECRET:}"
   email:
     resend-api-key: "${RESEND_API_KEY:}"
-    from: "Roadtrip Alerts <roadtrip@floo.ca>"
-    default-to:
+    from: "${ROADTRIP_EMAIL_FROM:Roadtrip Alerts <roadtrip@floo.ca>}"
+    default-to: "${ROADTRIP_EMAIL_DEFAULT_TO:}"
   poi-registry:
     resource: poi-registry.yaml
     path:

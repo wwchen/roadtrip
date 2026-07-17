@@ -22,7 +22,14 @@ class ApplicationPropertiesTest {
 
     @Test
     fun `load defaults to local profile properties`() {
-        val props = ApplicationProperties.load(env = emptyMap())
+        val props =
+            withSystemProperties(
+                "RESEND_API_KEY" to "",
+                "ROADTRIP_EMAIL_FROM" to "Roadtrip Alerts <roadtrip@floo.ca>",
+                "ROADTRIP_EMAIL_DEFAULT_TO" to "",
+            ) {
+                ApplicationProperties.load(env = emptyMap())
+            }
 
         assertEquals(".", props["roadtrip.static-dir"])
         assertEquals("poi-registry.yaml", props["roadtrip.poi-registry.resource"])
