@@ -169,27 +169,8 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
         routeRoutes(runtime.routeCache, routeCorridorService)
         geocodeRoutes(runtime.mapboxGeocoder)
         healthRoutes()
+        adminIngestRoutes(runtime.ingestController, runtime.ctx)
         staticSiteRoutes(runtime.staticDir)
-    }
-}
-
-internal fun Application.installAdminPlugins() {
-    install(CallLogging) {
-        level = Level.INFO
-        format { call ->
-            val status = call.response.status()?.value ?: UNKNOWN_HTTP_STATUS
-            val method = call.request.httpMethod.value
-            val path = call.request.path()
-            val durationMs = call.processingTimeMillis()
-            val remote = call.request.local.remoteHost
-            "$API_ACCESS_LOG_PREFIX method=$method path=$path status=$status duration_ms=$durationMs remote=$remote"
-        }
-    }
-}
-
-internal fun Application.registerAdminRoutes(boot: RoadtripBootContext) {
-    routing {
-        adminIngestRoutes(boot.ingestController, boot.ctx)
     }
 }
 

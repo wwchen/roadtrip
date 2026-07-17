@@ -6,7 +6,6 @@
 # available.
 
 PORT = '8765'
-ADMIN_PORT = '8766'
 COMPOSE_PROJECT = 'roadtrip'
 COMPOSE = 'docker compose -p ' + COMPOSE_PROJECT + ' --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois --profile recgov-companion'
 COMPOSE_INFRA_SERVICES = ['postgres', 'loki', 'tempo', 'prometheus', 'alloy']
@@ -201,7 +200,7 @@ local_resource(
 
 local_resource(
     'data-fetch',
-    cmd='curl --fail-with-body -sS --max-time 1800 -X POST http://127.0.0.1:' + ADMIN_PORT + '/api/admin/data/fetch',
+    cmd='curl --fail-with-body -sS --max-time 1800 -X POST http://127.0.0.1:' + PORT + '/api/admin/data/fetch',
     auto_init=False,
     trigger_mode=TRIGGER_MODE_MANUAL,
     resource_deps=['backend'],
@@ -210,7 +209,7 @@ local_resource(
 
 local_resource(
     'data-import',
-    cmd='curl --fail-with-body -sS --max-time 1800 -X POST http://127.0.0.1:' + ADMIN_PORT + '/api/admin/data/import',
+    cmd='curl --fail-with-body -sS --max-time 1800 -X POST http://127.0.0.1:' + PORT + '/api/admin/data/import',
     auto_init=False,
     trigger_mode=TRIGGER_MODE_MANUAL,
     resource_deps=['backend'],

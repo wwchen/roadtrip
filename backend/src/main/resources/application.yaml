@@ -1,0 +1,56 @@
+# Ktor EngineMain reads application.yaml automatically. Roadtrip runtime also
+# loads this base file, then overlays application-<profile>.yaml.
+#
+# Optional env-backed values use Ktor's ${ENV:default} syntax so EngineMain can
+# parse this file even when local secret env vars are intentionally unset.
+ktor:
+  deployment:
+    host: "0.0.0.0"
+    port: 8765
+  application:
+    modules:
+      - ca.floo.roadtrip.MainKt.module
+roadtrip:
+  availability:
+    force-pull-cooldown: 60s
+    provider-cooldown: 5m
+  booking:
+    recgov-atc:
+      companion-base-url:
+      companion-timeout: 180s
+  mapbox:
+    token: "${MAPBOX_TOKEN:}"
+  campflare:
+    api-key: "${CAMPFLARE_API_KEY:}"
+    token: "${CAMPFLARE_TOKEN:}"
+    api-base-url: "https://api.campflare.com/v2"
+  slack:
+    bot-token: "${SLACK_BOT_TOKEN:}"
+    default-channel: "${SLACK_ALERT_CHANNEL:}"
+    signing-secret: "${SLACK_SIGNING_SECRET:}"
+  email:
+    resend-api-key: "${RESEND_API_KEY:}"
+    from: "Roadtrip Alerts <roadtrip@floo.ca>"
+    default-to:
+  poi-registry:
+    resource: poi-registry.yaml
+    path:
+  read-path:
+    enabled-data-sources:
+      - campflare
+#      - recgov
+#      - federal-campgrounds
+#      - aspira-wa-pins
+      - aspira-bc-pins
+      - aspira-pc-pins
+      - alberta-provincial
+#      - new-york-state-parks
+#      - california-state-parks
+      - tesla_supercharger
+      - planet_fitness_location
+    enabled-availability-providers:
+      - aspira
+      - campflare
+      - recgov
+      - reserveamerica
+      - reservecalifornia

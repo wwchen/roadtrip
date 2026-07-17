@@ -46,8 +46,8 @@ Status mapping:
 Operational config:
 
 - `roadtrip.campflare.api-key` or `roadtrip.campflare.token`: API key. The
-  default `application.yml` values read `${CAMPFLARE_API_KEY}` /
-  `${CAMPFLARE_TOKEN}` so secrets stay outside the file.
+  default `application.yaml` values read `${CAMPFLARE_API_KEY:}` /
+  `${CAMPFLARE_TOKEN:}` so secrets stay outside the file.
 - `roadtrip.campflare.api-base-url`: optional API base URL override; defaults to
   `https://api.campflare.com/v2`.
 - `roadtrip.cache.campflare-availability.ttl`: optional cache TTL override.
