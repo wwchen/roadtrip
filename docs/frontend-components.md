@@ -1,0 +1,133 @@
+# Frontend Component Architecture
+
+## Component pattern
+
+All frontend UI is vanilla JS — no framework. Components follow this contract:
+
+```js
+mountComponent(container, config) → { dispose(), update?(), ... }
+```
+
+- `container`: the DOM element the component renders into
+- `config`: static options, callbacks, initial state
+- Returns a controller with `dispose()` (cleanup listeners/children) and optional methods like `update()`, `getValue()`, etc.
+
+## File structure
+
+Every component has up to 3 files:
+
+| File | Responsibility |
+|------|---------------|
+| `component.js` | DOM mounting, event delegation, lifecycle (the controller) |
+| `component-template.js` | Pure functions returning HTML strings — no DOM access, no side effects |
+| `component.css` | Styles using `--rt-*` design tokens |
+
+**Rule: no HTML fragments in `.js` files.** Templates belong in `*-template.js` files. The component `.js` file imports them and handles DOM/events only.
+
+## Two layers
+
+### Design-system primitives (`web/design-system/`)
+
+Generic, reusable across any page. Examples: Banner, ToggleSwitch, DoubleConfirmButton, DataTable, FormSection.
+
+These know nothing about watches, POIs, or domain logic. They accept data and callbacks.
+
+### Domain components (`web/<feature>/`)
+
+Compose design-system primitives into feature-specific UI. Examples: `web/watches/WatchForm`, `web/watches/WatchTable`.
+
+Domain components import from `web/design-system/` and from `web/api/` but never from other feature directories.
+
+## CSS rules
+
+- All custom properties come from `web/design-system/tokens.css` (`--rt-*` prefix)
+- Components inject their own stylesheet via `<link>` (not inline `<style>` tags)
+- Use the style injection pattern:
+
+```js
+function injectStyles() {
+  if (document.getElementById(STYLE_ID)) return;
+  const link = document.createElement('link');
+  link.id = STYLE_ID;
+  link.rel = 'stylesheet';
+  link.href = '/web/design-system/component-name.css';
+  document.head.appendChild(link);
+}
+```
+
+## Template rules
+
+Template functions are pure — they take data, return an HTML string:
+
+```js
+import { escapeHtml } from '../core.js';
+
+export function myTemplate({ title, items }) {
+  return `
+    <div class="rt-my-component">
+      <h2>${escapeHtml(title)}</h2>
+      ${items.map(item => `<span>${escapeHtml(item)}</span>`).join('')}
+    </div>
+  `;
+}
+```
+
+- Always use `escapeHtml()` for user-provided text
+- Templates never access the DOM or hold state
+- Templates never import anything except `escapeHtml` from `core.js`
+
+## Composing components
+
+Parent components mount children into DOM elements created during their own render:
+
+```js
+function render() {
+  container.innerHTML = parentTemplate({ ... });
+  const childHost = container.querySelector('[data-child-host]');
+  children.push(mountChildComponent(childHost, { ... }));
+}
+```
+
+Always dispose children before re-rendering:
+
+```js
+function render() {
+  children.forEach(c => c.dispose());
+  children.length = 0;
+  // ... render and mount new children
+}
+```
+
+## Event delegation
+
+Attach listeners on the container, not on individual elements. This survives re-renders without re-binding:
+
+```js
+function onClick(e) {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
+  // handle action
+}
+
+container.addEventListener('click', onClick);
+```
+
+## Page controllers
+
+Each page has a `*-page.js` entry point that:
+1. Mounts top-level components into DOM host elements (defined in the HTML shell)
+2. Handles URL params for deep-linking
+3. Wires callbacks between components (form → table refresh, etc.)
+4. Calls API functions from `web/api/`
+
+Page controllers are self-initializing (`init()` runs at module load) and have no exports.
+
+## Existing design-system components
+
+| Component | Import | Purpose |
+|-----------|--------|---------|
+| Banner | `web/design-system/banner.js` | Dismissible success/error/info message |
+| ToggleSwitch | `web/design-system/toggle-switch.js` | On/off toggle with label + help text |
+| DoubleConfirmButton | `web/design-system/double-confirm-button.js` | Two-click destructive action |
+| DataTable | `web/design-system/data-table.js` | Table from column defs + row data |
+| FormSection | `web/design-system/form-section.js` | Label + input + help text group |
