@@ -1,13 +1,11 @@
 package ca.floo.roadtrip.service.notification.common
 
 import kotlinx.serialization.json.JsonObject
-import java.io.Closeable
 import java.time.LocalDate
 
 class NotificationFanout(
     private val services: List<NotificationService>,
-) : NotificationSender,
-    Closeable {
+) : NotificationSender {
     override suspend fun sendWatchStatus(
         notice: WatchStatusNotice,
         targets: List<NotificationTarget>,
@@ -55,10 +53,6 @@ class NotificationFanout(
                 target = target,
             )
         }
-
-    override fun close() {
-        services.filterIsInstance<Closeable>().forEach { it.close() }
-    }
 
     private suspend fun sendToTargets(
         targets: List<NotificationTarget>,

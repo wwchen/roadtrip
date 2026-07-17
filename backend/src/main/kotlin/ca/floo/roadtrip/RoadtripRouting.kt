@@ -3,6 +3,13 @@ package ca.floo.roadtrip
 import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.http.cacheOptionsFor
+import ca.floo.roadtrip.repo.AdminIngestReadRepo
+import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.AvailabilityRepo
+import ca.floo.roadtrip.repo.AvailabilityRunRepo
+import ca.floo.roadtrip.repo.AvailabilityWatchRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.routes.IpRateLimiter
 import ca.floo.roadtrip.routes.adminIngestRoutes
 import ca.floo.roadtrip.routes.availabilityDashboardRoutes
 import ca.floo.roadtrip.routes.availabilityWatchRoutes
@@ -15,12 +22,14 @@ import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.routes.slackInteractivityRoute
 import ca.floo.roadtrip.routes.testEmailRoutes
 import ca.floo.roadtrip.routes.testSlackRoutes
-import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.CampsiteCatalogService
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
+import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
+import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
 import ca.floo.roadtrip.service.poi.PoiReader
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.routing.RouteCache
@@ -48,7 +57,6 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.CoroutineScope
-import org.jooq.DSLContext
 import org.slf4j.event.Level
 import java.io.File
 
@@ -103,9 +111,17 @@ internal fun Application.installRoadtripPlugins() {
 }
 
 internal fun Application.registerRoadtripRoutes() {
-    val runtime: RoadtripRuntime by dependencies
     val appConfig: AppConfig by dependencies
-    val ctx: DSLContext by dependencies
+    val staticDir: File by dependencies
+    val slackInteractivity: SlackInteractivityWiring? by dependencies
+    val ingestController: IngestController by dependencies
+    val adminIngestReadRepo: AdminIngestReadRepo by dependencies
+    val availabilityPollers: AvailabilityPollerRepo by dependencies
+    val availabilityRuns: AvailabilityRunRepo by dependencies
+    val availability: AvailabilityRepo by dependencies
+    val availabilityWatches: AvailabilityWatchRepo by dependencies
+    val campsitesRepo: CampsiteRepo by dependencies
+    val availabilityWatchMapper: AvailabilityWatchApiMapper by dependencies
     val availabilityWatchService: AvailabilityWatchService by dependencies
     val watchAlertDispatcher: WatchAlertDispatcher by dependencies
     val schedulerScope: CoroutineScope by dependencies
@@ -116,6 +132,9 @@ internal fun Application.registerRoadtripRoutes() {
     val poisOnRouteService: PoisOnRouteService by dependencies
     val campsiteCatalogService: CampsiteCatalogService by dependencies
     val campsiteAvailabilityService: CampsiteAvailabilityService by dependencies
+    val campsiteRateLimiter: IpRateLimiter by dependencies
+    val emailNotifications: EmailNotificationService by dependencies
+    val slackNotifications: SlackNotificationService by dependencies
     routing {
         route("/api/docs") {
             swaggerUI("/api/docs/openapi.json")
@@ -126,34 +145,39 @@ internal fun Application.registerRoadtripRoutes() {
 
         poiRoutes(poiService)
         availabilityWatchRoutes(
-            ctx,
-            availabilityWatchService,
-            watchAlertDispatcher,
-            schedulerScope,
+            watches = availabilityWatches,
+            watchMapper = availabilityWatchMapper,
+            watchService = availabilityWatchService,
+            alertDispatcher = watchAlertDispatcher,
+            notifyScope = schedulerScope,
         )
         campsiteRoutes(
             catalogService = campsiteCatalogService,
             availabilityService = campsiteAvailabilityService,
+            rateLimit = campsiteRateLimiter,
         )
         // Inbound Slack interactivity is only registered when the app is
         // configured with a signing secret; an unset secret means we can't
         // verify anything, so leave the route absent (404) rather than
         // answering 401 to every probe.
-        runtime.slackInteractivity?.let { wiring ->
+        slackInteractivity?.let { wiring ->
             slackInteractivityRoute(wiring.verifier, wiring.handler, schedulerScope)
         }
         availabilityDashboardRoutes(
-            ctx = ctx,
+            pollers = availabilityPollers,
+            runs = availabilityRuns,
+            availability = availability,
+            campsitesRepo = campsitesRepo,
             forcePullCooldown = appConfig.availability.forcePullCooldown,
         )
         poisOnRouteRoutes(poisOnRouteService)
         routeRoutes(routeCache, routeCorridorService)
         geocodeRoutes(mapboxGeocoder)
         healthRoutes()
-        adminIngestRoutes(runtime.ingestController, runtime.ctx)
-        testEmailRoutes(EmailNotificationService(runtime.appConfig.email))
-        testSlackRoutes(runtime.slackNotifications)
-        staticSiteRoutes(runtime.staticDir)
+        adminIngestRoutes(ingestController, adminIngestReadRepo)
+        testEmailRoutes(emailNotifications)
+        testSlackRoutes(slackNotifications)
+        staticSiteRoutes(staticDir)
     }
 }
 

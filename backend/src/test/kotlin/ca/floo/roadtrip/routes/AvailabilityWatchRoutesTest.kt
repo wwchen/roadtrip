@@ -14,6 +14,7 @@ import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
+import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.NotifyTriggerActionHandler
@@ -36,6 +37,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.server.routing.Route
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.CoroutineScope
@@ -47,6 +49,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import org.jooq.DSLContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -137,7 +140,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     }
 
     /** Wraps the default internal-poller alert provider for tests, mirroring
-     *  the production wiring in [ca.floo.roadtrip.startRoadtripRuntime]. */
+     *  the production DI wiring in [ca.floo.roadtrip.module]. */
     private fun alertProviders(
         campsitesRepo: CampsiteRepo,
         targets: DbAvailabilityTargetResolver,
@@ -154,6 +157,29 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     // notifier disabled — dispatchInitial no-ops and the fire-and-forget launch
     // does nothing. Initial-notify behavior is covered in AvailabilityPollExecutorTest.
     private val testNotifyScope = CoroutineScope(Dispatchers.Unconfined)
+
+    private fun Route.availabilityWatchRoutes(
+        ctx: DSLContext,
+        watchService: AvailabilityWatchService,
+        alertDispatcher: WatchAlertDispatcher,
+        notifyScope: CoroutineScope,
+        watchCapabilities: WatchCapabilityService? = null,
+    ) {
+        val campsitesRepo = CampsiteRepo(ctx)
+        val scopeResolver = WatchScopeResolver(campsitesRepo)
+        availabilityWatchRoutes(
+            watches = AvailabilityWatchRepo(ctx),
+            watchMapper =
+                AvailabilityWatchApiMapper(
+                    campsites = campsitesRepo,
+                    scopeResolver = scopeResolver,
+                    capabilities = watchCapabilities,
+                ),
+            watchService = watchService,
+            alertDispatcher = alertDispatcher,
+            notifyScope = notifyScope,
+        )
+    }
 
     private fun disabledDispatcher(): WatchAlertDispatcher {
         val campsitesRepo = CampsiteRepo(ctx)

@@ -7,16 +7,13 @@ import ca.floo.roadtrip.models.api.AvailabilityWatchResponse
 import ca.floo.roadtrip.models.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
-import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchRequestMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.AvailabilityWatchValidationException
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
-import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.WatchInitialNotificationPolicy
 import ca.floo.roadtrip.service.availability.WatchRequestMapping
-import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchStatus
 import io.github.smiley4.ktorswaggerui.dsl.routing.delete
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
@@ -35,7 +32,6 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
 
 private const val DEFAULT_LIST_LIMIT = 100
@@ -56,17 +52,12 @@ private val watchJson =
     }
 
 internal fun Route.availabilityWatchRoutes(
-    ctx: DSLContext,
+    watches: AvailabilityWatchRepo,
+    watchMapper: AvailabilityWatchApiMapper,
     watchService: AvailabilityWatchService,
     alertDispatcher: WatchAlertDispatcher,
     notifyScope: CoroutineScope,
-    watchCapabilities: WatchCapabilityService? = null,
 ) {
-    val watches = AvailabilityWatchRepo(ctx)
-    val campsitesRepo = CampsiteRepo(ctx)
-    val scopeResolver = WatchScopeResolver(campsitesRepo)
-    val watchMapper = AvailabilityWatchApiMapper(campsitesRepo, scopeResolver, watchCapabilities)
-
     // The "first message": on create/update, post the current window state to
     // Slack so an already-open site isn't stranded behind the edge-triggered
     // poller. Fire-and-forget, outside the mutation's transaction — it must

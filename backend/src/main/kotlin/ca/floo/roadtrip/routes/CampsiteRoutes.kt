@@ -24,14 +24,13 @@ import java.util.concurrent.ConcurrentHashMap
 
 private val log = LoggerFactory.getLogger("CampsiteRoutes")
 
-private const val IP_RATE_LIMIT_PER_MINUTE = 30
+internal const val IP_RATE_LIMIT_PER_MINUTE = 30
 
 internal fun Route.campsiteRoutes(
     catalogService: CampsiteCatalogService,
     availabilityService: CampsiteAvailabilityService,
+    rateLimit: IpRateLimiter,
 ) {
-    val rateLimit = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE)
-
     get("/api/pois/{id}/campsites", {
         tags = listOf("campsite", "poi")
         summary = "Canonical campsites linked to a campground POI"
@@ -147,7 +146,7 @@ internal fun Route.campsiteRoutes(
     }
 }
 
-private class IpRateLimiter(
+internal class IpRateLimiter(
     private val perMinute: Int,
     private val nowMs: () -> Long = { System.currentTimeMillis() },
 ) {

@@ -27,7 +27,6 @@ import io.ktor.server.routing.Route
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import org.jooq.DSLContext
 import java.time.Duration
 import java.time.OffsetDateTime
 
@@ -45,14 +44,12 @@ private val dashboardJson =
     }
 
 fun Route.availabilityDashboardRoutes(
-    ctx: DSLContext,
+    pollers: AvailabilityPollerRepo,
+    runs: AvailabilityRunRepo,
+    availability: AvailabilityRepo,
+    campsitesRepo: CampsiteRepo,
     forcePullCooldown: Duration,
 ) {
-    val pollers = AvailabilityPollerRepo(ctx)
-    val runs = AvailabilityRunRepo(ctx)
-    val availability = AvailabilityRepo(ctx)
-    val campsitesRepo = CampsiteRepo(ctx)
-
     get("/api/availability/pollers", {
         tags = listOf("availability")
         summary = "List availability pollers (coalesced per-vendor-call-unit schedulable)"

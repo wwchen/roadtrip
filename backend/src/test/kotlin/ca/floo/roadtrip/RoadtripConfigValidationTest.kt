@@ -8,7 +8,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
-class RoadtripRuntimeConfigTest {
+class RoadtripConfigValidationTest {
     @Test
     fun `read path data source validation accepts registry and detail source keys`() {
         validateReadPathDataSources(

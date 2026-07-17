@@ -4,8 +4,6 @@ import ca.floo.roadtrip.clients.aspira.AspiraAvailability
 import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.clients.aspira.AspiraOccupancy
 import ca.floo.roadtrip.clients.campflare.CampflareAvailabilityClient
-import ca.floo.roadtrip.clients.mapbox.MapboxDirections
-import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.clients.recgov.Campsite
 import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailability
@@ -26,18 +24,19 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.CampsiteCatalogService
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
-import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
-import ca.floo.roadtrip.service.etl.framework.IngestController
-import ca.floo.roadtrip.service.routing.RouteCache
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.Application
 import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import java.io.File
 import java.nio.file.Files
 import java.time.Duration
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicInteger
+import javax.sql.DataSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -49,26 +48,24 @@ private const val TEST_CAMPFLARE_API_BASE = "https://campflare.test.invalid"
 private const val TEST_DURATION_SECONDS = 1L
 private const val TEST_HEALTH_PATH = "/api/health"
 private const val TEST_OVERRIDE_DATA_SOURCE = "override-source"
-private const val TEST_RAW_DATA_DIR = "data/raw"
 private const val TEST_STATIC_DIR_PREFIX = "roadtrip-di-test"
 
-class RoadtripDependenciesTest : SharedDbTest() {
+class RoadtripDiGraphTest : SharedDbTest() {
     @Test
-    fun `production dependency graph resolves through Ktor DI and closes runtime`() {
+    fun `production dependency graph resolves through Ktor DI and closes resources`() {
         val closeTracker = CloseTracker()
-        val boot = testBootContext(closeTracker)
-        lateinit var runtime: RoadtripRuntime
+        lateinit var schedulerScope: CoroutineScope
 
         testApplication {
             application {
-                installRoadtripDependencies(boot)
+                installTestOverrides(closeTracker)
                 module()
 
-                val resolvedRuntime: RoadtripRuntime by dependencies
                 val catalogService: CampsiteCatalogService by dependencies
                 val availabilityService: CampsiteAvailabilityService by dependencies
+                val resolvedSchedulerScope: CoroutineScope by dependencies
 
-                runtime = resolvedRuntime
+                schedulerScope = resolvedSchedulerScope
                 assertNotNull(catalogService)
                 assertNotNull(availabilityService)
             }
@@ -76,7 +73,7 @@ class RoadtripDependenciesTest : SharedDbTest() {
             assertEquals(HttpStatusCode.OK, client.get(TEST_HEALTH_PATH).status)
         }
 
-        assertTrue(runtime.schedulerScope.coroutineContext[Job]?.isCancelled == true)
+        assertTrue(schedulerScope.coroutineContext[Job]?.isCancelled == true)
         assertEquals(PROVIDER_CLIENT_COUNT, closeTracker.closeCount)
     }
 
@@ -84,7 +81,6 @@ class RoadtripDependenciesTest : SharedDbTest() {
     fun `test applications can override dependencies before loading modules`() =
         testApplication {
             val closeTracker = CloseTracker()
-            val boot = testBootContext(closeTracker)
             val overrideConfig =
                 testAppConfig(
                     readPathProviders =
@@ -95,8 +91,7 @@ class RoadtripDependenciesTest : SharedDbTest() {
                 )
 
             application {
-                dependencies.provide<AppConfig> { overrideConfig }
-                installRoadtripDependencies(boot)
+                installTestOverrides(closeTracker, appConfig = overrideConfig)
                 module()
 
                 val appConfig: AppConfig by dependencies
@@ -106,28 +101,15 @@ class RoadtripDependenciesTest : SharedDbTest() {
             assertEquals(HttpStatusCode.OK, client.get(TEST_HEALTH_PATH).status)
         }
 
-    private fun testBootContext(closeTracker: CloseTracker): RoadtripBootContext {
-        val poiRegistry = PoiRegistry(dataSources = emptyList(), poiData = emptyList())
-        val staticDir = Files.createTempDirectory(TEST_STATIC_DIR_PREFIX).toFile()
-        return RoadtripBootContext(
-            properties = emptyMap(),
-            appConfig = testAppConfig(),
-            dataSource = ds,
-            ctx = ctx,
-            availabilityProviderClients = closeTracker.clients(),
-            staticDir = staticDir,
-            mapboxGeocoder = MapboxGeocoder(token = null),
-            routeCache = RouteCache(MapboxDirections(token = null)),
-            poiRegistry = poiRegistry,
-            ingestController =
-                IngestController(
-                    ctx = ctx,
-                    etl = EtlOrchestrator(ctx = ctx, rawDir = staticDir.resolve(TEST_RAW_DATA_DIR), poiRegistry = poiRegistry),
-                    fetchTargets = emptyMap(),
-                    importTargets = emptyMap(),
-                    workingDir = staticDir,
-                ),
-        )
+    private fun Application.installTestOverrides(
+        closeTracker: CloseTracker,
+        appConfig: AppConfig = testAppConfig(),
+    ) {
+        dependencies.provide<AppConfig> { appConfig }
+        dependencies.provide<DataSource> { ds }
+        dependencies.provide<File> { Files.createTempDirectory(TEST_STATIC_DIR_PREFIX).toFile() }
+        dependencies.provide<PoiRegistry> { PoiRegistry(dataSources = emptyList(), poiData = emptyList()) }
+        dependencies.provide<AvailabilityProviderClients> { closeTracker.clients() }
     }
 
     private fun testAppConfig(

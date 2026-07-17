@@ -49,7 +49,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import org.jooq.DSLContext
 
 @OptIn(ExperimentalSerializationApi::class)
 private val adminIngestJson =
@@ -76,10 +75,8 @@ private val adminIngestJson =
 // curl them. If you ever expose dev to the internet, bind to loopback only.
 fun Route.adminIngestRoutes(
     controller: IngestController,
-    ctx: DSLContext,
+    readRepo: AdminIngestReadRepo,
 ) {
-    val readRepo = AdminIngestReadRepo(ctx)
-
     route("/api/admin/data") {
         // One target — sync default; ?async=1 fires-and-forgets.
         post("/fetch/{target}", {
