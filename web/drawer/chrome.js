@@ -15,6 +15,8 @@ import { clearVisiblePoiUrl } from '../share-links.js';
 export const DRAWER_ROOT_ID = 'cg-drawer';
 export const BACKDROP_ID = 'cg-drawer-backdrop';
 
+const DRAWER_DRAG_INTERACTIVE_SELECTOR = 'a, button, input, select, textarea, [contenteditable="true"]';
+
 let openController = null;   // AbortController for inflight fetch on the open drawer
 let activeFeature = null;    // currently displayed feature (used for stale-check)
 
@@ -205,10 +207,8 @@ export function attachDragHandlers(root) {
   // this, we let the browser interpret the touch as a tap or scroll.
   const SLOP = 8;
 
-  // Records whether the touch began on an interactive element (link,
-  // button, input). We can't reject those at touchstart — the user
-  // needs to be able to drag-from-anywhere — but if motion stays below
-  // the slop threshold we let the tap through unimpeded.
+  // Records whether the touch began on an interactive element. Once movement
+  // starts, those controls keep the gesture so text selection/focus is stable.
   let startedOnInteractive = false;
 
   function onStart(e, originatedAtHandle) {
@@ -217,7 +217,7 @@ export function attachDragHandlers(root) {
     startY = e.touches[0].clientY;
     startH = root.getBoundingClientRect().height;
     startedOnInteractive =
-      !originatedAtHandle && !!e.target.closest('a, button, input, select, textarea');
+      !originatedAtHandle && !!e.target.closest(DRAWER_DRAG_INTERACTIVE_SELECTOR);
     phase = originatedAtHandle ? 'handle' : 'pending';
   }
 
@@ -229,6 +229,10 @@ export function attachDragHandlers(root) {
 
     // Pending body touch → decide whether this is a drag or a scroll.
     if (phase === 'pending') {
+      if (startedOnInteractive && (Math.abs(dx) > SLOP || Math.abs(dy) > SLOP)) {
+        phase = null;
+        return;
+      }
       if (Math.abs(dx) > SLOP && Math.abs(dx) > Math.abs(dy)) {
         // Let horizontal scrollers, especially the availability matrix,
         // keep the gesture. The drawer only owns vertical drag intent.
@@ -237,9 +241,7 @@ export function attachDragHandlers(root) {
       }
       if (dy > SLOP) {
         // Body drag exceeded slop. If content is scrolled mid-drawer,
-        // hand back to the native scroll. Otherwise we own the gesture
-        // even when it started over a link or button — the user is
-        // clearly swiping, not tapping.
+        // hand back to the native scroll. Otherwise we own the gesture.
         if (root.scrollTop > 0) {
           phase = null;
           return;
