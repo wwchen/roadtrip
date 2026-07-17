@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Run backend tests before pushing. Skip when no backend code changed in the
-# range about to be pushed, and skip entirely under SKIP_PREPUSH=1 for the
-# rare "yes I know, just push it" case. Enable with `make install-hooks`.
+# Run backend tests before pushing backend code or Gradle build inputs. Skip
+# when the pushed range only changes web/docs/data/etc., and skip entirely
+# under SKIP_PREPUSH=1 for the rare "yes I know, just push it" case. Enable
+# with `make install-hooks`.
 #
 # Pre-push (vs pre-commit) is the right gate for tests: pre-commit runs every
 # few minutes during a flow session and slow tests would train people to
@@ -17,6 +18,9 @@ fi
 # line per ref being pushed. Aggregate the changed-file set across all of
 # them so a multi-ref push still gates correctly.
 zero="0000000000000000000000000000000000000000"
+# Keep this narrower than `^backend/` so commits that only touch IDE metadata,
+# docs, or other non-build files under backend/ do not pay for Gradle.
+gradle_trigger_path_regex='^(backend/(build\.gradle\.kts$|src/)|settings\.gradle\.kts$|gradle\.properties$|gradle/|gradlew(\.bat)?$)'
 changed=""
 while read -r local_ref local_sha remote_ref remote_sha; do
   [ -z "${local_sha:-}" ] && continue
@@ -33,8 +37,8 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   changed+=$(git diff --name-only "$range" 2>/dev/null || true)$'\n'
 done
 
-if ! echo "$changed" | grep -qE '^backend/'; then
-  echo "pre-push: no backend changes — skipping tests"
+if ! printf '%s\n' "$changed" | grep -qE "$gradle_trigger_path_regex"; then
+  echo "pre-push: no backend/Gradle changes -- skipping tests"
   exit 0
 fi
 
