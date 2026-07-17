@@ -4,12 +4,13 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
-import ca.floo.roadtrip.route.api.availability.availabilityDashboardRoutes
+import ca.floo.roadtrip.service.availability.AvailabilityDashboardController
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.statement.bodyAsText
@@ -31,10 +32,19 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
+import ca.floo.roadtrip.route.api.availability.availabilityDashboardRoutes as installAvailabilityDashboardRoutes
 
 class AvailabilityDashboardRoutesTest : SharedDbTest() {
     private fun Route.testAvailabilityDashboardRoutes() {
-        availabilityDashboardRoutes(ctx = ctx, forcePullCooldown = Duration.ofSeconds(60))
+        installAvailabilityDashboardRoutes(
+            AvailabilityDashboardController(
+                pollers = AvailabilityPollerRepo(ctx),
+                runs = AvailabilityRunRepo(ctx),
+                availability = AvailabilityRepo(ctx),
+                campsites = CampsiteRepo(ctx),
+                forcePullCooldown = Duration.ofSeconds(60),
+            ),
+        )
     }
 
     @BeforeEach
