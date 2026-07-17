@@ -297,9 +297,7 @@ function injectWatchEditorStyles() {
   if (document.getElementById(WATCH_EDITOR_STYLE_ID)) return;
   const css = `
   .rt-watch-editor {
-    --rt-watch-editor-width: 240px;
-    --rt-watch-editor-mobile-margin: 16px;
-    width: var(--rt-watch-editor-width);
+    width: 240px;
     box-sizing: border-box;
     color: var(--rt-text, #e8eaed);
     background: var(--rt-surface, #26272d);
@@ -399,15 +397,6 @@ function injectWatchEditorStyles() {
   }
   .rt-watch-editor-save:disabled,
   .rt-watch-editor-remove:disabled { opacity: 0.6; cursor: wait; }
-  @media (max-width: 768px) {
-    .rt-watch-editor {
-      width: min(var(--rt-watch-editor-width), calc(100vw - var(--rt-watch-editor-mobile-margin)));
-    }
-    .rt-watch-editor-field input {
-      min-height: 40px;
-      font-size: 16px;
-    }
-  }
   `;
   const tag = document.createElement('style');
   tag.id = WATCH_EDITOR_STYLE_ID;

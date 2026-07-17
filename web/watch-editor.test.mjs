@@ -129,7 +129,6 @@ test('mountWatchEditor renders email, hides Slack channel override, and uses dar
     assert.doesNotMatch(host.innerHTML, /name="email_to"/);
     assert.doesNotMatch(host.innerHTML, /Channel override|name="slack_channel"/);
     assert.match(styleTag.textContent, /background: var\(--rt-surface, #26272d\)/);
-    assert.match(styleTag.textContent, /@media \(max-width: 768px\)[\s\S]*\.rt-watch-editor-field input[\s\S]*font-size: 16px/);
 
     controller.dispose();
   } finally {
