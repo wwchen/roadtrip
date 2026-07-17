@@ -133,6 +133,7 @@ dependencies {
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
     implementation("io.ktor:ktor-server-call-logging:$ktorVersion")
     implementation("io.ktor:ktor-server-status-pages:$ktorVersion")
+    implementation("io.ktor:ktor-server-request-validation:$ktorVersion")
     implementation("io.ktor:ktor-server-compression:$ktorVersion")
     implementation("io.ktor:ktor-server-caching-headers:$ktorVersion")
     implementation("io.ktor:ktor-server-conditional-headers:$ktorVersion")

@@ -1,11 +1,11 @@
 package ca.floo.roadtrip.route.api.geocode
 
 import ca.floo.roadtrip.client.mapbox.MapboxGeocoder
-import ca.floo.roadtrip.model.api.ApiErrorSchema
 import ca.floo.roadtrip.model.api.GeocodeResponseDto
 import ca.floo.roadtrip.model.api.GeocodeResultDto
 import ca.floo.roadtrip.model.routing.GeocodeResult
 import ca.floo.roadtrip.route.common.boundedIntQuery
+import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.support.GeocodeException
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -100,7 +100,7 @@ private suspend fun ApplicationCall.respondGeocodeError(
     status: HttpStatusCode,
     detail: String? = null,
 ) {
-    respondGeocodeJson(ApiErrorSchema(error = error, detail = detail), status)
+    respondApiError(error = error, status = status, detail = detail)
 }
 
 private suspend inline fun <reified T> ApplicationCall.respondGeocodeJson(
