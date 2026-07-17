@@ -22,12 +22,6 @@ internal fun Route.staticSiteRoutes(staticDir: File) {
     get("/watches") {
         call.respondFile(File(staticDir, "watches.html"))
     }
-    get("/watches") {
-        call.respondFile(File(staticDir, "watches.html"))
-    }
-    get("/watches/") {
-        call.respondFile(File(staticDir, "watches.html"))
-    }
     staticFiles("/", staticDir) {
         default("index.html")
         exclude { f ->
