@@ -81,7 +81,7 @@ repositories {
     mavenCentral()
 }
 
-val ktorVersion = "3.0.1"
+val ktorVersion = "3.5.1"
 val jooqVersion = "3.19.15"
 val postgresVersion = "42.7.4"
 val flywayVersion = "10.20.1"
@@ -151,7 +151,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-slf4j:1.9.0")
-    // YAML reader for app config and the POI registry resource.
+    // YAML reader for the POI registry resource.
     implementation("com.charleskorn.kaml:kaml:0.74.0")
     // Coordinate -> IANA ZoneId lookup from timezone-boundary-builder data.
     implementation("net.iakovlev:timeshape:$timeshapeVersion")

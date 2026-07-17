@@ -39,13 +39,13 @@ private fun installOptionalShutdownThreadDump(properties: Map<String, String>) {
 internal fun includeInRoadtripOpenApi(path: List<String>): Boolean = path.firstOrNull() == "api" && path.getOrNull(1) != "docs"
 
 fun Application.module() {
-    val properties = ApplicationProperties.load()
+    val properties = ApplicationProperties.load(baseConfig = environment.config)
     installOptionalShutdownThreadDump(properties)
     val boot = createRoadtripBootContext(properties)
 
     installRoadtripPlugins()
     val runtime = startRoadtripRuntime(boot)
-    environment.monitor.subscribe(ApplicationStopping) {
+    monitor.subscribe(ApplicationStopping) {
         runtime.close()
     }
     try {

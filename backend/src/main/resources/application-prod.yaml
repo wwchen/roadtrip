@@ -1,13 +1,13 @@
 roadtrip:
   static-dir: /app/static
   db:
-    url: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+    url: "${POSTGRES_URL:jdbc:postgresql://postgres:5432/roadtrip}"
     user: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
   booking:
     recgov-atc:
-      companion-base-url: http://recgov-companion:8770
+      companion-base-url: "http://recgov-companion:8770"
   grafana:
-    root-url: https://roadtrip.floo.ca/dash/
+    root-url: "https://roadtrip.floo.ca/dash/"
   web:
-    root-url: https://roadtrip.floo.ca/
+    root-url: "https://roadtrip.floo.ca/"

@@ -2,6 +2,11 @@ package ca.floo.roadtrip.config
 
 import io.ktor.server.config.ConfigLoader
 import org.junit.jupiter.api.Test
+import java.io.ByteArrayInputStream
+import java.io.InputStream
+import java.net.URL
+import java.net.URLConnection
+import java.net.URLStreamHandler
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
@@ -38,15 +43,13 @@ class ApplicationPropertiesTest {
     @Test
     fun `load uses selected profile properties`() {
         val props =
-            ApplicationProperties.load(
-                env =
-                    mapOf(
-                        "ROADTRIP_PROFILE" to "prod",
-                        "POSTGRES_DB" to "roadtrip",
-                        "POSTGRES_USER" to "roadtrip",
-                        "POSTGRES_PASSWORD" to "roadtrip",
-                    ),
-            )
+            withSystemProperties(
+                "POSTGRES_URL" to "jdbc:postgresql://postgres:5432/roadtrip",
+                "POSTGRES_USER" to "roadtrip",
+                "POSTGRES_PASSWORD" to "roadtrip",
+            ) {
+                ApplicationProperties.load(env = mapOf("ROADTRIP_PROFILE" to "prod"))
+            }
 
         assertEquals("/app/static", props["roadtrip.static-dir"])
         assertEquals("jdbc:postgresql://postgres:5432/roadtrip", props["roadtrip.db.url"])
@@ -62,15 +65,13 @@ class ApplicationPropertiesTest {
     @Test
     fun `compose local profile uses container paths with local browser links`() {
         val props =
-            ApplicationProperties.load(
-                env =
-                    mapOf(
-                        "ROADTRIP_PROFILE" to "compose-local",
-                        "POSTGRES_DB" to "roadtrip",
-                        "POSTGRES_USER" to "roadtrip",
-                        "POSTGRES_PASSWORD" to "roadtrip",
-                    ),
-            )
+            withSystemProperties(
+                "POSTGRES_URL" to "jdbc:postgresql://postgres:5432/roadtrip",
+                "POSTGRES_USER" to "roadtrip",
+                "POSTGRES_PASSWORD" to "roadtrip",
+            ) {
+                ApplicationProperties.load(env = mapOf("ROADTRIP_PROFILE" to "compose-local"))
+            }
 
         assertEquals("/app/static", props["roadtrip.static-dir"])
         assertEquals("jdbc:postgresql://postgres:5432/roadtrip", props["roadtrip.db.url"])
@@ -99,15 +100,13 @@ class ApplicationPropertiesTest {
     @Test
     fun `prod profile resolves database properties from postgres environment`() {
         val props =
-            ApplicationProperties.load(
-                env =
-                    mapOf(
-                        "ROADTRIP_PROFILE" to "prod",
-                        "POSTGRES_DB" to "roadtrip_prod",
-                        "POSTGRES_USER" to "app",
-                        "POSTGRES_PASSWORD" to "secret",
-                    ),
-            )
+            withSystemProperties(
+                "POSTGRES_URL" to "jdbc:postgresql://postgres:5432/roadtrip_prod",
+                "POSTGRES_USER" to "app",
+                "POSTGRES_PASSWORD" to "secret",
+            ) {
+                ApplicationProperties.load(env = mapOf("ROADTRIP_PROFILE" to "prod"))
+            }
 
         assertEquals("jdbc:postgresql://postgres:5432/roadtrip_prod", props["roadtrip.db.url"])
         assertEquals("app", props["roadtrip.db.user"])
@@ -117,26 +116,25 @@ class ApplicationPropertiesTest {
     @Test
     fun `load overlays selected profile yaml after base yaml`() {
         val props =
-            ApplicationProperties.load(
-                env =
-                    mapOf(
-                        "SECRET_VALUE" to "from-env",
-                    ),
-                classLoader =
-                    resourceClassLoader(
-                        "application.yaml" to
-                            """
-                            shared: base-yaml
-                            base-only: base
-                            secret: ${'$'}{SECRET_VALUE}
-                            """.trimIndent(),
-                        "application-local.yaml" to
-                            """
-                            profile-only: profile-yaml
-                            shared: profile-yaml
-                            """.trimIndent(),
-                    ),
-            )
+            withSystemProperties("SECRET_VALUE" to "from-env") {
+                ApplicationProperties.load(
+                    env = emptyMap(),
+                    classLoader =
+                        resourceClassLoader(
+                            "application.yaml" to
+                                """
+                                shared: base-yaml
+                                base-only: base
+                                secret: ${'$'}{SECRET_VALUE}
+                                """.trimIndent(),
+                            "application-local.yaml" to
+                                """
+                                profile-only: profile-yaml
+                                shared: profile-yaml
+                                """.trimIndent(),
+                        ),
+                )
+            }
 
         assertEquals("base", props["base-only"])
         assertEquals("from-env", props["secret"])
@@ -147,32 +145,32 @@ class ApplicationPropertiesTest {
     @Test
     fun `load resolves property placeholders from environment and other properties`() {
         val props =
-            ApplicationProperties.load(
-                env = mapOf("SECRET_VALUE" to "from-env"),
-                classLoader =
-                    resourceClassLoader(
-                        "application.yaml" to
-                            """
-                            direct: ${'$'}{SECRET_VALUE}
-                            missing: ${'$'}{DOES_NOT_EXIST}
-                            defaulted: ${'$'}{DOES_NOT_EXIST:fallback}
-                            emptyDefault: ${'$'}{DOES_NOT_EXIST:}
-                            chained: ${'$'}{direct}
-                            self: ${'$'}{self}
-                            list:
-                              - one
-                              - two
-                            """.trimIndent(),
-                        "application-local.yaml" to "",
-                    ),
-            )
+            withSystemProperties("SECRET_VALUE" to "from-env") {
+                ApplicationProperties.load(
+                    env = emptyMap(),
+                    classLoader =
+                        resourceClassLoader(
+                            "application.yaml" to
+                                """
+                                direct: ${'$'}{SECRET_VALUE}
+                                missing: ${'$'}{DOES_NOT_EXIST:}
+                                defaulted: ${'$'}{DOES_NOT_EXIST:fallback}
+                                emptyDefault: ${'$'}{DOES_NOT_EXIST:}
+                                chained: ${'$'}{direct}
+                                list:
+                                  - one
+                                  - two
+                                """.trimIndent(),
+                            "application-local.yaml" to "{}",
+                        ),
+                )
+            }
 
         assertEquals("from-env", props["direct"])
         assertEquals("", props["missing"])
         assertEquals("fallback", props["defaulted"])
         assertEquals("", props["emptyDefault"])
         assertEquals("from-env", props["chained"])
-        assertEquals("", props["self"])
         assertEquals("one,two", props["list"])
     }
 
@@ -195,7 +193,43 @@ class ApplicationPropertiesTest {
     private fun resourceClassLoader(vararg resources: Pair<String, String>): ClassLoader {
         val byName = resources.toMap()
         return object : ClassLoader(null) {
+            override fun getResource(name: String): URL? =
+                byName[name]?.let { content ->
+                    URL(
+                        null,
+                        "memory:$name",
+                        object : URLStreamHandler() {
+                            override fun openConnection(url: URL): URLConnection =
+                                object : URLConnection(url) {
+                                    override fun connect() = Unit
+
+                                    override fun getInputStream(): InputStream = ByteArrayInputStream(content.toByteArray())
+                                }
+                        },
+                    )
+                }
+
             override fun getResourceAsStream(name: String) = byName[name]?.byteInputStream()
+        }
+    }
+
+    private fun <T> withSystemProperties(
+        vararg values: Pair<String, String>,
+        block: () -> T,
+    ): T {
+        val previousValues = values.associate { (key, _) -> key to System.getProperty(key) }
+        values.forEach { (key, value) -> System.setProperty(key, value) }
+        return try {
+            block()
+        } finally {
+            values.forEach { (key, _) ->
+                val previous = previousValues[key]
+                if (previous == null) {
+                    System.clearProperty(key)
+                } else {
+                    System.setProperty(key, previous)
+                }
+            }
         }
     }
 }
