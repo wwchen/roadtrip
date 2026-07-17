@@ -6,7 +6,7 @@
 ktor:
   deployment:
     host: "0.0.0.0"
-    port: 8765
+    port: "${PORT:8765}"
   application:
     modules:
       - ca.floo.roadtrip.MainKt.module

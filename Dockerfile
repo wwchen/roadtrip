@@ -1,5 +1,5 @@
 # Backend Docker image. Runtime-only: build the fat jar on the host with
-# `./gradlew :backend:shadowJar`, then build this image from the repo root.
+# `./gradlew :backend:buildFatJar`, then build this image from the repo root.
 FROM eclipse-temurin:25-jre AS backend
 
 WORKDIR /app

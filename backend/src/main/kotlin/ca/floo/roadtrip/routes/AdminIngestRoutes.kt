@@ -2,17 +2,6 @@ package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.exceptions.TargetBusyException
 import ca.floo.roadtrip.exceptions.TargetNotFoundException
-import ca.floo.roadtrip.models.api.EXAMPLE_ERR_NOT_FOUND
-import ca.floo.roadtrip.models.api.EXAMPLE_ERR_NOT_FOUND_BAD_ID
-import ca.floo.roadtrip.models.api.EXAMPLE_ERR_TARGET_BUSY
-import ca.floo.roadtrip.models.api.EXAMPLE_ERR_UNKNOWN_TARGET
-import ca.floo.roadtrip.models.api.EXAMPLE_FAN_OUT_IMPORT
-import ca.floo.roadtrip.models.api.EXAMPLE_RUNS_LIST
-import ca.floo.roadtrip.models.api.EXAMPLE_RUN_DETAIL
-import ca.floo.roadtrip.models.api.EXAMPLE_RUN_OUTCOME_COMPLETED_IMPORT
-import ca.floo.roadtrip.models.api.EXAMPLE_RUN_OUTCOME_FAILED
-import ca.floo.roadtrip.models.api.EXAMPLE_RUN_OUTCOME_NOOP_IMPORT
-import ca.floo.roadtrip.models.api.EXAMPLE_STATUS
 import ca.floo.roadtrip.models.api.ErrorNotFoundSchema
 import ca.floo.roadtrip.models.api.ErrorTargetBusySchema
 import ca.floo.roadtrip.models.api.ErrorUnknownTargetSchema
@@ -90,26 +79,21 @@ fun Route.adminIngestRoutes(
                     description = "Import completed (or no-op for import-less targets)"
                     body<RunOutcomeSchema> {
                         mediaTypes(ContentType.Application.Json)
-                        example("completed") { value = EXAMPLE_RUN_OUTCOME_COMPLETED_IMPORT }
-                        example("noop (no import phases)") { value = EXAMPLE_RUN_OUTCOME_NOOP_IMPORT }
                     }
                 }
                 code(HttpStatusCode.NotFound) {
                     body<ErrorUnknownTargetSchema> {
                         mediaTypes(ContentType.Application.Json)
-                        example("unknown") { value = EXAMPLE_ERR_UNKNOWN_TARGET }
                     }
                 }
                 code(HttpStatusCode.Conflict) {
                     body<ErrorTargetBusySchema> {
                         mediaTypes(ContentType.Application.Json)
-                        example("busy") { value = EXAMPLE_ERR_TARGET_BUSY }
                     }
                 }
                 code(HttpStatusCode.InternalServerError) {
                     body<RunOutcomeSchema> {
                         mediaTypes(ContentType.Application.Json)
-                        example("failed") { value = EXAMPLE_RUN_OUTCOME_FAILED }
                     }
                 }
             }
@@ -123,13 +107,11 @@ fun Route.adminIngestRoutes(
                 code(HttpStatusCode.OK) {
                     body<FanOutResponseSchema> {
                         mediaTypes(ContentType.Application.Json)
-                        example("fan-out") { value = EXAMPLE_FAN_OUT_IMPORT }
                     }
                 }
                 code(HttpStatusCode.InternalServerError) {
                     body<FanOutResponseSchema> {
                         mediaTypes(ContentType.Application.Json)
-                        example("fan-out") { value = EXAMPLE_FAN_OUT_IMPORT }
                     }
                 }
             }
@@ -149,7 +131,6 @@ fun Route.adminIngestRoutes(
                 code(HttpStatusCode.OK) {
                     body<RunsListSchema> {
                         mediaTypes(ContentType.Application.Json)
-                        example("two runs") { value = EXAMPLE_RUNS_LIST }
                     }
                 }
             }
@@ -168,19 +149,16 @@ fun Route.adminIngestRoutes(
                 code(HttpStatusCode.OK) {
                     body<RunDetailSchema> {
                         mediaTypes(ContentType.Application.Json)
-                        example("with phases") { value = EXAMPLE_RUN_DETAIL }
                     }
                 }
                 code(HttpStatusCode.BadRequest) {
                     body<ErrorNotFoundSchema> {
                         mediaTypes(ContentType.Application.Json)
-                        example("bad id") { value = EXAMPLE_ERR_NOT_FOUND_BAD_ID }
                     }
                 }
                 code(HttpStatusCode.NotFound) {
                     body<ErrorNotFoundSchema> {
                         mediaTypes(ContentType.Application.Json)
-                        example("not found") { value = EXAMPLE_ERR_NOT_FOUND }
                     }
                 }
             }
@@ -205,7 +183,6 @@ fun Route.adminIngestRoutes(
                 code(HttpStatusCode.OK) {
                     body<StatusResponseSchema> {
                         mediaTypes(ContentType.Application.Json)
-                        example("two targets") { value = EXAMPLE_STATUS }
                     }
                 }
             }

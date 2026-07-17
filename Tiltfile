@@ -68,7 +68,7 @@ local_resource(
 
 local_resource(
     'backend-jar',
-    cmd='./gradlew --console=plain :backend:shadowJar',
+    cmd='./gradlew --console=plain :backend:buildFatJar',
     deps=[
         'backend/src/main',
         'backend/build.gradle.kts',
@@ -108,9 +108,9 @@ docker_compose(
 # changes (the JRE + apt base layers are cached), so the rebuild is a fast
 # layer swap, not a from-scratch image build.
 #
-# The jar name is version-pinned by shadowJar's archiveBaseName + `version` in
-# backend/build.gradle.kts (currently roadtrip-backend-0.1.0); keep this path
-# and the Dockerfile COPY in sync if the version bumps.
+# The jar name is configured through Ktor's `fatJar` extension in
+# backend/build.gradle.kts; keep this path and the Dockerfile COPY in sync if
+# the version bumps.
 docker_build(
     'roadtrip/backend',
     '.',

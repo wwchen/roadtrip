@@ -38,7 +38,7 @@ help:
 # stack on the deploy host.
 run: _ensure-hooks
 ifeq ($(RUN_ENV),prod)
-	./gradlew :backend:shadowJar
+	./gradlew :backend:buildFatJar
 	docker build -t $(BACKEND_IMAGE) --target backend .
 	$(PROD_COMPOSE) build recgov-companion
 	# `up -d` recreates only what changed: the rebuilt backend (new image id)
