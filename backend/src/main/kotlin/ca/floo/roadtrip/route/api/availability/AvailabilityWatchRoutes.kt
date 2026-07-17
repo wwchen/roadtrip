@@ -62,7 +62,7 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                 call.respondJson(
                     watches.list(status, poiId, campsiteId, limit, offset),
                 )
-            }.describeApi("availability", "List availability watches")
+            }.describeApi("watches", "List availability watches")
 
             post {
                 val req =
@@ -79,7 +79,7 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                     is AvailabilityWatchControllerResult.Ok ->
                         call.respondJson(result.value, HttpStatusCode.Created)
                 }
-            }.describeApi("availability", "Create a watch")
+            }.describeApi("watches", "Create a watch")
 
             route("/{id}") {
                 get {
@@ -90,7 +90,7 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                         watches.get(id)
                             ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
                     call.respondJson(watch)
-                }.describeApi("availability", "Get one watch")
+                }.describeApi("watches", "Get one watch")
 
                 post("/modify") {
                     val id =
@@ -110,7 +110,7 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                         is AvailabilityWatchControllerResult.Ok ->
                             call.respondJson(result.value)
                     }
-                }.describeApi("availability", "Modify a watch")
+                }.describeApi("watches", "Modify a watch")
 
                 post("/delete") {
                     val id =
@@ -121,7 +121,7 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                     } else {
                         call.respondError("not_found", HttpStatusCode.NotFound)
                     }
-                }.describeApi("availability", "Delete a watch")
+                }.describeApi("watches", "Delete a watch")
             }
         }
     }
