@@ -23,11 +23,11 @@ import ca.floo.roadtrip.models.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.models.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
+import ca.floo.roadtrip.service.availability.CampsiteCatalogService
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
-import ca.floo.roadtrip.service.poi.PoiReader
-import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.routing.RouteCache
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
@@ -65,12 +65,12 @@ class RoadtripDependenciesTest : SharedDbTest() {
                 module()
 
                 val resolvedRuntime: RoadtripRuntime by dependencies
-                val poiReader: PoiReader by dependencies
-                val poisOnRouteService: PoisOnRouteService by dependencies
+                val catalogService: CampsiteCatalogService by dependencies
+                val availabilityService: CampsiteAvailabilityService by dependencies
 
                 runtime = resolvedRuntime
-                assertNotNull(poiReader)
-                assertNotNull(poisOnRouteService)
+                assertNotNull(catalogService)
+                assertNotNull(availabilityService)
             }
 
             assertEquals(HttpStatusCode.OK, client.get(TEST_HEALTH_PATH).status)
@@ -97,10 +97,13 @@ class RoadtripDependenciesTest : SharedDbTest() {
             application {
                 dependencies.provide<AppConfig> { overrideConfig }
                 installRoadtripDependencies(boot)
+                module()
 
                 val appConfig: AppConfig by dependencies
                 assertSame(overrideConfig, appConfig)
             }
+
+            assertEquals(HttpStatusCode.OK, client.get(TEST_HEALTH_PATH).status)
         }
 
     private fun testBootContext(closeTracker: CloseTracker): RoadtripBootContext {

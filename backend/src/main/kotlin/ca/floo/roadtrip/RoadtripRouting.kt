@@ -15,13 +15,12 @@ import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.routes.slackInteractivityRoute
 import ca.floo.roadtrip.routes.testEmailRoutes
 import ca.floo.roadtrip.routes.testSlackRoutes
-import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
-import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
+import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
+import ca.floo.roadtrip.service.availability.CampsiteCatalogService
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
-import ca.floo.roadtrip.service.availability.WatchCapabilityService
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.poi.PoiReader
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.routing.RouteCache
@@ -107,18 +106,16 @@ internal fun Application.registerRoadtripRoutes() {
     val runtime: RoadtripRuntime by dependencies
     val appConfig: AppConfig by dependencies
     val ctx: DSLContext by dependencies
-    val availabilityProviders: AvailabilityProviderRegistry by dependencies
-    val dateResolver: AvailabilityDateResolver by dependencies
     val availabilityWatchService: AvailabilityWatchService by dependencies
     val watchAlertDispatcher: WatchAlertDispatcher by dependencies
-    val watchCapabilities: WatchCapabilityService by dependencies
     val schedulerScope: CoroutineScope by dependencies
-    val failoverFetcher: FailoverAvailabilityFetcher by dependencies
     val routeCache: RouteCache by dependencies
     val mapboxGeocoder: MapboxGeocoder by dependencies
     val poiService: PoiReader by dependencies
     val routeCorridorService: RouteCorridorService by dependencies
     val poisOnRouteService: PoisOnRouteService by dependencies
+    val campsiteCatalogService: CampsiteCatalogService by dependencies
+    val campsiteAvailabilityService: CampsiteAvailabilityService by dependencies
     routing {
         route("/api/docs") {
             swaggerUI("/api/docs/openapi.json")
@@ -135,11 +132,8 @@ internal fun Application.registerRoadtripRoutes() {
             schedulerScope,
         )
         campsiteRoutes(
-            ctx = ctx,
-            availabilityProviders = availabilityProviders,
-            dateResolver = dateResolver,
-            failoverFetcher = failoverFetcher,
-            watchCapabilities = watchCapabilities,
+            catalogService = campsiteCatalogService,
+            availabilityService = campsiteAvailabilityService,
         )
         // Inbound Slack interactivity is only registered when the app is
         // configured with a signing secret; an unset secret means we can't

@@ -2,19 +2,27 @@ package ca.floo.roadtrip
 
 import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.config.AppConfig
+import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CampgroundAvailabilitySupport
+import ca.floo.roadtrip.service.availability.CampsiteAvailabilityComposer
+import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
+import ca.floo.roadtrip.service.availability.CampsiteCatalogService
+import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiDetailService
@@ -41,38 +49,48 @@ internal fun Application.installRoadtripDependencies(boot: RoadtripBootContext) 
         provide(::availabilityDateResolver)
         provide(::availabilityWatchService)
         provide(::watchAlertDispatcher)
-        provide(::watchCapabilityService)
         provide(::failoverAvailabilityFetcher)
+        provide(::watchCapabilityService)
         provide(::schedulerScope)
-        provide(::mapboxGeocoder)
         provide(::routeCache)
-        provide(::campsiteProviderRepo)
+        provide(::mapboxGeocoder)
         provide(::CampgroundRepo)
+        provide(::CampsiteRepo)
+        provide(::CampsiteProviderRepo)
+        provide(::AvailabilityRepo)
         provide(::TeslaSuperchargerRepo)
         provide(::PlanetFitnessLocationRepo)
         provide(::PoiServingRepo)
         provide(::RouteCorridorRepo)
-        provide(::campgroundAvailabilitySupport)
-        provide(::campgroundService)
+        provide(::availabilityTargetResolver)
+        provide(::campsiteAvailabilityComposer)
+        provide(::CampsiteCatalogService)
+        provide(::CampsiteAvailabilityService)
+        provide(::CampgroundAvailabilitySupport)
+        provide(::CampgroundService)
         provide(::TeslaSuperchargerService)
         provide(::PlanetFitnessLocationService)
         provide(::poiDetailServices)
-        provide(::poiService)
+        provide(::PoiService)
         provide(::poiReader)
         provide(::RouteCorridorService)
-        provide(::poisOnRouteService)
+        provide(::PoisOnRouteService)
     }
 }
 
 internal fun Application.installRoadtripAdminDependencies(boot: RoadtripBootContext) {
     dependencies {
         provide<RoadtripBootContext> { boot }
+        provide(::dslContext)
+        provide(::ingestController)
     }
 }
 
 internal fun appConfig(boot: RoadtripBootContext): AppConfig = boot.appConfig
 
 internal fun dslContext(boot: RoadtripBootContext): DSLContext = boot.ctx
+
+internal fun ingestController(boot: RoadtripBootContext): IngestController = boot.ingestController
 
 internal fun availabilityProviderRegistry(runtime: RoadtripRuntime): AvailabilityProviderRegistry = runtime.availabilityProviderRegistry
 
@@ -82,36 +100,40 @@ internal fun availabilityWatchService(runtime: RoadtripRuntime): AvailabilityWat
 
 internal fun watchAlertDispatcher(runtime: RoadtripRuntime): WatchAlertDispatcher = runtime.watchAlertDispatcher
 
-internal fun watchCapabilityService(runtime: RoadtripRuntime): WatchCapabilityService = runtime.watchCapabilities
-
 internal fun failoverAvailabilityFetcher(runtime: RoadtripRuntime): FailoverAvailabilityFetcher = runtime.failoverFetcher
+
+internal fun watchCapabilityService(runtime: RoadtripRuntime): WatchCapabilityService = runtime.watchCapabilities
 
 internal fun schedulerScope(runtime: RoadtripRuntime): CoroutineScope = runtime.schedulerScope
 
-internal fun mapboxGeocoder(runtime: RoadtripRuntime): MapboxGeocoder = runtime.mapboxGeocoder
-
 internal fun routeCache(runtime: RoadtripRuntime): RouteCache = runtime.routeCache
 
-internal fun campsiteProviderRepo(runtime: RoadtripRuntime): CampsiteProviderRepo = runtime.campsiteProviders
+internal fun mapboxGeocoder(runtime: RoadtripRuntime): MapboxGeocoder = runtime.mapboxGeocoder
 
-internal fun campgroundAvailabilitySupport(
+internal fun availabilityTargetResolver(
     providerRefs: CampsiteProviderRepo,
+    campsitesRepo: CampsiteRepo,
     availabilityProviders: AvailabilityProviderRegistry,
-): CampgroundAvailabilitySupport =
-    CampgroundAvailabilitySupport(
+    dateResolver: AvailabilityDateResolver,
+): AvailabilityTargetResolver =
+    DbAvailabilityTargetResolver(
         providerRefs = providerRefs,
+        campsitesRepo = campsitesRepo,
         availabilityProviders = availabilityProviders,
+        dateResolver = dateResolver,
     )
 
-internal fun campgroundService(
-    repo: CampgroundRepo,
+internal fun campsiteAvailabilityComposer(
+    targets: AvailabilityTargetResolver,
     dateResolver: AvailabilityDateResolver,
-    availabilitySupport: CampgroundAvailabilitySupport,
-): CampgroundService =
-    CampgroundService(
-        repo = repo,
+    availability: AvailabilityRepo,
+    failoverFetcher: FailoverAvailabilityFetcher,
+): CampsiteAvailabilityComposer =
+    CampsiteAvailabilityComposer(
+        targets = targets,
         dateResolver = dateResolver,
-        availabilitySupport = availabilitySupport,
+        availability = availability,
+        failoverFetcher = failoverFetcher,
     )
 
 internal fun poiDetailServices(
@@ -125,15 +147,6 @@ internal fun poiDetailServices(
         planetFitnessLocationService,
     )
 
-internal fun poiService(
-    poiRepo: PoiServingRepo,
-    detailServices: List<PoiDetailService>,
-): PoiService =
-    PoiService(
-        poiRepo = poiRepo,
-        detailServices = detailServices,
-    )
-
 internal fun poiReader(
     appConfig: AppConfig,
     poiService: PoiService,
@@ -143,15 +156,4 @@ internal fun poiReader(
         delegate = poiService,
         detailServices = detailServices,
         providers = appConfig.readPathProviders,
-    )
-
-internal fun poisOnRouteService(
-    routeCache: RouteCache,
-    routeCorridorService: RouteCorridorService,
-    poiService: PoiReader,
-): PoisOnRouteService =
-    PoisOnRouteService(
-        routeCache = routeCache,
-        routeCorridorService = routeCorridorService,
-        poiService = poiService,
     )

@@ -6,20 +6,11 @@ import ca.floo.roadtrip.models.api.AvailabilityErrorDto
 import ca.floo.roadtrip.models.api.PoiCampsitesAvailabilityResponseDto
 import ca.floo.roadtrip.models.api.PoiCampsitesResponseSchema
 import ca.floo.roadtrip.models.availability.AvailabilityProviderError
-import ca.floo.roadtrip.repo.AvailabilityRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
-import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityServiceError
-import ca.floo.roadtrip.service.availability.CampsiteAvailabilityComposer
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.CampsiteCatalogService
-import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
-import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
-import ca.floo.roadtrip.service.availability.WatchCapabilityService
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -28,7 +19,6 @@ import io.ktor.server.application.call
 import io.ktor.server.plugins.origin
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
-import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
 
@@ -37,36 +27,9 @@ private val log = LoggerFactory.getLogger("CampsiteRoutes")
 private const val IP_RATE_LIMIT_PER_MINUTE = 30
 
 internal fun Route.campsiteRoutes(
-    ctx: DSLContext,
-    availabilityProviders: AvailabilityProviderRegistry,
-    dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
-    failoverFetcher: FailoverAvailabilityFetcher,
-    watchCapabilities: WatchCapabilityService,
+    catalogService: CampsiteCatalogService,
+    availabilityService: CampsiteAvailabilityService,
 ) {
-    val campsitesRepo = CampsiteRepo(ctx)
-    val providerRefs = CampsiteProviderRepo(ctx)
-    val targets =
-        DbAvailabilityTargetResolver(
-            providerRefs = providerRefs,
-            campsitesRepo = campsitesRepo,
-            availabilityProviders = availabilityProviders,
-            dateResolver = dateResolver,
-        )
-    val catalogService = CampsiteCatalogService(providerRefs, campsitesRepo, targets)
-    val availabilityService =
-        CampsiteAvailabilityService(
-            providerRefs = providerRefs,
-            campsitesRepo = campsitesRepo,
-            composer =
-                CampsiteAvailabilityComposer(
-                    targets = targets,
-                    dateResolver = dateResolver,
-                    availability = AvailabilityRepo(ctx),
-                    failoverFetcher = failoverFetcher,
-                ),
-            dateResolver = dateResolver,
-            watchCapabilityService = watchCapabilities,
-        )
     val rateLimit = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE)
 
     get("/api/pois/{id}/campsites", {
