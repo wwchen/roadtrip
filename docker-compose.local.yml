@@ -11,7 +11,6 @@ services:
       OTEL_RESOURCE_ATTRIBUTES: service.namespace=roadtrip,deployment.environment=compose-local,service.version=${ROADTRIP_BACKEND_VERSION:-0.1.0}
     ports:
       - "127.0.0.1:8765:8765"
-      - "127.0.0.1:8766:8766"
 
   recgov-companion:
     restart: "no"

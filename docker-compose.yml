@@ -75,11 +75,9 @@ services:
     env_file:
       - path: .env
         required: false
-    ports:
-      - "127.0.0.1:8766:8766"
     environment:
       # Profile selection is a process env control that chooses
-      # application-<profile>.yml before backend config is parsed.
+      # roadtrip-<profile>.yaml before backend config is parsed.
       - ROADTRIP_PROFILE=${ROADTRIP_PROFILE:-prod}
       # OpenTelemetry Java agent exports Ktor/JDBC/JVM telemetry to Alloy.
       # Logs still go through stdout -> Alloy -> Loki; trace/span ids are

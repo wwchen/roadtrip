@@ -6,7 +6,7 @@
 # available.
 
 PORT = '8765'
-ADMIN_PORT = '8766'
+ADMIN_PORT = PORT
 COMPOSE_PROJECT = 'roadtrip'
 COMPOSE = 'docker compose -p ' + COMPOSE_PROJECT + ' --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois --profile recgov-companion'
 COMPOSE_INFRA_SERVICES = ['postgres', 'loki', 'tempo', 'prometheus', 'alloy']

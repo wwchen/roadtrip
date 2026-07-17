@@ -1,7 +1,3 @@
-server:
-  port: 8765
-  admin-port: 8766
-
 roadtrip:
   static-dir: /app/static
   db:
@@ -12,6 +8,6 @@ roadtrip:
     recgov-atc:
       companion-base-url: http://recgov-companion:8770
   grafana:
-    root-url: http://127.0.0.1:3000/dash/
+    root-url: https://roadtrip.floo.ca/dash/
   web:
-    root-url: http://127.0.0.1:8765
+    root-url: https://roadtrip.floo.ca/

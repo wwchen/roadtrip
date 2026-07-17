@@ -1,10 +1,7 @@
-# Base application YAML. Runtime loads this first, then application-<profile>.yml.
+# Base Roadtrip runtime YAML. Runtime loads this first, then roadtrip-<profile>.yaml.
 #
 # Values may reference process environment with ${ENV_VAR}. This keeps backend
-# config in application*.yml while secrets stay in .env/deploy env.
-server:
-  admin-port: 8766
-
+# config in roadtrip*.yaml while secrets stay in .env/deploy env.
 roadtrip:
   availability:
     force-pull-cooldown: 60s

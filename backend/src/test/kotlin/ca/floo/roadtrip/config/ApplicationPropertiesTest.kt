@@ -1,15 +1,24 @@
 package ca.floo.roadtrip.config
 
+import io.ktor.server.config.ConfigLoader
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class ApplicationPropertiesTest {
     @Test
+    fun `ktor application yaml contains only engine startup config`() {
+        val config = ConfigLoader.load("application.yaml")
+
+        assertEquals("8765", config.property("ktor.deployment.port").getString())
+        assertEquals(listOf("ca.floo.roadtrip.MainKt.module"), config.property("ktor.application.modules").getList())
+        assertEquals(null, config.propertyOrNull("roadtrip.static-dir"))
+    }
+
+    @Test
     fun `load defaults to local profile properties`() {
         val props = ApplicationProperties.load(env = emptyMap())
 
-        assertEquals("8765", props["server.port"])
         assertEquals(".", props["roadtrip.static-dir"])
         assertEquals("poi-registry.yaml", props["roadtrip.poi-registry.resource"])
         assertEquals("", props["roadtrip.poi-registry.path"])
@@ -79,12 +88,10 @@ class ApplicationPropertiesTest {
             ApplicationProperties.load(
                 env =
                     mapOf(
-                        "server.port" to "9999",
                         "roadtrip.web.root-url" to "https://override.example",
                     ),
             )
 
-        assertEquals("8765", props["server.port"])
         assertEquals("http://127.0.0.1:8765", props["roadtrip.web.root-url"])
         assertEquals(".", props["roadtrip.static-dir"])
     }
@@ -144,7 +151,7 @@ class ApplicationPropertiesTest {
                 env = mapOf("SECRET_VALUE" to "from-env"),
                 classLoader =
                     resourceClassLoader(
-                        "application.yml" to
+                        "roadtrip.yaml" to
                             """
                             direct: ${'$'}{SECRET_VALUE}
                             missing: ${'$'}{DOES_NOT_EXIST}
@@ -154,7 +161,7 @@ class ApplicationPropertiesTest {
                               - one
                               - two
                             """.trimIndent(),
-                        "application-local.yml" to "",
+                        "roadtrip-local.yaml" to "",
                     ),
             )
 
@@ -173,12 +180,12 @@ class ApplicationPropertiesTest {
                     env = mapOf("ROADTRIP_PROFILE" to "typo"),
                     classLoader =
                         resourceClassLoader(
-                            "application.yml" to "server:\n  admin-port: 8766",
+                            "roadtrip.yaml" to "roadtrip:\n  static-dir: .",
                         ),
                 )
             }
 
-        assertEquals("application config resource 'application-typo.yml' not found", err.message)
+        assertEquals("application config resource 'roadtrip-typo.yaml' not found", err.message)
     }
 
     private fun resourceClassLoader(vararg resources: Pair<String, String>): ClassLoader {

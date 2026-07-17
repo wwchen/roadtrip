@@ -21,6 +21,6 @@ ENV OTEL_LOGS_EXPORTER=none
 
 COPY backend/build/libs/roadtrip-backend-*-all.jar /app/app.jar
 
-EXPOSE 8765 8766
+EXPOSE 8765
 
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]

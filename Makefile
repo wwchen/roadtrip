@@ -87,7 +87,7 @@ install: install-hooks
 # Backend must be running (e.g. `tilt up` or `make run`). Per-target mutex
 # means a fetch and an import on the same target serialize. Override the
 # host with ADMIN_BASE for remote deploys (e.g. ADMIN_BASE=https://… make data-fetch).
-ADMIN_PORT ?= 8766
+ADMIN_PORT ?= $(PORT)
 ADMIN_BASE ?= http://127.0.0.1:$(ADMIN_PORT)
 
 # poi_data names like `Federal Campgrounds` contain spaces; wrap the URL
