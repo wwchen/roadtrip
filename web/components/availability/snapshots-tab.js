@@ -13,8 +13,8 @@ export async function mount(rootEl, { urlParams }) {
     <section class="panel">
       <h2>Filter</h2>
       <form id="snap-filter" class="filters">
-        <label>Campsite ID <input name="campsite_id" inputmode="numeric"></label>
         <label>POI ID <input name="poi_id" inputmode="numeric"></label>
+        <label>Campsite ID <input name="campsite_id" inputmode="numeric"></label>
         <label>Target Date <input name="target_date" type="date"></label>
         <div class="actions">
           <button class="primary" type="submit">Apply</button>
