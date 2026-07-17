@@ -44,13 +44,13 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
-import ca.floo.roadtrip.service.notification.NotificationService
-import ca.floo.roadtrip.service.notification.NotificationServiceImpl
-import ca.floo.roadtrip.service.notification.NotificationTarget
-import ca.floo.roadtrip.service.notification.SlackContentAvailabilityRenderer
-import ca.floo.roadtrip.service.notification.SlackContentWatchStatusRenderer
-import ca.floo.roadtrip.service.notification.WatchOpening
-import ca.floo.roadtrip.service.notification.WatchStatusNotice
+import ca.floo.roadtrip.service.notification.common.NotificationFanout
+import ca.floo.roadtrip.service.notification.common.NotificationSender
+import ca.floo.roadtrip.service.notification.common.NotificationTarget
+import ca.floo.roadtrip.service.notification.common.WatchOpening
+import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
+import ca.floo.roadtrip.service.notification.slack.SlackContentAvailabilityRenderer
+import ca.floo.roadtrip.service.notification.slack.SlackContentWatchStatusRenderer
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
@@ -249,7 +249,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 }
     }
 
-    /** A [NotificationService] double that records every send and returns a
+    /** A [NotificationSender] double that records every send and returns a
      *  configurable result, so alert tests never touch a live Slack workspace. It
      *  resolves the default channel the way the real impl does, and renders
      *  openings through the real [SlackContentAvailabilityRenderer], so both
@@ -257,7 +257,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     private class RecordingSlackNotifications(
         var result: Boolean = true,
         private val defaultChannel: String? = "#camping",
-    ) : NotificationService {
+    ) : NotificationSender {
         val posts = mutableListOf<Post>()
 
         override suspend fun sendWatchStatus(
@@ -288,16 +288,6 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 .singleOrNull()
                 ?.channel
                 ?: defaultChannel
-
-        override suspend fun postResponseWatchStatus(
-            responseUrl: String,
-            notice: WatchStatusNotice,
-        ): Boolean = result
-
-        override suspend fun postResponseStaleWatch(
-            responseUrl: String,
-            watchId: Long,
-        ): Boolean = result
     }
 
     private class RecordingTriggerActionHandler(
@@ -327,7 +317,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     /** Dispatcher with Slack disabled — a null-config service that no-ops and
      *  returns false. Default for tests that don't exercise alerting. */
     private fun disabledDispatcher(): WatchAlertDispatcher {
-        val notifications = NotificationServiceImpl(slackConfig = null, emailConfig = null)
+        val notifications = NotificationFanout(emptyList())
         return WatchAlertDispatcher(
             notifications = notifications,
             scopeResolver = WatchScopeResolver(CampsiteRepo(ctx)),

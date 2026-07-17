@@ -1,10 +1,10 @@
-package ca.floo.roadtrip.service.notification
+package ca.floo.roadtrip.service.notification.common
 
 import java.time.LocalDate
 
 /**
  * One hydrated campsite opening handed to
- * [NotificationService.sendWatchOpenings]. The caller (the availability
+ * [NotificationSender.sendWatchOpenings]. The caller (the availability
  * dispatcher) resolves everything the alert renders — the site's display label,
  * loop, and type, the parent campground (id + name), and the provider booking
  * URL — so the notification layer only formats and never reaches back into the

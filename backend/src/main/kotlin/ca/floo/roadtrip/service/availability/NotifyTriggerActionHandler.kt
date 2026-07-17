@@ -1,17 +1,17 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
-import ca.floo.roadtrip.service.notification.NotificationService
-import ca.floo.roadtrip.service.notification.NotificationTarget
+import ca.floo.roadtrip.service.notification.common.NotificationSender
+import ca.floo.roadtrip.service.notification.common.NotificationTarget
 
 /**
  * Aggregate notification trigger action. A watch can ask for multiple
  * notification trigger kinds (`slack_notify`, `email_notify`); this handler
  * translates those kinds and trigger config into concrete notification targets
- * and sends the opening alert once through [NotificationService].
+ * and sends the opening alert once through [NotificationSender].
  */
 internal class NotifyTriggerActionHandler(
-    private val notifications: NotificationService,
+    private val notifications: NotificationSender,
     private val appRootUrl: String?,
 ) : TriggerActionHandler {
     override val kinds: Set<String> =

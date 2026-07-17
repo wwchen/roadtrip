@@ -6,14 +6,14 @@ import ca.floo.roadtrip.models.booking.BookingAction
 import ca.floo.roadtrip.models.booking.BookingProviderId
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
-import ca.floo.roadtrip.service.notification.NotificationService
-import ca.floo.roadtrip.service.notification.NotificationTarget
+import ca.floo.roadtrip.service.notification.common.NotificationSender
+import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import org.slf4j.LoggerFactory
 
 internal class AtcTriggerActionHandler(
     private val bookings: BookingProviderRegistry,
     private val bookingTargets: AvailabilityBookingTargetResolver,
-    private val notifications: NotificationService,
+    private val notifications: NotificationSender,
 ) : TriggerActionHandler {
     private val log = LoggerFactory.getLogger(javaClass)
 

@@ -17,10 +17,10 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
-import ca.floo.roadtrip.service.notification.NotificationService
-import ca.floo.roadtrip.service.notification.NotificationTarget
-import ca.floo.roadtrip.service.notification.WatchOpening
-import ca.floo.roadtrip.service.notification.WatchStatusNotice
+import ca.floo.roadtrip.service.notification.common.NotificationSender
+import ca.floo.roadtrip.service.notification.common.NotificationTarget
+import ca.floo.roadtrip.service.notification.common.WatchOpening
+import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -342,10 +342,10 @@ class TriggerActionHandlerTest {
         }
     }
 
-    /** [NotificationService] double that records aggregate notification calls. */
+    /** [NotificationSender] double that records aggregate notification calls. */
     private class CapturingNotifications(
         private val result: Boolean,
-    ) : NotificationService {
+    ) : NotificationSender {
         data class AtcResult(
             val watchId: Long,
             val vendor: String,
@@ -393,16 +393,6 @@ class TriggerActionHandlerTest {
             atcResults += AtcResult(watchId, vendor, status, response, targets)
             return result
         }
-
-        override suspend fun postResponseWatchStatus(
-            responseUrl: String,
-            notice: WatchStatusNotice,
-        ): Boolean = result
-
-        override suspend fun postResponseStaleWatch(
-            responseUrl: String,
-            watchId: Long,
-        ): Boolean = result
     }
 
     private fun fakeWatch(

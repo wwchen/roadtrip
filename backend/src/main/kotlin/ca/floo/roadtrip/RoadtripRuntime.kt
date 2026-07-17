@@ -59,9 +59,11 @@ import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.importTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.sweepStaleIngestRuns
-import ca.floo.roadtrip.service.notification.NotificationServiceImpl
-import ca.floo.roadtrip.service.notification.SlackInteractivityHandler
-import ca.floo.roadtrip.service.notification.WatchStatusNotice
+import ca.floo.roadtrip.service.notification.common.NotificationFanout
+import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
+import ca.floo.roadtrip.service.notification.email.EmailNotificationService
+import ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler
+import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.DEFAULT_POI_TYPES
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
@@ -99,7 +101,7 @@ internal class RoadtripRuntime(
     val schedulerScope: CoroutineScope,
     val slackInteractivity: SlackInteractivityWiring?,
     val failoverFetcher: FailoverAvailabilityFetcher,
-    private val notifications: NotificationServiceImpl,
+    private val notifications: NotificationFanout,
 ) {
     val appConfig: AppConfig get() = boot.appConfig
     val ctx: DSLContext get() = boot.ctx
@@ -207,10 +209,13 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
     val availabilityPollers = AvailabilityPollerRepo(boot.ctx)
     PollerBackfill(boot.ctx, pollerMembership).run()
 
+    val slackNotifications = SlackNotificationService(boot.appConfig.slack)
     val notifications =
-        NotificationServiceImpl(
-            slackConfig = boot.appConfig.slack,
-            emailConfig = boot.appConfig.email,
+        NotificationFanout(
+            listOf(
+                slackNotifications,
+                EmailNotificationService(boot.appConfig.email),
+            ),
         )
     val recgovAtcExecutor =
         boot.appConfig.booking.recgovAtc
@@ -303,7 +308,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             )
             SlackInteractivityWiring(
                 verifier = SlackSignatureVerifier(secret),
-                handler = SlackInteractivityHandler(watches = watchesPort, slack = notifications),
+                handler = SlackInteractivityHandler(watches = watchesPort, slack = slackNotifications),
             )
         } ?: run {
             val reason =

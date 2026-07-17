@@ -1,5 +1,6 @@
-package ca.floo.roadtrip.service.notification
+package ca.floo.roadtrip.service.notification.email
 
+import ca.floo.roadtrip.service.notification.common.WatchOpening
 import kotlinx.html.a
 import kotlinx.html.br
 import kotlinx.html.div

@@ -4,7 +4,7 @@ package ca.floo.roadtrip.clients.slack
  *  in the client UI and (for URL buttons) fire a redirect on click; interactive
  *  buttons additionally fire a `block_actions` payload to the app's Slack
  *  interactivity Request URL, which
- *  [ca.floo.roadtrip.service.notification.SlackInteractivityRoute] verifies and
+ *  [ca.floo.roadtrip.routes.SlackInteractivityRoutes] verifies and
  *  routes by [actionId] + [value].
  *
  *  Set [url] for URL buttons (opens the URL in the browser); leave it null for

@@ -1,7 +1,8 @@
-package ca.floo.roadtrip.service.notification
+package ca.floo.roadtrip.service.notification.slack
 
 import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
 import ca.floo.roadtrip.clients.slack.SlackBlockDto
+import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray

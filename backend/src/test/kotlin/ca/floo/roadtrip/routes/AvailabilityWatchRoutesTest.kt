@@ -26,7 +26,7 @@ import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
-import ca.floo.roadtrip.service.notification.NotificationServiceImpl
+import ca.floo.roadtrip.service.notification.common.NotificationFanout
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.patch
@@ -141,7 +141,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
     private fun disabledDispatcher(): WatchAlertDispatcher {
         val campsitesRepo = CampsiteRepo(ctx)
-        val notifications = NotificationServiceImpl(slackConfig = null, emailConfig = null)
+        val notifications = NotificationFanout(emptyList())
         return WatchAlertDispatcher(
             notifications = notifications,
             scopeResolver = WatchScopeResolver(campsitesRepo),

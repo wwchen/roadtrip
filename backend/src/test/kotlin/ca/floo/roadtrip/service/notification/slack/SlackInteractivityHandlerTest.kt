@@ -1,8 +1,10 @@
-package ca.floo.roadtrip.service.notification
+package ca.floo.roadtrip.service.notification.slack
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.service.availability.WatchStatus
+import ca.floo.roadtrip.service.notification.common.SlackResponseSender
+import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import java.time.LocalDate
@@ -62,7 +64,7 @@ class SlackInteractivityHandlerTest {
 
     /** Fake Slack transport — tests only need to observe what got posted to
      *  which response_url; the render itself is covered by the renderer test. */
-    private class FakeSlack : NotificationService {
+    private class FakeSlack : SlackResponseSender {
         data class Response(
             val url: String,
             val notice: WatchStatusNotice,
@@ -75,20 +77,6 @@ class SlackInteractivityHandlerTest {
 
         val responses = mutableListOf<Response>()
         val staleResponses = mutableListOf<StaleResponse>()
-
-        override suspend fun sendWatchStatus(
-            notice: WatchStatusNotice,
-            targets: List<NotificationTarget>,
-        ) = true
-
-        override suspend fun sendWatchOpenings(
-            watchId: Long,
-            startDate: LocalDate,
-            endDate: LocalDate,
-            openings: List<WatchOpening>,
-            targets: List<NotificationTarget>,
-            appRootUrl: String?,
-        ) = true
 
         override suspend fun postResponseWatchStatus(
             responseUrl: String,

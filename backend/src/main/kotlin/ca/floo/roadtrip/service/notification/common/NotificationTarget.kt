@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.notification
+package ca.floo.roadtrip.service.notification.common
 
 /**
  * A concrete destination for a watch notification. Watch trigger config is

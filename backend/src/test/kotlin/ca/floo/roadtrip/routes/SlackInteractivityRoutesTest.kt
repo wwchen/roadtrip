@@ -3,12 +3,10 @@ package ca.floo.roadtrip.routes
 import ca.floo.roadtrip.clients.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.availability.WatchStatus
-import ca.floo.roadtrip.service.notification.NotificationService
-import ca.floo.roadtrip.service.notification.NotificationTarget
-import ca.floo.roadtrip.service.notification.SlackInteractivityHandler
-import ca.floo.roadtrip.service.notification.SlackWatchCard
-import ca.floo.roadtrip.service.notification.WatchOpening
-import ca.floo.roadtrip.service.notification.WatchStatusNotice
+import ca.floo.roadtrip.service.notification.common.SlackResponseSender
+import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
+import ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler
+import ca.floo.roadtrip.service.notification.slack.SlackWatchCard
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -23,7 +21,6 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.Clock
 import java.time.Instant
-import java.time.LocalDate
 import java.time.ZoneOffset
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
@@ -77,21 +74,7 @@ class SlackInteractivityRoutesTest {
         ) = throw AssertionError("unused in these tests")
     }
 
-    private class SilentSlack : NotificationService {
-        override suspend fun sendWatchStatus(
-            notice: WatchStatusNotice,
-            targets: List<NotificationTarget>,
-        ) = true
-
-        override suspend fun sendWatchOpenings(
-            watchId: Long,
-            startDate: LocalDate,
-            endDate: LocalDate,
-            openings: List<WatchOpening>,
-            targets: List<NotificationTarget>,
-            appRootUrl: String?,
-        ) = true
-
+    private class SilentSlack : SlackResponseSender {
         override suspend fun postResponseWatchStatus(
             responseUrl: String,
             notice: WatchStatusNotice,

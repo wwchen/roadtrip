@@ -5,10 +5,10 @@ import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
-import ca.floo.roadtrip.service.notification.NotificationService
-import ca.floo.roadtrip.service.notification.NotificationTarget
-import ca.floo.roadtrip.service.notification.WatchOpening
-import ca.floo.roadtrip.service.notification.WatchStatusNotice
+import ca.floo.roadtrip.service.notification.common.NotificationSender
+import ca.floo.roadtrip.service.notification.common.NotificationTarget
+import ca.floo.roadtrip.service.notification.common.WatchOpening
+import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.LocalDate
 
@@ -33,7 +33,7 @@ private const val CELL_MATRIX_UID = "availability-cell-matrix"
  *
  * This class decides *which* watches fire and hydrates their openings; the
  * handlers own transport and formatting (the [NotifyTriggerActionHandler]
- * delegates to [NotificationService], which no-ops when requested transports
+ * delegates to [NotificationSender], which no-ops when requested transports
  * are unconfigured).
  * Nothing here throws into the caller: handlers swallow their own failures
  * and the executor wraps this call best-effort.
@@ -44,7 +44,7 @@ private const val CELL_MATRIX_UID = "availability-cell-matrix"
  * dashboard URLs" logic in exactly one place.
  */
 internal class WatchAlertDispatcher(
-    private val notifications: NotificationService,
+    private val notifications: NotificationSender,
     private val scopeResolver: WatchScopeResolver,
     private val watches: AvailabilityWatchRepo,
     private val targets: AvailabilityTargetResolver,

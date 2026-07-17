@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.notification
+package ca.floo.roadtrip.service.notification.slack
 
 /**
  * Shared constants for the watch notification card — action ids, attachment

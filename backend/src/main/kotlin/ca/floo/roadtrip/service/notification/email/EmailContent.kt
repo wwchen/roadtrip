@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.notification
+package ca.floo.roadtrip.service.notification.email
 
 internal data class EmailContent(
     val subject: String,

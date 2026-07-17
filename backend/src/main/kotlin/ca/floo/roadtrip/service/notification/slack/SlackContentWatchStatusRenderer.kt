@@ -1,8 +1,9 @@
-package ca.floo.roadtrip.service.notification
+package ca.floo.roadtrip.service.notification.slack
 
 import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
 import ca.floo.roadtrip.clients.slack.SlackBlocks
 import ca.floo.roadtrip.clients.slack.SlackButtonSpec
+import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 
 /**
  * Maps a [WatchStatusNotice] to the Slack watch-status card — a notification
