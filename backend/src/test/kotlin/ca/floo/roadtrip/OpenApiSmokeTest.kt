@@ -9,6 +9,8 @@ import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.routes.healthRoutes
 import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
+import ca.floo.roadtrip.routes.testEmailRoutes
+import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiService
@@ -29,6 +31,7 @@ import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
@@ -192,6 +195,45 @@ class OpenApiSmokeTest {
                 examples["happy"]!!.toString().contains("hello"),
                 "example payload missing from spec; got: ${examples["happy"]}",
             )
+        }
+
+    @Test
+    fun `main openapi spec lists test email route`() =
+        testApplication {
+            application {
+                install(SwaggerUI) {
+                    pathFilter = { _, path -> includeInRoadtripOpenApi(path) }
+                }
+                routing {
+                    route("/api/docs") { swaggerUI("/api/docs/openapi.json") }
+                    route("/api/docs/openapi.json") { openApiSpec() }
+                    testEmailRoutes(EmailNotificationService(config = null))
+                }
+            }
+
+            val docs = client.get("/api/docs")
+            assertEquals(HttpStatusCode.OK, docs.status)
+
+            val resp = client.get("/api/docs/openapi.json")
+            assertEquals(HttpStatusCode.OK, resp.status)
+
+            val spec = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            val paths = spec["paths"]!!.jsonObject
+            val testEmailPost =
+                paths["/test/email"]!!
+                    .jsonObject["post"]!!
+                    .jsonObject
+            assertEquals("Send a test email", testEmailPost["summary"]!!.jsonPrimitive.content)
+            assertEquals(
+                "test",
+                testEmailPost["tags"]!!
+                    .jsonArray
+                    .single()
+                    .jsonPrimitive
+                    .content,
+            )
+            assertFalse(paths.containsKey("/api/docs"))
+            assertFalse(paths.containsKey("/api/docs/openapi.json"))
         }
 
     private fun testPoiService(ctx: DSLContext): PoiService =

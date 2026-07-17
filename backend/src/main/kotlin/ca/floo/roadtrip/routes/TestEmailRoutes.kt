@@ -2,6 +2,7 @@ package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
+import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -9,7 +10,6 @@ import io.ktor.server.application.call
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.post
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
@@ -32,7 +32,51 @@ private val testEmailJson =
  * public app, because it causes outbound email side effects.
  */
 internal fun Route.testEmailRoutes(email: EmailNotificationService) {
-    post("/test/email") {
+    post("/test/email", {
+        tags = listOf("test")
+        summary = "Send a test email"
+        request {
+            body<TestEmailRequest> {
+                mediaTypes(ContentType.Application.Json)
+                example("recipient") {
+                    value = TestEmailRequest(to = "camper@example.com")
+                }
+            }
+        }
+        response {
+            code(HttpStatusCode.OK) {
+                body<TestEmailResponse> {
+                    mediaTypes(ContentType.Application.Json)
+                    example("sent") {
+                        value = TestEmailResponse(sent = true, to = "camper@example.com")
+                    }
+                }
+            }
+            code(HttpStatusCode.BadRequest) {
+                body<ApiErrorSchema> {
+                    mediaTypes(ContentType.Application.Json)
+                    example("missing recipient") {
+                        value = ApiErrorSchema(error = "missing_to", detail = "Expected JSON body: {\"to\":\"person@example.com\"}.")
+                    }
+                    example("invalid recipient") {
+                        value = ApiErrorSchema(error = "invalid_to", detail = "Recipient address must look like an email address.")
+                    }
+                }
+            }
+            code(HttpStatusCode.ServiceUnavailable) {
+                body<ApiErrorSchema> {
+                    mediaTypes(ContentType.Application.Json)
+                    example("email disabled") {
+                        value =
+                            ApiErrorSchema(
+                                error = "email_send_failed",
+                                detail = "Email is not configured or Resend rejected the request.",
+                            )
+                    }
+                }
+            }
+        }
+    }) {
         val request =
             runCatching { testEmailJson.decodeFromString<TestEmailRequest>(call.receiveText()) }
                 .getOrNull()
