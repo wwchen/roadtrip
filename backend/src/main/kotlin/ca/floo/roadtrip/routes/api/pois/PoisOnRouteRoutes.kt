@@ -1,21 +1,19 @@
-package ca.floo.roadtrip.routes
+package ca.floo.roadtrip.routes.api.pois
 
 import ca.floo.roadtrip.exceptions.RoutingException
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.poi.PointGeometrySchema
 import ca.floo.roadtrip.models.api.poi.PoisOnRouteFeaturePropertiesSchema
 import ca.floo.roadtrip.models.api.poi.PoisOnRouteFeatureSchema
-import ca.floo.roadtrip.models.api.poi.PoisOnRouteRequestSchema
 import ca.floo.roadtrip.models.api.poi.PoisOnRouteResponseSchema
-import ca.floo.roadtrip.models.api.poi.WaypointSchema
 import ca.floo.roadtrip.models.domain.poi.PoiRow
+import ca.floo.roadtrip.routes.common.describeApi
 import ca.floo.roadtrip.service.poi.OnRouteWaypoint
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.poi.canonicalPoiCategories
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_CORRIDOR_RADIUS_MILES
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_WAYPOINTS
 import ca.floo.roadtrip.service.routing.MIN_ROUTE_CORRIDOR_RADIUS_MILES
-import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -23,6 +21,8 @@ import io.ktor.server.application.call
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.post
+import io.ktor.server.routing.route
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -47,75 +47,48 @@ private val onRouteLog = LoggerFactory.getLogger("PoisOnRouteRoutes")
 // no per-category cap. Drives the trip planner's "campgrounds along route"
 // card list, which the user wants to scan end-to-end instead of pan-by-pan.
 internal fun Route.poisOnRouteRoutes(poisOnRouteService: PoisOnRouteService) {
-    post("/api/pois/on-route", {
-        tags = listOf("poi")
-        summary = "Slim POIs inside a buffered route corridor (no viewport, no truncation)"
-        description =
-            "Body: { waypoints: [{lat,lng}…2..$MAX_ROUTE_WAYPOINTS], " +
-            "radius_miles: ${MIN_ROUTE_CORRIDOR_RADIUS_MILES}..$MAX_ROUTE_CORRIDOR_RADIUS_MILES, categories? }. " +
-            "Returns every matching POI as a slim GeoJSON FeatureCollection. " +
-            "Backed by RouteCache; the FE typically primes it via /api/route just before this call."
-        request {
-            body<PoisOnRouteRequestSchema> {
-                mediaTypes(ContentType.Application.Json)
-                example("Vancouver → Seattle, 5mi corridor, campgrounds") {
-                    value =
-                        PoisOnRouteRequestSchema(
-                            waypoints =
-                                listOf(
-                                    WaypointSchema(lat = 49.28, lng = -123.10),
-                                    WaypointSchema(lat = 47.61, lng = -122.33),
-                                ),
-                            radius_miles = 5.0,
-                            categories = listOf("campground"),
+    route("/api") {
+        route("/pois") {
+            post("/on-route") {
+                val bodyText = call.receiveText()
+                val req =
+                    try {
+                        parseOnRouteRequest(bodyText)
+                    } catch (e: Exception) {
+                        call.respondOnRouteJson(
+                            ApiErrorSchema(error = "bad_request", detail = e.message ?: "parse failed"),
+                            HttpStatusCode.BadRequest,
                         )
-                }
-            }
-        }
-        response {
-            code(HttpStatusCode.OK) {
-                description = "FeatureCollection of slim features inside the buffered route corridor."
-                body<PoisOnRouteResponseSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.BadRequest) {
-                description = "Malformed body, bad waypoints, or radius out of range."
-                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.ServiceUnavailable) {
-                description = "Route lookup failed (Mapbox unreachable / cache miss)."
-                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-        }
-    }) {
-        val bodyText = call.receiveText()
-        val req =
-            try {
-                parseOnRouteRequest(bodyText)
-            } catch (e: Exception) {
-                call.respondOnRouteJson(
-                    ApiErrorSchema(error = "bad_request", detail = e.message ?: "parse failed"),
-                    HttpStatusCode.BadRequest,
-                )
-                return@post
-            }
+                        return@post
+                    }
 
-        val rows =
-            try {
-                poisOnRouteService.poisOnRoute(
-                    waypoints = req.waypoints,
-                    radiusMiles = req.radiusMiles,
-                    categories = req.categories,
-                )
-            } catch (e: RoutingException) {
-                onRouteLog.warn("on-route lookup failed: {}", e.message)
-                call.respondOnRouteJson(
-                    ApiErrorSchema(error = "routing_unavailable"),
-                    HttpStatusCode.ServiceUnavailable,
-                )
-                return@post
-            }
+                val rows =
+                    try {
+                        poisOnRouteService.poisOnRoute(
+                            waypoints = req.waypoints,
+                            radiusMiles = req.radiusMiles,
+                            categories = req.categories,
+                        )
+                    } catch (e: RoutingException) {
+                        onRouteLog.warn("on-route lookup failed: {}", e.message)
+                        call.respondOnRouteJson(
+                            ApiErrorSchema(error = "routing_unavailable"),
+                            HttpStatusCode.ServiceUnavailable,
+                        )
+                        return@post
+                    }
 
-        call.respondOnRouteJson(onRouteFeatureCollection(rows))
+                call.respondOnRouteJson(onRouteFeatureCollection(rows))
+            }.describeApi(
+                tag = "poi",
+                summary = "Slim POIs inside a buffered route corridor (no viewport, no truncation)",
+                description =
+                    "Body: { waypoints: [{lat,lng}...2..$MAX_ROUTE_WAYPOINTS], " +
+                        "radius_miles: ${MIN_ROUTE_CORRIDOR_RADIUS_MILES}..$MAX_ROUTE_CORRIDOR_RADIUS_MILES, categories? }. " +
+                        "Returns every matching POI as a slim GeoJSON FeatureCollection. " +
+                        "Backed by RouteCache; the FE typically primes it via /api/route just before this call.",
+            )
+        }
     }
 }
 
