@@ -1,14 +1,19 @@
 import { escapeHtml } from '../core.js';
 
-export function dataTableTemplate({ columns, rows, emptyMessage, rowClass }) {
+export function dataTableTemplate({ columns, rows, emptyMessage, rowClass, sortKey, sortDir }) {
   if (rows.length === 0) {
     return `<div class="rt-data-table-empty">${escapeHtml(emptyMessage || 'No data')}</div>`;
   }
 
   const headCells = columns.map((col) => {
     const style = col.width ? ` style="width:${escapeHtml(col.width)}"` : '';
-    const cls = col.class ? ` class="${escapeHtml(col.class)}"` : '';
-    return `<th${style}${cls}>${escapeHtml(col.label || '')}</th>`;
+    const sortable = col.sortable ? ' data-sort-key="' + escapeHtml(col.key) + '"' : '';
+    const sortCls = col.sortable ? 'rt-data-table-sortable' : '';
+    const activeCls = sortKey === col.key ? ` rt-data-table-sorted-${sortDir}` : '';
+    const cls = [col.class, sortCls, activeCls].filter(Boolean).join(' ');
+    const clsAttr = cls ? ` class="${escapeHtml(cls)}"` : '';
+    const indicator = sortKey === col.key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+    return `<th${style}${clsAttr}${sortable}>${escapeHtml(col.label || '')}${indicator}</th>`;
   }).join('');
 
   const bodyRows = rows.map((row) => {

@@ -28,6 +28,14 @@
 .rt-data-table .is-paused { opacity: 0.55; }
 .rt-data-table .is-done { opacity: 0.55; }
 
+.rt-data-table th.rt-data-table-sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.rt-data-table th.rt-data-table-sortable:hover {
+  color: var(--rt-text);
+}
+
 .rt-data-table-empty {
   padding: 34px 14px;
   color: var(--rt-muted);

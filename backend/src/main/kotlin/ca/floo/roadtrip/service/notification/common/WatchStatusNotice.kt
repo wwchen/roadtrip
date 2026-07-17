@@ -36,6 +36,7 @@ data class WatchStatusNotice(
     val endDate: LocalDate,
     val dashboardUrl: String?,
     val poiLinks: List<PoiLink>,
+    val appRootUrl: String? = null,
 ) {
     /** Which status card to render. [WATCHING] and [UNCHECKED] are both live
      *  (actively watching); they differ only in whether the cube has an

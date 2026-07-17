@@ -1755,6 +1755,27 @@
               {
                 "matcher": {
                   "id": "byName",
+                  "options": "watch_id"
+                },
+                "properties": [
+                  {
+                    "id": "links",
+                    "value": [
+                      {
+                        "title": "Modify watch",
+                        "url": "/watches?action=modify&id=${__data.fields.watch_id}"
+                      },
+                      {
+                        "title": "Delete watch",
+                        "url": "/watches?action=delete&id=${__data.fields.watch_id}"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
                   "options": "watch_status"
                 },
                 "properties": [

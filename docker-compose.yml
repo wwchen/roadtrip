@@ -109,6 +109,7 @@ services:
     volumes:
       - ./index.html:/app/static/index.html:ro
       - ./availability.html:/app/static/availability.html:ro
+      - ./watches.html:/app/static/watches.html:ro
       - ./web:/app/static/web:ro
       - ./data:/app/static/data
     healthcheck:

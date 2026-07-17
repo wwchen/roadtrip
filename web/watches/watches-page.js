@@ -70,10 +70,10 @@ async function handleSubmit(data) {
   try {
     if (editingId) {
       await updateWatch(editingId, data);
-      showBanner(bannerHost, 'success', 'Watch updated.');
+      showBanner(bannerHost, 'success', `Watch #${editingId} updated.`);
     } else {
       await createWatch(data);
-      showBanner(bannerHost, 'success', 'Watch created.');
+      showBanner(bannerHost, 'success', `Watch created for POI ${data.poi_id}.`);
     }
     formCtrl.setMode('create', null);
     notifyWatchesChanged();
@@ -117,7 +117,7 @@ async function handleDelete(id) {
   try {
     await deleteWatch(id);
     notifyWatchesChanged();
-    showBanner(bannerHost, 'success', 'Watch deleted.');
+    showBanner(bannerHost, 'success', `Watch #${id} deleted.`);
     if (String(formCtrl.getEditingId()) === String(id)) {
       formCtrl.setMode('create', null);
     }
@@ -149,7 +149,7 @@ async function applyUrlAction(bannerHost) {
     try {
       await deleteWatch(id);
       notifyWatchesChanged();
-      showBanner(bannerHost, 'success', 'Watch deleted.');
+      showBanner(bannerHost, 'success', `Watch #${id} deleted.`);
       await loadWatches();
     } catch {
       showBanner(bannerHost, 'error', 'Could not delete watch.');
@@ -177,4 +177,64 @@ function byStartDate(a, b) {
   return da < db ? -1 : 1;
 }
 
+function initTestNotifications() {
+  const slackBtn = document.getElementById('test-slack-btn');
+  const emailBtn = document.getElementById('test-email-btn');
+
+  slackBtn?.addEventListener('click', async () => {
+    const channel = document.getElementById('test-slack-channel')?.value.trim() || undefined;
+    const status = document.getElementById('test-slack-status');
+    slackBtn.disabled = true;
+    status.textContent = 'Sending…';
+    status.className = 'test-status';
+    try {
+      const body = channel ? JSON.stringify({ channel }) : '{}';
+      const resp = await fetch('/test/slack', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      if (resp.ok) {
+        status.textContent = '✓ Sent';
+        status.className = 'test-status ok';
+      } else {
+        const data = await resp.json().catch(() => ({}));
+        status.textContent = data.detail || 'Failed';
+        status.className = 'test-status err';
+      }
+    } catch {
+      status.textContent = 'Network error';
+      status.className = 'test-status err';
+    } finally {
+      slackBtn.disabled = false;
+    }
+  });
+
+  emailBtn?.addEventListener('click', async () => {
+    const to = document.getElementById('test-email-to')?.value.trim();
+    const status = document.getElementById('test-email-status');
+    if (!to) {
+      status.textContent = 'Enter an email address';
+      status.className = 'test-status err';
+      return;
+    }
+    emailBtn.disabled = true;
+    status.textContent = 'Sending…';
+    status.className = 'test-status';
+    try {
+      const resp = await fetch('/test/email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }) });
+      if (resp.ok) {
+        status.textContent = '✓ Sent';
+        status.className = 'test-status ok';
+      } else {
+        const data = await resp.json().catch(() => ({}));
+        status.textContent = data.detail || 'Failed';
+        status.className = 'test-status err';
+      }
+    } catch {
+      status.textContent = 'Network error';
+      status.className = 'test-status err';
+    } finally {
+      emailBtn.disabled = false;
+    }
+  });
+}
+
 init();
+initTestNotifications();

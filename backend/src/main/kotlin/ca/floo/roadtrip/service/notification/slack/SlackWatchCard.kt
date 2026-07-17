@@ -25,6 +25,7 @@ internal object SlackWatchCard {
     const val ACTION_OPEN_GRID = "open_grid"
     const val ACTION_OPEN_MAP = "open_map"
     const val ACTION_OPEN_DASHBOARD = "open_dashboard"
+    const val ACTION_OPEN_WATCHES = "open_watches"
 
     // Attachment bar colors, one per state.
     const val COLOR_AVAIL = "#4cb96a" // openings / DONE

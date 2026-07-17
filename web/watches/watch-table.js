@@ -19,11 +19,12 @@ export function mountWatchTable(container, config) {
 
   function columns() {
     return [
-      { key: 'poi', label: 'POI', render: (_, row) => poiCellHtml(row, state.poiNames) },
-      { key: 'date', label: 'Date', render: (_, row) => dateCellHtml(row.start_date) },
+      { key: 'id', label: 'ID', sortable: true },
+      { key: 'poi', label: 'POI', sortable: (a, b) => (a.poi_id ?? 0) - (b.poi_id ?? 0), render: (_, row) => poiCellHtml(row, state.poiNames) },
+      { key: 'start_date', label: 'Date', sortable: true, render: (_, row) => dateCellHtml(row.start_date) },
       { key: 'trigger', label: 'Trigger', render: (_, row) => triggerCellHtml(row) },
-      { key: 'status', label: 'Status', render: (_, row) => statusCellHtml(row) },
-      { key: 'last_checked', label: 'Last checked', render: (_, row) => checkedCellHtml(row) },
+      { key: 'status', label: 'Status', sortable: true, render: (_, row) => statusCellHtml(row) },
+      { key: 'last_run_at', label: 'Last checked', sortable: true, render: (_, row) => checkedCellHtml(row) },
       { key: 'actions', label: '', width: '140px', render: (_, row) => actionsCellHtml(row) },
     ];
   }
@@ -36,6 +37,7 @@ export function mountWatchTable(container, config) {
       columns: columns(),
       rows: state.watches,
       emptyMessage: 'No watches yet',
+      defaultSort: { key: 'id', dir: 'desc' },
       rowClass: (row) => row.status === 'paused' ? 'is-paused' : row.status === 'done' ? 'is-done' : '',
     });
     mountDeleteButtons();

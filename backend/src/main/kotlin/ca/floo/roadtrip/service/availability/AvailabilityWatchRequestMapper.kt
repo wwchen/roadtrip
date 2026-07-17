@@ -45,6 +45,12 @@ internal object AvailabilityWatchRequestMapper {
     }
 
     fun parseUpdate(req: AvailabilityWatchUpdateRequest): WatchRequestMapping<ParsedUpdateWatchRequest> {
+        if (req.targets != null) {
+            return WatchRequestMapping.Invalid("immutable_field", "targets cannot be changed after creation")
+        }
+        if (req.startDate != null || req.endDate != null) {
+            return WatchRequestMapping.Invalid("immutable_field", "start_date and end_date cannot be changed after creation")
+        }
         validateCadence(req.cadenceSec)?.let { return it }
         req.triggerKinds?.let { validateTriggerKinds(it)?.let { error -> return error } }
         val status =
@@ -55,21 +61,7 @@ internal object AvailabilityWatchRequestMapper {
                         detail = "status must be active, paused, or done",
                     )
             }
-        val window =
-            when {
-                (req.startDate == null) xor (req.endDate == null) ->
-                    return invalidDateWindow("start_date and end_date must be updated together")
-                req.startDate != null && req.endDate != null ->
-                    AvailabilityWatchDateWindow.parse(req.startDate, req.endDate)
-                        ?: return invalidDateWindow("end_date must be after start_date")
-                else -> null
-            }
-        val targets =
-            when (val mapped = updateTargets(req)) {
-                is WatchRequestMapping.Invalid -> return mapped
-                is WatchRequestMapping.Valid -> mapped.value
-            }
-        return valid(ParsedUpdateWatchRequest(targets = targets, dateWindow = window, status = status))
+        return valid(ParsedUpdateWatchRequest(targets = null, dateWindow = null, status = status))
     }
 
     private fun createTargets(req: AvailabilityWatchCreateRequest): WatchRequestMapping<List<AvailabilityWatchTargetRepo.TargetInput>> {
@@ -88,14 +80,6 @@ internal object AvailabilityWatchRequestMapper {
             ),
         )
     }
-
-    private fun updateTargets(req: AvailabilityWatchUpdateRequest): WatchRequestMapping<List<AvailabilityWatchTargetRepo.TargetInput>?> =
-        req.targets?.let { targets ->
-            when (val mapped = mapTargets(targets)) {
-                is WatchRequestMapping.Invalid -> mapped
-                is WatchRequestMapping.Valid -> valid(mapped.value)
-            }
-        } ?: valid(null)
 
     private fun mapTargets(
         targets: List<AvailabilityWatchTargetSchema>,
