@@ -186,8 +186,9 @@ class SlackInteractivityHandlerTest {
         }
 
     @Test
-    fun `pause action sends lifecycle notice to non-Slack targets`() =
+    fun `pause action sends lifecycle notice to configured notification targets`() =
         runBlocking {
+            val slackTarget = NotificationTarget.Slack()
             val emailTarget = NotificationTarget.Email(listOf("one@example.test"))
             val fakes = FakeWatches(mapOf(42L to emailWatch()))
             val slack = FakeSlack()
@@ -197,7 +198,7 @@ class SlackInteractivityHandlerTest {
 
             val status = notifications.statuses.single()
             assertEquals(WatchStatusNotice.State.PAUSED, status.notice.state)
-            assertEquals(listOf(emailTarget), status.targets)
+            assertEquals(listOf(slackTarget, emailTarget), status.targets)
         }
 
     @Test
@@ -217,8 +218,9 @@ class SlackInteractivityHandlerTest {
         }
 
     @Test
-    fun `resume action sends lifecycle notice to non-Slack targets`() =
+    fun `resume action sends lifecycle notice to configured notification targets`() =
         runBlocking {
+            val slackTarget = NotificationTarget.Slack()
             val emailTarget = NotificationTarget.Email(listOf("one@example.test"))
             val fakes = FakeWatches(mapOf(42L to emailWatch(status = WatchStatus.PAUSED)))
             val slack = FakeSlack()
@@ -228,7 +230,7 @@ class SlackInteractivityHandlerTest {
 
             val status = notifications.statuses.single()
             assertEquals(WatchStatusNotice.State.WATCHING, status.notice.state)
-            assertEquals(listOf(emailTarget), status.targets)
+            assertEquals(listOf(slackTarget, emailTarget), status.targets)
         }
 
     @Test
@@ -248,8 +250,9 @@ class SlackInteractivityHandlerTest {
         }
 
     @Test
-    fun `delete action sends stopped notice to non-Slack targets`() =
+    fun `delete action sends stopped notice to configured notification targets`() =
         runBlocking {
+            val slackTarget = NotificationTarget.Slack()
             val emailTarget = NotificationTarget.Email(listOf("one@example.test"))
             val fakes = FakeWatches(mapOf(42L to emailWatch()))
             val slack = FakeSlack()
@@ -259,7 +262,7 @@ class SlackInteractivityHandlerTest {
 
             val status = notifications.statuses.single()
             assertEquals(WatchStatusNotice.State.STOPPED, status.notice.state)
-            assertEquals(listOf(emailTarget), status.targets)
+            assertEquals(listOf(slackTarget, emailTarget), status.targets)
         }
 
     @Test

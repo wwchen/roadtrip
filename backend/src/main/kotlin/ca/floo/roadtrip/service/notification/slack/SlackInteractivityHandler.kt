@@ -5,7 +5,6 @@ import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.availability.notificationTargets
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
 import ca.floo.roadtrip.service.notification.common.NotificationSender
-import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
@@ -19,7 +18,7 @@ private val blockActionsJson = Json { ignoreUnknownKeys = true }
  * hands the parsed payload here; this handler applies the mutation (pause /
  * resume / delete), re-renders the card in place through the
  * [SlackResponseSender.postResponseWatchStatus] one-shot URL, and fans the
- * lifecycle notice out to any non-Slack notification targets on the watch.
+ * lifecycle notice out to the configured notification targets on the watch.
  *
  * URL-button action ids (Reserve, Grid, Map, Dashboard) route to a silent
  * no-op: Slack still fires an interaction payload for them, but the redirect
@@ -166,7 +165,7 @@ internal class SlackInteractivityHandler(
         watch: AvailabilityWatchRepo.Watch,
         notice: WatchStatusNotice,
     ): Boolean {
-        val targets = watch.notificationTargets().filterNot { it is NotificationTarget.Slack }
+        val targets = watch.notificationTargets()
         if (targets.isEmpty()) return true
         return runCatching { notifications.sendWatchStatus(notice, targets) }
             .onFailure { log.warn("Slack interactivity watch={} out-of-band status notify failed", watch.id, it) }
