@@ -52,8 +52,13 @@ import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiDetailService
+import ca.floo.roadtrip.service.poi.PoiReader
+import ca.floo.roadtrip.service.poi.PoiService
+import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.poi.TeslaSuperchargerService
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
+import ca.floo.roadtrip.service.readpath.ReadPathProviderPoiReader
+import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import ca.floo.roadtrip.service.scheduler.PollerBackfill
 import ca.floo.roadtrip.service.scheduler.WatchReaper
@@ -259,6 +264,26 @@ val serviceModule =
             )
         }
         single { RouteCorridorService(get<RouteCorridorRepo>()) }
+        single {
+            PoiService(
+                poiRepo = get<PoiServingRepo>(),
+                detailServices = get<List<PoiDetailService>>(),
+            )
+        }
+        single<PoiReader> {
+            ReadPathProviderPoiReader(
+                delegate = get<PoiService>(),
+                detailServices = get<List<PoiDetailService>>(),
+                providers = get<AppConfig>().readPathProviders,
+            )
+        }
+        single {
+            PoisOnRouteService(
+                routeCache = get<RouteCache>(),
+                routeCorridorService = get<RouteCorridorService>(),
+                poiService = get<PoiReader>(),
+            )
+        }
     }
 
 private fun AppConfig.isProviderEnabled(id: AvailabilityProviderId): Boolean =
