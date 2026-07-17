@@ -2,11 +2,11 @@ package ca.floo.roadtrip
 
 import ca.floo.roadtrip.config.ApplicationProperties
 import ca.floo.roadtrip.config.ConfigSection
+import ca.floo.roadtrip.di.infraModule
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStopping
 import io.ktor.server.application.install
 import io.ktor.server.netty.EngineMain
-import org.koin.dsl.module
 import org.koin.ktor.plugin.Koin
 
 private val mainLog = org.slf4j.LoggerFactory.getLogger("ca.floo.roadtrip.Main")
@@ -41,7 +41,7 @@ private fun installOptionalShutdownThreadDump(properties: Map<String, String>) {
 
 fun Application.module() {
     install(Koin) {
-        modules(module { })
+        modules(infraModule(environment.config))
     }
     val properties = ApplicationProperties.load(baseConfig = environment.config)
     installOptionalShutdownThreadDump(properties)
