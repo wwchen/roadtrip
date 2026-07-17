@@ -90,7 +90,6 @@ jobs:
             MAPBOX_TOKEN=${{ secrets.MAPBOX_TOKEN }}
             RIDB_API_KEY=${{ secrets.RIDB_API_KEY }}
             CAMPFLARE_API_KEY=${{ secrets.CAMPFLARE_API_KEY }}
-            TESLA_COOKIES=${{ secrets.TESLA_COOKIES }}
             SLACK_BOT_TOKEN=${{ secrets.SLACK_BOT_TOKEN }}
             SLACK_ALERT_CHANNEL=${{ secrets.SLACK_ALERT_CHANNEL }}
             SLACK_SIGNING_SECRET=${{ secrets.SLACK_SIGNING_SECRET }}
