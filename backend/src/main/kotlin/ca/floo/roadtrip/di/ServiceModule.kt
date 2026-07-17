@@ -32,19 +32,16 @@ import ca.floo.roadtrip.service.availability.DispatchingWatchLifecycleNotificati
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.NotifyTriggerActionHandler
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
-import ca.floo.roadtrip.service.availability.TriggerActionHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
-import ca.floo.roadtrip.service.availability.alert.AlertProvider
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
-import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import ca.floo.roadtrip.service.booking.adapters.RecGovBookingProvider
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
@@ -54,7 +51,6 @@ import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.DEFAULT_POI_TYPES
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
-import ca.floo.roadtrip.service.poi.PoiDetailService
 import ca.floo.roadtrip.service.poi.PoiReader
 import ca.floo.roadtrip.service.poi.PoiService
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
@@ -69,6 +65,7 @@ import ca.floo.roadtrip.service.scheduler.framework.Scheduler
 import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutor
 import kotlinx.coroutines.CoroutineScope
 import org.jooq.DSLContext
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 import javax.sql.DataSource
 
@@ -123,10 +120,10 @@ val serviceModule =
         }
         single { AvailabilityPollerMembership(get<WatchScopeResolver>(), get<DbAvailabilityTargetResolver>()) }
 
-        single<List<AlertProvider>> { listOf(InternalPollerAlertProvider(get<AvailabilityPollerMembership>())) }
-        single { AlertProviderRegistry(get<List<AlertProvider>>()) }
+        single(named("alertProviders")) { listOf(InternalPollerAlertProvider(get<AvailabilityPollerMembership>())) }
+        single { AlertProviderRegistry(get(named("alertProviders"))) }
 
-        single<List<BookingProvider>> {
+        single(named("bookingProviders")) {
             val config: AppConfig = get()
             val atcExecutor =
                 config.booking.recgovAtc
@@ -136,7 +133,7 @@ val serviceModule =
                 atcExecutor?.let(::RecGovBookingProvider),
             )
         }
-        single { BookingProviderRegistry(get<List<BookingProvider>>()) }
+        single { BookingProviderRegistry(get(named("bookingProviders"))) }
         single { AvailabilityBookingTargetResolver(get<BookingProviderRegistry>()) }
 
         single {
@@ -147,7 +144,7 @@ val serviceModule =
                 notificationTriggerKinds = notificationTriggerKinds(emailConfigured = config.email != null),
             )
         }
-        single<List<TriggerActionHandler>> {
+        single(named("triggerActionHandlers")) {
             listOf(
                 NotifyTriggerActionHandler(
                     notifications = get<NotificationFanout>(),
@@ -160,7 +157,7 @@ val serviceModule =
                 ),
             )
         }
-        single { TriggerActionRegistry(get<List<TriggerActionHandler>>()) }
+        single { TriggerActionRegistry(get(named("triggerActionHandlers"))) }
 
         single {
             val config: AppConfig = get()
@@ -235,7 +232,7 @@ val serviceModule =
             PollerBackfill(get<DSLContext>(), get<AvailabilityPollerMembership>()).also { it.run() }
         }
 
-        single<List<PoiDetailService>> {
+        single(named("poiDetailServices")) {
             listOf(
                 CampgroundService(
                     repo = get<CampgroundRepo>(),
@@ -250,13 +247,13 @@ val serviceModule =
         single {
             PoiService(
                 poiRepo = get<PoiServingRepo>(),
-                detailServices = get<List<PoiDetailService>>(),
+                detailServices = get(named("poiDetailServices")),
             )
         }
         single<PoiReader> {
             ReadPathProviderPoiReader(
                 delegate = get<PoiService>(),
-                detailServices = get<List<PoiDetailService>>(),
+                detailServices = get(named("poiDetailServices")),
                 providers = get<AppConfig>().readPathProviders,
             )
         }
