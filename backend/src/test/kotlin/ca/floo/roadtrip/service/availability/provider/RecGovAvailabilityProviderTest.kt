@@ -1,17 +1,16 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
-import ca.floo.roadtrip.models.availability.AvailabilityStatus
-import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
+import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.ProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
-import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovAvailabilityProvider
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import ca.floo.roadtrip.clients.recgov.Campsite as RecGovCampsite
+import ca.floo.roadtrip.client.recgov.Campsite as RecGovCampsite
 
 class RecGovAvailabilityProviderTest {
     @Test

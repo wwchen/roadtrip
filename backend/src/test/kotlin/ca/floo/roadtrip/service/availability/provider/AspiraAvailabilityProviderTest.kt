@@ -1,16 +1,14 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.clients.aspira.AspiraAvailability
-import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
-import ca.floo.roadtrip.clients.aspira.AspiraOccupancy
-import ca.floo.roadtrip.clients.aspira.AspiraResourceOccupancy
-import ca.floo.roadtrip.models.availability.AvailabilityStatus
-import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.client.aspira.AspiraAvailability
+import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
+import ca.floo.roadtrip.client.aspira.AspiraOccupancy
+import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
+import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.ProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
-import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraAvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraTenant
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import java.time.LocalDate

@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
-import ca.floo.roadtrip.models.metadata.Envelope
-import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.model.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject

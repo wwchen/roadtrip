@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.api.AvailabilityWatchCreateRequest
-import ca.floo.roadtrip.models.api.AvailabilityWatchTargetSchema
-import ca.floo.roadtrip.models.api.AvailabilityWatchUpdateRequest
+import ca.floo.roadtrip.model.api.AvailabilityWatchCreateRequest
+import ca.floo.roadtrip.model.api.AvailabilityWatchTargetSchema
+import ca.floo.roadtrip.model.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 
 private const val MIN_CADENCE_SEC = 5

@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.etl.vendors.campflare
 
-import ca.floo.roadtrip.models.domain.CampflareUrls
-import ca.floo.roadtrip.models.domain.CatalogVendorRefUpsertCandidate
-import ca.floo.roadtrip.models.metadata.Envelope
+import ca.floo.roadtrip.model.domain.CampflareUrls
+import ca.floo.roadtrip.model.domain.CatalogVendorRefUpsertCandidate
+import ca.floo.roadtrip.model.metadata.Envelope
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull

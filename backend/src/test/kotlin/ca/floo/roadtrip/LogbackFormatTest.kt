@@ -1,6 +1,6 @@
 package ca.floo.roadtrip
 
-import ca.floo.roadtrip.clients.DateStringFormatter
+import ca.floo.roadtrip.client.DateStringFormatter
 import ch.qos.logback.classic.LoggerContext
 import ch.qos.logback.classic.joran.JoranConfigurator
 import org.junit.jupiter.api.Test
@@ -35,7 +35,7 @@ class LogbackFormatTest {
             }
             MDC.put("run_id", "12345")
             LoggerFactory
-                .getLogger("ca.floo.roadtrip.clients.recgov.HttpRecgovAvailabilityClient")
+                .getLogger("ca.floo.roadtrip.client.recgov.HttpRecgovAvailabilityClient")
                 .info(
                     "recgov GET availability campground={} month={} attempt={}",
                     "232447",
@@ -56,7 +56,7 @@ class LogbackFormatTest {
             "message not interpolated: $line",
         )
         assertTrue(
-            line.contains("\"loggerName\":\"ca.floo.roadtrip.clients.recgov.HttpRecgovAvailabilityClient\""),
+            line.contains("\"loggerName\":\"ca.floo.roadtrip.client.recgov.HttpRecgovAvailabilityClient\""),
             "loggerName field missing/renamed: $line",
         )
         assertTrue(line.contains("\"level\":\"INFO\""), "level field missing: $line")

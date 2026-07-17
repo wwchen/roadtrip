@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.models.domain.CampsiteProviderRefRow
-import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
+import ca.floo.roadtrip.model.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId

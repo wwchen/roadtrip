@@ -1,11 +1,11 @@
 package ca.floo.roadtrip.service.etl.framework
 
-import ca.floo.roadtrip.models.metadata.registry.CampsiteDataEntry
-import ca.floo.roadtrip.models.metadata.registry.DataSourceEntry
-import ca.floo.roadtrip.models.metadata.registry.EtlEntry
-import ca.floo.roadtrip.models.metadata.registry.Fetcher
-import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
-import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.model.metadata.registry.CampsiteDataEntry
+import ca.floo.roadtrip.model.metadata.registry.DataSourceEntry
+import ca.floo.roadtrip.model.metadata.registry.EtlEntry
+import ca.floo.roadtrip.model.metadata.registry.Fetcher
+import ca.floo.roadtrip.model.metadata.registry.PoiDataEntry
+import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import org.junit.jupiter.api.BeforeEach

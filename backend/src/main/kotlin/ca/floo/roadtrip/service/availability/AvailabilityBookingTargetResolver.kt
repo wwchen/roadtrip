@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.booking.BookingAction
-import ca.floo.roadtrip.models.booking.BookingTarget
+import ca.floo.roadtrip.model.booking.BookingAction
+import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 
 /**

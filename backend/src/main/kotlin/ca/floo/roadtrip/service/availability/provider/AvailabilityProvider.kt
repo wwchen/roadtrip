@@ -1,12 +1,12 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
-import ca.floo.roadtrip.models.availability.AvailabilityProviderError
-import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.Dispatchable
+import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.support.Dispatchable
 import java.time.LocalDate
 
 /**

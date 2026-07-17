@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
-import ca.floo.roadtrip.models.domain.CampgroundUpsertCandidate
-import ca.floo.roadtrip.models.etl.CampgroundEtlOutput
-import ca.floo.roadtrip.models.metadata.ValidationResult
+import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
+import ca.floo.roadtrip.model.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -338,7 +338,7 @@ class AspiraJoinByNameEtl(
         )
 
     private fun canonicalBookingCtaRefs(
-        inventory: List<ca.floo.roadtrip.models.metadata.Envelope>,
+        inventory: List<ca.floo.roadtrip.model.metadata.Envelope>,
         dictionaryPayload: JsonObject?,
     ): Map<Long, AspiraBookingCtaRef> {
         val bookableByCategoryId = AspiraInventoryCategories.bookableFlagByCategoryId(dictionaryPayload)
@@ -371,7 +371,7 @@ class AspiraJoinByNameEtl(
 
     private fun detectGeometrySource(
         slug: String,
-        envelopes: List<ca.floo.roadtrip.models.metadata.Envelope>,
+        envelopes: List<ca.floo.roadtrip.model.metadata.Envelope>,
     ): GeometrySource {
         // We have a few characteristic shapes; sniff by slug first (cheap)
         // and fall back to payload inspection if the slug is unknown.

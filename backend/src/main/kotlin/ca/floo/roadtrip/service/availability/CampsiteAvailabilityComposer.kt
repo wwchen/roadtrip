@@ -1,13 +1,13 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.config.ApiCacheEntity
-import ca.floo.roadtrip.models.api.AvailabilityResponseDto
-import ca.floo.roadtrip.models.availability.AvailabilityProviderError
-import ca.floo.roadtrip.models.availability.AvailabilityWindows
-import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.models.availability.ResolvedDateWindow
-import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.model.api.AvailabilityResponseDto
+import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.availability.AvailabilityWindows
+import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.availability.ResolvedDateWindow
+import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
@@ -106,7 +106,7 @@ internal class CampsiteAvailabilityComposer(
     private suspend fun fetchWithFailover(
         rows: List<ResolvedAvailabilityTarget>,
         windows: AvailabilityWindows,
-    ): ca.floo.roadtrip.models.availability.AvailabilityObservationBatch {
+    ): ca.floo.roadtrip.model.availability.AvailabilityObservationBatch {
         val groupCandidates = rows.first().candidates
         val preferredRefs = rows.map { it.catalogRef }
         val result =

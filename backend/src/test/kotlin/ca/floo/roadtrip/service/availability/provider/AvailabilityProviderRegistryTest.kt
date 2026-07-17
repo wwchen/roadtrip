@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
-import ca.floo.roadtrip.models.domain.CampsiteProviderRefRow
-import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
+import ca.floo.roadtrip.model.domain.ProviderRef
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals

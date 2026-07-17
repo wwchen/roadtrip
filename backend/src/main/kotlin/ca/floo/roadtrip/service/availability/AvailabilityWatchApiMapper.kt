@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.api.AvailabilityWatchListResponse
-import ca.floo.roadtrip.models.api.AvailabilityWatchResponse
-import ca.floo.roadtrip.models.api.AvailabilityWatchSchema
-import ca.floo.roadtrip.models.api.AvailabilityWatchTargetSchema
-import ca.floo.roadtrip.models.api.CampsiteSummarySchema
+import ca.floo.roadtrip.model.api.AvailabilityWatchListResponse
+import ca.floo.roadtrip.model.api.AvailabilityWatchResponse
+import ca.floo.roadtrip.model.api.AvailabilityWatchSchema
+import ca.floo.roadtrip.model.api.AvailabilityWatchTargetSchema
+import ca.floo.roadtrip.model.api.CampsiteSummarySchema
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 

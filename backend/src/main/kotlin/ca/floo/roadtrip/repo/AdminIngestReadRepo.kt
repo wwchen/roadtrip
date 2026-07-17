@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
-import ca.floo.roadtrip.models.domain.ingest.IngestRunDetailRow
-import ca.floo.roadtrip.models.domain.ingest.IngestRunListItemRow
-import ca.floo.roadtrip.models.domain.ingest.IngestRunPhaseRow
-import ca.floo.roadtrip.models.domain.ingest.TargetIngestStatusRow
+import ca.floo.roadtrip.model.domain.ingest.IngestRunDetailRow
+import ca.floo.roadtrip.model.domain.ingest.IngestRunListItemRow
+import ca.floo.roadtrip.model.domain.ingest.IngestRunPhaseRow
+import ca.floo.roadtrip.model.domain.ingest.TargetIngestStatusRow
 import org.jooq.DSLContext
 import java.time.Duration
 import java.time.OffsetDateTime

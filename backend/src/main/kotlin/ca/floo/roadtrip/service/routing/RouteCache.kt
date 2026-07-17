@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.routing
 
-import ca.floo.roadtrip.clients.mapbox.MapboxDirections
+import ca.floo.roadtrip.client.mapbox.MapboxDirections
 import ca.floo.roadtrip.config.ApiCacheEntity
-import ca.floo.roadtrip.models.routing.RouteResponse
+import ca.floo.roadtrip.model.routing.RouteResponse
 import ca.floo.roadtrip.repo.NoopPersistentCache
 import ca.floo.roadtrip.repo.PersistentCache
 import kotlinx.serialization.json.Json

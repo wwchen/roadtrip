@@ -1,6 +1,6 @@
 package ca.floo.roadtrip
 
-import ca.floo.roadtrip.http.cacheOptionsFor
+import ca.floo.roadtrip.support.cacheOptionsFor
 import io.ktor.http.ContentType
 import io.ktor.server.application.Application
 import io.ktor.server.application.install

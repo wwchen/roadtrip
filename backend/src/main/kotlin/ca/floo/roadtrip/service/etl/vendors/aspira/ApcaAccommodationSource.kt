@@ -7,7 +7,7 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /** APCA Accommodation feature service — geojson features with Point geometry, attribute Name_e. */
 class ApcaAccommodationSource(
-    private val envelopes: List<ca.floo.roadtrip.models.metadata.Envelope>,
+    private val envelopes: List<ca.floo.roadtrip.model.metadata.Envelope>,
 ) : GeometrySource {
     override fun indexInto(byName: MutableMap<String, Pair<Double, Double>>) {
         for (env in envelopes) {

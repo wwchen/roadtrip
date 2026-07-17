@@ -1,9 +1,0 @@
-package ca.floo.roadtrip.models.api
-
-import kotlinx.serialization.Serializable
-
-@Serializable
-internal data class RouteLineGeometryDto(
-    val type: String = "LineString",
-    val coordinates: List<List<Double>>,
-)

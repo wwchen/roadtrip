@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.ProviderRef
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

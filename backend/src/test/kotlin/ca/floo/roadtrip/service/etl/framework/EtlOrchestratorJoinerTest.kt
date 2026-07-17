@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.etl.framework
 
-import ca.floo.roadtrip.models.domain.CampsiteParentLink
-import ca.floo.roadtrip.models.metadata.registry.CampsiteParentJoinerEntry
-import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.model.domain.CampsiteParentLink
+import ca.floo.roadtrip.model.metadata.registry.CampsiteParentJoinerEntry
+import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground

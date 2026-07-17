@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.availability.PoiDateContext
-import ca.floo.roadtrip.models.availability.ResolvedDateWindow
+import ca.floo.roadtrip.model.availability.PoiDateContext
+import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime

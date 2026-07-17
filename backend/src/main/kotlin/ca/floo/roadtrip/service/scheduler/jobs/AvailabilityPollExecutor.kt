@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
-import ca.floo.roadtrip.models.availability.AvailabilityProviderError
-import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.models.availability.CellTransition
-import ca.floo.roadtrip.models.availability.ResolvedDateWindow
-import ca.floo.roadtrip.models.domain.scheduler.HandlerResult
+import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.availability.CellTransition
+import ca.floo.roadtrip.model.availability.ResolvedDateWindow
+import ca.floo.roadtrip.model.domain.scheduler.HandlerResult
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -136,9 +136,9 @@ internal class AvailabilityPollExecutor(
         // batcher fetch, so the "skip null-window groups" decision is made once
         // and never drifts between the two.
         val windowFor: (
-            ca.floo.roadtrip.models.availability.PoiDateContext,
-            ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities,
-        ) -> ca.floo.roadtrip.models.availability.AvailabilityWindows? = { context, caps ->
+            ca.floo.roadtrip.model.availability.PoiDateContext,
+            ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities,
+        ) -> ca.floo.roadtrip.model.availability.AvailabilityWindows? = { context, caps ->
             val resolvedWindow =
                 dateResolver.resolvePollingWindow(
                     context = context,
@@ -146,7 +146,7 @@ internal class AvailabilityPollExecutor(
                     bookingHorizonDays = caps.bookingHorizonDays,
                 )
             resolvedWindow?.let {
-                ca.floo.roadtrip.models.availability
+                ca.floo.roadtrip.model.availability
                     .AvailabilityWindows(target = it, fetch = it)
             }
         }

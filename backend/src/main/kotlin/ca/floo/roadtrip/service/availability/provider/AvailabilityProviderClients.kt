@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
-import ca.floo.roadtrip.clients.campflare.CampflareAvailabilityClient
-import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
-import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
-import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaAvailabilityClient
+import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
+import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
+import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
+import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailabilityClient
+import ca.floo.roadtrip.client.reservecalifornia.ReserveCaliforniaAvailabilityClient
 
 class AvailabilityProviderClients(
     val recgovClient: RecGovAvailabilityClient,

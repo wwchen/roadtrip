@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.booking.BookingAction
+import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 
 private const val UNSUPPORTED_TRIGGER_ERROR = "unsupported_trigger"

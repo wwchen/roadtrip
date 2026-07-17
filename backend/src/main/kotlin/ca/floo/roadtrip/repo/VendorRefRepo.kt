@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.models.domain.catalog.CatalogVendorRefKey
-import ca.floo.roadtrip.models.domain.catalog.CatalogVendorRefSpec
+import ca.floo.roadtrip.model.domain.catalog.CatalogVendorRefKey
+import ca.floo.roadtrip.model.domain.catalog.CatalogVendorRefSpec
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
 

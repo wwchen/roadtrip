@@ -1,16 +1,16 @@
 package ca.floo.roadtrip.service.poi.campground
 
-import ca.floo.roadtrip.models.api.poi.PoiCtaSchema
-import ca.floo.roadtrip.models.domain.CampflareUrls
-import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.model.api.poi.PoiCtaSchema
+import ca.floo.roadtrip.model.domain.CampflareUrls
+import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.service.availability.provider.AspiraBookingDisplay
+import ca.floo.roadtrip.service.availability.provider.AspiraBookingUrl
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
+import ca.floo.roadtrip.service.availability.provider.RecGovBookingDisplay
 import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
-import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraBookingDisplay
-import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraBookingUrl
-import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovBookingDisplay
-import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaBookingDisplay
-import ca.floo.roadtrip.service.availability.provider.adapters.reservecalifornia.ReserveCaliforniaBookingDisplay
-import ca.floo.roadtrip.service.availability.provider.adapters.reservecalifornia.ReserveCaliforniaBookingUrl
+import ca.floo.roadtrip.service.availability.provider.ReserveAmericaBookingDisplay
+import ca.floo.roadtrip.service.availability.provider.ReserveCaliforniaBookingDisplay
+import ca.floo.roadtrip.service.availability.provider.ReserveCaliforniaBookingUrl
 import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneId

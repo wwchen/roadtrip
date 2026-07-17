@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.etl.framework
 
-import ca.floo.roadtrip.models.metadata.ingest.Phase
-import ca.floo.roadtrip.models.metadata.ingest.Target
-import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.model.metadata.ingest.Phase
+import ca.floo.roadtrip.model.metadata.ingest.Target
+import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import org.slf4j.LoggerFactory
 
 // Derives the IngestController target maps from the POI registry resource.

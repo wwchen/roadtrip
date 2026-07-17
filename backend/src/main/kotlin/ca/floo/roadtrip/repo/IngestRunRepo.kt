@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
-import ca.floo.roadtrip.models.metadata.ingest.Phase
-import ca.floo.roadtrip.models.metadata.ingest.RunKind
+import ca.floo.roadtrip.model.metadata.ingest.Phase
+import ca.floo.roadtrip.model.metadata.ingest.RunKind
 import org.jooq.DSLContext
 import org.jooq.JSONB
 import java.time.Duration

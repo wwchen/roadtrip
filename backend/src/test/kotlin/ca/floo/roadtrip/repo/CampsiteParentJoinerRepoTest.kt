@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.models.domain.CampsiteParentLink
+import ca.floo.roadtrip.model.domain.CampsiteParentLink
 import ca.floo.roadtrip.service.etl.framework.JoinerCtx
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampsiteParentJoiner
 import ca.floo.roadtrip.service.etl.vendors.reserveamerica.ReserveAmericaCampsiteParentJoiner

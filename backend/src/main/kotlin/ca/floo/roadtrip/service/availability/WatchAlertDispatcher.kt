@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.availability.CellTransition
-import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.availability.CellTransition
+import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.PoiServingRepo

@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.etl.vendors.bcparks
 
-import ca.floo.roadtrip.models.domain.CampgroundUpsertCandidate
-import ca.floo.roadtrip.models.etl.CampgroundEtlOutput
-import ca.floo.roadtrip.models.metadata.Envelope
-import ca.floo.roadtrip.models.metadata.ValidationResult
+import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
+import ca.floo.roadtrip.model.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx

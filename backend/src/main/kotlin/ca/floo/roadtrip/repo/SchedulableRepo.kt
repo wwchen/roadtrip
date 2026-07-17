@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.models.domain.scheduler.Schedulable
+import ca.floo.roadtrip.model.domain.scheduler.Schedulable
 import java.time.Duration
 import java.time.OffsetDateTime
 

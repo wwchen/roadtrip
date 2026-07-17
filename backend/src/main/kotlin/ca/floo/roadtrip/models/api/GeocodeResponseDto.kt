@@ -1,8 +1,0 @@
-package ca.floo.roadtrip.models.api
-
-import kotlinx.serialization.Serializable
-
-@Serializable
-internal data class GeocodeResponseDto(
-    val results: List<GeocodeResultDto>,
-)

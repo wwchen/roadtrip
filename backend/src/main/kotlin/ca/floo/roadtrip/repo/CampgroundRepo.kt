@@ -1,12 +1,12 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.models.domain.Campground
-import ca.floo.roadtrip.models.domain.CampgroundUpsertCandidate
-import ca.floo.roadtrip.models.domain.CatalogUpsertResult
-import ca.floo.roadtrip.models.domain.catalog.CatalogVendorRefKey
-import ca.floo.roadtrip.models.domain.catalog.CatalogVendorRefSpec
-import ca.floo.roadtrip.models.domain.poi.CampgroundPoiDetail
-import ca.floo.roadtrip.models.domain.poi.PoiGeometryUpdate
+import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.CatalogUpsertResult
+import ca.floo.roadtrip.model.domain.catalog.CatalogVendorRefKey
+import ca.floo.roadtrip.model.domain.catalog.CatalogVendorRefSpec
+import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
+import ca.floo.roadtrip.model.domain.poi.PoiGeometryUpdate
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext

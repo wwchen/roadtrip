@@ -1,12 +1,12 @@
 package ca.floo.roadtrip.service.etl.framework
 
-import ca.floo.roadtrip.exceptions.TargetBusyException
-import ca.floo.roadtrip.exceptions.TargetNotFoundException
-import ca.floo.roadtrip.models.metadata.ingest.Phase
-import ca.floo.roadtrip.models.metadata.ingest.RunKind
-import ca.floo.roadtrip.models.metadata.ingest.RunOutcome
-import ca.floo.roadtrip.models.metadata.ingest.Target
+import ca.floo.roadtrip.model.metadata.ingest.Phase
+import ca.floo.roadtrip.model.metadata.ingest.RunKind
+import ca.floo.roadtrip.model.metadata.ingest.RunOutcome
+import ca.floo.roadtrip.model.metadata.ingest.Target
 import ca.floo.roadtrip.repo.IngestRunRepo
+import ca.floo.roadtrip.support.TargetBusyException
+import ca.floo.roadtrip.support.TargetNotFoundException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex

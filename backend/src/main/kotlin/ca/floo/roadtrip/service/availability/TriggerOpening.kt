@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.service.notification.common.WatchOpening
 import java.time.LocalDate
 

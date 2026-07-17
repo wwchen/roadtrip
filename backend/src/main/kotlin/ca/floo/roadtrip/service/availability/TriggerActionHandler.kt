@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
-import ca.floo.roadtrip.service.Dispatchable
+import ca.floo.roadtrip.support.Dispatchable
 
 /**
  * Fires one or more trigger-action kinds (notification, ATC route, …)

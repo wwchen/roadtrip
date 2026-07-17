@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.poi
 
-import ca.floo.roadtrip.models.api.poi.PoiCategoryDetailSchema
-import ca.floo.roadtrip.models.api.poi.PoiDetailPropertiesSchema
-import ca.floo.roadtrip.models.domain.poi.PoiIndexRow
+import ca.floo.roadtrip.model.api.poi.PoiCategoryDetailSchema
+import ca.floo.roadtrip.model.api.poi.PoiDetailPropertiesSchema
+import ca.floo.roadtrip.model.domain.poi.PoiIndexRow
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.CampgroundAvailabilitySupport

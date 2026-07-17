@@ -1,14 +1,14 @@
 package ca.floo.roadtrip.service.poi
 
-import ca.floo.roadtrip.models.api.poi.PoiDetailFeatureSchema
-import ca.floo.roadtrip.models.api.poi.PoiFeatureCollectionSchema
-import ca.floo.roadtrip.models.api.poi.PoiSearchHitSchema
-import ca.floo.roadtrip.models.api.poi.PoiSearchResponseSchema
-import ca.floo.roadtrip.models.api.poi.PointGeometrySchema
-import ca.floo.roadtrip.models.api.poi.SlimPoiFeatureSchema
-import ca.floo.roadtrip.models.api.poi.SlimPoiPropertiesSchema
-import ca.floo.roadtrip.models.domain.poi.Bbox
-import ca.floo.roadtrip.models.domain.poi.PoiRow
+import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
+import ca.floo.roadtrip.model.api.poi.PoiFeatureCollectionSchema
+import ca.floo.roadtrip.model.api.poi.PoiSearchHitSchema
+import ca.floo.roadtrip.model.api.poi.PoiSearchResponseSchema
+import ca.floo.roadtrip.model.api.poi.PointGeometrySchema
+import ca.floo.roadtrip.model.api.poi.SlimPoiFeatureSchema
+import ca.floo.roadtrip.model.api.poi.SlimPoiPropertiesSchema
+import ca.floo.roadtrip.model.domain.poi.Bbox
+import ca.floo.roadtrip.model.domain.poi.PoiRow
 import ca.floo.roadtrip.repo.PoiServingRepo
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString

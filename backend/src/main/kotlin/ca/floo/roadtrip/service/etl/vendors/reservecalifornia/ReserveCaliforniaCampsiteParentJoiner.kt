@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 
-import ca.floo.roadtrip.models.domain.CampsiteParentLink
-import ca.floo.roadtrip.models.domain.ReserveCaliforniaCampsiteParentCandidate
+import ca.floo.roadtrip.model.domain.CampsiteParentLink
+import ca.floo.roadtrip.model.domain.ReserveCaliforniaCampsiteParentCandidate
 import ca.floo.roadtrip.service.etl.framework.CampsiteParentJoiner
 import ca.floo.roadtrip.service.etl.framework.JoinerCtx
 

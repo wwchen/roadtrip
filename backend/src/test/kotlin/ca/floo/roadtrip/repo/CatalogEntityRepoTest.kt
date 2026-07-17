@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.models.domain.CampgroundUpsertCandidate
-import ca.floo.roadtrip.models.domain.CampsiteUpsertCandidate
-import ca.floo.roadtrip.models.domain.CatalogVendorRefUpsertCandidate
-import ca.floo.roadtrip.models.domain.PlanetFitnessLocationUpsertCandidate
-import ca.floo.roadtrip.models.domain.TeslaSuperchargerUpsertCandidate
+import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
+import ca.floo.roadtrip.model.domain.CatalogVendorRefUpsertCandidate
+import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
+import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test

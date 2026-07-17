@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.notification.email
 
-import ca.floo.roadtrip.clients.resend.EmailDeliveryClient
-import ca.floo.roadtrip.clients.resend.EmailDeliveryMessage
-import ca.floo.roadtrip.clients.resend.ResendEmailClient
+import ca.floo.roadtrip.client.resend.EmailDeliveryClient
+import ca.floo.roadtrip.client.resend.EmailDeliveryMessage
+import ca.floo.roadtrip.client.resend.ResendEmailClient
 import ca.floo.roadtrip.config.EmailConfig
 import ca.floo.roadtrip.service.notification.common.NotificationService
 import ca.floo.roadtrip.service.notification.common.NotificationTarget

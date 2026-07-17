@@ -1,11 +1,10 @@
 package ca.floo.roadtrip.di
 
-import ca.floo.roadtrip.SlackInteractivityWiring
-import ca.floo.roadtrip.clients.companion.HttpRecGovAtcExecutor
-import ca.floo.roadtrip.clients.slack.SlackSignatureVerifier
+import ca.floo.roadtrip.client.companion.HttpRecGovAtcExecutor
+import ca.floo.roadtrip.client.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.config.ReadPathProviderConfig
-import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -43,7 +42,7 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClient
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
-import ca.floo.roadtrip.service.booking.adapters.RecGovBookingProvider
+import ca.floo.roadtrip.service.booking.RecGovBookingProvider
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler

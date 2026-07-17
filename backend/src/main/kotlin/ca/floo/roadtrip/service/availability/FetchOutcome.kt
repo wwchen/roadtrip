@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 
 /** Platform-level outcome of one group's upstream fetch. Derived from the
  *  typed [AvailabilityProviderError] the adapter throws; provider-agnostic. */

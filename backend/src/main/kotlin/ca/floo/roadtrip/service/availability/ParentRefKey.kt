@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.ProviderRef
 
 /** Renders a vendor's call-unit id as text for observability. Not
  *  provider dispatch — just formatting a value already picked by the

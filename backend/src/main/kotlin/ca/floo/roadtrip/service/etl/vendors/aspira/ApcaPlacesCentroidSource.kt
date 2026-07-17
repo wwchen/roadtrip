@@ -12,7 +12,7 @@ import kotlinx.serialization.json.jsonPrimitive
  * collapses the federal-park cruft so they can match the leaf's bare name.
  */
 class ApcaPlacesCentroidSource(
-    private val envelopes: List<ca.floo.roadtrip.models.metadata.Envelope>,
+    private val envelopes: List<ca.floo.roadtrip.model.metadata.Envelope>,
 ) : GeometrySource {
     override fun indexInto(byName: MutableMap<String, Pair<Double, Double>>) {
         for (env in envelopes) {

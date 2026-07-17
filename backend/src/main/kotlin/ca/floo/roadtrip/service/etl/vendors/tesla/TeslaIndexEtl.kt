@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.etl.vendors.tesla
 
-import ca.floo.roadtrip.models.domain.DEFAULT_TESLA_SITE_STATUS
-import ca.floo.roadtrip.models.domain.TeslaSuperchargerUpsertCandidate
-import ca.floo.roadtrip.models.etl.TeslaSuperchargerEtlOutput
-import ca.floo.roadtrip.models.metadata.Envelope
-import ca.floo.roadtrip.models.metadata.ValidationResult
+import ca.floo.roadtrip.model.domain.DEFAULT_TESLA_SITE_STATUS
+import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
+import ca.floo.roadtrip.model.etl.TeslaSuperchargerEtlOutput
+import ca.floo.roadtrip.model.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -188,7 +188,7 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerEtlOutput> {
         return addr.state?.takeIf { it.isNotBlank() } to addr.countryCode?.takeIf { it.isNotBlank() }
     }
 
-    private fun addressOf(detail: TeslaLocationDetail?): ca.floo.roadtrip.models.domain.Address? {
+    private fun addressOf(detail: TeslaLocationDetail?): ca.floo.roadtrip.model.domain.Address? {
         val addr = detail?.address ?: return null
         val street =
             listOfNotNull(addr.streetNumber, addr.street)
@@ -203,7 +203,7 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerEtlOutput> {
         ) {
             return null
         }
-        return ca.floo.roadtrip.models.domain.Address(
+        return ca.floo.roadtrip.model.domain.Address(
             street = street,
             city = addr.city?.takeIf { it.isNotBlank() },
             state = addr.state?.takeIf { it.isNotBlank() },
@@ -212,7 +212,7 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerEtlOutput> {
         )
     }
 
-    private fun addressJson(address: ca.floo.roadtrip.models.domain.Address?): JsonElement? {
+    private fun addressJson(address: ca.floo.roadtrip.model.domain.Address?): JsonElement? {
         address ?: return null
         return buildJsonObject {
             address.street?.let { put("street", it) }

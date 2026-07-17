@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 
 /**

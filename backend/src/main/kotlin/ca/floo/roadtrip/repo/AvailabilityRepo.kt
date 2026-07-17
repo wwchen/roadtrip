@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.Availability.Companion.AVAILABILITY
-import ca.floo.roadtrip.models.availability.AvailabilityStatus
-import ca.floo.roadtrip.models.availability.CellTransition
+import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.CellTransition
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 import java.time.Instant
