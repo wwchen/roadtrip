@@ -1,5 +1,4 @@
 // Runs tab: recent executions across all pollers (or filtered to one poller).
-// Provenance: clicking a run id navigates to /availability?tab=snapshots&run_id={id}.
 // Clicking a run's poller_id filters this tab to that poller.
 
 import { listRuns } from '/web/api/availability-dashboard-api.js';
@@ -47,9 +46,7 @@ export async function mount(rootEl, { onTabSwitch, urlParams }) {
     const link = e.target.closest('[data-action]');
     if (!link) return;
     e.preventDefault();
-    if (link.dataset.action === 'goto-snapshots-for-run') {
-      onTabSwitch('snapshots', { run_id: link.dataset.runId });
-    } else if (link.dataset.action === 'goto-pollers-tab') {
+    if (link.dataset.action === 'goto-pollers-tab') {
       onTabSwitch('pollers', {});
     }
   });
@@ -94,9 +91,7 @@ export async function mount(rootEl, { onTabSwitch, urlParams }) {
   function renderRow(r) {
     return `
       <tr>
-        <td>
-          <a href="#" data-action="goto-snapshots-for-run" data-run-id="${escapeHtml(r.id)}">${escapeHtml(r.id)}</a>
-        </td>
+        <td>${escapeHtml(r.id)}</td>
         <td>
           <a href="#" data-action="goto-pollers-tab" data-poller-id="${escapeHtml(r.poller_id)}">#${escapeHtml(r.poller_id)}</a>
         </td>

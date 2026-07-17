@@ -1,10 +1,10 @@
-// Snapshots tab: tabular view scoped to either one campsite id or
-// one run id. Backend rejects calls with neither/both.
+// Changes tab: tabular view scoped to either one campsite id or
+// one poi id. Backend rejects calls with neither/both.
 
 import {
-  getSnapshotsSummary,
-  listSnapshotsForCampsite,
-  listSnapshotsForRun,
+  getChangesSummary,
+  listChangesForCampsite,
+  listChangesForPoi,
 } from '/web/api/availability-dashboard-api.js';
 import { availabilityStatusLabel } from '/web/utils/availability-status.js';
 
@@ -14,7 +14,8 @@ export async function mount(rootEl, { urlParams }) {
       <h2>Filter</h2>
       <form id="snap-filter" class="filters">
         <label>Campsite ID <input name="campsite_id" inputmode="numeric"></label>
-        <label>Run ID <input name="run_id" inputmode="numeric"></label>
+        <label>POI ID <input name="poi_id" inputmode="numeric"></label>
+        <label>Target Date <input name="target_date" type="date"></label>
         <div class="actions">
           <button class="primary" type="submit">Apply</button>
           <button type="reset">Reset</button>
@@ -26,7 +27,7 @@ export async function mount(rootEl, { urlParams }) {
       <div id="snap-stats"></div>
     </section>
     <section class="panel" aria-live="polite">
-      <div id="snap-status" class="status">Set a Campsite ID or Run ID to load snapshots.</div>
+      <div id="snap-status" class="status">Set a Campsite ID or POI ID to load changes.</div>
       <div id="snap-results"></div>
     </section>
   `;
@@ -38,7 +39,8 @@ export async function mount(rootEl, { urlParams }) {
   const statsEl = rootEl.querySelector('#snap-stats');
 
   if (urlParams.campsite_id) filterForm.querySelector('[name=campsite_id]').value = urlParams.campsite_id;
-  if (urlParams.run_id) filterForm.querySelector('[name=run_id]').value = urlParams.run_id;
+  if (urlParams.poi_id) filterForm.querySelector('[name=poi_id]').value = urlParams.poi_id;
+  if (urlParams.target_date) filterForm.querySelector('[name=target_date]').value = urlParams.target_date;
 
   filterForm.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -46,16 +48,17 @@ export async function mount(rootEl, { urlParams }) {
   });
   filterForm.addEventListener('reset', () => setTimeout(refresh, 0));
 
-  if (urlParams.campsite_id || urlParams.run_id) {
+  if (urlParams.campsite_id || urlParams.poi_id) {
     await refresh();
   }
 
   async function refresh() {
     const fd = new FormData(filterForm);
     const campsiteId = (fd.get('campsite_id') || '').trim();
-    const runId = (fd.get('run_id') || '').trim();
-    if (!campsiteId === !runId) {
-      statusEl.textContent = 'Set exactly one of Campsite ID or Run ID.';
+    const poiId = (fd.get('poi_id') || '').trim();
+    const targetDate = (fd.get('target_date') || '').trim();
+    if (!campsiteId === !poiId) {
+      statusEl.textContent = 'Set exactly one of Campsite ID or POI ID.';
       resultsEl.innerHTML = '';
       hideStats();
       return;
@@ -63,10 +66,10 @@ export async function mount(rootEl, { urlParams }) {
     statusEl.textContent = 'Loading…';
     try {
       const data = campsiteId
-        ? await listSnapshotsForCampsite(campsiteId)
-        : await listSnapshotsForRun(runId);
-      statusEl.textContent = `${data.snapshots.length} snapshot${data.snapshots.length === 1 ? '' : 's'}.`;
-      render(data.snapshots);
+        ? await listChangesForCampsite(campsiteId, { targetDate: targetDate || undefined })
+        : await listChangesForPoi(poiId, { targetDate: targetDate || undefined });
+      statusEl.textContent = `${data.changes.length} change${data.changes.length === 1 ? '' : 's'}.`;
+      render(data.changes);
       if (campsiteId) {
         await refreshStats(campsiteId);
       } else {
@@ -79,19 +82,19 @@ export async function mount(rootEl, { urlParams }) {
     }
   }
 
-  function render(snaps) {
-    if (snaps.length === 0) {
-      resultsEl.innerHTML = '<div class="empty">No snapshots.</div>';
+  function render(changes) {
+    if (changes.length === 0) {
+      resultsEl.innerHTML = '<div class="empty">No changes.</div>';
       return;
     }
     resultsEl.innerHTML = `
       <table class="data-table">
         <thead><tr>
-          <th>run</th><th>target date</th>
+          <th>campsite</th><th>target date</th>
           <th>since</th><th>observed</th><th>status</th><th>available</th>
         </tr></thead>
         <tbody>
-          ${snaps.map(renderRow).join('')}
+          ${changes.map(renderRow).join('')}
         </tbody>
       </table>
     `;
@@ -100,7 +103,7 @@ export async function mount(rootEl, { urlParams }) {
   function renderRow(s) {
     return `
       <tr>
-        <td>${s.run_id != null ? `#${escapeHtml(s.run_id)}` : '—'}</td>
+        <td>${s.campsite_id != null ? `#${escapeHtml(s.campsite_id)}` : '—'}</td>
         <td>${escapeHtml(s.target_date)}</td>
         <td>${s.observed_from ? escapeHtml(formatTimestamp(s.observed_from)) : '—'}</td>
         <td>${escapeHtml(formatTimestamp(s.observed_at))}</td>
@@ -112,7 +115,7 @@ export async function mount(rootEl, { urlParams }) {
 
   async function refreshStats(campsiteId) {
     try {
-      const data = await getSnapshotsSummary(campsiteId);
+      const data = await getChangesSummary(campsiteId);
       if (data.stats.length === 0) {
         hideStats();
         return;

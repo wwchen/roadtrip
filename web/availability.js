@@ -1,11 +1,11 @@
 import { mount as mountPollers } from '/web/components/availability/pollers-tab.js';
 import { mount as mountRuns } from '/web/components/availability/runs-tab.js';
-import { mount as mountSnapshots } from '/web/components/availability/snapshots-tab.js';
+import { mount as mountChanges } from '/web/components/availability/snapshots-tab.js';
 
 const TABS = {
   pollers: mountPollers,
   runs: mountRuns,
-  snapshots: mountSnapshots,
+  changes: mountChanges,
 };
 
 const tabRoot = document.getElementById('tab-root');

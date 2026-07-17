@@ -1,4 +1,4 @@
-// Client for /api/availability/pollers|runs|snapshots GETs, plus the
+// Client for /api/availability/pollers|runs|changes GETs, plus the
 // "check now" force-pull POST.
 
 import { jsonGetOk, jsonPost } from './http.js';
@@ -43,20 +43,22 @@ export function listRuns({ status, pollerId, since, limit, signal } = {}) {
   return jsonGetOk(`/api/availability/runs${suffix}`, { signal });
 }
 
-export function listSnapshotsForCampsite(campsiteId, { limit, signal } = {}) {
+export function listChangesForCampsite(campsiteId, { targetDate, limit, signal } = {}) {
   const qs = new URLSearchParams({ campsite_id: String(campsiteId) });
+  if (targetDate) qs.set('target_date', targetDate);
   if (limit != null) qs.set('limit', limit);
-  return jsonGetOk(`/api/availability/snapshots?${qs}`, { signal });
+  return jsonGetOk(`/api/availability/changes?${qs}`, { signal });
 }
 
-export function listSnapshotsForRun(runId, { limit, signal } = {}) {
-  const qs = new URLSearchParams({ run_id: String(runId) });
+export function listChangesForPoi(poiId, { targetDate, limit, signal } = {}) {
+  const qs = new URLSearchParams({ poi_id: String(poiId) });
+  if (targetDate) qs.set('target_date', targetDate);
   if (limit != null) qs.set('limit', limit);
-  return jsonGetOk(`/api/availability/snapshots?${qs}`, { signal });
+  return jsonGetOk(`/api/availability/changes?${qs}`, { signal });
 }
 
-export function getSnapshotsSummary(campsiteId, { dates, signal } = {}) {
+export function getChangesSummary(campsiteId, { dates, signal } = {}) {
   const qs = new URLSearchParams({ campsite_id: String(campsiteId) });
   if (Array.isArray(dates) && dates.length > 0) qs.set('dates', dates.join(','));
-  return jsonGetOk(`/api/availability/snapshots/summary?${qs}`, { signal });
+  return jsonGetOk(`/api/availability/changes/summary?${qs}`, { signal });
 }

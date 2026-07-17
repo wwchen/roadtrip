@@ -249,15 +249,44 @@ class AvailabilityRepo(
 
     fun listForCampsite(
         campsiteId: Long,
+        targetDate: LocalDate? = null,
         limit: Int = 200,
-    ): List<StatusRun> =
-        ctx
-            .resultQuery(
-                "SELECT * FROM ($statusRunSelect) t WHERE campsite_id = ? " +
-                    "ORDER BY target_date DESC, last_observed_at DESC LIMIT ?",
-                campsiteId,
-                limit.coerceIn(1, 1000),
-            ).fetch { mapStatusRun(it) }
+    ): List<StatusRun> {
+        val dateClause = if (targetDate != null) " AND target_date = ?" else ""
+        val sql =
+            "SELECT * FROM ($statusRunSelect) t WHERE campsite_id = ?" +
+                "$dateClause ORDER BY target_date DESC, last_observed_at DESC LIMIT ?"
+        return if (targetDate != null) {
+            ctx
+                .resultQuery(sql, campsiteId, targetDate, limit.coerceIn(1, 1000))
+                .fetch { mapStatusRun(it) }
+        } else {
+            ctx
+                .resultQuery(sql, campsiteId, limit.coerceIn(1, 1000))
+                .fetch { mapStatusRun(it) }
+        }
+    }
+
+    fun listForCampsites(
+        campsiteIds: List<Long>,
+        targetDate: LocalDate? = null,
+        limit: Int = 500,
+    ): List<StatusRun> {
+        if (campsiteIds.isEmpty()) return emptyList()
+        val dateClause = if (targetDate != null) " AND target_date = ?" else ""
+        val sql =
+            "SELECT * FROM ($statusRunSelect) t WHERE campsite_id = ANY(?::bigint[])" +
+                "$dateClause ORDER BY target_date DESC, last_observed_at DESC LIMIT ?"
+        return if (targetDate != null) {
+            ctx
+                .resultQuery(sql, campsiteIds.toTypedArray(), targetDate, limit.coerceIn(1, 1000))
+                .fetch { mapStatusRun(it) }
+        } else {
+            ctx
+                .resultQuery(sql, campsiteIds.toTypedArray(), limit.coerceIn(1, 1000))
+                .fetch { mapStatusRun(it) }
+        }
+    }
 
     // Dates observed in the availability window for a campsite, plus any date
     // >= today (so the summary still surfaces upcoming cells whose last

@@ -1,13 +1,13 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.model.api.AvailabilityChangeSchema
+import ca.floo.roadtrip.model.api.AvailabilityChangesListResponse
 import ca.floo.roadtrip.model.api.AvailabilityPollerSchema
 import ca.floo.roadtrip.model.api.AvailabilityPollersListResponse
 import ca.floo.roadtrip.model.api.AvailabilityPollersSummary
 import ca.floo.roadtrip.model.api.AvailabilityRunSchema
 import ca.floo.roadtrip.model.api.AvailabilityRunsListResponse
-import ca.floo.roadtrip.model.api.AvailabilitySnapshotSchema
 import ca.floo.roadtrip.model.api.AvailabilitySnapshotStatsSchema
-import ca.floo.roadtrip.model.api.AvailabilitySnapshotsListResponse
 import ca.floo.roadtrip.model.api.AvailabilitySnapshotsSummaryResponse
 import ca.floo.roadtrip.model.api.CheckNowCooldownDto
 import ca.floo.roadtrip.model.api.CheckNowResponseDto
@@ -115,15 +115,16 @@ internal class AvailabilityDashboardController(
             runs = runs.listSince(since = since, status = status, pollerId = pollerId, limit = limit).map { it.toSchema() },
         )
 
-    fun listSnapshots(
+    fun listChanges(
         campsiteId: Long?,
-        runId: Long?,
+        poiId: Long?,
+        targetDate: LocalDate?,
         limit: Int,
-    ): AvailabilityDashboardResult<AvailabilitySnapshotsListResponse> {
-        if ((campsiteId == null) == (runId == null)) {
+    ): AvailabilityDashboardResult<AvailabilityChangesListResponse> {
+        if ((campsiteId == null) == (poiId == null)) {
             return AvailabilityDashboardResult.Invalid(
                 "invalid_filter",
-                "exactly one of campsite_id or run_id must be set",
+                "exactly one of campsite_id or poi_id must be set",
             )
         }
         val rows =
@@ -133,12 +134,23 @@ internal class AvailabilityDashboardController(
                         "campsite_not_found",
                         "no campsite with id $campsiteId",
                     )
-                availability.listForCampsite(campsiteId, limit = limit)
+                availability.listForCampsite(campsiteId, targetDate = targetDate, limit = limit)
             } else {
-                availability.listForRun(runId!!, limit = limit)
+                val poiCampsites = campsites.findByPoi(poiId!!)
+                if (poiCampsites.isEmpty()) {
+                    return AvailabilityDashboardResult.NotFound(
+                        "poi_not_found",
+                        "no campsites for poi $poiId",
+                    )
+                }
+                availability.listForCampsites(
+                    campsiteIds = poiCampsites.map { it.id },
+                    targetDate = targetDate,
+                    limit = limit,
+                )
             }
         return AvailabilityDashboardResult.Ok(
-            AvailabilitySnapshotsListResponse(snapshots = rows.map { it.toSchema() }),
+            AvailabilityChangesListResponse(changes = rows.map { it.toSchema() }),
         )
     }
 
@@ -203,10 +215,9 @@ private fun AvailabilityRunRepo.Run.toSchema(): AvailabilityRunSchema =
         completedAt = completedAt?.toString(),
     )
 
-private fun AvailabilityRepo.StatusRun.toSchema(): AvailabilitySnapshotSchema =
-    AvailabilitySnapshotSchema(
+private fun AvailabilityRepo.StatusRun.toSchema(): AvailabilityChangeSchema =
+    AvailabilityChangeSchema(
         campsiteId = campsiteId,
-        runId = runId,
         targetDate = targetDate.toString(),
         observedFrom = observedFrom?.toString(),
         observedAt = lastObservedAt.toString(),
