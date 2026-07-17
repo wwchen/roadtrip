@@ -112,7 +112,7 @@ services:
       - ./web:/app/static/web:ro
       - ./data:/app/static/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8765/api/health >/dev/null"]
+      test: ["CMD", "java", "-Xmx32m", "-cp", "/app/app.jar", "ca.floo.roadtrip.HealthProbe"]
       interval: 5s
       timeout: 3s
       retries: 20

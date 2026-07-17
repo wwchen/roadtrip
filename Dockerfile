@@ -6,13 +6,8 @@ WORKDIR /app
 
 ARG OTEL_JAVAAGENT_VERSION=2.29.0
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN curl -fsSL \
-        "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_JAVAAGENT_VERSION}/opentelemetry-javaagent.jar" \
-        -o /app/opentelemetry-javaagent.jar
+ADD "https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/download/v${OTEL_JAVAAGENT_VERSION}/opentelemetry-javaagent.jar" \
+    /app/opentelemetry-javaagent.jar
 
 ENV JAVA_OPTS="-Xmx3g -XX:+UseG1GC -javaagent:/app/opentelemetry-javaagent.jar"
 ENV OTEL_TRACES_EXPORTER=none
