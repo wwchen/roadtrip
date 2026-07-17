@@ -1,6 +1,9 @@
 package ca.floo.roadtrip.di
 
 import ca.floo.roadtrip.config.AppConfig
+import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.AvailabilityRepo
+import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.route.api.admin.adminIngestRoutes
@@ -17,6 +20,7 @@ import ca.floo.roadtrip.route.api.slack.slackInteractivityRoute
 import ca.floo.roadtrip.route.static.staticSiteRoutes
 import ca.floo.roadtrip.route.test.testEmailRoutes
 import ca.floo.roadtrip.route.test.testSlackRoutes
+import ca.floo.roadtrip.service.availability.AvailabilityDashboardController
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchController
@@ -40,6 +44,7 @@ import org.koin.core.qualifier.named
 import org.koin.ktor.ext.getKoin
 import org.koin.ktor.ext.inject
 import java.io.File
+import java.time.Duration
 
 internal fun Application.registerKoinRoutes() {
     val ctx: DSLContext by inject()
@@ -76,8 +81,7 @@ internal fun Application.registerKoinRoutes() {
             slackInteractivityRoute(wiring.verifier, wiring.handler, schedulerScope)
         }
         availabilityDashboardRoutes(
-            ctx = ctx,
-            forcePullCooldown = config.availability.forcePullCooldown,
+            availabilityDashboardController(ctx, config.availability.forcePullCooldown),
         )
         poisOnRouteRoutes(poisOnRouteService)
         routeRoutes(routeCache, routeCorridorService)
@@ -89,6 +93,18 @@ internal fun Application.registerKoinRoutes() {
         staticSiteRoutes(staticDir)
     }
 }
+
+private fun availabilityDashboardController(
+    ctx: DSLContext,
+    forcePullCooldown: Duration,
+): AvailabilityDashboardController =
+    AvailabilityDashboardController(
+        pollers = AvailabilityPollerRepo(ctx),
+        runs = AvailabilityRunRepo(ctx),
+        availability = AvailabilityRepo(ctx),
+        campsites = CampsiteRepo(ctx),
+        forcePullCooldown = forcePullCooldown,
+    )
 
 private fun availabilityWatchController(
     ctx: DSLContext,
