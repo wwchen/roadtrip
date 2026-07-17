@@ -244,6 +244,25 @@ before import.
 4. **Pricing cache** persists in `$HOME/.roadtrip-map/pricing-cache`
    (override with `CACHE_DIR=…` in `.env`).
 
+### Adding GitHub-backed deploy secrets
+
+Use the helper when adding a new secret runtime env var. It updates
+`.env.example`, adds the workflow mapping that can sync the deploy host's
+`.env`, and prints the matching `gh secret set` command:
+
+```sh
+scripts/add-secret-env.sh NEW_API_KEY --comment "Used by the backend Foo client."
+gh secret set NEW_API_KEY
+# or, when NEW_API_KEY is already set in your shell:
+gh secret set NEW_API_KEY --body "$NEW_API_KEY"
+```
+
+To let Deploy write the production `.env` from GitHub secrets, set the repo
+variable `SYNC_DEPLOY_ENV_FROM_GITHUB=true`. Leave it unset to keep using the
+deploy host's checked-out `.env` file. For environment-scoped secrets, also set
+`environment: production` on the deploy job and run the helper with
+`--github-env production`.
+
 ### Heads up: pricing cookies are IP-bound
 
 Tesla's `_abck` cookie is pinned to the IP that received it. Cookies pasted
