@@ -683,7 +683,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `POST modify rejects an empty targets array`() =
+    fun `POST modify rejects targets as immutable`() =
         testApplication {
             application {
                 routing {
@@ -717,11 +717,11 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("invalid_scope", obj["error"]!!.jsonPrimitive.content)
+            assertEquals("immutable_field", obj["error"]!!.jsonPrimitive.content)
         }
 
     @Test
-    fun `POST modify rejects a target with both poi_id and campsite_id set`() =
+    fun `POST modify rejects dates as immutable`() =
         testApplication {
             application {
                 routing {
@@ -732,8 +732,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
             }
             val poiId = seedPoi(sourceId = "p-patch-bad-target", name = "Patch Bad Target")
-            val campsiteId = seedCampsite("patch-bad-target-1")
-            linkCampsiteToPoi(campsiteId, poiId)
             val body =
                 """
                 {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
@@ -753,15 +751,15 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             val resp =
                 client.post(modifyWatchPath(id)) {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"targets": [{"poi_id": $poiId, "campsite_id": $campsiteId}]}""")
+                    setBody("""{"start_date": "2026-08-01", "end_date": "2026-08-02"}""")
                 }
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("invalid_scope", obj["error"]!!.jsonPrimitive.content)
+            assertEquals("immutable_field", obj["error"]!!.jsonPrimitive.content)
         }
 
     @Test
-    fun `POST modify with a valid single-target targets array updates the watch`() =
+    fun `POST modify allows updating trigger config without targets or dates`() =
         testApplication {
             application {
                 routing {
@@ -771,11 +769,10 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     )
                 }
             }
-            val poiA = seedPoi(sourceId = "p-patch-targets-a", name = "Patch Targets A")
-            val poiB = seedPoi(sourceId = "p-patch-targets-b", name = "Patch Targets B")
+            val poiId = seedPoi(sourceId = "p-patch-targets-a", name = "Patch Targets A")
             val body =
                 """
-                {"poi_id": $poiA, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
                 client.post(WATCHES_PATH) {
@@ -792,13 +789,11 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             val resp =
                 client.post(modifyWatchPath(id)) {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"targets": [{"poi_id": $poiB}]}""")
+                    setBody("""{"trigger_kinds": ["slack_notify"], "stop_when_triggered": false}""")
                 }
             assertEquals(HttpStatusCode.OK, resp.status)
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
-            val targets = obj["targets"]!!.jsonArray
-            assertEquals(1, targets.size)
-            assertEquals(poiB, targets[0].jsonObject["poi_id"]!!.jsonPrimitive.long)
+            assertEquals(false, obj["stop_when_triggered"]!!.jsonPrimitive.boolean)
         }
 
     @Test

@@ -108,10 +108,21 @@ object SlackContentAvailabilityRenderer {
                 )
             }
 
+        val modifyButton: SlackButtonSpec? =
+            appRootUrl?.let { root ->
+                SlackButtonSpec(
+                    label = "✏️ Modify",
+                    actionId = SlackWatchCard.ACTION_OPEN_WATCHES,
+                    url = "$root/watches?action=modify&id=$watchId",
+                    value = watchId.toString(),
+                )
+            }
+
         val buttons =
             buildList {
                 reserveButton?.let { add(it) }
                 gridButton?.let { add(it) }
+                modifyButton?.let { add(it) }
                 add(
                     SlackButtonSpec(
                         label = "⏸ Pause",

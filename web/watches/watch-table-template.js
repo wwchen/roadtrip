@@ -58,7 +58,8 @@ export function actionsCellHtml(watch) {
   if (watch.status === 'done') {
     const glyph = doneKind(watch) === 'expired' ? '⌛' : '✅';
     const title = glyph === '⌛' ? 'Expired' : 'Found';
-    return `<span class="rt-watch-table-actions"><span title="${title}">${glyph}</span></span>`;
+    const deleteHost = `<span data-delete-host data-watch-id="${watch.id}"></span>`;
+    return `<span class="rt-watch-table-actions"><span title="${title}">${glyph}</span>${deleteHost}</span>`;
   }
   const toggleBtn = watch.status === 'paused'
     ? `<button type="button" class="rt-watch-table-act" data-act="resume" data-id="${watch.id}" title="Resume" aria-label="Resume">▶</button>`

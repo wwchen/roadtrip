@@ -251,6 +251,7 @@ internal class WatchAlertDispatcher(
             endDate = watch.endDate,
             dashboardUrl = grafanaRootUrl?.let { "$it/d/$WATCH_DASHBOARD_UID?var-watch_id=${watch.id}" },
             poiLinks = poiLinks(poiIds),
+            appRootUrl = appRootUrl,
         )
     }
 

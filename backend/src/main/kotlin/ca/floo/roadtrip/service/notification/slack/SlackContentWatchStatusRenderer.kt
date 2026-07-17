@@ -103,10 +103,10 @@ object SlackContentWatchStatusRenderer {
         }
 
     /** The applicable action buttons for the state. Live watches offer Pause +
-     *  Delete; paused ones offer a green Resume + Delete; done watches offer
-     *  Delete; a just-stopped card is terminal (no buttons). Grid / map deep-
-     *  links per POI slot in ahead of the mutation buttons when their host is
-     *  configured. */
+     *  Modify + Delete; paused ones offer Resume + Modify + Delete; done watches
+     *  offer Delete; a just-stopped card is terminal (no buttons). Grid / map
+     *  deep-links per POI slot in ahead of the mutation buttons when their host
+     *  is configured. */
     private fun buttons(notice: WatchStatusNotice): List<SlackButtonSpec> {
         if (notice.state == WatchStatusNotice.State.STOPPED) return emptyList()
         val out = mutableListOf<SlackButtonSpec>()
@@ -158,6 +158,19 @@ object SlackContentWatchStatusRenderer {
                     url = it,
                     value = notice.watchId.toString(),
                 )
+        }
+        // Modify button — links to the /watches page with the watch pre-loaded
+        // for editing. Available on all live states (not DONE/STOPPED).
+        if (notice.state != WatchStatusNotice.State.DONE) {
+            notice.appRootUrl?.let { root ->
+                out +=
+                    SlackButtonSpec(
+                        label = "✏️ Modify",
+                        actionId = SlackWatchCard.ACTION_OPEN_WATCHES,
+                        url = "$root/watches?action=modify&id=${notice.watchId}",
+                        value = notice.watchId.toString(),
+                    )
+            }
         }
         // Match the openings alert's muscle memory: navigation first, the
         // Pause/Resume state action next, and Delete last. That keeps the

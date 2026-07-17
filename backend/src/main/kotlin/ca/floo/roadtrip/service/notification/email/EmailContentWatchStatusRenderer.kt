@@ -104,6 +104,14 @@ internal object EmailContentWatchStatusRenderer {
 
     private fun linksFor(notice: WatchStatusNotice): List<Link> =
         buildList {
+            notice.appRootUrl?.let { root ->
+                if (notice.state == WatchStatusNotice.State.PAUSED) {
+                    add(Link("Resume watch", "$root/watches?action=modify&id=${notice.watchId}"))
+                }
+                if (notice.state != WatchStatusNotice.State.DONE && notice.state != WatchStatusNotice.State.STOPPED) {
+                    add(Link("Modify watch", "$root/watches?action=modify&id=${notice.watchId}"))
+                }
+            }
             notice.dashboardUrl?.let { add(Link("Watch dashboard", it)) }
             notice.poiLinks.forEach { poi ->
                 poi.mapUrl?.let { add(Link("Map ${poi.poiId}", it)) }

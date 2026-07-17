@@ -6,6 +6,7 @@ import {
   TRIGGER_KIND_EMAIL_NOTIFY,
   watchHasTrigger,
   watchEmailTo,
+  watchSlackChannel,
   watchStopWhenTriggered,
 } from '../availability/watch-editor.js';
 
@@ -37,7 +38,7 @@ export function mountWatchForm(container, config) {
       name: 'poi_id',
       placeholder: 'e.g. 42',
       value: watch?.poi_id != null ? String(watch.poi_id) : '',
-      disabled: loading,
+      disabled: loading || mode === 'edit',
     });
     children.push(poiField);
 
@@ -46,7 +47,7 @@ export function mountWatchForm(container, config) {
       name: 'start_date',
       type: 'date',
       value: watch?.start_date || '',
-      disabled: loading,
+      disabled: loading || mode === 'edit',
     });
     children.push(startField);
 
@@ -55,12 +56,13 @@ export function mountWatchForm(container, config) {
       name: 'end_date',
       type: 'date',
       value: watch?.end_date || '',
-      disabled: loading,
+      disabled: loading || mode === 'edit',
     });
     children.push(endField);
 
     const triggerSelector = mountTriggerSelector(triggerHost, {
       slackEnabled: watch ? watchHasTrigger(watch, TRIGGER_KIND_SLACK_NOTIFY) : true,
+      slackChannel: watch ? watchSlackChannel(watch) : '',
       emailEnabled: watch ? watchHasTrigger(watch, TRIGGER_KIND_EMAIL_NOTIFY) : false,
       emailTo: watch ? watchEmailTo(watch) : '',
       stopWhenTriggered: watchStopWhenTriggered(watch, true),
@@ -72,7 +74,11 @@ export function mountWatchForm(container, config) {
       const triggerState = triggerSelector.getState();
       const triggerKinds = [];
       const triggerConfig = {};
-      if (triggerState.slackEnabled) triggerKinds.push(TRIGGER_KIND_SLACK_NOTIFY);
+      if (triggerState.slackEnabled) {
+        triggerKinds.push(TRIGGER_KIND_SLACK_NOTIFY);
+        const channel = (triggerState.slackChannel || '').trim();
+        if (channel) triggerConfig[TRIGGER_KIND_SLACK_NOTIFY] = { channel };
+      }
       if (triggerState.emailEnabled) {
         triggerKinds.push(TRIGGER_KIND_EMAIL_NOTIFY);
         const to = triggerState.emailTo.trim();

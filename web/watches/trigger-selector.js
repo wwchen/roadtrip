@@ -4,6 +4,7 @@ import { mountFormSection } from '../design-system/form-section.js';
 export function mountTriggerSelector(container, config) {
   let state = {
     slackEnabled: config.slackEnabled ?? true,
+    slackChannel: config.slackChannel || '',
     emailEnabled: config.emailEnabled ?? false,
     emailTo: config.emailTo || '',
     stopWhenTriggered: config.stopWhenTriggered ?? true,
@@ -16,10 +17,12 @@ export function mountTriggerSelector(container, config) {
     children.length = 0;
 
     const slackHost = document.createElement('div');
+    const slackFieldHost = document.createElement('div');
     const emailHost = document.createElement('div');
     const emailFieldHost = document.createElement('div');
     const stopHost = document.createElement('div');
     container.appendChild(slackHost);
+    container.appendChild(slackFieldHost);
     container.appendChild(emailHost);
     container.appendChild(emailFieldHost);
     container.appendChild(stopHost);
@@ -33,8 +36,27 @@ export function mountTriggerSelector(container, config) {
       onChange(checked) {
         state = { ...state, slackEnabled: checked };
         config.onChange?.(state);
+        render();
       },
     }));
+
+    if (state.slackEnabled) {
+      const channelInput = mountFormSection(slackFieldHost, {
+        label: 'Channel',
+        name: 'slack_channel',
+        type: 'text',
+        placeholder: '#alerts',
+        value: state.slackChannel,
+        disabled: config.disabled,
+      });
+      slackFieldHost.addEventListener('input', (e) => {
+        if (e.target.name === 'slack_channel') {
+          state = { ...state, slackChannel: e.target.value };
+          config.onChange?.(state);
+        }
+      });
+      children.push(channelInput);
+    }
 
     children.push(mountToggleSwitch(emailHost, {
       name: 'email_notify',
@@ -86,6 +108,7 @@ export function mountTriggerSelector(container, config) {
     getState() { return { ...state }; },
     update(newConfig) {
       if (newConfig.slackEnabled != null) state.slackEnabled = newConfig.slackEnabled;
+      if (newConfig.slackChannel != null) state.slackChannel = newConfig.slackChannel;
       if (newConfig.emailEnabled != null) state.emailEnabled = newConfig.emailEnabled;
       if (newConfig.emailTo != null) state.emailTo = newConfig.emailTo;
       if (newConfig.stopWhenTriggered != null) state.stopWhenTriggered = newConfig.stopWhenTriggered;

@@ -39,12 +39,14 @@ internal object EmailContentAvailabilityRenderer {
                 }
             }
         val watchUrl = appRootUrl?.let { "${it.trimEnd('/')}/availability?watch=$watchId" }
+        val modifyUrl = appRootUrl?.let { "${it.trimEnd('/')}/watches?action=modify&id=$watchId" }
         val window = "${startDate.format(DATE_FORMATTER)}-${endDate.format(DATE_FORMATTER)}"
         val text =
             buildString {
                 appendLine("Sites available for watch #$watchId")
                 appendLine("Window: $window")
                 watchUrl?.let { appendLine("Watch: $it") }
+                modifyUrl?.let { appendLine("Modify: $it") }
                 appendLine()
                 openings.forEachIndexed { index, opening ->
                     appendLine("${index + 1}. ${opening.label}")
@@ -56,7 +58,7 @@ internal object EmailContentAvailabilityRenderer {
                     appendLine()
                 }
             }.trimEnd()
-        val html = renderHtml(watchId = watchId, window = window, watchUrl = watchUrl, openings = openings)
+        val html = renderHtml(watchId = watchId, window = window, watchUrl = watchUrl, modifyUrl = modifyUrl, openings = openings)
         return EmailContent(subject = subject, text = text, html = html)
     }
 
@@ -64,6 +66,7 @@ internal object EmailContentAvailabilityRenderer {
         watchId: Long,
         window: String,
         watchUrl: String?,
+        modifyUrl: String?,
         openings: List<WatchOpening>,
     ): String =
         createHTML().div {
@@ -74,6 +77,10 @@ internal object EmailContentAvailabilityRenderer {
                 watchUrl?.let {
                     br()
                     a(href = it) { +"Open watch" }
+                }
+                modifyUrl?.let {
+                    +" · "
+                    a(href = it) { +"Modify watch" }
                 }
             }
             ol {

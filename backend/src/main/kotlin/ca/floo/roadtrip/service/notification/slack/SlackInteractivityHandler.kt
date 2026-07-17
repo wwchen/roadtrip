@@ -87,6 +87,7 @@ internal class SlackInteractivityHandler(
             SlackWatchCard.ACTION_OPEN_GRID,
             SlackWatchCard.ACTION_OPEN_MAP,
             SlackWatchCard.ACTION_OPEN_DASHBOARD,
+            SlackWatchCard.ACTION_OPEN_WATCHES,
             -> log.info("Slack interactivity handler: URL button {} — silent ack (redirect happened client-side)", action.actionId)
             else -> log.warn("Slack interactivity handler: unknown action_id={}, dropping", action.actionId)
         }
