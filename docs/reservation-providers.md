@@ -426,7 +426,7 @@ week pages                         ↓
   ↓                                  ↓ (match)
 "Set watch" click                  notify (Slack / email / push)
   ↓                                  ↓
-POST /api/availability/watches     record availability status-runs
+POST /api/watches                  record availability status-runs
                                                                    list watches, pause,
                                                                    per-watch history,
                                                                    tune notification
