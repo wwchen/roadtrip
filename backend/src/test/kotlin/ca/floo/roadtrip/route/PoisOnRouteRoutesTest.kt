@@ -26,7 +26,6 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
-import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -81,7 +80,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                 ),
             )
             val routeCache = primedRoute()
-            application { routing { poisOnRouteRoutes(poisOnRouteService(routeCache)) } }
+            application { routeTestApplication { poisOnRouteRoutes(poisOnRouteService(routeCache)) } }
 
             val resp =
                 client.post("/api/pois/on-route") {
@@ -112,7 +111,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                 ),
             )
             val routeCache = primedRoute()
-            application { routing { poisOnRouteRoutes(poisOnRouteService(routeCache)) } }
+            application { routeTestApplication { poisOnRouteRoutes(poisOnRouteService(routeCache)) } }
 
             val resp =
                 client.post("/api/pois/on-route") {
@@ -166,7 +165,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                 ),
             )
             val routeCache = primedRoute()
-            application { routing { poisOnRouteRoutes(poisOnRouteService(routeCache)) } }
+            application { routeTestApplication { poisOnRouteRoutes(poisOnRouteService(routeCache)) } }
 
             val resp =
                 client.post("/api/pois/on-route") {
@@ -192,7 +191,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     fun `route endpoint can include buffered corridor polygon`() =
         testApplication {
             val routeCache = primedRoute(token = "test-token")
-            application { routing { routeRoutes(routeCache, routeCorridorService()) } }
+            application { routeTestApplication { routeRoutes(routeCache, routeCorridorService()) } }
 
             val resp = client.get("/api/route?coords=-123.1,49.28%3B-122.33,47.61&radius_miles=5")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -221,7 +220,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     fun `route endpoint returns structured json error for bad quoted coords`() =
         testApplication {
             val routeCache = primedRoute(token = "test-token")
-            application { routing { routeRoutes(routeCache, routeCorridorService()) } }
+            application { routeTestApplication { routeRoutes(routeCache, routeCorridorService()) } }
 
             val resp = client.get("/api/route?coords=-123.1,49.28%3Bbad%22point")
 
@@ -239,7 +238,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
         testApplication {
             seed(listOf(row("far-east", -100.0, 40.0, "campground")))
             val routeCache = primedRoute()
-            application { routing { poisOnRouteRoutes(poisOnRouteService(routeCache)) } }
+            application { routeTestApplication { poisOnRouteRoutes(poisOnRouteService(routeCache)) } }
 
             val resp =
                 client.post("/api/pois/on-route") {
@@ -257,7 +256,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     @Test
     fun `radius below MIN returns 400`() =
         testApplication {
-            application { routing { poisOnRouteRoutes(poisOnRouteService(primedRoute())) } }
+            application { routeTestApplication { poisOnRouteRoutes(poisOnRouteService(primedRoute())) } }
             val resp =
                 client.post("/api/pois/on-route") {
                     contentType(ContentType.Application.Json)
@@ -272,7 +271,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     @Test
     fun `radius above MAX returns 400`() =
         testApplication {
-            application { routing { poisOnRouteRoutes(poisOnRouteService(primedRoute())) } }
+            application { routeTestApplication { poisOnRouteRoutes(poisOnRouteService(primedRoute())) } }
             val resp =
                 client.post("/api/pois/on-route") {
                     contentType(ContentType.Application.Json)
@@ -287,7 +286,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
     @Test
     fun `single waypoint returns 400`() =
         testApplication {
-            application { routing { poisOnRouteRoutes(poisOnRouteService(primedRoute())) } }
+            application { routeTestApplication { poisOnRouteRoutes(poisOnRouteService(primedRoute())) } }
             val resp =
                 client.post("/api/pois/on-route") {
                     contentType(ContentType.Application.Json)
@@ -302,7 +301,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
             // Empty route cache + null Mapbox token → directions() throws,
             // handler should surface 503.
             application {
-                routing {
+                routeTestApplication {
                     poisOnRouteRoutes(poisOnRouteService(RouteCache(MapboxDirections(token = null))))
                 }
             }

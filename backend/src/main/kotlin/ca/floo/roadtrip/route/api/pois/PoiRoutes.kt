@@ -16,14 +16,13 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
-import io.ktor.server.request.receiveText
+import io.ktor.server.request.receive
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -57,10 +56,9 @@ internal fun Route.poiRoutes(poiService: PoiReader) {
     route("/api") {
         route("/pois") {
             post {
-                val bodyText = call.receiveText()
                 val req =
                     try {
-                        parseRequest(bodyText)
+                        parseRequest(call.receive<PoisRequestSchema>())
                     } catch (e: Exception) {
                         call.respondPoiError("bad_request", HttpStatusCode.BadRequest, e.message ?: "parse failed")
                         return@post
@@ -156,8 +154,7 @@ private data class PoiRequest(
     val categories: List<String>?,
 )
 
-private fun parseRequest(bodyText: String): PoiRequest {
-    val dto = poiRoutesJson.decodeFromString<PoisRequestSchema>(bodyText)
+private fun parseRequest(dto: PoisRequestSchema): PoiRequest {
     val nums = dto.bbox
     require(nums.size == 4) { "bbox must be [west,south,east,north]" }
     val (w, s, e, n) = nums

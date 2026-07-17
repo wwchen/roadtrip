@@ -22,7 +22,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
-import io.ktor.server.request.receiveText
+import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
@@ -84,10 +84,9 @@ internal fun Route.availabilityWatchRoutes(
             }.describeApi("availability", "List availability watches")
 
             post {
-                val raw = call.receiveText()
                 val req =
                     try {
-                        watchJson.decodeFromString<AvailabilityWatchCreateRequest>(raw)
+                        call.receive<AvailabilityWatchCreateRequest>()
                     } catch (e: Exception) {
                         return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, e.message)
                     }
@@ -136,10 +135,9 @@ internal fun Route.availabilityWatchRoutes(
                     val id =
                         call.longPath("id")
                             ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
-                    val raw = call.receiveText()
                     val req =
                         try {
-                            watchJson.decodeFromString<AvailabilityWatchUpdateRequest>(raw)
+                            call.receive<AvailabilityWatchUpdateRequest>()
                         } catch (e: Exception) {
                             return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, e.message)
                         }
