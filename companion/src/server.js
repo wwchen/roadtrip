@@ -454,8 +454,8 @@ function renderLoginPage ({ result = null } = {}) {
     <button id="refresh-session" class="secondary" type="button">Refresh session</button>
     <button id="health-json" class="secondary" type="button">Health JSON</button>
   </div>
-  <div id="diagnostic">${diagnosticHtml}</div>
   ${healthHtml}
+  <div id="diagnostic">${diagnosticHtml}</div>
   <div id="loading" class="loading" hidden>
     <div class="loading-card">
       <div class="spinner"></div>

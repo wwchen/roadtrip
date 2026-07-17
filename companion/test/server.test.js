@@ -166,6 +166,7 @@ test('POST /login HTML response renders a failed login diagnostic screenshot', a
   assert.match(response.text, /Last login screenshot/)
   assert.match(response.text, /Reason: login_error/)
   assert.match(response.text, /src="\/diagnostics\/recgov-login-error\.png"/)
+  assert.ok(response.text.indexOf('id="json-output"') < response.text.indexOf('Last login screenshot'))
 })
 
 test('POST /refresh force-refreshes the stored browser session without credentials', async () => {

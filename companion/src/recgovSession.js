@@ -32,6 +32,7 @@ const RECGOV_REFRESH_RETRY_DELAY_MS = 1_000
 const RECGOV_JWT_PAYLOAD_INDEX = 1
 const RECGOV_JWT_MIN_PARTS = 2
 const RECGOV_REFRESH_LOG_BODY_LIMIT = 200
+const LOGIN_SELECTOR_LOG_LIMIT = 120
 const MILLISECONDS_PER_SECOND = 1_000
 const MIN_LOGIN_TIMEOUT_MS = 1
 const LOGIN_FIELD_TIMEOUT_MS = 5_000
@@ -375,9 +376,17 @@ async function submitCredentialLoginForm (page, credentials) {
   if (!password) return { ok: false, reason: 'password_input_not_found' }
 
   const submit = await clickFirstVisible(page, LOGIN_SUBMIT_SELECTORS)
-  if (!submit && !(await pressEnterToSubmit(page))) return { ok: false, reason: 'submit_button_not_found' }
+  if (submit) {
+    console.log(`Cart: clicked Recreation.gov login submit selector="${truncateLogText(submit, LOGIN_SELECTOR_LOG_LIMIT)}"`)
+    return { ok: true }
+  }
 
-  return { ok: true }
+  if (await pressEnterToSubmit(page)) {
+    console.log('Cart: submitted Recreation.gov login form via Enter')
+    return { ok: true }
+  }
+
+  return { ok: false, reason: 'submit_button_not_found' }
 }
 
 async function submitMfaCodeIfPrompted (page, credentials, timeout = LOGIN_MFA_PROMPT_TIMEOUT_MS) {
@@ -564,6 +573,11 @@ function sanitizeDiagnosticReason (reason) {
     .replace(/[^a-z0-9_-]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, DIAGNOSTIC_REASON_MAX_CHARS) || 'unknown'
+}
+
+function truncateLogText (value, maxLength) {
+  const rendered = String(value || '').replace(/\s+/g, ' ').trim()
+  return rendered.length <= maxLength ? rendered : `${rendered.slice(0, maxLength)}...`
 }
 
 async function readRecaccountFromOpenPages (page) {
