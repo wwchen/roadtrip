@@ -35,6 +35,7 @@ internal class WatchTriggerCapabilityValidator(
         if (watch.status != WatchStatus.ACTIVE) return
         val requiresInternalPolling =
             AvailabilityTriggerKinds.SLACK_NOTIFY in watch.triggerKinds ||
+                AvailabilityTriggerKinds.EMAIL_NOTIFY in watch.triggerKinds ||
                 AvailabilityTriggerKinds.ATC in watch.triggerKinds
         if (!requiresInternalPolling) return
 

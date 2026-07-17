@@ -41,11 +41,11 @@
     <img id="session-screenshot" src="/screenshot?path=/" alt="Companion Playwright screenshot of Recreation.gov home page">
   </section>
   <div class="row">
-    <button id="toggle-login" class="toggle" type="button" aria-expanded="false" aria-controls="login-panel">Login</button>
-    <button id="toggle-atc" class="toggle" type="button" aria-expanded="false" aria-controls="atc-panel">ATC</button>
-    <button id="refresh-session" class="secondary" type="button">Refresh session</button>
     <button id="health-json" class="secondary" type="button">Health JSON</button>
-    <button id="logout-session" class="secondary" type="button">Log out</button>
+    <button id="toggle-atc" class="toggle secondary" type="button" aria-expanded="false" aria-controls="atc-panel">ATC</button>
+    <button id="refresh-session" class="secondary" type="button">Refresh session</button>
+    <button id="toggle-login" class="toggle" type="button" aria-expanded="false" aria-controls="login-panel">Log in</button>
+    <button id="logout-session" type="button">Log out</button>
   </div>
   <section id="login-panel" class="panel" hidden>
     <form id="login-form" method="post" action="/login">

@@ -1,9 +1,12 @@
-package ca.floo.roadtrip.service.notification
+package ca.floo.roadtrip.service.notification.slack
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.availability.WatchStatus
+import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
+
+private val blockActionsJson = Json { ignoreUnknownKeys = true }
 
 /**
  * Server-side dispatch for a Slack interactivity `block_actions` payload — the
@@ -11,7 +14,7 @@ import org.slf4j.LoggerFactory
  * ([ca.floo.roadtrip.routes.slackInteractivityRoute]) verifies the signature and
  * hands the parsed payload here; this handler applies the mutation (pause /
  * resume / delete) and re-renders the card in place through the
- * [SlackNotificationService.postResponseWatchStatus] one-shot URL.
+ * [SlackResponseSender.postResponseWatchStatus] one-shot URL.
  *
  * URL-button action ids (Reserve, Grid, Map, Dashboard) route to a silent
  * no-op: Slack still fires an interaction payload for them, but the redirect
@@ -27,7 +30,7 @@ import org.slf4j.LoggerFactory
  */
 internal class SlackInteractivityHandler(
     private val watches: Watches,
-    private val slack: SlackNotificationService,
+    private val slack: SlackResponseSender,
 ) {
     /** The two mutations + one snapshot the interactivity handler needs from
      *  the watch layer, wrapped in a port the composition root implements by
@@ -146,7 +149,7 @@ internal class SlackInteractivityHandler(
          * button-in-a-card shape our cards use.
          */
         fun parse(json: String): BlockActionsPayload? =
-            runCatching { Json { ignoreUnknownKeys = true }.decodeFromString(BlockActionsPayload.serializer(), json) }
+            runCatching { blockActionsJson.decodeFromString(BlockActionsPayload.serializer(), json) }
                 .getOrNull()
     }
 }

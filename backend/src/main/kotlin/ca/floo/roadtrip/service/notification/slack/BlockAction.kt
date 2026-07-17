@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.notification
+package ca.floo.roadtrip.service.notification.slack
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable

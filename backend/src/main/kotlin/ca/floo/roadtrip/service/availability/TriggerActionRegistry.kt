@@ -1,22 +1,29 @@
 package ca.floo.roadtrip.service.availability
 
 /**
- * Dispatch table matching a watch's `trigger_kinds` to their [TriggerActionHandler]s.
- * A kind with no registered handler resolves to `null` (inert). Composed once
- * at runtime startup.
+ * Dispatch table matching a watch's `trigger_kinds` to [TriggerActionHandler]s.
+ * A handler may cover multiple trigger kinds; [forKinds] de-duplicates handlers
+ * so an aggregate handler, such as notifications, fires once per watch alert.
  */
 internal class TriggerActionRegistry(
     handlers: List<TriggerActionHandler>,
 ) {
-    private val byKind: Map<String, TriggerActionHandler> = handlers.associateBy { it.kind }
+    private val byKind: Map<String, TriggerActionHandler> =
+        handlers
+            .flatMap { handler -> handler.kinds.map { kind -> kind to handler } }
+            .toMap()
 
     init {
-        require(handlers.size == byKind.size) {
+        val registeredKinds = handlers.flatMap { it.kinds }
+        require(registeredKinds.size == registeredKinds.toSet().size) {
             "duplicate handler kinds in TriggerActionRegistry: " +
-                handlers.groupBy { it.kind }.filterValues { it.size > 1 }.keys
+                registeredKinds.groupBy { it }.filterValues { it.size > 1 }.keys
         }
     }
 
-    /** `null` == inert for unknown/absent handlers. */
-    fun forKind(kind: String): TriggerActionHandler? = byKind[kind]
+    /** Unknown/absent kinds are inert; repeated handlers are returned once. */
+    fun forKinds(kinds: List<String>): List<TriggerActionHandler> =
+        kinds
+            .mapNotNull(byKind::get)
+            .distinct()
 }

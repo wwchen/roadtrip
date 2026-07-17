@@ -1,0 +1,13 @@
+roadtrip:
+  static-dir: /app/static
+  db:
+    url: "${POSTGRES_URL:jdbc:postgresql://postgres:5432/roadtrip}"
+    user: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+  booking:
+    recgov-atc:
+      companion-base-url: "http://recgov-companion:8770"
+  grafana:
+    root-url: "http://127.0.0.1:3000/dash/"
+  web:
+    root-url: "http://127.0.0.1:8765"

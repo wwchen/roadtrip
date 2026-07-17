@@ -81,13 +81,14 @@ repositories {
     mavenCentral()
 }
 
-val ktorVersion = "3.0.1"
+val ktorVersion = "3.5.1"
 val jooqVersion = "3.19.15"
 val postgresVersion = "42.7.4"
 val flywayVersion = "10.20.1"
 val testcontainersVersion = "1.21.4"
 val bucket4jVersion = "8.10.1"
 val timeshapeVersion = "2025b.26"
+val resendVersion = "4.13.0"
 val junitVersion = "5.11.3"
 val playwrightVersion = "1.50.0"
 
@@ -106,6 +107,7 @@ sourceSets {
 dependencies {
     implementation("io.ktor:ktor-server-core:$ktorVersion")
     implementation("io.ktor:ktor-server-netty:$ktorVersion")
+    implementation("io.ktor:ktor-server-config-yaml:$ktorVersion")
     implementation("io.ktor:ktor-server-content-negotiation:$ktorVersion")
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
     implementation("io.ktor:ktor-server-call-logging:$ktorVersion")
@@ -113,6 +115,7 @@ dependencies {
     implementation("io.ktor:ktor-server-compression:$ktorVersion")
     implementation("io.ktor:ktor-server-caching-headers:$ktorVersion")
     implementation("io.ktor:ktor-server-conditional-headers:$ktorVersion")
+    implementation("io.ktor:ktor-server-html-builder:$ktorVersion")
     // SSE for /api/campsite/events stream.
     implementation("io.ktor:ktor-server-sse:$ktorVersion")
     // HttpClient powers AvailabilityClient (rec.gov) and SlackNotifier in the
@@ -148,10 +151,12 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-slf4j:1.9.0")
-    // YAML reader for app config and the POI registry resource.
+    // YAML reader for the POI registry resource.
     implementation("com.charleskorn.kaml:kaml:0.74.0")
     // Coordinate -> IANA ZoneId lookup from timezone-boundary-builder data.
     implementation("net.iakovlev:timeshape:$timeshapeVersion")
+    // Transactional email delivery for availability watch alerts.
+    implementation("com.resend:resend-java:$resendVersion")
 
     jooqGenerator("org.postgresql:postgresql:$postgresVersion")
     jooqGenerator("org.testcontainers:postgresql:$testcontainersVersion")

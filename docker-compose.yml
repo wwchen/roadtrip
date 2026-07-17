@@ -75,11 +75,9 @@ services:
     env_file:
       - path: .env
         required: false
-    ports:
-      - "127.0.0.1:8766:8766"
     environment:
       # Profile selection is a process env control that chooses
-      # application-<profile>.yml before backend config is parsed.
+      # application-<profile>.yaml before backend config is parsed.
       - ROADTRIP_PROFILE=${ROADTRIP_PROFILE:-prod}
       # OpenTelemetry Java agent exports Ktor/JDBC/JVM telemetry to Alloy.
       # Logs still go through stdout -> Alloy -> Loki; trace/span ids are
@@ -94,6 +92,7 @@ services:
       - OTEL_TRACES_SAMPLER=${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
       - OTEL_TRACES_SAMPLER_ARG=${OTEL_TRACES_SAMPLER_ARG:-1.0}
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
+      - POSTGRES_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-roadtrip}
       - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
       # Mapbox is server-side only. /api/route (Directions) and /api/geocode
