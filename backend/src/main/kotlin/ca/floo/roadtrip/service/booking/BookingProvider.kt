@@ -7,9 +7,12 @@ import ca.floo.roadtrip.models.booking.BookingAction
 import ca.floo.roadtrip.models.booking.BookingProviderId
 import ca.floo.roadtrip.models.booking.BookingTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.service.Dispatchable
 
-internal interface BookingProvider {
+internal interface BookingProvider : Dispatchable<BookingProviderId> {
     val id: BookingProviderId
+
+    override fun canHandle(key: BookingProviderId): Boolean = key == id
 
     /**
      * Translates provider-specific catalog identity into a booking target this

@@ -130,7 +130,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     }
 
     /** Wraps the default internal-poller alert provider for tests, mirroring
-     *  the production wiring in [ca.floo.roadtrip.startRoadtripRuntime]. */
+     *  the production wiring in [ca.floo.roadtrip.di.serviceModule]. */
     private fun alertProviders(
         campsitesRepo: CampsiteRepo,
         targets: DbAvailabilityTargetResolver,

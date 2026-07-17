@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.availability.alert
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
+import ca.floo.roadtrip.service.Dispatchable
 import org.jooq.DSLContext
 
 /**
@@ -16,9 +17,11 @@ import org.jooq.DSLContext
  * watch-write transaction; membership writes are transactional today, so the
  * [DSLContext] passed in is the txn context — never open a new connection.
  */
-internal interface AlertProvider {
+internal interface AlertProvider : Dispatchable<AlertProviderId> {
     /** Stable slug identifying this provider ("internal_poller", later "campflare"). */
     val id: String
+
+    override fun canHandle(key: AlertProviderId): Boolean = key.slug == id
 
     /**
      * `false` = platform polls this vendor for openings (internal poller);

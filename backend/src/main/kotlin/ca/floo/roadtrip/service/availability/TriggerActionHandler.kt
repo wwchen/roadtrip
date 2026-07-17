@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
+import ca.floo.roadtrip.service.Dispatchable
 
 /**
  * Fires one or more trigger-action kinds (notification, ATC route, …)
@@ -11,9 +12,11 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
  * `service/availability/` plus one entry in the runtime's
  * [TriggerActionRegistry] list.
  */
-internal interface TriggerActionHandler {
+internal interface TriggerActionHandler : Dispatchable<TriggerKind> {
     /** Stable slugs matching `availability_watches.trigger_kinds`. */
     val kinds: Set<String>
+
+    override fun canHandle(key: TriggerKind): Boolean = key.slug in kinds
 
     /**
      * Fires the side effect for [watch] over its [openings]. Returns `true`

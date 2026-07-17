@@ -2,9 +2,15 @@ package ca.floo.roadtrip
 
 import ca.floo.roadtrip.config.ApplicationProperties
 import ca.floo.roadtrip.config.ConfigSection
+import ca.floo.roadtrip.di.infraModule
+import ca.floo.roadtrip.di.registerKoinRoutes
+import ca.floo.roadtrip.di.repoModule
+import ca.floo.roadtrip.di.serviceModule
+import ca.floo.roadtrip.di.slackInteractivityModule
 import io.ktor.server.application.Application
-import io.ktor.server.application.ApplicationStopping
+import io.ktor.server.application.install
 import io.ktor.server.netty.EngineMain
+import org.koin.ktor.plugin.Koin
 
 private val mainLog = org.slf4j.LoggerFactory.getLogger("ca.floo.roadtrip.Main")
 
@@ -37,19 +43,20 @@ private fun installOptionalShutdownThreadDump(properties: Map<String, String>) {
 }
 
 fun Application.module() {
-    val properties = ApplicationProperties.load(baseConfig = environment.config)
+    val properties: Map<String, String> =
+        ApplicationProperties.load(baseConfig = environment.config)
+    install(Koin) {
+        val modules =
+            buildList {
+                add(infraModule(environment.config))
+                add(repoModule)
+                add(serviceModule)
+                val slackSecret = properties["roadtrip.slack.signing-secret"]?.takeIf { it.isNotBlank() }
+                if (slackSecret != null) add(slackInteractivityModule(slackSecret))
+            }
+        modules(modules)
+    }
     installOptionalShutdownThreadDump(properties)
-    val boot = createRoadtripBootContext(properties)
-
     installRoadtripPlugins()
-    val runtime = startRoadtripRuntime(boot)
-    monitor.subscribe(ApplicationStopping) {
-        runtime.close()
-    }
-    try {
-        registerRoadtripRoutes(runtime)
-    } catch (e: Throwable) {
-        runtime.close()
-        throw e
-    }
+    registerKoinRoutes()
 }
