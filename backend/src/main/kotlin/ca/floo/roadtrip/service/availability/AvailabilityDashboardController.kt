@@ -156,7 +156,7 @@ internal class AvailabilityDashboardController(
             }
         return AvailabilityDashboardResult.Ok(
             ListAvailabilityChangesResponse(
-                changes = rows.map { it.toSchema(nameMap[it.campsiteId]) },
+                changes = rows.filter { it.fromStatus != null }.map { it.toSchema(nameMap[it.campsiteId]) },
             ),
         )
     }
