@@ -17,6 +17,9 @@ class ApplicationPropertiesTest {
         assertEquals("http://127.0.0.1:8765", props["roadtrip.web.root-url"])
         assertEquals("http://127.0.0.1:8770", props["roadtrip.booking.recgov-atc.companion-base-url"])
         assertEquals("180s", props["roadtrip.booking.recgov-atc.companion-timeout"])
+        assertEquals("", props["roadtrip.email.resend-api-key"])
+        assertEquals("Roadtrip Alerts <roadtrip@floo.ca>", props["roadtrip.email.from"])
+        assertEquals("", props["roadtrip.email.default-to"])
         assertEquals(
             "aspira,campflare,recgov,reserveamerica,reservecalifornia",
             props["roadtrip.read-path.enabled-availability-providers"],
@@ -102,6 +105,36 @@ class ApplicationPropertiesTest {
         assertEquals("jdbc:postgresql://postgres:5432/roadtrip_prod", props["roadtrip.db.url"])
         assertEquals("app", props["roadtrip.db.user"])
         assertEquals("secret", props["roadtrip.db.password"])
+    }
+
+    @Test
+    fun `load overlays selected profile yaml after base yaml`() {
+        val props =
+            ApplicationProperties.load(
+                env =
+                    mapOf(
+                        "SECRET_VALUE" to "from-env",
+                    ),
+                classLoader =
+                    resourceClassLoader(
+                        "application.yml" to
+                            """
+                            shared: base-yaml
+                            base-only: base
+                            secret: ${'$'}{SECRET_VALUE}
+                            """.trimIndent(),
+                        "application-local.yml" to
+                            """
+                            profile-only: profile-yaml
+                            shared: profile-yaml
+                            """.trimIndent(),
+                    ),
+            )
+
+        assertEquals("base", props["base-only"])
+        assertEquals("from-env", props["secret"])
+        assertEquals("profile-yaml", props["profile-only"])
+        assertEquals("profile-yaml", props["shared"])
     }
 
     @Test

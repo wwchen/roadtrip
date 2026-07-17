@@ -23,6 +23,10 @@ roadtrip:
     bot-token: ${SLACK_BOT_TOKEN}
     default-channel: ${SLACK_ALERT_CHANNEL}
     signing-secret: ${SLACK_SIGNING_SECRET}
+  email:
+    resend-api-key: ${RESEND_API_KEY}
+    from: Roadtrip Alerts <roadtrip@floo.ca>
+    default-to:
   poi-registry:
     resource: poi-registry.yaml
     path:

@@ -17,9 +17,10 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
-import ca.floo.roadtrip.service.notification.SlackNotificationService
-import ca.floo.roadtrip.service.notification.WatchOpening
-import ca.floo.roadtrip.service.notification.WatchStatusNotice
+import ca.floo.roadtrip.service.notification.common.NotificationSender
+import ca.floo.roadtrip.service.notification.common.NotificationTarget
+import ca.floo.roadtrip.service.notification.common.WatchOpening
+import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -36,7 +37,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TriggerActionHandlerTest {
@@ -46,16 +46,16 @@ class TriggerActionHandlerTest {
             val fake = FakeHandler(kind = "slack_notify", result = true)
             val registry = TriggerActionRegistry(listOf(fake))
 
-            val handler = registry.forKind("slack_notify")
+            val handler = registry.forKinds(listOf("slack_notify")).singleOrNull()
             assertNotNull(handler)
             assertTrue(handler.fire(fakeWatch(id = 1L), openings = emptyList()))
             assertEquals(1, fake.calls)
         }
 
     @Test
-    fun `unknown kind returns null and is inert`() {
+    fun `unknown kind returns empty handler list and is inert`() {
         val registry = TriggerActionRegistry(listOf(FakeHandler(kind = "slack_notify")))
-        assertNull(registry.forKind("email"))
+        assertTrue(registry.forKinds(listOf("email")).isEmpty())
     }
 
     @Test
@@ -68,45 +68,82 @@ class TriggerActionHandlerTest {
     }
 
     @Test
-    fun `SlackNotifyHandler forwards channel override to slack service`() =
+    fun `registry returns an aggregate handler once for multiple matching kinds`() {
+        val fake =
+            FakeHandler(
+                kind = AvailabilityTriggerKinds.SLACK_NOTIFY,
+                supportedKinds = setOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.EMAIL_NOTIFY),
+            )
+        val registry = TriggerActionRegistry(listOf(fake))
+
+        assertEquals(listOf(fake), registry.forKinds(listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.EMAIL_NOTIFY)))
+    }
+
+    @Test
+    fun `NotifyTriggerActionHandler forwards slack channel override as notification target`() =
         runBlocking {
-            val slack = CapturingSlack(result = true)
-            val handler = SlackNotifyHandler(slack = slack, appRootUrl = "https://app.example")
+            val notifications = CapturingNotifications(result = true)
+            val handler = NotifyTriggerActionHandler(notifications = notifications, appRootUrl = "https://app.example")
 
             val watch =
                 fakeWatch(
                     id = 42L,
+                    triggerKinds = listOf(AvailabilityTriggerKinds.SLACK_NOTIFY),
                     triggerConfig = JsonObject(mapOf("channel" to JsonPrimitive("custom-channel"))),
                 )
             val delivered = handler.fire(watch, openings = listOf(triggerOpening()))
 
             assertTrue(delivered)
-            assertEquals(42L, slack.lastWatchId)
-            assertEquals("custom-channel", slack.lastChannel)
-            assertEquals("https://app.example", slack.lastAppRootUrl)
+            assertEquals(42L, notifications.lastWatchId)
+            assertEquals(listOf(NotificationTarget.Slack("custom-channel")), notifications.lastTargets)
+            assertEquals("https://app.example", notifications.lastAppRootUrl)
         }
 
     @Test
-    fun `SlackNotifyHandler omits channel when triggerConfig has none`() =
+    fun `NotifyTriggerActionHandler sends email target`() =
         runBlocking {
-            val slack = CapturingSlack(result = true)
-            val handler = SlackNotifyHandler(slack = slack, appRootUrl = null)
+            val notifications = CapturingNotifications(result = true)
+            val handler = NotifyTriggerActionHandler(notifications = notifications, appRootUrl = "https://app.example")
 
-            handler.fire(fakeWatch(id = 7L), openings = listOf(triggerOpening()))
+            val delivered =
+                handler.fire(
+                    fakeWatch(id = 42L, triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY)),
+                    openings = listOf(triggerOpening()),
+                )
 
-            // Null channel makes the service fall back to its configured default.
-            assertNull(slack.lastChannel)
+            assertTrue(delivered)
+            assertEquals(listOf(NotificationTarget.Email()), notifications.lastTargets)
+            assertEquals("Site 12", notifications.lastOpenings.single().label)
         }
 
     @Test
-    fun `SlackNotifyHandler reports transport failure as false`() =
+    fun `NotifyTriggerActionHandler combines slack and email targets into one send`() =
         runBlocking {
-            // The dispatcher's "watch goes DONE only when fire() returns true"
-            // gate is asserted at the dispatcher layer (AvailabilityPollExecutorTest
-            // covers stopWhenTriggered against a failing Slack service); here we
-            // verify the handler itself forwards the transport's success flag.
-            val slack = CapturingSlack(result = false)
-            val handler = SlackNotifyHandler(slack = slack, appRootUrl = null)
+            val notifications = CapturingNotifications(result = true)
+            val handler = NotifyTriggerActionHandler(notifications = notifications, appRootUrl = null)
+
+            val delivered =
+                handler.fire(
+                    fakeWatch(
+                        id = 42L,
+                        triggerKinds = listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.EMAIL_NOTIFY),
+                        triggerConfig = JsonObject(mapOf("channel" to JsonPrimitive("#custom"))),
+                    ),
+                    openings = listOf(triggerOpening()),
+                )
+
+            assertTrue(delivered)
+            assertEquals(
+                listOf(NotificationTarget.Slack("#custom"), NotificationTarget.Email()),
+                notifications.lastTargets,
+            )
+            assertEquals(1, notifications.openingSends)
+        }
+
+    @Test
+    fun `NotifyTriggerActionHandler reports aggregate transport failure as false`() =
+        runBlocking {
+            val handler = NotifyTriggerActionHandler(notifications = CapturingNotifications(result = false), appRootUrl = null)
 
             assertFalse(handler.fire(fakeWatch(id = 9L), openings = listOf(triggerOpening())))
         }
@@ -120,7 +157,7 @@ class TriggerActionHandlerTest {
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
-                    slack = CapturingSlack(result = true),
+                    notifications = CapturingNotifications(result = true),
                 )
             val watch = fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND), stopWhenTriggered = true)
 
@@ -156,12 +193,12 @@ class TriggerActionHandlerTest {
                     },
                 )
             val registry = BookingProviderRegistry(listOf(bookingProvider))
-            val slack = CapturingSlack(result = true)
+            val notifications = CapturingNotifications(result = true)
             val handler =
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
-                    slack = slack,
+                    notifications = notifications,
                 )
             val watch =
                 fakeWatch(
@@ -174,11 +211,11 @@ class TriggerActionHandlerTest {
             val delivered = handler.fire(watch, openings = listOf(triggerOpening()))
 
             assertTrue(delivered)
-            val result = slack.atcResults.single()
+            val result = notifications.atcResults.single()
             assertEquals(42L, result.watchId)
             assertEquals("recgov", result.vendor)
             assertEquals("completed", result.status)
-            assertEquals("#custom", result.channel)
+            assertEquals(listOf(NotificationTarget.Slack("#custom")), result.targets)
         }
 
     @Test
@@ -201,12 +238,12 @@ class TriggerActionHandlerTest {
                     },
                 )
             val registry = BookingProviderRegistry(listOf(bookingProvider))
-            val slack = CapturingSlack(result = true)
+            val notifications = CapturingNotifications(result = true)
             val handler =
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
-                    slack = slack,
+                    notifications = notifications,
                 )
 
             val delivered =
@@ -216,7 +253,7 @@ class TriggerActionHandlerTest {
                 )
 
             assertFalse(delivered)
-            assertEquals("failed", slack.atcResults.single().status)
+            assertEquals("failed", notifications.atcResults.single().status)
         }
 
     @Test
@@ -243,12 +280,12 @@ class TriggerActionHandlerTest {
                     },
                 )
             val registry = BookingProviderRegistry(listOf(bookingProvider))
-            val slack = CapturingSlack(result = true)
+            val notifications = CapturingNotifications(result = true)
             val handler =
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
-                    slack = slack,
+                    notifications = notifications,
                 )
 
             val delivered =
@@ -258,7 +295,7 @@ class TriggerActionHandlerTest {
                 )
 
             assertFalse(delivered)
-            val result = slack.atcResults.single()
+            val result = notifications.atcResults.single()
             assertEquals("failed", result.status)
             val auth = result.response!!["recgov_auth"]!!.jsonObject
             assertEquals("recgov_not_authenticated", auth["error"]!!.jsonPrimitive.content)
@@ -269,12 +306,12 @@ class TriggerActionHandlerTest {
         runBlocking {
             val bookingProvider = RecordingBookingProvider()
             val registry = BookingProviderRegistry(listOf(bookingProvider))
-            val slack = CapturingSlack(result = true)
+            val notifications = CapturingNotifications(result = true)
             val handler =
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
-                    slack = slack,
+                    notifications = notifications,
                 )
 
             val delivered =
@@ -285,13 +322,15 @@ class TriggerActionHandlerTest {
 
             assertFalse(delivered)
             assertTrue(bookingProvider.requests.isEmpty())
-            assertTrue(slack.atcResults.isEmpty())
+            assertTrue(notifications.atcResults.isEmpty())
         }
 
     private class FakeHandler(
-        override val kind: String,
+        kind: String,
+        supportedKinds: Set<String> = setOf(kind),
         private val result: Boolean = true,
     ) : TriggerActionHandler {
+        override val kinds: Set<String> = supportedKinds
         var calls: Int = 0
 
         override suspend fun fire(
@@ -303,23 +342,23 @@ class TriggerActionHandlerTest {
         }
     }
 
-    /** [SlackNotificationService] double that records the last call to
-     *  [sendWatchOpenings]; other methods no-op because the handler under test
-     *  only exercises that one seam. */
-    private class CapturingSlack(
+    /** [NotificationSender] double that records aggregate notification calls. */
+    private class CapturingNotifications(
         private val result: Boolean,
-    ) : SlackNotificationService {
+    ) : NotificationSender {
         data class AtcResult(
             val watchId: Long,
             val vendor: String,
             val status: String,
             val response: JsonObject?,
-            val channel: String?,
+            val targets: List<NotificationTarget>,
         )
 
         var lastWatchId: Long? = null
-        var lastChannel: String? = null
+        var lastTargets: List<NotificationTarget> = emptyList()
         var lastAppRootUrl: String? = null
+        var lastOpenings: List<WatchOpening> = emptyList()
+        var openingSends: Int = 0
         val atcResults = mutableListOf<AtcResult>()
 
         override suspend fun sendWatchOpenings(
@@ -327,18 +366,20 @@ class TriggerActionHandlerTest {
             startDate: LocalDate,
             endDate: LocalDate,
             openings: List<WatchOpening>,
-            channel: String?,
+            targets: List<NotificationTarget>,
             appRootUrl: String?,
         ): Boolean {
             lastWatchId = watchId
-            lastChannel = channel
+            lastTargets = targets
             lastAppRootUrl = appRootUrl
+            lastOpenings = openings
+            openingSends++
             return result
         }
 
         override suspend fun sendWatchStatus(
             notice: WatchStatusNotice,
-            channel: String?,
+            targets: List<NotificationTarget>,
         ): Boolean = result
 
         override suspend fun sendAtcResult(
@@ -347,27 +388,17 @@ class TriggerActionHandlerTest {
             status: String,
             request: JsonObject,
             response: JsonObject?,
-            channel: String?,
+            targets: List<NotificationTarget>,
         ): Boolean {
-            atcResults += AtcResult(watchId, vendor, status, response, channel)
+            atcResults += AtcResult(watchId, vendor, status, response, targets)
             return result
         }
-
-        override suspend fun postResponseWatchStatus(
-            responseUrl: String,
-            notice: WatchStatusNotice,
-        ): Boolean = result
-
-        override suspend fun postResponseStaleWatch(
-            responseUrl: String,
-            watchId: Long,
-        ): Boolean = result
     }
 
     private fun fakeWatch(
         id: Long,
         triggerConfig: JsonObject = JsonObject(emptyMap()),
-        triggerKinds: List<String> = listOf(SlackNotifyHandler.KIND),
+        triggerKinds: List<String> = listOf(AvailabilityTriggerKinds.SLACK_NOTIFY),
         stopWhenTriggered: Boolean = false,
     ): AvailabilityWatchRepo.Watch =
         AvailabilityWatchRepo.Watch(

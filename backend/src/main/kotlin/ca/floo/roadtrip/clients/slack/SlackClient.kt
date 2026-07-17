@@ -25,7 +25,7 @@ private val slackJson =
 /**
  * Outbound Slack `chat.postMessage` transport — the only thing that talks to
  * Slack over the wire. Business callers go through
- * [ca.floo.roadtrip.service.notification.SlackNotificationService]; this client
+ * [ca.floo.roadtrip.service.notification.slack.SlackNotificationService]; this client
  * only knows how to put bytes on the network.
  *
  * A message is a channel + fallback text + either a rich [SlackAttachmentDto]

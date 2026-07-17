@@ -6,17 +6,18 @@ import ca.floo.roadtrip.models.booking.BookingAction
 import ca.floo.roadtrip.models.booking.BookingProviderId
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
-import ca.floo.roadtrip.service.notification.SlackNotificationService
+import ca.floo.roadtrip.service.notification.common.NotificationSender
+import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import org.slf4j.LoggerFactory
 
 internal class AtcTriggerActionHandler(
     private val bookings: BookingProviderRegistry,
     private val bookingTargets: AvailabilityBookingTargetResolver,
-    private val slack: SlackNotificationService,
+    private val notifications: NotificationSender,
 ) : TriggerActionHandler {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    override val kind: String = KIND
+    override val kinds: Set<String> = setOf(KIND)
 
     override suspend fun fire(
         watch: AvailabilityWatchRepo.Watch,
@@ -56,13 +57,13 @@ internal class AtcTriggerActionHandler(
                     next.request.target.campsiteRef.campsiteId,
                     next.request.arrivalDate,
                 )
-                slack.sendAtcResult(
+                notifications.sendAtcResult(
                     watchId = watch.id,
                     vendor = result.providerId.vendorSlug(),
                     status = ATC_RESULT_COMPLETED,
                     request = result.request,
                     response = result.response,
-                    channel = watch.channelOverride(),
+                    targets = listOf(NotificationTarget.Slack(channel = watch.channelOverride())),
                 )
                 true
             }
@@ -76,13 +77,13 @@ internal class AtcTriggerActionHandler(
                     result.error,
                     result.detail,
                 )
-                slack.sendAtcResult(
+                notifications.sendAtcResult(
                     watchId = watch.id,
                     vendor = result.providerId.vendorSlug(),
                     status = ATC_RESULT_FAILED,
                     request = result.request,
                     response = result.response,
-                    channel = watch.channelOverride(),
+                    targets = listOf(NotificationTarget.Slack(channel = watch.channelOverride())),
                 )
                 false
             }

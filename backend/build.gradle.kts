@@ -88,6 +88,7 @@ val flywayVersion = "10.20.1"
 val testcontainersVersion = "1.21.4"
 val bucket4jVersion = "8.10.1"
 val timeshapeVersion = "2025b.26"
+val resendVersion = "4.13.0"
 val junitVersion = "5.11.3"
 val playwrightVersion = "1.50.0"
 
@@ -113,6 +114,7 @@ dependencies {
     implementation("io.ktor:ktor-server-compression:$ktorVersion")
     implementation("io.ktor:ktor-server-caching-headers:$ktorVersion")
     implementation("io.ktor:ktor-server-conditional-headers:$ktorVersion")
+    implementation("io.ktor:ktor-server-html-builder:$ktorVersion")
     // SSE for /api/campsite/events stream.
     implementation("io.ktor:ktor-server-sse:$ktorVersion")
     // HttpClient powers AvailabilityClient (rec.gov) and SlackNotifier in the
@@ -152,6 +154,8 @@ dependencies {
     implementation("com.charleskorn.kaml:kaml:0.74.0")
     // Coordinate -> IANA ZoneId lookup from timezone-boundary-builder data.
     implementation("net.iakovlev:timeshape:$timeshapeVersion")
+    // Transactional email delivery for availability watch alerts.
+    implementation("com.resend:resend-java:$resendVersion")
 
     jooqGenerator("org.postgresql:postgresql:$postgresVersion")
     jooqGenerator("org.testcontainers:postgresql:$testcontainersVersion")

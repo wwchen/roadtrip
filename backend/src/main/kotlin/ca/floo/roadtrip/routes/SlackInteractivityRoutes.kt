@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.clients.slack.SlackSignatureVerifier
-import ca.floo.roadtrip.service.notification.SlackInteractivityHandler
+import ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
 import io.ktor.server.request.receiveText

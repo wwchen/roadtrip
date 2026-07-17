@@ -1,10 +1,14 @@
-package ca.floo.roadtrip.service.notification
+package ca.floo.roadtrip.service.notification.slack
 
 import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
 import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import ca.floo.roadtrip.clients.slack.SlackBlocks
 import ca.floo.roadtrip.clients.slack.SlackClient
 import ca.floo.roadtrip.config.SlackConfig
+import ca.floo.roadtrip.service.notification.common.NotificationService
+import ca.floo.roadtrip.service.notification.common.NotificationTarget
+import ca.floo.roadtrip.service.notification.common.WatchOpening
+import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -23,36 +27,32 @@ private val slackJson = Json
 private val specialJsonSpaceChars = Regex("[\\u00A0\\u1680\\u2000-\\u200A\\u202F\\u205F\\u3000]")
 
 /**
- * Default [SlackNotificationService] backed by the Slack HTTP transport. Owns
- * channel policy: a caller may name a channel, otherwise the message goes to
- * the configured default channel. It also owns the mapping from domain data
- * to the Slack message body (via [SlackContentAvailabilityRenderer] and
- * [SlackContentWatchStatusRenderer]), so feature callers deal only in domain
- * types.
+ * Slack notification transport. It handles only [NotificationTarget.Slack];
+ * [ca.floo.roadtrip.service.notification.common.NotificationFanout] owns
+ * picking this service from the target list.
  *
- * [config] is null when Slack is unconfigured — a first-class "disabled" state,
- * not an error. The service owns the [SlackClient] it builds from [config] (and
- * its shutdown, via [close]); with no config there is no client. In that state
- * every send logs why it was skipped and returns `false`, so a disabled
- * workspace is visible in the logs rather than a silent no-op, without breaking
- * any caller's flow.
+ * [config] is null when Slack is unconfigured. That disabled state returns
+ * `false` with a log line instead of throwing into availability polling.
  *
- * [client] is injectable for tests (the enabled send path); production always
- * uses the default built from [config].
+ * [client] is injectable for tests; production builds it from config.
  */
-class SlackNotificationServiceImpl(
+class SlackNotificationService(
     private val config: SlackConfig?,
     private val client: SlackClient? = config?.let { SlackClient(it) },
-) : SlackNotificationService,
+) : NotificationService,
+    SlackResponseSender,
     Closeable {
     private val log = LoggerFactory.getLogger(javaClass)
 
+    override fun canHandle(target: NotificationTarget): Boolean = target is NotificationTarget.Slack
+
     override suspend fun sendWatchStatus(
         notice: WatchStatusNotice,
-        channel: String?,
+        target: NotificationTarget,
     ): Boolean {
+        val slackTarget = target as? NotificationTarget.Slack ?: return false
         val (fallback, attachments) = SlackContentWatchStatusRenderer.render(notice)
-        return send(channel, fallback, attachments)
+        return send(slackTarget.channel, fallback, attachments)
     }
 
     override suspend fun sendWatchOpenings(
@@ -60,13 +60,14 @@ class SlackNotificationServiceImpl(
         startDate: LocalDate,
         endDate: LocalDate,
         openings: List<WatchOpening>,
-        channel: String?,
+        target: NotificationTarget,
         appRootUrl: String?,
     ): Boolean {
         if (openings.isEmpty()) return false
+        val slackTarget = target as? NotificationTarget.Slack ?: return false
         val (fallback, attachments) =
             SlackContentAvailabilityRenderer.openings(watchId, startDate, endDate, openings, appRootUrl)
-        return send(channel, fallback, attachments)
+        return send(slackTarget.channel, fallback, attachments)
     }
 
     override suspend fun sendAtcResult(
@@ -75,8 +76,9 @@ class SlackNotificationServiceImpl(
         status: String,
         request: JsonObject,
         response: JsonObject?,
-        channel: String?,
+        target: NotificationTarget,
     ): Boolean {
+        val slackTarget = target as? NotificationTarget.Slack ?: return false
         val text = "ATC $status for watch #$watchId ($vendor)"
         val blocks =
             mutableListOf(
@@ -102,7 +104,7 @@ class SlackNotificationServiceImpl(
                     blocks = blocks,
                 ),
             )
-        return send(channel, text, attachments)
+        return send(slackTarget.channel, text, attachments)
     }
 
     override suspend fun postResponseWatchStatus(

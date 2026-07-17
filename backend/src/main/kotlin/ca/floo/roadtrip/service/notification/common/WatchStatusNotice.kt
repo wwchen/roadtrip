@@ -1,10 +1,10 @@
-package ca.floo.roadtrip.service.notification
+package ca.floo.roadtrip.service.notification.common
 
 import java.time.LocalDate
 
 /**
  * A watch's current lifecycle/status, handed to
- * [SlackNotificationService.sendWatchStatus] to render as a Slack status card.
+ * [NotificationSender.sendWatchStatus] to render as a Slack status card.
  * Unlike [WatchOpening] (a real opening), this carries no availability — it
  * tells the user the watch is live, paused, or done. Every field is plain
  * domain data, including the dashboard deep-link URLs and any per-POI links:

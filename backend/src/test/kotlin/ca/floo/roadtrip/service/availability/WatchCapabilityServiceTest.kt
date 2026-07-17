@@ -38,7 +38,7 @@ class WatchCapabilityServiceTest {
         assertEquals(0, support.unsupportedCount)
         assertEquals(setOf(BookingAction.ADD_TO_CART), service.supportedBookingActions(listOf(campsiteA, campsiteB)))
         assertEquals(
-            listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.ATC),
+            listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.EMAIL_NOTIFY, AvailabilityTriggerKinds.ATC),
             service.supportedTriggerKinds(listOf(campsiteA, campsiteB)),
         )
     }
@@ -55,7 +55,10 @@ class WatchCapabilityServiceTest {
         assertEquals(2, support.scopedCount)
         assertEquals(1, support.unsupportedCount)
         assertEquals(emptySet(), service.supportedBookingActions(listOf(supported, unsupported)))
-        assertEquals(listOf(AvailabilityTriggerKinds.SLACK_NOTIFY), service.supportedTriggerKinds(listOf(supported, unsupported)))
+        assertEquals(
+            listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.EMAIL_NOTIFY),
+            service.supportedTriggerKinds(listOf(supported, unsupported)),
+        )
     }
 
     @Test
@@ -85,16 +88,37 @@ class WatchCapabilityServiceTest {
         assertEquals(emptyList(), service.supportedTriggerKinds(listOf(campsite)))
     }
 
+    @Test
+    fun `supported trigger kinds use configured notification trigger kinds`() {
+        val campsite = campsite(1L, "site-1")
+        val service =
+            service(
+                campsites = listOf(campsite),
+                notificationTriggerKinds = listOf(AvailabilityTriggerKinds.SLACK_NOTIFY),
+            )
+
+        assertEquals(
+            listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.ATC),
+            service.supportedTriggerKinds(listOf(campsite)),
+        )
+    }
+
     private fun service(vararg campsites: CampsiteAvailabilityTarget): WatchCapabilityService = service(campsites = campsites.toList())
 
     private fun service(
         campsites: List<CampsiteAvailabilityTarget>,
         supportsInternalPolling: Boolean = true,
+        notificationTriggerKinds: List<String> =
+            listOf(
+                AvailabilityTriggerKinds.SLACK_NOTIFY,
+                AvailabilityTriggerKinds.EMAIL_NOTIFY,
+            ),
     ): WatchCapabilityService {
         val registry = BookingProviderRegistry(listOf(RecGovOnlyBookingProvider))
         return WatchCapabilityService(
             availabilityTargets = FakeTargetResolver(campsites, supportsInternalPolling),
             bookingTargets = AvailabilityBookingTargetResolver(registry),
+            notificationTriggerKinds = notificationTriggerKinds,
         )
     }
 

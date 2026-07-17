@@ -5,9 +5,10 @@ import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
-import ca.floo.roadtrip.service.notification.SlackNotificationService
-import ca.floo.roadtrip.service.notification.WatchOpening
-import ca.floo.roadtrip.service.notification.WatchStatusNotice
+import ca.floo.roadtrip.service.notification.common.NotificationSender
+import ca.floo.roadtrip.service.notification.common.NotificationTarget
+import ca.floo.roadtrip.service.notification.common.WatchOpening
+import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.LocalDate
 
@@ -31,8 +32,9 @@ private const val CELL_MATRIX_UID = "availability-cell-matrix"
  * we could not notify on.
  *
  * This class decides *which* watches fire and hydrates their openings; the
- * handlers own transport and formatting (the [SlackNotifyHandler] delegates to
- * [SlackNotificationService], which no-ops when Slack is unconfigured).
+ * handlers own transport and formatting (the [NotifyTriggerActionHandler]
+ * delegates to [NotificationSender], which no-ops when requested transports
+ * are unconfigured).
  * Nothing here throws into the caller: handlers swallow their own failures
  * and the executor wraps this call best-effort.
  *
@@ -42,7 +44,7 @@ private const val CELL_MATRIX_UID = "availability-cell-matrix"
  * dashboard URLs" logic in exactly one place.
  */
 internal class WatchAlertDispatcher(
-    private val slack: SlackNotificationService,
+    private val notifications: NotificationSender,
     private val scopeResolver: WatchScopeResolver,
     private val watches: AvailabilityWatchRepo,
     private val targets: AvailabilityTargetResolver,
@@ -60,7 +62,7 @@ internal class WatchAlertDispatcher(
         if (bookable.isEmpty()) return
 
         for (watch in liveWatches) {
-            val handlers = watch.triggerKinds.mapNotNull { triggerActions.forKind(it) }
+            val handlers = triggerActions.forKinds(watch.triggerKinds)
             if (handlers.isEmpty()) continue
             val campsitesById = scopeResolver.resolve(watch).associateBy { it.id }
             val covered =
@@ -94,8 +96,8 @@ internal class WatchAlertDispatcher(
      * Only the bookable state ever marks a watch `DONE`.
      */
     suspend fun dispatchInitial(watch: AvailabilityWatchRepo.Watch) {
-        val handlers = watch.triggerKinds.mapNotNull { triggerActions.forKind(it) }
-        val hasSlack = SlackNotifyHandler.KIND in watch.triggerKinds
+        val handlers = triggerActions.forKinds(watch.triggerKinds)
+        val hasSlack = AvailabilityTriggerKinds.SLACK_NOTIFY in watch.triggerKinds
         if (!hasSlack && handlers.isEmpty()) return
 
         val campsites = scopeResolver.resolve(watch)
@@ -107,7 +109,10 @@ internal class WatchAlertDispatcher(
                     WatchStatus.DONE -> WatchStatusNotice.State.DONE
                     WatchStatus.ACTIVE -> WatchStatusNotice.State.WATCHING // unreachable; guarded above
                 }
-            slack.sendWatchStatus(statusNotice(watch, campsites, state), watch.channelOverride())
+            notifications.sendWatchStatus(
+                statusNotice(watch, campsites, state),
+                targets = listOf(watch.slackNotificationTarget()),
+            )
             return
         }
         val campsitesById = campsites.associateBy { it.id }
@@ -118,7 +123,10 @@ internal class WatchAlertDispatcher(
             postOpenings(watch, covered, campsitesById, handlers)
         } else if (hasSlack) {
             val state = if (cells.isNotEmpty()) WatchStatusNotice.State.WATCHING else WatchStatusNotice.State.UNCHECKED
-            slack.sendWatchStatus(statusNotice(watch, campsites, state), watch.channelOverride())
+            notifications.sendWatchStatus(
+                statusNotice(watch, campsites, state),
+                targets = listOf(watch.slackNotificationTarget()),
+            )
         }
     }
 
@@ -129,9 +137,12 @@ internal class WatchAlertDispatcher(
      * throws into its caller and no-ops for a watch that never opted into Slack.
      */
     suspend fun dispatchStopped(watch: AvailabilityWatchRepo.Watch) {
-        if (SlackNotifyHandler.KIND !in watch.triggerKinds) return
+        if (AvailabilityTriggerKinds.SLACK_NOTIFY !in watch.triggerKinds) return
         val campsites = scopeResolver.resolve(watch)
-        slack.sendWatchStatus(statusNotice(watch, campsites, WatchStatusNotice.State.STOPPED), watch.channelOverride())
+        notifications.sendWatchStatus(
+            statusNotice(watch, campsites, WatchStatusNotice.State.STOPPED),
+            targets = listOf(watch.slackNotificationTarget()),
+        )
     }
 
     /**
@@ -276,3 +287,6 @@ internal fun AvailabilityWatchRepo.Watch.channelOverride(): String? =
         ?.takeIf { it.isString }
         ?.content
         ?.takeIf { it.isNotBlank() }
+
+internal fun AvailabilityWatchRepo.Watch.slackNotificationTarget(): NotificationTarget.Slack =
+    NotificationTarget.Slack(channel = channelOverride())
