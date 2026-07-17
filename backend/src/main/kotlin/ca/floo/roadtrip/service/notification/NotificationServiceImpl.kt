@@ -1,9 +1,13 @@
 package ca.floo.roadtrip.service.notification
 
+import ca.floo.roadtrip.clients.resend.EmailDeliveryClient
+import ca.floo.roadtrip.clients.resend.EmailDeliveryMessage
+import ca.floo.roadtrip.clients.resend.ResendEmailClient
 import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
 import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import ca.floo.roadtrip.clients.slack.SlackBlocks
 import ca.floo.roadtrip.clients.slack.SlackClient
+import ca.floo.roadtrip.config.EmailConfig
 import ca.floo.roadtrip.config.SlackConfig
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -23,36 +27,36 @@ private val slackJson = Json
 private val specialJsonSpaceChars = Regex("[\\u00A0\\u1680\\u2000-\\u200A\\u202F\\u205F\\u3000]")
 
 /**
- * Default [SlackNotificationService] backed by the Slack HTTP transport. Owns
- * channel policy: a caller may name a channel, otherwise the message goes to
- * the configured default channel. It also owns the mapping from domain data
- * to the Slack message body (via [SlackContentAvailabilityRenderer] and
- * [SlackContentWatchStatusRenderer]), so feature callers deal only in domain
- * types.
+ * Default [NotificationService] backed by configured notification transports.
+ * Callers pass [NotificationTarget]s; this aggregate owns channel/recipient
+ * policy plus transport-specific rendering.
  *
- * [config] is null when Slack is unconfigured — a first-class "disabled" state,
- * not an error. The service owns the [SlackClient] it builds from [config] (and
- * its shutdown, via [close]); with no config there is no client. In that state
- * every send logs why it was skipped and returns `false`, so a disabled
- * workspace is visible in the logs rather than a silent no-op, without breaking
- * any caller's flow.
+ * [slackConfig] and [emailConfig] are nullable because each transport can be
+ * independently disabled. A disabled target logs why it was skipped and returns
+ * `false`, so a watch that requested multiple targets is not marked delivered
+ * when one of them never received the alert.
  *
- * [client] is injectable for tests (the enabled send path); production always
- * uses the default built from [config].
+ * Clients are injectable for tests; production builds them from config.
  */
-class SlackNotificationServiceImpl(
-    private val config: SlackConfig?,
-    private val client: SlackClient? = config?.let { SlackClient(it) },
-) : SlackNotificationService,
+class NotificationServiceImpl(
+    private val slackConfig: SlackConfig?,
+    private val emailConfig: EmailConfig?,
+    private val slackClient: SlackClient? = slackConfig?.let { SlackClient(it) },
+    private val emailClient: EmailDeliveryClient? = emailConfig?.let { ResendEmailClient(it) },
+) : NotificationService,
     Closeable {
     private val log = LoggerFactory.getLogger(javaClass)
 
     override suspend fun sendWatchStatus(
         notice: WatchStatusNotice,
-        channel: String?,
+        targets: List<NotificationTarget>,
     ): Boolean {
+        val slackTargets = targets.filterIsInstance<NotificationTarget.Slack>()
+        if (slackTargets.isEmpty()) return false
         val (fallback, attachments) = SlackContentWatchStatusRenderer.render(notice)
-        return send(channel, fallback, attachments)
+        return slackTargets
+            .map { target -> sendSlack(target.channel, fallback, attachments) }
+            .all { it }
     }
 
     override suspend fun sendWatchOpenings(
@@ -60,13 +64,33 @@ class SlackNotificationServiceImpl(
         startDate: LocalDate,
         endDate: LocalDate,
         openings: List<WatchOpening>,
-        channel: String?,
+        targets: List<NotificationTarget>,
         appRootUrl: String?,
     ): Boolean {
-        if (openings.isEmpty()) return false
-        val (fallback, attachments) =
-            SlackContentAvailabilityRenderer.openings(watchId, startDate, endDate, openings, appRootUrl)
-        return send(channel, fallback, attachments)
+        if (openings.isEmpty() || targets.isEmpty()) return false
+        return targets
+            .map { target ->
+                when (target) {
+                    is NotificationTarget.Slack ->
+                        sendSlackWatchOpenings(
+                            watchId = watchId,
+                            startDate = startDate,
+                            endDate = endDate,
+                            openings = openings,
+                            channel = target.channel,
+                            appRootUrl = appRootUrl,
+                        )
+                    is NotificationTarget.Email ->
+                        sendEmailWatchOpenings(
+                            watchId = watchId,
+                            startDate = startDate,
+                            endDate = endDate,
+                            openings = openings,
+                            target = target,
+                            appRootUrl = appRootUrl,
+                        )
+                }
+            }.all { it }
     }
 
     override suspend fun sendAtcResult(
@@ -75,8 +99,10 @@ class SlackNotificationServiceImpl(
         status: String,
         request: JsonObject,
         response: JsonObject?,
-        channel: String?,
+        targets: List<NotificationTarget>,
     ): Boolean {
+        val slackTargets = targets.filterIsInstance<NotificationTarget.Slack>()
+        if (slackTargets.isEmpty()) return false
         val text = "ATC $status for watch #$watchId ($vendor)"
         val blocks =
             mutableListOf(
@@ -102,7 +128,9 @@ class SlackNotificationServiceImpl(
                     blocks = blocks,
                 ),
             )
-        return send(channel, text, attachments)
+        return slackTargets
+            .map { target -> sendSlack(target.channel, text, attachments) }
+            .all { it }
     }
 
     override suspend fun postResponseWatchStatus(
@@ -114,11 +142,11 @@ class SlackNotificationServiceImpl(
         // Still gate on `client` since a disabled workspace has no HTTP client
         // to talk to; that's the same "Slack not configured" fallback path.
         val (fallback, attachments) = SlackContentWatchStatusRenderer.render(notice)
-        if (client == null) {
+        if (slackClient == null) {
             log.warn("Slack disabled; response_url update skipped: {}", fallback)
             return false
         }
-        return client.postResponse(responseUrl, fallback, attachments = attachments)
+        return slackClient.postResponse(responseUrl, fallback, attachments = attachments)
     }
 
     override suspend fun postResponseStaleWatch(
@@ -126,30 +154,75 @@ class SlackNotificationServiceImpl(
         watchId: Long,
     ): Boolean {
         val (fallback, attachments) = SlackContentStaleWatchRenderer.render(watchId)
-        if (client == null) {
+        if (slackClient == null) {
             log.warn("Slack disabled; stale response_url update skipped: {}", fallback)
             return false
         }
-        return client.postResponse(responseUrl, fallback, attachments = attachments)
+        return slackClient.postResponse(responseUrl, fallback, attachments = attachments)
+    }
+
+    private suspend fun sendSlackWatchOpenings(
+        watchId: Long,
+        startDate: LocalDate,
+        endDate: LocalDate,
+        openings: List<WatchOpening>,
+        channel: String?,
+        appRootUrl: String?,
+    ): Boolean {
+        val (fallback, attachments) =
+            SlackContentAvailabilityRenderer.openings(watchId, startDate, endDate, openings, appRootUrl)
+        return sendSlack(channel, fallback, attachments)
+    }
+
+    private suspend fun sendEmailWatchOpenings(
+        watchId: Long,
+        startDate: LocalDate,
+        endDate: LocalDate,
+        openings: List<WatchOpening>,
+        target: NotificationTarget.Email,
+        appRootUrl: String?,
+    ): Boolean {
+        if (emailConfig == null || emailClient == null) {
+            log.warn("Email disabled (resend-api-key/from/default-to unset); watch #{} opening alert not sent", watchId)
+            return false
+        }
+        val recipients = target.recipients.ifEmpty { emailConfig.defaultTo }
+        if (recipients.isEmpty()) {
+            log.warn("Email target has no recipients; watch #{} opening alert not sent", watchId)
+            return false
+        }
+        val content = EmailContentAvailabilityRenderer.openings(watchId, startDate, endDate, openings, appRootUrl)
+        return recipients
+            .map { recipient ->
+                emailClient.send(
+                    EmailDeliveryMessage(
+                        from = emailConfig.from,
+                        to = recipient,
+                        subject = content.subject,
+                        text = content.text,
+                        html = content.html,
+                    ),
+                )
+            }.all { it }
     }
 
     /** The single send gate: no-ops (logging why) when Slack is disabled,
      *  otherwise posts [text] plus [attachments] to [channel] or the default. */
-    private suspend fun send(
+    private suspend fun sendSlack(
         channel: String?,
         text: String,
         attachments: List<SlackAttachmentDto>,
     ): Boolean {
-        if (config == null || client == null) {
+        if (slackConfig == null || slackClient == null) {
             log.warn("Slack disabled (bot-token/default-channel unset); message not sent: {}", text)
             return false
         }
-        return client.postMessage(channel ?: config.defaultChannel, text, attachments = attachments)
+        return slackClient.postMessage(channel ?: slackConfig.defaultChannel, text, attachments = attachments)
     }
 
     /** Releases the owned [SlackClient]'s HTTP client. Call on app shutdown. */
     override fun close() {
-        client?.close()
+        slackClient?.close()
     }
 
     private fun atcResultColor(status: String): String =

@@ -11,8 +11,8 @@ import com.charleskorn.kaml.YamlScalar
 object ApplicationProperties {
     private const val PROFILE_ENV = "ROADTRIP_PROFILE"
     private const val DEFAULT_PROFILE = "local"
-    private const val BASE_YAML_RESOURCE = "application.yml"
-    private const val YAML_EXTENSION = "yml"
+    private const val BASE_RESOURCE = "application.yml"
+    private const val RESOURCE_EXTENSION = "yml"
     private val PLACEHOLDER = Regex("""\$\{([A-Za-z_][A-Za-z0-9_.-]*)}""")
     private val yaml = Yaml(configuration = YamlConfiguration(strictMode = false))
 
@@ -24,12 +24,12 @@ object ApplicationProperties {
             env[PROFILE_ENV]?.trim()?.takeIf { it.isNotEmpty() }
                 ?: DEFAULT_PROFILE
         val values = linkedMapOf<String, String>()
-        values.putAll(loadYamlResource(BASE_YAML_RESOURCE, classLoader))
-        values.putAll(loadYamlResource("application-$profile.$YAML_EXTENSION", classLoader))
+        values.putAll(loadResource(BASE_RESOURCE, classLoader))
+        values.putAll(loadResource("application-$profile.$RESOURCE_EXTENSION", classLoader))
         return resolvePlaceholders(values, env)
     }
 
-    private fun loadYamlResource(
+    private fun loadResource(
         name: String,
         classLoader: ClassLoader,
     ): Map<String, String> {

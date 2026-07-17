@@ -84,8 +84,8 @@ service/availability/
 ├── ProviderCandidate.kt                 # (provider, parentRef, catalogRef) one availability candidate
 ├── FailoverAvailabilityFetcher.kt       # walks candidates on retryable failure; records per-attempt outcomes
 ├── ProviderCooldownTracker.kt           # in-process demote-on-failure for AvailabilityProviderId
-├── TriggerActionHandler.kt              # fire-side registry (`slack_notify` today; unknown kinds inert)
-├── SlackNotifyHandler.kt                # first TriggerActionHandler
+├── TriggerActionHandler.kt              # fire-side registry (notification/ATC kinds; unknown kinds inert)
+├── NotifyTriggerActionHandler.kt        # `slack_notify` / `email_notify` → notification targets
 └── alert/
     ├── AlertProvider.kt                 # who detects openings for a watch
     ├── AlertProviderRegistry.kt         # per-watch dispatch (v1: always InternalPollerAlertProvider)
@@ -173,10 +173,12 @@ lives on the alert provider itself (`hostsAlerts: Boolean`).
 
 ## Trigger registry
 
-`TriggerActionHandler` fires one side effect kind (Slack message today,
-push/email tomorrow, ATC route someday) for a watch that just detected an
-opening. `TriggerActionRegistry.forKind(kind)` returns null for unknown
-slugs — inert by design, matching today's `atc` behavior.
+`TriggerActionHandler` fires one side effect handler for a watch that just
+detected an opening. A handler may cover multiple kind slugs: for example,
+`NotifyTriggerActionHandler` handles both `slack_notify` and `email_notify` by
+turning the watch config into a list of notification targets and sending one
+aggregate alert. `TriggerActionRegistry.forKinds(kinds)` drops unknown slugs —
+inert by design, matching today's `atc` behavior.
 
 Registering a new kind is one file under `service/availability/` plus one
 entry in the registry list. The `stopWhenTriggered` DONE transition still

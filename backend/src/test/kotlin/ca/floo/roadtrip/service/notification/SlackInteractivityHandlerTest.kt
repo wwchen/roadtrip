@@ -62,7 +62,7 @@ class SlackInteractivityHandlerTest {
 
     /** Fake Slack transport — tests only need to observe what got posted to
      *  which response_url; the render itself is covered by the renderer test. */
-    private class FakeSlack : SlackNotificationService {
+    private class FakeSlack : NotificationService {
         data class Response(
             val url: String,
             val notice: WatchStatusNotice,
@@ -78,7 +78,7 @@ class SlackInteractivityHandlerTest {
 
         override suspend fun sendWatchStatus(
             notice: WatchStatusNotice,
-            channel: String?,
+            targets: List<NotificationTarget>,
         ) = true
 
         override suspend fun sendWatchOpenings(
@@ -86,7 +86,7 @@ class SlackInteractivityHandlerTest {
             startDate: LocalDate,
             endDate: LocalDate,
             openings: List<WatchOpening>,
-            channel: String?,
+            targets: List<NotificationTarget>,
             appRootUrl: String?,
         ) = true
 

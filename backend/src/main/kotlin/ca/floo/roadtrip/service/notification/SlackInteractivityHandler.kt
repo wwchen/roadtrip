@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory
  * ([ca.floo.roadtrip.routes.slackInteractivityRoute]) verifies the signature and
  * hands the parsed payload here; this handler applies the mutation (pause /
  * resume / delete) and re-renders the card in place through the
- * [SlackNotificationService.postResponseWatchStatus] one-shot URL.
+ * [NotificationService.postResponseWatchStatus] one-shot URL.
  *
  * URL-button action ids (Reserve, Grid, Map, Dashboard) route to a silent
  * no-op: Slack still fires an interaction payload for them, but the redirect
@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory
  */
 internal class SlackInteractivityHandler(
     private val watches: Watches,
-    private val slack: SlackNotificationService,
+    private val slack: NotificationService,
 ) {
     /** The two mutations + one snapshot the interactivity handler needs from
      *  the watch layer, wrapped in a port the composition root implements by

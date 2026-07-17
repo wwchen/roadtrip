@@ -4,25 +4,22 @@ import kotlinx.serialization.json.JsonObject
 import java.time.LocalDate
 
 /**
- * Business seam for delivering a Slack notification. Callers depend on this
- * interface — not on the [ca.floo.roadtrip.clients.slack.SlackClient] transport,
- * and not on its Block Kit wire types — so notification policy (channel routing,
- * formatting, future retries or alternate transports) can evolve without
- * touching every call site, and tests substitute a trivial fake instead of a
- * live workspace.
+ * Business seam for delivering watch notifications. Availability code depends
+ * on this aggregate interface instead of Slack, Resend, or their wire types.
+ * A watch alert supplies one or more [NotificationTarget]s; this service owns
+ * routing each target to its transport and formatting.
  */
-interface SlackNotificationService {
+interface NotificationService {
     /**
      * Renders and sends a watch's lifecycle/status card (watching, paused,
-     * done, stopped) for [notice] to [channel], or to the service's configured
-     * default channel when [channel] is null. The caller supplies plain domain
-     * data; the service owns the Block Kit body. Never throws: a delivery
-     * failure — or having no channel to send to — is surfaced as `false` so a
-     * notification problem can't break the caller's flow.
+     * done, stopped) for [notice] to [targets]. The caller supplies plain
+     * domain data; the service owns each target's message body. Never throws:
+     * a delivery failure is surfaced as `false` so a notification problem
+     * cannot break the caller's flow.
      */
     suspend fun sendWatchStatus(
         notice: WatchStatusNotice,
-        channel: String? = null,
+        targets: List<NotificationTarget>,
     ): Boolean
 
     /**
@@ -38,12 +35,12 @@ interface SlackNotificationService {
         startDate: LocalDate,
         endDate: LocalDate,
         openings: List<WatchOpening>,
-        channel: String? = null,
+        targets: List<NotificationTarget>,
         appRootUrl: String? = null,
     ): Boolean
 
     /**
-     * Reports a backend-owned one-shot ATC result.
+     * Reports a backend-owned one-shot ATC result to [targets].
      */
     suspend fun sendAtcResult(
         watchId: Long,
@@ -51,7 +48,7 @@ interface SlackNotificationService {
         status: String,
         request: JsonObject,
         response: JsonObject?,
-        channel: String? = null,
+        targets: List<NotificationTarget>,
     ): Boolean = false
 
     /**

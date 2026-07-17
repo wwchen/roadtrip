@@ -1,8 +1,11 @@
 package ca.floo.roadtrip.service.notification
 
+import ca.floo.roadtrip.clients.resend.EmailDeliveryClient
+import ca.floo.roadtrip.clients.resend.EmailDeliveryMessage
 import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
 import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import ca.floo.roadtrip.clients.slack.SlackClient
+import ca.floo.roadtrip.config.EmailConfig
 import ca.floo.roadtrip.config.SlackConfig
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.add
@@ -16,7 +19,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-class SlackNotificationServiceImplTest {
+class NotificationServiceImplTest {
     /** Records what it was asked to post and returns a fixed result, so the impl's
      *  enabled path (channel resolution, blocks pass-through, result propagation)
      *  is exercised without a live workspace. */
@@ -60,10 +63,39 @@ class SlackNotificationServiceImplTest {
         }
     }
 
+    private class RecordingEmailClient(
+        private val result: Boolean = true,
+    ) : EmailDeliveryClient {
+        val messages = mutableListOf<EmailDeliveryMessage>()
+
+        override suspend fun send(message: EmailDeliveryMessage): Boolean {
+            messages += message
+            return result
+        }
+    }
+
     private fun service(
         client: RecordingSlackClient,
         defaultChannel: String = "#default",
-    ) = SlackNotificationServiceImpl(SlackConfig(botToken = "xoxb-test", defaultChannel = defaultChannel), client = client)
+    ) = NotificationServiceImpl(
+        slackConfig = SlackConfig(botToken = "xoxb-test", defaultChannel = defaultChannel),
+        emailConfig = null,
+        slackClient = client,
+    )
+
+    private fun emailService(
+        client: RecordingEmailClient,
+        resultRecipients: List<String> = listOf("one@example.test", "two@example.test"),
+    ) = NotificationServiceImpl(
+        slackConfig = null,
+        emailConfig =
+            EmailConfig(
+                resendApiKey = "re_test",
+                from = "Roadtrip Alerts <alerts@example.test>",
+                defaultTo = resultRecipients,
+            ),
+        emailClient = client,
+    )
 
     private fun watchStatus(state: WatchStatusNotice.State = WatchStatusNotice.State.WATCHING) =
         WatchStatusNotice(
@@ -90,7 +122,7 @@ class SlackNotificationServiceImplTest {
     fun `sendWatchStatus renders an attachment to the given channel and returns the client result`() =
         runBlocking {
             val client = RecordingSlackClient(result = true)
-            val ok = service(client).sendWatchStatus(watchStatus(), "#camping")
+            val ok = service(client).sendWatchStatus(watchStatus(), listOf(NotificationTarget.Slack("#camping")))
 
             assertTrue(ok)
             assertEquals(1, client.posts.size)
@@ -106,7 +138,7 @@ class SlackNotificationServiceImplTest {
     fun `sendWatchStatus falls back to the configured default channel`() =
         runBlocking {
             val client = RecordingSlackClient()
-            service(client, defaultChannel = "#default").sendWatchStatus(watchStatus())
+            service(client, defaultChannel = "#default").sendWatchStatus(watchStatus(), listOf(NotificationTarget.Slack()))
 
             assertEquals("#default", client.posts.single().channel)
         }
@@ -114,7 +146,10 @@ class SlackNotificationServiceImplTest {
     @Test
     fun `sendWatchStatus surfaces a client failure as false`() =
         runBlocking {
-            assertFalse(service(RecordingSlackClient(result = false)).sendWatchStatus(watchStatus()))
+            assertFalse(
+                service(RecordingSlackClient(result = false))
+                    .sendWatchStatus(watchStatus(), listOf(NotificationTarget.Slack())),
+            )
         }
 
     @Test
@@ -128,17 +163,9 @@ class SlackNotificationServiceImplTest {
                     endDate = LocalDate.of(2026, 8, 3),
                     openings =
                         listOf(
-                            WatchOpening(
-                                label = "Site 100",
-                                loop = "Loop A",
-                                siteType = "Tent",
-                                date = LocalDate.of(2026, 8, 1),
-                                campgroundId = 7L,
-                                campground = "Kirk Creek",
-                                bookingUrl = "https://example.test/book/100",
-                            ),
+                            opening(),
                         ),
-                    channel = "#camping",
+                    targets = listOf(NotificationTarget.Slack(channel = "#camping")),
                 )
 
             assertTrue(ok)
@@ -152,10 +179,73 @@ class SlackNotificationServiceImplTest {
     fun `sendWatchOpenings sends nothing when there are no openings`() =
         runBlocking {
             val client = RecordingSlackClient()
-            val ok = service(client).sendWatchOpenings(1L, LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 3), emptyList())
+            val ok =
+                service(client).sendWatchOpenings(
+                    1L,
+                    LocalDate.of(2026, 8, 1),
+                    LocalDate.of(2026, 8, 3),
+                    emptyList(),
+                    targets = listOf(NotificationTarget.Slack()),
+                )
 
             assertFalse(ok)
             assertTrue(client.posts.isEmpty())
+        }
+
+    @Test
+    fun `sendWatchOpenings sends one email per configured recipient`() =
+        runBlocking {
+            val client = RecordingEmailClient()
+            val ok =
+                emailService(client).sendWatchOpenings(
+                    watchId = 42L,
+                    startDate = LocalDate.of(2026, 8, 1),
+                    endDate = LocalDate.of(2026, 8, 3),
+                    openings = listOf(opening()),
+                    targets = listOf(NotificationTarget.Email()),
+                    appRootUrl = "https://roadtrip.example",
+                )
+
+            assertTrue(ok)
+            assertEquals(listOf("one@example.test", "two@example.test"), client.messages.map { it.to })
+            val message = client.messages.first()
+            assertEquals("Roadtrip Alerts <alerts@example.test>", message.from)
+            assertTrue(message.subject.contains("1 site opened"), message.subject)
+            assertTrue(message.text.contains("Site 100"), message.text)
+            assertTrue(message.text.contains("https://example.test/book/100"), message.text)
+            assertTrue(message.html.contains("Open watch"), message.html)
+        }
+
+    @Test
+    fun `sendWatchOpenings returns false when any notification target fails`() =
+        runBlocking {
+            val slackClient = RecordingSlackClient(result = true)
+            val emailClient = RecordingEmailClient(result = false)
+            val service =
+                NotificationServiceImpl(
+                    slackConfig = SlackConfig(botToken = "xoxb-test", defaultChannel = "#default"),
+                    emailConfig =
+                        EmailConfig(
+                            resendApiKey = "re_test",
+                            from = "Roadtrip Alerts <alerts@example.test>",
+                            defaultTo = listOf("one@example.test"),
+                        ),
+                    slackClient = slackClient,
+                    emailClient = emailClient,
+                )
+
+            val ok =
+                service.sendWatchOpenings(
+                    watchId = 42L,
+                    startDate = LocalDate.of(2026, 8, 1),
+                    endDate = LocalDate.of(2026, 8, 3),
+                    openings = listOf(opening()),
+                    targets = listOf(NotificationTarget.Slack("#camping"), NotificationTarget.Email()),
+                )
+
+            assertFalse(ok)
+            assertEquals(1, slackClient.posts.size)
+            assertEquals(1, emailClient.messages.size)
         }
 
     @Test
@@ -207,7 +297,7 @@ class SlackNotificationServiceImplTest {
                             put("campsite_id", "10174587")
                         },
                     response = response,
-                    channel = "#camping",
+                    targets = listOf(NotificationTarget.Slack("#camping")),
                 )
 
             assertTrue(ok)
@@ -267,18 +357,31 @@ class SlackNotificationServiceImplTest {
     @Test
     fun `a disabled service (null config) sends nothing and returns false`() =
         runBlocking {
-            val service = SlackNotificationServiceImpl(config = null)
-            assertFalse(service.sendWatchStatus(watchStatus()))
-            assertFalse(service.sendWatchStatus(watchStatus(), channel = "#camping"))
+            val service = NotificationServiceImpl(slackConfig = null, emailConfig = null)
+            assertFalse(service.sendWatchStatus(watchStatus(), listOf(NotificationTarget.Slack())))
+            assertFalse(service.sendWatchStatus(watchStatus(), listOf(NotificationTarget.Slack("#camping"))))
             assertFalse(
                 service.sendWatchOpenings(
                     1L,
                     LocalDate.of(2026, 8, 1),
                     LocalDate.of(2026, 8, 3),
-                    listOf(WatchOpening("Site 100", null, null, LocalDate.of(2026, 8, 1), null, null, null)),
+                    listOf(opening()),
+                    targets = listOf(NotificationTarget.Slack(), NotificationTarget.Email()),
                 ),
             )
             assertFalse(service.postResponseWatchStatus("https://hooks.slack/actions/xyz", watchStatus()))
             assertFalse(service.postResponseStaleWatch("https://hooks.slack/actions/xyz", watchId = 42L))
         }
+
+    private fun opening(): WatchOpening =
+        WatchOpening(
+            label = "Site 100",
+            loop = "Loop A",
+            siteType = "Tent",
+            date = LocalDate.of(2026, 8, 1),
+            campgroundId = 7L,
+            campground = "Kirk Creek",
+            bookingUrl = "https://example.test/book/100",
+            vendor = "recgov",
+        )
 }

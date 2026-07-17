@@ -3,8 +3,9 @@ package ca.floo.roadtrip.routes
 import ca.floo.roadtrip.clients.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.availability.WatchStatus
+import ca.floo.roadtrip.service.notification.NotificationService
+import ca.floo.roadtrip.service.notification.NotificationTarget
 import ca.floo.roadtrip.service.notification.SlackInteractivityHandler
-import ca.floo.roadtrip.service.notification.SlackNotificationService
 import ca.floo.roadtrip.service.notification.SlackWatchCard
 import ca.floo.roadtrip.service.notification.WatchOpening
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
@@ -76,10 +77,10 @@ class SlackInteractivityRoutesTest {
         ) = throw AssertionError("unused in these tests")
     }
 
-    private class SilentSlack : SlackNotificationService {
+    private class SilentSlack : NotificationService {
         override suspend fun sendWatchStatus(
             notice: WatchStatusNotice,
-            channel: String?,
+            targets: List<NotificationTarget>,
         ) = true
 
         override suspend fun sendWatchOpenings(
@@ -87,7 +88,7 @@ class SlackInteractivityRoutesTest {
             startDate: LocalDate,
             endDate: LocalDate,
             openings: List<WatchOpening>,
-            channel: String?,
+            targets: List<NotificationTarget>,
             appRootUrl: String?,
         ) = true
 

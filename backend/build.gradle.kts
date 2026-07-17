@@ -114,6 +114,7 @@ dependencies {
     implementation("io.ktor:ktor-server-compression:$ktorVersion")
     implementation("io.ktor:ktor-server-caching-headers:$ktorVersion")
     implementation("io.ktor:ktor-server-conditional-headers:$ktorVersion")
+    implementation("io.ktor:ktor-server-html-builder:$ktorVersion")
     // SSE for /api/campsite/events stream.
     implementation("io.ktor:ktor-server-sse:$ktorVersion")
     // HttpClient powers AvailabilityClient (rec.gov) and SlackNotifier in the

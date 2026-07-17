@@ -1,12 +1,20 @@
 package ca.floo.roadtrip.service.notification
 
+import kotlinx.html.a
+import kotlinx.html.br
+import kotlinx.html.div
+import kotlinx.html.h2
+import kotlinx.html.li
+import kotlinx.html.ol
+import kotlinx.html.p
+import kotlinx.html.stream.createHTML
+import kotlinx.html.strong
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private const val MAX_SUBJECT_CAMPGROUND_CHARS = 80
 private const val ELLIPSIS = "..."
-private const val HTML_BREAK = "<br>"
 private val DATE_FORMATTER = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)
 
 internal object EmailContentAvailabilityRenderer {
@@ -47,49 +55,55 @@ internal object EmailContentAvailabilityRenderer {
                     appendLine()
                 }
             }.trimEnd()
-        val html =
-            buildString {
-                append("<h2>Sites available for watch #")
-                append(watchId)
-                append("</h2>")
-                append("<p><strong>Window:</strong> ")
-                append(window.escapeHtml())
-                watchUrl?.let {
-                    append(HTML_BREAK)
-                    append("""<a href="${it.escapeHtml()}">Open watch</a>""")
-                }
-                append("</p><ol>")
-                openings.forEach { opening ->
-                    append("<li><strong>")
-                    append(opening.label.escapeHtml())
-                    append("</strong>")
-                    val details =
-                        listOfNotNull(
-                            opening.campground?.let { "Campground: $it" },
-                            "Date: ${opening.date.format(DATE_FORMATTER)}",
-                            opening.loop?.let { "Loop: $it" },
-                            opening.siteType?.let { "Type: $it" },
-                            opening.bookingUrl?.let { """<a href="${it.escapeHtml()}">Book site</a>""" },
-                        )
-                    append("<br>")
-                    append(details.joinToString(HTML_BREAK) { it.escapeHtmlUnlessAnchor() })
-                    append("</li>")
-                }
-                append("</ol>")
-            }
+        val html = renderHtml(watchId = watchId, window = window, watchUrl = watchUrl, openings = openings)
         return EmailContent(subject = subject, text = text, html = html)
     }
+
+    private fun renderHtml(
+        watchId: Long,
+        window: String,
+        watchUrl: String?,
+        openings: List<WatchOpening>,
+    ): String =
+        createHTML().div {
+            h2 { +"Sites available for watch #$watchId" }
+            p {
+                strong { +"Window:" }
+                +" $window"
+                watchUrl?.let {
+                    br()
+                    a(href = it) { +"Open watch" }
+                }
+            }
+            ol {
+                openings.forEach { opening ->
+                    li {
+                        strong { +opening.label }
+                        br()
+                        opening.campground?.let {
+                            +"Campground: $it"
+                            br()
+                        }
+                        +"Date: ${opening.date.format(DATE_FORMATTER)}"
+                        opening.loop?.let {
+                            br()
+                            +"Loop: $it"
+                        }
+                        opening.siteType?.let {
+                            br()
+                            +"Type: $it"
+                        }
+                        opening.bookingUrl?.let {
+                            br()
+                            a(href = it) { +"Book site" }
+                        }
+                    }
+                }
+            }
+        }
 
     private fun String.plural(count: Int): String = if (count == 1) this else "${this}s"
 
     private fun String.truncateSubjectPart(): String =
         if (length <= MAX_SUBJECT_CAMPGROUND_CHARS) this else take(MAX_SUBJECT_CAMPGROUND_CHARS - ELLIPSIS.length) + ELLIPSIS
-
-    private fun String.escapeHtml(): String =
-        replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace("\"", "&quot;")
-
-    private fun String.escapeHtmlUnlessAnchor(): String = if (startsWith("<a href=")) this else escapeHtml()
 }

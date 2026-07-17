@@ -38,10 +38,9 @@ import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
-import ca.floo.roadtrip.service.availability.EmailNotifyHandler
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
+import ca.floo.roadtrip.service.availability.NotifyTriggerActionHandler
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
-import ca.floo.roadtrip.service.availability.SlackNotifyHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
@@ -60,9 +59,8 @@ import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.importTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.sweepStaleIngestRuns
-import ca.floo.roadtrip.service.notification.EmailNotificationServiceImpl
+import ca.floo.roadtrip.service.notification.NotificationServiceImpl
 import ca.floo.roadtrip.service.notification.SlackInteractivityHandler
-import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.DEFAULT_POI_TYPES
@@ -101,7 +99,7 @@ internal class RoadtripRuntime(
     val schedulerScope: CoroutineScope,
     val slackInteractivity: SlackInteractivityWiring?,
     val failoverFetcher: FailoverAvailabilityFetcher,
-    private val slackNotifications: SlackNotificationServiceImpl,
+    private val notifications: NotificationServiceImpl,
 ) {
     val appConfig: AppConfig get() = boot.appConfig
     val ctx: DSLContext get() = boot.ctx
@@ -114,7 +112,7 @@ internal class RoadtripRuntime(
     fun close() {
         schedulerScope.cancel()
         boot.availabilityProviderClients.close()
-        slackNotifications.close()
+        notifications.close()
     }
 }
 
@@ -209,8 +207,11 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
     val availabilityPollers = AvailabilityPollerRepo(boot.ctx)
     PollerBackfill(boot.ctx, pollerMembership).run()
 
-    val slackNotifications = SlackNotificationServiceImpl(boot.appConfig.slack)
-    val emailNotifications = EmailNotificationServiceImpl(boot.appConfig.email)
+    val notifications =
+        NotificationServiceImpl(
+            slackConfig = boot.appConfig.slack,
+            emailConfig = boot.appConfig.email,
+        )
     val recgovAtcExecutor =
         boot.appConfig.booking.recgovAtc
             .takeIf { it.companionEnabled }
@@ -247,24 +248,20 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
     val triggerActions =
         TriggerActionRegistry(
             listOf(
-                SlackNotifyHandler(
-                    slack = slackNotifications,
-                    appRootUrl = boot.appConfig.webApp?.rootUrl,
-                ),
-                EmailNotifyHandler(
-                    email = emailNotifications,
+                NotifyTriggerActionHandler(
+                    notifications = notifications,
                     appRootUrl = boot.appConfig.webApp?.rootUrl,
                 ),
                 AtcTriggerActionHandler(
                     bookings = bookingProviderRegistry,
                     bookingTargets = bookingTargets,
-                    slack = slackNotifications,
+                    notifications = notifications,
                 ),
             ),
         )
     val watchAlertDispatcher =
         WatchAlertDispatcher(
-            slack = slackNotifications,
+            notifications = notifications,
             scopeResolver = watchScopeResolver,
             watches = AvailabilityWatchRepo(boot.ctx),
             targets = availabilityTargets,
@@ -306,7 +303,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             )
             SlackInteractivityWiring(
                 verifier = SlackSignatureVerifier(secret),
-                handler = SlackInteractivityHandler(watches = watchesPort, slack = slackNotifications),
+                handler = SlackInteractivityHandler(watches = watchesPort, slack = notifications),
             )
         } ?: run {
             val reason =
@@ -361,7 +358,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         schedulerScope = schedulerScope,
         slackInteractivity = slackInteractivity,
         failoverFetcher = sharedFailoverFetcher,
-        slackNotifications = slackNotifications,
+        notifications = notifications,
     )
 }
 

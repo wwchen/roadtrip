@@ -16,7 +16,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
-import ca.floo.roadtrip.service.availability.SlackNotifyHandler
+import ca.floo.roadtrip.service.availability.NotifyTriggerActionHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
@@ -26,7 +26,7 @@ import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
-import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
+import ca.floo.roadtrip.service.notification.NotificationServiceImpl
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.patch
@@ -141,9 +141,9 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
     private fun disabledDispatcher(): WatchAlertDispatcher {
         val campsitesRepo = CampsiteRepo(ctx)
-        val slack = SlackNotificationServiceImpl(config = null)
+        val notifications = NotificationServiceImpl(slackConfig = null, emailConfig = null)
         return WatchAlertDispatcher(
-            slack = slack,
+            notifications = notifications,
             scopeResolver = WatchScopeResolver(campsitesRepo),
             watches = AvailabilityWatchRepo(ctx),
             targets =
@@ -155,7 +155,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 ),
             pois = PoiServingRepo(ctx),
             availability = AvailabilityRepo(ctx),
-            triggerActions = TriggerActionRegistry(listOf(SlackNotifyHandler(slack, appRootUrl = null))),
+            triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, appRootUrl = null))),
             grafanaRootUrl = null,
             appRootUrl = null,
         )

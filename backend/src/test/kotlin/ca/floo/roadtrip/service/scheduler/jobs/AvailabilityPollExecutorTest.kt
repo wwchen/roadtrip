@@ -32,9 +32,9 @@ import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.FetchOutcome
+import ca.floo.roadtrip.service.availability.NotifyTriggerActionHandler
 import ca.floo.roadtrip.service.availability.ProviderCandidate
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
-import ca.floo.roadtrip.service.availability.SlackNotifyHandler
 import ca.floo.roadtrip.service.availability.TriggerActionHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.TriggerOpening
@@ -44,10 +44,11 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
+import ca.floo.roadtrip.service.notification.NotificationService
+import ca.floo.roadtrip.service.notification.NotificationServiceImpl
+import ca.floo.roadtrip.service.notification.NotificationTarget
 import ca.floo.roadtrip.service.notification.SlackContentAvailabilityRenderer
 import ca.floo.roadtrip.service.notification.SlackContentWatchStatusRenderer
-import ca.floo.roadtrip.service.notification.SlackNotificationService
-import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
 import ca.floo.roadtrip.service.notification.WatchOpening
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
@@ -248,7 +249,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 }
     }
 
-    /** A [SlackNotificationService] double that records every send and returns a
+    /** A [NotificationService] double that records every send and returns a
      *  configurable result, so alert tests never touch a live Slack workspace. It
      *  resolves the default channel the way the real impl does, and renders
      *  openings through the real [SlackContentAvailabilityRenderer], so both
@@ -256,15 +257,15 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     private class RecordingSlackNotifications(
         var result: Boolean = true,
         private val defaultChannel: String? = "#camping",
-    ) : SlackNotificationService {
+    ) : NotificationService {
         val posts = mutableListOf<Post>()
 
         override suspend fun sendWatchStatus(
             notice: WatchStatusNotice,
-            channel: String?,
+            targets: List<NotificationTarget>,
         ): Boolean {
             val (fallback, attachments) = SlackContentWatchStatusRenderer.render(notice)
-            posts += Post(channel = channel ?: defaultChannel, text = fallback, attachments = attachments)
+            posts += Post(channel = channelFor(targets), text = fallback, attachments = attachments)
             return result
         }
 
@@ -273,13 +274,20 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             startDate: LocalDate,
             endDate: LocalDate,
             openings: List<WatchOpening>,
-            channel: String?,
+            targets: List<NotificationTarget>,
             appRootUrl: String?,
         ): Boolean {
             val (fallback, attachments) = SlackContentAvailabilityRenderer.openings(watchId, startDate, endDate, openings, appRootUrl)
-            posts += Post(channel = channel ?: defaultChannel, text = fallback, attachments = attachments)
+            posts += Post(channel = channelFor(targets), text = fallback, attachments = attachments)
             return result
         }
+
+        private fun channelFor(targets: List<NotificationTarget>): String? =
+            targets
+                .filterIsInstance<NotificationTarget.Slack>()
+                .singleOrNull()
+                ?.channel
+                ?: defaultChannel
 
         override suspend fun postResponseWatchStatus(
             responseUrl: String,
@@ -293,9 +301,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     }
 
     private class RecordingTriggerActionHandler(
-        override val kind: String,
+        kind: String,
         private val result: Boolean = true,
     ) : TriggerActionHandler {
+        override val kinds: Set<String> = setOf(kind)
         val calls = mutableListOf<Pair<AvailabilityWatchRepo.Watch, List<TriggerOpening>>>()
 
         override suspend fun fire(
@@ -318,9 +327,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     /** Dispatcher with Slack disabled — a null-config service that no-ops and
      *  returns false. Default for tests that don't exercise alerting. */
     private fun disabledDispatcher(): WatchAlertDispatcher {
-        val slack = SlackNotificationServiceImpl(config = null)
+        val notifications = NotificationServiceImpl(slackConfig = null, emailConfig = null)
         return WatchAlertDispatcher(
-            slack = slack,
+            notifications = notifications,
             scopeResolver = WatchScopeResolver(CampsiteRepo(ctx)),
             watches = AvailabilityWatchRepo(ctx),
             targets =
@@ -332,7 +341,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 ),
             pois = PoiServingRepo(ctx),
             availability = AvailabilityRepo(ctx),
-            triggerActions = TriggerActionRegistry(listOf(SlackNotifyHandler(slack, APP_ROOT_URL))),
+            triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, APP_ROOT_URL))),
             grafanaRootUrl = GRAFANA_ROOT_URL,
             appRootUrl = APP_ROOT_URL,
         )
@@ -346,13 +355,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         extraTriggerHandlers: List<TriggerActionHandler> = emptyList(),
     ): WatchAlertDispatcher =
         WatchAlertDispatcher(
-            slack = notifications,
+            notifications = notifications,
             scopeResolver = WatchScopeResolver(CampsiteRepo(ctx)),
             watches = AvailabilityWatchRepo(ctx),
             targets = targetsFor(provider),
             pois = PoiServingRepo(ctx),
             availability = AvailabilityRepo(ctx),
-            triggerActions = TriggerActionRegistry(listOf(SlackNotifyHandler(notifications, appRootUrl)) + extraTriggerHandlers),
+            triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, appRootUrl)) + extraTriggerHandlers),
             grafanaRootUrl = grafanaRootUrl,
             appRootUrl = appRootUrl,
         )
