@@ -18,7 +18,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
-import io.ktor.server.request.receiveText
+import io.ktor.server.request.receive
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
@@ -26,7 +26,6 @@ import io.ktor.server.routing.route
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
@@ -50,10 +49,9 @@ internal fun Route.poisOnRouteRoutes(poisOnRouteService: PoisOnRouteService) {
     route("/api") {
         route("/pois") {
             post("/on-route") {
-                val bodyText = call.receiveText()
                 val req =
                     try {
-                        parseOnRouteRequest(bodyText)
+                        parseOnRouteRequest(call.receive<OnRouteRequestDto>())
                     } catch (e: Exception) {
                         call.respondOnRouteJson(
                             ApiErrorSchema(error = "bad_request", detail = e.message ?: "parse failed"),
@@ -140,7 +138,7 @@ private data class WaypointDto(
     }
 }
 
-private fun parseOnRouteRequest(bodyText: String): OnRouteRequest = onRouteJson.decodeFromString<OnRouteRequestDto>(bodyText).validated()
+private fun parseOnRouteRequest(dto: OnRouteRequestDto): OnRouteRequest = dto.validated()
 
 /**
  * On-route FeatureCollection. Same per-feature shape as the bbox endpoint

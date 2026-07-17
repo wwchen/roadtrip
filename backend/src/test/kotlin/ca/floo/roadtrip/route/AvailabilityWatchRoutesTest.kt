@@ -29,7 +29,6 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
-import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
@@ -155,7 +154,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST creates a poi-scoped watch with filters`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -193,7 +192,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST rejects invalid date window`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -219,7 +218,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST ignores removed date fields`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -255,7 +254,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST rejects missing scope`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -280,7 +279,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST rejects atc watch when booking capability is unsupported`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchServiceRejectingAtc(),
@@ -311,7 +310,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST with an explicit targets array persists a multi-target watch`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -348,7 +347,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST with legacy poi_id is accepted as a one-element target list`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -377,7 +376,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST rejects both targets and legacy poi_id set together`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -403,7 +402,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST rejects a target with both poi_id and campsite_id set`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -431,7 +430,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `GET list filters by status`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -459,7 +458,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST modify pauses a watch`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -496,7 +495,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST modify rejects invalid cadence and triggers`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -581,7 +580,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST modify updates trigger config and stop when triggered`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -646,7 +645,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST modify ignores removed date fields`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -686,7 +685,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST modify rejects an empty targets array`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -724,7 +723,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST modify rejects a target with both poi_id and campsite_id set`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -764,7 +763,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST modify with a valid single-target targets array updates the watch`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -805,7 +804,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST delete removes a watch`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
@@ -838,7 +837,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `GET watch includes watch capabilities when configured`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchServiceWithRecgov(),
@@ -877,7 +876,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST links a poller and POST modify paused drops the link and deactivates it`() =
         testApplication {
             application {
-                routing {
+                routeTestApplication {
                     availabilityWatchRoutes(ctx, watchServiceWithRecgov())
                 }
             }
