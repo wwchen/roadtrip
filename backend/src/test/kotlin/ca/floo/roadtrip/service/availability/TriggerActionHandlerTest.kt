@@ -100,6 +100,53 @@ class TriggerActionHandlerTest {
         }
 
     @Test
+    fun `NotifyTriggerActionHandler prefers nested channel override over legacy flat channel`() =
+        runBlocking {
+            val notifications = CapturingNotifications(result = true)
+            val handler = NotifyTriggerActionHandler(notifications = notifications, appRootUrl = "https://app.example")
+
+            val delivered =
+                handler.fire(
+                    fakeWatch(
+                        id = 42L,
+                        triggerConfig =
+                            JsonObject(
+                                mapOf(
+                                    "channel" to JsonPrimitive("legacy-channel"),
+                                    AvailabilityTriggerKinds.SLACK_NOTIFY to
+                                        JsonObject(
+                                            mapOf("channel" to JsonPrimitive("nested-channel")),
+                                        ),
+                                ),
+                            ),
+                    ),
+                    openings = listOf(triggerOpening()),
+                )
+
+            assertTrue(delivered)
+            assertEquals(listOf(NotificationTarget.Slack("nested-channel")), notifications.lastTargets)
+        }
+
+    @Test
+    fun `NotifyTriggerActionHandler omits channel when triggerConfig has none`() =
+        runBlocking {
+            val notifications = CapturingNotifications(result = true)
+            val handler = NotifyTriggerActionHandler(notifications = notifications, appRootUrl = "https://app.example")
+
+            val delivered =
+                handler.fire(
+                    fakeWatch(
+                        id = 42L,
+                        triggerKinds = listOf(AvailabilityTriggerKinds.SLACK_NOTIFY),
+                    ),
+                    openings = listOf(triggerOpening()),
+                )
+
+            assertTrue(delivered)
+            assertEquals(listOf(NotificationTarget.Slack()), notifications.lastTargets)
+        }
+
+    @Test
     fun `NotifyTriggerActionHandler sends email target`() =
         runBlocking {
             val notifications = CapturingNotifications(result = true)
