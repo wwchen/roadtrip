@@ -10,5 +10,9 @@
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "grafana-core@grafana-skills": true,
+    "grafana-lgtm@grafana-skills": true
   }
 }
