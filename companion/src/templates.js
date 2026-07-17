@@ -9,8 +9,8 @@ export function renderLoginPage ({ result = null } = {}) {
   const status = result?.recgov_auth
   const ok = result?.ok === true
   const error = result && !ok ? result.detail || status?.detail || result.error || status?.error : null
-  const operation = status?.operation === 'refresh' ? 'Refresh' : 'Login'
-  const diagnostic = status?.diagnostic || status?.last_login_diagnostic || null
+  const operation = operationLabel(status?.operation)
+  const diagnostic = result?.diagnostics || status?.diagnostic || status?.last_login_diagnostic || null
   const statusHtml = result
     ? `<p id="status-message" class="${ok ? 'ok' : 'error'}">${escapeHtml(ok ? `${operation} succeeded.` : `${operation} failed: ${error}`)}</p>`
     : '<p id="status-message" class="muted">Ready.</p>'
@@ -31,6 +31,12 @@ export function renderLoginPage ({ result = null } = {}) {
 
 export function renderSwaggerPage () {
   return SWAGGER_PAGE_TEMPLATE
+}
+
+function operationLabel (operation) {
+  if (operation === 'refresh') return 'Refresh'
+  if (operation === 'logout') return 'Logout'
+  return 'Login'
 }
 
 function renderDiagnosticHtml (diagnostic) {

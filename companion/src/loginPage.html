@@ -132,7 +132,7 @@
       jsonOutput.classList.remove('hidden')
       jsonOutput.textContent = JSON.stringify(body, null, 2)
       sessionScreenshot.src = '/screenshot?path=/&_=' + Date.now()
-      renderDiagnostic(body?.recgov_auth?.diagnostic || body?.recgov_auth?.last_login_diagnostic)
+      renderDiagnostic(body?.diagnostics || body?.recgov_auth?.diagnostic || body?.recgov_auth?.last_login_diagnostic)
     }
 
     function renderDiagnostic (data) {

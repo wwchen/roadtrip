@@ -1,0 +1,3 @@
+export const SCREENSHOT_ROUTE = '/screenshot'
+export const SCREENSHOT_ROUTE_PREFIX = `${SCREENSHOT_ROUTE}/`
+export const SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX = `${SCREENSHOT_ROUTE}/diagnostics`

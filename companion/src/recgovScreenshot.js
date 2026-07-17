@@ -8,15 +8,20 @@ import {
   RECGOV_HOME_URL,
   resolveRecaccount,
 } from './recgovSession.js'
+import { captureRecgovPageImage } from './recgovScreenshotCapture.js'
+import {
+  SCREENSHOT_ROUTE_PREFIX,
+} from './recgovScreenshotRoutes.js'
 
-export const SCREENSHOT_ROUTE = '/screenshot'
-export const SCREENSHOT_ROUTE_PREFIX = `${SCREENSHOT_ROUTE}/`
+export {
+  SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX,
+  SCREENSHOT_ROUTE,
+  SCREENSHOT_ROUTE_PREFIX,
+} from './recgovScreenshotRoutes.js'
 
 const RECGOV_ORIGIN = new URL(RECGOV_HOME_URL).origin
 const SCREENSHOT_NAVIGATION_TIMEOUT_MS = 30_000
 const SCREENSHOT_SETTLE_MS = 2_000
-const SCREENSHOT_VIEWPORT_WIDTH = 1280
-const SCREENSHOT_VIEWPORT_HEIGHT = 1000
 
 export function createRecgovScreenshotDeps ({
   getContextFn = getContext,
@@ -45,13 +50,12 @@ export async function captureRecgovScreenshot (target, deps = createRecgovScreen
       await deps.injectRecaccountFn(page, recaccount)
       await deps.injectBearerRouteFn(page, recaccount.access_token)
     }
-    await setScreenshotViewport(page)
     await page.goto(target.href, {
       waitUntil: 'domcontentloaded',
       timeout: SCREENSHOT_NAVIGATION_TIMEOUT_MS,
     })
     await page.waitForTimeout(SCREENSHOT_SETTLE_MS)
-    const image = await page.screenshot({ type: 'png', fullPage: false })
+    const image = await captureRecgovPageImage(page)
     return {
       image,
       recaccountPresent: Boolean(recaccount?.access_token),
@@ -74,14 +78,6 @@ export function recgovScreenshotTargetUrl (url) {
   } catch {
     return null
   }
-}
-
-async function setScreenshotViewport (page) {
-  if (typeof page.setViewportSize !== 'function') return
-  await page.setViewportSize({
-    width: SCREENSHOT_VIEWPORT_WIDTH,
-    height: SCREENSHOT_VIEWPORT_HEIGHT,
-  })
 }
 
 function screenshotTargetInput (url) {

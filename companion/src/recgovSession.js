@@ -12,6 +12,8 @@ import {
   isSpaLoggedIn,
   readRecaccount,
 } from './browser.js'
+import { captureRecgovPageImage } from './recgovScreenshotCapture.js'
+import { SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX } from './recgovScreenshotRoutes.js'
 
 export const RECGOV_HOME_URL = 'https://www.recreation.gov/'
 export const RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS = 20_000
@@ -21,7 +23,6 @@ export const RECGOV_DIAGNOSTIC_DIR = process.env.RECGOV_DIAGNOSTIC_DIR || '/tmp/
 const RECGOV_REFRESH_URL = 'https://www.recreation.gov/api/accounts/login/v2/refresh'
 const RECGOV_REFRESH_CONTENT_TYPE = 'text/plain;charset=UTF-8'
 const RECGOV_RECACCOUNT_STORAGE_KEY = 'recaccount'
-const RECGOV_DIAGNOSTIC_URL_PREFIX = '/diagnostics'
 const DEFAULT_RECGOV_LOGIN_TIMEOUT_MS = 120_000
 const DEFAULT_RECGOV_CREDENTIAL_SESSION_TIMEOUT_MS = 5_000
 const MAX_RECGOV_CREDENTIAL_SESSION_TIMEOUT_MS = 5_000
@@ -676,13 +677,12 @@ async function captureLoginDiagnostic (page, reason, detail = null) {
     detail: detail || null,
     captured_at: capturedAt,
     page_url: safePageUrl(page),
-    screenshot_path: screenshotPath,
-    screenshot_url: `${RECGOV_DIAGNOSTIC_URL_PREFIX}/${filename}`,
+    screenshot_url: `${SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX}/${filename}`,
   }
 
   try {
     await fs.mkdir(RECGOV_DIAGNOSTIC_DIR, { recursive: true })
-    await page.screenshot({ path: screenshotPath, fullPage: true })
+    await captureRecgovPageImage(page, { path: screenshotPath })
     console.log(`Cart: captured Recreation.gov login diagnostic screenshot reason=${reason} url=${diagnostic.screenshot_url} page=${diagnostic.page_url}`)
   } catch (error) {
     diagnostic.screenshot_error = error.message

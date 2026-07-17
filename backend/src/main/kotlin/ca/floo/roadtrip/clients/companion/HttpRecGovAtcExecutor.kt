@@ -7,11 +7,9 @@ import kotlinx.coroutines.future.await
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 import java.net.URI
 import java.net.http.HttpClient
@@ -30,12 +28,7 @@ private const val ERROR_COMPANION_HEALTH_REQUEST_FAILED = "companion_health_requ
 private const val ERROR_COMPANION_HEALTH_INVALID_RESPONSE = "companion_health_invalid_response"
 private const val ERROR_COMPANION_HEALTH_HTTP = "companion_health_http_error"
 private const val ERROR_COMPANION_HEALTH_NOT_OK = "companion_health_not_ok"
-private const val ERROR_COMPANION_BUSY = "companion_busy"
-private const val ERROR_RECGOV_AUTH_MISSING = "recgov_auth_missing"
-private const val ERROR_RECGOV_AUTH_NOT_OK = "recgov_auth_not_ok"
 private const val ERROR_CART_NOT_ADDED = "cart_not_added"
-private const val DETAIL_COMPANION_BUSY = "companion is already running an ATC request"
-private const val DETAIL_RECGOV_AUTH_MISSING = "companion health response did not include recgov_auth"
 private const val MAX_ERROR_BODY_CHARS = 500
 private const val HEALTH_STATUS_OK = "ok"
 
@@ -111,7 +104,7 @@ internal class HttpRecGovAtcExecutor(
                 return healthPreflightFailed(
                     error = ERROR_COMPANION_HEALTH_REQUEST_FAILED,
                     detail = e.message,
-                    response = healthErrorResponse(ERROR_COMPANION_HEALTH_REQUEST_FAILED, e.message),
+                    response = null,
                 )
             }
 
@@ -122,43 +115,38 @@ internal class HttpRecGovAtcExecutor(
                 ?: return healthPreflightFailed(
                     error = ERROR_COMPANION_HEALTH_INVALID_RESPONSE,
                     detail = body.take(MAX_ERROR_BODY_CHARS),
-                    response =
-                        healthErrorResponse(
-                            ERROR_COMPANION_HEALTH_INVALID_RESPONSE,
-                            body.take(MAX_ERROR_BODY_CHARS),
-                        ),
+                    response = null,
                 )
 
         if (response.statusCode() !in SUCCESS_STATUS_RANGE) {
-            return healthPreflightFailed(
-                error = parsed.stringValue("error") ?: ERROR_COMPANION_HEALTH_HTTP,
-                detail = parsed.stringValue("detail") ?: body.take(MAX_ERROR_BODY_CHARS),
-                response = parsed,
+            return companionHealthFailed(
+                parsed,
+                fallbackError = ERROR_COMPANION_HEALTH_HTTP,
+                fallbackDetail = body.take(MAX_ERROR_BODY_CHARS),
             )
         }
         if (parsed.booleanValue("busy") == true) {
-            return healthPreflightFailed(
-                error = ERROR_COMPANION_BUSY,
-                detail = DETAIL_COMPANION_BUSY,
-                response = parsed,
-            )
+            return companionHealthFailed(parsed, fallbackError = ERROR_COMPANION_HEALTH_NOT_OK)
         }
         if (parsed.booleanValue("ok") != true) {
-            return healthPreflightFailed(
-                error = parsed.stringValue("error") ?: ERROR_COMPANION_HEALTH_NOT_OK,
-                detail = parsed.stringValue("detail"),
-                response = parsed,
-            )
+            return companionHealthFailed(parsed, fallbackError = ERROR_COMPANION_HEALTH_NOT_OK)
         }
         if (!parsed.recgovAuthOk()) {
-            return healthPreflightFailed(
-                error = parsed.recgovAuthError(),
-                detail = parsed.recgovAuthDetail(),
-                response = parsed,
-            )
+            return companionHealthFailed(parsed, fallbackError = ERROR_COMPANION_HEALTH_NOT_OK)
         }
         return null
     }
+
+    private fun companionHealthFailed(
+        response: JsonObject,
+        fallbackError: String,
+        fallbackDetail: String? = null,
+    ): RecGovAtcOutcome.Failed =
+        healthPreflightFailed(
+            error = response.companionError() ?: fallbackError,
+            detail = response.companionDetail() ?: fallbackDetail,
+            response = response,
+        )
 
     private fun healthPreflightFailed(
         error: String,
@@ -203,22 +191,18 @@ private fun JsonObject.recgovAuthOk(): Boolean {
         auth.booleanValue("logged_in") == true
 }
 
-private fun JsonObject.recgovAuthError(): String {
-    val auth = objectValue("recgov_auth") ?: return ERROR_RECGOV_AUTH_MISSING
-    return auth.stringValue("error") ?: auth.stringValue("login_status") ?: auth.stringValue("state") ?: ERROR_RECGOV_AUTH_NOT_OK
-}
+private fun JsonObject.companionError(): String? =
+    stringValue("error")
+        ?: objectValue("recgov_auth")?.let { auth ->
+            auth.stringValue("error")
+                ?: auth.stringValue("state")?.takeUnless { it == HEALTH_STATUS_OK }
+                ?: auth.stringValue("login_status")?.takeUnless { it == HEALTH_STATUS_OK }
+        }
 
-private fun JsonObject.recgovAuthDetail(): String? {
-    val auth = objectValue("recgov_auth") ?: return DETAIL_RECGOV_AUTH_MISSING
-    return auth.stringValue("detail") ?: auth.stringValue("corrective_action")
-}
-
-private fun healthErrorResponse(
-    error: String,
-    detail: String?,
-): JsonObject =
-    buildJsonObject {
-        put("ok", false)
-        put("error", error)
-        detail?.let { put("detail", it) }
-    }
+private fun JsonObject.companionDetail(): String? =
+    stringValue("detail")
+        ?: get("diagnostics")?.toString()
+        ?: objectValue("recgov_auth")?.let { auth ->
+            auth.stringValue("detail")
+                ?: auth.stringValue("corrective_action")
+        }

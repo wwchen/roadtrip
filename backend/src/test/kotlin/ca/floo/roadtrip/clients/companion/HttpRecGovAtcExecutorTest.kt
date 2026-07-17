@@ -13,6 +13,7 @@ import java.net.InetSocketAddress
 import java.time.Duration
 import java.util.concurrent.Executors
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class HttpRecGovAtcExecutorTest {
@@ -115,7 +116,35 @@ class HttpRecGovAtcExecutorTest {
 
                 val failed = outcome as RecGovAtcOutcome.Failed
                 assertEquals(listOf("/health"), server.paths)
-                assertEquals("companion_busy", failed.error)
+                assertEquals("companion_health_not_ok", failed.error)
+                assertEquals(
+                    true,
+                    failed.response!!["busy"]!!
+                        .jsonPrimitive
+                        .content
+                        .toBoolean(),
+                )
+            }
+        }
+
+    @Test
+    fun `health parse failure does not fabricate companion response`() =
+        runBlocking {
+            TestServer(
+                responses =
+                    mapOf(
+                        "/health" to TestResponse(body = "not json"),
+                    ),
+            ).use { server ->
+                val executor = HttpRecGovAtcExecutor(RecGovAtcConfig(server.baseUrl, Duration.ofSeconds(5)))
+
+                val outcome = executor.addToCart(flatAtcPayload())
+
+                val failed = outcome as RecGovAtcOutcome.Failed
+                assertEquals(listOf("/health"), server.paths)
+                assertEquals("companion_health_invalid_response", failed.error)
+                assertEquals("not json", failed.detail)
+                assertNull(failed.response)
             }
         }
 

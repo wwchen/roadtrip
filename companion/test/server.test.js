@@ -24,8 +24,12 @@ test('runStartupAuthCheck records logged-in status', async () => {
 })
 
 test('getRecgovHealthStatus exposes login status and refresh metadata', async () => {
+  const diagnostic = {
+    reason: 'login_success',
+    screenshot_url: '/screenshot/diagnostics/recgov-login-success.png',
+  }
   await runStartupAuthCheck({
-    testChromiumFn: async () => ({ ok: true, loggedIn: true }),
+    testChromiumFn: async () => ({ ok: true, loggedIn: true, diagnostic }),
     logger: () => {},
   })
 
@@ -36,13 +40,15 @@ test('getRecgovHealthStatus exposes login status and refresh metadata', async ()
   assert.equal('last_refresh_at' in health, true)
   assert.equal('last_refresh_expires_at' in health, true)
   assert.equal('next_refresh_at' in health, true)
+  assert.equal('diagnostic' in health, false)
+  assert.equal('last_login_diagnostic' in health, false)
 })
 
 test('runStartupAuthCheck records actionable auth failure status', async () => {
   const log = logCapture()
   const diagnostic = {
     reason: 'captcha_required',
-    screenshot_url: '/diagnostics/recgov-login-captcha.png',
+    screenshot_url: '/screenshot/diagnostics/recgov-login-captcha.png',
   }
 
   const status = await runStartupAuthCheck({
@@ -69,7 +75,7 @@ test('runStartupAuthCheck records actionable auth failure status', async () => {
   assert.match(log.text(), /recgov auth startup check fail/)
   assert.match(log.text(), /error=recgov_not_authenticated/)
   assert.match(log.text(), /diagnostic_reason=captcha_required/)
-  assert.match(log.text(), /screenshot=\/diagnostics\/recgov-login-captcha\.png/)
+  assert.match(log.text(), /screenshot=\/screenshot\/diagnostics\/recgov-login-captcha\.png/)
 })
 
 test('runStartupAuthCheck records exceptions as startup auth failures', async () => {
@@ -127,13 +133,20 @@ test('GET /openapi.json returns companion-owned OpenAPI docs', async () => {
   assert.ok(response.json.paths['/refresh'])
   assert.ok(response.json.paths['/atc'])
   assert.ok(response.json.paths['/screenshot'])
-  assert.ok(response.json.paths['/diagnostics/{filename}'])
+  assert.ok(response.json.paths['/screenshot/diagnostics/{filename}'])
   assert.equal(response.json.paths['/refresh'].get, undefined)
   assert.ok(response.json.paths['/refresh'].post)
 
   const loginSchema = response.json.components.schemas.LoginRequest
   assert.deepEqual(Object.keys(loginSchema.properties), ['username', 'password', 'mfa_code'])
   assert.deepEqual(loginSchema.required, ['username', 'password'])
+
+  const authSchema = response.json.components.schemas.RecgovAuthStatus
+  assert.equal(authSchema.properties.last_login_diagnostic, undefined)
+  assert.equal(authSchema.properties.diagnostic, undefined)
+  assert.ok(response.json.components.schemas.AuthResponse.properties.diagnostics)
+  const diagnosticSchema = response.json.components.schemas.LoginDiagnostic
+  assert.equal(diagnosticSchema.properties.screenshot_path, undefined)
 })
 
 test('GET /docs returns Swagger UI for the companion OpenAPI spec', async () => {
@@ -158,7 +171,7 @@ test('POST /login passes request-scoped credentials to the auth check', async ()
         loggedIn: true,
         diagnostic: {
           reason: 'login_success',
-          screenshot_url: '/diagnostics/recgov-login-success.png',
+          screenshot_url: '/screenshot/diagnostics/recgov-login-success.png',
         },
       }
     },
@@ -184,9 +197,10 @@ test('POST /login passes request-scoped credentials to the auth check', async ()
     mfaCode: '123456',
   })
   assert.equal(authOptions.allowManualLogin, false)
-  assert.deepEqual(response.json.recgov_auth.diagnostic, {
+  assert.equal(response.json.recgov_auth.diagnostic, undefined)
+  assert.deepEqual(response.json.diagnostics, {
     reason: 'login_success',
-    screenshot_url: '/diagnostics/recgov-login-success.png',
+    screenshot_url: '/screenshot/diagnostics/recgov-login-success.png',
   })
 })
 
@@ -197,7 +211,7 @@ test('POST /login HTML response renders a failed login diagnostic screenshot', a
       loggedIn: false,
       diagnostic: {
         reason: 'login_error',
-        screenshot_url: '/diagnostics/recgov-login-error.png',
+        screenshot_url: '/screenshot/diagnostics/recgov-login-error.png',
       },
     }),
   }), {
@@ -217,7 +231,7 @@ test('POST /login HTML response renders a failed login diagnostic screenshot', a
   assert.equal(response.status, 401)
   assert.match(response.text, /Last login screenshot/)
   assert.match(response.text, /Reason: login_error/)
-  assert.match(response.text, /src="\/diagnostics\/recgov-login-error\.png"/)
+  assert.match(response.text, /src="\/screenshot\/diagnostics\/recgov-login-error\.png"/)
   assert.ok(response.text.indexOf('id="json-output"') < response.text.indexOf('Last login screenshot'))
 })
 
@@ -239,6 +253,8 @@ test('POST /refresh force-refreshes the stored browser session without credentia
   assert.equal(authOptions.forceRefresh, true)
   assert.equal(authOptions.allowManualLogin, false)
   assert.equal(authOptions.credentials, undefined)
+  assert.equal(response.json.diagnostics, null)
+  assert.equal(response.json.recgov_auth.diagnostic, undefined)
 })
 
 test('POST /logout runs the Rec.gov browser logout flow', async () => {
@@ -262,6 +278,8 @@ test('POST /logout runs the Rec.gov browser logout flow', async () => {
   assert.equal(response.json.recgov_auth.logged_in, false)
   assert.equal(response.json.recgov_auth.logout.clicked, true)
   assert.equal(response.json.recgov_auth.logout.selector, 'button:has-text("Log Out")')
+  assert.equal(response.json.diagnostics, null)
+  assert.equal(response.json.recgov_auth.diagnostic, undefined)
 })
 
 test('POST /atc passes the flat payload to the one-shot runner', async () => {

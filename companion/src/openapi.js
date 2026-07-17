@@ -131,7 +131,7 @@ export const COMPANION_OPENAPI_SPEC = {
         },
       },
     },
-    '/diagnostics/{filename}': {
+    '/screenshot/diagnostics/{filename}': {
       get: {
         summary: 'Read a stored login diagnostic screenshot',
         operationId: 'getDiagnosticScreenshot',
@@ -194,8 +194,6 @@ export const COMPANION_OPENAPI_SPEC = {
           last_refresh_at: { type: 'string', format: 'date-time', nullable: true },
           last_refresh_expires_at: { type: 'string', format: 'date-time', nullable: true },
           next_refresh_at: { type: 'string', format: 'date-time', nullable: true },
-          diagnostic: { $ref: '#/components/schemas/LoginDiagnostic' },
-          last_login_diagnostic: { $ref: '#/components/schemas/LoginDiagnostic' },
           error: { type: 'string' },
           detail: { type: 'string' },
           corrective_action: { type: 'string' },
@@ -209,7 +207,6 @@ export const COMPANION_OPENAPI_SPEC = {
           detail: { type: 'string', nullable: true },
           captured_at: { type: 'string', format: 'date-time' },
           page_url: { type: 'string' },
-          screenshot_path: { type: 'string' },
           screenshot_url: { type: 'string' },
           screenshot_error: { type: 'string' },
         },
@@ -234,10 +231,11 @@ export const COMPANION_OPENAPI_SPEC = {
       },
       AuthResponse: {
         type: 'object',
-        required: ['ok', 'recgov_auth'],
+        required: ['ok', 'recgov_auth', 'diagnostics'],
         properties: {
           ok: { type: 'boolean' },
           recgov_auth: { $ref: '#/components/schemas/RecgovAuthStatus' },
+          diagnostics: { $ref: '#/components/schemas/LoginDiagnostic' },
         },
       },
       AtcRequest: {

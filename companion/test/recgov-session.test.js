@@ -202,6 +202,10 @@ test('resolveRecaccount can log in with request-scoped Recreation.gov credential
   assert.equal(page.credentialSubmitClicks, 1)
   assert.equal(page.screenshots.length, 1)
   assert.equal(getRecgovSessionStatus().last_login_diagnostic.reason, 'login_success')
+  assert.equal(getRecgovSessionStatus().last_login_diagnostic.screenshot_path, undefined)
+  assert.match(getRecgovSessionStatus().last_login_diagnostic.screenshot_url, /^\/screenshot\/diagnostics\//)
+  assert.deepEqual(page.viewportSize, { width: 1280, height: 1000 })
+  assert.equal(page.screenshots[0].fullPage, false)
   assert.deepEqual(page.fills.map(({ value }) => value), ['user@example.com', 'secret'])
 })
 
@@ -264,6 +268,10 @@ test('resolveRecaccount fails closed when Recreation.gov 2FA has no supplied cod
   assert.equal(page.mfaSubmitClicks, 0)
   assert.equal(page.screenshots.length, 1)
   assert.equal(getRecgovSessionStatus().last_login_diagnostic.reason, 'mfa_required')
+  assert.equal(getRecgovSessionStatus().last_login_diagnostic.screenshot_path, undefined)
+  assert.match(getRecgovSessionStatus().last_login_diagnostic.screenshot_url, /^\/screenshot\/diagnostics\//)
+  assert.deepEqual(page.viewportSize, { width: 1280, height: 1000 })
+  assert.equal(page.screenshots[0].fullPage, false)
 })
 
 test('logoutRecgovBrowserSession clicks the Rec.gov logout control and verifies logged-out state', async () => {
@@ -333,6 +341,9 @@ function fakePage ({
     },
     screenshot: async (options) => {
       page.screenshots.push(options)
+    },
+    setViewportSize: async (size) => {
+      page.viewportSize = size
     },
     locator: (selector) => ({
       first: () => ({

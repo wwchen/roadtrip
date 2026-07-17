@@ -23,6 +23,7 @@ import {
   SWAGGER_DOCS_ROUTE,
 } from './openapi.js'
 import {
+  SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX,
   SCREENSHOT_ROUTE,
   SCREENSHOT_ROUTE_PREFIX,
   captureRecgovScreenshot,
@@ -54,7 +55,6 @@ const AUTH_CHECK_EXCEPTION_ACTION =
   'Check the companion logs, then open the companion root page or run make recgov-login from the host profile.'
 const LOGOUT_EXCEPTION_ERROR = 'recgov_logout_exception'
 const LOGOUT_CORRECTIVE_ACTION = 'Open the companion root page and verify the Recreation.gov session screenshot.'
-const DIAGNOSTIC_ROUTE_PREFIX = '/diagnostics/'
 const PNG_CONTENT_TYPE = 'image/png'
 
 const HOST = process.env.COMPANION_HOST || DEFAULT_HOST
@@ -194,10 +194,18 @@ export function getRecgovAuthStatus () {
 }
 
 export function getRecgovHealthStatus () {
+  const {
+    last_login_diagnostic: _lastLoginDiagnostic,
+    ...sessionStatus
+  } = getRecgovSessionStatus()
+  const {
+    diagnostic: _diagnostic,
+    ...authStatus
+  } = recgovAuthStatus
   return {
-    login_status: recgovAuthStatus.state,
-    ...recgovAuthStatus,
-    ...getRecgovSessionStatus(),
+    login_status: authStatus.state,
+    ...sessionStatus,
+    ...authStatus,
   }
 }
 
@@ -288,8 +296,7 @@ async function handleLogout (req, res, deps) {
       `duration_ms=${Date.now() - startedAt}`,
     )
     respondAuthResult(req, res, status, {
-      ok: result.ok === true,
-      recgov_auth: recgovAuthStatus,
+      ...authActionResponseBody(recgovAuthStatus, result.ok === true),
     })
   } catch (error) {
     recgovAuthStatus = {
@@ -302,10 +309,7 @@ async function handleLogout (req, res, deps) {
       corrective_action: LOGOUT_CORRECTIVE_ACTION,
     }
     log('recgov auth logout request exception', error.message)
-    respondAuthResult(req, res, HTTP_INTERNAL_ERROR, {
-      ok: false,
-      recgov_auth: recgovAuthStatus,
-    })
+    respondAuthResult(req, res, HTTP_INTERNAL_ERROR, authActionResponseBody(recgovAuthStatus, false))
   } finally {
     busy = false
   }
@@ -339,11 +343,8 @@ async function handleRefresh (req, res, deps) {
     respondAuthResult(req, res, authHttpStatus(status), authResponseBody(status))
   } catch (error) {
     log('recgov auth refresh request exception', error.message)
-    jsonResponse(res, HTTP_INTERNAL_ERROR, {
-      ok: false,
-      error: AUTH_CHECK_EXCEPTION_ERROR,
-      detail: error.message,
-    })
+    recgovAuthStatus = authExceptionStatus('refresh', error)
+    respondAuthResult(req, res, HTTP_INTERNAL_ERROR, authActionResponseBody(recgovAuthStatus, false))
   } finally {
     busy = false
   }
@@ -411,11 +412,8 @@ async function handleLoginPost (req, res, deps) {
     respondAuthResult(req, res, authHttpStatus(status), authResponseBody(status))
   } catch (error) {
     log('recgov auth login request exception', error.message)
-    respondAuthResult(req, res, HTTP_INTERNAL_ERROR, {
-      ok: false,
-      error: AUTH_CHECK_EXCEPTION_ERROR,
-      detail: error.message,
-    })
+    recgovAuthStatus = authExceptionStatus('login', error)
+    respondAuthResult(req, res, HTTP_INTERNAL_ERROR, authActionResponseBody(recgovAuthStatus, false))
   } finally {
     busy = false
   }
@@ -444,9 +442,30 @@ function authHttpStatus (status) {
 }
 
 function authResponseBody (status) {
+  return authActionResponseBody(status, status.logged_in === true)
+}
+
+function authActionResponseBody (status, ok) {
+  const {
+    diagnostic,
+    ...recgovAuth
+  } = status
   return {
-    ok: status.logged_in === true,
-    recgov_auth: status,
+    ok,
+    recgov_auth: recgovAuth,
+    diagnostics: diagnostic || null,
+  }
+}
+
+function authExceptionStatus (operation, error) {
+  return {
+    state: 'failed',
+    logged_in: false,
+    operation,
+    checked_at: new Date().toISOString(),
+    error: AUTH_CHECK_EXCEPTION_ERROR,
+    detail: error.message,
+    corrective_action: AUTH_CHECK_EXCEPTION_ACTION,
   }
 }
 
@@ -584,7 +603,7 @@ export function createCompanionServer ({
   }
   return http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://companion.local')
-    if (req.method === 'GET' && url.pathname.startsWith(DIAGNOSTIC_ROUTE_PREFIX)) {
+    if (req.method === 'GET' && url.pathname.startsWith(`${SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX}/`)) {
       await handleDiagnosticImage(url, res)
       return
     }
@@ -696,7 +715,7 @@ async function serveScreenshotImage (imagePath, res, notFoundError) {
 
 function diagnosticFilename (url) {
   const filename = path.basename(url.pathname)
-  const requested = decodeURIComponent(url.pathname.slice(DIAGNOSTIC_ROUTE_PREFIX.length))
+  const requested = decodeURIComponent(url.pathname.slice(`${SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX}/`.length))
   if (!filename || filename !== requested || !filename.endsWith('.png')) return null
   return filename
 }
