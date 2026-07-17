@@ -27,10 +27,7 @@ private val testEmailJson =
         ignoreUnknownKeys = true
     }
 
-/**
- * Admin-only email smoke-test endpoint. Registered on the admin server, not the
- * public app, because it causes outbound email side effects.
- */
+/** Email smoke-test endpoint for verifying the configured Resend sender. */
 internal fun Route.testEmailRoutes(email: EmailNotificationService) {
     post("/test/email", {
         tags = listOf("test")
