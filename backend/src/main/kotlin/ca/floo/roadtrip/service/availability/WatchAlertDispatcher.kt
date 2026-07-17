@@ -260,7 +260,7 @@ internal class WatchAlertDispatcher(
     /** The half-open [startDate, endDate) day list — the same window contract
      *  [withinWindow] enforces on the edge path — for reading the current cube. */
     private fun datesInWindow(watch: AvailabilityWatchRepo.Watch): List<LocalDate> =
-        generateSequence(watch.startDate) { d -> d.plusDays(1).takeIf { it.isBefore(watch.endDate) } }.toList()
+        AvailabilityWatchDateWindow.datesIn(watch.startDate, watch.endDate)
 }
 
 // The watch window is half-open [startDate, endDate) — the same contract the
