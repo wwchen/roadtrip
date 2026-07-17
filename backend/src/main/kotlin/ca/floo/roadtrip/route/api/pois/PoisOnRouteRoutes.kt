@@ -6,7 +6,10 @@ import ca.floo.roadtrip.model.api.poi.PoisOnRouteFeaturePropertiesSchema
 import ca.floo.roadtrip.model.api.poi.PoisOnRouteFeatureSchema
 import ca.floo.roadtrip.model.api.poi.PoisOnRouteResponseSchema
 import ca.floo.roadtrip.model.domain.poi.PoiRow
+import ca.floo.roadtrip.route.common.RouteBodyResult
 import ca.floo.roadtrip.route.common.describeApi
+import ca.floo.roadtrip.route.common.mapCatching
+import ca.floo.roadtrip.route.common.receiveJsonBody
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.service.poi.OnRouteWaypoint
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
@@ -18,7 +21,6 @@ import ca.floo.roadtrip.support.RoutingException
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
-import io.ktor.server.request.receive
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
@@ -49,14 +51,20 @@ internal fun Route.poisOnRouteRoutes(poisOnRouteService: PoisOnRouteService) {
         route("/pois") {
             post("/on-route") {
                 val req =
-                    try {
-                        parseOnRouteRequest(call.receive<OnRouteRequestDto>())
-                    } catch (e: Exception) {
-                        call.respondOnRouteJson(
-                            ApiErrorSchema(error = "bad_request", detail = e.message ?: "parse failed"),
-                            HttpStatusCode.BadRequest,
-                        )
-                        return@post
+                    when (
+                        val body =
+                            call
+                                .receiveJsonBody<OnRouteRequestDto>()
+                                .mapCatching(::parseOnRouteRequest)
+                    ) {
+                        is RouteBodyResult.Invalid -> {
+                            call.respondOnRouteJson(
+                                ApiErrorSchema(error = "bad_request", detail = body.detail ?: "parse failed"),
+                                HttpStatusCode.BadRequest,
+                            )
+                            return@post
+                        }
+                        is RouteBodyResult.Valid -> body.value
                     }
 
                 val rows =

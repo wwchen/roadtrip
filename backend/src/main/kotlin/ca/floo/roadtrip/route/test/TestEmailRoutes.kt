@@ -1,19 +1,19 @@
 package ca.floo.roadtrip.route.test
 
 import ca.floo.roadtrip.model.api.ApiErrorSchema
+import ca.floo.roadtrip.route.common.RouteBodyResult
+import ca.floo.roadtrip.route.common.decodeTextJsonBody
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
-import io.ktor.server.request.receiveText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 
 private const val MAX_TEST_EMAIL_TO_CHARS = 320
@@ -35,8 +35,10 @@ internal fun Route.testEmailRoutes(
     route("/test") {
         post("/email") {
             val request =
-                runCatching { testEmailJson.decodeFromString<TestEmailRequest>(call.receiveText()) }
-                    .getOrNull()
+                when (val body = call.decodeTextJsonBody<TestEmailRequest>(testEmailJson)) {
+                    is RouteBodyResult.Invalid -> null
+                    is RouteBodyResult.Valid -> body.value
+                }
             val to = request?.to?.trim().orEmpty()
             val validationError = testEmailRecipientError(to)
             if (validationError != null) {

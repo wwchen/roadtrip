@@ -4,9 +4,12 @@ import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
 import ca.floo.roadtrip.model.api.poi.PoiFeatureCollectionSchema
 import ca.floo.roadtrip.model.api.poi.PoisRequestSchema
 import ca.floo.roadtrip.model.domain.poi.Bbox
+import ca.floo.roadtrip.route.common.RouteBodyResult
 import ca.floo.roadtrip.route.common.boundedIntQuery
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
+import ca.floo.roadtrip.route.common.mapCatching
+import ca.floo.roadtrip.route.common.receiveJsonBody
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.route.common.splitQueryValues
@@ -19,7 +22,6 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
-import io.ktor.server.request.receive
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
@@ -59,11 +61,21 @@ internal fun Route.poiRoutes(poiService: PoiReader) {
         route("/pois") {
             post {
                 val req =
-                    try {
-                        parseRequest(call.receive<PoisRequestSchema>())
-                    } catch (e: Exception) {
-                        call.respondPoiError("bad_request", HttpStatusCode.BadRequest, e.message ?: "parse failed")
-                        return@post
+                    when (
+                        val body =
+                            call
+                                .receiveJsonBody<PoisRequestSchema>()
+                                .mapCatching(::parseRequest)
+                    ) {
+                        is RouteBodyResult.Invalid -> {
+                            call.respondPoiError(
+                                "bad_request",
+                                HttpStatusCode.BadRequest,
+                                body.detail ?: "parse failed",
+                            )
+                            return@post
+                        }
+                        is RouteBodyResult.Valid -> body.value
                     }
 
                 call.respondPoiFeatureJson(
