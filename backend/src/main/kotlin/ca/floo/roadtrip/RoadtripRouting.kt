@@ -1,11 +1,8 @@
 package ca.floo.roadtrip
 
+import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
+import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.http.cacheOptionsFor
-import ca.floo.roadtrip.repo.CampgroundRepo
-import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
-import ca.floo.roadtrip.repo.PoiServingRepo
-import ca.floo.roadtrip.repo.RouteCorridorRepo
-import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.routes.adminIngestRoutes
 import ca.floo.roadtrip.routes.availabilityDashboardRoutes
 import ca.floo.roadtrip.routes.availabilityWatchRoutes
@@ -18,15 +15,16 @@ import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.routes.slackInteractivityRoute
 import ca.floo.roadtrip.routes.testEmailRoutes
 import ca.floo.roadtrip.routes.testSlackRoutes
-import ca.floo.roadtrip.service.availability.CampgroundAvailabilitySupport
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
-import ca.floo.roadtrip.service.poi.CampgroundService
-import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
-import ca.floo.roadtrip.service.poi.PoiDetailService
-import ca.floo.roadtrip.service.poi.PoiService
+import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.AvailabilityWatchService
+import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
+import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
+import ca.floo.roadtrip.service.availability.WatchCapabilityService
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.poi.PoiReader
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
-import ca.floo.roadtrip.service.poi.TeslaSuperchargerService
-import ca.floo.roadtrip.service.readpath.ReadPathProviderPoiReader
+import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
@@ -43,12 +41,15 @@ import io.ktor.server.plugins.compression.gzip
 import io.ktor.server.plugins.compression.matchContentType
 import io.ktor.server.plugins.compression.minimumSize
 import io.ktor.server.plugins.conditionalheaders.ConditionalHeaders
+import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.response.respondFile
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
+import kotlinx.coroutines.CoroutineScope
+import org.jooq.DSLContext
 import org.slf4j.event.Level
 import java.io.File
 
@@ -102,39 +103,22 @@ internal fun Application.installRoadtripPlugins() {
     }
 }
 
-internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
-    val campgroundAvailabilitySupport =
-        CampgroundAvailabilitySupport(
-            providerRefs = runtime.campsiteProviders,
-            availabilityProviders = runtime.availabilityProviderRegistry,
-        )
-    val poiDetailServices: List<PoiDetailService> =
-        listOf(
-            CampgroundService(
-                repo = CampgroundRepo(runtime.ctx),
-                dateResolver = runtime.availabilityDateResolver,
-                availabilitySupport = campgroundAvailabilitySupport,
-            ),
-            TeslaSuperchargerService(TeslaSuperchargerRepo(runtime.ctx)),
-            PlanetFitnessLocationService(PlanetFitnessLocationRepo(runtime.ctx)),
-        )
-    val poiService =
-        ReadPathProviderPoiReader(
-            delegate =
-                PoiService(
-                    poiRepo = PoiServingRepo(runtime.ctx),
-                    detailServices = poiDetailServices,
-                ),
-            detailServices = poiDetailServices,
-            providers = runtime.appConfig.readPathProviders,
-        )
-    val routeCorridorService = RouteCorridorService(RouteCorridorRepo(runtime.ctx))
-    val poisOnRouteService =
-        PoisOnRouteService(
-            routeCache = runtime.routeCache,
-            routeCorridorService = routeCorridorService,
-            poiService = poiService,
-        )
+internal fun Application.registerRoadtripRoutes() {
+    val runtime: RoadtripRuntime by dependencies
+    val appConfig: AppConfig by dependencies
+    val ctx: DSLContext by dependencies
+    val availabilityProviders: AvailabilityProviderRegistry by dependencies
+    val dateResolver: AvailabilityDateResolver by dependencies
+    val availabilityWatchService: AvailabilityWatchService by dependencies
+    val watchAlertDispatcher: WatchAlertDispatcher by dependencies
+    val watchCapabilities: WatchCapabilityService by dependencies
+    val schedulerScope: CoroutineScope by dependencies
+    val failoverFetcher: FailoverAvailabilityFetcher by dependencies
+    val routeCache: RouteCache by dependencies
+    val mapboxGeocoder: MapboxGeocoder by dependencies
+    val poiService: PoiReader by dependencies
+    val routeCorridorService: RouteCorridorService by dependencies
+    val poisOnRouteService: PoisOnRouteService by dependencies
     routing {
         route("/api/docs") {
             swaggerUI("/api/docs/openapi.json")
@@ -145,33 +129,32 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
 
         poiRoutes(poiService)
         availabilityWatchRoutes(
-            runtime.ctx,
-            runtime.availabilityWatchService,
-            runtime.watchAlertDispatcher,
-            runtime.schedulerScope,
-            runtime.watchCapabilities,
+            ctx,
+            availabilityWatchService,
+            watchAlertDispatcher,
+            schedulerScope,
         )
         campsiteRoutes(
-            ctx = runtime.ctx,
-            availabilityProviders = runtime.availabilityProviderRegistry,
-            dateResolver = runtime.availabilityDateResolver,
-            failoverFetcher = runtime.failoverFetcher,
-            watchCapabilities = runtime.watchCapabilities,
+            ctx = ctx,
+            availabilityProviders = availabilityProviders,
+            dateResolver = dateResolver,
+            failoverFetcher = failoverFetcher,
+            watchCapabilities = watchCapabilities,
         )
         // Inbound Slack interactivity is only registered when the app is
         // configured with a signing secret; an unset secret means we can't
         // verify anything, so leave the route absent (404) rather than
         // answering 401 to every probe.
         runtime.slackInteractivity?.let { wiring ->
-            slackInteractivityRoute(wiring.verifier, wiring.handler, runtime.schedulerScope)
+            slackInteractivityRoute(wiring.verifier, wiring.handler, schedulerScope)
         }
         availabilityDashboardRoutes(
-            ctx = runtime.ctx,
-            forcePullCooldown = runtime.appConfig.availability.forcePullCooldown,
+            ctx = ctx,
+            forcePullCooldown = appConfig.availability.forcePullCooldown,
         )
         poisOnRouteRoutes(poisOnRouteService)
-        routeRoutes(runtime.routeCache, routeCorridorService)
-        geocodeRoutes(runtime.mapboxGeocoder)
+        routeRoutes(routeCache, routeCorridorService)
+        geocodeRoutes(mapboxGeocoder)
         healthRoutes()
         adminIngestRoutes(runtime.ingestController, runtime.ctx)
         testEmailRoutes(EmailNotificationService(runtime.appConfig.email))

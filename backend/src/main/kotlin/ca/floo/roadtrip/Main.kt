@@ -4,7 +4,6 @@ import ca.floo.roadtrip.config.ApplicationProperties
 import ca.floo.roadtrip.config.ConfigSection
 import io.ktor.server.application.Application
 import io.ktor.server.netty.EngineMain
-import io.ktor.server.plugins.di.dependencies
 
 private val mainLog = org.slf4j.LoggerFactory.getLogger("ca.floo.roadtrip.Main")
 
@@ -47,11 +46,5 @@ fun Application.module() {
 
     installRoadtripDependencies(boot)
     installRoadtripPlugins()
-    val runtime: RoadtripRuntime by dependencies
-    try {
-        registerRoadtripRoutes(runtime)
-    } catch (e: Throwable) {
-        runtime.close()
-        throw e
-    }
+    registerRoadtripRoutes()
 }
