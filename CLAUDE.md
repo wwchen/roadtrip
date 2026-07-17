@@ -21,6 +21,8 @@ Key routing rules:
 
 Before backend architecture, route, service, repo, or model changes, read `docs/backend-architecture.md`.
 
+Before frontend component, page, or design-system changes, read `docs/frontend-components.md`.
+
 Before changes that touch campsite availability, alerts, or any reservation-provider integration (rec.gov, Aspira, Camis, future vendors), read `docs/reservation-providers.md`.
 
 Backend layering rules:

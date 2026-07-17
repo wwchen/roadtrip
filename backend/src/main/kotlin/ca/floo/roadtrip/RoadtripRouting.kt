@@ -14,6 +14,7 @@ import io.ktor.server.plugins.compression.minimumSize
 import io.ktor.server.plugins.conditionalheaders.ConditionalHeaders
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
+import io.ktor.server.routing.IgnoreTrailingSlash
 import org.slf4j.event.Level
 
 private const val API_ACCESS_LOG_PREFIX = "http_api request"
@@ -37,6 +38,7 @@ internal fun Application.installRoadtripPlugins() {
             "$API_ACCESS_LOG_PREFIX method=$method path=$path status=$status duration_ms=$durationMs remote=$remote"
         }
     }
+    install(IgnoreTrailingSlash)
     install(ConditionalHeaders)
     install(Compression) {
         gzip {

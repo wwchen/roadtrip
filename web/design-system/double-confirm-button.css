@@ -1,0 +1,31 @@
+.rt-dbl-btn {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--rt-border-strong);
+  border-radius: var(--rt-r-sm);
+  background: transparent;
+  color: var(--rt-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.rt-dbl-btn:hover {
+  background: var(--rt-fill-hover);
+  color: var(--rt-text);
+}
+
+.rt-dbl-btn.is-armed {
+  border-color: var(--rt-error);
+  background: rgba(245, 101, 101, 0.12);
+  color: var(--rt-error);
+  font-weight: 600;
+}
+
+.rt-dbl-btn.is-armed:hover {
+  background: rgba(245, 101, 101, 0.2);
+}
+
+.rt-dbl-btn:disabled { opacity: 0.55; cursor: wait; }
