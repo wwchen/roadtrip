@@ -1,40 +1,11 @@
 package ca.floo.roadtrip
 
 import ca.floo.roadtrip.http.cacheOptionsFor
-import ca.floo.roadtrip.repo.CampgroundRepo
-import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
-import ca.floo.roadtrip.repo.PoiServingRepo
-import ca.floo.roadtrip.repo.RouteCorridorRepo
-import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
-import ca.floo.roadtrip.routes.adminIngestRoutes
-import ca.floo.roadtrip.routes.availabilityDashboardRoutes
-import ca.floo.roadtrip.routes.availabilityWatchRoutes
-import ca.floo.roadtrip.routes.campsiteRoutes
-import ca.floo.roadtrip.routes.geocodeRoutes
-import ca.floo.roadtrip.routes.healthRoutes
-import ca.floo.roadtrip.routes.poiRoutes
-import ca.floo.roadtrip.routes.poisOnRouteRoutes
-import ca.floo.roadtrip.routes.routeRoutes
-import ca.floo.roadtrip.routes.slackInteractivityRoute
-import ca.floo.roadtrip.routes.testEmailRoutes
-import ca.floo.roadtrip.routes.testSlackRoutes
-import ca.floo.roadtrip.service.availability.CampgroundAvailabilitySupport
-import ca.floo.roadtrip.service.notification.email.EmailNotificationService
-import ca.floo.roadtrip.service.poi.CampgroundService
-import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
-import ca.floo.roadtrip.service.poi.PoiDetailService
-import ca.floo.roadtrip.service.poi.PoiService
-import ca.floo.roadtrip.service.poi.PoisOnRouteService
-import ca.floo.roadtrip.service.poi.TeslaSuperchargerService
-import ca.floo.roadtrip.service.readpath.ReadPathProviderPoiReader
-import ca.floo.roadtrip.service.routing.RouteCorridorService
-import io.github.smiley4.ktorswaggerui.SwaggerUI
-import io.github.smiley4.ktorswaggerui.routing.openApiSpec
-import io.github.smiley4.ktorswaggerui.routing.swaggerUI
+import ca.floo.roadtrip.routes.api.roadtripApiRoutes
+import ca.floo.roadtrip.routes.static.staticSiteRoutes
 import io.ktor.http.ContentType
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
-import io.ktor.server.http.content.staticFiles
 import io.ktor.server.plugins.cachingheaders.CachingHeaders
 import io.ktor.server.plugins.calllogging.CallLogging
 import io.ktor.server.plugins.calllogging.processingTimeMillis
@@ -45,12 +16,8 @@ import io.ktor.server.plugins.compression.minimumSize
 import io.ktor.server.plugins.conditionalheaders.ConditionalHeaders
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
-import io.ktor.server.response.respondFile
-import io.ktor.server.routing.get
-import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import org.slf4j.event.Level
-import java.io.File
 
 private const val API_ACCESS_LOG_PREFIX = "http_api request"
 private const val API_HEALTH_PATH = "/api/health"
@@ -73,14 +40,6 @@ internal fun Application.installRoadtripPlugins() {
             "$API_ACCESS_LOG_PREFIX method=$method path=$path status=$status duration_ms=$durationMs remote=$remote"
         }
     }
-    install(SwaggerUI) {
-        pathFilter = { _, path -> includeInRoadtripOpenApi(path) }
-        info {
-            title = "roadtrip API"
-            description = "Backend for roadtrip.floo.ca. Endpoints reflect the live routing tree."
-        }
-    }
-
     install(ConditionalHeaders)
     install(Compression) {
         gzip {
@@ -103,102 +62,8 @@ internal fun Application.installRoadtripPlugins() {
 }
 
 internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
-    val campgroundAvailabilitySupport =
-        CampgroundAvailabilitySupport(
-            providerRefs = runtime.campsiteProviders,
-            availabilityProviders = runtime.availabilityProviderRegistry,
-        )
-    val poiDetailServices: List<PoiDetailService> =
-        listOf(
-            CampgroundService(
-                repo = CampgroundRepo(runtime.ctx),
-                dateResolver = runtime.availabilityDateResolver,
-                availabilitySupport = campgroundAvailabilitySupport,
-            ),
-            TeslaSuperchargerService(TeslaSuperchargerRepo(runtime.ctx)),
-            PlanetFitnessLocationService(PlanetFitnessLocationRepo(runtime.ctx)),
-        )
-    val poiService =
-        ReadPathProviderPoiReader(
-            delegate =
-                PoiService(
-                    poiRepo = PoiServingRepo(runtime.ctx),
-                    detailServices = poiDetailServices,
-                ),
-            detailServices = poiDetailServices,
-            providers = runtime.appConfig.readPathProviders,
-        )
-    val routeCorridorService = RouteCorridorService(RouteCorridorRepo(runtime.ctx))
-    val poisOnRouteService =
-        PoisOnRouteService(
-            routeCache = runtime.routeCache,
-            routeCorridorService = routeCorridorService,
-            poiService = poiService,
-        )
     routing {
-        route("/api/docs") {
-            swaggerUI("/api/docs/openapi.json")
-        }
-        route("/api/docs/openapi.json") {
-            openApiSpec()
-        }
-
-        poiRoutes(poiService)
-        availabilityWatchRoutes(
-            runtime.ctx,
-            runtime.availabilityWatchService,
-            runtime.watchAlertDispatcher,
-            runtime.schedulerScope,
-            runtime.watchCapabilities,
-        )
-        campsiteRoutes(
-            ctx = runtime.ctx,
-            availabilityProviders = runtime.availabilityProviderRegistry,
-            dateResolver = runtime.availabilityDateResolver,
-            failoverFetcher = runtime.failoverFetcher,
-            watchCapabilities = runtime.watchCapabilities,
-        )
-        // Inbound Slack interactivity is only registered when the app is
-        // configured with a signing secret; an unset secret means we can't
-        // verify anything, so leave the route absent (404) rather than
-        // answering 401 to every probe.
-        runtime.slackInteractivity?.let { wiring ->
-            slackInteractivityRoute(wiring.verifier, wiring.handler, runtime.schedulerScope)
-        }
-        availabilityDashboardRoutes(
-            ctx = runtime.ctx,
-            forcePullCooldown = runtime.appConfig.availability.forcePullCooldown,
-        )
-        poisOnRouteRoutes(poisOnRouteService)
-        routeRoutes(runtime.routeCache, routeCorridorService)
-        geocodeRoutes(runtime.mapboxGeocoder)
-        healthRoutes()
-        adminIngestRoutes(runtime.ingestController, runtime.ctx)
-        testEmailRoutes(EmailNotificationService(runtime.appConfig.email))
-        testSlackRoutes(runtime.slackNotifications)
+        roadtripApiRoutes(runtime)
         staticSiteRoutes(runtime.staticDir)
-    }
-}
-
-private fun io.ktor.server.routing.Route.staticSiteRoutes(staticDir: File) {
-    staticFiles("/web", File(staticDir, "web"))
-    staticFiles("/data", File(staticDir, "data")) {
-        exclude { it.path.contains("/raw/") }
-        contentType { f ->
-            if (f.name.endsWith(".geojson")) ContentType("application", "geo+json") else null
-        }
-    }
-    get("/availability") {
-        call.respondFile(File(staticDir, "availability.html"))
-    }
-    get("/availability/") {
-        call.respondFile(File(staticDir, "availability.html"))
-    }
-    staticFiles("/", staticDir) {
-        default("index.html")
-        exclude { f ->
-            val rel = f.relativeTo(staticDir).path
-            rel.contains(File.separator)
-        }
     }
 }

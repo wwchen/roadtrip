@@ -5,6 +5,7 @@ import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
 import ca.floo.roadtrip.models.metadata.ingest.Phase
 import ca.floo.roadtrip.models.metadata.ingest.Target
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.routes.api.admin.adminIngestRoutes
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.ProcessFactory

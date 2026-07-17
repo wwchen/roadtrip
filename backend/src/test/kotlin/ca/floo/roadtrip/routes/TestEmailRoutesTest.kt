@@ -3,6 +3,7 @@ package ca.floo.roadtrip.routes
 import ca.floo.roadtrip.clients.resend.EmailDeliveryClient
 import ca.floo.roadtrip.clients.resend.EmailDeliveryMessage
 import ca.floo.roadtrip.config.EmailConfig
+import ca.floo.roadtrip.routes.test.testEmailRoutes
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody

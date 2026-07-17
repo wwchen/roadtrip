@@ -2,6 +2,8 @@ package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.models.routing.RouteLeg
 import ca.floo.roadtrip.models.routing.RouteResponse
+import ca.floo.roadtrip.routes.api.route.encodeRouteJson
+import ca.floo.roadtrip.routes.api.route.routeResponseFeatureCollection
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonArray

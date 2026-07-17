@@ -6,9 +6,10 @@ import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
-import ca.floo.roadtrip.routes.healthRoutes
-import ca.floo.roadtrip.routes.poiRoutes
-import ca.floo.roadtrip.routes.poisOnRouteRoutes
+import ca.floo.roadtrip.routes.api.docs.apiDocsRoutes
+import ca.floo.roadtrip.routes.api.health.healthRoutes
+import ca.floo.roadtrip.routes.api.pois.poiRoutes
+import ca.floo.roadtrip.routes.api.pois.poisOnRouteRoutes
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiService
@@ -16,19 +17,15 @@ import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.poi.TeslaSuperchargerService
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
-import io.github.smiley4.ktorswaggerui.SwaggerUI
-import io.github.smiley4.ktorswaggerui.dsl.routing.get
-import io.github.smiley4.ktorswaggerui.routing.openApiSpec
-import io.github.smiley4.ktorswaggerui.routing.swaggerUI
 import io.ktor.client.request.get
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.install
 import io.ktor.server.response.respondText
-import io.ktor.server.routing.route
+import io.ktor.server.routing.get
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
@@ -39,11 +36,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
-import io.ktor.server.routing.get as ktorGet
 
 // Smoke for /api/docs (issue #47).
 //
-// Boots a slim test app with the SwaggerUI plugin + the same /api/docs and
+// Boots a slim test app with the same /api/docs and
 // /api/docs/openapi.json routes Main.kt mounts. Asserts:
 //   - GET /api/docs returns 200 (Swagger UI HTML).
 //   - GET /api/docs/openapi.json returns 200 with a parseable spec listing
@@ -57,12 +53,8 @@ class OpenApiSmokeTest {
     fun `swagger UI serves at api docs`() =
         testApplication {
             application {
-                install(SwaggerUI) {
-                    pathFilter = { _, path -> includeInRoadtripOpenApi(path) }
-                }
                 routing {
-                    route("/api/docs") { swaggerUI("/api/docs/openapi.json") }
-                    route("/api/docs/openapi.json") { openApiSpec() }
+                    apiDocsRoutes()
                 }
             }
             val resp = client.get("/api/docs")
@@ -79,16 +71,13 @@ class OpenApiSmokeTest {
     fun `openapi spec lists representative real routes with summaries and tags`() =
         testApplication {
             application {
-                install(SwaggerUI) {
-                    pathFilter = { _, path -> includeInRoadtripOpenApi(path) }
-                }
                 val ctx = DSL.using(SQLDialect.POSTGRES)
                 val poiService = testPoiService(ctx)
                 val routeCorridorService = RouteCorridorService(RouteCorridorRepo(ctx))
                 routing {
-                    route("/api/docs/openapi.json") { openApiSpec() }
-                    ktorGet("/") { call.respondText("root") }
-                    ktorGet("/web/{path...}") { call.respondText("static") }
+                    apiDocsRoutes()
+                    get("/") { call.respondText("root") }
+                    get("/web/{path...}") { call.respondText("static") }
                     healthRoutes()
                     poiRoutes(poiService)
                     poisOnRouteRoutes(
@@ -114,10 +103,10 @@ class OpenApiSmokeTest {
             assertEquals(
                 "health",
                 healthGet["tags"]!!
-                    .toString()
-                    .removePrefix("[")
-                    .removeSuffix("]")
-                    .trim('"'),
+                    .jsonArray
+                    .single()
+                    .jsonPrimitive
+                    .content,
             )
 
             val poisPost =
@@ -136,62 +125,13 @@ class OpenApiSmokeTest {
 
             assertFalse(paths.containsKey("/api/availability/bulk"))
             assertFalse(paths.containsKey("/api/docs"))
+            assertFalse(paths.containsKey("/api/docs/openapi.json"))
             assertFalse(paths.containsKey("/"))
             assertFalse(paths.keys.any { it.startsWith("/web") })
             assertFalse(paths.containsKey("/api/campsite/events"))
             assertFalse(paths.containsKey("/api/campsite/availability/{poi_id}"))
             assertFalse(paths.containsKey("/api/poi/{poi_id}/reservables/availability"))
             assertFalse(paths.containsKey("/api/admin/campsite/debug/synth-match"))
-        }
-
-    @Test
-    fun `response examples land in the openapi spec`() =
-        testApplication {
-            application {
-                install(SwaggerUI) {
-                    pathFilter = { _, path -> includeInRoadtripOpenApi(path) }
-                }
-                routing {
-                    route("/api/docs/openapi.json") { openApiSpec() }
-                    get("/api/example", {
-                        tags = listOf("test")
-                        summary = "Has examples"
-                        response {
-                            code(HttpStatusCode.OK) {
-                                body<String> {
-                                    mediaTypes(io.ktor.http.ContentType.Application.Json)
-                                    example("happy") { value = """{"hello":"world"}""" }
-                                }
-                            }
-                        }
-                    }) { call.respondText("ok") }
-                }
-            }
-
-            val resp = client.get("/api/docs/openapi.json")
-            assertEquals(HttpStatusCode.OK, resp.status)
-
-            val spec = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            // paths./api/example.get.responses.200.content."application/json".examples.happy.value
-            val examples =
-                spec["paths"]!!
-                    .jsonObject["/api/example"]!!
-                    .jsonObject["get"]!!
-                    .jsonObject["responses"]!!
-                    .jsonObject["200"]!!
-                    .jsonObject["content"]!!
-                    .jsonObject["application/json"]!!
-                    .jsonObject["examples"]!!
-                    .jsonObject
-
-            assertNotNull(examples["happy"], "named example 'happy' not found in spec")
-            // The example value is reflected verbatim. The plugin may serialize
-            // the JSON string with escapes or as a literal — accept either, just
-            // confirm the inner payload is round-tripped.
-            assertTrue(
-                examples["happy"]!!.toString().contains("hello"),
-                "example payload missing from spec; got: ${examples["happy"]}",
-            )
         }
 
     private fun testPoiService(ctx: DSLContext): PoiService =

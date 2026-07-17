@@ -6,7 +6,9 @@
 
 import {
   TRIGGER_KIND_ATC,
+  TRIGGER_KIND_EMAIL_NOTIFY,
   TRIGGER_KIND_SLACK_NOTIFY,
+  normalizeWatchCapabilities,
   mountWatchEditor,
 } from './watch-editor.js';
 
@@ -19,17 +21,19 @@ import {
  * @param {boolean} args.watching
  * @param {boolean} [args.stopWhenFound]
  * @param {boolean} [args.supportsAddToCart]
+ * @param {object} [args.watchCapabilities]
  * @param {(payload: object) => Promise<void>} args.onSave
  * @param {() => Promise<void>} args.onRemove
  * @param {() => void} args.onClose
  */
 export function mountWatchPopover(host, args) {
-  const { poiName, date, watch, watching, supportsAddToCart, onSave, onRemove, onClose } = args;
+  const { poiName, date, watch, watching, supportsAddToCart, watchCapabilities, onSave, onRemove, onClose } = args;
+  const capabilities = capabilitiesForEditor(watchCapabilities, supportsAddToCart);
   const controller = mountWatchEditor(host, {
     title: `Watch ${poiName}`,
     subtitle: dateLabel(date),
-    watch: watchForEditor({ watch, watching, stopWhenFound: args.stopWhenFound, supportsAddToCart }),
-    capabilities: capabilitiesForEditor(supportsAddToCart),
+    watch: watchForEditor({ watch, watching, stopWhenFound: args.stopWhenFound, capabilities }),
+    capabilities,
     onSave: async (payload) => {
       await onSave(payload);
       onClose();
@@ -66,20 +70,27 @@ export function mountWatchPopover(host, args) {
   };
 }
 
-function watchForEditor({ watch, watching, stopWhenFound, supportsAddToCart }) {
+function watchForEditor({ watch, watching, stopWhenFound, capabilities }) {
   if (watching && watch) return watch;
   if (!watching) return null;
   return {
-    trigger_kinds: supportsAddToCart ? [TRIGGER_KIND_SLACK_NOTIFY, TRIGGER_KIND_ATC] : [TRIGGER_KIND_SLACK_NOTIFY],
+    trigger_kinds: Array.from(capabilities.triggerKinds),
     trigger_config: {},
     stop_when_triggered: stopWhenFound !== false,
   };
 }
 
-function capabilitiesForEditor(supportsAddToCart) {
-  const triggerKinds = [TRIGGER_KIND_SLACK_NOTIFY];
-  if (supportsAddToCart) triggerKinds.push(TRIGGER_KIND_ATC);
-  return { trigger_kinds: triggerKinds, booking_actions: [] };
+function capabilitiesForEditor(watchCapabilities, supportsAddToCart) {
+  const normalized = normalizeWatchCapabilities(watchCapabilities);
+  const triggerKinds = new Set();
+  if (normalized.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY) || normalized.triggerKinds.size === 0) {
+    triggerKinds.add(TRIGGER_KIND_SLACK_NOTIFY);
+  }
+  if (normalized.triggerKinds.has(TRIGGER_KIND_EMAIL_NOTIFY)) triggerKinds.add(TRIGGER_KIND_EMAIL_NOTIFY);
+  if (supportsAddToCart && (normalized.triggerKinds.has(TRIGGER_KIND_ATC) || normalized.triggerKinds.size === 0)) {
+    triggerKinds.add(TRIGGER_KIND_ATC);
+  }
+  return { triggerKinds, bookingActions: normalized.bookingActions };
 }
 
 function dateLabel(date) {

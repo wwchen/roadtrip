@@ -4,6 +4,7 @@ import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
 import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import ca.floo.roadtrip.clients.slack.SlackClient
 import ca.floo.roadtrip.config.SlackConfig
+import ca.floo.roadtrip.routes.test.testSlackRoutes
 import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody

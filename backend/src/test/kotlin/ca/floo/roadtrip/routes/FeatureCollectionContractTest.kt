@@ -5,6 +5,8 @@ import ca.floo.roadtrip.models.api.poi.PoiCtaSchema
 import ca.floo.roadtrip.models.api.poi.PoiDetailFeatureSchema
 import ca.floo.roadtrip.models.api.poi.PoiDetailPropertiesSchema
 import ca.floo.roadtrip.models.domain.poi.PoiRow
+import ca.floo.roadtrip.routes.api.pois.encodeOnRouteJson
+import ca.floo.roadtrip.routes.api.pois.onRouteFeatureCollection
 import ca.floo.roadtrip.service.poi.encodePoiFeatureJson
 import ca.floo.roadtrip.service.poi.poiFeatureCollection
 import kotlinx.serialization.json.Json

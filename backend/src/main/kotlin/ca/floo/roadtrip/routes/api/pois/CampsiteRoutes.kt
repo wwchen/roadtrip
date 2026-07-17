@@ -1,14 +1,15 @@
-package ca.floo.roadtrip.routes
+package ca.floo.roadtrip.routes.api.pois
 
 import ca.floo.roadtrip.exceptions.AspiraException
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityErrorDto
-import ca.floo.roadtrip.models.api.PoiCampsitesAvailabilityResponseDto
-import ca.floo.roadtrip.models.api.PoiCampsitesResponseSchema
 import ca.floo.roadtrip.models.availability.AvailabilityProviderError
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.routes.common.describeApi
+import ca.floo.roadtrip.routes.common.optionalDateQuery
+import ca.floo.roadtrip.routes.common.queryValues
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
@@ -20,7 +21,6 @@ import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
-import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -28,6 +28,8 @@ import io.ktor.server.application.call
 import io.ktor.server.plugins.origin
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.get
+import io.ktor.server.routing.route
 import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
 import java.util.concurrent.ConcurrentHashMap
@@ -69,117 +71,83 @@ internal fun Route.campsiteRoutes(
         )
     val rateLimit = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE)
 
-    get("/api/pois/{id}/campsites", {
-        tags = listOf("campsite", "poi")
-        summary = "Canonical campsites linked to a campground POI"
-        description =
-            "Lists active canonical campsite rows linked to a campground POI. " +
-            "`site_type` optionally filters exact campsite kinds."
-        request {
-            pathParameter<Long>("id") { description = "pois.id primary key" }
-            queryParameter<String>("site_type") { description = "Exact site type filter. Repeat or comma-separate for OR." }
-        }
-        response {
-            code(HttpStatusCode.OK) {
-                description = "Campsites linked to the POI."
-                body<PoiCampsitesResponseSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.BadRequest) {
-                description = "Malformed POI id."
-                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.NotFound) {
-                description = "No active campground POI with that id."
-                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-        }
-    }) {
-        val poiId =
-            call.parameters["id"]?.toLongOrNull()
-                ?: return@get call.respondCampsiteError("bad_id", HttpStatusCode.BadRequest)
-        try {
-            call.respondCampsiteJson(
-                catalogService.campsitesForPoi(
-                    poiId = poiId,
-                    siteTypes = call.queryValues("site_type", "siteType"),
-                ),
-            )
-        } catch (e: AvailabilityServiceError.NotFound) {
-            call.respondCampsiteError(e.error, HttpStatusCode.NotFound)
-        }
-    }
+    route("/api") {
+        route("/pois") {
+            route("/{id}") {
+                route("/campsites") {
+                    get {
+                        val poiId =
+                            call.parameters["id"]?.toLongOrNull()
+                                ?: return@get call.respondCampsiteError("bad_id", HttpStatusCode.BadRequest)
+                        try {
+                            call.respondCampsiteJson(
+                                catalogService.campsitesForPoi(
+                                    poiId = poiId,
+                                    siteTypes = call.queryValues("site_type", "siteType"),
+                                ),
+                            )
+                        } catch (e: AvailabilityServiceError.NotFound) {
+                            call.respondCampsiteError(e.error, HttpStatusCode.NotFound)
+                        }
+                    }.describeApi(
+                        tag = "campsite",
+                        summary = "Canonical campsites linked to a campground POI",
+                        description =
+                            "Lists active canonical campsite rows linked to a campground POI. " +
+                                "`site_type` optionally filters exact campsite kinds.",
+                    )
 
-    get("/api/pois/{poi_id}/campsites/availability", {
-        tags = listOf("availability", "campsite")
-        summary = "Per-campsite availability for one campground POI"
-        description =
-            "Path key is `pois.id`. Returns one availability envelope per canonical " +
-            "campsite linked to this POI. The frontend fuses the per-campsite streams " +
-            "into the campground week grid."
-        request {
-            pathParameter<Long>("poi_id") { description = "pois.id primary key" }
-            queryParameter<String>("start_date") { description = "YYYY-MM-DD; default is today's local date." }
-            queryParameter<String>("end_date") { description = "Exclusive YYYY-MM-DD; default is start_date + 7 days." }
-            queryParameter<String>("site_type") { description = "Exact site type filter. Repeat or comma-separate for OR." }
-        }
-        response {
-            code(HttpStatusCode.OK) {
-                description = "`campsites` is empty when none are linked or none match the filter."
-                body<PoiCampsitesAvailabilityResponseDto> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.BadRequest) {
-                description = "Bad POI id or invalid date window."
-                body<AvailabilityErrorDto> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.NotFound) {
-                description = "No active campground POI with that id."
-                body<AvailabilityErrorDto> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.ServiceUnavailable) {
-                description = "Rate limited or upstream availability service unavailable."
-                body<AvailabilityErrorDto> { mediaTypes(ContentType.Application.Json) }
-            }
-        }
-    }) {
-        val poiId =
-            call.parameters["poi_id"]?.toLongOrNull()
-                ?: return@get call.respondAvailabilityError("bad_poi_id", HttpStatusCode.BadRequest)
+                    get("/availability") {
+                        val poiId =
+                            call.parameters["id"]?.toLongOrNull()
+                                ?: return@get call.respondAvailabilityError("bad_poi_id", HttpStatusCode.BadRequest)
 
-        if (!rateLimit.allow(call.request.origin.remoteHost)) {
-            call.respondAvailabilityError("ip_throttled", HttpStatusCode.ServiceUnavailable)
-            return@get
-        }
+                        if (!rateLimit.allow(call.request.origin.remoteHost)) {
+                            call.respondAvailabilityError("ip_throttled", HttpStatusCode.ServiceUnavailable)
+                            return@get
+                        }
 
-        val startDate =
-            try {
-                call.optionalDateQuery("start_date")
-            } catch (e: Exception) {
-                call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
-                return@get
-            }
-        val endDate =
-            try {
-                call.optionalDateQuery("end_date")
-            } catch (e: Exception) {
-                call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
-                return@get
-            }
+                        val startDate =
+                            try {
+                                call.optionalDateQuery("start_date")
+                            } catch (e: Exception) {
+                                call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
+                                return@get
+                            }
+                        val endDate =
+                            try {
+                                call.optionalDateQuery("end_date")
+                            } catch (e: Exception) {
+                                call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
+                                return@get
+                            }
 
-        try {
-            call.respondAvailabilityJson(
-                availabilityService.poiCampsitesAvailability(
-                    poiId = poiId,
-                    startDate = startDate,
-                    endDate = endDate,
-                    siteTypes = call.queryValues("site_type", "siteType"),
-                ),
-            )
-        } catch (e: AvailabilityServiceError) {
-            call.respondServiceAvailabilityError(e)
-        } catch (e: AvailabilityProviderError) {
-            val (status, error) = mapProviderError(e)
-            log.info("poi campsites availability poi={} failed: {}", poiId, e.message)
-            call.respondAvailabilityJson(error, status)
+                        try {
+                            call.respondAvailabilityJson(
+                                availabilityService.poiCampsitesAvailability(
+                                    poiId = poiId,
+                                    startDate = startDate,
+                                    endDate = endDate,
+                                    siteTypes = call.queryValues("site_type", "siteType"),
+                                ),
+                            )
+                        } catch (e: AvailabilityServiceError) {
+                            call.respondServiceAvailabilityError(e)
+                        } catch (e: AvailabilityProviderError) {
+                            val (status, error) = mapProviderError(e)
+                            log.info("poi campsites availability poi={} failed: {}", poiId, e.message)
+                            call.respondAvailabilityJson(error, status)
+                        }
+                    }.describeApi(
+                        tag = "availability",
+                        summary = "Per-campsite availability for one campground POI",
+                        description =
+                            "Path key is `pois.id`. Returns one availability envelope per canonical " +
+                                "campsite linked to this POI. The frontend fuses the per-campsite streams " +
+                                "into the campground week grid.",
+                    )
+                }
+            }
         }
     }
 }
