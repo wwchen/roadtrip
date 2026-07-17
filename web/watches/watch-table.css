@@ -1,0 +1,49 @@
+.rt-watch-table-wrap {
+  overflow-x: auto;
+}
+
+.rt-watch-table-poi {
+  color: var(--rt-brand);
+  text-decoration: none;
+  font-weight: 500;
+}
+.rt-watch-table-poi:hover { text-decoration: underline; }
+
+.rt-watch-table-trigger {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.rt-watch-table-trigger svg { width: 14px; height: 14px; vertical-align: -2px; }
+
+.rt-watch-table-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.rt-watch-table-act {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--rt-r-sm);
+  color: var(--rt-faint);
+  cursor: pointer;
+  font-size: 13px;
+}
+.rt-watch-table-act:hover { background: var(--rt-fill-hover); color: var(--rt-text); }
+.rt-watch-table-act:disabled { opacity: 0.55; cursor: wait; }
+
+.rt-watch-table-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.rt-watch-table-status-active { color: var(--rt-success); }
+.rt-watch-table-status-paused { color: var(--rt-warn); }
+.rt-watch-table-status-done { color: var(--rt-muted); }
