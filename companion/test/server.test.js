@@ -94,11 +94,16 @@ test('GET /login returns a simple operator login form', async () => {
   })
 
   assert.equal(response.status, 200)
-  assert.match(response.text, /<form method="post" action="\/login">/)
+  assert.match(response.text, /<form id="login-form" method="post" action="\/login">/)
   assert.match(response.text, /name="username"/)
   assert.match(response.text, /name="password"/)
   assert.match(response.text, /name="mfa_code"/)
-  assert.match(response.text, /class="secondary button-link" href="\/health"/)
+  assert.match(response.text, /id="loading"/)
+  assert.match(response.text, /id="json-output"/)
+  assert.match(response.text, /id="refresh-session"/)
+  assert.match(response.text, /id="health-json"/)
+  assert.match(response.text, /fetch\(url/)
+  assert.doesNotMatch(response.text, /action="\/refresh"/)
   assert.doesNotMatch(response.text, /RECGOV_EMAIL|RECGOV_PASSWORD|RECGOV_MFA_CODE|RECGOV_OTP/)
 })
 

@@ -21,6 +21,8 @@ const RECGOV_REFRESH_CONTENT_TYPE = 'text/plain;charset=UTF-8'
 const RECGOV_RECACCOUNT_STORAGE_KEY = 'recaccount'
 const RECGOV_DIAGNOSTIC_URL_PREFIX = '/diagnostics'
 const DEFAULT_RECGOV_LOGIN_TIMEOUT_MS = 120_000
+const DEFAULT_RECGOV_CREDENTIAL_SESSION_TIMEOUT_MS = 5_000
+const MAX_RECGOV_CREDENTIAL_SESSION_TIMEOUT_MS = 5_000
 const RECGOV_LOGIN_POLL_MS = 1_000
 const RECGOV_LOGIN_WAIT_PROGRESS_MS = 10_000
 const RECGOV_LOGIN_BUTTON_TIMEOUT_MS = 5_000
@@ -35,7 +37,7 @@ const MIN_LOGIN_TIMEOUT_MS = 1
 const LOGIN_FIELD_TIMEOUT_MS = 5_000
 const LOGIN_SUBMIT_TIMEOUT_MS = 5_000
 const LOGIN_BLOCKER_TIMEOUT_MS = 1_000
-const LOGIN_MFA_PROMPT_TIMEOUT_MS = 8_000
+const LOGIN_MFA_PROMPT_TIMEOUT_MS = 5_000
 const DIAGNOSTIC_REASON_MAX_CHARS = 60
 
 const LOGIN_LINK_SEL = 'button:has-text("Sign Up / Log In"), a:has-text("Sign Up / Log In")'
@@ -252,12 +254,9 @@ async function recaccountFromCredentialLogin (page, options, credentialState) {
     return null
   }
 
-  const timeoutMs = recgovLoginTimeoutMs(options)
+  const credentialSessionTimeoutMs = recgovCredentialSessionTimeoutMs(options)
   clearLoginDiagnostic()
-  console.log(
-    `Cart: attempting Recreation.gov credential login for ${maskLoginEmail(credentialState.email)} ` +
-    `(waiting up to ${secondsLabel(timeoutMs)}s)`
-  )
+  console.log(`Cart: attempting Recreation.gov credential login for ${maskLoginEmail(credentialState.email)}`)
   await page.goto(RECGOV_HOME_URL, {
     waitUntil: 'domcontentloaded',
     timeout: RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS,
@@ -280,29 +279,60 @@ async function recaccountFromCredentialLogin (page, options, credentialState) {
   }
   console.log('Cart: submitted Recreation.gov username/password')
 
-  const mfaResult = await submitMfaCodeIfPrompted(page, credentialState)
-  if (!mfaResult.ok) {
-    console.log(`Cart: Recreation.gov credential login failed reason=${mfaResult.reason}`)
-    await captureLoginDiagnostic(page, mfaResult.reason)
-    return null
-  }
-  if (mfaResult.submitted) {
-    console.log('Cart: submitted Recreation.gov 2FA code')
+  console.log(`Cart: waiting for Recreation.gov browser session or challenge after credential submit (timeout ${secondsLabel(credentialSessionTimeoutMs)}s)`)
+  const completion = await waitForCredentialLoginCompletion(page, credentialSessionTimeoutMs, credentialState)
+  if (completion.browserSession) {
+    clearLoginDiagnostic()
+    return activateBrowserRecaccount(completion.browserSession.page, completion.browserSession.raw, options)
   }
 
-  console.log(`Cart: waiting for Recreation.gov browser session after credential submit (timeout ${secondsLabel(timeoutMs)}s)`)
-  const browserSession = await waitForBrowserRecaccount(page, timeoutMs, { label: 'credential login' })
-  if (!browserSession) {
-    const blocker = await credentialLoginBlocker(page)
-    await captureLoginDiagnostic(page, blocker.reason, blocker.detail)
-    console.log(
-      `Cart: Recreation.gov credential login failed reason=${blocker.reason}` +
-      (blocker.detail ? ` detail="${blocker.detail}"` : '')
-    )
-    return null
+  const blocker = completion.failure || { reason: 'recaccount_not_observed' }
+  await captureLoginDiagnostic(page, blocker.reason, blocker.detail)
+  console.log(
+    `Cart: Recreation.gov credential login failed reason=${blocker.reason}` +
+    (blocker.detail ? ` detail="${blocker.detail}"` : '')
+  )
+  return null
+}
+
+async function waitForCredentialLoginCompletion (page, timeoutMs, credentials) {
+  const deadline = Date.now() + timeoutMs
+  const startedAt = Date.now()
+  let mfaSubmitted = false
+  while (Date.now() < deadline) {
+    const browserSession = await readRecaccountFromOpenPages(page)
+    if (browserSession) return { browserSession, mfaSubmitted }
+
+    const challenge = await handleCredentialLoginChallenge(page, credentials, { mfaSubmitted })
+    if (challenge.failure) return { failure: challenge.failure, mfaSubmitted }
+    if (challenge.mfaSubmitted && !mfaSubmitted) {
+      mfaSubmitted = true
+      console.log('Cart: submitted Recreation.gov 2FA code')
+    }
+
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) break
+    await page.waitForTimeout(Math.min(RECGOV_LOGIN_POLL_MS, remaining))
   }
-  clearLoginDiagnostic()
-  return activateBrowserRecaccount(browserSession.page, browserSession.raw, options)
+
+  const elapsed = secondsLabel(Date.now() - startedAt)
+  console.log(`Cart: Recreation.gov credential login wait exhausted elapsed=${elapsed}s url=${safePageUrl(page)}`)
+  return { failure: await credentialLoginBlocker(page), mfaSubmitted }
+}
+
+async function handleCredentialLoginChallenge (page, credentials, { mfaSubmitted = false } = {}) {
+  if (await anyVisible(page, LOGIN_CAPTCHA_SELECTORS)) return { failure: { reason: 'captcha_required' } }
+
+  const detail = await firstVisibleText(page, LOGIN_ERROR_SELECTORS)
+  if (detail) return { failure: { reason: 'login_error', detail } }
+
+  if (!mfaSubmitted) {
+    const mfaResult = await submitMfaCodeIfPrompted(page, credentials, LOGIN_BLOCKER_TIMEOUT_MS)
+    if (!mfaResult.ok) return { failure: { reason: mfaResult.reason } }
+    if (mfaResult.submitted) return { mfaSubmitted: true }
+  }
+
+  return {}
 }
 
 function recgovLoginTimeoutMs (options = {}) {
@@ -310,6 +340,17 @@ function recgovLoginTimeoutMs (options = {}) {
   return Number.isFinite(configured) && configured >= MIN_LOGIN_TIMEOUT_MS
     ? configured
     : DEFAULT_RECGOV_LOGIN_TIMEOUT_MS
+}
+
+function recgovCredentialSessionTimeoutMs (options = {}) {
+  const configured = Number.parseInt(
+    options.credentialSessionTimeoutMs || process.env.RECGOV_CREDENTIAL_SESSION_TIMEOUT_MS || '',
+    10,
+  )
+  if (!Number.isFinite(configured) || configured < MIN_LOGIN_TIMEOUT_MS) {
+    return DEFAULT_RECGOV_CREDENTIAL_SESSION_TIMEOUT_MS
+  }
+  return Math.min(configured, MAX_RECGOV_CREDENTIAL_SESSION_TIMEOUT_MS)
 }
 
 function secondsLabel (millis) {
@@ -339,8 +380,8 @@ async function submitCredentialLoginForm (page, credentials) {
   return { ok: true }
 }
 
-async function submitMfaCodeIfPrompted (page, credentials) {
-  const mfaSelector = await firstVisibleSelector(page, LOGIN_MFA_CODE_SELECTORS, LOGIN_MFA_PROMPT_TIMEOUT_MS)
+async function submitMfaCodeIfPrompted (page, credentials, timeout = LOGIN_MFA_PROMPT_TIMEOUT_MS) {
+  const mfaSelector = await firstVisibleSelector(page, LOGIN_MFA_CODE_SELECTORS, timeout)
   if (!mfaSelector) return { ok: true, submitted: false }
   if (!credentials.mfaCode) return { ok: false, reason: 'mfa_required' }
 
@@ -413,6 +454,12 @@ async function credentialLoginBlocker (page) {
 
   const detail = await firstVisibleText(page, LOGIN_ERROR_SELECTORS)
   if (detail) return { reason: 'login_error', detail }
+  if (await anyVisible(page, LOGIN_EMAIL_SELECTORS) || await anyVisible(page, LOGIN_PASSWORD_SELECTORS)) {
+    return {
+      reason: 'login_form_still_visible',
+      detail: 'Recreation.gov login form was still visible after submit.',
+    }
+  }
 
   return { reason: 'recaccount_not_observed' }
 }

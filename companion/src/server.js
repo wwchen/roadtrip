@@ -400,17 +400,13 @@ function renderLoginPage ({ result = null } = {}) {
   const operation = status?.operation === 'refresh' ? 'Refresh' : 'Login'
   const diagnostic = status?.diagnostic || status?.last_login_diagnostic || null
   const statusHtml = result
-    ? `<p class="${ok ? 'ok' : 'error'}">${escapeHtml(ok ? `${operation} succeeded.` : `${operation} failed: ${error}`)}</p>`
-    : ''
-  const healthHtml = status
-    ? `<pre>${escapeHtml(JSON.stringify(status, null, 2))}</pre>`
-    : ''
+    ? `<p id="status-message" class="${ok ? 'ok' : 'error'}">${escapeHtml(ok ? `${operation} succeeded.` : `${operation} failed: ${error}`)}</p>`
+    : '<p id="status-message" class="muted">Ready.</p>'
+  const initialJson = result ? JSON.stringify(result, null, 2) : ''
+  const jsonClass = result ? '' : ' hidden'
+  const healthHtml = `<pre id="json-output" class="${jsonClass}">${escapeHtml(initialJson)}</pre>`
   const diagnosticHtml = diagnostic?.screenshot_url
-    ? `<section>
-        <h2>Last login screenshot</h2>
-        <p>Reason: ${escapeHtml(diagnostic.reason || 'unknown')}</p>
-        <img class="diagnostic" src="${escapeHtml(diagnostic.screenshot_url)}" alt="Recreation.gov login diagnostic screenshot">
-      </section>`
+    ? renderDiagnosticHtml(diagnostic)
     : ''
 
   return `<!doctype html>
@@ -424,21 +420,28 @@ function renderLoginPage ({ result = null } = {}) {
     label { display: block; font-weight: 650; margin-top: 1rem; }
     input { box-sizing: border-box; width: 100%; padding: .7rem; margin-top: .35rem; border: 1px solid #c8d0dc; border-radius: 6px; font: inherit; }
     button { margin-top: 1.25rem; padding: .75rem 1rem; border: 0; border-radius: 6px; background: #24579a; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+    button:disabled { cursor: wait; opacity: .65; }
     .button-link { display: inline-flex; align-items: center; justify-content: center; margin-top: 1.25rem; padding: .75rem 1rem; border-radius: 6px; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
     .row { display: flex; gap: .75rem; align-items: center; }
     .row form { margin: 0; }
     .secondary { background: #eef2f7; color: #172033; }
     .secondary:visited { color: #172033; }
+    .muted { color: #536174; }
     .ok { color: #166534; font-weight: 700; }
     .error { color: #b42318; font-weight: 700; }
     .diagnostic { display: block; max-width: 100%; border: 1px solid #c8d0dc; border-radius: 6px; }
     pre { overflow: auto; background: #f6f8fb; padding: .75rem; border-radius: 6px; }
+    .hidden, [hidden] { display: none !important; }
+    .loading { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(23, 32, 51, .34); z-index: 10; }
+    .loading-card { min-width: 16rem; border-radius: 8px; background: white; padding: 1.25rem; box-shadow: 0 16px 48px rgba(23, 32, 51, .28); text-align: center; }
+    .spinner { width: 2rem; height: 2rem; margin: 0 auto .75rem; border: 3px solid #d8e0ec; border-top-color: #24579a; border-radius: 999px; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
   <h1>${LOGIN_FORM_TITLE}</h1>
   ${statusHtml}
-  <form method="post" action="/login">
+  <form id="login-form" method="post" action="/login">
     <label for="username">Username or email</label>
     <input id="username" name="username" type="email" autocomplete="username" required>
     <label for="password">Password</label>
@@ -448,13 +451,113 @@ function renderLoginPage ({ result = null } = {}) {
     <button type="submit">Log in</button>
   </form>
   <div class="row">
-    <form method="post" action="/refresh"><button class="secondary" type="submit">Refresh session</button></form>
-    <a class="secondary button-link" href="/health">Health JSON</a>
+    <button id="refresh-session" class="secondary" type="button">Refresh session</button>
+    <button id="health-json" class="secondary" type="button">Health JSON</button>
   </div>
-  ${diagnosticHtml}
+  <div id="diagnostic">${diagnosticHtml}</div>
   ${healthHtml}
+  <div id="loading" class="loading" hidden>
+    <div class="loading-card">
+      <div class="spinner"></div>
+      <p id="loading-text">Working...</p>
+    </div>
+  </div>
+  <script>
+    const loginForm = document.getElementById('login-form')
+    const refreshButton = document.getElementById('refresh-session')
+    const healthButton = document.getElementById('health-json')
+    const statusMessage = document.getElementById('status-message')
+    const jsonOutput = document.getElementById('json-output')
+    const diagnostic = document.getElementById('diagnostic')
+    const loading = document.getElementById('loading')
+    const loadingText = document.getElementById('loading-text')
+    const actionButtons = [loginForm.querySelector('button[type="submit"]'), refreshButton, healthButton]
+
+    loginForm.addEventListener('submit', async (event) => {
+      event.preventDefault()
+      await runAction('Logging in...', 'Login', '/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(new FormData(loginForm)),
+      })
+    })
+
+    refreshButton.addEventListener('click', async () => {
+      await runAction('Refreshing session...', 'Refresh', '/refresh', { method: 'POST' })
+    })
+
+    healthButton.addEventListener('click', async () => {
+      await runAction('Loading health...', 'Health', '/health')
+    })
+
+    async function runAction (loadingLabel, actionLabel, url, options = {}) {
+      setLoading(true, loadingLabel)
+      try {
+        const response = await fetch(url, {
+          ...options,
+          headers: {
+            accept: 'application/json',
+            ...(options.headers || {}),
+          },
+        })
+        const body = await response.json().catch(() => ({
+          ok: false,
+          error: 'invalid_json_response',
+          detail: 'Companion returned a non-JSON response.',
+        }))
+        renderResult(actionLabel, response.ok, body)
+      } catch (error) {
+        renderResult(actionLabel, false, {
+          ok: false,
+          error: 'request_failed',
+          detail: error.message,
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    function setLoading (active, label = 'Working...') {
+      loading.hidden = !active
+      loadingText.textContent = label
+      for (const button of actionButtons) button.disabled = active
+    }
+
+    function renderResult (actionLabel, ok, body) {
+      const detail = body?.detail || body?.recgov_auth?.detail || body?.error || body?.recgov_auth?.error || ''
+      statusMessage.className = ok ? 'ok' : 'error'
+      statusMessage.textContent = ok ? actionLabel + ' succeeded.' : actionLabel + ' failed: ' + detail
+      jsonOutput.classList.remove('hidden')
+      jsonOutput.textContent = JSON.stringify(body, null, 2)
+      renderDiagnostic(body?.recgov_auth?.diagnostic || body?.recgov_auth?.last_login_diagnostic)
+    }
+
+    function renderDiagnostic (data) {
+      diagnostic.textContent = ''
+      if (!data?.screenshot_url) return
+      const section = document.createElement('section')
+      const heading = document.createElement('h2')
+      heading.textContent = 'Last login screenshot'
+      const reason = document.createElement('p')
+      reason.textContent = 'Reason: ' + (data.reason || 'unknown')
+      const image = document.createElement('img')
+      image.className = 'diagnostic'
+      image.src = data.screenshot_url
+      image.alt = 'Recreation.gov login diagnostic screenshot'
+      section.append(heading, reason, image)
+      diagnostic.append(section)
+    }
+  </script>
 </body>
 </html>`
+}
+
+function renderDiagnosticHtml (diagnostic) {
+  return `<section>
+        <h2>Last login screenshot</h2>
+        <p>Reason: ${escapeHtml(diagnostic.reason || 'unknown')}</p>
+        <img class="diagnostic" src="${escapeHtml(diagnostic.screenshot_url)}" alt="Recreation.gov login diagnostic screenshot">
+      </section>`
 }
 
 function renderRefreshPage () {
