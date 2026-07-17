@@ -36,6 +36,7 @@ export function mountDataTable(container, config) {
       sortKey: state.sortKey,
       sortDir: state.sortDir,
     });
+    config.onRender?.();
   }
 
   function onClick(e) {
