@@ -4,8 +4,9 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 
 /**
  * Decides whether an update changed watch meaning enough to send the current
- * window state again. Routes own HTTP and fire-and-forget dispatch wiring; this
- * policy owns the business rule so PATCH handling does not grow domain logic.
+ * window state again. The watch service owns lifecycle mutation side effects;
+ * this policy owns the business rule so ingress handlers do not grow domain
+ * logic.
  */
 internal object WatchInitialNotificationPolicy {
     fun shouldDispatchAfterUpdate(

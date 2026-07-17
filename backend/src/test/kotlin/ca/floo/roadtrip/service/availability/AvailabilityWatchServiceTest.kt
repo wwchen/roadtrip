@@ -75,6 +75,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         alertProviders: AlertProviderRegistry? = null,
         capabilityValidator: WatchCapabilityValidator = NoopWatchCapabilityValidator,
         availabilityProvider: AvailabilityProvider = FakeProvider,
+        lifecycleNotifications: WatchLifecycleNotifications = NoopWatchLifecycleNotifications,
     ): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
         val registry = AvailabilityProviderRegistry(mapOf("test" to availabilityProvider))
@@ -93,7 +94,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                     ),
                 ),
             )
-        return AvailabilityWatchService(ctx, providers, capabilityValidator)
+        return AvailabilityWatchService(ctx, providers, capabilityValidator, lifecycleNotifications)
     }
 
     private fun bookingValidatedService(
@@ -525,7 +526,80 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         )
     }
 
+    @Test
+    fun `watch mutations emit lifecycle notification callbacks from the service path`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val lifecycle = RecordingLifecycleNotifications()
+        val svc = service(lifecycleNotifications = lifecycle)
+
+        val watch = svc.createForTest(poiInput(poiId))
+        val paused = svc.updateForTest(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))!!
+        val resumed = svc.updateForTest(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.ACTIVE))!!
+        assertTrue(svc.delete(watch.id))
+
+        assertEquals(
+            listOf(
+                watch.id to WatchStatus.ACTIVE,
+            ),
+            lifecycle.created.map { it.id to it.status },
+        )
+        assertEquals(
+            listOf(
+                WatchStatus.ACTIVE to WatchStatus.PAUSED,
+                WatchStatus.PAUSED to WatchStatus.ACTIVE,
+            ),
+            lifecycle.updated.map { it.first.status to it.second.status },
+        )
+        assertEquals(WatchStatus.PAUSED, paused.status)
+        assertEquals(WatchStatus.ACTIVE, resumed.status)
+        assertEquals(listOf(watch.id), lifecycle.deleted.map { it.id })
+    }
+
+    @Test
+    fun `delete returning snapshot uses the shared delete path and emits stopped lifecycle callback`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val lifecycle = RecordingLifecycleNotifications()
+        val svc = service(lifecycleNotifications = lifecycle)
+        val watch = svc.createForTest(poiInput(poiId))
+        lifecycle.clear()
+
+        val snapshot = svc.deleteReturningSnapshot(watch.id)
+
+        assertEquals(watch.id, snapshot?.id)
+        assertEquals(null, AvailabilityWatchRepo(ctx).findById(watch.id))
+        assertEquals(listOf(watch.id), lifecycle.deleted.map { it.id })
+    }
+
     private enum class AlertEvent { ACTIVATED, DEACTIVATED }
+
+    private class RecordingLifecycleNotifications : WatchLifecycleNotifications {
+        val created: MutableList<AvailabilityWatchRepo.Watch> = mutableListOf()
+        val updated: MutableList<Pair<AvailabilityWatchRepo.Watch, AvailabilityWatchRepo.Watch>> = mutableListOf()
+        val deleted: MutableList<AvailabilityWatchRepo.Watch> = mutableListOf()
+
+        override fun afterCreate(watch: AvailabilityWatchRepo.Watch) {
+            created += watch
+        }
+
+        override fun afterUpdate(
+            before: AvailabilityWatchRepo.Watch,
+            after: AvailabilityWatchRepo.Watch,
+        ) {
+            updated += before to after
+        }
+
+        override fun afterDelete(watch: AvailabilityWatchRepo.Watch) {
+            deleted += watch
+        }
+
+        fun clear() {
+            created.clear()
+            updated.clear()
+            deleted.clear()
+        }
+    }
 
     /** Fake alert provider that records `(watch.id, event)` tuples so the test
      *  can assert the service dispatches watch-lifecycle events through the

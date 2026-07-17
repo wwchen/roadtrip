@@ -70,8 +70,6 @@ internal fun Route.roadtripApiRoutes(runtime: RoadtripRuntime) {
     availabilityWatchRoutes(
         runtime.ctx,
         runtime.availabilityWatchService,
-        runtime.watchAlertDispatcher,
-        runtime.schedulerScope,
         runtime.watchCapabilities,
     )
     campsiteRoutes(

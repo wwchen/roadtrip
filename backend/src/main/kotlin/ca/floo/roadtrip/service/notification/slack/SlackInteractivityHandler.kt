@@ -2,9 +2,6 @@ package ca.floo.roadtrip.service.notification.slack
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.availability.WatchStatus
-import ca.floo.roadtrip.service.availability.notificationTargets
-import ca.floo.roadtrip.service.notification.common.NotificationFanout
-import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
@@ -17,8 +14,7 @@ private val blockActionsJson = Json { ignoreUnknownKeys = true }
  * ([ca.floo.roadtrip.routes.api.slack.slackInteractivityRoute]) verifies the signature and
  * hands the parsed payload here; this handler applies the mutation (pause /
  * resume / delete), re-renders the card in place through the
- * [SlackResponseSender.postResponseWatchStatus] one-shot URL, and fans the
- * lifecycle notice out to the configured notification targets on the watch.
+ * [SlackResponseSender.postResponseWatchStatus] one-shot URL.
  *
  * URL-button action ids (Reserve, Grid, Map, Dashboard) route to a silent
  * no-op: Slack still fires an interaction payload for them, but the redirect
@@ -26,22 +22,16 @@ private val blockActionsJson = Json { ignoreUnknownKeys = true }
  * Unknown action ids are logged and ignored so a forgotten button in an old
  * card can't crash the endpoint.
  *
- * Depends on a narrow [Watches] port (rather than the wider
- * `AvailabilityWatchService` / `AvailabilityWatchRepo` / `WatchAlertDispatcher`)
- * so the two watch operations we need to hit here can be stubbed in tests
- * without spinning up a DB, and so a future refactor of any of those wider
- * services doesn't force the handler to change shape.
+ * Depends on a narrow [Watches] port so the ingress adapter stays out of the
+ * lifecycle implementation. The composition root backs that port with the same
+ * watch service methods used by the HTTP routes.
  */
 internal class SlackInteractivityHandler(
     private val watches: Watches,
     private val slack: SlackResponseSender,
-    private val notifications: NotificationSender = NotificationFanout(emptyList()),
 ) {
-    /** The two mutations + one snapshot the interactivity handler needs from
-     *  the watch layer, wrapped in a port the composition root implements by
-     *  delegating to `AvailabilityWatchService` + `AvailabilityWatchRepo` +
-     *  `WatchAlertDispatcher`. Kept small on purpose — this is the seam a
-     *  test needs to fake, not the whole watch surface. */
+    /** The watch operations this ingress adapter needs, backed in production
+     *  by the shared watch service path. */
     interface Watches {
         /** Applies [status] to watch [id] and returns the updated row; null when
          *  no row with that id exists (a stale card from before delete). */
@@ -68,7 +58,7 @@ internal class SlackInteractivityHandler(
     private val log = LoggerFactory.getLogger(javaClass)
 
     /** Applies whatever mutation [payload]'s first action names, then updates
-     *  the Slack card in place. Best-effort: any exception from the repo or
+     *  the Slack card in place. Best-effort: any exception from the watch or
      *  Slack layer is logged and swallowed — the caller (a Ktor coroutine
      *  launched off the route thread) already ack'd 200 to Slack and can't
      *  surface a delayed error to the user. */
@@ -123,13 +113,11 @@ internal class SlackInteractivityHandler(
         }
         val notice = watches.buildStatusNotice(updated, newNoticeState)
         val slackOk = slack.postResponseWatchStatus(responseUrl, notice)
-        val notifyOk = sendOutOfBandStatus(updated, notice)
         log.info(
-            "Slack interactivity {} watch={} response_url update ok={} out_of_band_notify_ok={}",
+            "Slack interactivity {} watch={} response_url update ok={}",
             action.actionId,
             watchId,
             slackOk,
-            notifyOk,
         )
     }
 
@@ -152,24 +140,11 @@ internal class SlackInteractivityHandler(
         }
         val notice = watches.buildStatusNotice(snapshot, WatchStatusNotice.State.STOPPED)
         val slackOk = slack.postResponseWatchStatus(responseUrl, notice)
-        val notifyOk = sendOutOfBandStatus(snapshot, notice)
         log.info(
-            "Slack interactivity delete watch={} response_url update ok={} out_of_band_notify_ok={}",
+            "Slack interactivity delete watch={} response_url update ok={}",
             watchId,
             slackOk,
-            notifyOk,
         )
-    }
-
-    private suspend fun sendOutOfBandStatus(
-        watch: AvailabilityWatchRepo.Watch,
-        notice: WatchStatusNotice,
-    ): Boolean {
-        val targets = watch.notificationTargets()
-        if (targets.isEmpty()) return true
-        return runCatching { notifications.sendWatchStatus(notice, targets) }
-            .onFailure { log.warn("Slack interactivity watch={} out-of-band status notify failed", watch.id, it) }
-            .getOrDefault(false)
     }
 
     companion object {

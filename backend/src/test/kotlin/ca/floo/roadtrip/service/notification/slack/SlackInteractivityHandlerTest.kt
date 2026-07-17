@@ -3,13 +3,9 @@ package ca.floo.roadtrip.service.notification.slack
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.service.availability.WatchStatus
-import ca.floo.roadtrip.service.notification.common.NotificationSender
-import ca.floo.roadtrip.service.notification.common.NotificationTarget
-import ca.floo.roadtrip.service.notification.common.WatchOpening
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import kotlin.test.Test
@@ -98,32 +94,6 @@ class SlackInteractivityHandlerTest {
         }
     }
 
-    private class RecordingNotifications : NotificationSender {
-        data class Status(
-            val notice: WatchStatusNotice,
-            val targets: List<NotificationTarget>,
-        )
-
-        val statuses = mutableListOf<Status>()
-
-        override suspend fun sendWatchStatus(
-            notice: WatchStatusNotice,
-            targets: List<NotificationTarget>,
-        ): Boolean {
-            statuses += Status(notice, targets)
-            return true
-        }
-
-        override suspend fun sendWatchOpenings(
-            watchId: Long,
-            startDate: LocalDate,
-            endDate: LocalDate,
-            openings: List<WatchOpening>,
-            targets: List<NotificationTarget>,
-            appRootUrl: String?,
-        ): Boolean = false
-    }
-
     private fun watch(
         id: Long = 42,
         status: WatchStatus = WatchStatus.ACTIVE,
@@ -144,18 +114,6 @@ class SlackInteractivityHandlerTest {
         updatedAt = OffsetDateTime.parse("2026-07-01T00:00:00Z"),
     )
 
-    private fun emailWatch(status: WatchStatus = WatchStatus.ACTIVE) =
-        watch(
-            status = status,
-            triggerKinds = listOf("slack_notify", "email_notify"),
-            triggerConfig =
-                JsonObject(
-                    mapOf(
-                        "email_notify" to JsonObject(mapOf("to" to JsonPrimitive("one@example.test"))),
-                    ),
-                ),
-        )
-
     private fun payload(
         actionId: String,
         value: String? = "42",
@@ -168,8 +126,7 @@ class SlackInteractivityHandlerTest {
     private fun handler(
         fakes: FakeWatches,
         slack: FakeSlack,
-        notifications: RecordingNotifications = RecordingNotifications(),
-    ) = SlackInteractivityHandler(watches = fakes, slack = slack, notifications = notifications)
+    ) = SlackInteractivityHandler(watches = fakes, slack = slack)
 
     @Test
     fun `pause action flips status to PAUSED and posts a PAUSED card via response_url`() =
@@ -183,22 +140,6 @@ class SlackInteractivityHandlerTest {
             val resp = slack.responses.single()
             assertEquals(responseUrl, resp.url)
             assertEquals(WatchStatusNotice.State.PAUSED, resp.notice.state)
-        }
-
-    @Test
-    fun `pause action sends lifecycle notice to configured notification targets`() =
-        runBlocking {
-            val slackTarget = NotificationTarget.Slack()
-            val emailTarget = NotificationTarget.Email(listOf("one@example.test"))
-            val fakes = FakeWatches(mapOf(42L to emailWatch()))
-            val slack = FakeSlack()
-            val notifications = RecordingNotifications()
-
-            handler(fakes, slack, notifications).handle(payload(SlackWatchCard.ACTION_WATCH_PAUSE))
-
-            val status = notifications.statuses.single()
-            assertEquals(WatchStatusNotice.State.PAUSED, status.notice.state)
-            assertEquals(listOf(slackTarget, emailTarget), status.targets)
         }
 
     @Test
@@ -218,22 +159,6 @@ class SlackInteractivityHandlerTest {
         }
 
     @Test
-    fun `resume action sends lifecycle notice to configured notification targets`() =
-        runBlocking {
-            val slackTarget = NotificationTarget.Slack()
-            val emailTarget = NotificationTarget.Email(listOf("one@example.test"))
-            val fakes = FakeWatches(mapOf(42L to emailWatch(status = WatchStatus.PAUSED)))
-            val slack = FakeSlack()
-            val notifications = RecordingNotifications()
-
-            handler(fakes, slack, notifications).handle(payload(SlackWatchCard.ACTION_WATCH_RESUME))
-
-            val status = notifications.statuses.single()
-            assertEquals(WatchStatusNotice.State.WATCHING, status.notice.state)
-            assertEquals(listOf(slackTarget, emailTarget), status.targets)
-        }
-
-    @Test
     fun `delete action snapshots + deletes and posts a STOPPED card`() =
         runBlocking {
             val fakes = FakeWatches(mapOf(42L to watch()))
@@ -247,22 +172,6 @@ class SlackInteractivityHandlerTest {
                     .single()
                     .notice.state,
             )
-        }
-
-    @Test
-    fun `delete action sends stopped notice to configured notification targets`() =
-        runBlocking {
-            val slackTarget = NotificationTarget.Slack()
-            val emailTarget = NotificationTarget.Email(listOf("one@example.test"))
-            val fakes = FakeWatches(mapOf(42L to emailWatch()))
-            val slack = FakeSlack()
-            val notifications = RecordingNotifications()
-
-            handler(fakes, slack, notifications).handle(payload(SlackWatchCard.ACTION_WATCH_DELETE))
-
-            val status = notifications.statuses.single()
-            assertEquals(WatchStatusNotice.State.STOPPED, status.notice.state)
-            assertEquals(listOf(slackTarget, emailTarget), status.targets)
         }
 
     @Test
