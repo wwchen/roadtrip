@@ -33,10 +33,12 @@ import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
+import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.EmailNotifyHandler
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.SlackNotifyHandler
@@ -58,6 +60,7 @@ import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.importTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.sweepStaleIngestRuns
+import ca.floo.roadtrip.service.notification.EmailNotificationServiceImpl
 import ca.floo.roadtrip.service.notification.SlackInteractivityHandler
 import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
@@ -207,6 +210,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
     PollerBackfill(boot.ctx, pollerMembership).run()
 
     val slackNotifications = SlackNotificationServiceImpl(boot.appConfig.slack)
+    val emailNotifications = EmailNotificationServiceImpl(boot.appConfig.email)
     val recgovAtcExecutor =
         boot.appConfig.booking.recgovAtc
             .takeIf { it.companionEnabled }
@@ -219,7 +223,17 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             ),
         )
     val bookingTargets = AvailabilityBookingTargetResolver(bookingProviderRegistry)
-    val watchCapabilities = WatchCapabilityService(availabilityTargets, bookingTargets)
+    val notificationTriggerKinds =
+        buildList {
+            add(AvailabilityTriggerKinds.SLACK_NOTIFY)
+            if (boot.appConfig.email != null) add(AvailabilityTriggerKinds.EMAIL_NOTIFY)
+        }
+    val watchCapabilities =
+        WatchCapabilityService(
+            availabilityTargets = availabilityTargets,
+            bookingTargets = bookingTargets,
+            notificationTriggerKinds = notificationTriggerKinds,
+        )
     val availabilityWatchService =
         AvailabilityWatchService(
             ctx = boot.ctx,
@@ -235,6 +249,10 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             listOf(
                 SlackNotifyHandler(
                     slack = slackNotifications,
+                    appRootUrl = boot.appConfig.webApp?.rootUrl,
+                ),
+                EmailNotifyHandler(
+                    email = emailNotifications,
                     appRootUrl = boot.appConfig.webApp?.rootUrl,
                 ),
                 AtcTriggerActionHandler(

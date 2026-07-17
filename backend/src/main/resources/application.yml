@@ -1,4 +1,6 @@
-# Base application YAML. Runtime loads this first, then application-<profile>.yml.
+# Base application YAML. Runtime loads this first, then optional
+# application.properties, then application-<profile>.yml and optional
+# application-<profile>.properties.
 #
 # Values may reference process environment with ${ENV_VAR}. This keeps backend
 # config in application*.yml while secrets stay in .env/deploy env.

@@ -17,6 +17,7 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.notification.EmailNotificationService
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import ca.floo.roadtrip.service.notification.WatchOpening
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
@@ -107,6 +108,28 @@ class TriggerActionHandlerTest {
             // verify the handler itself forwards the transport's success flag.
             val slack = CapturingSlack(result = false)
             val handler = SlackNotifyHandler(slack = slack, appRootUrl = null)
+
+            assertFalse(handler.fire(fakeWatch(id = 9L), openings = listOf(triggerOpening())))
+        }
+
+    @Test
+    fun `EmailNotifyHandler forwards openings to email service`() =
+        runBlocking {
+            val email = CapturingEmail(result = true)
+            val handler = EmailNotifyHandler(email = email, appRootUrl = "https://app.example")
+
+            val delivered = handler.fire(fakeWatch(id = 42L), openings = listOf(triggerOpening()))
+
+            assertTrue(delivered)
+            assertEquals(42L, email.lastWatchId)
+            assertEquals("https://app.example", email.lastAppRootUrl)
+            assertEquals("Site 12", email.lastOpenings.single().label)
+        }
+
+    @Test
+    fun `EmailNotifyHandler reports transport failure as false`() =
+        runBlocking {
+            val handler = EmailNotifyHandler(email = CapturingEmail(result = false), appRootUrl = null)
 
             assertFalse(handler.fire(fakeWatch(id = 9L), openings = listOf(triggerOpening())))
         }
@@ -362,6 +385,27 @@ class TriggerActionHandlerTest {
             responseUrl: String,
             watchId: Long,
         ): Boolean = result
+    }
+
+    private class CapturingEmail(
+        private val result: Boolean,
+    ) : EmailNotificationService {
+        var lastWatchId: Long? = null
+        var lastAppRootUrl: String? = null
+        var lastOpenings: List<WatchOpening> = emptyList()
+
+        override suspend fun sendWatchOpenings(
+            watchId: Long,
+            startDate: LocalDate,
+            endDate: LocalDate,
+            openings: List<WatchOpening>,
+            appRootUrl: String?,
+        ): Boolean {
+            lastWatchId = watchId
+            lastOpenings = openings
+            lastAppRootUrl = appRootUrl
+            return result
+        }
     }
 
     private fun fakeWatch(

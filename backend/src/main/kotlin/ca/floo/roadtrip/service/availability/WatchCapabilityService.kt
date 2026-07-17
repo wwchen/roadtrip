@@ -13,6 +13,11 @@ internal data class WatchCapabilitySupport(
 internal class WatchCapabilityService(
     private val availabilityTargets: AvailabilityTargetResolver,
     private val bookingTargets: AvailabilityBookingTargetResolver,
+    private val notificationTriggerKinds: List<String> =
+        listOf(
+            AvailabilityTriggerKinds.SLACK_NOTIFY,
+            AvailabilityTriggerKinds.EMAIL_NOTIFY,
+        ),
 ) {
     fun internalPollingSupportFor(campsites: List<CampsiteAvailabilityTarget>): WatchCapabilitySupport {
         val unsupported =
@@ -44,7 +49,7 @@ internal class WatchCapabilityService(
         if (!internalPollingSupportFor(campsites).supported) return emptyList()
         val bookingActions = supportedBookingActions(campsites)
         return buildList {
-            add(AvailabilityTriggerKinds.SLACK_NOTIFY)
+            addAll(notificationTriggerKinds)
             if (BookingAction.ADD_TO_CART in bookingActions) add(AvailabilityTriggerKinds.ATC)
         }
     }

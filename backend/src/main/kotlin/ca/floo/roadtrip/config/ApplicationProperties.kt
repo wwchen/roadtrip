@@ -7,12 +7,15 @@ import com.charleskorn.kaml.YamlMap
 import com.charleskorn.kaml.YamlNode
 import com.charleskorn.kaml.YamlNull
 import com.charleskorn.kaml.YamlScalar
+import java.util.Properties
 
 object ApplicationProperties {
     private const val PROFILE_ENV = "ROADTRIP_PROFILE"
     private const val DEFAULT_PROFILE = "local"
-    private const val BASE_RESOURCE = "application.yml"
-    private const val RESOURCE_EXTENSION = "yml"
+    private const val BASE_YAML_RESOURCE = "application.yml"
+    private const val BASE_PROPERTIES_RESOURCE = "application.properties"
+    private const val YAML_EXTENSION = "yml"
+    private const val PROPERTIES_EXTENSION = "properties"
     private val PLACEHOLDER = Regex("""\$\{([A-Za-z_][A-Za-z0-9_.-]*)}""")
     private val yaml = Yaml(configuration = YamlConfiguration(strictMode = false))
 
@@ -24,12 +27,14 @@ object ApplicationProperties {
             env[PROFILE_ENV]?.trim()?.takeIf { it.isNotEmpty() }
                 ?: DEFAULT_PROFILE
         val values = linkedMapOf<String, String>()
-        values.putAll(loadResource(BASE_RESOURCE, classLoader))
-        values.putAll(loadResource("application-$profile.$RESOURCE_EXTENSION", classLoader))
+        values.putAll(loadYamlResource(BASE_YAML_RESOURCE, classLoader))
+        values.putAll(loadOptionalPropertiesResource(BASE_PROPERTIES_RESOURCE, classLoader))
+        values.putAll(loadYamlResource("application-$profile.$YAML_EXTENSION", classLoader))
+        values.putAll(loadOptionalPropertiesResource("application-$profile.$PROPERTIES_EXTENSION", classLoader))
         return resolvePlaceholders(values, env)
     }
 
-    private fun loadResource(
+    private fun loadYamlResource(
         name: String,
         classLoader: ClassLoader,
     ): Map<String, String> {
@@ -38,6 +43,16 @@ object ApplicationProperties {
                 ?: throw IllegalArgumentException("application config resource '$name' not found")
         val content = stream.bufferedReader(Charsets.UTF_8).use { it.readText() }
         return flattenYaml(content)
+    }
+
+    private fun loadOptionalPropertiesResource(
+        name: String,
+        classLoader: ClassLoader,
+    ): Map<String, String> {
+        val stream = classLoader.getResourceAsStream(name) ?: return emptyMap()
+        val props = Properties()
+        stream.reader(Charsets.UTF_8).use(props::load)
+        return props.stringPropertyNames().associateWith { key -> props.getProperty(key).orEmpty() }
     }
 
     private fun flattenYaml(content: String): Map<String, String> {

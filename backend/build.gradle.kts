@@ -88,6 +88,7 @@ val flywayVersion = "10.20.1"
 val testcontainersVersion = "1.21.4"
 val bucket4jVersion = "8.10.1"
 val timeshapeVersion = "2025b.26"
+val resendVersion = "4.13.0"
 val junitVersion = "5.11.3"
 val playwrightVersion = "1.50.0"
 
@@ -152,6 +153,8 @@ dependencies {
     implementation("com.charleskorn.kaml:kaml:0.74.0")
     // Coordinate -> IANA ZoneId lookup from timezone-boundary-builder data.
     implementation("net.iakovlev:timeshape:$timeshapeVersion")
+    // Transactional email delivery for availability watch alerts.
+    implementation("com.resend:resend-java:$resendVersion")
 
     jooqGenerator("org.postgresql:postgresql:$postgresVersion")
     jooqGenerator("org.testcontainers:postgresql:$testcontainersVersion")
