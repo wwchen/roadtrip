@@ -4,25 +4,27 @@ import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
 import ca.floo.roadtrip.exceptions.TargetBusyException
 import ca.floo.roadtrip.exceptions.TargetNotFoundException
+import ca.floo.roadtrip.models.etl.PlanetFitnessLocationEtlOutput
+import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.models.metadata.ingest.Phase
 import ca.floo.roadtrip.models.metadata.ingest.RunKind
 import ca.floo.roadtrip.models.metadata.ingest.Target
+import ca.floo.roadtrip.models.metadata.registry.EtlEntry
+import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
+import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.SharedDbTest
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
-import java.io.ByteArrayInputStream
 import java.io.File
-import java.io.InputStream
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -42,115 +44,71 @@ class IngestControllerTest : SharedDbTest() {
     fun `unknown target throws`() {
         val controller = controllerWith(emptyMap())
         assertThrows<TargetNotFoundException> {
-            runBlocking { controller.startRun("nope", RunKind.FETCH, "test") }
+            runBlocking { controller.startRun("nope", RunKind.IMPORT, "test") }
         }
     }
 
     @Test
-    fun `single fetch phase happy path records completed parent and phase rows`() =
+    fun `import-with-no-phases is a noop that completes`() =
         runBlocking {
-            val factory = FakeProcessFactory()
-            factory.queue(FakeProcess(stdout = "ok\n", stderr = "", exit = 0))
-            val controller =
-                controllerWith(
-                    targetMap("t", fetch = listOf(Phase.Fetch("step1", listOf("echo", "ok")))),
-                    factory = factory,
-                )
+            val controller = controllerWith(targetMap("curated"))
 
-            val outcome = controller.startRun("t", RunKind.FETCH, "test")
-
-            assertEquals("completed", outcome.status)
-            assertNull(outcome.failedPhase)
-            assertEquals(RunKind.FETCH, outcome.kind)
+            val outcome = controller.startRun("curated", RunKind.IMPORT, "test")
+            assertEquals("noop", outcome.status)
+            assertEquals(RunKind.IMPORT, outcome.kind)
 
             val parent = ctx.selectFrom(INGEST_RUNS).where(INGEST_RUNS.ID.eq(outcome.parentRunId)).fetchOne()!!
             assertEquals("target", parent.phaseKind)
-            // Parent row's `phase` column carries the run kind.
-            assertEquals("fetch", parent.phase)
+            assertEquals("import", parent.phase)
             assertEquals("completed", parent.status)
             assertNotNull(parent.completedAt)
-
-            val phases =
-                ctx
-                    .selectFrom(INGEST_RUNS)
-                    .where(INGEST_RUNS.PARENT_RUN_ID.eq(outcome.parentRunId))
-                    .fetch()
-            assertEquals(1, phases.size)
-            assertEquals("fetch", phases[0].phaseKind)
-            assertEquals("completed", phases[0].status)
-            assertEquals("""{"exit_code": 0}""", phases[0].counts?.data())
-        }
-
-    @Test
-    fun `import-with-no-phases is a noop that completes`() =
-        runBlocking {
-            // parks-canada-curated has no fetch phase; an import-only target
-            // with no fetch phases should complete cleanly when fetched.
-            val controller =
-                controllerWith(
-                    targetMap("curated", fetch = emptyList(), import = listOf(Phase.Import("k", "x"))),
-                )
-
-            val outcome = controller.startRun("curated", RunKind.FETCH, "test")
-            assertEquals("noop", outcome.status)
-
-            val parent = ctx.selectFrom(INGEST_RUNS).where(INGEST_RUNS.ID.eq(outcome.parentRunId)).fetchOne()!!
-            assertEquals("completed", parent.status)
             assertEquals(0, ctx.fetchCount(INGEST_RUNS, INGEST_RUNS.PARENT_RUN_ID.eq(outcome.parentRunId)))
         }
 
     @Test
-    fun `fetch non-zero exit fails phase and parent`() =
-        runBlocking {
-            val factory = FakeProcessFactory()
-            factory.queue(FakeProcess(stdout = "", stderr = "boom\n", exit = 1))
-            val controller =
-                controllerWith(
-                    targetMap("t", fetch = listOf(Phase.Fetch("step1", listOf("false")))),
-                    factory = factory,
-                )
+    fun `import phase failure surfaces as failed phase row`() {
+        val controller =
+            controllerWith(
+                targetMap("t", Phase.Import("import:does-not-exist", "does-not-exist")),
+                dataDir = File("/tmp/this-does-not-exist-${System.nanoTime()}"),
+            )
 
-            val outcome = controller.startRun("t", RunKind.FETCH, "test")
+        val outcome = runBlocking { controller.startRun("t", RunKind.IMPORT, "test") }
+        assertEquals("failed", outcome.status)
+        assertEquals("import:does-not-exist", outcome.failedPhase)
 
-            assertEquals("failed", outcome.status)
-            assertEquals("step1", outcome.failedPhase)
+        val parent = ctx.selectFrom(INGEST_RUNS).where(INGEST_RUNS.ID.eq(outcome.parentRunId)).fetchOne()!!
+        assertEquals("failed", parent.status)
+        assertTrue(parent.notes!!.contains("import:does-not-exist"), "parent notes should mention failing phase")
 
-            val parent = ctx.selectFrom(INGEST_RUNS).where(INGEST_RUNS.ID.eq(outcome.parentRunId)).fetchOne()!!
-            assertEquals("failed", parent.status)
-            assertTrue(parent.notes!!.contains("step1"), "parent notes should mention failing phase")
-
-            val phase = ctx.selectFrom(INGEST_RUNS).where(INGEST_RUNS.PARENT_RUN_ID.eq(outcome.parentRunId)).fetchOne()!!
-            assertEquals("failed", phase.status)
-            assertEquals(1, phase.exitCode)
-            assertTrue(phase.notes!!.contains("boom"), "phase notes should carry stderr tail")
-        }
+        val phase =
+            ctx
+                .selectFrom(INGEST_RUNS)
+                .where(INGEST_RUNS.PARENT_RUN_ID.eq(outcome.parentRunId))
+                .fetchOne() ?: fail("phase row not created")
+        assertEquals("failed", phase.status)
+        assertEquals("import", phase.phaseKind)
+        assertNotNull(phase.notes)
+        assertNull(phase.exitCode)
+    }
 
     @Test
     fun `phase 2 failure means phase 3 is never created`() =
         runBlocking {
-            val factory = FakeProcessFactory()
-            factory.queue(FakeProcess(stdout = "", stderr = "", exit = 0)) // phase 1 ok
-            factory.queue(FakeProcess(stdout = "", stderr = "phase 2 broke\n", exit = 7))
-            // phase 3 is queued but should never be consumed
-            factory.queue(FakeProcess(stdout = "", stderr = "", exit = 0))
             val controller =
                 controllerWith(
                     targetMap(
                         "t",
-                        fetch =
-                            listOf(
-                                Phase.Fetch("p1", listOf("a")),
-                                Phase.Fetch("p2", listOf("b")),
-                                Phase.Fetch("p3", listOf("c")),
-                            ),
+                        Phase.Import("p1", "first"),
+                        Phase.Import("p2", "second"),
+                        Phase.Import("p3", "third"),
                     ),
-                    factory = factory,
                 )
 
-            val outcome = controller.startRun("t", RunKind.FETCH, "test")
+            val outcome = controller.startRun("t", RunKind.IMPORT, "test")
 
             assertEquals("failed", outcome.status)
-            assertEquals("p2", outcome.failedPhase)
+            assertEquals("p1", outcome.failedPhase)
 
             val phases =
                 ctx
@@ -158,147 +116,92 @@ class IngestControllerTest : SharedDbTest() {
                     .where(INGEST_RUNS.PARENT_RUN_ID.eq(outcome.parentRunId))
                     .orderBy(INGEST_RUNS.ID.asc())
                     .fetch()
-            assertEquals(2, phases.size, "phase 3 must not have been created")
+            assertEquals(1, phases.size, "later phases must not be created after failure")
             assertEquals("p1", phases[0].phase)
-            assertEquals("completed", phases[0].status)
-            assertEquals("p2", phases[1].phase)
-            assertEquals("failed", phases[1].status)
-            assertEquals(1, factory.unused(), "phase 3 process must not be consumed")
+            assertEquals("failed", phases[0].status)
         }
 
     @Test
-    fun `concurrent same-target throws TargetBusyException with running run_id`() =
+    fun `concurrent same-target import throws TargetBusyException with running run_id`() =
         runBlocking {
-            val gate = CompletableDeferred<Unit>()
-            val release = CompletableDeferred<Unit>()
-            val factory = FakeProcessFactory()
-            factory.queue(BlockingFakeProcess(gate, release))
+            val gate = CountDownLatch(1)
+            val release = CountDownLatch(1)
+            val registry = blockingRegistry("Blocking Import" to "blocking-etl")
             val controller =
                 controllerWith(
-                    targetMap("t", fetch = listOf(Phase.Fetch("hold", listOf("sleep")))),
-                    factory = factory,
+                    targetMap("Blocking Import", Phase.Import("import:Blocking Import", "Blocking Import")),
+                    registry = registry,
+                    etlRegistry =
+                        mapOf(
+                            "blocking-etl" to BlockingPlanetFitnessEtl("blocking-etl", gate, release),
+                        ),
                 )
 
             coroutineScope {
-                val first = async(Dispatchers.IO) { controller.startRun("t", RunKind.FETCH, "first") }
-
-                // Wait for the phase to actually start (process spawn => gate completes).
-                withTimeout(5_000) { gate.await() }
+                val first = async(Dispatchers.IO) { controller.startRun("Blocking Import", RunKind.IMPORT, "first") }
+                assertTrue(gate.await(5, TimeUnit.SECONDS), "first import did not start")
 
                 val ex =
                     assertThrows<TargetBusyException> {
-                        runBlocking { controller.startRun("t", RunKind.FETCH, "second") }
+                        runBlocking { controller.startRun("Blocking Import", RunKind.IMPORT, "second") }
                     }
-                // Must surface the running parent run_id, not invent a new one.
                 val running =
                     ctx
                         .selectFrom(INGEST_RUNS)
-                        .where(INGEST_RUNS.TARGET.eq("t"))
+                        .where(INGEST_RUNS.TARGET.eq("Blocking Import"))
                         .and(INGEST_RUNS.PHASE_KIND.eq("target"))
                         .and(INGEST_RUNS.STATUS.eq("started"))
                         .fetchOne()!!
                 assertEquals(running.id, ex.runningRunId)
 
-                release.complete(Unit)
+                release.countDown()
                 val outcome = first.await()
                 assertEquals("completed", outcome.status)
             }
         }
 
     @Test
-    fun `fetch and import on same target serialize through the same mutex`() =
-        runBlocking {
-            // The whole point of one-mutex-per-target. A fetch in flight must
-            // block an import on the same target until it completes.
-            val gate = CompletableDeferred<Unit>()
-            val release = CompletableDeferred<Unit>()
-            val factory = FakeProcessFactory()
-            factory.queue(BlockingFakeProcess(gate, release))
-            val controller =
-                controllerWith(
-                    targetMap(
-                        "t",
-                        fetch = listOf(Phase.Fetch("hold", listOf("sleep"))),
-                        import = listOf(Phase.Import("i", "x")),
-                    ),
-                    factory = factory,
-                )
-
-            coroutineScope {
-                val fetchRun = async(Dispatchers.IO) { controller.startRun("t", RunKind.FETCH, "test") }
-                withTimeout(5_000) { gate.await() }
-
-                // Import on the same target while fetch is in flight: 409.
-                assertThrows<TargetBusyException> {
-                    runBlocking { controller.startRun("t", RunKind.IMPORT, "test") }
-                }
-
-                release.complete(Unit)
-                fetchRun.await()
-            }
-        }
-
-    @Test
     fun `different targets run concurrently`() =
         runBlocking {
-            val gateA = CompletableDeferred<Unit>()
-            val gateB = CompletableDeferred<Unit>()
-            val release = CompletableDeferred<Unit>()
-            val factory = FakeProcessFactory()
-            // Both processes block until release; if they serialized, only one
-            // would hit its gate before the other releases.
-            factory.queue(BlockingFakeProcess(gateA, release))
-            factory.queue(BlockingFakeProcess(gateB, release))
+            val gate = CountDownLatch(2)
+            val release = CountDownLatch(1)
+            val registry =
+                blockingRegistry(
+                    "Blocking A" to "blocking-a",
+                    "Blocking B" to "blocking-b",
+                )
             val controller =
                 controllerWith(
                     mapOf(
-                        "a" to Target("a", listOf(Phase.Fetch("ha", listOf("sleep"))), emptyList()),
-                        "b" to Target("b", listOf(Phase.Fetch("hb", listOf("sleep"))), emptyList()),
+                        "Blocking A" to Target("Blocking A", listOf(Phase.Import("import:Blocking A", "Blocking A"))),
+                        "Blocking B" to Target("Blocking B", listOf(Phase.Import("import:Blocking B", "Blocking B"))),
                     ),
-                    factory = factory,
+                    registry = registry,
+                    etlRegistry =
+                        mapOf(
+                            "blocking-a" to BlockingPlanetFitnessEtl("blocking-a", gate, release),
+                            "blocking-b" to BlockingPlanetFitnessEtl("blocking-b", gate, release),
+                        ),
                 )
 
             coroutineScope {
-                val ra = async(Dispatchers.IO) { controller.startRun("a", RunKind.FETCH, "test") }
-                val rb = async(Dispatchers.IO) { controller.startRun("b", RunKind.FETCH, "test") }
-                withTimeout(5_000) {
-                    gateA.await()
-                    gateB.await()
-                }
-                release.complete(Unit)
-                assertEquals("completed", ra.await().status)
-                assertEquals("completed", rb.await().status)
+                val first = async(Dispatchers.IO) { controller.startRun("Blocking A", RunKind.IMPORT, "test") }
+                val second = async(Dispatchers.IO) { controller.startRun("Blocking B", RunKind.IMPORT, "test") }
+                assertTrue(gate.await(5, TimeUnit.SECONDS), "both imports did not start concurrently")
+                release.countDown()
+                assertEquals("completed", first.await().status)
+                assertEquals("completed", second.await().status)
             }
-        }
-
-    @Test
-    fun `mutex is released after failure so the next run can proceed`() =
-        runBlocking {
-            val factory = FakeProcessFactory()
-            factory.queue(FakeProcess(stdout = "", stderr = "x\n", exit = 9))
-            factory.queue(FakeProcess(stdout = "", stderr = "", exit = 0))
-            val controller =
-                controllerWith(
-                    targetMap("t", fetch = listOf(Phase.Fetch("only", listOf("a")))),
-                    factory = factory,
-                )
-
-            val first = controller.startRun("t", RunKind.FETCH, "test")
-            assertEquals("failed", first.status)
-            // Second run must not be 409 — mutex must have been released.
-            val second = controller.startRun("t", RunKind.FETCH, "test")
-            assertEquals("completed", second.status)
         }
 
     @Test
     fun `boot recovery marks stale started rows as aborted`() {
-        // Hand-roll a 'started' parent row 1h in the past.
         val past = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1)
         val staleId =
             ctx
                 .insertInto(INGEST_RUNS)
                 .set(INGEST_RUNS.TARGET, "t")
-                .set(INGEST_RUNS.PHASE, "fetch")
+                .set(INGEST_RUNS.PHASE, "import")
                 .set(INGEST_RUNS.PHASE_KIND, "target")
                 .set(INGEST_RUNS.STATUS, "started")
                 .set(INGEST_RUNS.STARTED_AT, past)
@@ -306,7 +209,6 @@ class IngestControllerTest : SharedDbTest() {
                 .returningResult(INGEST_RUNS.ID)
                 .fetchOne()!!
                 .value1()!!
-        // And a 'started' row from 1 minute ago — must NOT be swept.
         val recent = OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1)
         val recentId =
             ctx
@@ -333,118 +235,58 @@ class IngestControllerTest : SharedDbTest() {
         assertEquals("started", recentAfter.status, "rows younger than the cutoff must be untouched")
     }
 
-    @Test
-    fun `import phase failure surfaces as failed phase row`() {
-        // sourceFor() throws IllegalStateException for an unknown source name;
-        // IngestController catches it and records the failure on the phase row.
-        val controller =
-            controllerWith(
-                targetMap(
-                    "t",
-                    fetch = emptyList(),
-                    import = listOf(Phase.Import("import:does-not-exist", "does-not-exist")),
-                ),
-                dataDir = File("/tmp/this-does-not-exist-${System.nanoTime()}"),
-            )
-
-        val outcome = runBlocking { controller.startRun("t", RunKind.IMPORT, "test") }
-        assertEquals("failed", outcome.status)
-        val phase =
-            ctx
-                .selectFrom(INGEST_RUNS)
-                .where(INGEST_RUNS.PARENT_RUN_ID.eq(outcome.parentRunId))
-                .fetchOne() ?: fail("phase row not created")
-        assertEquals("failed", phase.status)
-        assertEquals("import", phase.phaseKind)
-        assertNotNull(phase.notes)
-    }
-
     private fun controllerWith(
         targets: Map<String, Target>,
-        factory: FakeProcessFactory = FakeProcessFactory(),
+        registry: PoiRegistry = PoiRegistry(emptyList(), emptyList()),
         dataDir: File = File("/tmp"),
-    ): IngestController {
-        // Tests are constructed with single-target maps; each test fixture
-        // exercises either fetch or import, never both. Pass the same map
-        // to both slots — the controller dispatches by RunKind.
-        return IngestController(
+        etlRegistry: Map<String, SourceEtl<*, *>> = emptyMap(),
+    ): IngestController =
+        IngestController(
             ctx = ctx,
             etl =
-                ca.floo.roadtrip.service.etl.framework.EtlOrchestrator(
-                    ctx,
-                    dataDir,
-                    ca.floo.roadtrip.models.metadata.registry
-                        .PoiRegistry(emptyList(), emptyList()),
+                EtlOrchestrator(
+                    ctx = ctx,
+                    rawDir = dataDir,
+                    poiRegistry = registry,
+                    etlRegistry = etlRegistry,
                 ),
-            fetchTargets = targets,
             importTargets = targets,
-            workingDir = File("/tmp"),
             ioDispatcher = Dispatchers.IO,
-            processFactory = factory,
         )
-    }
 
     private fun targetMap(
         name: String,
-        fetch: List<Phase.Fetch> = emptyList(),
-        import: List<Phase.Import> = emptyList(),
-    ): Map<String, Target> = mapOf(name to Target(name, fetch, import))
+        vararg importPhases: Phase.Import,
+    ): Map<String, Target> = mapOf(name to Target(name, importPhases.toList()))
 
-    // -- Fakes ----------------------------------------------------------------
+    private fun blockingRegistry(vararg rows: Pair<String, String>): PoiRegistry =
+        PoiRegistry(
+            dataSources = emptyList(),
+            poiData =
+                rows.map { (name, slug) ->
+                    PoiDataEntry(
+                        name = name,
+                        category = "planet-fitness",
+                        etls = listOf(EtlEntry(slug = slug, adapter = "BlockingPlanetFitnessEtl")),
+                    )
+                },
+        )
 
-    private class FakeProcessFactory : ProcessFactory {
-        // Thread-safe — the concurrent-targets test fires two start() calls
-        // from coroutines on Dispatchers.IO, and ArrayDeque.removeFirstOrNull
-        // races; the slow loser ends up with `null` and fails the run with
-        // "no fake process queued" instead of getting its blocking handle.
-        private val queue = java.util.concurrent.ConcurrentLinkedDeque<RunningProcess>()
-
-        fun queue(p: RunningProcess) {
-            queue.addLast(p)
+    private class BlockingPlanetFitnessEtl(
+        override val etlSlug: String,
+        private val gate: CountDownLatch,
+        private val release: CountDownLatch,
+    ) : SourceEtl<Unit, PlanetFitnessLocationEtlOutput> {
+        override fun parse(inputs: InputBundle) {
+            gate.countDown()
+            check(release.await(5, TimeUnit.SECONDS)) { "release gate timed out" }
         }
 
-        fun unused(): Int = queue.size
+        override fun validate(dto: Unit): ValidationResult<Unit> = ValidationResult.Ok(dto)
 
-        override fun start(
-            cmd: List<String>,
-            workingDir: File,
-        ): RunningProcess = queue.pollFirst() ?: error("no fake process queued for cmd=$cmd")
-    }
-
-    private class FakeProcess(
-        stdout: String,
-        stderr: String,
-        private val exit: Int,
-    ) : RunningProcess {
-        private val out: InputStream = ByteArrayInputStream(stdout.toByteArray())
-        private val err: InputStream = ByteArrayInputStream(stderr.toByteArray())
-
-        override fun stdoutStream(): InputStream = out
-
-        override fun stderrStream(): InputStream = err
-
-        override suspend fun awaitExit(): Int = exit
-
-        override fun killTree() {}
-    }
-
-    private class BlockingFakeProcess(
-        private val gate: CompletableDeferred<Unit>,
-        private val release: CompletableDeferred<Unit>,
-    ) : RunningProcess {
-        override fun stdoutStream(): InputStream = ByteArrayInputStream(byteArrayOf())
-
-        override fun stderrStream(): InputStream = ByteArrayInputStream(byteArrayOf())
-
-        override suspend fun awaitExit(): Int {
-            // Signal that the phase started, then wait for the test to release.
-            gate.complete(Unit)
-            release.await()
-            // Spin briefly so awaitExit returns AFTER drainers finish.
-            delay(10)
-            return 0
-        }
-
-        override fun killTree() {}
+        override fun transform(
+            dto: Unit,
+            ctx: TransformCtx,
+        ): PlanetFitnessLocationEtlOutput = PlanetFitnessLocationEtlOutput(emptyList())
     }
 }

@@ -56,7 +56,6 @@ import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import ca.floo.roadtrip.service.booking.adapters.RecGovBookingProvider
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
-import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.importTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.sweepStaleIngestRuns
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
@@ -163,9 +162,7 @@ internal fun createRoadtripBootContext(properties: Map<String, String> = Applica
                     poiRegistry = poiRegistry,
                     canonicalViews = canonicalViews,
                 ),
-            fetchTargets = fetchTargetsFromRegistry(poiRegistry, staticDir),
             importTargets = importTargetsFromRegistry(poiRegistry),
-            workingDir = staticDir,
         )
 
     return RoadtripBootContext(

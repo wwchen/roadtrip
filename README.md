@@ -53,28 +53,28 @@ The Tilt UI also has a `data` cluster of manual-trigger background workers
 isn't surfaced there — the fetch is interactive (cURL paste) and runs
 from a terminal via `make fetch-tesla-supercharger-pricing`.
 
-POI data refresh goes through the backend's admin API. Two-step flow,
-two Tilt buttons under the `data` cluster, two make targets:
+POI data refresh is a two-step flow. Fetch runs the registry Python fetchers on
+the host; import goes through the backend admin API and writes Postgres rows.
+Tilt exposes both as manual buttons under the `data` cluster:
 
 ```sh
 make data-fetch                       # spawn fetchers → data/raw/<source>/<ts>.json
-make data-fetch TARGET=campgrounds    # one target only
+make data-fetch TARGET=campflare-campgrounds-export    # one data_source slug
 make data-import                      # data/raw/ → Postgres rows via the ETL
-make data-import TARGET=planet-fitness
+make data-import TARGET='Planet Fitness'               # one poi_data/campsite_data row
 ```
 
-`data-fetch` runs the Python fetchers (the same ones `make poll-raw`
-dispatches); `data-import` runs the Kotlin ETL pipeline (parse →
-validate → transform → upsert). Each phase is recorded in `ingest_runs`;
-per-target mutex serializes a fetch and an import on the same target.
-Skipping `data-fetch` is fine — the ETL runs against the newest capture
-already on disk.
+`data-fetch` runs the Python fetchers declared under `data_sources:`;
+`data-import` runs the Kotlin ETL pipeline (parse → validate → transform
+→ upsert). Import runs are recorded in `ingest_runs`. Skipping
+`data-fetch` is fine — the ETL runs against the newest capture already
+on disk.
 
-Targets are derived from `backend/src/main/resources/poi-registry.yaml` at boot. Each
-`governing_body` slug becomes a multi-source target (refresh every source
-under that body), and each `source.id` becomes its own target (refresh
-just that one). Adding a vendor = appending a YAML row + writing the
-Kotlin ETL impl. Adding a governing body = appending a YAML row.
+Fetch targets are `data_sources.slug` values in
+`backend/src/main/resources/poi-registry.yaml`. Import targets are the
+display names from `poi_data:`, `campsite_data:`, and
+`campsite_parent_joiner:` rows. Adding a vendor means appending registry
+rows, writing the fetcher if needed, and wiring the Kotlin ETL adapter.
 
 > Note: `refresh-tesla-cookies` is **Tesla-only**. Recreation.gov auth is
 > owned by the companion's logged-in Chromium profile. Two unrelated systems
@@ -92,21 +92,15 @@ and 404s with `{"error":"not_cached"}` for sites that haven't been crawled.
 To populate/refresh the cache, run `make fetch-tesla-supercharger-pricing`,
 which mints fresh cookies, smoke-tests them, and walks the bulk index +
 per-slug detail. (For a cache-aware locations-only re-fetch use
-`make poll-raw SOURCE=tesla-locations`.) See `README_PRICING.md` for
+`make data-fetch TARGET=tesla-locations`.) See `README_PRICING.md` for
 cookie details.
 
 ## Refresh POI data
 
-Two paths, picked by where you want to land:
-
-- **`make poll-raw`** — interactive fzf picker over every fetcher. Runs
-  the chosen one and prints the `data/raw/<source>/<ts>.json` it wrote.
-  Append `SOURCE=<name>` to skip the picker, `SOURCE=--all` to run every
-  source in registry order, `SOURCE=--list` for the JSON registry.
-- **`make data-fetch` then `make data-import`** — same fetchers, run via
-  the backend's admin API so they're recorded in `ingest_runs` and
-  serialized by per-target mutex. Use this for production-shaped runs
-  (Tilt buttons trigger the same path).
+Use **`make data-fetch` then `make data-import`**. Fetchers run on the
+host first, then the backend admin API imports the newest raw captures
+into Postgres. Tilt buttons trigger the same split path. For an
+interactive source picker, run `python3 scripts/poll_raw.py` directly.
 
 ### Pipeline shape
 
@@ -129,8 +123,8 @@ Envelope shape:
 }
 ```
 
-Source registry lives at `backend/src/main/resources/poi-registry.yaml`. Run `make poll-raw
-SOURCE=--list` for the current set; abridged:
+Source registry lives at `backend/src/main/resources/poi-registry.yaml`.
+Run `make data-fetch TARGET=--list` for the current set; abridged:
 
 | Source                | Upstream                                | Output dir |
 |-----------------------|-----------------------------------------|------------|
@@ -183,15 +177,13 @@ public — paths and summaries only, no secrets.
 
 | Verb | Path | Returns |
 |------|------|---------|
-| POST | `/api/admin/data/fetch[/{target}]` | sync; runs Python fetcher phase(s). 200 on success, 500 + `failed_phase` on phase failure |
 | POST | `/api/admin/data/import[/{target}]` | sync; runs the Kotlin importer phase(s). 200 on success/noop, 500 on phase failure |
 | GET  | `/api/admin/data/runs[?target=…]` | last 50 parent runs |
 | GET  | `/api/admin/data/runs/{id}` | parent + ordered phase rows |
 | GET  | `/api/admin/data/status` | per-target last completed status + age |
 
-Without a `{target}`, fetch and import fan out across every known target
-sequentially. Per-target mutex means a fetch and an import on the same
-target serialize.
+Without a `{target}`, import fans out across every known import target
+sequentially.
 
 **Auth boundary:** Cloudflare Zero Trust path rule on `/api/admin/*` — same
 tunnel that already fronts the deploy. Workload is idempotent +
@@ -200,10 +192,10 @@ routes are reachable on `127.0.0.1:8765` directly. **If you ever expose dev
 to the public internet (port-forward, ngrok, etc.), bind admin routes to
 loopback only first.**
 
-The admin API only runs on hosts where `data/` is writable. In the Compose
-stack, the backend container mounts `./data` read-write at `/app/static/data`
-and mounts `./scripts` read-only so the admin fetch/import buttons run inside
-the backend container and write raw captures back to the checkout.
+The admin import API only runs on hosts where `data/` is writable. In the
+Compose stack, the backend container mounts `./data` read-write at
+`/app/static/data`; host-side fetchers write raw captures into the checkout
+before import.
 
 ## Deploy via Docker + Cloudflare tunnel
 

@@ -106,18 +106,13 @@ services:
       - SLACK_ALERT_CHANNEL=${SLACK_ALERT_CHANNEL:-}
       # https://docs.slack.dev/interactivity/implementing-shortcuts/#scope_permissions
       - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET:-}
-      - RIDB_API_KEY=${RIDB_API_KEY:-}
-      - COOKIE_BOT_URL=${COOKIE_BOT_URL:-}
-      - COOKIE_BOT_TOKEN=${COOKIE_BOT_TOKEN:-}
-      - TESLA_COOKIES=${TESLA_COOKIES:-}
     volumes:
       - ./index.html:/app/static/index.html:ro
       - ./availability.html:/app/static/availability.html:ro
       - ./web:/app/static/web:ro
-      - ./scripts:/app/static/scripts:ro
       - ./data:/app/static/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8765/api/health >/dev/null"]
+      test: ["CMD", "java", "-Xmx32m", "-cp", "/app/app.jar", "ca.floo.roadtrip.HealthProbe"]
       interval: 5s
       timeout: 3s
       retries: 20

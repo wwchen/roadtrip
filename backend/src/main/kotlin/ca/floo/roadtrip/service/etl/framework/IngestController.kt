@@ -1,7 +1,5 @@
 package ca.floo.roadtrip.service.etl.framework
 
-import ca.floo.roadtrip.exceptions.FetchFailedException
-import ca.floo.roadtrip.exceptions.FetchTimeoutException
 import ca.floo.roadtrip.exceptions.TargetBusyException
 import ca.floo.roadtrip.exceptions.TargetNotFoundException
 import ca.floo.roadtrip.models.metadata.ingest.Phase
@@ -10,12 +8,9 @@ import ca.floo.roadtrip.models.metadata.ingest.RunOutcome
 import ca.floo.roadtrip.models.metadata.ingest.Target
 import ca.floo.roadtrip.repo.IngestRunRepo
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -24,10 +19,6 @@ import kotlinx.serialization.json.Json
 import org.jooq.DSLContext
 import org.jooq.JSONB
 import org.slf4j.LoggerFactory
-import java.io.BufferedReader
-import java.io.File
-import java.io.InputStreamReader
-import java.time.Duration
 
 @OptIn(ExperimentalSerializationApi::class)
 private val ingestControllerJson =
@@ -42,9 +33,8 @@ private val ingestControllerJson =
 //   1. tryLock the target's mutex; on contention, throw TargetBusyException
 //      carrying the existing parent run_id so the caller can return 409.
 //   2. Insert a parent ingest_runs row (phase_kind='target',
-//      phase='fetch'|'import', status='started').
-//   3. For each phase in the chosen kind's list, insert a phase row, run
-//      it, finalize the row.
+//      phase='import', status='started').
+//   3. For each import phase, insert a phase row, run it, finalize the row.
 //   4. On any phase failure, mark parent failed and skip remaining phases.
 //   5. On success, mark parent completed.
 //   6. Always release the mutex in finally.
@@ -54,32 +44,21 @@ private val ingestControllerJson =
 class IngestController(
     private val ctx: DSLContext,
     val etl: EtlOrchestrator,
-    private val fetchTargets: Map<String, Target>,
     private val importTargets: Map<String, Target>,
-    private val workingDir: File,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
-    private val processFactory: ProcessFactory = DefaultProcessFactory,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val ingestRunRepo = IngestRunRepo(ctx)
 
-    // Per-target mutex. Fetch and import keyspaces are disjoint (slug vs.
-    // poi_data name); use a combined map keyed by "<kind>:<name>" so
-    // a fetch and an import for the same upstream don't share a lock —
-    // they read/write different files.
-    private val locks: Map<String, Mutex> =
-        (fetchTargets.keys.map { "fetch:$it" } + importTargets.keys.map { "import:$it" })
-            .associateWith { Mutex() }
+    private val locks: Map<String, Mutex> = importTargets.keys.associateWith { Mutex() }
 
     private val active: MutableMap<String, Long> = mutableMapOf()
 
-    /** All targets across both fetch and import maps (de-duplicated). */
-    fun knownTargets(): Set<String> = fetchTargets.keys + importTargets.keys
+    fun knownTargets(): Set<String> = importTargets.keys
 
     /** Fan-out targets for [kind]. Import order is the registry-derived execution order. */
     fun fanOutTargets(kind: RunKind): List<String> =
         when (kind) {
-            RunKind.FETCH -> fetchTargets.keys.toList()
             RunKind.IMPORT -> importTargets.keys.toList()
         }
 
@@ -88,26 +67,20 @@ class IngestController(
         kind: RunKind,
         triggeredBy: String,
     ): RunOutcome {
-        val targets = if (kind == RunKind.FETCH) fetchTargets else importTargets
-        val target = targets[targetName] ?: throw TargetNotFoundException(targetName)
-        val lockKey = "${kind.rowValue}:$targetName"
-        val mutex = locks[lockKey]!!
+        val target = importTargets[targetName] ?: throw TargetNotFoundException(targetName)
+        val mutex = locks[targetName]!!
 
         if (!mutex.tryLock()) {
             val existing =
-                synchronized(active) { active[lockKey] }
-                    ?: error("mutex held but no active run_id for $lockKey")
+                synchronized(active) { active[targetName] }
+                    ?: error("mutex held but no active run_id for $targetName")
             throw TargetBusyException(targetName, existing)
         }
 
-        val phases: List<Phase> =
-            when (kind) {
-                RunKind.FETCH -> target.fetchPhases
-                RunKind.IMPORT -> target.importPhases
-            }
+        val phases = target.importPhases
 
         val parentId = ingestRunRepo.createParentRow(target.name, kind, triggeredBy)
-        synchronized(active) { active[lockKey] = parentId }
+        synchronized(active) { active[targetName] = parentId }
         log.info(
             "ingest_runs id={} target={} kind={} started ({} phases)",
             parentId,
@@ -119,7 +92,7 @@ class IngestController(
         try {
             return runPhases(target, kind, phases, parentId)
         } finally {
-            synchronized(active) { active.remove(lockKey) }
+            synchronized(active) { active.remove(targetName) }
             mutex.unlock()
         }
     }
@@ -127,12 +100,12 @@ class IngestController(
     private suspend fun runPhases(
         target: Target,
         kind: RunKind,
-        phases: List<Phase>,
+        phases: List<Phase.Import>,
         parentId: Long,
     ): RunOutcome {
-        // Empty phase list is a legitimate no-op (e.g. parks-canada-curated
-        // has no fetch step). Mark the parent completed and return; this
-        // shows up cleanly on the dashboard rather than as a phantom row.
+        // Empty phase list is a legitimate no-op. Mark the parent completed and
+        // return so it shows up cleanly on the dashboard rather than as a
+        // phantom row.
         if (phases.isEmpty()) {
             ingestRunRepo.completeParent(parentId)
             return RunOutcome(parentId, target.name, kind, "noop", null)
@@ -141,11 +114,7 @@ class IngestController(
         for (phase in phases) {
             val phaseId = ingestRunRepo.createPhaseRow(parentId, target.name, phase)
             try {
-                val counts =
-                    when (phase) {
-                        is Phase.Fetch -> runFetch(phase)
-                        is Phase.Import -> runImport(phase)
-                    }
+                val counts = runImport(phase)
                 ingestRunRepo.completePhase(phaseId, counts)
                 log.info("ingest_runs id={} phase={} completed", phaseId, phase.label)
             } catch (e: Throwable) {
@@ -208,65 +177,6 @@ class IngestController(
 
     private fun truncateFailureNotes(notes: String): String = notes.take(FAILURE_NOTES_MAX_CHARS)
 
-    // -- Fetch phases (web → data/) -------------------------------------------
-    private suspend fun runFetch(phase: Phase.Fetch): JSONB =
-        withContext(ioDispatcher) {
-            val process =
-                processFactory.start(
-                    cmd = phase.cmd,
-                    workingDir = workingDir,
-                )
-
-            // Drain stdout to logger (line-stream so a hung script with output
-            // is visible) and stderr to a 4KB ring buffer for the row's notes.
-            val stdoutDrain =
-                CoroutineScope(ioDispatcher).async {
-                    BufferedReader(InputStreamReader(process.stdoutStream())).useLines { lines ->
-                        lines.forEach { log.info("[{}] {}", phase.label, it) }
-                    }
-                }
-            val stderrTail = StringBuilder()
-            val stderrDrain =
-                CoroutineScope(ioDispatcher).async {
-                    BufferedReader(InputStreamReader(process.stderrStream())).useLines { lines ->
-                        lines.forEach { line ->
-                            log.info("[{}] {}", phase.label, line)
-                            synchronized(stderrTail) {
-                                stderrTail.appendLine(line)
-                                if (stderrTail.length > STDERR_TAIL_BYTES) {
-                                    stderrTail.delete(0, stderrTail.length - STDERR_TAIL_BYTES)
-                                }
-                            }
-                        }
-                    }
-                }
-
-            val finished =
-                withTimeoutOrNull(Duration.ofSeconds(phase.timeoutSec).toMillis()) {
-                    process.awaitExit()
-                }
-
-            if (finished == null) {
-                // Best-effort kill of the process tree (Process.descendants on
-                // JDK 9+) so child curls/python don't outlive the timeout.
-                process.killTree()
-                stdoutDrain.cancel()
-                stderrDrain.cancel()
-                throw FetchTimeoutException("phase ${phase.label} exceeded ${phase.timeoutSec}s timeout")
-            }
-            // Wait for drainers to finish so notes carry the full tail.
-            runCatching { stdoutDrain.await() }
-            runCatching { stderrDrain.await() }
-
-            if (finished != 0) {
-                throw FetchFailedException(
-                    exitCode = finished,
-                    stderrTail = synchronized(stderrTail) { stderrTail.toString() },
-                )
-            }
-            JSONB.valueOf(ingestControllerJson.encodeToString(FetchPhaseCountsDto(exitCode = 0)))
-        }
-
     // -- Import phases (data/raw/ + data/etl-out/ → Postgres) -----------------
     //
     // The phase carries a row's display name + which YAML section it
@@ -326,24 +236,12 @@ class IngestController(
             }
         }
 
-    private fun phaseFailureNotes(e: Throwable): Pair<String, Int?> =
-        when (e) {
-            is FetchFailedException ->
-                "exit=${e.exitCode}\n${e.stderrTail.trim()}" to e.exitCode
-            is FetchTimeoutException -> (e.message ?: "timeout") to null
-            else -> "${e.javaClass.simpleName}: ${e.message ?: ""}" to null
-        }
+    private fun phaseFailureNotes(e: Throwable): Pair<String, Int?> = "${e.javaClass.simpleName}: ${e.message ?: ""}" to null
 
     companion object {
-        const val STDERR_TAIL_BYTES = 4 * 1024
         private const val FAILURE_NOTES_MAX_CHARS = 300
     }
 }
-
-@Serializable
-private data class FetchPhaseCountsDto(
-    @SerialName("exit_code") val exitCode: Int,
-)
 
 /**
  * Counts written into `ingest_runs.counts` (JSONB) for one import phase.
