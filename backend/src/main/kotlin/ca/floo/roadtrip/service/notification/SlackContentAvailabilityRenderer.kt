@@ -96,7 +96,7 @@ object SlackContentAvailabilityRenderer {
 
         // Grid link points at the app's alerts panel focused on this watch —
         // matches the existing deep-link scheme (?alert=<id>) so the user
-        // lands on the exact heatmap for the openings they just saw.
+        // lands on the availability grid for the openings they just saw.
         val gridButton: SlackButtonSpec? =
             appRootUrl?.let { root ->
                 SlackButtonSpec(

@@ -2,20 +2,13 @@ package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchCreateRequest
-import ca.floo.roadtrip.models.api.AvailabilityWatchHeatmapCell
-import ca.floo.roadtrip.models.api.AvailabilityWatchHeatmapGroup
-import ca.floo.roadtrip.models.api.AvailabilityWatchHeatmapResponse
-import ca.floo.roadtrip.models.api.AvailabilityWatchHeatmapRow
 import ca.floo.roadtrip.models.api.AvailabilityWatchListResponse
 import ca.floo.roadtrip.models.api.AvailabilityWatchResponse
 import ca.floo.roadtrip.models.api.AvailabilityWatchUpdateRequest
-import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
-import ca.floo.roadtrip.service.availability.AvailabilityWatchDateWindow
 import ca.floo.roadtrip.service.availability.AvailabilityWatchRequestMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.AvailabilityWatchValidationException
@@ -71,7 +64,6 @@ internal fun Route.availabilityWatchRoutes(
 ) {
     val watches = AvailabilityWatchRepo(ctx)
     val campsitesRepo = CampsiteRepo(ctx)
-    val availability = AvailabilityRepo(ctx)
     val scopeResolver = WatchScopeResolver(campsitesRepo)
     val watchMapper = AvailabilityWatchApiMapper(campsitesRepo, scopeResolver, watchCapabilities)
 
@@ -253,71 +245,6 @@ internal fun Route.availabilityWatchRoutes(
         } else {
             call.respondError("not_found", HttpStatusCode.NotFound)
         }
-    }
-
-    get("/api/availability/watches/{id}/heatmap", {
-        tags = listOf("availability")
-        summary = "(child campsite × date) heatmap of latest snapshot statuses for a watch"
-        request {
-            pathParameter<Long>("id") { description = "Watch id." }
-        }
-        response {
-            code(HttpStatusCode.OK) {
-                body<AvailabilityWatchHeatmapResponse> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.NotFound) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
-            code(HttpStatusCode.BadRequest) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
-        }
-    }) {
-        val id =
-            call.parameters["id"]?.toLongOrNull()
-                ?: return@get call.respondError("invalid_id", HttpStatusCode.BadRequest)
-        val watch =
-            watches.findById(id)
-                ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
-
-        val children = scopeResolver.resolve(watch)
-        val dates = AvailabilityWatchDateWindow.datesIn(watch.startDate, watch.endDate)
-        val cells = availability.readCurrent(children.map { it.id }, dates)
-        val cellsByPair = cells.associateBy { it.campsiteId to it.targetDate }
-
-        val dateStrings = dates.map { it.toString() }
-        val rowsByLoop = LinkedHashMap<String?, MutableList<AvailabilityWatchHeatmapRow>>()
-        for (r in children.sortedWith(
-            compareBy<CampsiteAvailabilityTarget, String?>(nullsLast()) {
-                it.loop
-            }.thenBy { it.name ?: "" }.thenBy { it.vendorId },
-        )) {
-            val rowCells =
-                dates.map { d ->
-                    val cell = cellsByPair[r.id to d]
-                    AvailabilityWatchHeatmapCell(
-                        targetDate = d.toString(),
-                        status = cell?.status,
-                        available = cell?.available,
-                        observedAt = cell?.observedAt?.toString(),
-                    )
-                }
-            val key = r.loop?.takeIf { it.isNotBlank() }
-            rowsByLoop.getOrPut(key) { mutableListOf() } +=
-                AvailabilityWatchHeatmapRow(
-                    campsiteId = r.id,
-                    name = r.name,
-                    cells = rowCells,
-                )
-        }
-
-        val groups =
-            rowsByLoop.entries.map { (loop, rows) ->
-                AvailabilityWatchHeatmapGroup(loop = loop, rows = rows)
-            }
-        call.respondJson(
-            AvailabilityWatchHeatmapResponse(
-                watchId = watch.id,
-                dates = dateStrings,
-                groups = groups,
-            ),
-        )
     }
 }
 

@@ -264,7 +264,7 @@ internal class WatchAlertDispatcher(
 }
 
 // The watch window is half-open [startDate, endDate) — the same contract the
-// provider fetch and the heatmap use. endDate is the checkout day, not a
+// provider fetch and current-state reads use. endDate is the checkout day, not a
 // watched night, so it is excluded: with coalesced pollers a longer watch can
 // pull a transition on a shorter watch's endDate into the shared fetch, and an
 // inclusive bound would misfire the shorter watch (and wrongly mark it done).
