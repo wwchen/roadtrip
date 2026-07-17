@@ -5,7 +5,6 @@ const STATUS_META = Object.freeze({
     label: 'A',
     aria: 'available',
     text: 'Available',
-    heatmapClass: 'cell-available',
     detailClass: 'cg-status-ok',
   }),
   first_come: Object.freeze({
@@ -14,7 +13,6 @@ const STATUS_META = Object.freeze({
     label: 'FF',
     aria: 'first come first served',
     text: 'First come first served',
-    heatmapClass: 'cell-first-come',
     detailClass: 'cg-status-first-come',
   }),
   reserved: Object.freeze({
@@ -23,7 +21,6 @@ const STATUS_META = Object.freeze({
     label: 'R',
     aria: 'reserved',
     text: 'Reserved',
-    heatmapClass: 'cell-reserved',
     detailClass: 'cg-status-muted',
   }),
   closed: Object.freeze({
@@ -32,7 +29,6 @@ const STATUS_META = Object.freeze({
     label: 'C',
     aria: 'closed',
     text: 'Closed',
-    heatmapClass: 'cell-closed',
     detailClass: 'cg-status-muted',
   }),
   unknown: Object.freeze({
@@ -41,7 +37,6 @@ const STATUS_META = Object.freeze({
     label: '?',
     aria: 'unknown',
     text: 'Unknown',
-    heatmapClass: 'cell-unknown',
     detailClass: 'cg-status-unknown',
   }),
   past: Object.freeze({
@@ -50,7 +45,6 @@ const STATUS_META = Object.freeze({
     label: '·',
     aria: 'past',
     text: 'Past',
-    heatmapClass: 'cell-past',
     detailClass: 'cg-status-muted',
   }),
 });
@@ -70,8 +64,4 @@ export function availabilityStatusLabel(raw) {
 
 export function availabilityStatusAria(raw) {
   return availabilityStatusMeta(raw).aria;
-}
-
-export function availabilityStatusHeatmapClass(raw) {
-  return availabilityStatusMeta(raw).heatmapClass;
 }

@@ -17,9 +17,10 @@
 // the action with one click on the existing in-app button — the app stays the
 // only writer, so a stale or forwarded Slack card can't mutate a watch itself.
 
-import { listWatches, updateWatch, deleteWatch } from '../api/watches-api.js';
+import { listWatches, getWatch, updateWatch, deleteWatch } from '../api/watches-api.js';
 import { fetchPoiDetail } from '../api/poi-api.js';
 import { onWatchesChanged } from '../availability/watch-events.js';
+import { mountWatchEditor } from '../availability/watch-editor.js';
 import { escapeHtml } from '../core.js';
 
 const WATCH_LIST_LIMIT = 200;
@@ -57,6 +58,8 @@ let watches = [];
 let focusWatchId = null;
 let focusAction = null;
 let focusTimer = null;
+let editing = null;
+let editorController = null;
 
 export function initAlerts() {
   rootEl = document.getElementById('tb-alerts');
@@ -124,6 +127,7 @@ function render() {
   const paused = pausedCount();
   const done = doneCount();
   if (active + paused + done === 0) {
+    disposeEditor();
     rootEl.innerHTML = '';
     rootEl.classList.remove('visible');
     expanded = false;
@@ -138,6 +142,7 @@ function render() {
     </button>
     ${expanded ? renderTable() : ''}
   `;
+  mountCurrentEditor();
 }
 
 function barLabel(active, paused, done) {
@@ -182,6 +187,7 @@ function rowHtml(w) {
   // pointing the user at the exact control to click.
   const armed = focused ? focusAction : null;
   const delArmed = armed === 'delete' ? ' is-armed' : '';
+  const editorHtml = String(editing?.id ?? '') === String(w.id) ? editorRowHtml() : '';
   return `
     <div class="tb-alerts-row${stateClass}${focused ? ' is-focus' : ''}" role="row" data-id="${escapeHtml(String(w.id))}" data-poi="${escapeHtml(String(w.poi_id ?? ''))}" data-week="${escapeHtml(start)}">
       <span class="tb-alerts-poi" role="cell" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
@@ -193,6 +199,7 @@ function rowHtml(w) {
         <button type="button" class="tb-alerts-act tb-alerts-del${delArmed}" data-act="delete" data-id="${w.id}" title="Delete" aria-label="Delete watch">🗑</button>
       </span>
     </div>
+    ${editorHtml}
   `;
 }
 
@@ -206,9 +213,21 @@ function actionsHtml(w, armed) {
       ? `<span class="tb-alerts-status" title="Watch window ended without availability">⌛</span>`
       : `<span class="tb-alerts-status" title="Availability found">✅</span>`;
   }
-  return w.status === 'paused'
+  const statusAction = w.status === 'paused'
     ? `<button type="button" class="tb-alerts-act${armed === 'resume' ? ' is-armed' : ''}" data-act="resume" data-id="${w.id}" title="Resume" aria-label="Resume watch">▶</button>`
     : `<button type="button" class="tb-alerts-act${armed === 'pause' ? ' is-armed' : ''}" data-act="pause" data-id="${w.id}" title="Pause" aria-label="Pause watch">⏸</button>`;
+  const editAction = `<button type="button" class="tb-alerts-act" data-act="edit" data-id="${w.id}" title="Edit" aria-label="Edit watch">⚙</button>`;
+  return `${statusAction}${editAction}`;
+}
+
+function editorRowHtml() {
+  if (editing?.loading) {
+    return '<div class="tb-alerts-editor-row"><div class="tb-alerts-editor-loading">Loading watch...</div></div>';
+  }
+  if (editing?.error) {
+    return `<div class="tb-alerts-editor-row"><div class="tb-alerts-editor-error">${escapeHtml(editing.error)}</div></div>`;
+  }
+  return '<div class="tb-alerts-editor-row"><div class="tb-alerts-editor-host"></div></div>';
 }
 
 // A Slack alert card links back with ?alert=<id> (+ optional
@@ -322,9 +341,15 @@ async function onClick(e) {
     if (!id) return;
     actBtn.disabled = true;
     try {
+      if (act === 'edit') {
+        actBtn.disabled = false;
+        await openEditor(id);
+        return;
+      }
       if (act === 'delete') await deleteWatch(id);
       else if (act === 'pause') await updateWatch(id, { status: 'paused' });
       else if (act === 'resume') await updateWatch(id, { status: 'active' });
+      if (String(editing?.id ?? '') === String(id)) closeEditor();
       await refresh();
     } catch (err) {
       console.warn('[alerts] action failed', act, err);
@@ -344,6 +369,63 @@ async function onClick(e) {
     const poi = row.getAttribute('data-poi');
     if (poi && typeof window.__rtOpenPoiById === 'function') window.__rtOpenPoiById(poi);
   }
+}
+
+async function openEditor(id) {
+  editing = { id, loading: true, error: null, detail: null };
+  expanded = true;
+  render();
+  try {
+    const detail = await getWatch(id);
+    editing = { id, loading: false, error: null, detail };
+    render();
+  } catch (err) {
+    editing = { id, loading: false, error: 'Could not load this watch.', detail: null };
+    render();
+  }
+}
+
+function closeEditor() {
+  editing = null;
+  disposeEditor();
+  render();
+}
+
+function mountCurrentEditor() {
+  disposeEditor();
+  if (!editing?.detail) return;
+  const host = rootEl.querySelector('.tb-alerts-editor-host');
+  if (!host) return;
+  const watch = editing.detail.watch;
+  editorController = mountWatchEditor(host, {
+    title: `Edit ${watchName(watch)}`,
+    subtitle: fmtWatchWindow(watch),
+    watch,
+    capabilities: editing.detail.watch_capabilities,
+    onSave: async (payload) => {
+      await updateWatch(watch.id, payload);
+      editing = null;
+      await refresh();
+    },
+    onRemove: async () => {
+      await deleteWatch(watch.id);
+      editing = null;
+      await refresh();
+    },
+    onClose: closeEditor,
+  });
+}
+
+function disposeEditor() {
+  editorController?.dispose();
+  editorController = null;
+}
+
+function fmtWatchWindow(watch) {
+  const start = watch?.start_date ?? '';
+  const end = watch?.end_date ?? '';
+  if (!start || !end) return '';
+  return `${fmtDate(start)} - ${fmtDate(end)}`;
 }
 
 function injectAlertsStyles() {
@@ -416,6 +498,19 @@ function injectAlertsStyles() {
     width: 24px; height: 24px;
     display: grid; place-items: center; font-size: 12px;
   }
+  .tb-alerts-editor-row {
+    padding: 8px 12px 12px 12px;
+    border-bottom: 1px solid var(--rt-border);
+    background: var(--rt-fill-hover);
+  }
+  .tb-alerts-editor-host { max-width: 360px; margin-left: auto; }
+  .tb-alerts-editor-loading,
+  .tb-alerts-editor-error {
+    color: var(--rt-muted);
+    font-size: 12px;
+    padding: 8px;
+  }
+  .tb-alerts-editor-error { color: var(--rt-error); }
   `;
   const tag = document.createElement('style');
   tag.id = 'tb-alerts-styles';

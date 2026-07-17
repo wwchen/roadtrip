@@ -9,7 +9,6 @@ import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.notification.common.WatchOpening
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
-import kotlinx.serialization.json.JsonPrimitive
 import java.time.LocalDate
 
 /** Grafana dashboards the alert deep-links to. The watch drill-down takes the
@@ -272,21 +271,15 @@ internal class WatchAlertDispatcher(
     /** The half-open [startDate, endDate) day list — the same window contract
      *  [withinWindow] enforces on the edge path — for reading the current cube. */
     private fun datesInWindow(watch: AvailabilityWatchRepo.Watch): List<LocalDate> =
-        generateSequence(watch.startDate) { d -> d.plusDays(1).takeIf { it.isBefore(watch.endDate) } }.toList()
+        AvailabilityWatchDateWindow.datesIn(watch.startDate, watch.endDate)
 }
 
 // The watch window is half-open [startDate, endDate) — the same contract the
-// provider fetch and the heatmap use. endDate is the checkout day, not a
+// provider fetch and current-state reads use. endDate is the checkout day, not a
 // watched night, so it is excluded: with coalesced pollers a longer watch can
 // pull a transition on a shorter watch's endDate into the shared fetch, and an
 // inclusive bound would misfire the shorter watch (and wrongly mark it done).
 private fun LocalDate.withinWindow(watch: AvailabilityWatchRepo.Watch): Boolean = !isBefore(watch.startDate) && isBefore(watch.endDate)
 
-internal fun AvailabilityWatchRepo.Watch.channelOverride(): String? =
-    (triggerConfig["channel"] as? JsonPrimitive)
-        ?.takeIf { it.isString }
-        ?.content
-        ?.takeIf { it.isNotBlank() }
-
-internal fun AvailabilityWatchRepo.Watch.slackNotificationTarget(): NotificationTarget.Slack =
+private fun AvailabilityWatchRepo.Watch.slackNotificationTarget(): NotificationTarget.Slack =
     NotificationTarget.Slack(channel = channelOverride())

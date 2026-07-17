@@ -70,7 +70,3 @@ export async function deleteWatch(id, { signal } = {}) {
     throw new HttpError(`${BASE}/${id}`, r.status);
   }
 }
-
-export function getWatchHeatmap(id, { signal } = {}) {
-  return jsonGetOk(`/api/availability/watches/${encodeURIComponent(id)}/heatmap`, { signal });
-}

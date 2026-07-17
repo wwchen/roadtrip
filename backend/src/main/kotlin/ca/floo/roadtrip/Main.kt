@@ -36,7 +36,9 @@ private fun installOptionalShutdownThreadDump(properties: Map<String, String>) {
     )
 }
 
-internal fun includeInRoadtripOpenApi(path: List<String>): Boolean = path.firstOrNull() == "api" && path.getOrNull(1) != "docs"
+internal fun includeInRoadtripOpenApi(path: List<String>): Boolean =
+    (path.firstOrNull() == "api" && path.getOrNull(1) != "docs") ||
+        path.firstOrNull() == "test"
 
 fun Application.module() {
     val properties = ApplicationProperties.load(baseConfig = environment.config)

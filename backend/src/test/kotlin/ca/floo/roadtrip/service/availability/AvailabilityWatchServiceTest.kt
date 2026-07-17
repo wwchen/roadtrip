@@ -27,6 +27,7 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegist
 import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.jooq.DSLContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -145,6 +146,34 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
             stopWhenTriggered = false,
         )
 
+    private fun AvailabilityWatchService.createForTest(input: AvailabilityWatchRepo.CreateInput) =
+        create(
+            targets = input.targets,
+            campsiteFilters = input.campsiteFilters,
+            startDate = input.startDate,
+            endDate = input.endDate,
+            cadenceSec = input.cadenceSec,
+            triggerKinds = input.triggerKinds,
+            triggerConfig = input.triggerConfig,
+            stopWhenTriggered = input.stopWhenTriggered,
+        )
+
+    private fun AvailabilityWatchService.updateForTest(
+        id: Long,
+        input: AvailabilityWatchRepo.UpdateInput,
+    ) = update(
+        id = id,
+        targets = input.targets,
+        campsiteFilters = input.campsiteFilters,
+        startDate = input.startDate,
+        endDate = input.endDate,
+        cadenceSec = input.cadenceSec,
+        triggerKinds = input.triggerKinds,
+        triggerConfig = input.triggerConfig,
+        stopWhenTriggered = input.stopWhenTriggered,
+        status = input.status,
+    )
+
     @Test
     fun `a watch spanning two campgrounds links to two pollers`() {
         val poiA = seedPoi("232447")
@@ -154,7 +183,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
 
         val svc = service()
         val watch =
-            svc.create(
+            svc.createForTest(
                 AvailabilityWatchRepo.CreateInput(
                     targets =
                         listOf(
@@ -182,7 +211,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     fun `create links an active watch to one poller`() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
-        val watch = service().create(poiInput(poiId))
+        val watch = service().createForTest(poiInput(poiId))
 
         val pollers = AvailabilityPollerRepo(ctx)
         val linked = pollers.pollerIdsForWatch(watch.id)
@@ -199,7 +228,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         seedCampsite(poiId, "100")
         val svc = bookingValidatedService(BookingProviderRegistry(emptyList()))
 
-        val error = assertFailsWith<AvailabilityWatchValidationException> { svc.create(poiInput(poiId)) }
+        val error = assertFailsWith<AvailabilityWatchValidationException> { svc.createForTest(poiInput(poiId)) }
 
         assertEquals("unsupported_trigger", error.error)
         assertEquals(0, AvailabilityWatchRepo(ctx).count())
@@ -210,11 +239,11 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
         val svc = bookingValidatedService(BookingProviderRegistry(emptyList()))
-        val watch = svc.create(poiInput(poiId, triggerKinds = listOf("slack_notify")))
+        val watch = svc.createForTest(poiInput(poiId, triggerKinds = listOf("slack_notify")))
 
         val error =
             assertFailsWith<AvailabilityWatchValidationException> {
-                svc.update(watch.id, AvailabilityWatchRepo.UpdateInput(triggerKinds = listOf("atc")))
+                svc.updateForTest(watch.id, AvailabilityWatchRepo.UpdateInput(triggerKinds = listOf("atc")))
             }
 
         assertEquals("unsupported_trigger", error.error)
@@ -222,13 +251,39 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     }
 
     @Test
+    fun `update rejects invalid trigger config and leaves stored config unchanged`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val svc = service()
+        val watch = svc.createForTest(poiInput(poiId, triggerKinds = listOf("slack_notify")))
+
+        val error =
+            assertFailsWith<AvailabilityWatchValidationException> {
+                svc.updateForTest(
+                    watch.id,
+                    AvailabilityWatchRepo.UpdateInput(
+                        triggerConfig =
+                            JsonObject(
+                                mapOf(
+                                    "slack_notify" to JsonObject(mapOf("channel" to JsonPrimitive(""))),
+                                ),
+                            ),
+                    ),
+                )
+            }
+
+        assertEquals("invalid_trigger_config", error.error)
+        assertEquals(JsonObject(emptyMap()), AvailabilityWatchRepo(ctx).findById(watch.id)!!.triggerConfig)
+    }
+
+    @Test
     fun `update allows pausing an unsupported legacy atc watch`() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
-        val watch = service().create(poiInput(poiId))
+        val watch = service().createForTest(poiInput(poiId))
         val validatingService = bookingValidatedService(BookingProviderRegistry(emptyList()))
 
-        val updated = validatingService.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))
+        val updated = validatingService.updateForTest(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))
 
         assertEquals(WatchStatus.PAUSED, updated?.status)
     }
@@ -239,7 +294,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         seedCampsite(poiId, "100")
         val svc = bookingValidatedService(BookingProviderRegistry(listOf(RecGovOnlyBookingProvider)))
 
-        val watch = svc.create(poiInput(poiId))
+        val watch = svc.createForTest(poiInput(poiId))
 
         assertEquals(listOf("atc"), watch.triggerKinds)
         assertEquals(1, AvailabilityPollerRepo(ctx).pollerIdsForWatch(watch.id).size)
@@ -257,7 +312,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
 
         val error =
             assertFailsWith<AvailabilityWatchValidationException> {
-                svc.create(
+                svc.createForTest(
                     poiInput(
                         poiId,
                         triggerKinds = listOf("slack_notify"),
@@ -279,7 +334,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 availabilityProvider = NonPollableProvider,
             )
 
-        val error = assertFailsWith<AvailabilityWatchValidationException> { svc.create(poiInput(poiId)) }
+        val error = assertFailsWith<AvailabilityWatchValidationException> { svc.createForTest(poiInput(poiId)) }
 
         assertEquals("unsupported_trigger", error.error)
         assertEquals(0, AvailabilityWatchRepo(ctx).count())
@@ -289,7 +344,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     fun `create does not link a poller when provider does not support internal polling`() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
-        val watch = service(availabilityProvider = NonPollableProvider).create(poiInput(poiId))
+        val watch = service(availabilityProvider = NonPollableProvider).createForTest(poiInput(poiId))
 
         assertEquals(emptyList<Long>(), AvailabilityPollerRepo(ctx).pollerIdsForWatch(watch.id))
     }
@@ -299,8 +354,8 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
         val svc = service()
-        val w1 = svc.create(poiInput(poiId))
-        val w2 = svc.create(poiInput(poiId))
+        val w1 = svc.createForTest(poiInput(poiId))
+        val w2 = svc.createForTest(poiInput(poiId))
 
         val pollers = AvailabilityPollerRepo(ctx)
         val p1 = pollers.pollerIdsForWatch(w1.id).single()
@@ -314,11 +369,11 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
         val svc = service()
-        val watch = svc.create(poiInput(poiId))
+        val watch = svc.createForTest(poiInput(poiId))
         val pollers = AvailabilityPollerRepo(ctx)
         val pollerId = pollers.pollerIdsForWatch(watch.id).single()
 
-        svc.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))
+        svc.updateForTest(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))
 
         assertTrue(pollers.pollerIdsForWatch(watch.id).isEmpty())
         assertEquals(false, pollers.findById(pollerId)!!.active)
@@ -329,7 +384,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
         val svc = service()
-        val watch = svc.create(poiInput(poiId))
+        val watch = svc.createForTest(poiInput(poiId))
         val pollers = AvailabilityPollerRepo(ctx)
         val pollerId = pollers.pollerIdsForWatch(watch.id).single()
 
@@ -347,9 +402,9 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val recorder = RecordingAlertProvider()
         val svc = service(AlertProviderRegistry(listOf(recorder)))
 
-        val watch = svc.create(poiInput(poiId))
-        svc.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))
-        svc.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.ACTIVE))
+        val watch = svc.createForTest(poiInput(poiId))
+        svc.updateForTest(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))
+        svc.updateForTest(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.ACTIVE))
         svc.delete(watch.id)
 
         assertEquals(

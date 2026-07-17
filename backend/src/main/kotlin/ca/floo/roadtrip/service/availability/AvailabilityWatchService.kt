@@ -2,9 +2,12 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
+import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
+import kotlinx.serialization.json.JsonObject
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
+import java.time.LocalDate
 
 /**
  * Mutates watches and hands the "who detects openings" work to the
@@ -29,8 +32,29 @@ internal class AvailabilityWatchService(
     private val alertProviders: AlertProviderRegistry,
     private val capabilityValidator: WatchCapabilityValidator = NoopWatchCapabilityValidator,
 ) {
-    fun create(input: AvailabilityWatchRepo.CreateInput): Watch =
+    fun create(
+        targets: List<AvailabilityWatchTargetRepo.TargetInput>,
+        campsiteFilters: JsonObject,
+        startDate: LocalDate,
+        endDate: LocalDate,
+        cadenceSec: Int?,
+        triggerKinds: List<String>,
+        triggerConfig: JsonObject,
+        stopWhenTriggered: Boolean,
+    ): Watch =
         ctx.transactionResult { config ->
+            val input =
+                AvailabilityWatchRepo.CreateInput(
+                    targets = targets,
+                    campsiteFilters = campsiteFilters,
+                    startDate = startDate,
+                    endDate = endDate,
+                    cadenceSec = cadenceSec,
+                    triggerKinds = triggerKinds,
+                    triggerConfig = triggerConfig,
+                    stopWhenTriggered = stopWhenTriggered,
+                )
+            WatchTriggerConfig.validateCreate(input)
             val txn = DSL.using(config)
             val watch = AvailabilityWatchRepo(txn).create(input)
             capabilityValidator.validate(watch)
@@ -40,9 +64,30 @@ internal class AvailabilityWatchService(
 
     fun update(
         id: Long,
-        input: AvailabilityWatchRepo.UpdateInput,
+        targets: List<AvailabilityWatchTargetRepo.TargetInput>? = null,
+        campsiteFilters: JsonObject? = null,
+        startDate: LocalDate? = null,
+        endDate: LocalDate? = null,
+        cadenceSec: Int? = null,
+        triggerKinds: List<String>? = null,
+        triggerConfig: JsonObject? = null,
+        stopWhenTriggered: Boolean? = null,
+        status: WatchStatus? = null,
     ): Watch? =
         ctx.transactionResult { config ->
+            val input =
+                AvailabilityWatchRepo.UpdateInput(
+                    targets = targets,
+                    campsiteFilters = campsiteFilters,
+                    startDate = startDate,
+                    endDate = endDate,
+                    cadenceSec = cadenceSec,
+                    triggerKinds = triggerKinds,
+                    triggerConfig = triggerConfig,
+                    stopWhenTriggered = stopWhenTriggered,
+                    status = status,
+                )
+            WatchTriggerConfig.validateUpdate(input)
             val txn = DSL.using(config)
             val updated = AvailabilityWatchRepo(txn).update(id, input) ?: return@transactionResult null
             capabilityValidator.validate(updated)

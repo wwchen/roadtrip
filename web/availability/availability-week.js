@@ -16,7 +16,7 @@
 import { escapeHtml } from '../core.js';
 import { requestPoiCampsitesAvailability } from '../api/availability-api.js';
 import { fetchPoiCampsites } from '../api/campsite-api.js';
-import { createWatch, deleteWatch, listWatches } from '../api/watches-api.js';
+import { createWatch, deleteWatch, listWatches, updateWatch } from '../api/watches-api.js';
 import { renderDayDetail } from './day-detail.js';
 import { renderSiteMatrix, renderSiteMatrixSkeleton } from './site-matrix.js';
 import { renderSiteList } from './site-list.js';
@@ -617,13 +617,20 @@ function openWatchPopover(ctx, anchorEl, date) {
   const controller = mountWatchPopover(host, {
     poiName,
     date,
+    watch: existingWatch,
     watching: Boolean(existingWatch),
     stopWhenFound: watchStopWhenFound(existingWatch),
     supportsAddToCart: supportsAddToCart(ctx),
-    onSet: async ({ stopWhenFound, addToCart } = {}) => {
-      const payload = buildWatchPayload(ctx, date, endDate, { stopWhenFound, addToCart });
-      const created = await createWatch(payload, { signal: ctx.signal });
-      ctx.watchesByWindow.set(key, created.watch || { ...payload, id: created.id });
+    onSave: async (triggerPayload) => {
+      const existing = ctx.watchesByWindow.get(key);
+      if (existing) {
+        const updated = await updateWatch(existing.id, triggerPayload, { signal: ctx.signal });
+        ctx.watchesByWindow.set(key, updated.watch || { ...existing, ...triggerPayload });
+      } else {
+        const payload = buildWatchPayload(ctx, date, endDate, triggerPayload);
+        const created = await createWatch(payload, { signal: ctx.signal });
+        ctx.watchesByWindow.set(key, created.watch || { ...payload, id: created.id });
+      }
       notifyWatchesChanged();
       rerender(ctx);
     },
@@ -929,21 +936,25 @@ async function toggleWatch(ctx, button) {
   }
 }
 
-function buildWatchPayload(ctx, date, endDate, { stopWhenFound = DEFAULT_STOP_WHEN_FOUND, addToCart = false } = {}) {
+function buildWatchPayload(ctx, date, endDate, triggerPayload = defaultTriggerPayload()) {
   if (!supportsWatchAlerts(ctx)) {
     throw new Error('Watch alerts are not available for this campground.');
   }
-  const triggerKinds = [TRIGGER_KIND_SLACK_NOTIFY];
-  if (addToCart && supportsAddToCart(ctx)) triggerKinds.push(TRIGGER_KIND_ATC);
   return {
     poi_id: Number(ctx.poiId),
     campsite_filters: {},
     start_date: date,
     end_date: endDate,
     cadence_sec: DEFAULT_WATCH_CADENCE_SEC,
-    trigger_kinds: triggerKinds,
+    ...triggerPayload,
+  };
+}
+
+function defaultTriggerPayload() {
+  return {
+    trigger_kinds: [TRIGGER_KIND_SLACK_NOTIFY],
     trigger_config: {},
-    stop_when_triggered: stopWhenFound,
+    stop_when_triggered: DEFAULT_STOP_WHEN_FOUND,
   };
 }
 
