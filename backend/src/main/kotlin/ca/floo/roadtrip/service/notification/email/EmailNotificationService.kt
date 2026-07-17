@@ -45,7 +45,7 @@ class EmailNotificationService(
         val emailConfig = config
         val emailClient = client
         if (emailConfig == null || emailClient == null) {
-            log.warn("Email disabled (resend-api-key/from/default-to unset); {} not sent", failureContext)
+            log.warn("Email disabled (resend-api-key/from unset); {} not sent", failureContext)
             return false
         }
         if (recipients.isEmpty()) {

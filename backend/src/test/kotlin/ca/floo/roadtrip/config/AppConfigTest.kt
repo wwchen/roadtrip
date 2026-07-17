@@ -70,6 +70,42 @@ class AppConfigTest {
     }
 
     @Test
+    fun `email config allows explicit recipient sends without default recipients`() {
+        val config =
+            appConfig(
+                mapOf(
+                    "roadtrip.email.resend-api-key" to " re_test ",
+                    "roadtrip.email.from" to " Roadtrip Alerts <roadtrip@floo.ca> ",
+                    "roadtrip.email.default-to" to "",
+                ),
+            ).email
+
+        assertEquals("re_test", config?.resendApiKey)
+        assertEquals("Roadtrip Alerts <roadtrip@floo.ca>", config?.from)
+        assertEquals(emptyList(), config?.defaultTo)
+    }
+
+    @Test
+    fun `email config is disabled without resend api key or sender`() {
+        assertNull(
+            appConfig(
+                mapOf(
+                    "roadtrip.email.from" to "Roadtrip Alerts <roadtrip@floo.ca>",
+                    "roadtrip.email.default-to" to "alerts@example.test",
+                ),
+            ).email,
+        )
+        assertNull(
+            appConfig(
+                mapOf(
+                    "roadtrip.email.resend-api-key" to "re_test",
+                    "roadtrip.email.default-to" to "alerts@example.test",
+                ),
+            ).email,
+        )
+    }
+
+    @Test
     fun `cache config uses entity defaults when properties are empty`() {
         val config = appConfig()
 

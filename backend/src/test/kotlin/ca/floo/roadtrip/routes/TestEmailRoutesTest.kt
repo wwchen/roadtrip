@@ -121,7 +121,7 @@ class TestEmailRoutesTest {
                 EmailConfig(
                     resendApiKey = "re_test",
                     from = "Roadtrip Alerts <alerts@example.test>",
-                    defaultTo = listOf("alerts@example.test"),
+                    defaultTo = emptyList(),
                 ),
             client = client,
         )
