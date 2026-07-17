@@ -305,7 +305,12 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             )
             SlackInteractivityWiring(
                 verifier = SlackSignatureVerifier(secret),
-                handler = SlackInteractivityHandler(watches = watchesPort, slack = slackNotifications),
+                handler =
+                    SlackInteractivityHandler(
+                        watches = watchesPort,
+                        slack = slackNotifications,
+                        notifications = notifications,
+                    ),
             )
         } ?: run {
             val reason =

@@ -12,6 +12,7 @@ internal object WatchInitialNotificationPolicy {
         before: AvailabilityWatchRepo.Watch,
         after: AvailabilityWatchRepo.Watch,
     ): Boolean {
+        if (before.status != after.status) return true
         if (after.status != WatchStatus.ACTIVE) return false
         if (before.status != WatchStatus.ACTIVE) return true
         if (before.startDate != after.startDate || before.endDate != after.endDate) return true

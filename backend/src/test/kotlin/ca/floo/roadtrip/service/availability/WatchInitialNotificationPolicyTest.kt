@@ -36,9 +36,19 @@ class WatchInitialNotificationPolicyTest {
     }
 
     @Test
-    fun `inactive watch does not dispatch initial notification`() {
+    fun `status change dispatches lifecycle notification`() {
         val before = watch(triggerKinds = listOf("slack_notify"))
-        val after = before.copy(status = WatchStatus.PAUSED, startDate = before.startDate.plusDays(1))
+        val paused = before.copy(status = WatchStatus.PAUSED)
+        val resumed = paused.copy(status = WatchStatus.ACTIVE)
+
+        assertTrue(WatchInitialNotificationPolicy.shouldDispatchAfterUpdate(before, paused))
+        assertTrue(WatchInitialNotificationPolicy.shouldDispatchAfterUpdate(paused, resumed))
+    }
+
+    @Test
+    fun `unchanged inactive watch does not dispatch initial notification`() {
+        val before = watch(triggerKinds = listOf("slack_notify")).copy(status = WatchStatus.PAUSED)
+        val after = before.copy(startDate = before.startDate.plusDays(1))
 
         assertFalse(WatchInitialNotificationPolicy.shouldDispatchAfterUpdate(before, after))
     }

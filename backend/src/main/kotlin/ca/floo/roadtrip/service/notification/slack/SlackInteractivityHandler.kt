@@ -2,6 +2,10 @@ package ca.floo.roadtrip.service.notification.slack
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.availability.WatchStatus
+import ca.floo.roadtrip.service.availability.notificationTargets
+import ca.floo.roadtrip.service.notification.common.NotificationFanout
+import ca.floo.roadtrip.service.notification.common.NotificationSender
+import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
@@ -13,8 +17,9 @@ private val blockActionsJson = Json { ignoreUnknownKeys = true }
  * inbound half of the outbound watch cards. The Ktor route
  * ([ca.floo.roadtrip.routes.api.slack.slackInteractivityRoute]) verifies the signature and
  * hands the parsed payload here; this handler applies the mutation (pause /
- * resume / delete) and re-renders the card in place through the
- * [SlackResponseSender.postResponseWatchStatus] one-shot URL.
+ * resume / delete), re-renders the card in place through the
+ * [SlackResponseSender.postResponseWatchStatus] one-shot URL, and fans the
+ * lifecycle notice out to any non-Slack notification targets on the watch.
  *
  * URL-button action ids (Reserve, Grid, Map, Dashboard) route to a silent
  * no-op: Slack still fires an interaction payload for them, but the redirect
@@ -31,6 +36,7 @@ private val blockActionsJson = Json { ignoreUnknownKeys = true }
 internal class SlackInteractivityHandler(
     private val watches: Watches,
     private val slack: SlackResponseSender,
+    private val notifications: NotificationSender = NotificationFanout(emptyList()),
 ) {
     /** The two mutations + one snapshot the interactivity handler needs from
      *  the watch layer, wrapped in a port the composition root implements by
@@ -116,8 +122,16 @@ internal class SlackInteractivityHandler(
             log.info("Slack interactivity {} missing watch={} stale response_url update ok={}", action.actionId, watchId, ok)
             return
         }
-        val ok = slack.postResponseWatchStatus(responseUrl, watches.buildStatusNotice(updated, newNoticeState))
-        log.info("Slack interactivity {} watch={} response_url update ok={}", action.actionId, watchId, ok)
+        val notice = watches.buildStatusNotice(updated, newNoticeState)
+        val slackOk = slack.postResponseWatchStatus(responseUrl, notice)
+        val notifyOk = sendOutOfBandStatus(updated, notice)
+        log.info(
+            "Slack interactivity {} watch={} response_url update ok={} out_of_band_notify_ok={}",
+            action.actionId,
+            watchId,
+            slackOk,
+            notifyOk,
+        )
     }
 
     private suspend fun deleteWatch(
@@ -137,8 +151,26 @@ internal class SlackInteractivityHandler(
             log.info("Slack interactivity delete missing watch={} stale response_url update ok={}", watchId, ok)
             return
         }
-        val ok = slack.postResponseWatchStatus(responseUrl, watches.buildStatusNotice(snapshot, WatchStatusNotice.State.STOPPED))
-        log.info("Slack interactivity delete watch={} response_url update ok={}", watchId, ok)
+        val notice = watches.buildStatusNotice(snapshot, WatchStatusNotice.State.STOPPED)
+        val slackOk = slack.postResponseWatchStatus(responseUrl, notice)
+        val notifyOk = sendOutOfBandStatus(snapshot, notice)
+        log.info(
+            "Slack interactivity delete watch={} response_url update ok={} out_of_band_notify_ok={}",
+            watchId,
+            slackOk,
+            notifyOk,
+        )
+    }
+
+    private suspend fun sendOutOfBandStatus(
+        watch: AvailabilityWatchRepo.Watch,
+        notice: WatchStatusNotice,
+    ): Boolean {
+        val targets = watch.notificationTargets().filterNot { it is NotificationTarget.Slack }
+        if (targets.isEmpty()) return true
+        return runCatching { notifications.sendWatchStatus(notice, targets) }
+            .onFailure { log.warn("Slack interactivity watch={} out-of-band status notify failed", watch.id, it) }
+            .getOrDefault(false)
     }
 
     companion object {
