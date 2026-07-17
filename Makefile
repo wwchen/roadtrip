@@ -25,8 +25,8 @@ help:
 	@echo "  make recgov-login     Open companion Chromium and verify Recreation.gov login"
 	@echo "  make recgov-refresh   Force-refresh the companion Recreation.gov session"
 	@echo "  make recgov-atc       Run one Rec.gov add-to-cart attempt (PAYLOAD=/path/to/atc.json)"
-	@echo "  make data-fetch       Fetch upstream data via admin API (TARGET=<data_source slug> for one)."
-	@echo "  make data-import      Import data/ files into Postgres (TARGET=<row name> for one). Routes by YAML section (poi_data / reservable_data / poi_reservable_joiner)."
+	@echo "  make data-fetch       Fetch upstream data on the host (TARGET=<data_source slug> for one)."
+	@echo "  make data-import      Import data/ files into Postgres (TARGET=<row name> for one). Routes by YAML section (poi_data / campsite_data / campsite_parent_joiner)."
 	@echo "  make reset-db         Drop/recreate the local schema and Flyway history for a full migration replay."
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make grafana-export   Snapshot UI-edited dashboards and apply shared links"
@@ -78,23 +78,22 @@ install: install-hooks
 	brew install tilt docker openjdk node
 	cd companion && npm install && npx playwright install chromium
 
-# Two-step refresh through the backend's admin API (RFC 0004 / issue #44):
+# Two-step refresh:
 #   make data-fetch                       # all targets
-#   make data-fetch TARGET=campgrounds    # one target
+#   make data-fetch TARGET=campflare-campgrounds-export    # one source
 #   make data-import                      # all targets
-#   make data-import TARGET=planet-fitness
+#   make data-import TARGET='Planet Fitness'
 #
-# Backend must be running (e.g. `tilt up` or `make run`). Per-target mutex
-# means a fetch and an import on the same target serialize. Override the
-# host with ADMIN_BASE for remote deploys (e.g. ADMIN_BASE=https://… make data-fetch).
+# Fetch runs the repo's Python fetchers on the host and writes data/raw/.
+# Backend must be running only for import (e.g. `tilt up` or `make run`).
+# Override the host with ADMIN_BASE for remote imports.
 ADMIN_BASE ?= http://127.0.0.1:$(PORT)
 
 # poi_data names like `Federal Campgrounds` contain spaces; wrap the URL
 # in single quotes and url-encode the path segment so curl gets one arg.
-# python3 is the simplest portable url-encoder; falls back to the bare
-# value when TARGET is unset.
+# python3 is the simplest portable url-encoder.
 data-fetch:
-	curl --fail-with-body -sS --max-time 1800 -X POST '$(ADMIN_BASE)/api/admin/data/fetch$(if $(TARGET),/$(shell python3 -c "import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=''))" "$(TARGET)"))'
+	python3 scripts/poll_raw.py $(if $(TARGET),$(TARGET),--all)
 
 data-import:
 	curl --fail-with-body -sS --max-time 1800 -X POST '$(ADMIN_BASE)/api/admin/data/import$(if $(TARGET),/$(shell python3 -c "import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=''))" "$(TARGET)"))'

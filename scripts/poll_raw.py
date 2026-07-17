@@ -2,8 +2,8 @@
 """Local fetcher entry point — reads the POI registry resource.
 
 Picks a source via fzf and runs its fetcher locally (no backend needed).
-For the production-shaped path that goes through the admin API and is
-recorded in poller_runs, use `bin/refresh` instead.
+After fetching, import the raw captures through the backend admin API with
+`make data-import`.
 
   python3 scripts/poll_raw.py                         # fzf source picker
   python3 scripts/poll_raw.py <slug>                  # by data_source slug

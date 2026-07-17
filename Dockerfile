@@ -7,7 +7,7 @@ WORKDIR /app
 ARG OTEL_JAVAAGENT_VERSION=2.29.0
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 python3-yaml curl ca-certificates \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL \

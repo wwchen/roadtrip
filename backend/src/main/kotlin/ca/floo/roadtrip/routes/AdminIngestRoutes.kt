@@ -6,14 +6,11 @@ import ca.floo.roadtrip.models.api.EXAMPLE_ERR_NOT_FOUND
 import ca.floo.roadtrip.models.api.EXAMPLE_ERR_NOT_FOUND_BAD_ID
 import ca.floo.roadtrip.models.api.EXAMPLE_ERR_TARGET_BUSY
 import ca.floo.roadtrip.models.api.EXAMPLE_ERR_UNKNOWN_TARGET
-import ca.floo.roadtrip.models.api.EXAMPLE_FAN_OUT_FETCH
 import ca.floo.roadtrip.models.api.EXAMPLE_FAN_OUT_IMPORT
 import ca.floo.roadtrip.models.api.EXAMPLE_RUNS_LIST
 import ca.floo.roadtrip.models.api.EXAMPLE_RUN_DETAIL
-import ca.floo.roadtrip.models.api.EXAMPLE_RUN_OUTCOME_COMPLETED_FETCH
 import ca.floo.roadtrip.models.api.EXAMPLE_RUN_OUTCOME_COMPLETED_IMPORT
 import ca.floo.roadtrip.models.api.EXAMPLE_RUN_OUTCOME_FAILED
-import ca.floo.roadtrip.models.api.EXAMPLE_RUN_OUTCOME_NOOP
 import ca.floo.roadtrip.models.api.EXAMPLE_RUN_OUTCOME_NOOP_IMPORT
 import ca.floo.roadtrip.models.api.EXAMPLE_STATUS
 import ca.floo.roadtrip.models.api.ErrorNotFoundSchema
@@ -61,19 +58,17 @@ private val adminIngestJson =
 // Admin surface for the ingestion controller (RFC 0004 / issue #44).
 //
 // Vocabulary:
-//   POST /api/admin/data/fetch[/{target}]    web → data/<target>.{json,geojson}
 //   POST /api/admin/data/import[/{target}]   data/ → Postgres rows via Importer
 //   GET  /api/admin/data/runs[?target=…|/:id] history
 //   GET  /api/admin/data/status              per-target last-completed + age
 //
-// With no {target}, fetch and import fan out across every known target,
-// sequentially, in `targetsFromRegistry` order (see the POI registry resource). The response is the
-// per-target outcome list.
+// With no {target}, import fans out across every known target, sequentially, in
+// registry order. Fetchers run outside the backend process via scripts/poll_raw.py.
 //
 // Auth boundary lives upstream at the Cloudflare Zero Trust path rule on
 // /api/admin/* (existing tunnel). Locally the routes are reachable on
-// 127.0.0.1:8765 directly — Tilt buttons and `make data-fetch`/`data-import`
-// curl them. If you ever expose dev to the internet, bind to loopback only.
+// 127.0.0.1:8765 directly for `make data-import`. If you ever expose dev to the
+// internet, bind admin routes to loopback only.
 fun Route.adminIngestRoutes(
     controller: IngestController,
     ctx: DSLContext,
@@ -82,48 +77,6 @@ fun Route.adminIngestRoutes(
 
     route("/api/admin/data") {
         // One target — sync default; ?async=1 fires-and-forgets.
-        post("/fetch/{target}", {
-            tags = listOf("admin")
-            summary = "Fetch upstream data into data/{target}.* for one target"
-            request {
-                pathParameter<String>("target") {
-                    description = "Target name from /api/admin/data/status"
-                    example("campgrounds") { value = "campgrounds" }
-                }
-            }
-            response {
-                code(HttpStatusCode.OK) {
-                    description = "Fetch completed (or no-op for fetch-less targets)"
-                    body<RunOutcomeSchema> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("completed") { value = EXAMPLE_RUN_OUTCOME_COMPLETED_FETCH }
-                        example("noop (no fetch phases)") { value = EXAMPLE_RUN_OUTCOME_NOOP }
-                    }
-                }
-                code(HttpStatusCode.NotFound) {
-                    description = "Target name is not in the static map"
-                    body<ErrorUnknownTargetSchema> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("unknown") { value = EXAMPLE_ERR_UNKNOWN_TARGET }
-                    }
-                }
-                code(HttpStatusCode.Conflict) {
-                    description = "A run for this target is already in flight"
-                    body<ErrorTargetBusySchema> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("busy") { value = EXAMPLE_ERR_TARGET_BUSY }
-                    }
-                }
-                code(HttpStatusCode.InternalServerError) {
-                    description = "A phase failed; failed_phase identifies which"
-                    body<RunOutcomeSchema> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("failed") { value = EXAMPLE_RUN_OUTCOME_FAILED }
-                    }
-                }
-            }
-        }) { runOne(controller, RunKind.FETCH) }
-
         post("/import/{target}", {
             tags = listOf("admin")
             summary = "Import data/ files into Postgres for one target"
@@ -163,27 +116,6 @@ fun Route.adminIngestRoutes(
         }) { runOne(controller, RunKind.IMPORT) }
 
         // No target — fan out across every known target sequentially.
-        post("/fetch", {
-            tags = listOf("admin")
-            summary = "Fetch upstream data for every known target (sequential fan-out)"
-            response {
-                code(HttpStatusCode.OK) {
-                    description = "All targets succeeded (or were no-ops)"
-                    body<FanOutResponseSchema> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("fan-out") { value = EXAMPLE_FAN_OUT_FETCH }
-                    }
-                }
-                code(HttpStatusCode.InternalServerError) {
-                    description = "At least one target failed; outcomes shows per-target status"
-                    body<FanOutResponseSchema> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("fan-out") { value = EXAMPLE_FAN_OUT_FETCH }
-                    }
-                }
-            }
-        }) { runAll(controller, RunKind.FETCH) }
-
         post("/import", {
             tags = listOf("admin")
             summary = "Import data/ files for every known target (sequential fan-out)"
@@ -293,7 +225,7 @@ private suspend fun io.ktor.server.routing.RoutingContext.runOne(
             withContext(NonCancellable) {
                 controller.startRun(target, kind, "admin-api")
             }
-        if (kind == RunKind.IMPORT && outcome.status == "completed") {
+        if (outcome.status == "completed") {
             withContext(NonCancellable) {
                 controller.etl.refreshCanonicalViews()
             }
@@ -322,9 +254,8 @@ private suspend fun io.ktor.server.routing.RoutingContext.runAll(
     controller: IngestController,
     kind: RunKind,
 ) {
-    // Fan out sequentially. Concurrent might be tempting but parallel fetches
-    // against the same upstream (rec.gov, OSM Overpass) burn rate-limit
-    // budget for no real wall-clock savings on a manual refresh.
+    // Fan out sequentially. Import phases hit shared local files and Postgres;
+    // keeping this serial preserves stable run history and predictable load.
     val log = org.slf4j.LoggerFactory.getLogger("AdminIngest.fanOut")
     val (outcomes, anyFailed) =
         withContext(NonCancellable) {
@@ -363,7 +294,7 @@ private suspend fun io.ktor.server.routing.RoutingContext.runAll(
                     )
                 }
             }
-            if (kind == RunKind.IMPORT && outcomes.any { it.status == "completed" }) {
+            if (outcomes.any { it.status == "completed" }) {
                 log.info("fan-out: refreshing canonical views")
                 controller.etl.refreshCanonicalViews()
             }

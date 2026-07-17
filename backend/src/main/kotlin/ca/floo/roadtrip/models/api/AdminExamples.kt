@@ -5,55 +5,44 @@ package ca.floo.roadtrip.models.api
 // above — drift between schema and example is a compile error, not a
 // stale doc.
 
-val EXAMPLE_RUN_OUTCOME_COMPLETED_FETCH =
-    RunOutcomeSchema(run_id = 42, target = "campgrounds", kind = "fetch", status = "completed")
-
 val EXAMPLE_RUN_OUTCOME_COMPLETED_IMPORT =
-    RunOutcomeSchema(run_id = 42, target = "planet-fitness", kind = "import", status = "completed")
-
-val EXAMPLE_RUN_OUTCOME_NOOP =
-    RunOutcomeSchema(run_id = 42, target = "parks-canada-curated", kind = "fetch", status = "noop")
+    RunOutcomeSchema(run_id = 42, target = "Planet Fitness", kind = "import", status = "completed")
 
 val EXAMPLE_RUN_OUTCOME_NOOP_IMPORT =
-    RunOutcomeSchema(run_id = 42, target = "tesla-pricing", kind = "import", status = "noop")
+    RunOutcomeSchema(run_id = 42, target = "Tesla Superchargers", kind = "import", status = "noop")
 
 val EXAMPLE_RUN_OUTCOME_FAILED =
     RunOutcomeSchema(
         run_id = 42,
-        target = "campgrounds",
-        kind = "fetch",
+        target = "Rec.gov Campsites",
+        kind = "import",
         status = "failed",
-        failed_phase = "fetch_bc_parks.py",
+        failed_phase = "import:Rec.gov Campsites",
     )
 
 val EXAMPLE_ERR_UNKNOWN_TARGET =
     ErrorUnknownTargetSchema(
         error = "unknown target",
         target = "nope",
-        known = listOf("campgrounds", "national-parks", "planet-fitness", "state-parks", "tesla-index"),
+        known =
+            listOf(
+                "Campflare Campgrounds",
+                "Planet Fitness",
+                "Rec.gov Campsites",
+                "Tesla Superchargers",
+            ),
     )
 
 val EXAMPLE_ERR_TARGET_BUSY =
-    ErrorTargetBusySchema(error = "target busy", target = "campgrounds", running_run_id = 41)
-
-val EXAMPLE_FAN_OUT_FETCH =
-    FanOutResponseSchema(
-        kind = "fetch",
-        outcomes =
-            listOf(
-                RunOutcomeSchema(run_id = 1, target = "alberta-provincial", kind = "fetch", status = "noop"),
-                RunOutcomeSchema(run_id = 2, target = "campgrounds", kind = "fetch", status = "completed"),
-                RunOutcomeSchema(run_id = 3, target = "planet-fitness", kind = "fetch", status = "completed"),
-            ),
-    )
+    ErrorTargetBusySchema(error = "target busy", target = "Rec.gov Campsites", running_run_id = 41)
 
 val EXAMPLE_FAN_OUT_IMPORT =
     FanOutResponseSchema(
         kind = "import",
         outcomes =
             listOf(
-                RunOutcomeSchema(run_id = 4, target = "campgrounds", kind = "import", status = "completed"),
-                RunOutcomeSchema(run_id = 5, target = "planet-fitness", kind = "import", status = "completed"),
+                RunOutcomeSchema(run_id = 4, target = "Rec.gov Campgrounds", kind = "import", status = "completed"),
+                RunOutcomeSchema(run_id = 5, target = "Planet Fitness", kind = "import", status = "completed"),
             ),
     )
 
@@ -63,8 +52,8 @@ val EXAMPLE_RUNS_LIST =
             listOf(
                 IngestRunListItemSchema(
                     id = 42,
-                    target = "campgrounds",
-                    kind = "fetch",
+                    target = "Rec.gov Campsites",
+                    kind = "import",
                     status = "completed",
                     triggered_by = "admin-api",
                     started_at = "2026-06-06T19:14:02Z",
@@ -72,7 +61,7 @@ val EXAMPLE_RUNS_LIST =
                 ),
                 IngestRunListItemSchema(
                     id = 41,
-                    target = "planet-fitness",
+                    target = "Planet Fitness",
                     kind = "import",
                     status = "completed",
                     triggered_by = "admin-api",
@@ -85,8 +74,8 @@ val EXAMPLE_RUNS_LIST =
 val EXAMPLE_RUN_DETAIL =
     RunDetailSchema(
         id = 42,
-        target = "campgrounds",
-        kind = "fetch",
+        target = "Rec.gov Campsites",
+        kind = "import",
         status = "completed",
         triggered_by = "admin-api",
         started_at = "2026-06-06T19:14:02Z",
@@ -95,8 +84,8 @@ val EXAMPLE_RUN_DETAIL =
             listOf(
                 IngestRunPhaseSchema(
                     id = 43,
-                    phase = "fetch_campgrounds.py",
-                    phase_kind = "fetch",
+                    phase = "import:Rec.gov Campsites",
+                    phase_kind = "import",
                     status = "completed",
                     started_at = "2026-06-06T19:14:02Z",
                     completed_at = "2026-06-06T19:14:55Z",
@@ -104,8 +93,8 @@ val EXAMPLE_RUN_DETAIL =
                 ),
                 IngestRunPhaseSchema(
                     id = 44,
-                    phase = "fetch_bc_parks.py",
-                    phase_kind = "fetch",
+                    phase = "import:Aspira Resources → Aspira Pins",
+                    phase_kind = "import",
                     status = "completed",
                     started_at = "2026-06-06T19:14:55Z",
                     completed_at = "2026-06-06T19:15:30Z",
@@ -119,13 +108,13 @@ val EXAMPLE_STATUS =
         targets =
             listOf(
                 TargetStatusSchema(
-                    target = "campgrounds",
+                    target = "Rec.gov Campsites",
                     last_run = 42,
-                    kind = "fetch",
+                    kind = "import",
                     status = "completed",
                     age_sec = 3742,
                 ),
-                TargetStatusSchema(target = "planet-fitness"),
+                TargetStatusSchema(target = "Planet Fitness"),
             ),
     )
 

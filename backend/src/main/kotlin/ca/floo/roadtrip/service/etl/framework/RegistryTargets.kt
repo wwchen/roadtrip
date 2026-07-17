@@ -2,66 +2,19 @@ package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.models.metadata.ingest.Phase
 import ca.floo.roadtrip.models.metadata.ingest.Target
-import ca.floo.roadtrip.models.metadata.registry.DataSourceEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import org.slf4j.LoggerFactory
-import java.io.File
 
 // Derives the IngestController target maps from the POI registry resource.
 //
-// Two namespaces:
-//   - fetchTargets: one Target per data_sources row. Target.name is the
-//     data_source slug. Used by POST /api/admin/data/fetch/<slug> and the
-//     fan-out endpoint POST /api/admin/data/fetch.
-//   - importTargets: one Target per runnable poi_data and campsite_data row.
-//     Joiner rows remain declared for historical context but are not runnable
-//     because canonical campsite ETLs now carry parent vendor refs directly.
+// Backend ingest targets are import-only: one Target per runnable poi_data,
+// campsite_data, or campsite_parent_joiner row. data_sources fetchers run
+// outside the Ktor process through scripts/poll_raw.py.
 //
 // Adding a new runnable import: append an enabled registry row and register
 // the ETL adapter(s) in EtlOrchestrator.registry. If a row is disabled or its
 // ETL slugs are absent from that registry, no import target is created. This
 // omits only rows whose adapter is not wired into the canonical registry.
-fun fetchTargetsFromRegistry(
-    registry: PoiRegistry,
-    repoRoot: File,
-): Map<String, Target> {
-    val out = mutableMapOf<String, Target>()
-    for (src in orderedDataSources(registry.dataSources)) {
-        out[src.slug] =
-            Target(
-                name = src.slug,
-                fetchPhases = listOf(fetchPhaseFor(src, repoRoot)),
-                importPhases = emptyList(),
-            )
-    }
-    return out
-}
-
-private fun orderedDataSources(sources: List<DataSourceEntry>): List<DataSourceEntry> {
-    val bySlug = sources.associateBy { it.slug }
-    val visited = mutableSetOf<String>()
-    val visiting = mutableSetOf<String>()
-    val out = mutableListOf<DataSourceEntry>()
-
-    fun visit(src: DataSourceEntry) {
-        if (src.slug in visited) return
-        require(src.slug !in visiting) { "depends_on cycle on ${src.slug}" }
-        visiting += src.slug
-        for (dep in src.dependsOn) {
-            val resolved =
-                bySlug[dep]
-                    ?: error("data_source '${src.slug}' depends_on unknown slug '$dep' - typo or renamed dependency")
-            visit(resolved)
-        }
-        visiting -= src.slug
-        visited += src.slug
-        out += src
-    }
-
-    for (src in sources) visit(src)
-    return out
-}
-
 fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
     val log = LoggerFactory.getLogger("RegistryTargets")
     val out = mutableMapOf<String, Target>()
@@ -86,7 +39,6 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
         out[row.name] =
             Target(
                 name = row.name,
-                fetchPhases = emptyList(),
                 importPhases =
                     listOf(
                         Phase.Import(
@@ -117,7 +69,6 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
         out[row.name] =
             Target(
                 name = row.name,
-                fetchPhases = emptyList(),
                 importPhases =
                     listOf(
                         Phase.Import(
@@ -148,7 +99,6 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
         out[row.name] =
             Target(
                 name = row.name,
-                fetchPhases = emptyList(),
                 importPhases =
                     listOf(
                         Phase.Import(
@@ -160,15 +110,4 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
             )
     }
     return out
-}
-
-private fun fetchPhaseFor(
-    src: DataSourceEntry,
-    repoRoot: File,
-): Phase.Fetch {
-    val script = repoRoot.resolve(src.fetcher.filename).absolutePath
-    val cliArgs = src.fetcher.args.flatMap { (k, v) -> listOf("--$k", v) }
-    val cmd = listOf(src.fetcher.executor, script) + cliArgs
-    val label = "${src.fetcher.filename.substringAfterLast('/')} ${src.slug}"
-    return Phase.Fetch(label, cmd, timeoutSec = src.fetcher.timeoutSec)
 }

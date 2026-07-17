@@ -178,35 +178,30 @@ local_resource(
 # separate shell.
 #
 # Notes:
-# - 'data-fetch' / 'data-import' POST to the backend's RFC 0004 admin API.
-#   Two-step refresh: fetch upstream into data/*.{json,geojson}, then import
-#   into Postgres. Both fan out across every target; per-target mutex keeps
-#   them ordered.
+# - 'data-fetch' runs the host-side registry fetchers and writes data/raw/.
+# - 'data-import' POSTs to the backend admin API so the Kotlin ETL imports the
+#   newest raw captures into Postgres.
 
 # --- Data refresh (RFC 0004 / issue #44) -------------------------------------
-# Two buttons. data-fetch pulls upstream JSON/GeoJSON into data/<target>.*
-# (Python scripts run as subprocesses by the backend's admin API). data-import
-# loads those files into Postgres via the Kotlin importer. Both fan out across
-# every known target sequentially. Per-target mutex serializes fetch + import
-# on the same target.
+# Two buttons. data-fetch pulls upstream JSON/GeoJSON into data/raw/<target>*
+# by running scripts/poll_raw.py on the host. data-import loads those files into
+# Postgres via the backend's Kotlin importer and records import rows in
+# ingest_runs.
 #
 # First-time stack bring-up: `tilt up` → DB migrates → click data-fetch (or
 # skip if data/ is already populated) → click data-import. Routine refresh:
 # click data-fetch then data-import.
 #
-# `--fail-with-body` makes curl exit non-zero on 4xx/5xx but still print the
-# JSON body (so a failed_phase shows up in the resource pane). 30-min timeout
-# covers the campgrounds enricher worst case (~10 min today).
-
 local_resource(
     'data-fetch',
-    cmd='curl --fail-with-body -sS --max-time 1800 -X POST http://127.0.0.1:' + PORT + '/api/admin/data/fetch',
+    cmd='python3 scripts/poll_raw.py --all',
     auto_init=False,
     trigger_mode=TRIGGER_MODE_MANUAL,
-    resource_deps=['backend'],
     labels=['data'],
 )
 
+# `--fail-with-body` makes curl exit non-zero on 4xx/5xx but still print the
+# JSON body, so a failed_phase shows up in the resource pane.
 local_resource(
     'data-import',
     cmd='curl --fail-with-body -sS --max-time 1800 -X POST http://127.0.0.1:' + PORT + '/api/admin/data/import',
