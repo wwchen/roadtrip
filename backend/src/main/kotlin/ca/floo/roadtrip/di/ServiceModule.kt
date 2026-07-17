@@ -89,7 +89,6 @@ val serviceModule =
         }
 
         single {
-            val config: AppConfig = get()
             AvailabilityProviderClients(
                 recgovClient = get(),
                 aspiraClient = get(),
@@ -197,24 +196,6 @@ val serviceModule =
             )
         }
 
-        single<SlackInteractivityWiring?> {
-            val config: AppConfig = get()
-            config.slack?.signingSecret?.let { secret ->
-                SlackInteractivityWiring(
-                    verifier = SlackSignatureVerifier(secret),
-                    handler =
-                        SlackInteractivityHandler(
-                            watches =
-                                SlackInteractivityWatchesPort(
-                                    watchService = get<AvailabilityWatchService>(),
-                                    alertDispatcher = get<WatchAlertDispatcher>(),
-                                ),
-                            slack = get<SlackNotificationService>(),
-                        ),
-                )
-            }
-        }
-
         single {
             val config: AppConfig = get()
             ProviderCooldownTracker(cooldown = config.availability.providerCooldown)
@@ -284,6 +265,24 @@ val serviceModule =
                 routeCache = get<RouteCache>(),
                 routeCorridorService = get<RouteCorridorService>(),
                 poiService = get<PoiReader>(),
+            )
+        }
+    }
+
+fun slackInteractivityModule(signingSecret: String) =
+    module {
+        single {
+            SlackInteractivityWiring(
+                verifier = SlackSignatureVerifier(signingSecret),
+                handler =
+                    SlackInteractivityHandler(
+                        watches =
+                            SlackInteractivityWatchesPort(
+                                watchService = get<AvailabilityWatchService>(),
+                                alertDispatcher = get<WatchAlertDispatcher>(),
+                            ),
+                        slack = get<SlackNotificationService>(),
+                    ),
             )
         }
     }

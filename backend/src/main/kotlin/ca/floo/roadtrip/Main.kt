@@ -6,6 +6,7 @@ import ca.floo.roadtrip.di.infraModule
 import ca.floo.roadtrip.di.registerKoinRoutes
 import ca.floo.roadtrip.di.repoModule
 import ca.floo.roadtrip.di.serviceModule
+import ca.floo.roadtrip.di.slackInteractivityModule
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.netty.EngineMain
@@ -42,11 +43,19 @@ private fun installOptionalShutdownThreadDump(properties: Map<String, String>) {
 }
 
 fun Application.module() {
-    install(Koin) {
-        modules(infraModule(environment.config), repoModule, serviceModule)
-    }
     val properties: Map<String, String> =
         ApplicationProperties.load(baseConfig = environment.config)
+    install(Koin) {
+        val modules =
+            buildList {
+                add(infraModule(environment.config))
+                add(repoModule)
+                add(serviceModule)
+                val slackSecret = properties["roadtrip.slack.signing-secret"]?.takeIf { it.isNotBlank() }
+                if (slackSecret != null) add(slackInteractivityModule(slackSecret))
+            }
+        modules(modules)
+    }
     installOptionalShutdownThreadDump(properties)
     installRoadtripPlugins()
     registerKoinRoutes()

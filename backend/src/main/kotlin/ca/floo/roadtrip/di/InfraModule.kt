@@ -110,7 +110,7 @@ fun infraModule(baseConfig: ApplicationConfig) =
             RouteCache(
                 directions = get<MapboxDirections>(),
                 ttl = config.cache.ttlFor(ApiCacheEntity.ROUTE),
-                persistentCache = ApiCacheRepo(get()),
+                persistentCache = get<ApiCacheRepo>(),
             )
         }
 
@@ -125,7 +125,7 @@ fun infraModule(baseConfig: ApplicationConfig) =
                         ctx = ctx,
                         rawDir = staticDir.resolveConfiguredPath(RAW_DATA_DIR),
                         poiRegistry = get(),
-                        canonicalViews = CanonicalViewRepo(ctx),
+                        canonicalViews = get<CanonicalViewRepo>(),
                     ),
                 importTargets = importTargetsFromRegistry(get()),
             )
