@@ -87,6 +87,7 @@ val bucket4jVersion = "8.10.1"
 val timeshapeVersion = "2025b.26"
 val resendVersion = "4.13.0"
 val junitVersion = "5.11.3"
+val koinVersion = "4.0.4"
 val playwrightVersion = "1.50.0"
 val backendImageName = "roadtrip/backend"
 val backendPort = 8765
@@ -177,6 +178,10 @@ dependencies {
     // Transactional email delivery for availability watch alerts.
     implementation("com.resend:resend-java:$resendVersion")
 
+    implementation("io.insert-koin:koin-ktor:$koinVersion")
+    implementation("io.insert-koin:koin-core:$koinVersion")
+    implementation("io.insert-koin:koin-logger-slf4j:$koinVersion")
+
     jooqGenerator("org.postgresql:postgresql:$postgresVersion")
     jooqGenerator("org.testcontainers:postgresql:$testcontainersVersion")
 
@@ -189,6 +194,8 @@ dependencies {
     testImplementation("org.testcontainers:postgresql:$testcontainersVersion")
     testImplementation("org.testcontainers:junit-jupiter:$testcontainersVersion")
     testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
+    testImplementation("io.insert-koin:koin-test:$koinVersion")
+    testImplementation("io.insert-koin:koin-test-junit5:$koinVersion")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     // Playwright-driven SmokeTest lives in its own `smokeTest` source set (see
