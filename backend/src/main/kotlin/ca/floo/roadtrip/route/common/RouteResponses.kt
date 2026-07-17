@@ -22,8 +22,20 @@ internal suspend fun ApplicationCall.respondApiError(
     status: HttpStatusCode,
     detail: String? = null,
 ) {
+    respondEncodedJson(
+        roadtripApiJson,
+        ApiErrorSchema(error = error, detail = detail),
+        status,
+    )
+}
+
+internal suspend inline fun <reified T> ApplicationCall.respondEncodedJson(
+    json: Json,
+    value: T,
+    status: HttpStatusCode = HttpStatusCode.OK,
+) {
     respondText(
-        roadtripApiJson.encodeToString(ApiErrorSchema(error = error, detail = detail)),
+        json.encodeToString(value),
         ContentType.Application.Json,
         status,
     )

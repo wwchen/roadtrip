@@ -1,12 +1,12 @@
 package ca.floo.roadtrip.route.api.docs
 
+import ca.floo.roadtrip.route.common.respondEncodedJson
 import io.ktor.http.ContentType
 import io.ktor.openapi.OpenApiDoc
 import io.ktor.openapi.OpenApiInfo
 import io.ktor.server.application.Application
 import io.ktor.server.application.call
 import io.ktor.server.plugins.swagger.swaggerUI
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.OpenApiRoutePathFormat
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
@@ -17,7 +17,6 @@ import io.ktor.server.routing.path
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routingRoot
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 private const val API_DOCS_PATH = "/api/docs"
@@ -50,7 +49,7 @@ internal fun Route.apiDocsRoutes() {
     route(API_DOCS_PATH) {
         get("/openapi.json") {
             val doc = OpenApiDoc(info = roadtripOpenApiInfo) + call.application.roadtripOpenApiRoutes()
-            call.respondText(openApiJson.encodeToString(doc), ContentType.Application.Json)
+            call.respondEncodedJson(openApiJson, doc)
         }.hide()
     }
 }

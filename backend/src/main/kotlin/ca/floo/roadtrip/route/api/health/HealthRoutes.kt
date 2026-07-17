@@ -2,10 +2,9 @@ package ca.floo.roadtrip.route.api.health
 
 import ca.floo.roadtrip.model.api.HealthResponseDto
 import ca.floo.roadtrip.route.common.describeApi
-import io.ktor.http.ContentType
+import ca.floo.roadtrip.route.common.respondEncodedJson
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
@@ -35,5 +34,5 @@ internal fun healthResponseDto(now: Long): HealthResponseDto = HealthResponseDto
 internal inline fun <reified T> encodeHealthJson(value: T): String = healthRouteJson.encodeToString(value)
 
 private suspend inline fun <reified T> ApplicationCall.respondHealthJson(value: T) {
-    respondText(encodeHealthJson(value), ContentType.Application.Json)
+    respondEncodedJson(healthRouteJson, value)
 }

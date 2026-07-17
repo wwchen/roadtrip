@@ -7,6 +7,7 @@ import ca.floo.roadtrip.model.api.poi.PoisOnRouteFeatureSchema
 import ca.floo.roadtrip.model.api.poi.PoisOnRouteResponseSchema
 import ca.floo.roadtrip.model.domain.poi.PoiRow
 import ca.floo.roadtrip.route.common.describeApi
+import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.service.poi.OnRouteWaypoint
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.poi.canonicalPoiCategories
@@ -14,12 +15,10 @@ import ca.floo.roadtrip.service.routing.MAX_ROUTE_CORRIDOR_RADIUS_MILES
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_WAYPOINTS
 import ca.floo.roadtrip.service.routing.MIN_ROUTE_CORRIDOR_RADIUS_MILES
 import ca.floo.roadtrip.support.RoutingException
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.request.receive
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
@@ -166,5 +165,5 @@ private suspend inline fun <reified T> ApplicationCall.respondOnRouteJson(
     value: T,
     status: HttpStatusCode = HttpStatusCode.OK,
 ) {
-    respondText(onRouteJson.encodeToString(value), ContentType.Application.Json, status)
+    respondEncodedJson(onRouteJson, value, status)
 }

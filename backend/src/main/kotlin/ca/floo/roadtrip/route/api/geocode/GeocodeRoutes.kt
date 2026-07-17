@@ -8,12 +8,11 @@ import ca.floo.roadtrip.route.common.boundedIntQuery
 import ca.floo.roadtrip.route.common.matchingQuery
 import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.respondApiError
+import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.route.common.trimmedQuery
 import ca.floo.roadtrip.support.GeocodeException
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
@@ -107,5 +106,5 @@ private suspend inline fun <reified T> ApplicationCall.respondGeocodeJson(
     value: T,
     status: HttpStatusCode = HttpStatusCode.OK,
 ) {
-    respondText(encodeGeocodeJson(value), ContentType.Application.Json, status)
+    respondEncodedJson(geocodeRouteJson, value, status)
 }

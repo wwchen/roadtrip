@@ -22,14 +22,13 @@ import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.pathParam
 import ca.floo.roadtrip.route.common.queryParam
+import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.support.TargetBusyException
 import ca.floo.roadtrip.support.TargetNotFoundException
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
@@ -37,7 +36,6 @@ import io.ktor.server.routing.route
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jooq.DSLContext
 
@@ -239,7 +237,7 @@ private suspend inline fun <reified T> ApplicationCall.respondAdminJson(
     value: T,
     status: HttpStatusCode = HttpStatusCode.OK,
 ) {
-    respondText(adminIngestJson.encodeToString(value), ContentType.Application.Json, status)
+    respondEncodedJson(adminIngestJson, value, status)
 }
 
 private fun RunOutcome.toSchema(): RunOutcomeSchema =

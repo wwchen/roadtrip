@@ -2,20 +2,18 @@ package ca.floo.roadtrip.route.test
 
 import ca.floo.roadtrip.model.api.ApiErrorSchema
 import ca.floo.roadtrip.route.common.describeApi
+import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.request.receiveText
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 private const val MAX_TEST_SLACK_CHANNEL_CHARS = 255
@@ -86,4 +84,4 @@ private data class TestSlackResponse(
 private suspend inline fun <reified T> ApplicationCall.respondTestSlackJson(
     value: T,
     status: HttpStatusCode = HttpStatusCode.OK,
-) = respondText(testSlackJson.encodeToString(value), ContentType.Application.Json, status)
+) = respondEncodedJson(testSlackJson, value, status)
