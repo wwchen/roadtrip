@@ -34,7 +34,7 @@ private const val ASPIRA_MAX_POLL_WINDOW_DAYS = 30
  * above it by [ca.floo.roadtrip.service.api.AvailabilityLoader].
  */
 class AspiraAvailabilityProvider(
-    private val tenant: AspiraTenant,
+    internal val tenant: AspiraTenant,
     private val client: AspiraAvailabilityClient,
     private val enabled: Boolean,
     /**

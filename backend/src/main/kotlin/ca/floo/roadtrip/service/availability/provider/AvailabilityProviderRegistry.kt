@@ -2,23 +2,20 @@ package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.models.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
-import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraAvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraTenants
-import ca.floo.roadtrip.service.availability.provider.adapters.campflare.CampflareAvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovAvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaAvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaTenant
-import ca.floo.roadtrip.service.availability.provider.adapters.reservecalifornia.ReserveCaliforniaAvailabilityProvider
+
+data class AvailabilityProviderBinding(
+    val source: String,
+    val provider: AvailabilityProvider,
+)
 
 /**
  * Holds the live availability-provider adapters and dispatches a selected
  * `(vendor_ref.vendor, provider_ref)` pair to the right one.
  *
- * Construction is the only place that knows the mapping from source/vendor
- * keys to a [AvailabilityProvider] instance. Once built, the registry exposes a
- * single lookup — routes and the watch poller never see the source string, and
- * adapters never see the source either.
+ * The registry indexes DI-provided source bindings; it does not construct
+ * provider adapters. Once built, the registry exposes a single lookup — routes
+ * and the watch poller never see the source string, and adapters never see the
+ * source either.
  *
  * Key shape note: a single [AvailabilityProviderId] value can map to multiple
  * adapter *instances* (Aspira NextGen runs three tenants — PC/BC/WA — that
@@ -27,7 +24,8 @@ import ca.floo.roadtrip.service.availability.provider.adapters.reservecalifornia
  * each tenant's source resolves to its own adapter while the public
  * provider id stays vendor-shaped.
  *
- * Held as a singleton in [Main]; safe to share across coroutines.
+ * Held as a singleton in the application dependency graph; safe to share across
+ * coroutines.
  */
 class AvailabilityProviderRegistry(
     /**
@@ -79,112 +77,18 @@ class AvailabilityProviderRegistry(
         adaptersBySource.values.firstOrNull { it.id == id && it.isEnabled() }
 
     companion object {
-        fun fromPoiRegistry(
-            registry: PoiRegistry,
-            clients: AvailabilityProviderClients,
-            isProviderEnabled: (AvailabilityProviderId) -> Boolean,
-        ): AvailabilityProviderRegistry {
-            val adaptersBySource = mutableMapOf<String, AvailabilityProvider>()
-
-            // RecGov — single adapter instance shared across every recgov source.
-            val recgov =
-                RecGovAvailabilityProvider(
-                    client = clients.recgovClient,
-                    enabled = isProviderEnabled(AvailabilityProviderId.RECGOV),
-                )
-            adaptersBySource[RECGOV_VENDOR] = recgov
-            for (source in registry.recgovSources()) {
-                adaptersBySource[source] = recgov
+        fun fromBindings(bindings: List<AvailabilityProviderBinding>): AvailabilityProviderRegistry {
+            val duplicates =
+                bindings
+                    .groupBy { it.source }
+                    .filterValues { it.size > 1 }
+                    .keys
+            require(duplicates.isEmpty()) {
+                "duplicate availability provider source bindings: ${duplicates.sorted()}"
             }
-
-            // Canonical catalog reads expose `vendor_refs.vendor` ("campflare"),
-            // while registry YAML exposes the terminal ETL slug ("campflare-campgrounds").
-            val campflare =
-                CampflareAvailabilityProvider(
-                    client = clients.campflareClient,
-                    enabled = isProviderEnabled(AvailabilityProviderId.CAMPFLARE),
-                )
-            adaptersBySource[CAMPFLARE_VENDOR] = campflare
-            for (source in registry.campflareSources()) {
-                adaptersBySource[source] = campflare
-            }
-
-            // Aspira — one adapter instance per upstream host. Sources that share
-            // a host share an instance.
-            val hostBySource = registry.aspiraHostBySource()
-            validateAspiraHosts(hostBySource)
-            val aspiraByHost = mutableMapOf<String, AspiraAvailabilityProvider>()
-            for ((source, host) in hostBySource) {
-                val adapter =
-                    aspiraByHost.getOrPut(host) {
-                        val tenant =
-                            AspiraTenants.byHost(host)
-                                ?: error(
-                                    "Aspira host '$host' has no AspiraTenant config row; " +
-                                        "add it to AspiraTenants.kt.",
-                                )
-                        AspiraAvailabilityProvider(
-                            tenant = tenant,
-                            client = clients.aspiraClient,
-                            enabled = isProviderEnabled(AvailabilityProviderId.ASPIRA),
-                        )
-                    }
-                adaptersBySource[source] = adapter
-            }
-
-            // ReserveAmerica / Active Network — one adapter per tenant source.
-            for (config in registry.reserveAmericaSources()) {
-                val tenant =
-                    ReserveAmericaTenant(
-                        source = config.source,
-                        host = config.host,
-                        contractCode = config.contractCode,
-                        bookingHorizonDays = config.bookingHorizonDays,
-                    )
-                adaptersBySource[config.source] =
-                    ReserveAmericaAvailabilityProvider(
-                        tenant = tenant,
-                        client = clients.reserveAmericaClient,
-                        enabled = isProviderEnabled(AvailabilityProviderId.RESERVEAMERICA),
-                    )
-            }
-
-            val reserveCaliforniaSources = registry.reserveCaliforniaSources()
-            if (reserveCaliforniaSources.isNotEmpty()) {
-                val reserveCalifornia =
-                    ReserveCaliforniaAvailabilityProvider(
-                        client = clients.reserveCaliforniaClient,
-                        enabled = isProviderEnabled(AvailabilityProviderId.RESERVECALIFORNIA),
-                    )
-                for (source in reserveCaliforniaSources) {
-                    adaptersBySource[source] = reserveCalifornia
-                }
-            }
-
-            return AvailabilityProviderRegistry(adaptersBySource = adaptersBySource.toMap())
+            return AvailabilityProviderRegistry(
+                adaptersBySource = bindings.associate { it.source to it.provider },
+            )
         }
-
-        /**
-         * Boot-time gate: every Aspira host the YAML declares must have a
-         * tenant config row, and vice versa. Catches forgotten entries
-         * loudly instead of letting a request silently route to a missing
-         * adapter at the first user click.
-         */
-        private fun validateAspiraHosts(hostBySource: Map<String, String>) {
-            val yamlHosts = hostBySource.values.toSet()
-            val configHosts = AspiraTenants.knownHosts()
-            val missingFromConfig = yamlHosts - configHosts
-            if (missingFromConfig.isNotEmpty()) {
-                error(
-                    "Aspira hosts declared in POI registry but missing from AspiraTenants: " +
-                        "$missingFromConfig. Add a tenant row in AspiraTenants.kt.",
-                )
-            }
-            // Reverse direction is informational, not fatal: a tenant row with no
-            // YAML source is harmless (the adapter just won't be exercised).
-        }
-
-        private const val CAMPFLARE_VENDOR = "campflare"
-        private const val RECGOV_VENDOR = "recgov"
     }
 }

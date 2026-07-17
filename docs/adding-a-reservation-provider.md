@@ -87,15 +87,19 @@ If the provider cannot support an operation, use the explicit unsupported
 capability path. Do not add stubs that throw because the implementation is
 unfinished.
 
-## Step 4 - Wire The Registry
+## Step 4 - Wire Ktor DI, Koin, And Source Bindings
 
-Wire the adapter through the availability-provider registry/factory.
+Wire infrastructure through Ktor DI, bind provider implementations through
+Koin, and bind catalog source keys to the provider registry.
 
 Checklist:
 
 - Add the provider identity value if this is a new provider family.
-- Add client lifecycle wiring to the provider client set.
-- Add registry construction for the provider.
+- Register the vendor client as its own Ktor DI resource.
+- Register the adapter as a Koin definition bound to `AvailabilityProvider`.
+- Use Koin `getAll<AvailabilityProvider>()` when assembling the provider
+  registry; do not hand-maintain provider lists in services or routes.
+- Add source bindings for each catalog source this adapter handles.
 - Validate any per-tenant or per-source registry configuration at boot.
 - Add registry tests that prove sources map to the correct adapter and that
   missing required config fails loudly.

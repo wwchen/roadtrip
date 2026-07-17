@@ -28,7 +28,6 @@ tests, and operational wiring for a new provider.
 
 ```
 service/availability/provider/
-├── AvailabilityProviderClients.kt   # boot-time vendor client set + lifecycle
 ├── AvailabilityProvider.kt          # normalized availability + provider metadata port
 ├── AvailabilityProviderId.kt        # enum/provider identity
 ├── AvailabilityProviderRegistry.kt  # forPoi(row, ref) → adapter that can handle it
@@ -65,13 +64,18 @@ because it is unconfigured in this process, the resolver continues to the next
 linked candidate ref. This is how a Campflare catalog row can naturally fall
 through to a linked rec.gov alias without a Campflare-specific service branch.
 
-Boot wiring passes those vendor-specific HTTP clients as one
-`AvailabilityProviderClients` set. Every vendor client interface is an
-`AutoCloseable` with a default no-op `close()`. Implementations that actually
-own closeable resources, such as RecGov's Ktor client, override `close()`.
-Provider enablement belongs on `AvailabilityProvider.isEnabled()`, not on raw
-HTTP clients. `Main` closes the set, not an individual vendor, so transport
-lifecycle does not leak through the availability-provider abstraction.
+Boot wiring keeps infrastructure in Ktor DI and provider implementations in
+Koin. Vendor-specific HTTP clients are Ktor DI resources because they own
+transport lifecycle; every vendor client interface is an `AutoCloseable` with
+a default no-op `close()`, and implementations that actually own closeable
+resources override `close()`. Ktor DI owns their shutdown lifecycle.
+
+Availability, alert, and booking provider implementations are Koin
+multibindings. Each adapter binds to its shared interface
+(`AvailabilityProvider`, `AlertProvider`, or `BookingProvider`), and registries
+consume `getAll<...>()` plus source bindings. Registries index already-built
+providers; they do not instantiate adapters. Provider enablement belongs on
+`AvailabilityProvider.isEnabled()`, not on raw HTTP clients.
 
 The availability orchestration that consumes this port lives one layer above:
 
@@ -443,8 +447,9 @@ poller has produced.
 3. Create `service/availability/provider/adapters/<vendor>/<Vendor>AvailabilityProvider.kt`
    implementing `AvailabilityProvider`. Capabilities default conservatively
    (`supportsInternalPolling = false`); flip them on as features land.
-4. Ensure the terminal ETL emits the right `provider_ref` JSON and that its
-   `pois.source` maps to the adapter in `AvailabilityProviderRegistry.fromPoiRegistry`.
+4. Register the vendor client in Ktor DI, bind the adapter in the Koin
+   provider module, and add the adapter's source binding so the terminal ETL
+   source maps to the adapter.
 5. Update the matrix table above.
 
 Steps 1–5 should be the entire provider-registration diff. If you find

@@ -1,13 +1,18 @@
 package ca.floo.roadtrip
 
+import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.clients.aspira.HttpAspiraAvailabilityClient
+import ca.floo.roadtrip.clients.campflare.CampflareAvailabilityClient
 import ca.floo.roadtrip.clients.campflare.HttpCampflareAvailabilityClient
 import ca.floo.roadtrip.clients.companion.HttpRecGovAtcExecutor
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
 import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.clients.recgov.HttpRecgovAvailabilityClient
+import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.clients.reserveamerica.HttpReserveAmericaAvailabilityClient
+import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.clients.reservecalifornia.HttpReserveCaliforniaAvailabilityClient
+import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.clients.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.config.AppConfig
@@ -61,12 +66,24 @@ import ca.floo.roadtrip.service.availability.WatchCapabilityValidator
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
+import ca.floo.roadtrip.service.availability.alert.AlertProvider
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderBinding
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraAvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraTenant
+import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraTenants
+import ca.floo.roadtrip.service.availability.provider.adapters.campflare.CampflareAvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovAvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaAvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaTenant
+import ca.floo.roadtrip.service.availability.provider.adapters.reservecalifornia.ReserveCaliforniaAvailabilityProvider
+import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.booking.RecGovAtcExecutor
 import ca.floo.roadtrip.service.booking.adapters.RecGovBookingProvider
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
@@ -97,6 +114,7 @@ import ca.floo.roadtrip.service.scheduler.WatchReaper
 import ca.floo.roadtrip.service.scheduler.framework.Scheduler
 import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutor
 import io.ktor.server.application.Application
+import io.ktor.server.application.install
 import io.ktor.server.netty.EngineMain
 import io.ktor.server.plugins.di.DependencyKey
 import io.ktor.server.plugins.di.DependencyRegistry
@@ -108,9 +126,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import org.jooq.DSLContext
+import org.koin.core.annotation.KoinExperimentalAPI
+import org.koin.core.module.Module
+import org.koin.core.module.dsl.singleOf
+import org.koin.core.qualifier.named
+import org.koin.dsl.bind
+import org.koin.dsl.module
+import org.koin.ktor.ext.getKoin
+import org.koin.logger.slf4jLogger
 import org.slf4j.LoggerFactory
 import java.io.File
 import javax.sql.DataSource
+import org.koin.ktor.plugin.Koin as KoinPlugin
 
 private val mainLog = LoggerFactory.getLogger("ca.floo.roadtrip.Main")
 
@@ -124,6 +151,10 @@ private const val MAPBOX_TOKEN_KEY = "token"
 private const val DEFAULT_POI_REGISTRY_RESOURCE = "poi-registry.yaml"
 private const val RAW_DATA_DIR = "data/raw"
 private const val SCHEDULER_NAME_AVAILABILITY = "availability"
+private const val CAMPFLARE_VENDOR = "campflare"
+private const val RECGOV_VENDOR = "recgov"
+private const val KOIN_AVAILABILITY_PROVIDER_QUALIFIER_PREFIX = "availability-provider"
+private const val KOIN_BOOKING_PROVIDER_QUALIFIER_PREFIX = "booking-provider"
 
 fun main(args: Array<String>): Unit = EngineMain.main(args)
 
@@ -200,18 +231,35 @@ internal fun Application.installRoadtripDependencies(properties: Map<String, Str
         provide(::CanonicalViewRepo)
 
         provide(::AvailabilityDateResolver)
-        if (!containsDependency<AvailabilityProviderClients>()) {
-            provide(::availabilityProviderClients)
+        if (!containsDependency<RecGovAvailabilityClient>()) {
+            provide(::recGovAvailabilityClient)
         }
-        provide(::availabilityProviderRegistry)
+        if (!containsDependency<AspiraAvailabilityClient>()) {
+            provide(::aspiraAvailabilityClient)
+        }
+        if (!containsDependency<ReserveAmericaAvailabilityClient>()) {
+            provide(::reserveAmericaAvailabilityClient)
+        }
+        if (!containsDependency<ReserveCaliforniaAvailabilityClient>()) {
+            provide(::reserveCaliforniaAvailabilityClient)
+        }
+        if (!containsDependency<CampflareAvailabilityClient>()) {
+            provide(::campflareAvailabilityClient)
+        }
+    }
+
+    val appConfig: AppConfig by dependencies
+    val poiRegistry: PoiRegistry by dependencies
+    installRoadtripProviderKoin(appConfig = appConfig, poiRegistry = poiRegistry)
+    val koin = getKoin()
+
+    dependencies {
+        provide<AvailabilityProviderRegistry> { koin.get() }
         provide(::availabilityTargetResolver)
         provide(::WatchScopeResolver)
         provide(::AvailabilityPollerMembership)
-        provide(::InternalPollerAlertProvider)
-        provide(::alertProviderRegistry)
-        provide<HttpRecGovAtcExecutor?> { recGovAtcExecutor(resolve()) }
-        provide<RecGovBookingProvider?> { recGovBookingProvider(resolve()) }
-        provide(::bookingProviderRegistry)
+        provide<AlertProviderRegistry> { koin.get() }
+        provide<BookingProviderRegistry> { koin.get() }
         provide(::AvailabilityBookingTargetResolver)
         provide(::watchCapabilityService)
         provide(::watchCapabilityValidator)
@@ -286,9 +334,9 @@ private fun roadtripDataSource(roadtripConfig: ConfigSection): DataSource {
     return dataSource
 }
 
-private fun roadtripDslContext(dataSource: DataSource): DSLContext = dsl(dataSource)
+internal fun roadtripDslContext(dataSource: DataSource): DSLContext = dsl(dataSource)
 
-private fun apiCacheRepo(ctx: DSLContext): ApiCacheRepo = ApiCacheRepo(ctx)
+internal fun apiCacheRepo(ctx: DSLContext): ApiCacheRepo = ApiCacheRepo(ctx)
 
 private fun poiRegistry(
     appConfig: AppConfig,
@@ -298,31 +346,210 @@ private fun poiRegistry(
     loadPoiRegistry(roadtripConfig.section("poi-registry"), staticDir)
         .also { validateReadPathDataSources(appConfig.readPathProviders, it) }
 
-private fun availabilityProviderClients(appConfig: AppConfig): AvailabilityProviderClients =
-    AvailabilityProviderClients(
-        recgovClient = HttpRecgovAvailabilityClient(),
-        aspiraClient = HttpAspiraAvailabilityClient(),
-        reserveAmericaClient = HttpReserveAmericaAvailabilityClient(),
-        reserveCaliforniaClient = HttpReserveCaliforniaAvailabilityClient(),
-        campflareClient =
-            HttpCampflareAvailabilityClient(
-                apiBaseUrl = appConfig.campflare.apiBaseUrl,
-                apiKey = appConfig.campflare.apiKey,
-            ),
+internal fun recGovAvailabilityClient(): RecGovAvailabilityClient = HttpRecgovAvailabilityClient()
+
+internal fun aspiraAvailabilityClient(): AspiraAvailabilityClient = HttpAspiraAvailabilityClient()
+
+internal fun reserveAmericaAvailabilityClient(): ReserveAmericaAvailabilityClient = HttpReserveAmericaAvailabilityClient()
+
+internal fun reserveCaliforniaAvailabilityClient(): ReserveCaliforniaAvailabilityClient = HttpReserveCaliforniaAvailabilityClient()
+
+internal fun campflareAvailabilityClient(appConfig: AppConfig): CampflareAvailabilityClient =
+    HttpCampflareAvailabilityClient(
+        apiBaseUrl = appConfig.campflare.apiBaseUrl,
+        apiKey = appConfig.campflare.apiKey,
     )
 
-private fun availabilityProviderRegistry(
+@OptIn(KoinExperimentalAPI::class)
+internal fun Application.installRoadtripProviderKoin(
     appConfig: AppConfig,
     poiRegistry: PoiRegistry,
-    clients: AvailabilityProviderClients,
-): AvailabilityProviderRegistry =
-    AvailabilityProviderRegistry.fromPoiRegistry(
-        registry = poiRegistry,
-        clients = clients,
-        isProviderEnabled = { id -> appConfig.isProviderEnabled(id) },
+) {
+    install(KoinPlugin) {
+        slf4jLogger()
+        bridge {
+            koinToKtor()
+        }
+        modules(roadtripProviderKoinModule(appConfig = appConfig, poiRegistry = poiRegistry))
+    }
+}
+
+internal fun roadtripProviderKoinModule(
+    appConfig: AppConfig,
+    poiRegistry: PoiRegistry,
+): Module {
+    val aspiraTenants = aspiraTenantsFor(poiRegistry)
+    val reserveAmericaTenants = reserveAmericaTenantsFor(poiRegistry)
+    return module {
+        singleOf(::recGovAvailabilityProvider) bind AvailabilityProvider::class
+        singleOf(::campflareAvailabilityProvider) bind AvailabilityProvider::class
+        aspiraTenants.forEach { tenant ->
+            single<AvailabilityProvider>(named("$KOIN_AVAILABILITY_PROVIDER_QUALIFIER_PREFIX:aspira:${tenant.host}")) {
+                aspiraAvailabilityProvider(tenant = tenant, client = get(), appConfig = get())
+            }
+        }
+        reserveAmericaTenants.forEach { tenant ->
+            single<AvailabilityProvider>(named("$KOIN_AVAILABILITY_PROVIDER_QUALIFIER_PREFIX:reserveamerica:${tenant.source}")) {
+                reserveAmericaAvailabilityProvider(tenant = tenant, client = get(), appConfig = get())
+            }
+        }
+        singleOf(::reserveCaliforniaAvailabilityProvider) bind AvailabilityProvider::class
+        single {
+            val providers = getAll<AvailabilityProvider>()
+            AvailabilityProviderRegistry.fromBindings(availabilityProviderBindings(poiRegistry, providers))
+        }
+
+        singleOf(::InternalPollerAlertProvider) bind AlertProvider::class
+        single {
+            val providers = getAll<AlertProvider>()
+            AlertProviderRegistry(providers)
+        }
+
+        if (appConfig.booking.recgovAtc.companionEnabled) {
+            mainLog.info("Rec.gov ATC companion executor enabled at {}", appConfig.booking.recgovAtc.companionBaseUrl)
+            single<RecGovAtcExecutor> { HttpRecGovAtcExecutor(appConfig.booking.recgovAtc) }
+            singleOf(::RecGovBookingProvider) bind BookingProvider::class
+        }
+        single {
+            val providers = getAll<BookingProvider>()
+            BookingProviderRegistry(providers)
+        }
+    }
+}
+
+internal fun recGovAvailabilityProvider(
+    client: RecGovAvailabilityClient,
+    appConfig: AppConfig,
+): RecGovAvailabilityProvider =
+    RecGovAvailabilityProvider(
+        client = client,
+        enabled = appConfig.isProviderEnabled(AvailabilityProviderId.RECGOV),
     )
 
-private fun availabilityTargetResolver(
+internal fun campflareAvailabilityProvider(
+    client: CampflareAvailabilityClient,
+    appConfig: AppConfig,
+): CampflareAvailabilityProvider =
+    CampflareAvailabilityProvider(
+        client = client,
+        enabled = appConfig.isProviderEnabled(AvailabilityProviderId.CAMPFLARE),
+    )
+
+internal fun aspiraAvailabilityProvider(
+    tenant: AspiraTenant,
+    client: AspiraAvailabilityClient,
+    appConfig: AppConfig,
+): AspiraAvailabilityProvider =
+    AspiraAvailabilityProvider(
+        tenant = tenant,
+        client = client,
+        enabled = appConfig.isProviderEnabled(AvailabilityProviderId.ASPIRA),
+    )
+
+private fun aspiraTenantsFor(poiRegistry: PoiRegistry): List<AspiraTenant> {
+    val hostBySource = poiRegistry.aspiraHostBySource()
+    validateAspiraHosts(hostBySource)
+    return hostBySource
+        .values
+        .distinct()
+        .map { host ->
+            AspiraTenants.byHost(host)
+                ?: error(
+                    "Aspira host '$host' has no AspiraTenant config row; " +
+                        "add it to AspiraTenants.kt.",
+                )
+        }
+}
+
+internal fun reserveAmericaAvailabilityProvider(
+    tenant: ReserveAmericaTenant,
+    client: ReserveAmericaAvailabilityClient,
+    appConfig: AppConfig,
+): ReserveAmericaAvailabilityProvider =
+    ReserveAmericaAvailabilityProvider(
+        tenant = tenant,
+        client = client,
+        enabled = appConfig.isProviderEnabled(AvailabilityProviderId.RESERVEAMERICA),
+    )
+
+private fun reserveAmericaTenantsFor(poiRegistry: PoiRegistry): List<ReserveAmericaTenant> =
+    poiRegistry.reserveAmericaSources().map { config ->
+        ReserveAmericaTenant(
+            source = config.source,
+            host = config.host,
+            contractCode = config.contractCode,
+            bookingHorizonDays = config.bookingHorizonDays,
+        )
+    }
+
+internal fun reserveCaliforniaAvailabilityProvider(
+    client: ReserveCaliforniaAvailabilityClient,
+    appConfig: AppConfig,
+): ReserveCaliforniaAvailabilityProvider =
+    ReserveCaliforniaAvailabilityProvider(
+        client = client,
+        enabled = appConfig.isProviderEnabled(AvailabilityProviderId.RESERVECALIFORNIA),
+    )
+
+internal fun availabilityProviderBindings(
+    poiRegistry: PoiRegistry,
+    providers: List<AvailabilityProvider>,
+): List<AvailabilityProviderBinding> =
+    buildList {
+        val recgov = providers.singleProvider<RecGovAvailabilityProvider>(AvailabilityProviderId.RECGOV)
+        val campflare = providers.singleProvider<CampflareAvailabilityProvider>(AvailabilityProviderId.CAMPFLARE)
+        val reserveCalifornia = providers.singleProvider<ReserveCaliforniaAvailabilityProvider>(AvailabilityProviderId.RESERVECALIFORNIA)
+
+        addSourceBindings(provider = recgov, sources = listOf(RECGOV_VENDOR) + poiRegistry.recgovSources())
+        addSourceBindings(provider = campflare, sources = listOf(CAMPFLARE_VENDOR) + poiRegistry.campflareSources())
+
+        val aspiraByHost = providers.filterIsInstance<AspiraAvailabilityProvider>().associateBy { it.tenant.host }
+        for ((source, host) in poiRegistry.aspiraHostBySource()) {
+            add(AvailabilityProviderBinding(source = source, provider = aspiraByHost.getValue(host)))
+        }
+
+        val reserveAmericaBySource = providers.filterIsInstance<ReserveAmericaAvailabilityProvider>().associateBy { it.tenant.source }
+        for (config in poiRegistry.reserveAmericaSources()) {
+            add(AvailabilityProviderBinding(source = config.source, provider = reserveAmericaBySource.getValue(config.source)))
+        }
+
+        addSourceBindings(provider = reserveCalifornia, sources = poiRegistry.reserveCaliforniaSources())
+    }
+
+private fun MutableList<AvailabilityProviderBinding>.addSourceBindings(
+    provider: AvailabilityProvider,
+    sources: Iterable<String>,
+) {
+    sources.distinct().forEach { source ->
+        add(AvailabilityProviderBinding(source = source, provider = provider))
+    }
+}
+
+private inline fun <reified T : AvailabilityProvider> List<AvailabilityProvider>.singleProvider(id: AvailabilityProviderId): T =
+    filterIsInstance<T>()
+        .singleOrNull()
+        ?: error("expected exactly one ${id.name.lowercase()} availability provider, found ${count { it.id == id }}")
+
+/**
+ * Boot-time gate: every Aspira host the YAML declares must have a tenant config
+ * row. Catches forgotten entries loudly instead of letting a request silently
+ * route to a missing adapter at the first user click.
+ */
+private fun validateAspiraHosts(hostBySource: Map<String, String>) {
+    val yamlHosts = hostBySource.values.toSet()
+    val configHosts = AspiraTenants.knownHosts()
+    val missingFromConfig = yamlHosts - configHosts
+    if (missingFromConfig.isNotEmpty()) {
+        error(
+            "Aspira hosts declared in POI registry but missing from AspiraTenants: " +
+                "$missingFromConfig. Add a tenant row in AspiraTenants.kt.",
+        )
+    }
+    // Reverse direction is informational, not fatal: a tenant row with no YAML
+    // source is harmless because DI builds only the configured adapters.
+}
+
+internal fun availabilityTargetResolver(
     providerRefs: CampsiteProviderRepo,
     campsitesRepo: CampsiteRepo,
     availabilityProviders: AvailabilityProviderRegistry,
@@ -335,21 +562,7 @@ private fun availabilityTargetResolver(
         dateResolver = dateResolver,
     )
 
-private fun alertProviderRegistry(internalPoller: InternalPollerAlertProvider): AlertProviderRegistry =
-    AlertProviderRegistry(listOf(internalPoller))
-
-private fun recGovAtcExecutor(appConfig: AppConfig): HttpRecGovAtcExecutor? =
-    appConfig.booking.recgovAtc
-        .takeIf { it.companionEnabled }
-        ?.also { mainLog.info("Rec.gov ATC companion executor enabled at {}", it.companionBaseUrl) }
-        ?.let(::HttpRecGovAtcExecutor)
-
-private fun recGovBookingProvider(executor: HttpRecGovAtcExecutor?): RecGovBookingProvider? = executor?.let(::RecGovBookingProvider)
-
-private fun bookingProviderRegistry(recGovBookingProvider: RecGovBookingProvider?): BookingProviderRegistry =
-    BookingProviderRegistry(listOfNotNull(recGovBookingProvider))
-
-private fun watchCapabilityService(
+internal fun watchCapabilityService(
     appConfig: AppConfig,
     availabilityTargets: AvailabilityTargetResolver,
     bookingTargets: AvailabilityBookingTargetResolver,
@@ -364,7 +577,7 @@ private fun watchCapabilityService(
             },
     )
 
-private fun watchCapabilityValidator(
+internal fun watchCapabilityValidator(
     scopeResolver: WatchScopeResolver,
     capabilities: WatchCapabilityService,
 ): WatchCapabilityValidator =
@@ -373,7 +586,7 @@ private fun watchCapabilityValidator(
         capabilities = capabilities,
     )
 
-private fun availabilityWatchService(
+internal fun availabilityWatchService(
     ctx: DSLContext,
     alertProviders: AlertProviderRegistry,
     capabilityValidator: WatchCapabilityValidator,
@@ -384,7 +597,7 @@ private fun availabilityWatchService(
         capabilityValidator = capabilityValidator,
     )
 
-private fun availabilityWatchApiMapper(
+internal fun availabilityWatchApiMapper(
     campsitesRepo: CampsiteRepo,
     scopeResolver: WatchScopeResolver,
     capabilities: WatchCapabilityService,
@@ -395,13 +608,13 @@ private fun availabilityWatchApiMapper(
         capabilities = capabilities,
     )
 
-private fun providerCooldownTracker(appConfig: AppConfig): ProviderCooldownTracker =
+internal fun providerCooldownTracker(appConfig: AppConfig): ProviderCooldownTracker =
     ProviderCooldownTracker(cooldown = appConfig.availability.providerCooldown)
 
-private fun failoverAvailabilityFetcher(cooldowns: ProviderCooldownTracker): FailoverAvailabilityFetcher =
+internal fun failoverAvailabilityFetcher(cooldowns: ProviderCooldownTracker): FailoverAvailabilityFetcher =
     FailoverAvailabilityFetcher(cooldowns = cooldowns)
 
-private fun campsiteAvailabilityComposer(
+internal fun campsiteAvailabilityComposer(
     targets: AvailabilityTargetResolver,
     dateResolver: AvailabilityDateResolver,
     availability: AvailabilityRepo,
@@ -414,16 +627,16 @@ private fun campsiteAvailabilityComposer(
         failoverFetcher = failoverFetcher,
     )
 
-private fun slackNotificationService(appConfig: AppConfig): SlackNotificationService = SlackNotificationService(appConfig.slack)
+internal fun slackNotificationService(appConfig: AppConfig): SlackNotificationService = SlackNotificationService(appConfig.slack)
 
-private fun emailNotificationService(appConfig: AppConfig): EmailNotificationService = EmailNotificationService(appConfig.email)
+internal fun emailNotificationService(appConfig: AppConfig): EmailNotificationService = EmailNotificationService(appConfig.email)
 
-private fun notificationServices(
+internal fun notificationServices(
     slack: SlackNotificationService,
     email: EmailNotificationService,
 ): List<NotificationService> = listOf(slack, email)
 
-private fun notifyTriggerActionHandler(
+internal fun notifyTriggerActionHandler(
     notifications: NotificationSender,
     appConfig: AppConfig,
 ): NotifyTriggerActionHandler =
@@ -432,12 +645,12 @@ private fun notifyTriggerActionHandler(
         appRootUrl = appConfig.webApp?.rootUrl,
     )
 
-private fun triggerActionRegistry(
+internal fun triggerActionRegistry(
     notify: NotifyTriggerActionHandler,
     atc: AtcTriggerActionHandler,
 ): TriggerActionRegistry = TriggerActionRegistry(listOf(notify, atc))
 
-private fun watchAlertDispatcher(
+internal fun watchAlertDispatcher(
     notifications: NotificationSender,
     scopeResolver: WatchScopeResolver,
     watches: AvailabilityWatchRepo,
@@ -478,7 +691,7 @@ private fun slackSignatureVerifier(appConfig: AppConfig): SlackSignatureVerifier
         null
     }
 
-private fun slackInteractivityWatches(
+internal fun slackInteractivityWatches(
     watches: AvailabilityWatchRepo,
     watchService: AvailabilityWatchService,
     watchAlertDispatcher: WatchAlertDispatcher,
@@ -500,19 +713,19 @@ private fun slackInteractivityWatches(
         ) = watchAlertDispatcher.statusNoticeForWatch(watch, state)
     }
 
-private fun slackInteractivityHandler(
+internal fun slackInteractivityHandler(
     watches: SlackInteractivityHandler.Watches,
     slack: SlackNotificationService,
 ): SlackInteractivityHandler = SlackInteractivityHandler(watches = watches, slack = slack)
 
-private fun slackInteractivityWiring(
+internal fun slackInteractivityWiring(
     verifier: SlackSignatureVerifier?,
     handler: SlackInteractivityHandler,
 ): SlackInteractivityWiring? = verifier?.let { SlackInteractivityWiring(verifier = it, handler = handler) }
 
 private fun mapboxToken(roadtripConfig: ConfigSection): String? = roadtripConfig.section("mapbox").value(MAPBOX_TOKEN_KEY)
 
-private fun routeCache(
+internal fun routeCache(
     appConfig: AppConfig,
     directions: MapboxDirections,
     apiCache: ApiCacheRepo,
@@ -523,7 +736,7 @@ private fun routeCache(
         persistentCache = apiCache,
     )
 
-private fun campgroundService(
+internal fun campgroundService(
     repo: CampgroundRepo,
     dateResolver: AvailabilityDateResolver,
     availabilitySupport: CampgroundAvailabilitySupport,
@@ -534,7 +747,7 @@ private fun campgroundService(
         availabilitySupport = availabilitySupport,
     )
 
-private fun poiDetailServices(
+internal fun poiDetailServices(
     campgroundService: CampgroundService,
     teslaSuperchargerService: TeslaSuperchargerService,
     planetFitnessLocationService: PlanetFitnessLocationService,
@@ -545,7 +758,7 @@ private fun poiDetailServices(
         planetFitnessLocationService,
     )
 
-private fun poiService(
+internal fun poiService(
     poiRepo: PoiServingRepo,
     detailServices: List<PoiDetailService>,
 ): PoiService =
@@ -554,7 +767,7 @@ private fun poiService(
         detailServices = detailServices,
     )
 
-private fun poiReader(
+internal fun poiReader(
     appConfig: AppConfig,
     poiService: PoiService,
     detailServices: List<PoiDetailService>,
@@ -565,7 +778,7 @@ private fun poiReader(
         providers = appConfig.readPathProviders,
     )
 
-private fun poisOnRouteService(
+internal fun poisOnRouteService(
     routeCache: RouteCache,
     routeCorridorService: RouteCorridorService,
     poiService: PoiReader,
@@ -576,7 +789,7 @@ private fun poisOnRouteService(
         poiService = poiService,
     )
 
-private fun etlOrchestrator(
+internal fun etlOrchestrator(
     ctx: DSLContext,
     staticDir: File,
     poiRegistry: PoiRegistry,
@@ -589,7 +802,7 @@ private fun etlOrchestrator(
         canonicalViews = canonicalViews,
     )
 
-private fun ingestController(
+internal fun ingestController(
     ctx: DSLContext,
     etl: EtlOrchestrator,
     poiRegistry: PoiRegistry,
@@ -605,7 +818,7 @@ private fun ingestController(
     )
 }
 
-private fun vendorRateLimiter(
+internal fun vendorRateLimiter(
     appConfig: AppConfig,
     dataSource: DataSource,
 ): VendorRateLimiter =
@@ -614,7 +827,7 @@ private fun vendorRateLimiter(
         dataSource = dataSource,
     )
 
-private fun availabilityPollExecutor(
+internal fun availabilityPollExecutor(
     pollers: AvailabilityPollerRepo,
     campsitesRepo: CampsiteRepo,
     batcher: CatalogAvailabilityBatcher,
@@ -641,7 +854,7 @@ private fun availabilityPollExecutor(
         failoverFetcher = failoverFetcher,
     )
 
-private fun availabilityScheduler(
+internal fun availabilityScheduler(
     pollers: AvailabilityPollerRepo,
     executor: AvailabilityPollExecutor,
 ): Scheduler<AvailabilityPollerRepo.Poller> =
@@ -651,7 +864,7 @@ private fun availabilityScheduler(
         name = SCHEDULER_NAME_AVAILABILITY,
     )
 
-private fun watchReaper(pollers: AvailabilityPollerRepo): WatchReaper = WatchReaper(pollers)
+internal fun watchReaper(pollers: AvailabilityPollerRepo): WatchReaper = WatchReaper(pollers)
 
 private fun AppConfig.isProviderEnabled(id: AvailabilityProviderId): Boolean =
     readPathProviders.isAvailabilityProviderEnabled(id.name.lowercase()) &&

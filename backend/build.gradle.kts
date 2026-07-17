@@ -119,6 +119,9 @@ dependencies {
     implementation("io.ktor:ktor-server-html-builder:$ktorVersion")
     // SSE for /api/campsite/events stream.
     implementation("io.ktor:ktor-server-sse:$ktorVersion")
+    implementation(platform(libs.koin.bom))
+    implementation(libs.koin.ktor)
+    implementation(libs.koin.logger.slf4j)
     // HttpClient powers AvailabilityClient (rec.gov) and SlackNotifier in the
     // campsite poller.
     implementation("io.ktor:ktor-client-core:$ktorVersion")

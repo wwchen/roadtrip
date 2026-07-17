@@ -19,11 +19,14 @@ import ca.floo.roadtrip.config.RecGovAtcConfig
 import ca.floo.roadtrip.config.VendorRateLimitConfig
 import ca.floo.roadtrip.models.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.models.availability.reservecalifornia.ReserveCaliforniaGridAvailability
+import ca.floo.roadtrip.models.metadata.registry.DataSourceEntry
+import ca.floo.roadtrip.models.metadata.registry.EtlEntry
+import ca.floo.roadtrip.models.metadata.registry.Fetcher
+import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.CampsiteCatalogService
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
 import io.ktor.client.request.get
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.Application
@@ -32,10 +35,13 @@ import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import java.io.File
+import java.io.PrintWriter
 import java.nio.file.Files
+import java.sql.Connection
 import java.time.Duration
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.logging.Logger
 import javax.sql.DataSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -49,6 +55,10 @@ private const val TEST_DURATION_SECONDS = 1L
 private const val TEST_HEALTH_PATH = "/api/health"
 private const val TEST_OVERRIDE_DATA_SOURCE = "override-source"
 private const val TEST_STATIC_DIR_PREFIX = "roadtrip-di-test"
+private const val TEST_ASPIRA_HOST = "reservation.pc.gc.ca"
+private const val TEST_RESERVEAMERICA_HOST = "reserveamerica.test.invalid"
+private const val TEST_RESERVEAMERICA_CONTRACT = "RA"
+private const val TEST_RESERVEAMERICA_BOOKING_HORIZON_DAYS = "180"
 
 class RoadtripDiGraphTest : SharedDbTest() {
     @Test
@@ -106,10 +116,14 @@ class RoadtripDiGraphTest : SharedDbTest() {
         appConfig: AppConfig = testAppConfig(),
     ) {
         dependencies.provide<AppConfig> { appConfig }
-        dependencies.provide<DataSource> { ds }
+        dependencies.provide<DataSource> { NonClosingDataSource(ds) }
         dependencies.provide<File> { Files.createTempDirectory(TEST_STATIC_DIR_PREFIX).toFile() }
-        dependencies.provide<PoiRegistry> { PoiRegistry(dataSources = emptyList(), poiData = emptyList()) }
-        dependencies.provide<AvailabilityProviderClients> { closeTracker.clients() }
+        dependencies.provide<PoiRegistry> { fullProviderRegistry() }
+        dependencies.provide<RecGovAvailabilityClient> { closeTracker.recGovClient() }
+        dependencies.provide<AspiraAvailabilityClient> { closeTracker.aspiraClient() }
+        dependencies.provide<ReserveAmericaAvailabilityClient> { closeTracker.reserveAmericaClient() }
+        dependencies.provide<ReserveCaliforniaAvailabilityClient> { closeTracker.reserveCaliforniaClient() }
+        dependencies.provide<CampflareAvailabilityClient> { closeTracker.campflareClient() }
     }
 
     private fun testAppConfig(
@@ -149,25 +163,105 @@ class RoadtripDiGraphTest : SharedDbTest() {
         )
     }
 
+    private fun fullProviderRegistry(): PoiRegistry =
+        PoiRegistry(
+            dataSources =
+                listOf(
+                    dataSource("recgov-source"),
+                    dataSource("campflare-source"),
+                    dataSource("aspira-source"),
+                    dataSource("reserveamerica-source"),
+                    dataSource("reservecalifornia-source"),
+                ),
+            poiData =
+                listOf(
+                    poiData(
+                        name = "RecGov",
+                        etl =
+                            EtlEntry(
+                                slug = "federal-campgrounds",
+                                adapter = "RecGovCampgroundsEtl",
+                                inputs = listOf("recgov-source"),
+                            ),
+                    ),
+                    poiData(
+                        name = "Campflare",
+                        etl =
+                            EtlEntry(
+                                slug = "campflare-campgrounds",
+                                adapter = "CampflareCampgroundsEtl",
+                                inputs = listOf("campflare-source"),
+                            ),
+                    ),
+                    poiData(
+                        name = "Aspira",
+                        etl =
+                            EtlEntry(
+                                slug = "aspira-pc-pins",
+                                adapter = "AspiraJoinByNameEtl",
+                                inputs = listOf("aspira-source"),
+                                args = mapOf("host" to TEST_ASPIRA_HOST),
+                            ),
+                    ),
+                    poiData(
+                        name = "ReserveAmerica",
+                        etl =
+                            EtlEntry(
+                                slug = "alberta-provincial",
+                                adapter = "ReserveAmericaEtl",
+                                inputs = listOf("reserveamerica-source"),
+                                args =
+                                    mapOf(
+                                        "host" to TEST_RESERVEAMERICA_HOST,
+                                        "contract" to TEST_RESERVEAMERICA_CONTRACT,
+                                        "booking_horizon_days" to TEST_RESERVEAMERICA_BOOKING_HORIZON_DAYS,
+                                    ),
+                            ),
+                    ),
+                    poiData(
+                        name = "ReserveCalifornia",
+                        etl =
+                            EtlEntry(
+                                slug = "california-state-parks",
+                                adapter = "ReserveCaliforniaEtl",
+                                inputs = listOf("reservecalifornia-source"),
+                            ),
+                    ),
+                ),
+        )
+
+    private fun dataSource(slug: String): DataSourceEntry =
+        DataSourceEntry(
+            slug = slug,
+            name = slug,
+            fetcher =
+                Fetcher(
+                    executor = "noop",
+                    filename = "$slug.json",
+                    outputDirPrefix = slug,
+                ),
+        )
+
+    private fun poiData(
+        name: String,
+        etl: EtlEntry,
+    ): PoiDataEntry =
+        PoiDataEntry(
+            name = name,
+            category = "campground",
+            etls = listOf(etl),
+        )
+
     private class CloseTracker {
         private val closed = AtomicInteger()
 
         val closeCount: Int get() = closed.get()
 
-        fun clients(): AvailabilityProviderClients =
-            AvailabilityProviderClients(
-                recgovClient = trackedRecGovClient(),
-                aspiraClient = trackedAspiraClient(),
-                reserveAmericaClient = trackedReserveAmericaClient(),
-                reserveCaliforniaClient = trackedReserveCaliforniaClient(),
-                campflareClient = trackedCampflareClient(),
-            )
-
         private fun closeOne() {
             closed.incrementAndGet()
         }
 
-        private fun trackedRecGovClient(): RecGovAvailabilityClient =
+        fun recGovClient(): RecGovAvailabilityClient =
             object : RecGovAvailabilityClient {
                 override suspend fun fetchMonth(
                     campgroundId: String,
@@ -177,7 +271,7 @@ class RoadtripDiGraphTest : SharedDbTest() {
                 override fun close() = closeOne()
             }
 
-        private fun trackedAspiraClient(): AspiraAvailabilityClient =
+        fun aspiraClient(): AspiraAvailabilityClient =
             object : AspiraAvailabilityClient {
                 override suspend fun fetch(
                     host: String,
@@ -196,7 +290,7 @@ class RoadtripDiGraphTest : SharedDbTest() {
                 override fun close() = closeOne()
             }
 
-        private fun trackedReserveAmericaClient(): ReserveAmericaAvailabilityClient =
+        fun reserveAmericaClient(): ReserveAmericaAvailabilityClient =
             object : ReserveAmericaAvailabilityClient {
                 override suspend fun fetch(
                     host: String,
@@ -209,7 +303,7 @@ class RoadtripDiGraphTest : SharedDbTest() {
                 override fun close() = closeOne()
             }
 
-        private fun trackedReserveCaliforniaClient(): ReserveCaliforniaAvailabilityClient =
+        fun reserveCaliforniaClient(): ReserveCaliforniaAvailabilityClient =
             object : ReserveCaliforniaAvailabilityClient {
                 override suspend fun fetchGrid(
                     facilityId: Long,
@@ -222,7 +316,7 @@ class RoadtripDiGraphTest : SharedDbTest() {
                 override fun close() = closeOne()
             }
 
-        private fun trackedCampflareClient(): CampflareAvailabilityClient =
+        fun campflareClient(): CampflareAvailabilityClient =
             object : CampflareAvailabilityClient {
                 override suspend fun fetchAvailability(
                     campgroundIds: List<String>,
@@ -234,5 +328,34 @@ class RoadtripDiGraphTest : SharedDbTest() {
             }
 
         private fun unexpectedAvailabilityFetch(): Nothing = error("DI lifecycle tests must not call availability clients")
+    }
+
+    private class NonClosingDataSource(
+        private val delegate: DataSource,
+    ) : DataSource {
+        override fun getConnection(): Connection = delegate.connection
+
+        override fun getConnection(
+            username: String?,
+            password: String?,
+        ): Connection = delegate.getConnection(username, password)
+
+        override fun getLogWriter(): PrintWriter? = delegate.logWriter
+
+        override fun setLogWriter(out: PrintWriter?) {
+            delegate.logWriter = out
+        }
+
+        override fun setLoginTimeout(seconds: Int) {
+            delegate.loginTimeout = seconds
+        }
+
+        override fun getLoginTimeout(): Int = delegate.loginTimeout
+
+        override fun getParentLogger(): Logger = delegate.parentLogger
+
+        override fun <T : Any?> unwrap(iface: Class<T>): T = delegate.unwrap(iface)
+
+        override fun isWrapperFor(iface: Class<*>): Boolean = delegate.isWrapperFor(iface)
     }
 }
