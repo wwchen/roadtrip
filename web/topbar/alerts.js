@@ -258,10 +258,33 @@ function applyAlertDeepLink() {
   // The highlight is a transient cue — drop it (and re-render) after a while.
   clearTimeout(focusTimer);
   focusTimer = setTimeout(() => {
-    focusWatchId = null;
-    focusAction = null;
-    render();
+    clearFocusHighlight();
   }, FOCUS_HIGHLIGHT_MS);
+}
+
+function clearFocusHighlight() {
+  focusWatchId = null;
+  focusAction = null;
+  if (alertEditorHasFocus()) {
+    clearFocusHighlightInPlace();
+    return;
+  }
+  render();
+}
+
+function alertEditorHasFocus() {
+  return alertEditorContainsFocus(rootEl, document.activeElement);
+}
+
+export function alertEditorContainsFocus(root, active) {
+  return active instanceof Element &&
+    !!root?.contains(active) &&
+    !!active.closest('.tb-alerts-editor-host');
+}
+
+function clearFocusHighlightInPlace() {
+  rootEl?.querySelectorAll('.tb-alerts-row.is-focus').forEach((row) => row.classList.remove('is-focus'));
+  rootEl?.querySelectorAll('.tb-alerts-act.is-armed').forEach((button) => button.classList.remove('is-armed'));
 }
 
 function clearAlertDeepLinkParams() {

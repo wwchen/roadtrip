@@ -39,6 +39,10 @@ const STALE_THRESHOLD_MIN = 10;
 const CALENDAR_MAX_DAYS_OUT = 365;
 const DEFAULT_STOP_WHEN_FOUND = true;
 const DEFAULT_WATCH_CADENCE_SEC = 60;
+const WATCH_POPOVER_WIDTH_PX = 240;
+const WATCH_POPOVER_MARGIN_PX = 8;
+const WATCH_POPOVER_ANCHOR_GAP_PX = 6;
+const WATCH_POPOVER_Z_INDEX = 1200;
 const TRIGGER_KIND_SLACK_NOTIFY = 'slack_notify';
 const TRIGGER_KIND_EMAIL_NOTIFY = 'email_notify';
 const TRIGGER_KIND_ATC = 'atc';
@@ -609,6 +613,8 @@ function openWatchPopover(ctx, anchorEl, date) {
   reposition();
   window.addEventListener('scroll', reposition, true);
   window.addEventListener('resize', reposition);
+  window.visualViewport?.addEventListener('resize', reposition);
+  window.visualViewport?.addEventListener('scroll', reposition);
 
   const endDate = stayEndDate(ctx, date);
   const key = watchWindowKey(date, endDate);
@@ -647,12 +653,19 @@ function openWatchPopover(ctx, anchorEl, date) {
     },
     onClose: () => closeWatchPopover(ctx),
   });
+  if (typeof window.requestAnimationFrame === 'function') {
+    window.requestAnimationFrame(reposition);
+  } else {
+    window.setTimeout(reposition, 0);
+  }
 
   ctx.watchPopover = {
     reposition,
     dispose() {
       window.removeEventListener('scroll', reposition, true);
       window.removeEventListener('resize', reposition);
+      window.visualViewport?.removeEventListener('resize', reposition);
+      window.visualViewport?.removeEventListener('scroll', reposition);
       controller.dispose();
       host.remove();
     },
@@ -669,12 +682,58 @@ function repositionWatchPopover(ctx) {
 }
 
 function positionWatchPopover(host, anchorEl) {
-  const rect = anchorEl.getBoundingClientRect();
-  const width = 240;
+  const anchor = rectInLayoutViewport(anchorEl.getBoundingClientRect());
+  const viewport = visibleViewportBounds();
+  const popoverHeight = host.getBoundingClientRect().height;
+  const minLeft = viewport.left + WATCH_POPOVER_MARGIN_PX;
+  const maxLeft = viewport.right - WATCH_POPOVER_WIDTH_PX - WATCH_POPOVER_MARGIN_PX;
+  const minTop = viewport.top + WATCH_POPOVER_MARGIN_PX;
+  const maxTop = viewport.bottom - popoverHeight - WATCH_POPOVER_MARGIN_PX;
+  const preferredBelowTop = anchor.bottom + WATCH_POPOVER_ANCHOR_GAP_PX;
+  const preferredAboveTop = anchor.top - popoverHeight - WATCH_POPOVER_ANCHOR_GAP_PX;
+  const top =
+    popoverHeight > 0 && preferredBelowTop > maxTop && preferredAboveTop >= minTop
+      ? preferredAboveTop
+      : clampNumber(preferredBelowTop, minTop, maxTop);
   host.style.position = 'fixed';
-  host.style.zIndex = '1200';
-  host.style.top = `${Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 12))}px`;
-  host.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))}px`;
+  host.style.zIndex = String(WATCH_POPOVER_Z_INDEX);
+  host.style.top = `${top}px`;
+  host.style.left = `${clampNumber(anchor.left, minLeft, maxLeft)}px`;
+}
+
+function visibleViewportBounds() {
+  const visual = window.visualViewport;
+  if (visual) {
+    return {
+      left: visual.offsetLeft,
+      top: visual.offsetTop,
+      right: visual.offsetLeft + visual.width,
+      bottom: visual.offsetTop + visual.height,
+    };
+  }
+  return {
+    left: 0,
+    top: 0,
+    right: window.innerWidth,
+    bottom: window.innerHeight,
+  };
+}
+
+function rectInLayoutViewport(rect) {
+  const visual = window.visualViewport;
+  const left = rect.left + (visual?.offsetLeft || 0);
+  const top = rect.top + (visual?.offsetTop || 0);
+  return {
+    left,
+    top,
+    right: rect.right + (visual?.offsetLeft || 0),
+    bottom: rect.bottom + (visual?.offsetTop || 0),
+  };
+}
+
+function clampNumber(value, min, max) {
+  const upper = Math.max(min, max);
+  return Math.max(min, Math.min(value, upper));
 }
 
 function jumpMatrixToToday(ctx) {
