@@ -7,9 +7,9 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class AvailabilityChangeSchema(
     @SerialName("campsite_id") val campsiteId: Long? = null,
+    @SerialName("campsite_name") val campsiteName: String? = null,
     @SerialName("target_date") val targetDate: String,
-    @SerialName("observed_from") val observedFrom: String? = null,
     @SerialName("observed_at") val observedAt: String,
-    val status: AvailabilityStatus,
-    val available: Boolean,
+    @SerialName("from_status") val fromStatus: AvailabilityStatus? = null,
+    @SerialName("to_status") val toStatus: AvailabilityStatus,
 )

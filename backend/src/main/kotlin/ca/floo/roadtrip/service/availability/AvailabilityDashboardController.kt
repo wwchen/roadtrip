@@ -11,6 +11,7 @@ import ca.floo.roadtrip.model.api.AvailabilitySnapshotsSummaryResponse
 import ca.floo.roadtrip.model.api.CheckNowCooldownDto
 import ca.floo.roadtrip.model.api.CheckNowResponseDto
 import ca.floo.roadtrip.model.api.ListAvailabilityChangesResponse
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
@@ -127,13 +128,16 @@ internal class AvailabilityDashboardController(
                 "exactly one of campsite_id or poi_id must be set",
             )
         }
+        val nameMap: Map<Long, String>
         val rows =
             if (campsiteId != null) {
-                campsites.findById(campsiteId)
-                    ?: return AvailabilityDashboardResult.NotFound(
-                        "campsite_not_found",
-                        "no campsite with id $campsiteId",
-                    )
+                val cs =
+                    campsites.findById(campsiteId)
+                        ?: return AvailabilityDashboardResult.NotFound(
+                            "campsite_not_found",
+                            "no campsite with id $campsiteId",
+                        )
+                nameMap = mapOf(cs.id to campsiteDisplayName(cs))
                 availability.listForCampsite(campsiteId, targetDate = targetDate, limit = limit)
             } else {
                 val poiCampsites = campsites.findByPoi(poiId!!)
@@ -143,6 +147,7 @@ internal class AvailabilityDashboardController(
                         "no campsites for poi $poiId",
                     )
                 }
+                nameMap = poiCampsites.associate { it.id to campsiteDisplayName(it) }
                 availability.listForCampsites(
                     campsiteIds = poiCampsites.map { it.id },
                     targetDate = targetDate,
@@ -150,7 +155,9 @@ internal class AvailabilityDashboardController(
                 )
             }
         return AvailabilityDashboardResult.Ok(
-            ListAvailabilityChangesResponse(changes = rows.map { it.toSchema() }),
+            ListAvailabilityChangesResponse(
+                changes = rows.map { it.toSchema(nameMap[it.campsiteId]) },
+            ),
         )
     }
 
@@ -215,15 +222,17 @@ private fun AvailabilityRunRepo.Run.toSchema(): AvailabilityRunSchema =
         completedAt = completedAt?.toString(),
     )
 
-private fun AvailabilityRepo.StatusRun.toSchema(): AvailabilityChangeSchema =
+private fun AvailabilityRepo.StatusRun.toSchema(name: String? = null): AvailabilityChangeSchema =
     AvailabilityChangeSchema(
         campsiteId = campsiteId,
+        campsiteName = name,
         targetDate = targetDate.toString(),
-        observedFrom = observedFrom?.toString(),
-        observedAt = lastObservedAt.toString(),
-        status = status,
-        available = available,
+        observedAt = observedAt.toString(),
+        fromStatus = fromStatus,
+        toStatus = toStatus,
     )
+
+private fun campsiteDisplayName(cs: Campsite): String = if (cs.loopName != null) "${cs.loopName} / ${cs.name}" else cs.name
 
 private fun AvailabilityRepo.TargetDateStats.toSchema(): AvailabilitySnapshotStatsSchema =
     AvailabilitySnapshotStatsSchema(

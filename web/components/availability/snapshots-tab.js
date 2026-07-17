@@ -91,7 +91,7 @@ export async function mount(rootEl, { urlParams }) {
       <table class="data-table">
         <thead><tr>
           <th>campsite</th><th>target date</th>
-          <th>since</th><th>observed</th><th>status</th><th>available</th>
+          <th>observed</th><th>from</th><th>to</th>
         </tr></thead>
         <tbody>
           ${changes.map(renderRow).join('')}
@@ -101,14 +101,15 @@ export async function mount(rootEl, { urlParams }) {
   }
 
   function renderRow(s) {
+    const from = s.from_status ? availabilityStatusLabel(s.from_status) : '—';
+    const to = availabilityStatusLabel(s.to_status);
     return `
       <tr>
-        <td>${s.campsite_id != null ? `#${escapeHtml(s.campsite_id)}` : '—'}</td>
+        <td>${s.campsite_name ? escapeHtml(s.campsite_name) : (s.campsite_id != null ? `#${s.campsite_id}` : '—')}</td>
         <td>${escapeHtml(s.target_date)}</td>
-        <td>${s.observed_from ? escapeHtml(formatTimestamp(s.observed_from)) : '—'}</td>
         <td>${escapeHtml(formatTimestamp(s.observed_at))}</td>
-        <td title="${escapeHtml(s.status)}">${escapeHtml(availabilityStatusLabel(s.status))}</td>
-        <td>${s.available ? '✓' : '✗'}</td>
+        <td>${escapeHtml(from)}</td>
+        <td>${escapeHtml(to)}</td>
       </tr>
     `;
   }

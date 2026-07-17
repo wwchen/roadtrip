@@ -219,31 +219,34 @@ class AvailabilityRepo(
         val campsiteId: Long,
         val runId: Long?,
         val targetDate: LocalDate,
-        val status: AvailabilityStatus,
+        val fromStatus: AvailabilityStatus?,
+        val toStatus: AvailabilityStatus,
         val available: Boolean,
         val observedFrom: OffsetDateTime?,
-        val lastObservedAt: OffsetDateTime,
+        val observedAt: OffsetDateTime,
     )
 
     private val statusRunSelect =
         """
         SELECT campsite_id, run_id, target_date, status, last_observed_at,
-               lag(last_observed_at) OVER (
-                 PARTITION BY campsite_id, target_date ORDER BY last_observed_at, id
-               ) AS observed_from
+               lag(last_observed_at) OVER w AS observed_from,
+               lag(status) OVER w AS from_status
         FROM availability
+        WINDOW w AS (PARTITION BY campsite_id, target_date ORDER BY last_observed_at, id)
         """.trimIndent()
 
     private fun mapStatusRun(r: org.jooq.Record): StatusRun {
-        val status = AvailabilityStatus.parse(r.get("status", String::class.java))
+        val toStatus = AvailabilityStatus.parse(r.get("status", String::class.java))
+        val fromStatusRaw = r.get("from_status", String::class.java)
         return StatusRun(
             campsiteId = r.get("campsite_id", Long::class.java),
             runId = r.get("run_id", Long::class.java),
             targetDate = r.get("target_date", LocalDate::class.java),
-            status = status,
-            available = status.isOnlineBookable,
+            fromStatus = fromStatusRaw?.let { AvailabilityStatus.parse(it) },
+            toStatus = toStatus,
+            available = toStatus.isOnlineBookable,
             observedFrom = r.get("observed_from", OffsetDateTime::class.java),
-            lastObservedAt = r.get("last_observed_at", OffsetDateTime::class.java),
+            observedAt = r.get("last_observed_at", OffsetDateTime::class.java),
         )
     }
 
@@ -334,17 +337,17 @@ class AvailabilityRepo(
             ctx
                 .resultQuery(
                     """
-                    SELECT campsite_id, run_id, target_date, status, last_observed_at, observed_from
+                    SELECT campsite_id, run_id, target_date, status, last_observed_at, observed_from, from_status
                     FROM (
                         SELECT campsite_id, run_id, target_date, status, last_observed_at,
-                               lag(last_observed_at) OVER (
-                                 PARTITION BY campsite_id, target_date ORDER BY last_observed_at, id
-                               ) AS observed_from,
+                               lag(last_observed_at) OVER w AS observed_from,
+                               lag(status) OVER w AS from_status,
                                row_number() OVER (
                                  PARTITION BY campsite_id, target_date ORDER BY last_observed_at DESC, id DESC
                                ) AS rn
                         FROM availability
                         WHERE campsite_id = ? AND target_date = ANY(?::date[])
+                        WINDOW w AS (PARTITION BY campsite_id, target_date ORDER BY last_observed_at, id)
                     ) t
                     WHERE last_observed_at >= ?::timestamptz OR rn = 1
                     ORDER BY target_date, last_observed_at
@@ -368,9 +371,9 @@ class AvailabilityRepo(
         val openRuns = runs.filter { it.available }
         val openWindows =
             openRuns.map { r ->
-                val from = r.observedFrom ?: r.lastObservedAt
+                val from = r.observedFrom ?: r.observedAt
                 java.time.Duration
-                    .between(from, r.lastObservedAt)
+                    .between(from, r.observedAt)
                     .seconds
                     .toInt()
                     .coerceAtLeast(0)
@@ -378,11 +381,11 @@ class AvailabilityRepo(
         return TargetDateStats(
             targetDate = date,
             totalRuns = runs.size,
-            lastOpenAt = openRuns.lastOrNull()?.lastObservedAt,
+            lastOpenAt = openRuns.lastOrNull()?.observedAt,
             isCurrentlyOpen = runs.last().available,
             currentOrLastOpenWindowSec = openWindows.lastOrNull(),
             medianOpenWindowSec = medianOrNull(openWindows),
-            opensLast24h = openRuns.count { (it.observedFrom ?: it.lastObservedAt) >= opensSince },
+            opensLast24h = openRuns.count { (it.observedFrom ?: it.observedAt) >= opensSince },
         )
     }
 
