@@ -150,6 +150,25 @@ class NotificationServicesTest {
         }
 
     @Test
+    fun `sendWatchStatus sends one email per target recipient`() =
+        runBlocking {
+            val client = RecordingEmailClient()
+            val ok =
+                emailService(client).sendWatchStatus(
+                    watchStatus(),
+                    NotificationTarget.Email(listOf("one@example.test", "two@example.test")),
+                )
+
+            assertTrue(ok)
+            assertEquals(listOf("one@example.test", "two@example.test"), client.messages.map { it.to })
+            val message = client.messages.first()
+            assertEquals("Roadtrip Alerts <alerts@example.test>", message.from)
+            assertEquals("Roadtrip watch #1: Watching for openings", message.subject)
+            assertTrue(message.text.contains("Nothing open right now"), message.text)
+            assertTrue(message.html.contains("Watch dashboard"), message.html)
+        }
+
+    @Test
     fun `sendWatchOpenings forwards openings to the requested channel`() =
         runBlocking {
             val client = RecordingSlackClient()
@@ -325,6 +344,12 @@ class NotificationServicesTest {
             val service = NotificationFanout(listOf(slack, email))
             assertFalse(slack.sendWatchStatus(watchStatus(), NotificationTarget.Slack()))
             assertFalse(slack.sendWatchStatus(watchStatus(), NotificationTarget.Slack("#camping")))
+            assertFalse(
+                email.sendWatchStatus(
+                    watchStatus(),
+                    NotificationTarget.Email(listOf("one@example.test")),
+                ),
+            )
             assertFalse(slack.sendTestMessage("#camping"))
             assertFalse(
                 service.sendWatchOpenings(

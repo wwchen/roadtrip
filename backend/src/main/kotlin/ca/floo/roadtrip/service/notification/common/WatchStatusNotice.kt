@@ -4,7 +4,8 @@ import java.time.LocalDate
 
 /**
  * A watch's current lifecycle/status, handed to
- * [NotificationSender.sendWatchStatus] to render as a Slack status card.
+ * [NotificationSender.sendWatchStatus] to render as a transport-specific
+ * status message.
  * Unlike [WatchOpening] (a real opening), this carries no availability — it
  * tells the user the watch is live, paused, or done. Every field is plain
  * domain data, including the dashboard deep-link URLs and any per-POI links:

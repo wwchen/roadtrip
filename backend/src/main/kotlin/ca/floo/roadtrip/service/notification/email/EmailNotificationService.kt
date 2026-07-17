@@ -7,6 +7,7 @@ import ca.floo.roadtrip.config.EmailConfig
 import ca.floo.roadtrip.service.notification.common.NotificationService
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.notification.common.WatchOpening
+import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
@@ -17,6 +18,15 @@ class EmailNotificationService(
     private val log = LoggerFactory.getLogger(javaClass)
 
     override fun canHandle(target: NotificationTarget): Boolean = target is NotificationTarget.Email
+
+    override suspend fun sendWatchStatus(
+        notice: WatchStatusNotice,
+        target: NotificationTarget,
+    ): Boolean {
+        val emailTarget = target as? NotificationTarget.Email ?: return false
+        val content = EmailContentWatchStatusRenderer.render(notice)
+        return sendContent(content, emailTarget.recipients, failureContext = "watch #${notice.watchId} status")
+    }
 
     override suspend fun sendWatchOpenings(
         watchId: Long,
