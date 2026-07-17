@@ -7,7 +7,6 @@ import ca.floo.roadtrip.models.booking.BookingAction
 import ca.floo.roadtrip.models.booking.BookingProviderId
 import ca.floo.roadtrip.models.booking.BookingTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.availability.provider.RecGovBookingUrl
 import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.RecGovAtcExecutor
 import ca.floo.roadtrip.service.booking.RecGovAtcOutcome
@@ -15,7 +14,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-private const val RECGOV_VENDOR = "recgov"
 private const val ERROR_COMPANION_EXCEPTION = "companion_exception"
 
 internal class RecGovBookingProvider(
@@ -76,12 +74,6 @@ internal class RecGovBookingProvider(
         buildJsonObject {
             put("start_date", arrivalDate.toString())
             put("end_date", checkoutDate.toString())
-            put("vendor", RECGOV_VENDOR)
-            put("booking_url", recgovCampsiteBookingUrl())
-            put("campground_id", (target.parentRef as ProviderRef.RecGov).recgovId)
             put("campsite_id", target.campsiteRef.vendorId)
         }
-
-    private fun AddToCartRequest.recgovCampsiteBookingUrl(): String =
-        RecGovBookingUrl.campsite(target.campsiteRef.vendorId, arrivalDate, checkoutDate)
 }

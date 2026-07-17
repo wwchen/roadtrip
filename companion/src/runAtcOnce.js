@@ -61,9 +61,9 @@ export async function runAtcOnce ({
 
   const base = {
     booking_url: bookingUrlForMatch(match),
-    campsite_site: match.campsite_site,
     first_date: match.first_date,
     checkout_date: match.checkout_date,
+    screenshots: result?.screenshots || [],
   }
 
   if (result?.ok) {
@@ -135,11 +135,16 @@ function parseJson (raw, label) {
 
 function redirectConsoleLog (stderr) {
   const originalLog = console.log
+  const originalError = console.error
   console.log = (...items) => {
+    stderr.write(`${format(...items)}\n`)
+  }
+  console.error = (...items) => {
     stderr.write(`${format(...items)}\n`)
   }
   return () => {
     console.log = originalLog
+    console.error = originalError
   }
 }
 
@@ -169,7 +174,7 @@ function usage () {
     'Usage:',
     '  npm run recgov:atc -- --payload-file /path/to/atc.json',
     '  npm run recgov:atc -- --payload-json \'{"start_date":"2026-07-15",...}\'',
-    '  npm run recgov:atc -- --booking-url URL --start-date YYYY-MM-DD --end-date YYYY-MM-DD',
+    '  npm run recgov:atc -- --campsite-id RECGOV_CAMPSITE_ID --start-date YYYY-MM-DD --end-date YYYY-MM-DD',
     '',
     'Payload may be either a { "payload": ... } envelope or the raw ATC payload.',
     '',

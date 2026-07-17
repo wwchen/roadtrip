@@ -5,6 +5,11 @@ import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import ca.floo.roadtrip.clients.slack.SlackClient
 import ca.floo.roadtrip.config.SlackConfig
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -151,6 +156,81 @@ class SlackNotificationServiceImplTest {
 
             assertFalse(ok)
             assertTrue(client.posts.isEmpty())
+        }
+
+    @Test
+    fun `sendAtcResult chunks the full companion response instead of truncating`() =
+        runBlocking {
+            val client = RecordingSlackClient()
+            val longLogLine = "confirmation-disabled ".repeat(180) + "tail-marker"
+            val response =
+                buildJsonObject {
+                    put("ok", false)
+                    put("cart_added", false)
+                    put("error", "recgov_confirmation_disabled")
+                    put(
+                        "detail",
+                        "Recreation.gov showed an add-to-cart confirmation step,\u00A0but no confirmation button became enabled.",
+                    )
+                    put("booking_url", "https://www.recreation.gov/camping/campsites/10174587")
+                    putJsonObject("cart_check") {
+                        put("reason", "cart_empty")
+                        put("status", 200)
+                        put("reservation_count", 0)
+                        put("response_signal", false)
+                    }
+                    putJsonArray("screenshots") {
+                        add(
+                            buildJsonObject {
+                                put("label", "confirmation-disabled")
+                                put(
+                                    "screenshot_url",
+                                    "/screenshot/diagnostics/recgov-atc-confirmation-disabled.png",
+                                )
+                            },
+                        )
+                    }
+                    putJsonArray("logs") {
+                        add(longLogLine)
+                    }
+                }
+
+            val ok =
+                service(client).sendAtcResult(
+                    watchId = 14L,
+                    vendor = "recgov",
+                    status = "failed",
+                    request =
+                        buildJsonObject {
+                            put("start_date", "2026-07-19")
+                            put("end_date", "2026-07-20")
+                            put("campsite_id", "10174587")
+                        },
+                    response = response,
+                    channel = "#camping",
+                )
+
+            assertTrue(ok)
+            val post = client.posts.single()
+            assertEquals("#camping", post.channel)
+            val blocks =
+                post.attachments
+                    ?.single()
+                    ?.blocks
+                    .orEmpty()
+            val blockText =
+                blocks
+                    .flatMap { block ->
+                        listOfNotNull(block.text?.text) + block.fields.orEmpty().map { it.text }
+                    }.joinToString("\n")
+            assertTrue(blockText.contains("recgov_confirmation_disabled"), blockText)
+            assertTrue(blockText.contains("reason=`cart_empty`"), blockText)
+            assertTrue(blockText.contains("recgov-atc-confirmation-disabled.png"), blockText)
+            assertTrue(blockText.contains("tail-marker"), blockText)
+            assertTrue(blockText.contains("*Companion response (2/"), blockText)
+            assertFalse(blockText.contains("\n..."), blockText)
+            assertFalse(blockText.contains('\u00A0'), blockText)
+            assertFalse(blockText.contains("    \"ok\""), blockText)
         }
 
     @Test

@@ -203,6 +203,16 @@ export const COMPANION_API_SCHEMAS = {
       screenshot_error: { type: 'string' },
     },
   },
+  PlaywrightScreenshot: {
+    type: 'object',
+    properties: {
+      label: { type: 'string', example: 'opened-booking-url' },
+      captured_at: { type: 'string', format: 'date-time' },
+      page_url: { type: 'string' },
+      screenshot_url: { type: 'string' },
+      screenshot_error: { type: 'string' },
+    },
+  },
   LoginRequest: {
     type: 'object',
     required: ['username', 'password'],
@@ -232,32 +242,33 @@ export const COMPANION_API_SCHEMAS = {
   },
   AtcRequest: {
     type: 'object',
-    required: ['start_date', 'end_date', 'vendor', 'booking_url', 'campground_id', 'campsite_id'],
+    required: ['start_date', 'end_date', 'campsite_id'],
     properties: {
-      vendor: { type: 'string', enum: ['recgov'], example: 'recgov' },
       start_date: { type: 'string', format: 'date' },
       end_date: { type: 'string', format: 'date' },
-      booking_url: {
-        type: 'string',
-        example: 'https://www.recreation.gov/camping/campsites/102524?startDate=2026-07-19&endDate=2026-07-20',
-      },
-      campground_id: idSchema('232447'),
       campsite_id: idSchema('102524'),
     },
   },
   AtcResult: {
     type: 'object',
-    required: ['ok', 'cart_added'],
+    required: ['ok', 'cart_added', 'logs', 'screenshots'],
     properties: {
       ok: { type: 'boolean' },
       cart_added: { type: 'boolean' },
       error: { type: 'string' },
       detail: { type: 'string' },
       booking_url: { type: 'string' },
-      campsite_site: { type: 'string' },
       first_date: { type: 'string', format: 'date' },
       checkout_date: { type: 'string', format: 'date' },
       cart_check: { type: 'object', additionalProperties: true },
+      logs: {
+        type: 'array',
+        items: { type: 'string' },
+      },
+      screenshots: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/PlaywrightScreenshot' },
+      },
     },
   },
   ErrorResponse: {

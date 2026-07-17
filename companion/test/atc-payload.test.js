@@ -54,15 +54,12 @@ test('cartMatchFromAtcInput accepts the flat companion ATC request body', () => 
     cartMatchFromAtcInput({
       start_date: '2026-07-15',
       end_date: '2026-07-16',
-      vendor: 'recgov',
-      booking_url: 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16',
-      campground_id: '232447',
       campsite_id: '300',
     }),
     {
-      vendor: 'recgov',
-      booking_url: 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16',
-      campground_id: '232447',
+      vendor: undefined,
+      booking_url: undefined,
+      campground_id: undefined,
       campsite_id: '300',
       provider_campground_id: undefined,
       provider_campsite_id: undefined,
@@ -77,16 +74,16 @@ test('cartMatchFromAtcInput accepts the flat companion ATC request body', () => 
 test('cartMatchFromArgs builds a direct command-line match', () => {
   assert.deepEqual(
     cartMatchFromArgs({
-      'booking-url': 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16',
+      'campsite-id': '300',
       'start-date': '2026-07-15',
       'end-date': '2026-07-16',
       site: '116',
     }),
     {
       vendor: undefined,
-      booking_url: 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16',
+      booking_url: undefined,
       campground_id: undefined,
-      campsite_id: undefined,
+      campsite_id: '300',
       provider_campground_id: undefined,
       provider_campsite_id: undefined,
       first_date: '2026-07-15',
@@ -98,18 +95,18 @@ test('cartMatchFromArgs builds a direct command-line match', () => {
 })
 
 test('validateCartMatch rejects unusable one-shot inputs', () => {
-  assert.equal(validateCartMatch({ checkout_date: '2026-07-16', booking_url: 'url' }), 'missing first_date/start-date')
-  assert.equal(validateCartMatch({ first_date: '2026-07-15', booking_url: 'url' }), 'missing checkout_date/end-date')
+  assert.equal(validateCartMatch({ checkout_date: '2026-07-16', campsite_id: '300' }), 'missing first_date/start-date')
+  assert.equal(validateCartMatch({ first_date: '2026-07-15', campsite_id: '300' }), 'missing checkout_date/end-date')
   assert.equal(
     validateCartMatch({ first_date: '2026-07-15', checkout_date: '2026-07-16' }),
-    'missing booking_url or campsite/campground identifier',
+    'missing campsite_id',
   )
   assert.equal(
     validateCartMatch(cartMatchFromArgs({ 'booking-url': true, 'start-date': '2026-07-15', 'end-date': '2026-07-16' })),
-    'missing booking_url or campsite/campground identifier',
+    'missing campsite_id',
   )
   assert.equal(
-    validateCartMatch({ vendor: 'aspira', first_date: '2026-07-15', checkout_date: '2026-07-16', booking_url: 'url' }),
+    validateCartMatch({ vendor: 'aspira', first_date: '2026-07-15', checkout_date: '2026-07-16', campsite_id: '300' }),
     'unsupported vendor: aspira',
   )
 })

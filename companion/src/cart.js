@@ -1,6 +1,8 @@
 // Add-to-cart orchestration. Owns Playwright-driven rec.gov interaction.
 // Returns the browser result to the CLI/HTTP caller; the companion does not persist.
 
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import {
   IS_HEADLESS,
   getContext,
@@ -14,12 +16,15 @@ import {
   toCheckoutDate,
 } from './browser.js'
 import {
+  RECGOV_DIAGNOSTIC_DIR,
   RECGOV_HOME_URL,
   RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS,
   RECGOV_LOGIN_STATE_SETTLE_MS,
   clearBrowserRecaccount,
   resolveRecaccount,
 } from './recgovSession.js'
+import { captureRecgovPageImage } from './recgovScreenshotCapture.js'
+import { SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX } from './recgovScreenshotRoutes.js'
 
 let lastLoginState = null
 export function getLastLoginState () { return lastLoginState }
@@ -178,6 +183,8 @@ const CONFIRMATION_CLICK_TIMEOUT_MS = 3_000
 const POST_CONFIRMATION_CLICK_SETTLE_MS = 2_000
 const CONFIRMATION_DIAGNOSTIC_LIMIT = 8
 const CONFIRMATION_TEXT_LOG_LIMIT = 80
+const ATC_SCREENSHOT_PREFIX = 'recgov-atc'
+const ATC_SCREENSHOT_LABEL_MAX_CHARS = 60
 const CART_URL_CAMPSITE_ID_RE = /\/camping\/campsites\/([^/?#]+)/
 const CART_VERIFY_MATCHED = 'matched'
 const CART_VERIFY_FETCH_FAILED = 'cart_fetch_failed'
@@ -447,33 +454,35 @@ function cartVerificationSummary (check) {
   return fields.join(' ')
 }
 
-export async function clickReserveButton (page) {
+export async function clickReserveButton (page, { screenshots = null } = {}) {
   for (const sel of RESERVE_SELECTORS) {
     if (!await page.locator(sel).first().isVisible().catch(() => false)) continue
 
     console.log(`Cart: clicking "${sel}"`)
     await page.locator(sel).first().click()
     await page.waitForTimeout(2000)
+    await screenshots?.capture('reserve-click')
 
     const loginModal = await page.locator(
       'button:has-text("Sign In"), button:has-text("Log In"), [data-testid="login-modal"]'
     ).first().isVisible().catch(() => false)
     if (loginModal) {
       console.log('Cart: login modal appeared after ATC click — SPA still considers user logged out')
+      await screenshots?.capture('login-modal-after-reserve-click')
       return {
         clicked: false,
         failure: spaLoggedOutFailure(),
       }
     }
 
-    const confirmation = await clickConfirmationButton(page)
+    const confirmation = await clickConfirmationButton(page, { screenshots })
 
     return { clicked: true, confirmation }
   }
   return { clicked: false }
 }
 
-async function clickConfirmationButton (page) {
+async function clickConfirmationButton (page, { screenshots = null } = {}) {
   await page.waitForSelector(CONFIRMATION_COMBINED, { timeout: CONFIRMATION_WAIT_MS }).catch(() => {})
   const candidates = await confirmationButtonCandidates(page)
   const visibleCandidates = candidates.filter(candidate => candidate.visible)
@@ -483,6 +492,7 @@ async function clickConfirmationButton (page) {
   const enabled = await firstEnabledConfirmationButton(page)
   if (!enabled) {
     console.log(`Cart: confirmation buttons visible but none enabled — ${formatConfirmationCandidates(visibleCandidates)}`)
+    await screenshots?.capture('confirmation-disabled')
     return {
       seen: true,
       clicked: false,
@@ -494,6 +504,7 @@ async function clickConfirmationButton (page) {
   console.log(`Cart: clicking confirmation button text="${enabled.text || '?'}" index=${enabled.index}`)
   await enabled.button.click({ timeout: CONFIRMATION_CLICK_TIMEOUT_MS })
   await page.waitForTimeout(POST_CONFIRMATION_CLICK_SETTLE_MS)
+  await screenshots?.capture('confirmation-click')
   return {
     seen: true,
     clicked: true,
@@ -603,6 +614,56 @@ async function waitForCaptchaIfPresent (page, solveTimeout = 90000) {
   return true
 }
 
+function createAtcScreenshotCollector (page) {
+  const screenshots = []
+  return {
+    screenshots,
+    async capture (label) {
+      const capturedAt = new Date().toISOString()
+      const filename = `${ATC_SCREENSHOT_PREFIX}-${capturedAt.replace(/[:.]/g, '-')}-${sanitizeScreenshotLabel(label)}.png`
+      const screenshot = {
+        label,
+        captured_at: capturedAt,
+        page_url: safePageUrl(page),
+        screenshot_url: `${SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX}/${filename}`,
+      }
+      try {
+        await fs.mkdir(RECGOV_DIAGNOSTIC_DIR, { recursive: true })
+        await captureRecgovPageImage(page, { path: path.join(RECGOV_DIAGNOSTIC_DIR, filename) })
+        console.log(`Cart: captured screenshot label=${label} url=${screenshot.screenshot_url}`)
+      } catch (error) {
+        screenshot.screenshot_error = error.message
+        console.log(`Cart: screenshot capture failed label=${label} error="${truncateText(error.message, CONFIRMATION_TEXT_LOG_LIMIT)}"`)
+      }
+      screenshots.push(screenshot)
+      return screenshot
+    },
+  }
+}
+
+function withScreenshots (result, screenshots) {
+  return {
+    ...result,
+    screenshots: screenshots?.screenshots || [],
+  }
+}
+
+function sanitizeScreenshotLabel (value) {
+  return String(value || 'step')
+    .replace(/[^a-z0-9_-]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, ATC_SCREENSHOT_LABEL_MAX_CHARS)
+    .toLowerCase() || 'step'
+}
+
+function safePageUrl (page) {
+  try {
+    return page.url()
+  } catch {
+    return null
+  }
+}
+
 // Adds a match to the cart on rec.gov. Returns true if the cart now has the reservation.
 // `match` is the backend Match shape (snake_case fields from /api/campsite/matches).
 export function bookingUrlForMatch (match) {
@@ -626,7 +687,9 @@ export async function addToCart (match) {
   console.log(`Cart: opening ${url}`)
 
   const { page, recaccount, authFailure } = await setupAuthPage()
-  if (!recaccount) return { ok: false, page, ...authFailure }
+  const screenshots = createAtcScreenshotCollector(page)
+  await screenshots.capture(recaccount ? 'auth-session-ready' : 'auth-session-missing')
+  if (!recaccount) return withScreenshots({ ok: false, page, ...authFailure }, screenshots)
 
   const captured = []
   let cartVerificationRequests = 0
@@ -650,6 +713,7 @@ export async function addToCart (match) {
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
     await waitForCaptchaIfPresent(page)
+    await screenshots.capture('opened-booking-url')
 
     const signInSel = 'button:has-text("Sign Up / Log In"), a:has-text("Sign Up / Log In")'
     await page.waitForSelector(
@@ -659,41 +723,46 @@ export async function addToCart (match) {
 
     if (await page.locator(signInSel).first().isVisible().catch(() => false)) {
       console.log('Cart: SPA shows logged-out state — cannot add to cart')
-      return {
+      await screenshots.capture('spa-logged-out')
+      return withScreenshots({
         ok: false,
         page,
         ...spaLoggedOutFailure(),
-      }
+      }, screenshots)
     }
     console.log('Cart: SPA header does not show logged-out CTA')
+    await screenshots.capture('spa-logged-in')
 
-    const reserveClick = await clickReserveButton(page)
-    if (reserveClick.failure) return { ok: false, page, ...reserveClick.failure }
+    const reserveClick = await clickReserveButton(page, { screenshots })
+    if (reserveClick.failure) return withScreenshots({ ok: false, page, ...reserveClick.failure }, screenshots)
     if (reserveClick.clicked) {
       await waitForCaptchaIfPresent(page)
       console.log('Cart: verifying requested campsite/date in cart after reserve click')
       const verification = await waitForRequestedCartItem(page, captured, match, getCartForVerification)
+      await screenshots.capture('cart-verification-after-reserve-click')
       if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
       if (!verification.ok && reserveClick.confirmation?.reason === 'confirmation_disabled') {
-        return { ok: false, page, ...confirmationDisabledFailure(verification.check, reserveClick.confirmation) }
+        return withScreenshots({ ok: false, page, ...confirmationDisabledFailure(verification.check, reserveClick.confirmation) }, screenshots)
       }
-      return { ok: verification.ok, page, cart_check: verification.check }
+      return withScreenshots({ ok: verification.ok, page, cart_check: verification.check }, screenshots)
     }
 
     if (await page.locator(ENTER_DATES_SEL).first().isVisible().catch(() => false)) {
       await enterDates(page, firstDate, checkout)
+      await screenshots.capture('dates-entered')
       await page.waitForSelector(RESERVE_COMBINED, { timeout: 12000 }).catch(() => {})
-      const datedReserveClick = await clickReserveButton(page)
-      if (datedReserveClick.failure) return { ok: false, page, ...datedReserveClick.failure }
+      const datedReserveClick = await clickReserveButton(page, { screenshots })
+      if (datedReserveClick.failure) return withScreenshots({ ok: false, page, ...datedReserveClick.failure }, screenshots)
       if (datedReserveClick.clicked) {
         await waitForCaptchaIfPresent(page)
         console.log('Cart: verifying requested campsite/date in cart after dated reserve click')
         const verification = await waitForRequestedCartItem(page, captured, match, getCartForVerification)
+        await screenshots.capture('cart-verification-after-dated-reserve-click')
         if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
         if (!verification.ok && datedReserveClick.confirmation?.reason === 'confirmation_disabled') {
-          return { ok: false, page, ...confirmationDisabledFailure(verification.check, datedReserveClick.confirmation) }
+          return withScreenshots({ ok: false, page, ...confirmationDisabledFailure(verification.check, datedReserveClick.confirmation) }, screenshots)
         }
-        return { ok: verification.ok, page, cart_check: verification.check }
+        return withScreenshots({ ok: verification.ok, page, cart_check: verification.check }, screenshots)
       }
     }
 
@@ -705,10 +774,12 @@ export async function addToCart (match) {
     } else {
       console.log(`Cart: no Reserve button for Site ${site} — buttons: [${btnStr}]`)
     }
-    return { ok: false, page }
+    await screenshots.capture('no-reserve-button')
+    return withScreenshots({ ok: false, page }, screenshots)
   } catch (err) {
     console.error('Cart automation error:', err.message)
-    return { ok: false, page }
+    await screenshots.capture('automation-error')
+    return withScreenshots({ ok: false, page }, screenshots)
   }
 }
 

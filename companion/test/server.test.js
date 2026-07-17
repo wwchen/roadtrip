@@ -114,10 +114,10 @@ test('GET / returns a simple operator login form', async () => {
   assert.match(response.text, /name="mfa_code"/)
   assert.match(response.text, /name="start_date"/)
   assert.match(response.text, /name="end_date"/)
-  assert.match(response.text, /name="vendor"/)
-  assert.match(response.text, /name="booking_url"/)
-  assert.match(response.text, /name="campground_id"/)
   assert.match(response.text, /name="campsite_id"/)
+  assert.doesNotMatch(response.text, /name="vendor"/)
+  assert.doesNotMatch(response.text, /name="booking_url"/)
+  assert.doesNotMatch(response.text, /name="campground_id"/)
   assert.match(response.text, /id="loading"/)
   assert.match(response.text, /id="json-output"/)
   assert.match(response.text, /id="refresh-session"/)
@@ -167,6 +167,13 @@ test('GET /openapi.json returns companion-owned OpenAPI docs', async () => {
   assert.ok(response.json.components.schemas.AuthResponse.properties.diagnostics)
   const diagnosticSchema = response.json.components.schemas.LoginDiagnostic
   assert.equal(diagnosticSchema.properties.screenshot_path, undefined)
+  const atcSchema = response.json.components.schemas.AtcRequest
+  assert.deepEqual(atcSchema.required, ['start_date', 'end_date', 'campsite_id'])
+  assert.deepEqual(Object.keys(atcSchema.properties), ['start_date', 'end_date', 'campsite_id'])
+  const atcResultSchema = response.json.components.schemas.AtcResult
+  assert.equal(atcResultSchema.properties.campsite_site, undefined)
+  assert.ok(atcResultSchema.properties.logs)
+  assert.ok(atcResultSchema.properties.screenshots)
 })
 
 test('GET /docs returns Swagger UI for the companion OpenAPI spec', async () => {
@@ -306,16 +313,25 @@ test('POST /atc passes the flat payload to the one-shot runner', async () => {
   const payload = {
     start_date: '2026-07-19',
     end_date: '2026-07-20',
-    vendor: 'recgov',
-    booking_url: 'https://www.recreation.gov/camping/campsites/102524?startDate=2026-07-19&endDate=2026-07-20',
-    campground_id: '232447',
     campsite_id: '102524',
   }
   let argv = null
   const response = await request(createCompanionServer({
-    runAtcOnceFn: async ({ argv: receivedArgv, stdout }) => {
+    runAtcOnceFn: async ({ argv: receivedArgv, stdout, stderr }) => {
       argv = receivedArgv
-      stdout.write(JSON.stringify({ ok: true, cart_added: true }))
+      stderr.write('Cart: opening https://www.recreation.gov/camping/campsites/102524\n')
+      stderr.write('Cart: confirmation buttons visible but none enabled\n')
+      stdout.write(JSON.stringify({
+        ok: true,
+        cart_added: true,
+        booking_url: 'https://www.recreation.gov/camping/campsites/102524?startDate=2026-07-19&endDate=2026-07-20',
+        screenshots: [
+          {
+            label: 'opened-booking-url',
+            screenshot_url: '/screenshot/diagnostics/recgov-atc-opened-booking-url.png',
+          },
+        ],
+      }))
       return 0
     },
   }), {
@@ -331,6 +347,21 @@ test('POST /atc passes the flat payload to the one-shot runner', async () => {
   assert.equal(response.status, 200)
   assert.equal(response.json.ok, true)
   assert.deepEqual(argv, ['--payload-json', JSON.stringify(payload)])
+  assert.match(
+    response.json.logs[0],
+    /^recgov atc start start_date=2026-07-19 end_date=2026-07-20 campsite=102524 booking_url="https:\/\/www\.recreation\.gov\/camping\/campsites\/102524\?startDate=2026-07-19&endDate=2026-07-20"/,
+  )
+  assert.deepEqual(response.json.logs.slice(1, 3), [
+    'Cart: opening https://www.recreation.gov/camping/campsites/102524',
+    'Cart: confirmation buttons visible but none enabled',
+  ])
+  assert.match(response.json.logs[3], /^recgov atc result success code=0 duration_ms=/)
+  assert.deepEqual(response.json.screenshots, [
+    {
+      label: 'opened-booking-url',
+      screenshot_url: '/screenshot/diagnostics/recgov-atc-opened-booking-url.png',
+    },
+  ])
 })
 
 test('GET /screenshot captures a Recreation.gov path with the companion browser session', async () => {

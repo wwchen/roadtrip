@@ -43,8 +43,8 @@ export function validateCartMatch (match) {
   if (match.vendor && match.vendor !== RECGOV_VENDOR) return `unsupported vendor: ${match.vendor}`
   if (!match.first_date) return 'missing first_date/start-date'
   if (!match.checkout_date) return 'missing checkout_date/end-date'
-  if (!match.booking_url && !match.campground_id && !match.provider_campsite_id && !match.campsite_id) {
-    return 'missing booking_url or campsite/campground identifier'
+  if (!match.provider_campsite_id && !match.campsite_id) {
+    return 'missing campsite_id'
   }
   return null
 }

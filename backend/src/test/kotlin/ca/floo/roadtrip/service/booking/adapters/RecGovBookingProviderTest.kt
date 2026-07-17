@@ -25,9 +25,6 @@ private const val TEST_WATCH_ID = 42L
 private const val TEST_CAMPSITE_ID = 7L
 private const val TEST_VENDOR_ID = "300"
 private const val TEST_RECGOV_CAMPGROUND_ID = "232447"
-private const val TEST_RECGOV_CAMPSITE_URL =
-    "https://www.recreation.gov/camping/campsites/300?startDate=2026-07-04&endDate=2026-07-05"
-private const val TEST_RECGOV_VENDOR = "recgov"
 
 class RecGovBookingProviderTest {
     @Test
@@ -94,39 +91,13 @@ class RecGovBookingProviderTest {
                     ?.toBoolean()
             assertEquals(true, ok)
             val payload = executor.payload
+            assertEquals(setOf("start_date", "end_date", "campsite_id"), payload?.keys)
             assertEquals("2026-07-04", payload?.get("start_date")?.jsonPrimitive?.content)
             assertEquals("2026-07-05", payload?.get("end_date")?.jsonPrimitive?.content)
-            assertEquals(TEST_RECGOV_VENDOR, payload?.get("vendor")?.jsonPrimitive?.content)
-            assertEquals(TEST_RECGOV_CAMPGROUND_ID, payload?.get("campground_id")?.jsonPrimitive?.content)
             assertEquals(TEST_VENDOR_ID, payload?.get("campsite_id")?.jsonPrimitive?.content)
-            assertEquals(TEST_RECGOV_CAMPSITE_URL, payload?.get("booking_url")?.jsonPrimitive?.content)
             assertFalse(payload?.containsKey("watch_id") == true)
             assertFalse(payload?.containsKey("payload_version") == true)
             assertFalse(payload?.containsKey("openings") == true)
-        }
-
-    @Test
-    fun `add to cart uses recgov campsite page for companion booking url`() =
-        runBlocking {
-            val executor = RecordingAtcExecutor(completedOutcome())
-            val provider = provider(executor)
-            val request =
-                request(
-                    recgovTarget(),
-                    bookingUrl =
-                        "https://www.recreation.gov/camping/campgrounds/" +
-                            "$TEST_RECGOV_CAMPGROUND_ID?startDate=2026-07-04&endDate=2026-07-05",
-                )
-
-            provider.addToCart(request)
-
-            assertEquals(
-                TEST_RECGOV_CAMPSITE_URL,
-                executor.payload
-                    ?.get("booking_url")
-                    ?.jsonPrimitive
-                    ?.content,
-            )
         }
 
     @Test
@@ -151,13 +122,6 @@ class RecGovBookingProviderTest {
                     ?.content
                     ?.toBoolean()
             assertEquals(true, ok)
-            assertEquals(
-                TEST_RECGOV_CAMPSITE_URL,
-                executor.payload
-                    ?.get("booking_url")
-                    ?.jsonPrimitive
-                    ?.content,
-            )
         }
 
     @Test

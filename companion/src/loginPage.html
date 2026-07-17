@@ -61,25 +61,14 @@
   <section id="atc-panel" class="panel" hidden>
     <form id="atc-form" method="post" action="/atc">
       <div class="grid">
-        <label for="atc_vendor">Vendor
-          <select id="atc_vendor" name="vendor" required>
-            <option value="recgov">recgov</option>
-          </select>
-        </label>
         <label for="atc_start_date">Start date
           <input id="atc_start_date" name="start_date" type="date" required>
         </label>
         <label for="atc_end_date">End date
           <input id="atc_end_date" name="end_date" type="date" required>
         </label>
-        <label for="atc_campground_id">Campground ID
-          <input id="atc_campground_id" name="campground_id" inputmode="numeric" required>
-        </label>
         <label for="atc_campsite_id">Campsite ID
           <input id="atc_campsite_id" name="campsite_id" inputmode="numeric" required>
-        </label>
-        <label class="wide" for="atc_booking_url">Booking URL
-          <input id="atc_booking_url" name="booking_url" type="url" required>
         </label>
       </div>
       <button type="submit">Run ATC</button>

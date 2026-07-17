@@ -1,24 +1,26 @@
 package ca.floo.roadtrip.service.notification
 
 import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
+import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import ca.floo.roadtrip.clients.slack.SlackBlocks
 import ca.floo.roadtrip.clients.slack.SlackClient
 import ca.floo.roadtrip.config.SlackConfig
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 import java.io.Closeable
 import java.time.LocalDate
 
 private const val ATC_STATUS_COMPLETED = "completed"
-private const val MAX_JSON_REPORT_CHARS = 2500
-private const val TRUNCATED_REPORT_SUFFIX = "\n..."
+private const val MAX_JSON_REPORT_CHUNK_CHARS = 2600
+private const val JSON_REPORT_CHUNK_MIN_CHARS = 1
 
-private val slackJson =
-    Json {
-        prettyPrint = true
-    }
+private val slackJson = Json
+private val specialJsonSpaceChars = Regex("[\\u00A0\\u1680\\u2000-\\u200A\\u202F\\u205F\\u3000]")
 
 /**
  * Default [SlackNotificationService] backed by the Slack HTTP transport. Owns
@@ -86,10 +88,11 @@ class SlackNotificationServiceImpl(
                         "*Vendor*\n$vendor",
                     ),
                 ),
-                SlackBlocks.section("*Request body*\n```${formatJsonReport(request)}```"),
             )
+        blocks += jsonReportBlocks("Request body", request)
         if (response != null) {
-            blocks += SlackBlocks.section("*Companion response*\n```${formatJsonReport(response)}```")
+            blocks += atcDiagnosticBlocks(response)
+            blocks += jsonReportBlocks("Companion response", response)
         }
         val attachments =
             listOf(
@@ -156,10 +159,91 @@ class SlackNotificationServiceImpl(
             SlackWatchCard.COLOR_ERROR
         }
 
-    private fun formatJsonReport(body: JsonObject): String {
-        val rendered = slackJson.encodeToString(body)
-        if (rendered.length <= MAX_JSON_REPORT_CHARS) return rendered
-        return rendered.take(MAX_JSON_REPORT_CHARS - TRUNCATED_REPORT_SUFFIX.length) +
-            TRUNCATED_REPORT_SUFFIX
+    private fun jsonReportBlocks(
+        title: String,
+        body: JsonObject,
+    ): List<SlackBlockDto> {
+        val chunks = splitJsonReport(formatJsonReport(body))
+        return chunks.mapIndexed { index, chunk ->
+            val part = if (chunks.size == 1) "" else " (${index + 1}/${chunks.size})"
+            SlackBlocks.section("*$title$part*\n```$chunk```")
+        }
     }
+
+    private fun formatJsonReport(body: JsonObject): String = sanitizeSlackText(slackJson.encodeToString(body))
+
+    private fun sanitizeSlackText(value: String): String = specialJsonSpaceChars.replace(value, " ")
+
+    private fun atcDiagnosticBlocks(response: JsonObject): List<SlackBlockDto> {
+        val fields =
+            listOfNotNull(
+                response.stringValue("error")?.let { "*Error*\n`$it`" },
+                response.stringValue("detail")?.let { "*Detail*\n$it" },
+                response.stringValue("booking_url")?.let { "*Booking URL*\n$it" },
+                cartCheckSummary(response.objectValue("cart_check"))?.let { "*Cart check*\n$it" },
+                latestScreenshotSummary(response.arrayValue("screenshots"))?.let { "*Latest screenshot*\n`$it`" },
+                response.arrayValue("logs")?.size?.let { "*Log lines*\n$it" },
+            )
+        return if (fields.isEmpty()) emptyList() else listOf(SlackBlocks.fields(fields))
+    }
+
+    private fun splitJsonReport(rendered: String): List<String> {
+        if (rendered.length <= MAX_JSON_REPORT_CHUNK_CHARS) return listOf(rendered)
+        val chunks = mutableListOf<String>()
+        val current = StringBuilder()
+        rendered.lineSequence().forEach { line ->
+            appendJsonReportLine(chunks, current, line)
+        }
+        if (current.isNotEmpty()) chunks += current.toString()
+        return chunks.ifEmpty { listOf(rendered) }
+    }
+
+    private fun appendJsonReportLine(
+        chunks: MutableList<String>,
+        current: StringBuilder,
+        line: String,
+    ) {
+        val separatorLength = if (current.isEmpty()) 0 else 1
+        if (current.length + separatorLength + line.length <= MAX_JSON_REPORT_CHUNK_CHARS) {
+            if (current.isNotEmpty()) current.append('\n')
+            current.append(line)
+            return
+        }
+        if (current.isNotEmpty()) {
+            chunks += current.toString()
+            current.clear()
+        }
+        if (line.length <= MAX_JSON_REPORT_CHUNK_CHARS) {
+            current.append(line)
+            return
+        }
+        val chunkSize = MAX_JSON_REPORT_CHUNK_CHARS.coerceAtLeast(JSON_REPORT_CHUNK_MIN_CHARS)
+        line
+            .chunked(chunkSize)
+            .forEach(chunks::add)
+    }
+
+    private fun cartCheckSummary(cartCheck: JsonObject?): String? {
+        if (cartCheck == null) return null
+        val parts =
+            listOfNotNull(
+                cartCheck.stringValue("reason")?.let { "reason=`$it`" },
+                cartCheck.stringValue("status")?.let { "status=$it" },
+                cartCheck.stringValue("reservation_count")?.let { "reservations=$it" },
+                cartCheck.stringValue("response_signal")?.let { "response_signal=$it" },
+            )
+        return parts.takeIf { it.isNotEmpty() }?.joinToString(" ")
+    }
+
+    private fun latestScreenshotSummary(screenshots: JsonArray?): String? =
+        screenshots
+            ?.mapNotNull { it as? JsonObject }
+            ?.lastOrNull()
+            ?.stringValue("screenshot_url")
+
+    private fun JsonObject.stringValue(name: String): String? = get(name)?.jsonPrimitive?.contentOrNull?.let(::sanitizeSlackText)
+
+    private fun JsonObject.objectValue(name: String): JsonObject? = get(name) as? JsonObject
+
+    private fun JsonObject.arrayValue(name: String): JsonArray? = get(name) as? JsonArray
 }

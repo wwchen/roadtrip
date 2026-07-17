@@ -191,12 +191,6 @@ class HttpRecGovAtcExecutorTest {
             buildJsonObject {
                 put("start_date", "2026-07-19")
                 put("end_date", "2026-07-20")
-                put("vendor", "recgov")
-                put(
-                    "booking_url",
-                    "https://www.recreation.gov/camping/campsites/102524?startDate=2026-07-19&endDate=2026-07-20",
-                )
-                put("campground_id", "232447")
                 put("campsite_id", "102524")
             }
     }
