@@ -27,21 +27,36 @@ class EmailNotificationService(
         appRootUrl: String?,
     ): Boolean {
         val emailTarget = target as? NotificationTarget.Email ?: return false
-        if (config == null || client == null) {
-            log.warn("Email disabled (resend-api-key/from/default-to unset); watch #{} opening alert not sent", watchId)
-            return false
-        }
-        val recipients = emailTarget.recipients.ifEmpty { config.defaultTo }
-        if (recipients.isEmpty()) {
-            log.warn("Email target has no recipients; watch #{} opening alert not sent", watchId)
-            return false
-        }
+        val recipients = emailTarget.recipients.ifEmpty { config?.defaultTo.orEmpty() }
         val content = EmailContentAvailabilityRenderer.openings(watchId, startDate, endDate, openings, appRootUrl)
+        return sendContent(content, recipients, failureContext = "watch #$watchId opening alert")
+    }
+
+    suspend fun sendTestEmail(to: String): Boolean {
+        val recipient = to.trim().takeIf { it.isNotEmpty() } ?: return false
+        return sendContent(EmailContentTestRenderer.render(), listOf(recipient), failureContext = "test email")
+    }
+
+    private suspend fun sendContent(
+        content: EmailContent,
+        recipients: List<String>,
+        failureContext: String,
+    ): Boolean {
+        val emailConfig = config
+        val emailClient = client
+        if (emailConfig == null || emailClient == null) {
+            log.warn("Email disabled (resend-api-key/from/default-to unset); {} not sent", failureContext)
+            return false
+        }
+        if (recipients.isEmpty()) {
+            log.warn("Email target has no recipients; {} not sent", failureContext)
+            return false
+        }
         return recipients
             .map { recipient ->
-                client.send(
+                emailClient.send(
                     EmailDeliveryMessage(
-                        from = config.from,
+                        from = emailConfig.from,
                         to = recipient,
                         subject = content.subject,
                         text = content.text,
