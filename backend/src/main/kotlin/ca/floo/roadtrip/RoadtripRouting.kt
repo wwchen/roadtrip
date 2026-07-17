@@ -79,13 +79,17 @@ internal fun Application.installRoadtripPlugins() {
             path.startsWith(API_PATH_PREFIX) && path != API_HEALTH_PATH
         }
         format { call ->
-            val status = call.response.status()?.value ?: UNKNOWN_HTTP_STATUS
             val method = call.request.httpMethod.value
             val path = call.request.path()
+            val status = call.response.status()?.value ?: UNKNOWN_HTTP_STATUS
             val durationMs = call.processingTimeMillis()
-            val remote = call.request.local.remoteHost
-            "$API_ACCESS_LOG_PREFIX method=$method path=$path status=$status duration_ms=$durationMs remote=$remote"
+            "$API_ACCESS_LOG_PREFIX $method $path $status ${durationMs}ms"
         }
+        mdc("http_method") { call -> call.request.httpMethod.value }
+        mdc("http_path") { call -> call.request.path() }
+        mdc("http_status") { call -> (call.response.status()?.value ?: UNKNOWN_HTTP_STATUS).toString() }
+        mdc("http_duration_ms") { call -> call.processingTimeMillis().toString() }
+        mdc("http_remote") { call -> call.request.local.remoteHost }
     }
     install(IgnoreTrailingSlash)
     install(ConditionalHeaders)

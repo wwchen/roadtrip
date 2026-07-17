@@ -652,7 +652,7 @@
       "type": "table"
     },
     {
-      "collapsed": true,
+      "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -660,6 +660,279 @@
         "y": 16
       },
       "id": 38,
+      "title": "② Watches — what's being watched",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        }
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "id": 11,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "value_and_name",
+        "wideLayout": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  count(*) FILTER (WHERE status = 'active') AS active,\n  count(*) FILTER (WHERE status = 'paused') AS paused,\n  count(*) FILTER (WHERE status = 'done')   AS done\nFROM availability_watch;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Watches by status",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "watch_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Modify watch",
+                    "url": "/watches?action=modify&id=${__data.fields.watch_id}"
+                  },
+                  {
+                    "title": "Delete watch",
+                    "url": "/watches?action=delete&id=${__data.fields.watch_id}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "watch_status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "aborted": {
+                        "color": "red",
+                        "index": 4
+                      },
+                      "active": {
+                        "color": "green",
+                        "index": 2
+                      },
+                      "blocked": {
+                        "color": "red",
+                        "index": 5
+                      },
+                      "completed": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "done": {
+                        "color": "blue",
+                        "index": 9
+                      },
+                      "failed": {
+                        "color": "red",
+                        "index": 3
+                      },
+                      "noop": {
+                        "color": "text",
+                        "index": 10
+                      },
+                      "ok": {
+                        "color": "green",
+                        "index": 1
+                      },
+                      "paused": {
+                        "color": "yellow",
+                        "index": 7
+                      },
+                      "rate_limited": {
+                        "color": "yellow",
+                        "index": 8
+                      },
+                      "started": {
+                        "color": "yellow",
+                        "index": 6
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/(_at)/",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeAsIso"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "id": 12,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "\nSELECT\n  w.id AS watch_id,\n  w.status AS watch_status,\n  count(DISTINCT wt.id) AS target_count,\n  array_agg(\n    DISTINCT CASE\n      WHEN wt.poi_id IS NOT NULL THEN 'poi:' || wt.poi_id::text\n      WHEN wt.campsite_id IS NOT NULL THEN 'campsite:' || wt.campsite_id::text\n    END\n  ) FILTER (WHERE wt.id IS NOT NULL) AS scope_ids,\n  w.start_date::date::text,\n  w.end_date::date::text,\n  w.cadence_sec,\n  w.trigger_kinds,\n  w.stop_when_triggered,\n  w.created_at,\n  array_to_string(array_agg(distinct p.id), ', ') poller_ids,\n  min(p.next_run_at) FILTER (WHERE p.active) AS next_run_at,\n  max(p.last_run_at) AS last_run_at\nFROM availability_watch w\nLEFT JOIN availability_watch_poller wp ON wp.watch_id = w.id\nLEFT JOIN availability_poller p ON p.id = wp.poller_id\nLEFT JOIN availability_watch_target wt ON wt.watch_id = w.id\nGROUP BY\n  w.id,\n  w.status,\n  w.start_date,\n  w.end_date,\n  w.cadence_sec,\n  w.trigger_kinds,\n  w.stop_when_triggered,\n  w.created_at\nORDER BY\n  (w.status = 'active') DESC,\n  next_run_at ASC NULLS LAST;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Watches",
+      "type": "table"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 39,
       "panels": [
         {
           "datasource": {
@@ -686,7 +959,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 17
+            "y": 31
           },
           "id": 6,
           "options": {
@@ -832,7 +1105,7 @@
             "h": 6,
             "w": 24,
             "x": 0,
-            "y": 21
+            "y": 35
           },
           "id": 19,
           "options": {
@@ -948,7 +1221,7 @@
             "h": 4,
             "w": 24,
             "x": 0,
-            "y": 27
+            "y": 41
           },
           "id": 7,
           "options": {
@@ -1176,7 +1449,7 @@
             "h": 10,
             "w": 12,
             "x": 0,
-            "y": 31
+            "y": 45
           },
           "id": 8,
           "options": {
@@ -1500,7 +1773,7 @@
             "h": 10,
             "w": 12,
             "x": 12,
-            "y": 31
+            "y": 45
           },
           "id": 21,
           "options": {
@@ -1606,7 +1879,7 @@
             "h": 7,
             "w": 24,
             "x": 0,
-            "y": 41
+            "y": 55
           },
           "id": 9,
           "options": {
@@ -1645,7 +1918,7 @@
           "type": "timeseries"
         }
       ],
-      "title": "② Availability polling — what got fetched",
+      "title": "③  Availability polling — what got fetched",
       "type": "row"
     },
     {
@@ -1654,264 +1927,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 17
-      },
-      "id": 39,
-      "panels": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  }
-                ]
-              }
-            }
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 24,
-            "x": 0,
-            "y": 18
-          },
-          "id": 11,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "value_and_name",
-            "wideLayout": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "postgres",
-                "uid": "roadtrip-postgres"
-              },
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "SELECT\n  count(*) FILTER (WHERE status = 'active') AS active,\n  count(*) FILTER (WHERE status = 'paused') AS paused,\n  count(*) FILTER (WHERE status = 'done')   AS done\nFROM availability_watch;",
-              "refId": "A"
-            }
-          ],
-          "title": "Watches by status",
-          "type": "stat"
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "auto",
-                "cellOptions": {
-                  "type": "auto"
-                },
-                "filterable": true,
-                "footer": {
-                  "reducers": []
-                },
-                "inspect": false
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "watch_id"
-                },
-                "properties": [
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "title": "Modify watch",
-                        "url": "/watches?action=modify&id=${__data.fields.watch_id}"
-                      },
-                      {
-                        "title": "Delete watch",
-                        "url": "/watches?action=delete&id=${__data.fields.watch_id}"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "watch_status"
-                },
-                "properties": [
-                  {
-                    "id": "mappings",
-                    "value": [
-                      {
-                        "options": {
-                          "aborted": {
-                            "color": "red",
-                            "index": 4
-                          },
-                          "active": {
-                            "color": "green",
-                            "index": 2
-                          },
-                          "blocked": {
-                            "color": "red",
-                            "index": 5
-                          },
-                          "completed": {
-                            "color": "green",
-                            "index": 0
-                          },
-                          "done": {
-                            "color": "blue",
-                            "index": 9
-                          },
-                          "failed": {
-                            "color": "red",
-                            "index": 3
-                          },
-                          "noop": {
-                            "color": "text",
-                            "index": 10
-                          },
-                          "ok": {
-                            "color": "green",
-                            "index": 1
-                          },
-                          "paused": {
-                            "color": "yellow",
-                            "index": 7
-                          },
-                          "rate_limited": {
-                            "color": "yellow",
-                            "index": 8
-                          },
-                          "started": {
-                            "color": "yellow",
-                            "index": 6
-                          }
-                        },
-                        "type": "value"
-                      }
-                    ]
-                  },
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "color-text"
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byRegexp",
-                  "options": "/(date|_at)/",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "dateTimeAsIso"
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 9,
-            "w": 24,
-            "x": 0,
-            "y": 22
-          },
-          "id": 12,
-          "options": {
-            "cellHeight": "sm",
-            "showHeader": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "postgres",
-                "uid": "roadtrip-postgres"
-              },
-              "editorMode": "code",
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "\nSELECT\n  w.id AS watch_id,\n  w.status AS watch_status,\n  CASE\n    WHEN count(DISTINCT wt.id) = 0 THEN NULL\n    WHEN count(DISTINCT wt.id) FILTER (WHERE wt.poi_id IS NOT NULL) > 0\n     AND count(DISTINCT wt.id) FILTER (WHERE wt.campsite_id IS NOT NULL) > 0 THEN 'mixed'\n    WHEN count(DISTINCT wt.id) FILTER (WHERE wt.poi_id IS NOT NULL) > 0 THEN 'poi'\n    ELSE 'campsite'\n  END AS scope,\n  count(DISTINCT wt.id) AS target_count,\n  array_agg(\n    DISTINCT CASE\n      WHEN wt.poi_id IS NOT NULL THEN 'poi:' || wt.poi_id::text\n      WHEN wt.campsite_id IS NOT NULL THEN 'campsite:' || wt.campsite_id::text\n    END\n  ) FILTER (WHERE wt.id IS NOT NULL) AS scope_ids,\n  w.start_date,\n  w.end_date,\n  w.cadence_sec,\n  w.trigger_kinds,\n  w.stop_when_triggered,\n  count(DISTINCT p.id) AS pollers,\n  min(p.next_run_at) FILTER (WHERE p.active) AS next_run_at,\n  max(p.last_run_at) AS last_run_at,\n  w.created_at\nFROM availability_watch w\nLEFT JOIN availability_watch_poller wp ON wp.watch_id = w.id\nLEFT JOIN availability_poller p ON p.id = wp.poller_id\nLEFT JOIN availability_watch_target wt ON wt.watch_id = w.id\nGROUP BY\n  w.id,\n  w.status,\n  w.start_date,\n  w.end_date,\n  w.cadence_sec,\n  w.trigger_kinds,\n  w.stop_when_triggered,\n  w.created_at\nORDER BY\n  (w.status = 'active') DESC,\n  next_run_at ASC NULLS LAST;",
-              "refId": "A",
-              "sql": {
-                "columns": [
-                  {
-                    "parameters": [],
-                    "type": "function"
-                  }
-                ],
-                "groupBy": [
-                  {
-                    "property": {
-                      "type": "string"
-                    },
-                    "type": "groupBy"
-                  }
-                ],
-                "limit": 50
-              }
-            }
-          ],
-          "title": "Watches",
-          "type": "table"
-        }
-      ],
-      "title": "③ Watches — what's being watched",
-      "type": "row"
-    },
-    {
-      "collapsed": true,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 18
+        "y": 31
       },
       "id": 40,
       "panels": [
@@ -2050,7 +2066,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 19
+            "y": 32
           },
           "id": 30,
           "options": {
@@ -2266,7 +2282,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 19
+            "y": 32
           },
           "id": 27,
           "options": {
@@ -2470,7 +2486,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 23
+            "y": 36
           },
           "id": 31,
           "options": {
@@ -2681,7 +2697,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 23
+            "y": 36
           },
           "id": 29,
           "options": {
@@ -2784,7 +2800,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 27
+            "y": 40
           },
           "id": 28,
           "options": {
@@ -2836,7 +2852,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 19
+        "y": 32
       },
       "id": 41,
       "title": "⑤ Data ingest (ETL) — when & what was fetched",
@@ -2920,7 +2936,7 @@
         "h": 4,
         "w": 24,
         "x": 0,
-        "y": 20
+        "y": 33
       },
       "id": 3,
       "options": {
@@ -3136,7 +3152,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 24
+        "y": 37
       },
       "id": 4,
       "options": {
@@ -3326,7 +3342,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 33
+        "y": 46
       },
       "id": 20,
       "options": {
@@ -3373,7 +3389,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 41
+        "y": 54
       },
       "id": 42,
       "panels": [
@@ -3578,7 +3594,7 @@
             "h": 12,
             "w": 24,
             "x": 0,
-            "y": 42
+            "y": 55
           },
           "id": 14,
           "options": {
