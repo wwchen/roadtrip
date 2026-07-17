@@ -44,9 +44,10 @@ private const val CAMPSITE_DATA_SECTION = "campsite_data"
 //   1. EtlOrchestrator — runs etl chains in declared order, dispatching
 //      poi_data terminals to Pois Upsert and campsite_data terminals
 //      to CampsiteRepo. Also runs joiner adapters.
-//   2. IngestController / RegistryTargets — fetch is per data_source;
-//      import targets cover all three of {poi_data, campsite_data,
-//      campsite_parent_joiner}.
+//   2. scripts/poll_raw.py — fetch is per data_source and runs outside
+//      the backend process.
+//   3. IngestController / RegistryTargets — import targets cover all
+//      three of {poi_data, campsite_data, campsite_parent_joiner}.
 //
 // Adding a new POI source: one data_sources row + one poi_data row +
 // one EtlOrchestrator.registry line per ETL slug. No Flyway migration.

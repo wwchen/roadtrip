@@ -1,20 +1,12 @@
 package ca.floo.roadtrip.models.metadata.ingest
 
 // Vocabulary:
-//   fetch  = web → local file in data/raw/   (Phase.Fetch, runs a fetcher subprocess)
 //   import = data/raw/ + data/etl-out/ → Postgres rows  (Phase.Import, runs EtlOrchestrator)
 //
-// "ingest" is the umbrella term for fetch + import together; it appears only
-// in internal code (this package, the ingest_runs table). End-user surfaces
-// (Make targets, Tilt buttons, README) say data-fetch / data-import.
+// "ingest" is the umbrella term used by the ingest_runs table. Fetchers now
+// run outside the backend process; backend phases are import-only.
 sealed interface Phase {
     val label: String
-
-    data class Fetch(
-        override val label: String,
-        val cmd: List<String>,
-        val timeoutSec: Long = 30 * 60,
-    ) : Phase
 
     /**
      * Run one row from the registry. The [section] field tells the

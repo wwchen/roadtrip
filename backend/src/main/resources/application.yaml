@@ -6,7 +6,7 @@
 ktor:
   deployment:
     host: "0.0.0.0"
-    port: 8765
+    port: "${PORT:8765}"
   application:
     modules:
       - ca.floo.roadtrip.MainKt.module
@@ -30,8 +30,8 @@ roadtrip:
     signing-secret: "${SLACK_SIGNING_SECRET:}"
   email:
     resend-api-key: "${RESEND_API_KEY:}"
-    from: "Campsite Alerts <alerts@roadtrip.floo.ca>"
-    default-to:
+    from: "${ROADTRIP_EMAIL_FROM:Campsite Alerts <alerts@roadtrip.floo.ca>}"
+    default-to: "${ROADTRIP_EMAIL_DEFAULT_TO:}"
   poi-registry:
     resource: poi-registry.yaml
     path:

@@ -8,7 +8,8 @@ The pipeline is config-driven. `backend/src/main/resources/poi-registry.yaml` is
 flowchart TB
     YAML[("backend/src/main/resources/poi-registry.yaml")]
     Registry["PoiRegistry<br/>(boot-time)<br/>· validates YAML<br/>· topo-sorts the DAG"]
-    Ingest["IngestController"]
+    FetchCtl["host fetch command<br/>(make data-fetch / scripts/poll_raw.py)"]
+    Ingest["IngestController<br/>(import only)"]
     Fetcher["fetcher script<br/>(subprocess via fetcher.executor)"]
     Raw[("data/raw/&lt;data_source-slug&gt;/<br/>envelope-wrapped<br/>raw upstream")]
     Inter["intermediate ETL(s)<br/>(parse → validate → transform)<br/>output handed to next stage in memory"]
@@ -17,11 +18,13 @@ flowchart TB
     PoisAPI["/api/pois<br/>(bbox query)"]
     FE["Map UI<br/>(pins)"]
 
-    Trigger(["POST /api/admin/data/fetch/&lt;data_source-slug&gt;<br/>POST /api/admin/data/import/&lt;poi_data-name&gt;<br/>POST /api/admin/data/{fetch,import}  ← fan-out"])
+    Trigger(["make data-fetch [TARGET=&lt;data_source-slug&gt;]<br/>POST /api/admin/data/import/&lt;poi_data-name&gt;<br/>POST /api/admin/data/import  ← fan-out"])
 
     YAML --> Registry --> Ingest
+    YAML --> FetchCtl
+    Trigger --> FetchCtl
     Trigger --> Ingest
-    Ingest -- fetch phase --> Fetcher --> Raw
+    FetchCtl -- fetch phase --> Fetcher --> Raw
     Ingest -- import phase --> Inter
     Raw --> Inter --> Emit
     Raw --> Emit
@@ -42,16 +45,16 @@ flowchart TB
 
 What flows where:
 
-1. **YAML** has two sections. `data_sources:` declares fetchers (one row per upstream feed). `poi_data:` declares the user-facing datasets — each row carries `name`, `category`, optional `subcategory`, and an ordered `etls:` list. The **last** entry in `etls:` is the POI emitter (must output `Poi.*`); earlier entries are intermediates. Backend reads the YAML at boot, topo-sorts the DAG, and refuses to start if anything is wrong (duplicate slug, dangling `inputs:`, cycle, forward reference within `etls:`, cross-row etl ref, or the last `etls:` entry's adapter doesn't emit `Poi.*`).
-2. **Fetch phase** — IngestController spawns a subprocess per `data_sources:` row: `<fetcher.executor> <fetcher.filename> --<arg> <value> …`. The script writes envelope-wrapped raw bytes into the YAML's `output_dir_prefix:` (typically `data/raw/<data_source-slug>/<UTC-ts>.json`, possibly a directory of pages). No DB writes.
-3. **Import phase** — for each `poi_data:` row, the orchestrator runs the chain in declared order: each non-terminal `etls:` entry parses its `inputs:` (data_sources → `data/raw/`, prior siblings → typed payload from this same run) and produces a typed `JsonElement` that's handed to the next stage **in memory**. Re-running the import recomputes; intermediates don't persist. The last `etls:` entry parses its inputs the same way and runs `Upsert.run`, which writes/sweeps `pois` rows scoped to `source=<last etl-slug>`.
+1. **YAML** has four sections. `data_sources:` declares fetchers (one row per upstream feed). `poi_data:` declares user-facing POI datasets. `campsite_data:` declares campsite catalogs. `campsite_parent_joiner:` declares post-import campsite parent reconciliation passes. ETL rows carry an ordered `etls:` list; earlier entries are intermediates and the last entry emits the canonical output for that section. Backend reads the YAML at boot, topo-sorts the DAG, and refuses to start if anything is wrong (duplicate slug, dangling `inputs:`, cycle, forward reference within `etls:`, cross-row etl ref, or an unwired terminal adapter).
+2. **Fetch phase** — `make data-fetch` / `scripts/poll_raw.py` spawns a subprocess per `data_sources:` row on the host: `<fetcher.executor> <fetcher.filename> --<arg> <value> …`. The script writes envelope-wrapped raw bytes into the YAML's `output_dir_prefix:` (typically `data/raw/<data_source-slug>/<UTC-ts>.json`, possibly a directory of pages). No DB writes and no backend container runtime dependency.
+3. **Import phase** — for each `poi_data:` or `campsite_data:` row, the orchestrator runs the chain in declared order: each non-terminal `etls:` entry parses its `inputs:` (data_sources → `data/raw/`, prior siblings → typed payload from this same run) and produces a typed `JsonElement` that's handed to the next stage **in memory**. Re-running the import recomputes; intermediates don't persist. The terminal ETL writes/sweeps canonical rows scoped to `source=<last etl-slug>`. `campsite_parent_joiner:` rows run their adapter against the canonical catalog after the relevant campsite data is imported.
 4. **Frontend** — `/api/pois` does a bbox PostGIS query against `pois`. No knowledge of sources, fetchers, or ETLs; it just renders whatever's in the table for the visible map area.
 
 How runs are triggered:
 
-- **One target, manual** — fetch and import are addressed differently. Fetch is per data_source: `POST /api/admin/data/fetch/<data_source-slug>`. Import is per poi_data row: `POST /api/admin/data/import/<poi_data-name>`. Both return a `run_id` and final status; full history in `ingest_runs`.
-- **Fan-out** — `POST /api/admin/data/fetch` (no slug) walks every `data_sources:` row sequentially. `POST /api/admin/data/import` walks every `poi_data:` row whose `enabled:` is true (default). A target whose fetcher is unreachable is recorded as a failed run and the next target proceeds; the import phase doesn't depend on the fetch phase.
-- **Local dev** — Tilt buttons + `make data-fetch` / `make data-import` curl the same admin endpoints.
+- **One target, manual** — fetch and import are addressed differently. Fetch is per data_source: `make data-fetch TARGET=<data_source-slug>`. Import is per registry row: `POST /api/admin/data/import/<row-name>`. Import calls return a `run_id` and final status; full history is in `ingest_runs`.
+- **Fan-out** — `make data-fetch` walks every enabled `data_sources:` row sequentially. `POST /api/admin/data/import` walks every enabled import row sequentially. The import phase doesn't depend on a fresh fetch; it reads the newest raw capture already on disk.
+- **Local dev** — Tilt buttons + `make data-fetch` / `make data-import` run the same host-fetch/backend-import split.
 - **Recurring** — currently none; runs are triggered manually until a cron/worker lands.
 
 ## Conventions
@@ -61,7 +64,7 @@ How runs are triggered:
 - `<category>` — match an existing FE-recognized category. New categories require a separate change.
 - `<subcategory>` — drives the FE legend toggles + circle-color expression for that category. Required when the category has multiple sub-buckets (e.g. `campground` ⇒ `federal | state | local | provincial | private`); omitted when a category has no sub-bucket (`planet-fitness`, `supercharger`).
 - `inputs:` are dependency edges. Within a row's `etls:` list, list order is dependency order — entry N may only reference data_source slugs OR earlier siblings (index < N). The last entry is the emitter. There is no separate `depends_on:` field.
-- All commands assume cwd = repo root, backend running on `127.0.0.1:8765`.
+- Commands assume cwd = repo root. Import commands also assume the backend is running on `127.0.0.1:8765`.
 
 ## When to add what
 
@@ -243,18 +246,18 @@ No warning about a missing adapter for any of your slugs.
 
 ## Step 5 — Trigger fetch + import end-to-end
 
-**Run fetch** (per data_source) **and import** (per poi_data row) via the admin API:
+**Run fetch** (per data_source) on the host, then **import** (per poi_data row) via the admin API:
 
 ```bash
-# Fetch raw data — one call per data_source
-curl -X POST http://127.0.0.1:8765/api/admin/data/fetch/<data_source-slug>
+# Fetch raw data — one host-side command per data_source
+make data-fetch TARGET=<data_source-slug>
 
 # Import: walks the row's etls: list in order, materializes each intermediate,
 # then the terminal etl runs and upserts.
 curl -X POST "http://127.0.0.1:8765/api/admin/data/import/$(echo '<Poi Data Name>' | jq -sRr @uri)"
 ```
 
-Each call returns `{"run_id": …, "status": "completed"}`. Status `failed` means check `ingest_runs`:
+The import call returns `{"run_id": …, "status": "completed"}`. Status `failed` means check `ingest_runs`:
 
 ```bash
 docker exec roadtrip-postgres-1 psql -U roadtrip -d roadtrip -c \
@@ -323,7 +326,7 @@ After adding a second tenant:
 
 ```bash
 # Per-tenant raw lands in its own dir
-curl -X POST http://127.0.0.1:8765/api/admin/data/fetch/<new-data_source-slug>
+make data-fetch TARGET=<new-data_source-slug>
 ls <new data_source's fetcher.output_dir_prefix>/
 
 # Per-tenant import keys off the terminal etl slug
@@ -378,9 +381,9 @@ fixture envelope to pin down the regression.
 | ETL test                            | `backend/src/test/kotlin/.../<vendor>/<Vendor>EtlTest.kt`                                               |
 | Test fixtures                       | `backend/src/test/resources/etl-fixtures/<slug>/`                                                       |
 | Register adapter                    | `EtlOrchestrator.kt` `registry` map (one line per ETL slug, intermediates included)                    |
-| Trigger fetch                       | `POST /api/admin/data/fetch/<data_source-slug>`                                                         |
-| Trigger import                      | `POST /api/admin/data/import/<poi_data-name>`                                                           |
-| Run history                         | `GET /api/admin/data/runs?target=<slug>`                                                                |
+| Trigger fetch                       | `make data-fetch TARGET=<data_source-slug>`                                                             |
+| Trigger import                      | `POST /api/admin/data/import/<row-name>`                                                                |
+| Run history                         | `GET /api/admin/data/runs?target=<row-name>`                                                            |
 | Data status snapshot                | `GET /api/admin/data/status`                                                                            |
 | Add an env var                      | `.env.example` + `.env` + Tilt `serve_env` + compose `environment:`                                     |
 | Same fetcher, new tenant            | New `data_sources:` + new `poi_data:` row + new `EtlOrchestrator.registry` line. No new fetcher.        |

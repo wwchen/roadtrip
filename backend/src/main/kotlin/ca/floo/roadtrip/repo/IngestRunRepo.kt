@@ -20,7 +20,7 @@ class IngestRunRepo(
         ctx
             .insertInto(INGEST_RUNS)
             .set(INGEST_RUNS.TARGET, target)
-            .set(INGEST_RUNS.PHASE, kind.rowValue) // 'fetch' or 'import'
+            .set(INGEST_RUNS.PHASE, kind.rowValue)
             .set(INGEST_RUNS.PHASE_KIND, "target")
             .set(INGEST_RUNS.STATUS, "started")
             .set(INGEST_RUNS.TRIGGERED_BY, triggeredBy)
@@ -33,17 +33,12 @@ class IngestRunRepo(
         parentId: Long,
         target: String,
         phase: Phase,
-    ): Long {
-        val kind =
-            when (phase) {
-                is Phase.Fetch -> "fetch"
-                is Phase.Import -> "import"
-            }
-        return ctx
+    ): Long =
+        ctx
             .insertInto(INGEST_RUNS)
             .set(INGEST_RUNS.TARGET, target)
             .set(INGEST_RUNS.PHASE, phase.label)
-            .set(INGEST_RUNS.PHASE_KIND, kind)
+            .set(INGEST_RUNS.PHASE_KIND, "import")
             .set(INGEST_RUNS.PARENT_RUN_ID, parentId)
             .set(INGEST_RUNS.STATUS, "started")
             .set(INGEST_RUNS.TRIGGERED_BY, "phase")
@@ -51,7 +46,6 @@ class IngestRunRepo(
             .returningResult(INGEST_RUNS.ID)
             .fetchOne()!!
             .value1()!!
-    }
 
     fun completePhase(
         phaseId: Long,
