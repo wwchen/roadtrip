@@ -20,6 +20,8 @@ import ca.floo.roadtrip.model.metadata.ingest.RunOutcome
 import ca.floo.roadtrip.repo.AdminIngestReadRepo
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
+import ca.floo.roadtrip.route.common.pathParam
+import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.support.TargetBusyException
 import ca.floo.roadtrip.support.TargetNotFoundException
@@ -80,7 +82,7 @@ fun Route.adminIngestRoutes(
 
                 route("/runs") {
                     get {
-                        val target = call.request.queryParameters["target"]
+                        val target = call.queryParam("target")
                         call.respondAdminJson(listRecent(readRepo, target, limit = 50))
                     }.describeApi("admin", "Last 50 parent ingest runs (filter by ?target=)")
 
@@ -111,7 +113,7 @@ private suspend fun io.ktor.server.routing.RoutingContext.runOne(
     controller: IngestController,
     kind: RunKind,
 ) {
-    val target = call.parameters["target"]!!
+    val target = call.pathParam("target")!!
     try {
         val outcome =
             withContext(NonCancellable) {
