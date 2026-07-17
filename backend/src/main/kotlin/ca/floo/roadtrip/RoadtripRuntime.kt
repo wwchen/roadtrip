@@ -38,6 +38,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.DispatchingWatchLifecycleNotifications
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.NotifyTriggerActionHandler
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
@@ -237,16 +238,6 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             bookingTargets = bookingTargets,
             notificationTriggerKinds = notificationTriggerKinds,
         )
-    val availabilityWatchService =
-        AvailabilityWatchService(
-            ctx = boot.ctx,
-            alertProviders = alertProviders,
-            capabilityValidator =
-                WatchTriggerCapabilityValidator(
-                    scopeResolver = watchScopeResolver,
-                    capabilities = watchCapabilities,
-                ),
-        )
     val triggerActions =
         TriggerActionRegistry(
             listOf(
@@ -273,12 +264,26 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             grafanaRootUrl = boot.appConfig.grafana?.rootUrl,
             appRootUrl = boot.appConfig.webApp?.rootUrl,
         )
+    val availabilityWatchService =
+        AvailabilityWatchService(
+            ctx = boot.ctx,
+            alertProviders = alertProviders,
+            capabilityValidator =
+                WatchTriggerCapabilityValidator(
+                    scopeResolver = watchScopeResolver,
+                    capabilities = watchCapabilities,
+                ),
+            lifecycleNotifications =
+                DispatchingWatchLifecycleNotifications(
+                    dispatcher = watchAlertDispatcher,
+                    scope = schedulerScope,
+                ),
+        )
     // Interactivity wiring only exists when the Slack app is configured with a
     // signing secret — no secret means we can't verify inbound requests, so
     // the endpoint stays unregistered rather than accepting unverifiable input.
     val slackInteractivity =
         boot.appConfig.slack?.signingSecret?.let { secret ->
-            val watchRepo = AvailabilityWatchRepo(boot.ctx)
             val watchesPort =
                 object : SlackInteractivityHandler.Watches {
                     override fun setStatus(
@@ -286,13 +291,8 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                         status: WatchStatus,
                     ) = availabilityWatchService.update(id = id, status = status)
 
-                    override fun snapshotAndDelete(id: Long): AvailabilityWatchRepo.Watch? {
-                        // Snapshot pre-delete so the goodbye card can still resolve
-                        // POI names / dates — mirrors the HTTP delete route which
-                        // captures the row before the FK cascade drops its links.
-                        val snapshot = watchRepo.findById(id) ?: return null
-                        return if (availabilityWatchService.delete(id)) snapshot else null
-                    }
+                    override fun snapshotAndDelete(id: Long): AvailabilityWatchRepo.Watch? =
+                        availabilityWatchService.deleteReturningSnapshot(id)
 
                     override fun buildStatusNotice(
                         watch: AvailabilityWatchRepo.Watch,
@@ -305,7 +305,11 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             )
             SlackInteractivityWiring(
                 verifier = SlackSignatureVerifier(secret),
-                handler = SlackInteractivityHandler(watches = watchesPort, slack = slackNotifications),
+                handler =
+                    SlackInteractivityHandler(
+                        watches = watchesPort,
+                        slack = slackNotifications,
+                    ),
             )
         } ?: run {
             val reason =

@@ -97,6 +97,8 @@ class SlackInteractivityHandlerTest {
     private fun watch(
         id: Long = 42,
         status: WatchStatus = WatchStatus.ACTIVE,
+        triggerKinds: List<String> = listOf("slack_notify"),
+        triggerConfig: JsonObject = JsonObject(emptyMap()),
     ) = AvailabilityWatchRepo.Watch(
         id = id,
         targets = listOf(AvailabilityWatchTargetRepo.WatchTarget(id = 100, watchId = id, poiId = 7, campsiteId = null)),
@@ -104,8 +106,8 @@ class SlackInteractivityHandlerTest {
         startDate = LocalDate.of(2026, 7, 11),
         endDate = LocalDate.of(2026, 7, 12),
         cadenceSec = null,
-        triggerKinds = listOf("slack_notify"),
-        triggerConfig = JsonObject(emptyMap()),
+        triggerKinds = triggerKinds,
+        triggerConfig = triggerConfig,
         stopWhenTriggered = false,
         status = status,
         createdAt = OffsetDateTime.parse("2026-07-01T00:00:00Z"),
@@ -121,12 +123,17 @@ class SlackInteractivityHandlerTest {
         responseUrl = responseUrl,
     )
 
+    private fun handler(
+        fakes: FakeWatches,
+        slack: FakeSlack,
+    ) = SlackInteractivityHandler(watches = fakes, slack = slack)
+
     @Test
     fun `pause action flips status to PAUSED and posts a PAUSED card via response_url`() =
         runBlocking {
             val fakes = FakeWatches(mapOf(42L to watch()))
             val slack = FakeSlack()
-            SlackInteractivityHandler(fakes, slack).handle(payload(SlackWatchCard.ACTION_WATCH_PAUSE))
+            handler(fakes, slack).handle(payload(SlackWatchCard.ACTION_WATCH_PAUSE))
 
             assertEquals(listOf(42L to WatchStatus.PAUSED), fakes.statusCalls)
             assertEquals(listOf(42L to WatchStatusNotice.State.PAUSED), fakes.noticeCalls)
@@ -140,7 +147,7 @@ class SlackInteractivityHandlerTest {
         runBlocking {
             val fakes = FakeWatches(mapOf(42L to watch(status = WatchStatus.PAUSED)))
             val slack = FakeSlack()
-            SlackInteractivityHandler(fakes, slack).handle(payload(SlackWatchCard.ACTION_WATCH_RESUME))
+            handler(fakes, slack).handle(payload(SlackWatchCard.ACTION_WATCH_RESUME))
 
             assertEquals(listOf(42L to WatchStatus.ACTIVE), fakes.statusCalls)
             assertEquals(
@@ -156,7 +163,7 @@ class SlackInteractivityHandlerTest {
         runBlocking {
             val fakes = FakeWatches(mapOf(42L to watch()))
             val slack = FakeSlack()
-            SlackInteractivityHandler(fakes, slack).handle(payload(SlackWatchCard.ACTION_WATCH_DELETE))
+            handler(fakes, slack).handle(payload(SlackWatchCard.ACTION_WATCH_DELETE))
 
             assertEquals(listOf(42L), fakes.deleteCalls)
             assertEquals(
@@ -172,7 +179,7 @@ class SlackInteractivityHandlerTest {
         runBlocking {
             val fakes = FakeWatches(mapOf(42L to watch()))
             val slack = FakeSlack()
-            val h = SlackInteractivityHandler(fakes, slack)
+            val h = handler(fakes, slack)
             listOf(
                 SlackWatchCard.ACTION_RESERVE_SITE,
                 SlackWatchCard.ACTION_OPEN_GRID,
@@ -192,7 +199,7 @@ class SlackInteractivityHandlerTest {
         runBlocking {
             val fakes = FakeWatches(mapOf(42L to watch()))
             val slack = FakeSlack()
-            SlackInteractivityHandler(fakes, slack).handle(payload("watch_extend")) // not in the shipped set
+            handler(fakes, slack).handle(payload("watch_extend")) // not in the shipped set
 
             assertTrue(fakes.statusCalls.isEmpty())
             assertTrue(slack.responses.isEmpty())
@@ -203,7 +210,7 @@ class SlackInteractivityHandlerTest {
         runBlocking {
             val fakes = FakeWatches(emptyMap()) // watch 42 already deleted
             val slack = FakeSlack()
-            SlackInteractivityHandler(fakes, slack).handle(payload(SlackWatchCard.ACTION_WATCH_PAUSE))
+            handler(fakes, slack).handle(payload(SlackWatchCard.ACTION_WATCH_PAUSE))
 
             assertEquals(listOf(42L to WatchStatus.PAUSED), fakes.statusCalls)
             assertTrue(slack.responses.isEmpty())
@@ -215,7 +222,7 @@ class SlackInteractivityHandlerTest {
         runBlocking {
             val fakes = FakeWatches(emptyMap()) // watch 42 already deleted
             val slack = FakeSlack()
-            SlackInteractivityHandler(fakes, slack).handle(payload(SlackWatchCard.ACTION_WATCH_DELETE))
+            handler(fakes, slack).handle(payload(SlackWatchCard.ACTION_WATCH_DELETE))
 
             assertEquals(listOf(42L), fakes.deleteCalls)
             assertTrue(slack.responses.isEmpty())
@@ -227,7 +234,7 @@ class SlackInteractivityHandlerTest {
         runBlocking {
             val fakes = FakeWatches(mapOf(42L to watch()))
             val slack = FakeSlack()
-            SlackInteractivityHandler(fakes, slack).handle(payload(SlackWatchCard.ACTION_WATCH_PAUSE, value = "not-a-number"))
+            handler(fakes, slack).handle(payload(SlackWatchCard.ACTION_WATCH_PAUSE, value = "not-a-number"))
 
             assertTrue(fakes.statusCalls.isEmpty(), "handler must not attempt setStatus with a bad id")
             assertTrue(slack.responses.isEmpty())

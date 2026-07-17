@@ -4,16 +4,13 @@ import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchCreateRequest
 import ca.floo.roadtrip.models.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
-import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.routes.common.describeApi
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchRequestMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.AvailabilityWatchValidationException
-import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
-import ca.floo.roadtrip.service.availability.WatchInitialNotificationPolicy
 import ca.floo.roadtrip.service.availability.WatchRequestMapping
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchStatus
@@ -30,22 +27,13 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.patch
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jooq.DSLContext
-import org.slf4j.LoggerFactory
 
 private const val DEFAULT_LIST_LIMIT = 100
 private const val MAX_LIST_LIMIT = 500
-
-// Logger anchor for these top-level route functions (the file has no class of
-// its own); keeps the category class-derived rather than a hardcoded string.
-private object AvailabilityWatchRoutes
-
-private val log = LoggerFactory.getLogger(AvailabilityWatchRoutes::class.java)
 
 @OptIn(ExperimentalSerializationApi::class)
 private val watchJson =
@@ -58,36 +46,12 @@ private val watchJson =
 internal fun Route.availabilityWatchRoutes(
     ctx: DSLContext,
     watchService: AvailabilityWatchService,
-    alertDispatcher: WatchAlertDispatcher,
-    notifyScope: CoroutineScope,
     watchCapabilities: WatchCapabilityService? = null,
 ) {
     val watches = AvailabilityWatchRepo(ctx)
     val campsitesRepo = CampsiteRepo(ctx)
     val scopeResolver = WatchScopeResolver(campsitesRepo)
     val watchMapper = AvailabilityWatchApiMapper(campsitesRepo, scopeResolver, watchCapabilities)
-
-    // The "first message": on create/update, post the current window state so
-    // an already-open site isn't stranded behind the edge-triggered poller.
-    // Fire-and-forget, outside the mutation's transaction — it must never
-    // block or fail the HTTP response. Trigger/transport gating lives in
-    // dispatchInitial.
-    fun scheduleInitialNotify(watch: Watch) {
-        notifyScope.launch {
-            runCatching { alertDispatcher.dispatchInitial(watch) }
-                .onFailure { log.warn("initial notify for watch {} failed", watch.id, it) }
-        }
-    }
-
-    // The terminal "watch stopped" message on delete. Fire-and-forget on the
-    // captured pre-delete watch (its scope is still resolvable), symmetric with
-    // scheduleInitialNotify: it must never block or fail the HTTP response.
-    fun scheduleStoppedNotify(watch: Watch) {
-        notifyScope.launch {
-            runCatching { alertDispatcher.dispatchStopped(watch) }
-                .onFailure { log.warn("stopped notify for watch {} failed", watch.id, it) }
-        }
-    }
 
     route("/api") {
         route("/availability") {
@@ -149,7 +113,6 @@ internal fun Route.availabilityWatchRoutes(
                         } catch (e: AvailabilityWatchValidationException) {
                             return@post call.respondError(e.error, HttpStatusCode.BadRequest, e.message)
                         }
-                    scheduleInitialNotify(watch)
                     call.respondJson(watchMapper.response(watch), HttpStatusCode.Created)
                 }.describeApi("availability", "Create a watch")
 
@@ -187,9 +150,6 @@ internal fun Route.availabilityWatchRoutes(
                                     )
                                 is WatchRequestMapping.Valid -> mapped.value
                             }
-                        val previous =
-                            watches.findById(id)
-                                ?: return@patch call.respondError("not_found", HttpStatusCode.NotFound)
                         val updated =
                             try {
                                 watchService.update(
@@ -208,7 +168,6 @@ internal fun Route.availabilityWatchRoutes(
                                 return@patch call.respondError(e.error, HttpStatusCode.BadRequest, e.message)
                             }
                         if (updated == null) return@patch call.respondError("not_found", HttpStatusCode.NotFound)
-                        if (WatchInitialNotificationPolicy.shouldDispatchAfterUpdate(previous, updated)) scheduleInitialNotify(updated)
                         call.respondJson(watchMapper.response(updated))
                     }.describeApi("availability", "Update a watch")
 
@@ -216,11 +175,7 @@ internal fun Route.availabilityWatchRoutes(
                         val id =
                             call.parameters["id"]?.toLongOrNull()
                                 ?: return@delete call.respondError("invalid_id", HttpStatusCode.BadRequest)
-                        // Capture the watch before deletion so the goodbye notification can
-                        // still resolve its scope; the row (and its poller links) are gone after.
-                        val watch = watches.findById(id)
                         if (watchService.delete(id)) {
-                            watch?.let { scheduleStoppedNotify(it) }
                             call.respond(HttpStatusCode.NoContent)
                         } else {
                             call.respondError("not_found", HttpStatusCode.NotFound)

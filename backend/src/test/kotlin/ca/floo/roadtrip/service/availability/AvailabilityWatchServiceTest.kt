@@ -10,10 +10,12 @@ import ca.floo.roadtrip.models.booking.BookingProviderId
 import ca.floo.roadtrip.models.booking.BookingTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
@@ -26,6 +28,12 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.notification.common.NotificationSender
+import ca.floo.roadtrip.service.notification.common.NotificationTarget
+import ca.floo.roadtrip.service.notification.common.WatchOpening
+import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -75,6 +83,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         alertProviders: AlertProviderRegistry? = null,
         capabilityValidator: WatchCapabilityValidator = NoopWatchCapabilityValidator,
         availabilityProvider: AvailabilityProvider = FakeProvider,
+        lifecycleNotifications: WatchLifecycleNotifications = NoopWatchLifecycleNotifications,
     ): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
         val registry = AvailabilityProviderRegistry(mapOf("test" to availabilityProvider))
@@ -93,7 +102,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                     ),
                 ),
             )
-        return AvailabilityWatchService(ctx, providers, capabilityValidator)
+        return AvailabilityWatchService(ctx, providers, capabilityValidator, lifecycleNotifications)
     }
 
     private fun bookingValidatedService(
@@ -136,6 +145,34 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                             notificationTriggerKinds = notificationTriggerKinds,
                         ),
                 ),
+        )
+    }
+
+    private fun dispatchingLifecycleNotifications(notifications: NotificationSender): WatchLifecycleNotifications {
+        val campsitesRepo = CampsiteRepo(ctx)
+        val registry = AvailabilityProviderRegistry(mapOf("test" to FakeProvider))
+        val targets =
+            DbAvailabilityTargetResolver(
+                providerRefs = CampsiteProviderRepo(ctx),
+                campsitesRepo = campsitesRepo,
+                availabilityProviders = registry,
+                dateResolver = AvailabilityDateResolver(),
+            )
+        val dispatcher =
+            WatchAlertDispatcher(
+                notifications = notifications,
+                scopeResolver = WatchScopeResolver(campsitesRepo),
+                watches = AvailabilityWatchRepo(ctx),
+                targets = targets,
+                pois = PoiServingRepo(ctx),
+                availability = AvailabilityRepo(ctx),
+                triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, appRootUrl = null))),
+                grafanaRootUrl = null,
+                appRootUrl = null,
+            )
+        return DispatchingWatchLifecycleNotifications(
+            dispatcher = dispatcher,
+            scope = CoroutineScope(Dispatchers.Unconfined),
         )
     }
 
@@ -525,7 +562,131 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         )
     }
 
+    @Test
+    fun `watch mutations emit lifecycle notification callbacks from the service path`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val lifecycle = RecordingLifecycleNotifications()
+        val svc = service(lifecycleNotifications = lifecycle)
+
+        val watch = svc.createForTest(poiInput(poiId))
+        val paused = svc.updateForTest(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))!!
+        val resumed = svc.updateForTest(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.ACTIVE))!!
+        assertTrue(svc.delete(watch.id))
+
+        assertEquals(
+            listOf(
+                watch.id to WatchStatus.ACTIVE,
+            ),
+            lifecycle.created.map { it.id to it.status },
+        )
+        assertEquals(
+            listOf(
+                WatchStatus.ACTIVE to WatchStatus.PAUSED,
+                WatchStatus.PAUSED to WatchStatus.ACTIVE,
+            ),
+            lifecycle.updated.map { it.first.status to it.second.status },
+        )
+        assertEquals(WatchStatus.PAUSED, paused.status)
+        assertEquals(WatchStatus.ACTIVE, resumed.status)
+        assertEquals(listOf(watch.id), lifecycle.deleted.map { it.id })
+    }
+
+    @Test
+    fun `create sends initial email status through the dispatching lifecycle hook`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val notifications = RecordingNotifications()
+        val svc =
+            service(
+                lifecycleNotifications = dispatchingLifecycleNotifications(notifications),
+            )
+
+        val watch =
+            svc.createForTest(
+                poiInput(
+                    poiId,
+                    triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY),
+                    triggerConfig = emailTriggerConfig("alerts@example.test"),
+                ),
+            )
+
+        val status = notifications.statuses.single()
+        assertEquals(watch.id, status.notice.watchId)
+        assertEquals(WatchStatusNotice.State.UNCHECKED, status.notice.state)
+        assertEquals(listOf(NotificationTarget.Email(listOf("alerts@example.test"))), status.targets)
+    }
+
+    @Test
+    fun `delete returning snapshot uses the shared delete path and emits stopped lifecycle callback`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val lifecycle = RecordingLifecycleNotifications()
+        val svc = service(lifecycleNotifications = lifecycle)
+        val watch = svc.createForTest(poiInput(poiId))
+        lifecycle.clear()
+
+        val snapshot = svc.deleteReturningSnapshot(watch.id)
+
+        assertEquals(watch.id, snapshot?.id)
+        assertEquals(null, AvailabilityWatchRepo(ctx).findById(watch.id))
+        assertEquals(listOf(watch.id), lifecycle.deleted.map { it.id })
+    }
+
     private enum class AlertEvent { ACTIVATED, DEACTIVATED }
+
+    private class RecordingLifecycleNotifications : WatchLifecycleNotifications {
+        val created: MutableList<AvailabilityWatchRepo.Watch> = mutableListOf()
+        val updated: MutableList<Pair<AvailabilityWatchRepo.Watch, AvailabilityWatchRepo.Watch>> = mutableListOf()
+        val deleted: MutableList<AvailabilityWatchRepo.Watch> = mutableListOf()
+
+        override fun afterCreate(watch: AvailabilityWatchRepo.Watch) {
+            created += watch
+        }
+
+        override fun afterUpdate(
+            before: AvailabilityWatchRepo.Watch,
+            after: AvailabilityWatchRepo.Watch,
+        ) {
+            updated += before to after
+        }
+
+        override fun afterDelete(watch: AvailabilityWatchRepo.Watch) {
+            deleted += watch
+        }
+
+        fun clear() {
+            created.clear()
+            updated.clear()
+            deleted.clear()
+        }
+    }
+
+    private class RecordingNotifications : NotificationSender {
+        data class Status(
+            val notice: WatchStatusNotice,
+            val targets: List<NotificationTarget>,
+        )
+
+        val statuses: MutableList<Status> = mutableListOf()
+
+        override suspend fun sendWatchStatus(
+            notice: WatchStatusNotice,
+            targets: List<NotificationTarget>,
+        ): Boolean {
+            statuses += Status(notice, targets)
+            return true
+        }
+
+        override suspend fun sendWatchOpenings(
+            watchId: Long,
+            startDate: LocalDate,
+            endDate: LocalDate,
+            openings: List<WatchOpening>,
+            targets: List<NotificationTarget>,
+            appRootUrl: String?,
+        ): Boolean = false
+    }
 
     /** Fake alert provider that records `(watch.id, event)` tuples so the test
      *  can assert the service dispatches watch-lifecycle events through the

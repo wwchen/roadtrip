@@ -31,6 +31,7 @@ internal class AvailabilityWatchService(
     private val ctx: DSLContext,
     private val alertProviders: AlertProviderRegistry,
     private val capabilityValidator: WatchCapabilityValidator = NoopWatchCapabilityValidator,
+    private val lifecycleNotifications: WatchLifecycleNotifications = NoopWatchLifecycleNotifications,
 ) {
     fun create(
         targets: List<AvailabilityWatchTargetRepo.TargetInput>,
@@ -41,26 +42,30 @@ internal class AvailabilityWatchService(
         triggerKinds: List<String>,
         triggerConfig: JsonObject,
         stopWhenTriggered: Boolean,
-    ): Watch =
-        ctx.transactionResult { config ->
-            val input =
-                AvailabilityWatchRepo.CreateInput(
-                    targets = targets,
-                    campsiteFilters = campsiteFilters,
-                    startDate = startDate,
-                    endDate = endDate,
-                    cadenceSec = cadenceSec,
-                    triggerKinds = triggerKinds,
-                    triggerConfig = triggerConfig,
-                    stopWhenTriggered = stopWhenTriggered,
-                )
-            WatchTriggerConfig.validateCreate(input)
-            val txn = DSL.using(config)
-            val watch = AvailabilityWatchRepo(txn).create(input)
-            capabilityValidator.validate(watch)
-            alertProviders.forWatch(watch).onWatchActivated(txn, watch)
-            watch
-        }
+    ): Watch {
+        val watch =
+            ctx.transactionResult { config ->
+                val input =
+                    AvailabilityWatchRepo.CreateInput(
+                        targets = targets,
+                        campsiteFilters = campsiteFilters,
+                        startDate = startDate,
+                        endDate = endDate,
+                        cadenceSec = cadenceSec,
+                        triggerKinds = triggerKinds,
+                        triggerConfig = triggerConfig,
+                        stopWhenTriggered = stopWhenTriggered,
+                    )
+                WatchTriggerConfig.validateCreate(input)
+                val txn = DSL.using(config)
+                val created = AvailabilityWatchRepo(txn).create(input)
+                capabilityValidator.validate(created)
+                alertProviders.forWatch(created).onWatchActivated(txn, created)
+                created
+            }
+        lifecycleNotifications.afterCreate(watch)
+        return watch
+    }
 
     fun update(
         id: Long,
@@ -73,50 +78,64 @@ internal class AvailabilityWatchService(
         triggerConfig: JsonObject? = null,
         stopWhenTriggered: Boolean? = null,
         status: WatchStatus? = null,
-    ): Watch? =
-        ctx.transactionResult { config ->
-            val input =
-                AvailabilityWatchRepo.UpdateInput(
-                    targets = targets,
-                    campsiteFilters = campsiteFilters,
-                    startDate = startDate,
-                    endDate = endDate,
-                    cadenceSec = cadenceSec,
-                    triggerKinds = triggerKinds,
-                    triggerConfig = triggerConfig,
-                    stopWhenTriggered = stopWhenTriggered,
-                    status = status,
-                )
-            WatchTriggerConfig.validateUpdate(input)
-            val triggerIntentTouched = input.triggerKinds != null || input.triggerConfig != null
-            val txn = DSL.using(config)
-            val updated = AvailabilityWatchRepo(txn).update(id, input) ?: return@transactionResult null
-            if (triggerIntentTouched) WatchTriggerConfig.validateSnapshot(updated)
-            capabilityValidator.validate(updated)
-            // ACTIVE → the alert provider (re)subscribes / re-syncs poller links;
-            // any non-ACTIVE status is a deactivate as far as opening-detection
-            // is concerned — the watch holds no live subscription.
-            val provider = alertProviders.forWatch(updated)
-            if (updated.status == WatchStatus.ACTIVE) {
-                provider.onWatchActivated(txn, updated)
-            } else {
-                provider.onWatchDeactivated(txn, updated)
+    ): Watch? {
+        val update =
+            ctx.transactionResult { config ->
+                val input =
+                    AvailabilityWatchRepo.UpdateInput(
+                        targets = targets,
+                        campsiteFilters = campsiteFilters,
+                        startDate = startDate,
+                        endDate = endDate,
+                        cadenceSec = cadenceSec,
+                        triggerKinds = triggerKinds,
+                        triggerConfig = triggerConfig,
+                        stopWhenTriggered = stopWhenTriggered,
+                        status = status,
+                    )
+                WatchTriggerConfig.validateUpdate(input)
+                val triggerIntentTouched = input.triggerKinds != null || input.triggerConfig != null
+                val txn = DSL.using(config)
+                val repo = AvailabilityWatchRepo(txn)
+                val before = repo.findById(id) ?: return@transactionResult null
+                val updated = repo.update(id, input) ?: return@transactionResult null
+                if (triggerIntentTouched) WatchTriggerConfig.validateSnapshot(updated)
+                capabilityValidator.validate(updated)
+                // ACTIVE -> the alert provider (re)subscribes / re-syncs poller links;
+                // any non-ACTIVE status is a deactivate as far as opening-detection
+                // is concerned -- the watch holds no live subscription.
+                val provider = alertProviders.forWatch(updated)
+                if (updated.status == WatchStatus.ACTIVE) {
+                    provider.onWatchActivated(txn, updated)
+                } else {
+                    provider.onWatchDeactivated(txn, updated)
+                }
+                before to updated
             }
-            updated
-        }
+        update?.let { (before, after) -> lifecycleNotifications.afterUpdate(before, after) }
+        return update?.second
+    }
 
-    fun delete(id: Long): Boolean =
-        ctx.transactionResult { config ->
-            val txn = DSL.using(config)
-            val repo = AvailabilityWatchRepo(txn)
-            // Snapshot pre-delete so the alert provider's deactivate hook has a
-            // Watch to work with — the row itself is about to disappear (FK
-            // cascade will drop its availability_watch_poller links).
-            val snapshot = repo.findById(id) ?: return@transactionResult false
-            val deleted = repo.delete(id)
-            if (deleted) {
-                alertProviders.forWatch(snapshot).onWatchDeactivated(txn, snapshot)
+    fun delete(id: Long): Boolean = deleteReturningSnapshot(id) != null
+
+    fun deleteReturningSnapshot(id: Long): Watch? {
+        val snapshot =
+            ctx.transactionResult { config ->
+                val txn = DSL.using(config)
+                val repo = AvailabilityWatchRepo(txn)
+                // Snapshot pre-delete so the alert provider's deactivate hook has a
+                // Watch to work with -- the row itself is about to disappear (FK
+                // cascade will drop its availability_watch_poller links).
+                val existing = repo.findById(id) ?: return@transactionResult null
+                val deleted = repo.delete(id)
+                if (deleted) {
+                    alertProviders.forWatch(existing).onWatchDeactivated(txn, existing)
+                    existing
+                } else {
+                    null
+                }
             }
-            deleted
-        }
+        snapshot?.let(lifecycleNotifications::afterDelete)
+        return snapshot
+    }
 }
