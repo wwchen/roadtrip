@@ -5,7 +5,9 @@ import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
 import ca.floo.roadtrip.model.api.poi.PoiFeatureCollectionSchema
 import ca.floo.roadtrip.model.api.poi.PoisRequestSchema
 import ca.floo.roadtrip.model.domain.poi.Bbox
+import ca.floo.roadtrip.route.common.boundedIntQuery
 import ca.floo.roadtrip.route.common.describeApi
+import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.POI_LIMIT
 import ca.floo.roadtrip.service.poi.PoiReader
@@ -31,6 +33,12 @@ private val poiRoutesJson =
         ignoreUnknownKeys = true
         explicitNulls = false
     }
+
+private const val DEFAULT_SEARCH_LIMIT = 10
+private const val MIN_SEARCH_LIMIT = 1
+private const val MAX_SEARCH_LIMIT = 25
+
+private val searchLimitRange = MIN_SEARCH_LIMIT..MAX_SEARCH_LIMIT
 
 // POST /api/pois
 //
@@ -84,11 +92,7 @@ internal fun Route.poiRoutes(poiService: PoiReader) {
                     call.request.queryParameters["q"]
                         ?.trim()
                         .orEmpty()
-                val limit =
-                    call.request.queryParameters["limit"]
-                        ?.toIntOrNull()
-                        ?.coerceIn(1, 25)
-                        ?: 10
+                val limit = call.boundedIntQuery("limit", DEFAULT_SEARCH_LIMIT, searchLimitRange)
                 val categories =
                     parseSearchCategories(
                         call.request.queryParameters
@@ -119,7 +123,7 @@ internal fun Route.poiRoutes(poiService: PoiReader) {
             // pin" flow with the full feature shape.
             get("/{id}") {
                 val id =
-                    call.parameters["id"]?.toLongOrNull()
+                    call.longPath("id")
                         ?: return@get call.respondPoiError("bad_id", HttpStatusCode.BadRequest)
                 val feature =
                     poiService.poiDetail(id)

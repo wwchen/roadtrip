@@ -5,7 +5,11 @@ import ca.floo.roadtrip.model.api.AvailabilityWatchCreateRequest
 import ca.floo.roadtrip.model.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.route.common.boundedIntQuery
 import ca.floo.roadtrip.route.common.describeApi
+import ca.floo.roadtrip.route.common.intQueryAtLeast
+import ca.floo.roadtrip.route.common.longPath
+import ca.floo.roadtrip.route.common.optionalLongQuery
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchRequestMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
@@ -31,7 +35,12 @@ import kotlinx.serialization.json.Json
 import org.jooq.DSLContext
 
 private const val DEFAULT_LIST_LIMIT = 100
+private const val MIN_LIST_LIMIT = 1
 private const val MAX_LIST_LIMIT = 500
+private const val DEFAULT_LIST_OFFSET = 0
+private const val MIN_LIST_OFFSET = 0
+
+private val listLimitRange = MIN_LIST_LIMIT..MAX_LIST_LIMIT
 
 @OptIn(ExperimentalSerializationApi::class)
 private val watchJson =
@@ -63,13 +72,10 @@ internal fun Route.availabilityWatchRoutes(
                                 "status must be active, paused, or done",
                             )
                     }
-                val poiId = call.request.queryParameters["poi_id"]?.toLongOrNull()
-                val campsiteId = call.request.queryParameters["campsite_id"]?.toLongOrNull()
-                val limit = (call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_LIST_LIMIT).coerceIn(1, MAX_LIST_LIMIT)
-                val offset =
-                    call.request.queryParameters["offset"]
-                        ?.toIntOrNull()
-                        ?.coerceAtLeast(0) ?: 0
+                val poiId = call.optionalLongQuery("poi_id")
+                val campsiteId = call.optionalLongQuery("campsite_id")
+                val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)
+                val offset = call.intQueryAtLeast("offset", DEFAULT_LIST_OFFSET, MIN_LIST_OFFSET)
                 val rows = watches.list(status, poiId, campsiteId, limit, offset)
                 val total = watches.count(status, poiId, campsiteId)
                 call.respondJson(
@@ -116,7 +122,7 @@ internal fun Route.availabilityWatchRoutes(
             route("/{id}") {
                 get {
                     val id =
-                        call.parameters["id"]?.toLongOrNull()
+                        call.longPath("id")
                             ?: return@get call.respondError("invalid_id", HttpStatusCode.BadRequest)
                     val watch =
                         watches.findById(id)
@@ -128,7 +134,7 @@ internal fun Route.availabilityWatchRoutes(
 
                 post("/modify") {
                     val id =
-                        call.parameters["id"]?.toLongOrNull()
+                        call.longPath("id")
                             ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
                     val raw = call.receiveText()
                     val req =
@@ -170,7 +176,7 @@ internal fun Route.availabilityWatchRoutes(
 
                 post("/delete") {
                     val id =
-                        call.parameters["id"]?.toLongOrNull()
+                        call.longPath("id")
                             ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
                     if (watchService.delete(id)) {
                         call.respond(HttpStatusCode.NoContent)

@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.api.ApiErrorSchema
 import ca.floo.roadtrip.model.api.GeocodeResponseDto
 import ca.floo.roadtrip.model.api.GeocodeResultDto
 import ca.floo.roadtrip.model.routing.GeocodeResult
+import ca.floo.roadtrip.route.common.boundedIntQuery
 import ca.floo.roadtrip.support.GeocodeException
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -18,6 +19,11 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 private val LNGLAT_RE = Regex("""^-?\d{1,3}(\.\d{1,8})?,-?\d{1,3}(\.\d{1,8})?$""")
+private const val DEFAULT_GEOCODE_LIMIT = 5
+private const val MIN_GEOCODE_LIMIT = 1
+private const val MAX_GEOCODE_LIMIT = 10
+
+private val geocodeLimitRange = MIN_GEOCODE_LIMIT..MAX_GEOCODE_LIMIT
 
 @OptIn(ExperimentalSerializationApi::class)
 private val geocodeRouteJson =
@@ -57,10 +63,7 @@ fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
             }
 
             val autocomplete = call.request.queryParameters["autocomplete"] != "0"
-            val limit =
-                call.request.queryParameters["limit"]
-                    ?.toIntOrNull()
-                    ?.coerceIn(1, 10) ?: 5
+            val limit = call.boundedIntQuery("limit", DEFAULT_GEOCODE_LIMIT, geocodeLimitRange)
             val proximity = call.request.queryParameters["proximity"]?.takeIf { LNGLAT_RE.matches(it) }
 
             val results =
