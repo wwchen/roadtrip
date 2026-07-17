@@ -35,12 +35,14 @@ import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.CanonicalViewRepo
+import ca.floo.roadtrip.repo.PersistentCache
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.routes.api.pois.IP_RATE_LIMIT_PER_MINUTE
 import ca.floo.roadtrip.routes.api.pois.IpRateLimiter
+import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
@@ -59,6 +61,7 @@ import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.NotifyTriggerActionHandler
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
+import ca.floo.roadtrip.service.availability.TriggerActionHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
@@ -97,6 +100,7 @@ import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler
 import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
+import ca.floo.roadtrip.service.notification.slack.SlackResponseSender
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.DEFAULT_POI_TYPES
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
@@ -105,6 +109,7 @@ import ca.floo.roadtrip.service.poi.PoiReader
 import ca.floo.roadtrip.service.poi.PoiService
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.poi.TeslaSuperchargerService
+import ca.floo.roadtrip.service.poi.campground.CampgroundCta
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.readpath.ReadPathProviderPoiReader
 import ca.floo.roadtrip.service.routing.RouteCache
@@ -125,6 +130,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.serialization.json.Json
 import org.jooq.DSLContext
 import org.koin.core.annotation.KoinExperimentalAPI
 import org.koin.core.module.Module
@@ -136,6 +142,7 @@ import org.koin.ktor.ext.getKoin
 import org.koin.logger.slf4jLogger
 import org.slf4j.LoggerFactory
 import java.io.File
+import java.time.Clock
 import javax.sql.DataSource
 import org.koin.ktor.plugin.Koin as KoinPlugin
 
@@ -154,7 +161,6 @@ private const val SCHEDULER_NAME_AVAILABILITY = "availability"
 private const val CAMPFLARE_VENDOR = "campflare"
 private const val RECGOV_VENDOR = "recgov"
 private const val KOIN_AVAILABILITY_PROVIDER_QUALIFIER_PREFIX = "availability-provider"
-private const val KOIN_BOOKING_PROVIDER_QUALIFIER_PREFIX = "booking-provider"
 
 fun main(args: Array<String>): Unit = EngineMain.main(args)
 
@@ -185,13 +191,13 @@ fun Application.module() {
     val properties = ApplicationProperties.load(baseConfig = environment.config)
     installOptionalShutdownThreadDump(properties)
 
-    installRoadtripDependencies(properties)
+    installRoadtripInfrastructure(properties)
     installRoadtripPlugins()
     startRoadtripBackgroundServices()
     registerRoadtripRoutes()
 }
 
-internal fun Application.installRoadtripDependencies(properties: Map<String, String>) {
+internal fun Application.installRoadtripInfrastructure(properties: Map<String, String>) {
     val roadtripConfig = ConfigSection(properties).section("roadtrip")
     dependencies {
         if (!containsDependency<AppConfig>()) {
@@ -210,23 +216,6 @@ internal fun Application.installRoadtripDependencies(properties: Map<String, Str
         }
         provide(::roadtripDslContext)
 
-        provide(::apiCacheRepo)
-        provide(::CampgroundRepo)
-        provide(::CampsiteRepo)
-        provide(::CampsiteProviderRepo)
-        provide(::AvailabilityRepo)
-        provide(::AvailabilityPollerRepo)
-        provide(::AvailabilityRunRepo)
-        provide(::AvailabilityFetchCallRepo)
-        provide(::AvailabilityWatchRepo)
-        provide(::TeslaSuperchargerRepo)
-        provide(::PlanetFitnessLocationRepo)
-        provide(::PoiServingRepo)
-        provide(::RouteCorridorRepo)
-        provide(::AdminIngestReadRepo)
-        provide(::CanonicalViewRepo)
-
-        provide(::AvailabilityDateResolver)
         if (!containsDependency<RecGovAvailabilityClient>()) {
             provide(::recGovAvailabilityClient)
         }
@@ -242,80 +231,46 @@ internal fun Application.installRoadtripDependencies(properties: Map<String, Str
         if (!containsDependency<CampflareAvailabilityClient>()) {
             provide(::campflareAvailabilityClient)
         }
-    }
-
-    val appConfig: AppConfig by dependencies
-    val poiRegistry: PoiRegistry by dependencies
-    installRoadtripProviderKoin(appConfig = appConfig, poiRegistry = poiRegistry)
-    val koin = getKoin()
-
-    dependencies {
-        provide<AvailabilityProviderRegistry> { koin.get() }
-        provide(::availabilityTargetResolver)
-        provide(::WatchScopeResolver)
-        provide(::AvailabilityPollerMembership)
-        provide<AlertProviderRegistry> { koin.get() }
-        provide<BookingProviderRegistry> { koin.get() }
-        provide(::AvailabilityBookingTargetResolver)
-        provide(::watchCapabilityService)
-        provide(::watchCapabilityValidator)
-        provide(::availabilityWatchService)
-        provide(::availabilityWatchApiMapper)
-        provide(::providerCooldownTracker)
-        provide(::failoverAvailabilityFetcher)
-        provide(::CatalogAvailabilityBatcher)
-        provide(::campsiteAvailabilityComposer)
-        provide(::CampsiteCatalogService)
-        provide(::CampsiteAvailabilityService)
-        provide(::CampgroundAvailabilitySupport)
-
-        provide(::slackNotificationService)
-        provide(::emailNotificationService)
-        provide(::notificationServices)
-        provide(::NotificationFanout)
-        provide<NotificationSender> { resolve<NotificationFanout>() }
-        provide(::notifyTriggerActionHandler)
-        provide(::AtcTriggerActionHandler)
-        provide(::triggerActionRegistry)
-        provide(::watchAlertDispatcher)
-        provide<SlackSignatureVerifier?> { slackSignatureVerifier(resolve()) }
-        provide(::slackInteractivityWatches)
-        provide(::slackInteractivityHandler)
-        provide(::slackInteractivityWiring)
-
-        provide<MapboxDirections> { MapboxDirections(token = mapboxToken(roadtripConfig)) }
-        provide<MapboxGeocoder> { MapboxGeocoder(token = mapboxToken(roadtripConfig)) }
-        provide(::routeCache)
-        provide(::campgroundService)
-        provide(::TeslaSuperchargerService)
-        provide(::PlanetFitnessLocationService)
-        provide(::poiDetailServices)
-        provide(::poiService)
-        provide(::poiReader)
-        provide(::RouteCorridorService)
-        provide(::poisOnRouteService)
-
-        provide(::etlOrchestrator)
-        provide(::ingestController)
-        provide<IpRateLimiter> { IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE) }
 
         provide<CoroutineScope> { CoroutineScope(Dispatchers.IO + SupervisorJob()) }.cleanup { scope ->
             scope.cancel()
         }
-        provide(::vendorRateLimiter)
-        provide(::availabilityPollExecutor)
-        provide(::availabilityScheduler)
-        provide(::PollerBackfill)
-        provide(::watchReaper)
     }
+
+    val appConfig: AppConfig by dependencies
+    val staticDir: File by dependencies
+    val poiRegistry: PoiRegistry by dependencies
+    val dataSource: DataSource by dependencies
+    val ctx: DSLContext by dependencies
+    val recGovClient: RecGovAvailabilityClient by dependencies
+    val aspiraClient: AspiraAvailabilityClient by dependencies
+    val reserveAmericaClient: ReserveAmericaAvailabilityClient by dependencies
+    val reserveCaliforniaClient: ReserveCaliforniaAvailabilityClient by dependencies
+    val campflareClient: CampflareAvailabilityClient by dependencies
+    val schedulerScope: CoroutineScope by dependencies
+    installRoadtripKoin(
+        appConfig = appConfig,
+        staticDir = staticDir,
+        poiRegistry = poiRegistry,
+        dataSource = dataSource,
+        ctx = ctx,
+        recGovClient = recGovClient,
+        aspiraClient = aspiraClient,
+        reserveAmericaClient = reserveAmericaClient,
+        reserveCaliforniaClient = reserveCaliforniaClient,
+        campflareClient = campflareClient,
+        schedulerScope = schedulerScope,
+        roadtripConfig = roadtripConfig,
+    )
 }
 
 private fun Application.startRoadtripBackgroundServices() {
     CoordinateTimeZones.warmUp()
-    val pollerBackfill: PollerBackfill by dependencies
-    val schedulerScope: CoroutineScope by dependencies
-    val scheduler: Scheduler<AvailabilityPollerRepo.Poller> by dependencies
-    val watchReaper: WatchReaper by dependencies
+    val koin = getKoin()
+    val pollerBackfill = koin.get<PollerBackfill>()
+    val schedulerScope = koin.get<CoroutineScope>()
+    val scheduler = koin.get<Scheduler<AvailabilityPollerRepo.Poller>>()
+    val watchReaper = koin.get<WatchReaper>()
 
     pollerBackfill.run()
     scheduler.start(schedulerScope)
@@ -331,8 +286,6 @@ private fun roadtripDataSource(roadtripConfig: ConfigSection): DataSource {
 }
 
 internal fun roadtripDslContext(dataSource: DataSource): DSLContext = dsl(dataSource)
-
-internal fun apiCacheRepo(ctx: DSLContext): ApiCacheRepo = ApiCacheRepo(ctx)
 
 private fun poiRegistry(
     appConfig: AppConfig,
@@ -357,26 +310,93 @@ internal fun campflareAvailabilityClient(appConfig: AppConfig): CampflareAvailab
     )
 
 @OptIn(KoinExperimentalAPI::class)
-internal fun Application.installRoadtripProviderKoin(
+internal fun Application.installRoadtripKoin(
     appConfig: AppConfig,
+    staticDir: File,
     poiRegistry: PoiRegistry,
+    dataSource: DataSource,
+    ctx: DSLContext,
+    recGovClient: RecGovAvailabilityClient,
+    aspiraClient: AspiraAvailabilityClient,
+    reserveAmericaClient: ReserveAmericaAvailabilityClient,
+    reserveCaliforniaClient: ReserveCaliforniaAvailabilityClient,
+    campflareClient: CampflareAvailabilityClient,
+    schedulerScope: CoroutineScope,
+    roadtripConfig: ConfigSection,
 ) {
     install(KoinPlugin) {
         slf4jLogger()
         bridge {
             koinToKtor()
         }
-        modules(roadtripProviderKoinModule(appConfig = appConfig, poiRegistry = poiRegistry))
+        modules(
+            roadtripKoinModule(
+                appConfig = appConfig,
+                staticDir = staticDir,
+                poiRegistry = poiRegistry,
+                dataSource = dataSource,
+                ctx = ctx,
+                recGovClient = recGovClient,
+                aspiraClient = aspiraClient,
+                reserveAmericaClient = reserveAmericaClient,
+                reserveCaliforniaClient = reserveCaliforniaClient,
+                campflareClient = campflareClient,
+                schedulerScope = schedulerScope,
+                roadtripConfig = roadtripConfig,
+            ),
+        )
     }
 }
 
-internal fun roadtripProviderKoinModule(
+internal fun roadtripKoinModule(
     appConfig: AppConfig,
+    staticDir: File,
     poiRegistry: PoiRegistry,
+    dataSource: DataSource,
+    ctx: DSLContext,
+    recGovClient: RecGovAvailabilityClient,
+    aspiraClient: AspiraAvailabilityClient,
+    reserveAmericaClient: ReserveAmericaAvailabilityClient,
+    reserveCaliforniaClient: ReserveCaliforniaAvailabilityClient,
+    campflareClient: CampflareAvailabilityClient,
+    schedulerScope: CoroutineScope,
+    roadtripConfig: ConfigSection,
 ): Module {
     val aspiraTenants = aspiraTenantsFor(poiRegistry)
     val reserveAmericaTenants = reserveAmericaTenantsFor(poiRegistry)
     return module {
+        single { appConfig }
+        single { staticDir }
+        single { poiRegistry }
+        single<DataSource> { dataSource }
+        single { ctx }
+        single<RecGovAvailabilityClient> { recGovClient }
+        single<AspiraAvailabilityClient> { aspiraClient }
+        single<ReserveAmericaAvailabilityClient> { reserveAmericaClient }
+        single<ReserveCaliforniaAvailabilityClient> { reserveCaliforniaClient }
+        single<CampflareAvailabilityClient> { campflareClient }
+        single<CoroutineScope> { schedulerScope }
+        single<Clock> { Clock.systemUTC() }
+        single<Json> { Json }
+        single { CampgroundCta.Default }
+
+        singleOf(::ApiCacheRepo) bind PersistentCache::class
+        singleOf(::CampgroundRepo)
+        singleOf(::CampsiteRepo)
+        singleOf(::CampsiteProviderRepo)
+        singleOf(::AvailabilityRepo)
+        singleOf(::AvailabilityPollerRepo)
+        singleOf(::AvailabilityRunRepo)
+        singleOf(::AvailabilityFetchCallRepo)
+        singleOf(::AvailabilityWatchRepo)
+        singleOf(::TeslaSuperchargerRepo)
+        singleOf(::PlanetFitnessLocationRepo)
+        singleOf(::PoiServingRepo)
+        singleOf(::RouteCorridorRepo)
+        singleOf(::AdminIngestReadRepo)
+        singleOf(::CanonicalViewRepo)
+
+        singleOf(::AvailabilityDateResolver)
         singleOf(::recGovAvailabilityProvider) bind AvailabilityProvider::class
         singleOf(::campflareAvailabilityProvider) bind AvailabilityProvider::class
         aspiraTenants.forEach { tenant ->
@@ -394,23 +414,182 @@ internal fun roadtripProviderKoinModule(
             val providers = getAll<AvailabilityProvider>()
             AvailabilityProviderRegistry.fromBindings(availabilityProviderBindings(poiRegistry, providers))
         }
+        singleOf(::DbAvailabilityTargetResolver) bind AvailabilityTargetResolver::class
 
+        singleOf(::WatchScopeResolver)
+        singleOf(::AvailabilityPollerMembership)
         singleOf(::InternalPollerAlertProvider) bind AlertProvider::class
         single {
             val providers = getAll<AlertProvider>()
             AlertProviderRegistry(providers)
         }
+        single {
+            WatchCapabilityService(
+                availabilityTargets = get(),
+                bookingTargets = get(),
+                notificationTriggerKinds = notificationTriggerKinds(get()),
+            )
+        }
+        singleOf(::WatchTriggerCapabilityValidator) bind WatchCapabilityValidator::class
+        singleOf(::AvailabilityWatchService)
+        singleOf(::AvailabilityWatchApiMapper)
+        single {
+            ProviderCooldownTracker(cooldown = get<AppConfig>().availability.providerCooldown)
+        }
+        singleOf(::FailoverAvailabilityFetcher)
+        singleOf(::CatalogAvailabilityBatcher)
+        singleOf(::AvailabilityLoader)
+        singleOf(::CampsiteAvailabilityComposer)
+        singleOf(::CampsiteCatalogService)
+        singleOf(::CampsiteAvailabilityService)
+        singleOf(::CampgroundAvailabilitySupport)
 
         if (appConfig.booking.recgovAtc.companionEnabled) {
             mainLog.info("Rec.gov ATC companion executor enabled at {}", appConfig.booking.recgovAtc.companionBaseUrl)
-            single<RecGovAtcExecutor> { HttpRecGovAtcExecutor(appConfig.booking.recgovAtc) }
+            single<RecGovAtcExecutor> { HttpRecGovAtcExecutor(get<AppConfig>().booking.recgovAtc) }
             singleOf(::RecGovBookingProvider) bind BookingProvider::class
         }
         single {
             val providers = getAll<BookingProvider>()
             BookingProviderRegistry(providers)
         }
+        singleOf(::AvailabilityBookingTargetResolver)
+
+        single { SlackNotificationService(get<AppConfig>().slack) } bind NotificationService::class
+        single<SlackResponseSender> { get<SlackNotificationService>() }
+        single { EmailNotificationService(get<AppConfig>().email) } bind NotificationService::class
+        single<NotificationSender> { NotificationFanout(getAll<NotificationService>()) }
+        single<TriggerActionHandler> {
+            NotifyTriggerActionHandler(
+                notifications = get(),
+                appRootUrl = get<AppConfig>().webApp?.rootUrl,
+            )
+        }
+        singleOf(::AtcTriggerActionHandler) bind TriggerActionHandler::class
+        single {
+            TriggerActionRegistry(getAll<TriggerActionHandler>())
+        }
+        single {
+            val config = get<AppConfig>()
+            WatchAlertDispatcher(
+                notifications = get(),
+                scopeResolver = get(),
+                watches = get(),
+                targets = get(),
+                pois = get(),
+                availability = get(),
+                triggerActions = get(),
+                grafanaRootUrl = config.grafana?.rootUrl,
+                appRootUrl = config.webApp?.rootUrl,
+            )
+        }
+        single<SlackInteractivityHandler.Watches> {
+            slackInteractivityWatches(
+                watches = get(),
+                watchService = get(),
+                watchAlertDispatcher = get(),
+            )
+        }
+        singleOf(::SlackInteractivityHandler)
+        configureSlackInteractivity(appConfig)
+
+        single<MapboxDirections> { MapboxDirections(token = mapboxToken(roadtripConfig)) }
+        single<MapboxGeocoder> { MapboxGeocoder(token = mapboxToken(roadtripConfig)) }
+        single {
+            RouteCache(
+                directions = get(),
+                ttl = get<AppConfig>().cache.ttlFor(ApiCacheEntity.ROUTE),
+                persistentCache = get<ApiCacheRepo>(),
+            )
+        }
+        singleOf(::CampgroundService) bind PoiDetailService::class
+        singleOf(::TeslaSuperchargerService) bind PoiDetailService::class
+        singleOf(::PlanetFitnessLocationService) bind PoiDetailService::class
+        single {
+            PoiService(
+                poiRepo = get(),
+                detailServices = getAll<PoiDetailService>(),
+            )
+        }
+        single<PoiReader> {
+            ReadPathProviderPoiReader(
+                delegate = get<PoiService>(),
+                detailServices = getAll<PoiDetailService>(),
+                providers = get<AppConfig>().readPathProviders,
+            )
+        }
+        singleOf(::RouteCorridorService)
+        singleOf(::PoisOnRouteService)
+
+        single {
+            val staticDir = get<File>()
+            EtlOrchestrator(
+                ctx = get(),
+                rawDir = staticDir.resolveConfiguredPath(RAW_DATA_DIR),
+                poiRegistry = get(),
+                canonicalViews = get(),
+            )
+        }
+        single {
+            val ctx = get<DSLContext>()
+            val staticDir = get<File>()
+            val registry = get<PoiRegistry>()
+            sweepStaleIngestRuns(ctx)
+            IngestController(
+                ctx = ctx,
+                etl = get(),
+                fetchTargets = fetchTargetsFromRegistry(registry, staticDir),
+                importTargets = importTargetsFromRegistry(registry),
+                workingDir = staticDir,
+            )
+        }
+        single<IpRateLimiter> { IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE) }
+        single {
+            VendorRateLimiter(
+                config = get<AppConfig>().vendorRateLimit,
+                dataSource = get(),
+            )
+        }
+        singleOf(::AvailabilityPollExecutor)
+        single<Scheduler<AvailabilityPollerRepo.Poller>> {
+            val executor = get<AvailabilityPollExecutor>()
+            Scheduler(
+                repo = get<AvailabilityPollerRepo>(),
+                handler = executor::handle,
+                name = SCHEDULER_NAME_AVAILABILITY,
+            )
+        }
+        singleOf(::PollerBackfill)
+        singleOf(::WatchReaper)
     }
+}
+
+private fun notificationTriggerKinds(appConfig: AppConfig): List<String> =
+    buildList {
+        add(AvailabilityTriggerKinds.SLACK_NOTIFY)
+        if (appConfig.email?.defaultTo?.isNotEmpty() == true) add(AvailabilityTriggerKinds.EMAIL_NOTIFY)
+    }
+
+private fun Module.configureSlackInteractivity(appConfig: AppConfig) {
+    val signingSecret = appConfig.slack?.signingSecret
+    if (signingSecret != null) {
+        mainLog.info(
+            "Slack interactivity ENABLED: signing secret set ({} chars), POST /api/slack/interactivity is live",
+            signingSecret.length,
+        )
+        single<SlackSignatureVerifier> { SlackSignatureVerifier(signingSecret) }
+        singleOf(::SlackInteractivityWiring)
+        return
+    }
+
+    val reason =
+        when {
+            appConfig.slack == null ->
+                "Slack is disabled (no roadtrip.slack.bot-token / roadtrip.slack.default-channel)"
+            else ->
+                "roadtrip.slack.signing-secret is not set; outbound Slack works, but the interactivity endpoint stays unregistered"
+        }
+    mainLog.info("Slack interactivity DISABLED: {}", reason)
 }
 
 internal fun recGovAvailabilityProvider(
@@ -545,148 +724,6 @@ private fun validateAspiraHosts(hostBySource: Map<String, String>) {
     // source is harmless because DI builds only the configured adapters.
 }
 
-internal fun availabilityTargetResolver(
-    providerRefs: CampsiteProviderRepo,
-    campsitesRepo: CampsiteRepo,
-    availabilityProviders: AvailabilityProviderRegistry,
-    dateResolver: AvailabilityDateResolver,
-): AvailabilityTargetResolver =
-    DbAvailabilityTargetResolver(
-        providerRefs = providerRefs,
-        campsitesRepo = campsitesRepo,
-        availabilityProviders = availabilityProviders,
-        dateResolver = dateResolver,
-    )
-
-internal fun watchCapabilityService(
-    appConfig: AppConfig,
-    availabilityTargets: AvailabilityTargetResolver,
-    bookingTargets: AvailabilityBookingTargetResolver,
-): WatchCapabilityService =
-    WatchCapabilityService(
-        availabilityTargets = availabilityTargets,
-        bookingTargets = bookingTargets,
-        notificationTriggerKinds =
-            buildList {
-                add(AvailabilityTriggerKinds.SLACK_NOTIFY)
-                if (appConfig.email?.defaultTo?.isNotEmpty() == true) add(AvailabilityTriggerKinds.EMAIL_NOTIFY)
-            },
-    )
-
-internal fun watchCapabilityValidator(
-    scopeResolver: WatchScopeResolver,
-    capabilities: WatchCapabilityService,
-): WatchCapabilityValidator =
-    WatchTriggerCapabilityValidator(
-        scopeResolver = scopeResolver,
-        capabilities = capabilities,
-    )
-
-internal fun availabilityWatchService(
-    ctx: DSLContext,
-    alertProviders: AlertProviderRegistry,
-    capabilityValidator: WatchCapabilityValidator,
-): AvailabilityWatchService =
-    AvailabilityWatchService(
-        ctx = ctx,
-        alertProviders = alertProviders,
-        capabilityValidator = capabilityValidator,
-    )
-
-internal fun availabilityWatchApiMapper(
-    campsitesRepo: CampsiteRepo,
-    scopeResolver: WatchScopeResolver,
-    capabilities: WatchCapabilityService,
-): AvailabilityWatchApiMapper =
-    AvailabilityWatchApiMapper(
-        campsites = campsitesRepo,
-        scopeResolver = scopeResolver,
-        capabilities = capabilities,
-    )
-
-internal fun providerCooldownTracker(appConfig: AppConfig): ProviderCooldownTracker =
-    ProviderCooldownTracker(cooldown = appConfig.availability.providerCooldown)
-
-internal fun failoverAvailabilityFetcher(cooldowns: ProviderCooldownTracker): FailoverAvailabilityFetcher =
-    FailoverAvailabilityFetcher(cooldowns = cooldowns)
-
-internal fun campsiteAvailabilityComposer(
-    targets: AvailabilityTargetResolver,
-    dateResolver: AvailabilityDateResolver,
-    availability: AvailabilityRepo,
-    failoverFetcher: FailoverAvailabilityFetcher,
-): CampsiteAvailabilityComposer =
-    CampsiteAvailabilityComposer(
-        targets = targets,
-        dateResolver = dateResolver,
-        availability = availability,
-        failoverFetcher = failoverFetcher,
-    )
-
-internal fun slackNotificationService(appConfig: AppConfig): SlackNotificationService = SlackNotificationService(appConfig.slack)
-
-internal fun emailNotificationService(appConfig: AppConfig): EmailNotificationService = EmailNotificationService(appConfig.email)
-
-internal fun notificationServices(
-    slack: SlackNotificationService,
-    email: EmailNotificationService,
-): List<NotificationService> = listOf(slack, email)
-
-internal fun notifyTriggerActionHandler(
-    notifications: NotificationSender,
-    appConfig: AppConfig,
-): NotifyTriggerActionHandler =
-    NotifyTriggerActionHandler(
-        notifications = notifications,
-        appRootUrl = appConfig.webApp?.rootUrl,
-    )
-
-internal fun triggerActionRegistry(
-    notify: NotifyTriggerActionHandler,
-    atc: AtcTriggerActionHandler,
-): TriggerActionRegistry = TriggerActionRegistry(listOf(notify, atc))
-
-internal fun watchAlertDispatcher(
-    notifications: NotificationSender,
-    scopeResolver: WatchScopeResolver,
-    watches: AvailabilityWatchRepo,
-    targets: AvailabilityTargetResolver,
-    pois: PoiServingRepo,
-    availability: AvailabilityRepo,
-    triggerActions: TriggerActionRegistry,
-    appConfig: AppConfig,
-): WatchAlertDispatcher =
-    WatchAlertDispatcher(
-        notifications = notifications,
-        scopeResolver = scopeResolver,
-        watches = watches,
-        targets = targets,
-        pois = pois,
-        availability = availability,
-        triggerActions = triggerActions,
-        grafanaRootUrl = appConfig.grafana?.rootUrl,
-        appRootUrl = appConfig.webApp?.rootUrl,
-    )
-
-private fun slackSignatureVerifier(appConfig: AppConfig): SlackSignatureVerifier? =
-    appConfig.slack?.signingSecret?.let { secret ->
-        mainLog.info(
-            "Slack interactivity ENABLED: signing secret set ({} chars), POST /api/slack/interactivity is live",
-            secret.length,
-        )
-        SlackSignatureVerifier(secret)
-    } ?: run {
-        val reason =
-            when {
-                appConfig.slack == null ->
-                    "Slack is disabled (no roadtrip.slack.bot-token / roadtrip.slack.default-channel)"
-                else ->
-                    "roadtrip.slack.signing-secret is not set; outbound Slack works, but the interactivity endpoint stays unregistered"
-            }
-        mainLog.info("Slack interactivity DISABLED: {}", reason)
-        null
-    }
-
 internal fun slackInteractivityWatches(
     watches: AvailabilityWatchRepo,
     watchService: AvailabilityWatchService,
@@ -709,158 +746,7 @@ internal fun slackInteractivityWatches(
         ) = watchAlertDispatcher.statusNoticeForWatch(watch, state)
     }
 
-internal fun slackInteractivityHandler(
-    watches: SlackInteractivityHandler.Watches,
-    slack: SlackNotificationService,
-): SlackInteractivityHandler = SlackInteractivityHandler(watches = watches, slack = slack)
-
-internal fun slackInteractivityWiring(
-    verifier: SlackSignatureVerifier?,
-    handler: SlackInteractivityHandler,
-): SlackInteractivityWiring? = verifier?.let { SlackInteractivityWiring(verifier = it, handler = handler) }
-
 private fun mapboxToken(roadtripConfig: ConfigSection): String? = roadtripConfig.section("mapbox").value(MAPBOX_TOKEN_KEY)
-
-internal fun routeCache(
-    appConfig: AppConfig,
-    directions: MapboxDirections,
-    apiCache: ApiCacheRepo,
-): RouteCache =
-    RouteCache(
-        directions = directions,
-        ttl = appConfig.cache.ttlFor(ApiCacheEntity.ROUTE),
-        persistentCache = apiCache,
-    )
-
-internal fun campgroundService(
-    repo: CampgroundRepo,
-    dateResolver: AvailabilityDateResolver,
-    availabilitySupport: CampgroundAvailabilitySupport,
-): CampgroundService =
-    CampgroundService(
-        repo = repo,
-        dateResolver = dateResolver,
-        availabilitySupport = availabilitySupport,
-    )
-
-internal fun poiDetailServices(
-    campgroundService: CampgroundService,
-    teslaSuperchargerService: TeslaSuperchargerService,
-    planetFitnessLocationService: PlanetFitnessLocationService,
-): List<PoiDetailService> =
-    listOf(
-        campgroundService,
-        teslaSuperchargerService,
-        planetFitnessLocationService,
-    )
-
-internal fun poiService(
-    poiRepo: PoiServingRepo,
-    detailServices: List<PoiDetailService>,
-): PoiService =
-    PoiService(
-        poiRepo = poiRepo,
-        detailServices = detailServices,
-    )
-
-internal fun poiReader(
-    appConfig: AppConfig,
-    poiService: PoiService,
-    detailServices: List<PoiDetailService>,
-): PoiReader =
-    ReadPathProviderPoiReader(
-        delegate = poiService,
-        detailServices = detailServices,
-        providers = appConfig.readPathProviders,
-    )
-
-internal fun poisOnRouteService(
-    routeCache: RouteCache,
-    routeCorridorService: RouteCorridorService,
-    poiService: PoiReader,
-): PoisOnRouteService =
-    PoisOnRouteService(
-        routeCache = routeCache,
-        routeCorridorService = routeCorridorService,
-        poiService = poiService,
-    )
-
-internal fun etlOrchestrator(
-    ctx: DSLContext,
-    staticDir: File,
-    poiRegistry: PoiRegistry,
-    canonicalViews: CanonicalViewRepo,
-): EtlOrchestrator =
-    EtlOrchestrator(
-        ctx = ctx,
-        rawDir = staticDir.resolveConfiguredPath(RAW_DATA_DIR),
-        poiRegistry = poiRegistry,
-        canonicalViews = canonicalViews,
-    )
-
-internal fun ingestController(
-    ctx: DSLContext,
-    etl: EtlOrchestrator,
-    poiRegistry: PoiRegistry,
-    staticDir: File,
-): IngestController {
-    sweepStaleIngestRuns(ctx)
-    return IngestController(
-        ctx = ctx,
-        etl = etl,
-        fetchTargets = fetchTargetsFromRegistry(poiRegistry, staticDir),
-        importTargets = importTargetsFromRegistry(poiRegistry),
-        workingDir = staticDir,
-    )
-}
-
-internal fun vendorRateLimiter(
-    appConfig: AppConfig,
-    dataSource: DataSource,
-): VendorRateLimiter =
-    VendorRateLimiter(
-        config = appConfig.vendorRateLimit,
-        dataSource = dataSource,
-    )
-
-internal fun availabilityPollExecutor(
-    pollers: AvailabilityPollerRepo,
-    campsitesRepo: CampsiteRepo,
-    batcher: CatalogAvailabilityBatcher,
-    availability: AvailabilityRepo,
-    runs: AvailabilityRunRepo,
-    dateResolver: AvailabilityDateResolver,
-    targets: AvailabilityTargetResolver,
-    fetchCalls: AvailabilityFetchCallRepo,
-    limiter: VendorRateLimiter,
-    alertDispatcher: WatchAlertDispatcher,
-    failoverFetcher: FailoverAvailabilityFetcher,
-): AvailabilityPollExecutor =
-    AvailabilityPollExecutor(
-        pollers = pollers,
-        campsitesRepo = campsitesRepo,
-        batcher = batcher,
-        availability = availability,
-        runs = runs,
-        dateResolver = dateResolver,
-        targets = targets,
-        fetchCalls = fetchCalls,
-        limiter = limiter,
-        alertDispatcher = alertDispatcher,
-        failoverFetcher = failoverFetcher,
-    )
-
-internal fun availabilityScheduler(
-    pollers: AvailabilityPollerRepo,
-    executor: AvailabilityPollExecutor,
-): Scheduler<AvailabilityPollerRepo.Poller> =
-    Scheduler(
-        repo = pollers,
-        handler = executor::handle,
-        name = SCHEDULER_NAME_AVAILABILITY,
-    )
-
-internal fun watchReaper(pollers: AvailabilityPollerRepo): WatchReaper = WatchReaper(pollers)
 
 private fun AppConfig.isProviderEnabled(id: AvailabilityProviderId): Boolean =
     readPathProviders.isAvailabilityProviderEnabled(id.name.lowercase()) &&

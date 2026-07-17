@@ -11,11 +11,9 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
-import ca.floo.roadtrip.routes.api.availability.availabilityWatchRoutes
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
-import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.NotifyTriggerActionHandler
@@ -55,6 +53,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import ca.floo.roadtrip.routes.api.availability.availabilityWatchRoutes as registerAvailabilityWatchRoutes
 
 class AvailabilityWatchRoutesTest : SharedDbTest() {
     @BeforeEach
@@ -166,19 +165,12 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         notifyScope: CoroutineScope,
         watchCapabilities: WatchCapabilityService? = null,
     ) {
-        val campsitesRepo = CampsiteRepo(ctx)
-        val scopeResolver = WatchScopeResolver(campsitesRepo)
-        availabilityWatchRoutes(
-            watches = AvailabilityWatchRepo(ctx),
-            watchMapper =
-                AvailabilityWatchApiMapper(
-                    campsites = campsitesRepo,
-                    scopeResolver = scopeResolver,
-                    capabilities = watchCapabilities,
-                ),
+        registerAvailabilityWatchRoutes(
+            ctx = ctx,
             watchService = watchService,
             alertDispatcher = alertDispatcher,
             notifyScope = notifyScope,
+            watchCapabilities = watchCapabilities,
         )
     }
 

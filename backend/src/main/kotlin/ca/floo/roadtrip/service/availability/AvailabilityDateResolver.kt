@@ -12,7 +12,6 @@ private val GLOBAL_EARLIEST_DATE_CUTOFF: LocalTime = LocalTime.of(18, 0)
 
 internal class AvailabilityDateResolver(
     private val clock: Clock = Clock.systemUTC(),
-    private val cutoff: LocalTime = GLOBAL_EARLIEST_DATE_CUTOFF,
 ) {
     fun context(
         lat: Double?,
@@ -25,7 +24,7 @@ internal class AvailabilityDateResolver(
     fun earliestDate(zone: ZoneId): LocalDate {
         val localNow = clock.instant().atZone(zone)
         val localDate = localNow.toLocalDate()
-        return if (localNow.toLocalTime().isBefore(cutoff)) localDate else localDate.plusDays(1)
+        return if (localNow.toLocalTime().isBefore(GLOBAL_EARLIEST_DATE_CUTOFF)) localDate else localDate.plusDays(1)
     }
 
     fun resolveWindow(

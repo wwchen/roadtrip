@@ -11,9 +11,11 @@ import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import kotlinx.coroutines.runBlocking
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -27,13 +29,19 @@ class FailoverAvailabilityFetcherTest {
     /** Mutable virtual clock (mirrors ProviderCooldownTrackerTest's FakeClock). */
     private class FakeClock(
         start: String = "2026-07-09T12:00:00Z",
-    ) {
+    ) : Clock() {
         var now: Instant = Instant.parse(start)
             private set
 
         fun advance(millis: Long) {
             now = now.plusMillis(millis)
         }
+
+        override fun getZone(): ZoneId = ZoneId.of("UTC")
+
+        override fun withZone(zone: ZoneId): Clock = this
+
+        override fun instant(): Instant = now
     }
 
     /** Fake provider whose `catalogAvailability` behaviour is scripted per call. */
@@ -139,7 +147,7 @@ class FailoverAvailabilityFetcherTest {
     private fun fetcherWith(
         tracker: ProviderCooldownTracker,
         clock: FakeClock,
-    ): FailoverAvailabilityFetcher = FailoverAvailabilityFetcher(cooldowns = tracker, clock = { clock.now })
+    ): FailoverAvailabilityFetcher = FailoverAvailabilityFetcher(cooldowns = tracker, clock = clock)
 
     @Test
     fun `first candidate succeeds — single attempt, servedBy first`() =

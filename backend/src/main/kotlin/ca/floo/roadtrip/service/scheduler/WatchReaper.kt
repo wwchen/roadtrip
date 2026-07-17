@@ -31,8 +31,8 @@ private val DEFAULT_REAP_INTERVAL: Duration = Duration.ofMinutes(5)
  */
 internal class WatchReaper(
     private val pollers: AvailabilityPollerRepo,
-    private val interval: Duration = DEFAULT_REAP_INTERVAL,
 ) {
+    private val interval: Duration = DEFAULT_REAP_INTERVAL
     private val log = LoggerFactory.getLogger(javaClass)
     private var loop: Job? = null
 

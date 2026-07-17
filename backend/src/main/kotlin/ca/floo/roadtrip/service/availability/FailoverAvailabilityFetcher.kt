@@ -7,6 +7,7 @@ import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import java.time.Clock
 import java.time.Instant
 
 /**
@@ -27,7 +28,7 @@ import java.time.Instant
  */
 internal open class FailoverAvailabilityFetcher(
     private val cooldowns: ProviderCooldownTracker,
-    private val clock: () -> Instant = Instant::now,
+    private val clock: Clock = Clock.systemUTC(),
 ) {
     data class AttemptRecord(
         val provider: AvailabilityProviderId,
@@ -73,9 +74,9 @@ internal open class FailoverAvailabilityFetcher(
                 return FailoverResult(batch = null, servedBy = null, attempts = attempts)
             }
 
-            val begin = clock()
+            val begin = now()
             val (outcome, batch, error) = attemptFetch(candidate, refs, window)
-            val durationMs = elapsedMs(begin, clock())
+            val durationMs = elapsedMs(begin, now())
 
             attempts +=
                 AttemptRecord(
@@ -137,6 +138,8 @@ internal open class FailoverAvailabilityFetcher(
         begin: Instant,
         end: Instant,
     ): Int = (end.toEpochMilli() - begin.toEpochMilli()).toInt().coerceAtLeast(0)
+
+    private fun now(): Instant = clock.instant()
 
     companion object {
         internal const val NO_REFS_ERROR = "no campsite refs for candidate"

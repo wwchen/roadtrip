@@ -34,6 +34,7 @@ import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import org.koin.ktor.ext.getKoin
 import java.io.File
 import java.io.PrintWriter
 import java.nio.file.Files
@@ -71,9 +72,10 @@ class RoadtripDiGraphTest : SharedDbTest() {
                 installTestOverrides(closeTracker)
                 module()
 
-                val catalogService: CampsiteCatalogService by dependencies
-                val availabilityService: CampsiteAvailabilityService by dependencies
-                val resolvedSchedulerScope: CoroutineScope by dependencies
+                val koin = getKoin()
+                val catalogService = koin.get<CampsiteCatalogService>()
+                val availabilityService = koin.get<CampsiteAvailabilityService>()
+                val resolvedSchedulerScope = koin.get<CoroutineScope>()
 
                 schedulerScope = resolvedSchedulerScope
                 assertNotNull(catalogService)

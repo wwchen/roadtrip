@@ -8,7 +8,6 @@ import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
@@ -22,13 +21,10 @@ private const val DEFAULT_AVAILABILITY_DAYS: Int = 7
 
 internal class CampsiteAvailabilityComposer(
     private val targets: AvailabilityTargetResolver,
-    private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
-    availability: AvailabilityRepo? = null,
-    private val snapshotFreshnessTtl: (AvailabilityProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
+    private val dateResolver: AvailabilityDateResolver,
+    private val availabilityLoader: AvailabilityLoader,
     private val failoverFetcher: FailoverAvailabilityFetcher,
 ) {
-    private val availabilityLoader = AvailabilityLoader(availability)
-
     suspend fun availabilityFor(
         campsites: List<CampsiteAvailabilityTarget>,
         startDate: LocalDate?,
@@ -67,7 +63,7 @@ internal class CampsiteAvailabilityComposer(
                             targets = rows.map { it.toAvailabilityTarget() },
                             startDate = windows.target.startDate,
                             endDate = windows.target.endDate,
-                            ttl = snapshotFreshnessTtl(provider.id),
+                            ttl = defaultSnapshotFreshnessTtl(provider.id),
                         ),
                     ) {
                         fetchWithFailover(rows, windows)

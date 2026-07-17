@@ -4,7 +4,6 @@ import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
-import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
@@ -36,10 +35,7 @@ import kotlin.test.assertEquals
 class AvailabilityDashboardRoutesTest : SharedDbTest() {
     private fun Route.testAvailabilityDashboardRoutes() {
         availabilityDashboardRoutes(
-            pollers = AvailabilityPollerRepo(ctx),
-            runs = AvailabilityRunRepo(ctx),
-            availability = AvailabilityRepo(ctx),
-            campsitesRepo = CampsiteRepo(ctx),
+            ctx = ctx,
             forcePullCooldown = Duration.ofSeconds(60),
         )
     }

@@ -13,8 +13,9 @@ internal class PoisOnRouteService(
     private val routeCache: RouteCache,
     private val routeCorridorService: RouteCorridorService,
     private val poiService: PoiReader,
-    private val defaultCategories: List<String> = DEFAULT_POI_TYPES,
 ) {
+    private val defaultCategories: List<String> = DEFAULT_POI_TYPES
+
     suspend fun poisOnRoute(
         waypoints: List<OnRouteWaypoint>,
         radiusMiles: Double,

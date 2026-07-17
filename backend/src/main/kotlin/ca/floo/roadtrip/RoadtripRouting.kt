@@ -29,12 +29,12 @@ import io.ktor.server.plugins.compression.gzip
 import io.ktor.server.plugins.compression.matchContentType
 import io.ktor.server.plugins.compression.minimumSize
 import io.ktor.server.plugins.conditionalheaders.ConditionalHeaders
-import io.ktor.server.plugins.di.dependencies
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.CoroutineScope
 import org.jooq.DSLContext
+import org.koin.ktor.ext.getKoin
 import org.slf4j.event.Level
 import java.io.File
 
@@ -81,25 +81,31 @@ internal fun Application.installRoadtripPlugins() {
 }
 
 internal fun Application.registerRoadtripRoutes() {
-    val appConfig: AppConfig by dependencies
-    val staticDir: File by dependencies
-    val slackInteractivity: SlackInteractivityWiring? by dependencies
-    val ingestController: IngestController by dependencies
-    val ctx: DSLContext by dependencies
-    val availabilityWatchService: AvailabilityWatchService by dependencies
-    val watchAlertDispatcher: WatchAlertDispatcher by dependencies
-    val schedulerScope: CoroutineScope by dependencies
-    val watchCapabilities: WatchCapabilityService by dependencies
-    val campsiteCatalogService: CampsiteCatalogService by dependencies
-    val campsiteAvailabilityService: CampsiteAvailabilityService by dependencies
-    val campsiteRateLimiter: IpRateLimiter by dependencies
-    val routeCache: RouteCache by dependencies
-    val mapboxGeocoder: MapboxGeocoder by dependencies
-    val poiService: PoiReader by dependencies
-    val routeCorridorService: RouteCorridorService by dependencies
-    val poisOnRouteService: PoisOnRouteService by dependencies
-    val emailNotifications: EmailNotificationService by dependencies
-    val slackNotifications: SlackNotificationService by dependencies
+    val koin = getKoin()
+    val appConfig = koin.get<AppConfig>()
+    val staticDir = koin.get<File>()
+    val slackInteractivity =
+        if (appConfig.slack?.signingSecret == null) {
+            null
+        } else {
+            koin.get<SlackInteractivityWiring>()
+        }
+    val ingestController = koin.get<IngestController>()
+    val ctx = koin.get<DSLContext>()
+    val availabilityWatchService = koin.get<AvailabilityWatchService>()
+    val watchAlertDispatcher = koin.get<WatchAlertDispatcher>()
+    val schedulerScope = koin.get<CoroutineScope>()
+    val watchCapabilities = koin.get<WatchCapabilityService>()
+    val campsiteCatalogService = koin.get<CampsiteCatalogService>()
+    val campsiteAvailabilityService = koin.get<CampsiteAvailabilityService>()
+    val campsiteRateLimiter = koin.get<IpRateLimiter>()
+    val routeCache = koin.get<RouteCache>()
+    val mapboxGeocoder = koin.get<MapboxGeocoder>()
+    val poiService = koin.get<PoiReader>()
+    val routeCorridorService = koin.get<RouteCorridorService>()
+    val poisOnRouteService = koin.get<PoisOnRouteService>()
+    val emailNotifications = koin.get<EmailNotificationService>()
+    val slackNotifications = koin.get<SlackNotificationService>()
     routing {
         roadtripApiRoutes(
             appConfig = appConfig,
