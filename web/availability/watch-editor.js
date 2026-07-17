@@ -87,11 +87,12 @@ export function mountWatchEditor(host, args) {
   function onChange(e) {
     const tgt = e.target;
     if (!(tgt instanceof HTMLInputElement)) return;
-    if (tgt.name === 'slack_notify') state = { ...state, slackNotify: tgt.checked, error: null };
-    if (tgt.name === 'email_notify') state = { ...state, emailNotify: tgt.checked, error: null };
-    if (tgt.name === 'atc') state = { ...state, addToCart: tgt.checked, error: null };
-    if (tgt.name === 'stop_when_triggered') state = { ...state, stopWhenTriggered: tgt.checked, error: null };
-    rerender();
+    let changed = false;
+    if (tgt.name === 'slack_notify') { state = { ...state, slackNotify: tgt.checked, error: null }; changed = true; }
+    if (tgt.name === 'email_notify') { state = { ...state, emailNotify: tgt.checked, error: null }; changed = true; }
+    if (tgt.name === 'atc') { state = { ...state, addToCart: tgt.checked, error: null }; changed = true; }
+    if (tgt.name === 'stop_when_triggered') { state = { ...state, stopWhenTriggered: tgt.checked, error: null }; changed = true; }
+    if (changed) rerender();
   }
 
   function onInput(e) {
@@ -224,7 +225,7 @@ function renderEditor({ title, subtitle, watch, capabilities, state, onRemove, o
           ? `
         <label class="rt-watch-editor-field">
           <span>To</span>
-          <input type="email" name="email_to" value="${escapeHtml(state.emailTo)}" placeholder="you@example.com" ${busyAttr}>
+          <input type="text" name="email_to" value="${escapeHtml(state.emailTo)}" placeholder="you@example.com, other@example.com" ${busyAttr}>
         </label>
       `
           : ''

@@ -28,7 +28,10 @@ private val testEmailJson =
     }
 
 /** Email smoke-test endpoint for verifying the configured Resend sender. */
-internal fun Route.testEmailRoutes(email: EmailNotificationService) {
+internal fun Route.testEmailRoutes(
+    email: EmailNotificationService,
+    appRootUrl: String? = null,
+) {
     route("/test") {
         post("/email") {
             val request =
@@ -41,7 +44,8 @@ internal fun Route.testEmailRoutes(email: EmailNotificationService) {
                 return@post
             }
 
-            if (!email.sendTestEmail(to)) {
+            val recipients = parseRecipients(to)
+            if (!email.sendTestEmail(recipients, appRootUrl)) {
                 call.respondTestEmailJson(
                     ApiErrorSchema(
                         error = "email_send_failed",
@@ -57,13 +61,15 @@ internal fun Route.testEmailRoutes(email: EmailNotificationService) {
     }
 }
 
+private fun parseRecipients(to: String): List<String> = to.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+
 private fun testEmailRecipientError(to: String): ApiErrorSchema? =
     when {
         to.isBlank() ->
             ApiErrorSchema(error = "missing_to", detail = "Expected JSON body: {\"to\":\"person@example.com\"}.")
         to.length > MAX_TEST_EMAIL_TO_CHARS ->
             ApiErrorSchema(error = "invalid_to", detail = "Recipient address is too long.")
-        !emailRecipientPattern.matches(to) ->
+        parseRecipients(to).isEmpty() || parseRecipients(to).any { !emailRecipientPattern.matches(it) } ->
             ApiErrorSchema(error = "invalid_to", detail = "Recipient address must look like an email address.")
         else -> null
     }

@@ -75,8 +75,8 @@ export function mountTriggerSelector(container, config) {
       const emailInput = mountFormSection(emailFieldHost, {
         label: 'Email address',
         name: 'email_to',
-        type: 'email',
-        placeholder: 'you@example.com',
+        type: 'text',
+        placeholder: 'you@example.com, other@example.com',
         value: state.emailTo,
         disabled: config.disabled,
       });

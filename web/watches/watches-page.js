@@ -70,7 +70,8 @@ async function handleSubmit(data) {
   try {
     if (editingId) {
       await updateWatch(editingId, data);
-      showBanner(bannerHost, 'success', `Watch #${editingId} updated.`);
+      const verb = data.status === 'active' ? 'reactivated' : 'updated';
+      showBanner(bannerHost, 'success', `Watch #${editingId} ${verb}.`);
     } else {
       await createWatch(data);
       showBanner(bannerHost, 'success', `Watch created for POI ${data.poi_id}.`);
