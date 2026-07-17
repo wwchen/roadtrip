@@ -3,9 +3,9 @@
 Supercharger pricing is served read-only from `data/pricing-cache/{slug}.json`.
 The cache is populated **offline** by `scripts/fetch_tesla_index.py` +
 `scripts/fetch_tesla_locations.py` (run via
-`make fetch-tesla-supercharger-pricing`, which mints cookies, smoke-tests
+`./scripts/fetch-tesla-supercharger-pricing.sh`, which mints cookies, smoke-tests
 them, and walks the full fetch; or pick a single fetcher interactively
-with `make poll-raw`). The Kotlin backend never calls Tesla on the
+with `python3 scripts/poll_raw.py`). The Kotlin backend never calls Tesla on the
 request path. Misses on `/api/pricing/{slug}` return HTTP 404 with
 `{"error":"not_cached"}`.
 
@@ -24,7 +24,7 @@ live in `.env` as `TESLA_COOKIES=…`.
 ## One-time setup (or refresh when expired)
 
 ```sh
-make fetch-tesla-supercharger-pricing   # mint cookies + run the full fetch
+./scripts/fetch-tesla-supercharger-pricing.sh   # mint cookies + run the full fetch
 ```
 
 Interactive flow: prompts for a Safari cURL paste, mints cookies into
@@ -37,7 +37,7 @@ the per-slug detail. On 403/429 it loops back and asks for a fresh paste
 
 Akamai cookies last on the order of a day; they're also IP-bound.
 When pricing starts returning 403/429, re-run
-`make fetch-tesla-supercharger-pricing` — the loop handles the re-mint.
+`./scripts/fetch-tesla-supercharger-pricing.sh` — the loop handles the re-mint.
 (The user-facing site is unaffected — it serves the existing cache; only
 the *next* fetch is blocked.)
 

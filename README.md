@@ -17,7 +17,7 @@ Personal web map for roadtripping a Tesla. Live at [roadtrip.floo.ca](https://ro
 tilt up                  # Compose stack (Postgres/backend/Grafana/observability/Rec.gov companion)
 make run                 # Kotlin/Ktor backend on http://127.0.0.1:8765 (serves static + /api)
 make run env=prod        # on the deploy host: build image + docker compose up
-make fetch-tesla-supercharger-pricing  # mint cookies + crawl Tesla Supercharger pricing into data/raw/
+./scripts/fetch-tesla-supercharger-pricing.sh  # mint cookies + crawl Tesla Supercharger pricing into data/raw/
 ```
 
 `tilt up` is the easiest path for full-stack dev: Tilt uses Docker Compose
@@ -51,7 +51,7 @@ the production Compose stack.
 The Tilt UI also has a `data` cluster of manual-trigger background workers
 (none auto-run on `tilt up`) for POI refresh. Tesla Supercharger pricing
 isn't surfaced there — the fetch is interactive (cURL paste) and runs
-from a terminal via `make fetch-tesla-supercharger-pricing`.
+from a terminal via `./scripts/fetch-tesla-supercharger-pricing.sh`.
 
 POI data refresh is a two-step flow. Fetch runs the registry Python fetchers on
 the host; import goes through the backend admin API and writes Postgres rows.
@@ -89,7 +89,7 @@ make install        # Homebrew deps + companion (npm + playwright) + git hooks
 Pricing is served from the on-disk cache (`data/pricing-cache/`). Tesla is
 never called from the user request path — the backend just reads cached JSON
 and 404s with `{"error":"not_cached"}` for sites that haven't been crawled.
-To populate/refresh the cache, run `make fetch-tesla-supercharger-pricing`,
+To populate/refresh the cache, run `./scripts/fetch-tesla-supercharger-pricing.sh`,
 which mints fresh cookies, smoke-tests them, and walks the bulk index +
 per-slug detail. (For a cache-aware locations-only re-fetch use
 `make data-fetch TARGET=tesla-locations`.) See `README_PRICING.md` for
@@ -270,11 +270,11 @@ from your laptop browser will work from the Docker host **only if the Docker
 host egresses from the same public IP** — i.e., same home network. If the
 Docker host is elsewhere, either grab cookies from a browser *on* that
 network, or have your laptop egress through the host's IP via Tailscale
-exit node before running `make fetch-tesla-supercharger-pricing`.
+exit node before running `./scripts/fetch-tesla-supercharger-pricing.sh`.
 Production hosts mint their own cookies out-of-band.
 
 Cookies expire every day or so. When pricing starts returning 403 or 429,
-re-run `make fetch-tesla-supercharger-pricing` — its loop will mint fresh
+re-run `./scripts/fetch-tesla-supercharger-pricing.sh` — its loop will mint fresh
 ones automatically.
 
 ## Architecture notes
@@ -294,7 +294,7 @@ ones automatically.
 - **Pricing cache.** `/api/pricing/{slug}` is read-only against
   `data/pricing-cache/{slug}.json`. Misses return 404 with
   `{"error":"not_cached"}`. Cache is populated offline by
-  `scripts/fetch_tesla_index.py` + `scripts/fetch_tesla_locations.py` (run via `make fetch-tesla-supercharger-pricing`),
+  `scripts/fetch_tesla_index.py` + `scripts/fetch_tesla_locations.py` (run via `./scripts/fetch-tesla-supercharger-pricing.sh`),
   which shells out to `curl-impersonate` because Akamai fingerprints TLS
   ClientHello + HTTP/2 SETTINGS — stock OpenSSL curl gets 403.
 - **Map** — MapLibre GL, vector and raster basemaps, runtime style-swap.
