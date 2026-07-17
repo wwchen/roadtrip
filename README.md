@@ -168,15 +168,12 @@ land for each gap (Alberta now covered by the ReserveAmerica fetcher).
 
 Swagger UI at `/api/docs`, OpenAPI 3.1 spec at `/api/docs/openapi.json`.
 Built from the live routing tree at boot, so the doc reflects whatever's
-mounted. To document a new route, replace the `io.ktor.server.routing.{get,post}`
-import with `io.github.smiley4.ktorswaggerui.dsl.routing.{get,post}` and pass
-a doc block:
+mounted. To document a new route, use the normal `io.ktor.server.routing`
+route function and chain `describeApi`:
 
 ```kotlin
-get("/api/foo", {
-    tags = listOf("group")
-    summary = "One-line description"
-}) { /* handler */ }
+get("/api/foo") { /* handler */ }
+    .describeApi("group", "One-line description")
 ```
 
 Routes without a doc block still appear in the spec (untitled). The page is

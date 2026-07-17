@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.models.routing.GeocodeResult
+import ca.floo.roadtrip.routes.api.geocode.encodeGeocodeJson
+import ca.floo.roadtrip.routes.api.geocode.geocodeResponseDto
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonArray

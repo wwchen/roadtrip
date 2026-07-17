@@ -130,10 +130,9 @@ dependencies {
     // logback 1.5.x / Java 11+.
     implementation("net.logstash.logback:logstash-logback-encoder:8.0")
 
-    // Self-documenting /api/docs at runtime — Swagger UI + OpenAPI 3.1 spec
-    // built from the live routing tree. Compatible with Ktor 3.0.x.
-    // Issue #47.
-    implementation("io.github.smiley4:ktor-swagger-ui:4.1.7")
+    // Self-documenting /api/docs at runtime from Ktor's routing tree.
+    implementation("io.ktor:ktor-server-swagger:$ktorVersion")
+    implementation("io.ktor:ktor-server-routing-openapi:$ktorVersion")
 
     implementation("org.jooq:jooq:$jooqVersion")
     implementation("com.zaxxer:HikariCP:6.1.0")
