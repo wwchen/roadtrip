@@ -49,10 +49,21 @@ internal class WatchAlertDispatcher(
     private val targets: AvailabilityTargetResolver,
     private val pois: PoiServingRepo,
     private val availability: AvailabilityRepo,
-    private val triggerActions: TriggerActionRegistry,
+    triggerActions: List<TriggerActionHandler>,
     private val grafanaRootUrl: String?,
     private val appRootUrl: String?,
 ) {
+    private val triggerActionsByKind: Map<String, TriggerActionHandler> =
+        triggerActions
+            .flatMap { handler -> handler.kinds.map { kind -> kind to handler } }
+            .also { registrations ->
+                val registeredKinds = registrations.map { it.first }
+                require(registeredKinds.size == registeredKinds.toSet().size) {
+                    "duplicate trigger action handler kinds: " +
+                        registeredKinds.groupBy { it }.filterValues { it.size > 1 }.keys
+                }
+            }.toMap()
+
     suspend fun dispatch(
         liveWatches: List<AvailabilityWatchRepo.Watch>,
         transitions: List<CellTransition>,
@@ -61,7 +72,7 @@ internal class WatchAlertDispatcher(
         if (bookable.isEmpty()) return
 
         for (watch in liveWatches) {
-            val handlers = triggerActions.forKinds(watch.triggerKinds)
+            val handlers = triggerHandlersFor(watch.triggerKinds)
             if (handlers.isEmpty()) continue
             val campsitesById = scopeResolver.resolve(watch).associateBy { it.id }
             val covered =
@@ -95,7 +106,7 @@ internal class WatchAlertDispatcher(
      * Only the bookable state ever marks a watch `DONE`.
      */
     suspend fun dispatchInitial(watch: AvailabilityWatchRepo.Watch) {
-        val handlers = triggerActions.forKinds(watch.triggerKinds)
+        val handlers = triggerHandlersFor(watch.triggerKinds)
         val hasSlack = AvailabilityTriggerKinds.SLACK_NOTIFY in watch.triggerKinds
         if (!hasSlack && handlers.isEmpty()) return
 
@@ -179,6 +190,11 @@ internal class WatchAlertDispatcher(
             watches.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE))
         }
     }
+
+    private fun triggerHandlersFor(kinds: List<String>): List<TriggerActionHandler> =
+        kinds
+            .mapNotNull(triggerActionsByKind::get)
+            .distinct()
 
     /** Resolves each covered cell to a [TriggerOpening] — the campsite's display
      *  label/loop/type, parent campground, provider booking URL, and resolved

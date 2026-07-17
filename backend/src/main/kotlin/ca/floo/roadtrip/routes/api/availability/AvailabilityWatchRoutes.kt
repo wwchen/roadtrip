@@ -7,6 +7,7 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.routes.common.describeApi
+import ca.floo.roadtrip.routes.common.routeKoin
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchRequestMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
@@ -54,6 +55,17 @@ private val watchJson =
         explicitNulls = false
         ignoreUnknownKeys = true
     }
+
+internal fun Route.availabilityWatchRoutes() {
+    val koin = routeKoin()
+    availabilityWatchRoutes(
+        ctx = koin.get(),
+        watchService = koin.get(),
+        alertDispatcher = koin.get(),
+        notifyScope = koin.get(),
+        watchCapabilities = koin.get(),
+    )
+}
 
 internal fun Route.availabilityWatchRoutes(
     ctx: DSLContext,

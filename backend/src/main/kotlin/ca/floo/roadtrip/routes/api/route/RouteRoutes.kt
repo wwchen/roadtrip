@@ -10,6 +10,7 @@ import ca.floo.roadtrip.models.api.RouteLegDto
 import ca.floo.roadtrip.models.api.RouteLineGeometryDto
 import ca.floo.roadtrip.models.api.RoutePropertiesDto
 import ca.floo.roadtrip.models.routing.RouteResponse
+import ca.floo.roadtrip.routes.common.routeKoin
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_CORRIDOR_RADIUS_MILES
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_WAYPOINTS
 import ca.floo.roadtrip.service.routing.MIN_ROUTE_CORRIDOR_RADIUS_MILES
@@ -35,6 +36,14 @@ private val routeJson =
         encodeDefaults = true
         explicitNulls = false
     }
+
+internal fun Route.routeRoutes() {
+    val koin = routeKoin()
+    routeRoutes(
+        routeCache = koin.get(),
+        routeCorridorService = koin.get(),
+    )
+}
 
 /**
  * GET /api/route?coords=lng,lat;lng,lat;...

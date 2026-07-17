@@ -3,7 +3,8 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
-import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
+import ca.floo.roadtrip.service.availability.alert.AlertProvider
+import ca.floo.roadtrip.service.availability.alert.INTERNAL_POLLER_ALERT_PROVIDER_ID
 import kotlinx.serialization.json.JsonObject
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
@@ -11,7 +12,7 @@ import java.time.LocalDate
 
 /**
  * Mutates watches and hands the "who detects openings" work to the
- * [AlertProviderRegistry]. Single seam for routes; routes never touch
+ * configured [AlertProvider]s. Single seam for routes; routes never touch
  * [AvailabilityWatchRepo] or [ca.floo.roadtrip.repo.AvailabilityPollerRepo]
  * for writes.
  *
@@ -22,16 +23,17 @@ import java.time.LocalDate
  * `availability_watch` and whatever state the chosen alert provider owns, so
  * a watch is never visible without its alert-provider bookkeeping resolved.
  *
- * Internal because it composes [AlertProviderRegistry], which is module-
- * internal; everything is one Gradle module (routes included), so `internal`
- * costs nothing and keeps upstream-vendor shape from leaking through a public
- * API.
+ * Internal keeps upstream-vendor shape from leaking through a public API.
  */
 internal class AvailabilityWatchService(
     private val ctx: DSLContext,
-    private val alertProviders: AlertProviderRegistry,
+    alertProviders: List<AlertProvider>,
     private val capabilityValidator: WatchCapabilityValidator = NoopWatchCapabilityValidator,
 ) {
+    private val internalPollerProvider =
+        alertProviders.singleOrNull { it.id == INTERNAL_POLLER_ALERT_PROVIDER_ID }
+            ?: error("expected exactly one $INTERNAL_POLLER_ALERT_PROVIDER_ID alert provider")
+
     fun create(
         targets: List<AvailabilityWatchTargetRepo.TargetInput>,
         campsiteFilters: JsonObject,
@@ -58,7 +60,7 @@ internal class AvailabilityWatchService(
             val txn = DSL.using(config)
             val watch = AvailabilityWatchRepo(txn).create(input)
             capabilityValidator.validate(watch)
-            alertProviders.forWatch(watch).onWatchActivated(txn, watch)
+            alertProviderFor(watch).onWatchActivated(txn, watch)
             watch
         }
 
@@ -94,7 +96,7 @@ internal class AvailabilityWatchService(
             // ACTIVE → the alert provider (re)subscribes / re-syncs poller links;
             // any non-ACTIVE status is a deactivate as far as opening-detection
             // is concerned — the watch holds no live subscription.
-            val provider = alertProviders.forWatch(updated)
+            val provider = alertProviderFor(updated)
             if (updated.status == WatchStatus.ACTIVE) {
                 provider.onWatchActivated(txn, updated)
             } else {
@@ -113,8 +115,10 @@ internal class AvailabilityWatchService(
             val snapshot = repo.findById(id) ?: return@transactionResult false
             val deleted = repo.delete(id)
             if (deleted) {
-                alertProviders.forWatch(snapshot).onWatchDeactivated(txn, snapshot)
+                alertProviderFor(snapshot).onWatchDeactivated(txn, snapshot)
             }
             deleted
         }
+
+    private fun alertProviderFor(watch: Watch): AlertProvider = internalPollerProvider
 }

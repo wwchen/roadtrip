@@ -6,6 +6,7 @@ import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.GeocodeResponseDto
 import ca.floo.roadtrip.models.api.GeocodeResultDto
 import ca.floo.roadtrip.models.routing.GeocodeResult
+import ca.floo.roadtrip.routes.common.routeKoin
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -25,6 +26,10 @@ private val geocodeRouteJson =
         encodeDefaults = true
         explicitNulls = false
     }
+
+fun Route.geocodeRoutes() {
+    geocodeRoutes(routeKoin().get<MapboxGeocoder>())
+}
 
 /**
  * GET /api/geocode?q=<text>[&autocomplete=0][&proximity=lng,lat][&limit=N]

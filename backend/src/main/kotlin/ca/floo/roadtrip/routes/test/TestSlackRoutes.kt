@@ -2,6 +2,7 @@ package ca.floo.roadtrip.routes.test
 
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.routes.common.describeApi
+import ca.floo.roadtrip.routes.common.routeKoin
 import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -29,6 +30,10 @@ private val testSlackJson =
     }
 
 /** Slack smoke-test endpoint for verifying the configured bot token/channel. */
+internal fun Route.testSlackRoutes() {
+    testSlackRoutes(routeKoin().get<SlackNotificationService>())
+}
+
 internal fun Route.testSlackRoutes(slack: SlackNotificationService) {
     route("/test") {
         post("/slack") {

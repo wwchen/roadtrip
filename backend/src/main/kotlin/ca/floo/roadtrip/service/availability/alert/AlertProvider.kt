@@ -3,6 +3,8 @@ package ca.floo.roadtrip.service.availability.alert
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import org.jooq.DSLContext
 
+internal const val INTERNAL_POLLER_ALERT_PROVIDER_ID = "internal_poller"
+
 /**
  * Who detects openings for a watch. The internal poller is the default; a
  * vendor-hosted implementation (e.g. Campflare's alert API) subscribes
@@ -10,7 +12,7 @@ import org.jooq.DSLContext
  * normalizes payloads to [ca.floo.roadtrip.models.availability.CellTransition],
  * and feeds the same [ca.floo.roadtrip.service.availability.WatchAlertDispatcher].
  * A new alert provider is one file under `alert/providers/<vendor>/` plus one
- * registry row.
+ * Koin binding.
  *
  * The hooks run inside [ca.floo.roadtrip.service.availability.AvailabilityWatchService]'s
  * watch-write transaction; membership writes are transactional today, so the

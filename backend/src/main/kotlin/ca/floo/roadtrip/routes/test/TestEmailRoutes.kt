@@ -2,6 +2,7 @@ package ca.floo.roadtrip.routes.test
 
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.routes.common.describeApi
+import ca.floo.roadtrip.routes.common.routeKoin
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -30,6 +31,10 @@ private val testEmailJson =
     }
 
 /** Email smoke-test endpoint for verifying the configured Resend sender. */
+internal fun Route.testEmailRoutes() {
+    testEmailRoutes(routeKoin().get<EmailNotificationService>())
+}
+
 internal fun Route.testEmailRoutes(email: EmailNotificationService) {
     route("/test") {
         post("/email") {

@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.clients.campflare.CampflareAvailabilityClient
+import ca.floo.roadtrip.fixtures.availabilityPoiRegistry
+import ca.floo.roadtrip.fixtures.recgovAvailabilityPoiRegistry
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
@@ -13,7 +15,6 @@ import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.adapters.campflare.CampflareAvailabilityProvider
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -50,7 +51,8 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
             DbAvailabilityTargetResolver(
                 providerRefs = providerRefs,
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = AvailabilityProviderRegistry(mapOf("test" to TemplateProvider)),
+                poiRegistry = recgovAvailabilityPoiRegistry(),
+                availabilityProviders = listOf(TemplateProvider),
                 dateResolver = AvailabilityDateResolver(),
             )
         val service = CampsiteCatalogService(providerRefs, campsitesRepo, targets)
@@ -90,10 +92,8 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
             DbAvailabilityTargetResolver(
                 providerRefs = providerRefs,
                 campsitesRepo = campsitesRepo,
-                availabilityProviders =
-                    AvailabilityProviderRegistry(
-                        mapOf("campflare" to CampflareAvailabilityProvider(unusedCampflareClient(), enabled = true)),
-                    ),
+                poiRegistry = availabilityPoiRegistry("campflare-campgrounds" to "CampflareCampgroundsEtl"),
+                availabilityProviders = listOf(CampflareAvailabilityProvider(unusedCampflareClient(), enabled = true)),
                 dateResolver = AvailabilityDateResolver(),
             )
         val service = CampsiteCatalogService(providerRefs, campsitesRepo, targets)

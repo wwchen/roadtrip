@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.scheduler
 
+import ca.floo.roadtrip.fixtures.recgovAvailabilityPoiRegistry
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.models.domain.ProviderRef
@@ -16,7 +17,6 @@ import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
@@ -73,12 +73,12 @@ class PollerBackfillTest : SharedDbTest() {
 
     private fun membership(): AvailabilityPollerMembership {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("test" to FakeProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = registry,
+                poiRegistry = recgovAvailabilityPoiRegistry(),
+                availabilityProviders = listOf(FakeProvider),
                 dateResolver = AvailabilityDateResolver(),
             )
         return AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets)

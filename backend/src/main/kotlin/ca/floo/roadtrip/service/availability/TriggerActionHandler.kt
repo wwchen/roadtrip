@@ -7,9 +7,7 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
  * for a watch that has just detected an opening. Handlers are matched by
  * kind slug against `availability_watches.trigger_kinds`; an unknown or
  * unregistered kind is inert (no handler ⇒ no fire, no error). Registering a
- * new kind is one file under
- * `service/availability/` plus one entry in the runtime's
- * [TriggerActionRegistry] list.
+ * new kind is one file under `service/availability/` plus one Koin binding.
  */
 internal interface TriggerActionHandler {
     /** Stable slugs matching `availability_watches.trigger_kinds`. */

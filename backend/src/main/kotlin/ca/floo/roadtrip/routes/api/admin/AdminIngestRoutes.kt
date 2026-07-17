@@ -21,6 +21,7 @@ import ca.floo.roadtrip.models.metadata.ingest.RunKind
 import ca.floo.roadtrip.models.metadata.ingest.RunOutcome
 import ca.floo.roadtrip.repo.AdminIngestReadRepo
 import ca.floo.roadtrip.routes.common.describeApi
+import ca.floo.roadtrip.routes.common.routeKoin
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -44,6 +45,14 @@ private val adminIngestJson =
         encodeDefaults = true
         explicitNulls = false
     }
+
+fun Route.adminIngestRoutes() {
+    val koin = routeKoin()
+    adminIngestRoutes(
+        controller = koin.get(),
+        ctx = koin.get(),
+    )
+}
 
 // Admin surface for the ingestion controller (RFC 0004 / issue #44).
 //

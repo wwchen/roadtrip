@@ -5,14 +5,22 @@ import ca.floo.roadtrip.clients.recgov.Campsite
 import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
+import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.models.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.models.availability.campflare.CampflareCampgroundAvailability
+import ca.floo.roadtrip.models.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.models.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.models.metadata.registry.DataSourceEntry
+import ca.floo.roadtrip.models.metadata.registry.EtlEntry
+import ca.floo.roadtrip.models.metadata.registry.Fetcher
+import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
+import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.availability.provider.adapters.campflare.CampflareAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaTenant
+import ca.floo.roadtrip.service.availability.provider.adapters.reservecalifornia.ReserveCaliforniaAvailabilityProvider
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.LocalDate
@@ -22,9 +30,11 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
-class AvailabilityProviderRegistryBuildTest {
+private const val TEST_DATA_SOURCE = "test-source"
+
+class AvailabilityProviderSourceResolutionTest {
     @Test
-    fun `reserveamerica provider passes registry tenant args to shared client`() =
+    fun `reserveamerica provider passes tenant args to shared client`() =
         runBlocking {
             var observedCall: ReserveAmericaCall? = null
             val provider =
@@ -50,12 +60,23 @@ class AvailabilityProviderRegistryBuildTest {
                         },
                     enabled = true,
                 )
-            val registry =
-                AvailabilityProviderRegistry.fromBindings(
-                    listOf(AvailabilityProviderBinding(source = "test-reserveamerica", provider = provider)),
+            val providersBySource =
+                availabilityProvidersBySource(
+                    poiRegistry =
+                        registryWithPoiData(
+                            source = "test-reserveamerica",
+                            adapter = "ReserveAmericaEtl",
+                            args =
+                                mapOf(
+                                    "host" to "example.reserveamerica.test",
+                                    "contract" to "ZZ",
+                                    "booking_horizon_days" to "123",
+                                ),
+                        ),
+                    providers = providerSet(provider),
                 )
 
-            val resolved = registry.forPoi(row("test-reserveamerica"))
+            val resolved = providersBySource.availabilityProviderFor(row("test-reserveamerica"))
 
             assertNotNull(resolved)
             assertEquals(AvailabilityProviderId.RESERVEAMERICA, resolved.id)
@@ -99,16 +120,14 @@ class AvailabilityProviderRegistryBuildTest {
                         },
                     enabled = true,
                 )
-            val registry =
-                AvailabilityProviderRegistry.fromBindings(
-                    listOf(
-                        AvailabilityProviderBinding(source = "campflare-campgrounds", provider = provider),
-                        AvailabilityProviderBinding(source = "campflare", provider = provider),
-                    ),
+            val providersBySource =
+                availabilityProvidersBySource(
+                    poiRegistry = registryWithPoiData(source = "campflare-campgrounds", adapter = "CampflareCampgroundsEtl"),
+                    providers = providerSet(campflare = provider),
                 )
 
-            val resolved = registry.forPoi(row("campflare-campgrounds"))
-            val resolvedByCanonicalVendor = registry.forPoi(row("campflare"))
+            val resolved = providersBySource.availabilityProviderFor(row("campflare-campgrounds"))
+            val resolvedByCanonicalVendor = providersBySource.availabilityProviderFor(row("campflare"))
 
             assertNotNull(resolved)
             assertNotNull(resolvedByCanonicalVendor)
@@ -133,27 +152,32 @@ class AvailabilityProviderRegistryBuildTest {
     fun `unconfigured campflare provider declines campflare refs so recgov aliases can be fallback`() {
         val campflare = CampflareAvailabilityProvider(client = stubCampflareClient(), enabled = false)
         val recgov = RecGovAvailabilityProvider(client = stubRecgovClient(), enabled = true)
-        val registry =
-            AvailabilityProviderRegistry.fromBindings(
-                listOf(
-                    AvailabilityProviderBinding(source = "campflare", provider = campflare),
-                    AvailabilityProviderBinding(source = "campflare-campgrounds", provider = campflare),
-                    AvailabilityProviderBinding(source = "recgov", provider = recgov),
-                    AvailabilityProviderBinding(source = "federal-campgrounds", provider = recgov),
-                ),
+        val providersBySource =
+            availabilityProvidersBySource(
+                poiRegistry =
+                    registryWithPoiData(
+                        "campflare-campgrounds" to "CampflareCampgroundsEtl",
+                        "federal-campgrounds" to "RecGovCampgroundsEtl",
+                    ),
+                providers = providerSet(recgov = recgov, campflare = campflare),
             )
 
-        assertNull(registry.forPoi(row("campflare")))
-        assertNull(registry.forPoi(row("campflare-campgrounds")))
-        assertNull(registry.forPoi(row("campflare"), ProviderRef.Campflare("upper-pines-campground-447")))
-        assertNull(registry.forPoi(row("campflare-campgrounds"), ProviderRef.Campflare("upper-pines-campground-447")))
-        assertEquals(
-            AvailabilityProviderId.RECGOV,
-            registry.forPoi(row("recgov"), ProviderRef.RecGov("232447"))?.id,
+        assertNull(providersBySource.availabilityProviderFor(row("campflare")))
+        assertNull(providersBySource.availabilityProviderFor(row("campflare-campgrounds")))
+        assertNull(providersBySource.availabilityProviderFor(row("campflare"), ProviderRef.Campflare("upper-pines-campground-447")))
+        assertNull(
+            providersBySource.availabilityProviderFor(
+                row("campflare-campgrounds"),
+                ProviderRef.Campflare("upper-pines-campground-447"),
+            ),
         )
         assertEquals(
             AvailabilityProviderId.RECGOV,
-            registry.forPoi(row("federal-campgrounds"), ProviderRef.RecGov("232447"))?.id,
+            providersBySource.availabilityProviderFor(row("recgov"), ProviderRef.RecGov("232447"))?.id,
+        )
+        assertEquals(
+            AvailabilityProviderId.RECGOV,
+            providersBySource.availabilityProviderFor(row("federal-campgrounds"), ProviderRef.RecGov("232447"))?.id,
         )
     }
 
@@ -162,11 +186,13 @@ class AvailabilityProviderRegistryBuildTest {
         val recgov = RecGovAvailabilityProvider(client = stubRecgovClient(), enabled = true)
 
         assertFailsWith<IllegalArgumentException> {
-            AvailabilityProviderRegistry.fromBindings(
-                listOf(
-                    AvailabilityProviderBinding(source = "recgov", provider = recgov),
-                    AvailabilityProviderBinding(source = "recgov", provider = recgov),
-                ),
+            availabilityProvidersBySource(
+                poiRegistry =
+                    registryWithPoiData(
+                        "recgov-campgrounds" to "RecGovCampgroundsEtl",
+                        "recgov" to "CampflareCampgroundsEtl",
+                    ),
+                providers = providerSet(recgov = recgov),
             )
         }
     }
@@ -187,6 +213,61 @@ class AvailabilityProviderRegistryBuildTest {
 
     private fun row(source: String): CampsiteProviderRefRow = CampsiteProviderRefRow(poiId = 1L, source = source, providerRefJson = "{}")
 
+    private fun providerSet(
+        vararg extra: AvailabilityProvider,
+        recgov: RecGovAvailabilityProvider = RecGovAvailabilityProvider(client = stubRecgovClient(), enabled = true),
+        campflare: CampflareAvailabilityProvider = CampflareAvailabilityProvider(client = stubCampflareClient(), enabled = true),
+        reserveCalifornia: ReserveCaliforniaAvailabilityProvider =
+            ReserveCaliforniaAvailabilityProvider(client = stubReserveCaliforniaClient(), enabled = true),
+    ): List<AvailabilityProvider> = listOf(recgov, campflare, reserveCalifornia) + extra
+
+    private fun registryWithPoiData(vararg rows: Pair<String, String>): PoiRegistry =
+        PoiRegistry(
+            dataSources = listOf(dataSource()),
+            poiData = rows.map { (source, adapter) -> poiData(source = source, adapter = adapter) },
+        )
+
+    private fun registryWithPoiData(
+        source: String,
+        adapter: String,
+        args: Map<String, String> = emptyMap(),
+    ): PoiRegistry =
+        PoiRegistry(
+            dataSources = listOf(dataSource()),
+            poiData = listOf(poiData(source = source, adapter = adapter, args = args)),
+        )
+
+    private fun dataSource(): DataSourceEntry =
+        DataSourceEntry(
+            slug = TEST_DATA_SOURCE,
+            name = "Test Source",
+            fetcher =
+                Fetcher(
+                    executor = "test",
+                    filename = "test.json",
+                    outputDirPrefix = "test",
+                ),
+        )
+
+    private fun poiData(
+        source: String,
+        adapter: String,
+        args: Map<String, String> = emptyMap(),
+    ): PoiDataEntry =
+        PoiDataEntry(
+            name = source,
+            category = "campground",
+            etls =
+                listOf(
+                    EtlEntry(
+                        slug = source,
+                        adapter = adapter,
+                        inputs = listOf(TEST_DATA_SOURCE),
+                        args = args,
+                    ),
+                ),
+        )
+
     private fun stubRecgovClient(): RecGovAvailabilityClient =
         object : RecGovAvailabilityClient {
             override suspend fun fetchMonth(
@@ -196,4 +277,15 @@ class AvailabilityProviderRegistryBuildTest {
         }
 
     private fun stubCampflareClient(): CampflareAvailabilityClient = CampflareAvailabilityClient { _, _, _ -> error("not used") }
+
+    private fun stubReserveCaliforniaClient(): ReserveCaliforniaAvailabilityClient =
+        object : ReserveCaliforniaAvailabilityClient {
+            override suspend fun fetchGrid(
+                facilityId: Long,
+                startDate: LocalDate,
+                endDate: LocalDate,
+                minDate: LocalDate,
+                maxDate: LocalDate,
+            ): ReserveCaliforniaGridAvailability = error("not used")
+        }
 }

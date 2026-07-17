@@ -16,7 +16,6 @@ import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.booking.BookingProvider
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.notification.common.WatchOpening
@@ -34,51 +33,10 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class TriggerActionHandlerTest {
-    @Test
-    fun `known kind fires its handler`() =
-        runBlocking {
-            val fake = FakeHandler(kind = "slack_notify", result = true)
-            val registry = TriggerActionRegistry(listOf(fake))
-
-            val handler = registry.forKinds(listOf("slack_notify")).singleOrNull()
-            assertNotNull(handler)
-            assertTrue(handler.fire(fakeWatch(id = 1L), openings = emptyList()))
-            assertEquals(1, fake.calls)
-        }
-
-    @Test
-    fun `unknown kind returns empty handler list and is inert`() {
-        val registry = TriggerActionRegistry(listOf(FakeHandler(kind = "slack_notify")))
-        assertTrue(registry.forKinds(listOf("email")).isEmpty())
-    }
-
-    @Test
-    fun `duplicate kinds in constructor throws`() {
-        val error =
-            assertFailsWith<IllegalArgumentException> {
-                TriggerActionRegistry(listOf(FakeHandler(kind = "dup"), FakeHandler(kind = "dup")))
-            }
-        assertTrue(error.message!!.contains("duplicate handler kinds"))
-    }
-
-    @Test
-    fun `registry returns an aggregate handler once for multiple matching kinds`() {
-        val fake =
-            FakeHandler(
-                kind = AvailabilityTriggerKinds.SLACK_NOTIFY,
-                supportedKinds = setOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.EMAIL_NOTIFY),
-            )
-        val registry = TriggerActionRegistry(listOf(fake))
-
-        assertEquals(listOf(fake), registry.forKinds(listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.EMAIL_NOTIFY)))
-    }
-
     @Test
     fun `NotifyTriggerActionHandler forwards slack channel override as notification target`() =
         runBlocking {
@@ -182,11 +140,11 @@ class TriggerActionHandlerTest {
     fun `AtcTriggerActionHandler executes first supported opening through booking provider`() =
         runBlocking {
             val bookingProvider = RecordingBookingProvider()
-            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val bookingProviders = listOf<BookingProvider>(bookingProvider)
             val handler =
                 AtcTriggerActionHandler(
-                    bookings = registry,
-                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    bookings = bookingProviders,
+                    bookingTargets = AvailabilityBookingTargetResolver(bookingProviders),
                     notifications = CapturingNotifications(result = true),
                 )
             val watch = fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND), stopWhenTriggered = true)
@@ -222,12 +180,12 @@ class TriggerActionHandlerTest {
                         )
                     },
                 )
-            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val bookingProviders = listOf<BookingProvider>(bookingProvider)
             val notifications = CapturingNotifications(result = true)
             val handler =
                 AtcTriggerActionHandler(
-                    bookings = registry,
-                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    bookings = bookingProviders,
+                    bookingTargets = AvailabilityBookingTargetResolver(bookingProviders),
                     notifications = notifications,
                 )
             val watch =
@@ -267,12 +225,12 @@ class TriggerActionHandlerTest {
                         )
                     },
                 )
-            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val bookingProviders = listOf<BookingProvider>(bookingProvider)
             val notifications = CapturingNotifications(result = true)
             val handler =
                 AtcTriggerActionHandler(
-                    bookings = registry,
-                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    bookings = bookingProviders,
+                    bookingTargets = AvailabilityBookingTargetResolver(bookingProviders),
                     notifications = notifications,
                 )
 
@@ -309,12 +267,12 @@ class TriggerActionHandlerTest {
                         )
                     },
                 )
-            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val bookingProviders = listOf<BookingProvider>(bookingProvider)
             val notifications = CapturingNotifications(result = true)
             val handler =
                 AtcTriggerActionHandler(
-                    bookings = registry,
-                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    bookings = bookingProviders,
+                    bookingTargets = AvailabilityBookingTargetResolver(bookingProviders),
                     notifications = notifications,
                 )
 
@@ -335,12 +293,12 @@ class TriggerActionHandlerTest {
     fun `AtcTriggerActionHandler leaves unsupported openings inert`() =
         runBlocking {
             val bookingProvider = RecordingBookingProvider()
-            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val bookingProviders = listOf<BookingProvider>(bookingProvider)
             val notifications = CapturingNotifications(result = true)
             val handler =
                 AtcTriggerActionHandler(
-                    bookings = registry,
-                    bookingTargets = AvailabilityBookingTargetResolver(registry),
+                    bookings = bookingProviders,
+                    bookingTargets = AvailabilityBookingTargetResolver(bookingProviders),
                     notifications = notifications,
                 )
 

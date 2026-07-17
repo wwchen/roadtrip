@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.fixtures.emptyPoiRegistry
+import ca.floo.roadtrip.fixtures.recgovAvailabilityPoiRegistry
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
@@ -17,15 +19,12 @@ import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.NotifyTriggerActionHandler
-import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
-import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
+import ca.floo.roadtrip.service.availability.alert.AlertProvider
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -63,7 +62,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
     /**
      * Builds the watch service the routes take. The target resolver is real
-     * but backed by an empty provider registry, so POIs without a resolvable
+     * but backed by an empty provider list, so POIs without a resolvable
      * availability provider produce no poller links — which is fine for the
      * CRUD assertions here (poller membership is exercised in the membership
      * and executor tests).
@@ -74,26 +73,27 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
+                poiRegistry = emptyPoiRegistry(),
+                availabilityProviders = emptyList(),
                 dateResolver = AvailabilityDateResolver(),
             )
         return AvailabilityWatchService(ctx, alertProviders(campsitesRepo, targets))
     }
 
     /**
-     * Watch service whose registry maps the test POI source ('test') to a
+     * Watch service whose registry fixture maps the test POI source ('test') to a
      * recgov adapter, so a POI with a `{"recgov_id": ...}` provider_ref
      * resolves to a real (recgov, parentRef) poller. Used to exercise poller
      * membership on watch mutation.
      */
     private fun watchServiceWithRecgov(): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("test" to FakeRecgovProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = registry,
+                poiRegistry = recgovAvailabilityPoiRegistry(),
+                availabilityProviders = listOf(FakeRecgovProvider),
                 dateResolver = AvailabilityDateResolver(),
             )
         return AvailabilityWatchService(ctx, alertProviders(campsitesRepo, targets))
@@ -105,12 +105,13 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = AvailabilityProviderRegistry(mapOf("test" to FakeRecgovProvider)),
+                poiRegistry = recgovAvailabilityPoiRegistry(),
+                availabilityProviders = listOf(FakeRecgovProvider),
                 dateResolver = AvailabilityDateResolver(),
             )
         return WatchCapabilityService(
             availabilityTargets = targets,
-            bookingTargets = AvailabilityBookingTargetResolver(BookingProviderRegistry(emptyList())),
+            bookingTargets = AvailabilityBookingTargetResolver(emptyList()),
         )
     }
 
@@ -120,7 +121,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
+                poiRegistry = emptyPoiRegistry(),
+                availabilityProviders = emptyList(),
                 dateResolver = AvailabilityDateResolver(),
             )
         val scopeResolver = WatchScopeResolver(campsitesRepo)
@@ -133,7 +135,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     capabilities =
                         WatchCapabilityService(
                             availabilityTargets = targets,
-                            bookingTargets = AvailabilityBookingTargetResolver(BookingProviderRegistry(emptyList())),
+                            bookingTargets = AvailabilityBookingTargetResolver(emptyList()),
                         ),
                 ),
         )
@@ -144,12 +146,10 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     private fun alertProviders(
         campsitesRepo: CampsiteRepo,
         targets: DbAvailabilityTargetResolver,
-    ): AlertProviderRegistry =
-        AlertProviderRegistry(
-            listOf(
-                InternalPollerAlertProvider(
-                    AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets),
-                ),
+    ): List<AlertProvider> =
+        listOf(
+            InternalPollerAlertProvider(
+                AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets),
             ),
         )
 
@@ -185,12 +185,13 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 DbAvailabilityTargetResolver(
                     providerRefs = CampsiteProviderRepo(ctx),
                     campsitesRepo = campsitesRepo,
-                    availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
+                    poiRegistry = emptyPoiRegistry(),
+                    availabilityProviders = emptyList(),
                     dateResolver = AvailabilityDateResolver(),
                 ),
             pois = PoiServingRepo(ctx),
             availability = AvailabilityRepo(ctx),
-            triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, appRootUrl = null))),
+            triggerActions = listOf(NotifyTriggerActionHandler(notifications, appRootUrl = null)),
             grafanaRootUrl = null,
             appRootUrl = null,
         )

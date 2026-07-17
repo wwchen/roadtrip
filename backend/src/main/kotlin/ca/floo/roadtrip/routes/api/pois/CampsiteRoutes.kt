@@ -7,6 +7,7 @@ import ca.floo.roadtrip.models.availability.AvailabilityProviderError
 import ca.floo.roadtrip.routes.common.describeApi
 import ca.floo.roadtrip.routes.common.optionalDateQuery
 import ca.floo.roadtrip.routes.common.queryValues
+import ca.floo.roadtrip.routes.common.routeKoin
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.service.availability.AvailabilityServiceError
@@ -27,6 +28,15 @@ import java.util.concurrent.ConcurrentHashMap
 private val log = LoggerFactory.getLogger("CampsiteRoutes")
 
 internal const val IP_RATE_LIMIT_PER_MINUTE = 30
+
+internal fun Route.campsiteRoutes() {
+    val koin = routeKoin()
+    campsiteRoutes(
+        catalogService = koin.get(),
+        availabilityService = koin.get(),
+        rateLimit = koin.get(),
+    )
+}
 
 internal fun Route.campsiteRoutes(
     catalogService: CampsiteCatalogService,

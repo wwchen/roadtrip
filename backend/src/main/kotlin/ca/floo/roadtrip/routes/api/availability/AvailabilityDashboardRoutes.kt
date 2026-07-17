@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.routes.api.availability
 
+import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityPollerSchema
 import ca.floo.roadtrip.models.api.AvailabilityPollersListResponse
@@ -17,6 +18,7 @@ import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.routes.common.describeApi
+import ca.floo.roadtrip.routes.common.routeKoin
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -45,6 +47,14 @@ private val dashboardJson =
         explicitNulls = false
         ignoreUnknownKeys = true
     }
+
+fun Route.availabilityDashboardRoutes() {
+    val koin = routeKoin()
+    availabilityDashboardRoutes(
+        ctx = koin.get(),
+        forcePullCooldown = koin.get<AppConfig>().availability.forcePullCooldown,
+    )
+}
 
 fun Route.availabilityDashboardRoutes(
     ctx: DSLContext,

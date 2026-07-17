@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.recgovAvailabilityPoiRegistry
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
@@ -19,13 +20,11 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.alert.AlertProvider
-import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
+import ca.floo.roadtrip.service.availability.alert.INTERNAL_POLLER_ALERT_PROVIDER_ID
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.booking.BookingProvider
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.jooq.DSLContext
@@ -70,50 +69,46 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
             .get("campground_id", Long::class.java)
 
     private fun service(
-        alertProviders: AlertProviderRegistry? = null,
+        alertProviders: List<AlertProvider>? = null,
         capabilityValidator: WatchCapabilityValidator = NoopWatchCapabilityValidator,
         availabilityProvider: AvailabilityProvider = FakeProvider,
     ): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("test" to availabilityProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = registry,
+                poiRegistry = recgovAvailabilityPoiRegistry(),
+                availabilityProviders = listOf(availabilityProvider),
                 dateResolver = AvailabilityDateResolver(),
             )
         val providers =
-            alertProviders ?: AlertProviderRegistry(
-                listOf(
-                    InternalPollerAlertProvider(
-                        AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets),
-                    ),
+            alertProviders ?: listOf(
+                InternalPollerAlertProvider(
+                    AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets),
                 ),
             )
         return AvailabilityWatchService(ctx, providers, capabilityValidator)
     }
 
     private fun bookingValidatedService(
-        bookingProviders: BookingProviderRegistry,
+        bookingProviders: List<BookingProvider>,
         availabilityProvider: AvailabilityProvider = FakeProvider,
     ): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("test" to availabilityProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = registry,
+                poiRegistry = recgovAvailabilityPoiRegistry(),
+                availabilityProviders = listOf(availabilityProvider),
                 dateResolver = AvailabilityDateResolver(),
             )
         val scopeResolver = WatchScopeResolver(campsitesRepo)
         val providers =
-            AlertProviderRegistry(
-                listOf(
-                    InternalPollerAlertProvider(
-                        AvailabilityPollerMembership(scopeResolver, targets),
-                    ),
+            listOf(
+                InternalPollerAlertProvider(
+                    AvailabilityPollerMembership(scopeResolver, targets),
                 ),
             )
         return AvailabilityWatchService(
@@ -226,7 +221,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     fun `create rejects an atc watch when no booking provider supports its scoped campsite`() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
-        val svc = bookingValidatedService(BookingProviderRegistry(emptyList()))
+        val svc = bookingValidatedService(emptyList())
 
         val error = assertFailsWith<AvailabilityWatchValidationException> { svc.createForTest(poiInput(poiId)) }
 
@@ -238,7 +233,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     fun `update rejects adding atc when no booking provider supports the scoped campsite`() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
-        val svc = bookingValidatedService(BookingProviderRegistry(emptyList()))
+        val svc = bookingValidatedService(emptyList())
         val watch = svc.createForTest(poiInput(poiId, triggerKinds = listOf("slack_notify")))
 
         val error =
@@ -281,7 +276,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
         val watch = service().createForTest(poiInput(poiId))
-        val validatingService = bookingValidatedService(BookingProviderRegistry(emptyList()))
+        val validatingService = bookingValidatedService(emptyList())
 
         val updated = validatingService.updateForTest(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))
 
@@ -292,7 +287,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     fun `create allows an atc watch when recgov booking provider supports its scoped campsite`() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
-        val svc = bookingValidatedService(BookingProviderRegistry(listOf(RecGovOnlyBookingProvider)))
+        val svc = bookingValidatedService(listOf(RecGovOnlyBookingProvider))
 
         val watch = svc.createForTest(poiInput(poiId))
 
@@ -306,7 +301,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         seedCampsite(poiId, "100")
         val svc =
             bookingValidatedService(
-                bookingProviders = BookingProviderRegistry(listOf(RecGovOnlyBookingProvider)),
+                bookingProviders = listOf(RecGovOnlyBookingProvider),
                 availabilityProvider = NonPollableProvider,
             )
 
@@ -330,7 +325,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         seedCampsite(poiId, "100")
         val svc =
             bookingValidatedService(
-                bookingProviders = BookingProviderRegistry(listOf(RecGovOnlyBookingProvider)),
+                bookingProviders = listOf(RecGovOnlyBookingProvider),
                 availabilityProvider = NonPollableProvider,
             )
 
@@ -396,11 +391,11 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     }
 
     @Test
-    fun `watch lifecycle drives alert-provider hooks through the registry`() {
+    fun `watch lifecycle drives alert-provider hooks through the selected alert provider`() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
         val recorder = RecordingAlertProvider()
-        val svc = service(AlertProviderRegistry(listOf(recorder)))
+        val svc = service(listOf(recorder))
 
         val watch = svc.createForTest(poiInput(poiId))
         svc.updateForTest(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))
@@ -422,10 +417,9 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
 
     /** Fake alert provider that records `(watch.id, event)` tuples so the test
      *  can assert the service dispatches watch-lifecycle events through the
-     *  registry rather than reaching into poller state directly. Impersonates
-     *  the internal poller id because the v1 registry always dispatches to it. */
+     *  selected alert provider rather than reaching into poller state directly. */
     private class RecordingAlertProvider : AlertProvider {
-        override val id: String = AlertProviderRegistry.INTERNAL_POLLER_ID
+        override val id: String = INTERNAL_POLLER_ALERT_PROVIDER_ID
         override val hostsAlerts: Boolean = false
         val events: MutableList<Pair<Long, AlertEvent>> = mutableListOf()
 

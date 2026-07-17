@@ -5,16 +5,18 @@ import ca.floo.roadtrip.models.booking.AddToCartResult
 import ca.floo.roadtrip.models.booking.BookingAction
 import ca.floo.roadtrip.models.booking.BookingProviderId
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.booking.BookingProvider
+import ca.floo.roadtrip.service.booking.bookingProvidersById
 import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import org.slf4j.LoggerFactory
 
 internal class AtcTriggerActionHandler(
-    private val bookings: BookingProviderRegistry,
+    bookings: List<BookingProvider>,
     private val bookingTargets: AvailabilityBookingTargetResolver,
     private val notifications: NotificationSender,
 ) : TriggerActionHandler {
+    private val bookingsById = bookings.bookingProvidersById()
     private val log = LoggerFactory.getLogger(javaClass)
 
     override val kinds: Set<String> = setOf(KIND)
@@ -37,7 +39,7 @@ internal class AtcTriggerActionHandler(
 
         val next = pending.first()
         val result =
-            runCatching { bookings.addToCart(next.request) }
+            runCatching { addToCart(next.request) }
                 .onFailure {
                     log.error(
                         "failed to execute ATC booking action for watch_id={} campsite_id={} date={}",
@@ -125,6 +127,12 @@ internal class AtcTriggerActionHandler(
     private data class PendingAddToCart(
         val request: AddToCartRequest,
     )
+
+    private suspend fun addToCart(request: AddToCartRequest): AddToCartResult {
+        val provider = bookingsById[request.target.providerId] ?: return AddToCartResult.Unsupported
+        if (!provider.can(BookingAction.ADD_TO_CART, request.target)) return AddToCartResult.Unsupported
+        return provider.addToCart(request)
+    }
 
     private fun BookingProviderId.vendorSlug(): String = name.lowercase()
 

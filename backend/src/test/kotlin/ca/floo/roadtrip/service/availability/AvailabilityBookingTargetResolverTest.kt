@@ -14,7 +14,6 @@ import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.booking.BookingProvider
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import java.time.ZoneId
@@ -29,8 +28,7 @@ private const val TEST_CAMPFLARE_PARENT_ID = "campflare-parent-1"
 class AvailabilityBookingTargetResolverTest {
     @Test
     fun `targetFor skips availability-only campflare candidate and returns recgov booking target`() {
-        val registry = BookingProviderRegistry(listOf(RecGovOnlyBookingProvider()))
-        val resolver = AvailabilityBookingTargetResolver(registry)
+        val resolver = AvailabilityBookingTargetResolver(listOf(RecGovOnlyBookingProvider()))
         val resolved =
             resolvedTarget(
                 candidates =
@@ -49,8 +47,7 @@ class AvailabilityBookingTargetResolverTest {
 
     @Test
     fun `targetFor returns null when no candidate maps to supported booking provider`() {
-        val registry = BookingProviderRegistry(listOf(RecGovOnlyBookingProvider()))
-        val resolver = AvailabilityBookingTargetResolver(registry)
+        val resolver = AvailabilityBookingTargetResolver(listOf(RecGovOnlyBookingProvider()))
 
         val target = resolver.targetFor(BookingAction.ADD_TO_CART, resolvedTarget(candidates = listOf(campflareCandidate())))
 

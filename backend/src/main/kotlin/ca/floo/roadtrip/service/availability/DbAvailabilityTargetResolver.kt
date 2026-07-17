@@ -4,19 +4,25 @@ import ca.floo.roadtrip.models.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.models.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
+import ca.floo.roadtrip.service.availability.provider.availabilityProviderFor
 import ca.floo.roadtrip.service.availability.provider.availabilityProviderId
+import ca.floo.roadtrip.service.availability.provider.availabilityProvidersBySource
 
 internal class DbAvailabilityTargetResolver(
     private val providerRefs: CampsiteProviderRepo,
     private val campsitesRepo: CampsiteRepo,
-    private val availabilityProviders: AvailabilityProviderRegistry,
+    poiRegistry: PoiRegistry,
+    availabilityProviders: List<AvailabilityProvider>,
     private val dateResolver: AvailabilityDateResolver,
 ) : AvailabilityTargetResolver {
+    private val providersBySource = availabilityProvidersBySource(poiRegistry, availabilityProviders)
+
     private data class ResolvedRow(
         val poiId: Long,
         val row: CampsiteProviderRefRow,
@@ -55,7 +61,7 @@ internal class DbAvailabilityTargetResolver(
         campsite: CampsiteAvailabilityTarget,
     ): ProviderCandidate? {
         val ref = ProviderRefParser.parse(row.providerRefJson) ?: return null
-        val provider = availabilityProviders.forPoi(row, ref) ?: return null
+        val provider = providersBySource.availabilityProviderFor(row, ref) ?: return null
         return ProviderCandidate(
             provider = provider,
             parentRef = ref,

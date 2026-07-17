@@ -20,29 +20,29 @@ private const val TEST_WATCH_ID = 42L
 private const val TEST_CAMPSITE_ID = 7L
 private const val TEST_VENDOR_ID = "site-7"
 
-class BookingProviderRegistryTest {
+class BookingProviderListTest {
     @Test
-    fun `can delegates target support to the routed provider`() {
+    fun `can delegates target support to the provider selected by id`() {
         val provider = FakeBookingProvider(canAddToCart = true)
-        val registry = BookingProviderRegistry(listOf(provider))
+        val providersById = listOf<BookingProvider>(provider).bookingProvidersById()
 
-        assertTrue(registry.can(BookingAction.ADD_TO_CART, target()))
+        assertTrue(providersById[target().providerId]?.can(BookingAction.ADD_TO_CART, target()) == true)
     }
 
     @Test
     fun `can returns false when provider is absent or declines target`() {
-        val decliningRegistry = BookingProviderRegistry(listOf(FakeBookingProvider(canAddToCart = false)))
-        val emptyRegistry = BookingProviderRegistry(emptyList())
+        val decliningProviders = listOf<BookingProvider>(FakeBookingProvider(canAddToCart = false)).bookingProvidersById()
+        val emptyProviders = emptyList<BookingProvider>().bookingProvidersById()
 
-        assertFalse(decliningRegistry.can(BookingAction.ADD_TO_CART, target()))
-        assertFalse(emptyRegistry.can(BookingAction.ADD_TO_CART, target()))
+        assertFalse(decliningProviders[target().providerId]?.can(BookingAction.ADD_TO_CART, target()) == true)
+        assertFalse(emptyProviders[target().providerId]?.can(BookingAction.ADD_TO_CART, target()) == true)
     }
 
     @Test
-    fun `target for asks providers to translate provider refs`() {
-        val registry = BookingProviderRegistry(listOf(FakeBookingProvider(canAddToCart = true)))
+    fun `provider translates provider refs into booking targets`() {
+        val provider = FakeBookingProvider(canAddToCart = true)
 
-        val target = registry.targetFor(BookingAction.ADD_TO_CART, ProviderRef.RecGov("100"), campsiteRef())
+        val target = provider.targetFor(ProviderRef.RecGov("100"), campsiteRef())
 
         assertEquals(BookingProviderId.RECGOV, target?.providerId)
         assertEquals(ProviderRef.RecGov("100"), target?.parentRef)
@@ -53,9 +53,15 @@ class BookingProviderRegistryTest {
     fun `add to cart returns unsupported when provider declines target`() =
         runBlocking {
             val provider = FakeBookingProvider(canAddToCart = false)
-            val registry = BookingProviderRegistry(listOf(provider))
+            val providersById = listOf<BookingProvider>(provider).bookingProvidersById()
 
-            val result = registry.addToCart(request())
+            val selected = providersById[request().target.providerId]
+            val result =
+                if (selected?.can(BookingAction.ADD_TO_CART, request().target) == true) {
+                    selected.addToCart(request())
+                } else {
+                    AddToCartResult.Unsupported
+                }
 
             assertEquals(AddToCartResult.Unsupported, result)
             assertEquals(0, provider.addToCartCalls)
@@ -65,9 +71,10 @@ class BookingProviderRegistryTest {
     fun `add to cart delegates to provider when target is supported`() =
         runBlocking {
             val provider = FakeBookingProvider(canAddToCart = true)
-            val registry = BookingProviderRegistry(listOf(provider))
+            val providersById = listOf<BookingProvider>(provider).bookingProvidersById()
 
-            val result = registry.addToCart(request())
+            val selected = providersById[request().target.providerId]!!
+            val result = selected.addToCart(request())
 
             assertEquals(
                 AddToCartResult.Completed(
@@ -83,7 +90,10 @@ class BookingProviderRegistryTest {
     @Test
     fun `duplicate provider ids are rejected`() {
         assertFailsWith<IllegalArgumentException> {
-            BookingProviderRegistry(listOf(FakeBookingProvider(canAddToCart = true), FakeBookingProvider(canAddToCart = true)))
+            listOf<BookingProvider>(
+                FakeBookingProvider(canAddToCart = true),
+                FakeBookingProvider(canAddToCart = true),
+            ).bookingProvidersById()
         }
     }
 

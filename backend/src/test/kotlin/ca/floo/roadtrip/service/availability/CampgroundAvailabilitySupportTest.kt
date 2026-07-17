@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.recgovAndCampflareAvailabilityPoiRegistry
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.models.domain.ProviderRef
@@ -10,7 +11,6 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
@@ -42,12 +42,11 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
         val support =
             CampgroundAvailabilitySupport(
                 providerRefs = CampsiteProviderRepo(ctx),
+                poiRegistry = recgovAndCampflareAvailabilityPoiRegistry(),
                 availabilityProviders =
-                    AvailabilityProviderRegistry(
-                        mapOf(
-                            "campflare" to DecliningCampflareProvider(),
-                            "recgov" to NoopRecgovProvider(),
-                        ),
+                    listOf(
+                        DecliningCampflareProvider(),
+                        NoopRecgovProvider(),
                     ),
             )
 
@@ -92,13 +91,11 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
     private fun supportFor(campflareEnabled: Boolean = true): CampgroundAvailabilitySupport =
         CampgroundAvailabilitySupport(
             providerRefs = CampsiteProviderRepo(ctx),
+            poiRegistry = recgovAndCampflareAvailabilityPoiRegistry(),
             availabilityProviders =
-                AvailabilityProviderRegistry(
-                    adaptersBySource =
-                        mapOf(
-                            "campflare" to NoopCampflareProvider(enabled = campflareEnabled),
-                            "recgov" to NoopRecgovProvider(),
-                        ),
+                listOf(
+                    NoopCampflareProvider(enabled = campflareEnabled),
+                    NoopRecgovProvider(),
                 ),
         )
 

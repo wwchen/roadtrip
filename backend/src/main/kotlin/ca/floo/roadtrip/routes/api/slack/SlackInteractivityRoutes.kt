@@ -1,6 +1,9 @@
 package ca.floo.roadtrip.routes.api.slack
 
+import ca.floo.roadtrip.SlackInteractivityWiring
 import ca.floo.roadtrip.clients.slack.SlackSignatureVerifier
+import ca.floo.roadtrip.config.AppConfig
+import ca.floo.roadtrip.routes.common.routeKoin
 import ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
@@ -21,6 +24,18 @@ private val log = LoggerFactory.getLogger(SlackInteractivityRoutes::class.java)
 
 private const val SLACK_SIGNATURE_HEADER = "X-Slack-Signature"
 private const val SLACK_TIMESTAMP_HEADER = "X-Slack-Request-Timestamp"
+
+internal fun Route.slackInteractivityRoute() {
+    val koin = routeKoin()
+    if (koin.get<AppConfig>().slack?.signingSecret == null) return
+
+    val wiring = koin.get<SlackInteractivityWiring>()
+    slackInteractivityRoute(
+        verifier = wiring.verifier,
+        handler = wiring.handler,
+        scope = koin.get(),
+    )
+}
 
 /**
  * Inbound Slack interactivity endpoint — the destination for `block_actions`

@@ -7,10 +7,8 @@ object AspiraTenants {
     /**
      * The tenant table. Order does not matter; lookup is by host.
      *
-     * Adding a tenant: append a row. Validation at boot
-     * ([ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry])
-     * ensures every host the YAML
-     * registry declares has a row here, so a forgotten entry fails
+     * Adding a tenant: append a row. Validation at boot ensures every host the
+     * YAML registry declares has a row here, so a forgotten entry fails
      * loudly instead of silently routing to a missing adapter.
      */
     private val ALL: List<AspiraTenant> =

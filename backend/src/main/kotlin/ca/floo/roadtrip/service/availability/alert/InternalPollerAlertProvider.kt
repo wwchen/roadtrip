@@ -19,7 +19,7 @@ import java.time.OffsetDateTime
 internal class InternalPollerAlertProvider(
     private val membership: AvailabilityPollerMembership,
 ) : AlertProvider {
-    override val id: String = AlertProviderRegistry.INTERNAL_POLLER_ID
+    override val id: String = INTERNAL_POLLER_ALERT_PROVIDER_ID
 
     /** Platform polls upstream; no vendor-hosted webhook route. */
     override val hostsAlerts: Boolean = false

@@ -8,6 +8,7 @@ import ca.floo.roadtrip.models.api.poi.PoisOnRouteFeatureSchema
 import ca.floo.roadtrip.models.api.poi.PoisOnRouteResponseSchema
 import ca.floo.roadtrip.models.domain.poi.PoiRow
 import ca.floo.roadtrip.routes.common.describeApi
+import ca.floo.roadtrip.routes.common.routeKoin
 import ca.floo.roadtrip.service.poi.OnRouteWaypoint
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.poi.canonicalPoiCategories
@@ -40,6 +41,10 @@ private val onRouteJson =
     }
 
 private val onRouteLog = LoggerFactory.getLogger("PoisOnRouteRoutes")
+
+internal fun Route.poisOnRouteRoutes() {
+    poisOnRouteRoutes(routeKoin().get<PoisOnRouteService>())
+}
 
 // POST /api/pois/on-route
 //

@@ -3,6 +3,8 @@ package ca.floo.roadtrip.service.scheduler.jobs
 import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
 import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import ca.floo.roadtrip.config.VendorRateLimitConfig
+import ca.floo.roadtrip.fixtures.emptyPoiRegistry
+import ca.floo.roadtrip.fixtures.recgovAvailabilityPoiRegistry
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityProviderCapabilities
@@ -36,13 +38,11 @@ import ca.floo.roadtrip.service.availability.NotifyTriggerActionHandler
 import ca.floo.roadtrip.service.availability.ProviderCandidate
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.TriggerActionHandler
-import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.TriggerOpening
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
 import ca.floo.roadtrip.service.notification.common.NotificationSender
@@ -184,12 +184,12 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
     private fun membershipFor(provider: AvailabilityProvider): AvailabilityPollerMembership {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("test" to provider))
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = registry,
+                poiRegistry = recgovAvailabilityPoiRegistry(),
+                availabilityProviders = listOf(provider),
                 dateResolver = AvailabilityDateResolver(),
             )
         return AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets)
@@ -310,7 +310,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         DbAvailabilityTargetResolver(
             providerRefs = CampsiteProviderRepo(ctx),
             campsitesRepo = CampsiteRepo(ctx),
-            availabilityProviders = AvailabilityProviderRegistry(mapOf("test" to provider)),
+            poiRegistry = recgovAvailabilityPoiRegistry(),
+            availabilityProviders = listOf(provider),
             dateResolver = AvailabilityDateResolver(),
         )
 
@@ -326,12 +327,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 DbAvailabilityTargetResolver(
                     providerRefs = CampsiteProviderRepo(ctx),
                     campsitesRepo = CampsiteRepo(ctx),
-                    availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
+                    poiRegistry = emptyPoiRegistry(),
+                    availabilityProviders = emptyList(),
                     dateResolver = AvailabilityDateResolver(),
                 ),
             pois = PoiServingRepo(ctx),
             availability = AvailabilityRepo(ctx),
-            triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, APP_ROOT_URL))),
+            triggerActions = listOf(NotifyTriggerActionHandler(notifications, APP_ROOT_URL)),
             grafanaRootUrl = GRAFANA_ROOT_URL,
             appRootUrl = APP_ROOT_URL,
         )
@@ -351,7 +353,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             targets = targetsFor(provider),
             pois = PoiServingRepo(ctx),
             availability = AvailabilityRepo(ctx),
-            triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, appRootUrl)) + extraTriggerHandlers),
+            triggerActions = listOf(NotifyTriggerActionHandler(notifications, appRootUrl)) + extraTriggerHandlers,
             grafanaRootUrl = grafanaRootUrl,
             appRootUrl = appRootUrl,
         )
@@ -364,13 +366,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = testProviderCooldown)),
     ): AvailabilityPollExecutor {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("test" to provider))
         val dateResolver = AvailabilityDateResolver(clock = testClock)
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = registry,
+                poiRegistry = recgovAvailabilityPoiRegistry(),
+                availabilityProviders = listOf(provider),
                 dateResolver = dateResolver,
             )
         return AvailabilityPollExecutor(

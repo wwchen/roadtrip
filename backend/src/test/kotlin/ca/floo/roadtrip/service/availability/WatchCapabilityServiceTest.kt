@@ -14,7 +14,6 @@ import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.booking.BookingProvider
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import java.time.ZoneId
@@ -113,14 +112,12 @@ class WatchCapabilityServiceTest {
                 AvailabilityTriggerKinds.SLACK_NOTIFY,
                 AvailabilityTriggerKinds.EMAIL_NOTIFY,
             ),
-    ): WatchCapabilityService {
-        val registry = BookingProviderRegistry(listOf(RecGovOnlyBookingProvider))
-        return WatchCapabilityService(
+    ): WatchCapabilityService =
+        WatchCapabilityService(
             availabilityTargets = FakeTargetResolver(campsites, supportsInternalPolling),
-            bookingTargets = AvailabilityBookingTargetResolver(registry),
+            bookingTargets = AvailabilityBookingTargetResolver(listOf(RecGovOnlyBookingProvider)),
             notificationTriggerKinds = notificationTriggerKinds,
         )
-    }
 
     private object RecGovOnlyBookingProvider : BookingProvider {
         override val id: BookingProviderId = BookingProviderId.RECGOV

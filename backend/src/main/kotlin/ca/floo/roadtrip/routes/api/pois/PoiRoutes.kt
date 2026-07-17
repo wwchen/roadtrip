@@ -6,6 +6,7 @@ import ca.floo.roadtrip.models.api.poi.PoiFeatureCollectionSchema
 import ca.floo.roadtrip.models.api.poi.PoisRequestSchema
 import ca.floo.roadtrip.models.domain.poi.Bbox
 import ca.floo.roadtrip.routes.common.describeApi
+import ca.floo.roadtrip.routes.common.routeKoin
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.POI_LIMIT
 import ca.floo.roadtrip.service.poi.PoiReader
@@ -31,6 +32,10 @@ private val poiRoutesJson =
         ignoreUnknownKeys = true
         explicitNulls = false
     }
+
+internal fun Route.poiRoutes() {
+    poiRoutes(routeKoin().get<PoiReader>())
+}
 
 // POST /api/pois
 //

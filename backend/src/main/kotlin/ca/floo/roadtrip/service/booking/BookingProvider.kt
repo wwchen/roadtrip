@@ -33,3 +33,12 @@ internal interface BookingProvider {
 
     suspend fun addToCart(request: AddToCartRequest): AddToCartResult
 }
+
+internal fun List<BookingProvider>.bookingProvidersById(): Map<BookingProviderId, BookingProvider> {
+    val byId = associateBy { it.id }
+    require(size == byId.size) {
+        "duplicate booking providers: " +
+            groupBy { it.id }.filterValues { it.size > 1 }.keys
+    }
+    return byId
+}

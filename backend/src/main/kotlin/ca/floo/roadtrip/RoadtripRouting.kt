@@ -1,23 +1,20 @@
 package ca.floo.roadtrip
 
-import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
-import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.http.cacheOptionsFor
-import ca.floo.roadtrip.routes.api.pois.IpRateLimiter
-import ca.floo.roadtrip.routes.api.roadtripApiRoutes
+import ca.floo.roadtrip.routes.api.admin.adminIngestRoutes
+import ca.floo.roadtrip.routes.api.availability.availabilityDashboardRoutes
+import ca.floo.roadtrip.routes.api.availability.availabilityWatchRoutes
+import ca.floo.roadtrip.routes.api.docs.apiDocsRoutes
+import ca.floo.roadtrip.routes.api.geocode.geocodeRoutes
+import ca.floo.roadtrip.routes.api.health.healthRoutes
+import ca.floo.roadtrip.routes.api.pois.campsiteRoutes
+import ca.floo.roadtrip.routes.api.pois.poiRoutes
+import ca.floo.roadtrip.routes.api.pois.poisOnRouteRoutes
+import ca.floo.roadtrip.routes.api.route.routeRoutes
+import ca.floo.roadtrip.routes.api.slack.slackInteractivityRoute
 import ca.floo.roadtrip.routes.static.staticSiteRoutes
-import ca.floo.roadtrip.service.availability.AvailabilityWatchService
-import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
-import ca.floo.roadtrip.service.availability.CampsiteCatalogService
-import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
-import ca.floo.roadtrip.service.availability.WatchCapabilityService
-import ca.floo.roadtrip.service.etl.framework.IngestController
-import ca.floo.roadtrip.service.notification.email.EmailNotificationService
-import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
-import ca.floo.roadtrip.service.poi.PoiReader
-import ca.floo.roadtrip.service.poi.PoisOnRouteService
-import ca.floo.roadtrip.service.routing.RouteCache
-import ca.floo.roadtrip.service.routing.RouteCorridorService
+import ca.floo.roadtrip.routes.test.testEmailRoutes
+import ca.floo.roadtrip.routes.test.testSlackRoutes
 import io.ktor.http.ContentType
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -32,8 +29,6 @@ import io.ktor.server.plugins.conditionalheaders.ConditionalHeaders
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
 import io.ktor.server.routing.routing
-import kotlinx.coroutines.CoroutineScope
-import org.jooq.DSLContext
 import org.koin.ktor.ext.getKoin
 import org.slf4j.event.Level
 import java.io.File
@@ -81,52 +76,22 @@ internal fun Application.installRoadtripPlugins() {
 }
 
 internal fun Application.registerRoadtripRoutes() {
-    val koin = getKoin()
-    val appConfig = koin.get<AppConfig>()
-    val staticDir = koin.get<File>()
-    val slackInteractivity =
-        if (appConfig.slack?.signingSecret == null) {
-            null
-        } else {
-            koin.get<SlackInteractivityWiring>()
-        }
-    val ingestController = koin.get<IngestController>()
-    val ctx = koin.get<DSLContext>()
-    val availabilityWatchService = koin.get<AvailabilityWatchService>()
-    val watchAlertDispatcher = koin.get<WatchAlertDispatcher>()
-    val schedulerScope = koin.get<CoroutineScope>()
-    val watchCapabilities = koin.get<WatchCapabilityService>()
-    val campsiteCatalogService = koin.get<CampsiteCatalogService>()
-    val campsiteAvailabilityService = koin.get<CampsiteAvailabilityService>()
-    val campsiteRateLimiter = koin.get<IpRateLimiter>()
-    val routeCache = koin.get<RouteCache>()
-    val mapboxGeocoder = koin.get<MapboxGeocoder>()
-    val poiService = koin.get<PoiReader>()
-    val routeCorridorService = koin.get<RouteCorridorService>()
-    val poisOnRouteService = koin.get<PoisOnRouteService>()
-    val emailNotifications = koin.get<EmailNotificationService>()
-    val slackNotifications = koin.get<SlackNotificationService>()
+    val staticDir = getKoin().get<File>()
+
     routing {
-        roadtripApiRoutes(
-            appConfig = appConfig,
-            slackInteractivity = slackInteractivity,
-            ingestController = ingestController,
-            ctx = ctx,
-            availabilityWatchService = availabilityWatchService,
-            watchAlertDispatcher = watchAlertDispatcher,
-            schedulerScope = schedulerScope,
-            watchCapabilities = watchCapabilities,
-            campsiteCatalogService = campsiteCatalogService,
-            campsiteAvailabilityService = campsiteAvailabilityService,
-            campsiteRateLimiter = campsiteRateLimiter,
-            routeCache = routeCache,
-            mapboxGeocoder = mapboxGeocoder,
-            poiService = poiService,
-            routeCorridorService = routeCorridorService,
-            poisOnRouteService = poisOnRouteService,
-            emailNotifications = emailNotifications,
-            slackNotifications = slackNotifications,
-        )
+        apiDocsRoutes()
+        poiRoutes()
+        availabilityWatchRoutes()
+        campsiteRoutes()
+        slackInteractivityRoute()
+        availabilityDashboardRoutes()
+        poisOnRouteRoutes()
+        routeRoutes()
+        geocodeRoutes()
+        healthRoutes()
+        adminIngestRoutes()
+        testEmailRoutes()
+        testSlackRoutes()
         staticSiteRoutes(staticDir)
     }
 }

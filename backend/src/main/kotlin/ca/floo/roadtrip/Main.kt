@@ -62,7 +62,6 @@ import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.NotifyTriggerActionHandler
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.TriggerActionHandler
-import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.WatchCapabilityValidator
@@ -70,12 +69,9 @@ import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProvider
-import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderBinding
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraTenant
 import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraTenants
@@ -85,7 +81,6 @@ import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.Re
 import ca.floo.roadtrip.service.availability.provider.adapters.reserveamerica.ReserveAmericaTenant
 import ca.floo.roadtrip.service.availability.provider.adapters.reservecalifornia.ReserveCaliforniaAvailabilityProvider
 import ca.floo.roadtrip.service.booking.BookingProvider
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import ca.floo.roadtrip.service.booking.RecGovAtcExecutor
 import ca.floo.roadtrip.service.booking.adapters.RecGovBookingProvider
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
@@ -157,8 +152,6 @@ private const val MAPBOX_TOKEN_KEY = "token"
 private const val DEFAULT_POI_REGISTRY_RESOURCE = "poi-registry.yaml"
 private const val RAW_DATA_DIR = "data/raw"
 private const val SCHEDULER_NAME_AVAILABILITY = "availability"
-private const val CAMPFLARE_VENDOR = "campflare"
-private const val RECGOV_VENDOR = "recgov"
 private const val KOIN_AVAILABILITY_PROVIDER_QUALIFIER_PREFIX = "availability-provider"
 
 fun main(args: Array<String>): Unit = EngineMain.main(args)
@@ -410,18 +403,18 @@ internal fun roadtripKoinModule(
         }
         singleOf(::reserveCaliforniaAvailabilityProvider) bind AvailabilityProvider::class
         single {
-            val providers = getAll<AvailabilityProvider>()
-            AvailabilityProviderRegistry.fromBindings(availabilityProviderBindings(poiRegistry, providers))
-        }
-        singleOf(::DbAvailabilityTargetResolver) bind AvailabilityTargetResolver::class
+            DbAvailabilityTargetResolver(
+                providerRefs = get(),
+                campsitesRepo = get(),
+                poiRegistry = get(),
+                availabilityProviders = getAll(),
+                dateResolver = get(),
+            )
+        } bind AvailabilityTargetResolver::class
 
         singleOf(::WatchScopeResolver)
         singleOf(::AvailabilityPollerMembership)
         singleOf(::InternalPollerAlertProvider) bind AlertProvider::class
-        single {
-            val providers = getAll<AlertProvider>()
-            AlertProviderRegistry(providers)
-        }
         single {
             WatchCapabilityService(
                 availabilityTargets = get(),
@@ -430,7 +423,13 @@ internal fun roadtripKoinModule(
             )
         }
         singleOf(::WatchTriggerCapabilityValidator) bind WatchCapabilityValidator::class
-        singleOf(::AvailabilityWatchService)
+        single {
+            AvailabilityWatchService(
+                ctx = get(),
+                alertProviders = getAll(),
+                capabilityValidator = get(),
+            )
+        }
         singleOf(::AvailabilityWatchApiMapper)
         single {
             ProviderCooldownTracker(cooldown = get<AppConfig>().availability.providerCooldown)
@@ -441,7 +440,13 @@ internal fun roadtripKoinModule(
         singleOf(::CampsiteAvailabilityComposer)
         singleOf(::CampsiteCatalogService)
         singleOf(::CampsiteAvailabilityService)
-        singleOf(::CampgroundAvailabilitySupport)
+        single {
+            CampgroundAvailabilitySupport(
+                providerRefs = get(),
+                poiRegistry = get(),
+                availabilityProviders = getAll(),
+            )
+        }
 
         if (appConfig.booking.recgovAtc.companionEnabled) {
             mainLog.info("Rec.gov ATC companion executor enabled at {}", appConfig.booking.recgovAtc.companionBaseUrl)
@@ -449,10 +454,8 @@ internal fun roadtripKoinModule(
             singleOf(::RecGovBookingProvider) bind BookingProvider::class
         }
         single {
-            val providers = getAll<BookingProvider>()
-            BookingProviderRegistry(providers)
+            AvailabilityBookingTargetResolver(getAll<BookingProvider>())
         }
-        singleOf(::AvailabilityBookingTargetResolver)
 
         single { SlackNotificationService(get<AppConfig>().slack) } bind NotificationService::class
         single<SlackResponseSender> { get<SlackNotificationService>() }
@@ -464,9 +467,12 @@ internal fun roadtripKoinModule(
                 appRootUrl = get<AppConfig>().webApp?.rootUrl,
             )
         }
-        singleOf(::AtcTriggerActionHandler) bind TriggerActionHandler::class
-        single {
-            TriggerActionRegistry(getAll<TriggerActionHandler>())
+        single<TriggerActionHandler> {
+            AtcTriggerActionHandler(
+                bookings = getAll(),
+                bookingTargets = get(),
+                notifications = get(),
+            )
         }
         single {
             val config = get<AppConfig>()
@@ -477,7 +483,7 @@ internal fun roadtripKoinModule(
                 targets = get(),
                 pois = get(),
                 availability = get(),
-                triggerActions = get(),
+                triggerActions = getAll(),
                 grafanaRootUrl = config.grafana?.rootUrl,
                 appRootUrl = config.webApp?.rootUrl,
             )
@@ -661,45 +667,6 @@ internal fun reserveCaliforniaAvailabilityProvider(
         client = client,
         enabled = appConfig.isProviderEnabled(AvailabilityProviderId.RESERVECALIFORNIA),
     )
-
-internal fun availabilityProviderBindings(
-    poiRegistry: PoiRegistry,
-    providers: List<AvailabilityProvider>,
-): List<AvailabilityProviderBinding> =
-    buildList {
-        val recgov = providers.singleProvider<RecGovAvailabilityProvider>(AvailabilityProviderId.RECGOV)
-        val campflare = providers.singleProvider<CampflareAvailabilityProvider>(AvailabilityProviderId.CAMPFLARE)
-        val reserveCalifornia = providers.singleProvider<ReserveCaliforniaAvailabilityProvider>(AvailabilityProviderId.RESERVECALIFORNIA)
-
-        addSourceBindings(provider = recgov, sources = listOf(RECGOV_VENDOR) + poiRegistry.recgovSources())
-        addSourceBindings(provider = campflare, sources = listOf(CAMPFLARE_VENDOR) + poiRegistry.campflareSources())
-
-        val aspiraByHost = providers.filterIsInstance<AspiraAvailabilityProvider>().associateBy { it.tenant.host }
-        for ((source, host) in poiRegistry.aspiraHostBySource()) {
-            add(AvailabilityProviderBinding(source = source, provider = aspiraByHost.getValue(host)))
-        }
-
-        val reserveAmericaBySource = providers.filterIsInstance<ReserveAmericaAvailabilityProvider>().associateBy { it.tenant.source }
-        for (config in poiRegistry.reserveAmericaSources()) {
-            add(AvailabilityProviderBinding(source = config.source, provider = reserveAmericaBySource.getValue(config.source)))
-        }
-
-        addSourceBindings(provider = reserveCalifornia, sources = poiRegistry.reserveCaliforniaSources())
-    }
-
-private fun MutableList<AvailabilityProviderBinding>.addSourceBindings(
-    provider: AvailabilityProvider,
-    sources: Iterable<String>,
-) {
-    sources.distinct().forEach { source ->
-        add(AvailabilityProviderBinding(source = source, provider = provider))
-    }
-}
-
-private inline fun <reified T : AvailabilityProvider> List<AvailabilityProvider>.singleProvider(id: AvailabilityProviderId): T =
-    filterIsInstance<T>()
-        .singleOrNull()
-        ?: error("expected exactly one ${id.name.lowercase()} availability provider, found ${count { it.id == id }}")
 
 /**
  * Boot-time gate: every Aspira host the YAML declares must have a tenant config
