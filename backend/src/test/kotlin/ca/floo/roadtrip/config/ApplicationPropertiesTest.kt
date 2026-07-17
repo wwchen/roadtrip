@@ -7,12 +7,12 @@ import kotlin.test.assertFailsWith
 
 class ApplicationPropertiesTest {
     @Test
-    fun `ktor application yaml contains only engine startup config`() {
+    fun `ktor application yaml exposes engine and custom config`() {
         val config = ConfigLoader.load("application.yaml")
 
         assertEquals("8765", config.property("ktor.deployment.port").getString())
         assertEquals(listOf("ca.floo.roadtrip.MainKt.module"), config.property("ktor.application.modules").getList())
-        assertEquals(null, config.propertyOrNull("roadtrip.static-dir"))
+        assertEquals("https://api.campflare.com/v2", config.property("roadtrip.campflare.api-base-url").getString())
     }
 
     @Test
@@ -124,13 +124,13 @@ class ApplicationPropertiesTest {
                     ),
                 classLoader =
                     resourceClassLoader(
-                        "application.yml" to
+                        "application.yaml" to
                             """
                             shared: base-yaml
                             base-only: base
                             secret: ${'$'}{SECRET_VALUE}
                             """.trimIndent(),
-                        "application-local.yml" to
+                        "application-local.yaml" to
                             """
                             profile-only: profile-yaml
                             shared: profile-yaml
@@ -151,22 +151,26 @@ class ApplicationPropertiesTest {
                 env = mapOf("SECRET_VALUE" to "from-env"),
                 classLoader =
                     resourceClassLoader(
-                        "roadtrip.yaml" to
+                        "application.yaml" to
                             """
                             direct: ${'$'}{SECRET_VALUE}
                             missing: ${'$'}{DOES_NOT_EXIST}
+                            defaulted: ${'$'}{DOES_NOT_EXIST:fallback}
+                            emptyDefault: ${'$'}{DOES_NOT_EXIST:}
                             chained: ${'$'}{direct}
                             self: ${'$'}{self}
                             list:
                               - one
                               - two
                             """.trimIndent(),
-                        "roadtrip-local.yaml" to "",
+                        "application-local.yaml" to "",
                     ),
             )
 
         assertEquals("from-env", props["direct"])
         assertEquals("", props["missing"])
+        assertEquals("fallback", props["defaulted"])
+        assertEquals("", props["emptyDefault"])
         assertEquals("from-env", props["chained"])
         assertEquals("", props["self"])
         assertEquals("one,two", props["list"])
@@ -180,12 +184,12 @@ class ApplicationPropertiesTest {
                     env = mapOf("ROADTRIP_PROFILE" to "typo"),
                     classLoader =
                         resourceClassLoader(
-                            "roadtrip.yaml" to "roadtrip:\n  static-dir: .",
+                            "application.yaml" to "roadtrip:\n  static-dir: .",
                         ),
                 )
             }
 
-        assertEquals("application config resource 'roadtrip-typo.yaml' not found", err.message)
+        assertEquals("application config resource 'application-typo.yaml' not found", err.message)
     }
 
     private fun resourceClassLoader(vararg resources: Pair<String, String>): ClassLoader {

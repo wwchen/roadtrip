@@ -11,9 +11,9 @@ import com.charleskorn.kaml.YamlScalar
 object ApplicationProperties {
     private const val PROFILE_ENV = "ROADTRIP_PROFILE"
     private const val DEFAULT_PROFILE = "local"
-    private const val BASE_RESOURCE = "roadtrip.yaml"
+    private const val BASE_RESOURCE = "application.yaml"
     private const val RESOURCE_EXTENSION = "yaml"
-    private val PLACEHOLDER = Regex("""\$\{([A-Za-z_][A-Za-z0-9_.-]*)}""")
+    private val PLACEHOLDER = Regex("""\$\{([A-Za-z_][A-Za-z0-9_.-]*)(?::([^}]*))?}""")
     private val yaml = Yaml(configuration = YamlConfiguration(strictMode = false))
 
     fun load(
@@ -25,7 +25,7 @@ object ApplicationProperties {
                 ?: DEFAULT_PROFILE
         val values = linkedMapOf<String, String>()
         values.putAll(loadResource(BASE_RESOURCE, classLoader))
-        values.putAll(loadResource("roadtrip-$profile.$RESOURCE_EXTENSION", classLoader))
+        values.putAll(loadResource("application-$profile.$RESOURCE_EXTENSION", classLoader))
         return resolvePlaceholders(values, env)
     }
 
@@ -89,11 +89,12 @@ object ApplicationProperties {
         val raw = values[key].orEmpty()
         return PLACEHOLDER.replace(raw) { match ->
             val ref = match.groupValues[1]
+            val defaultValue = match.groups[2]?.value
             when {
                 ref in env -> env.getValue(ref)
                 ref == key || ref in seen -> ""
                 ref in values -> resolveValue(key = ref, values = values, env = env, seen = seen + key)
-                else -> ""
+                else -> defaultValue.orEmpty()
             }
         }
     }
