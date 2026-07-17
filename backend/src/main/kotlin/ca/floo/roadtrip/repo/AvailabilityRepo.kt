@@ -221,7 +221,6 @@ class AvailabilityRepo(
         val targetDate: LocalDate,
         val fromStatus: AvailabilityStatus?,
         val toStatus: AvailabilityStatus,
-        val available: Boolean,
         val observedFrom: OffsetDateTime?,
         val observedAt: OffsetDateTime,
     )
@@ -244,7 +243,6 @@ class AvailabilityRepo(
             targetDate = r.get("target_date", LocalDate::class.java),
             fromStatus = fromStatusRaw?.let { AvailabilityStatus.parse(it) },
             toStatus = toStatus,
-            available = toStatus.isOnlineBookable,
             observedFrom = r.get("observed_from", OffsetDateTime::class.java),
             observedAt = r.get("last_observed_at", OffsetDateTime::class.java),
         )
@@ -368,7 +366,7 @@ class AvailabilityRepo(
         if (runs.isEmpty()) {
             return TargetDateStats(date, 0, null, false, null, null, 0)
         }
-        val openRuns = runs.filter { it.available }
+        val openRuns = runs.filter { it.toStatus.isOnlineBookable }
         val openWindows =
             openRuns.map { r ->
                 val from = r.observedFrom ?: r.observedAt
@@ -382,7 +380,7 @@ class AvailabilityRepo(
             targetDate = date,
             totalRuns = runs.size,
             lastOpenAt = openRuns.lastOrNull()?.observedAt,
-            isCurrentlyOpen = runs.last().available,
+            isCurrentlyOpen = runs.last().toStatus.isOnlineBookable,
             currentOrLastOpenWindowSec = openWindows.lastOrNull(),
             medianOpenWindowSec = medianOrNull(openWindows),
             opensLast24h = openRuns.count { (it.observedFrom ?: it.observedAt) >= opensSince },
