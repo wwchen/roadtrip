@@ -7,7 +7,9 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import {
   IS_HEADLESS,
+  getContext,
   injectFingerprintCookie,
+  isSpaLoggedIn,
   readRecaccount,
 } from './browser.js'
 
@@ -40,8 +42,38 @@ const LOGIN_SUBMIT_TIMEOUT_MS = 5_000
 const LOGIN_BLOCKER_TIMEOUT_MS = 1_000
 const LOGIN_MFA_PROMPT_TIMEOUT_MS = 5_000
 const DIAGNOSTIC_REASON_MAX_CHARS = 60
+const RECGOV_LOGOUT_MENU_SETTLE_MS = 500
+const RECGOV_LOGOUT_VERIFY_TIMEOUT_MS = 5_000
+const RECGOV_LOGOUT_POLL_MS = 500
+const RECGOV_LOGOUT_SELECTOR_TIMEOUT_MS = 1_500
+const RECGOV_LOGOUT_CLICK_TIMEOUT_MS = 3_000
 
 const LOGIN_LINK_SEL = 'button:has-text("Sign Up / Log In"), a:has-text("Sign Up / Log In")'
+const LOGOUT_MENU_SELECTORS = [
+  'button[aria-label*="account" i]',
+  'button[aria-label*="profile" i]',
+  'button[aria-label*="user" i]',
+  'button:has-text("My Account")',
+  'button:has-text("Account")',
+  '[role="button"]:has-text("My Account")',
+  '[role="button"]:has-text("Account")',
+  'header button:has-text("Hi")',
+  'nav button:has-text("Hi")',
+]
+const LOGOUT_ACTION_SELECTORS = [
+  'button:has-text("Log Out")',
+  'a:has-text("Log Out")',
+  '[role="menuitem"]:has-text("Log Out")',
+  'button:has-text("Logout")',
+  'a:has-text("Logout")',
+  '[role="menuitem"]:has-text("Logout")',
+  'button:has-text("Sign Out")',
+  'a:has-text("Sign Out")',
+  '[role="menuitem"]:has-text("Sign Out")',
+  'button:has-text("Sign out")',
+  'a:has-text("Sign out")',
+  '[role="menuitem"]:has-text("Sign out")',
+]
 const LOGIN_EMAIL_SELECTORS = [
   '[role="dialog"] input[type="email"]',
   '[role="dialog"] input[name*="email" i]',
@@ -167,6 +199,19 @@ export async function resolveRecaccount (page, options = {}) {
 
 export function getRecgovSessionStatus () {
   return { ...recgovSessionStatus }
+}
+
+export async function logoutRecgovBrowserSession ({
+  getContextFn = getContext,
+  isSpaLoggedInFn = isSpaLoggedIn,
+} = {}) {
+  const context = await getContextFn()
+  const page = await context.newPage()
+  try {
+    return await logoutRecgovPage(page, isSpaLoggedInFn)
+  } finally {
+    await page.close().catch(() => {})
+  }
 }
 
 export function recgovLoginCredentialsFromInput (input = {}) {
@@ -427,17 +472,113 @@ async function fillFirstVisible (page, selectors, value) {
   }
 }
 
-async function clickFirstVisible (page, selectors) {
+async function clickFirstVisible (
+  page,
+  selectors,
+  {
+    visibleTimeoutMs = LOGIN_BLOCKER_TIMEOUT_MS,
+    actionTimeoutMs = LOGIN_SUBMIT_TIMEOUT_MS,
+  } = {},
+) {
   for (const selector of selectors) {
     const locator = page.locator(selector).first()
-    if (!await locator.isVisible({ timeout: LOGIN_BLOCKER_TIMEOUT_MS }).catch(() => false)) continue
+    if (!await locator.isVisible({ timeout: visibleTimeoutMs }).catch(() => false)) continue
     try {
-      await locator.waitFor({ state: 'enabled', timeout: LOGIN_SUBMIT_TIMEOUT_MS }).catch(() => {})
-      await locator.click({ timeout: LOGIN_SUBMIT_TIMEOUT_MS })
+      await locator.waitFor({ state: 'enabled', timeout: actionTimeoutMs }).catch(() => {})
+      await locator.click({ timeout: actionTimeoutMs })
       return selector
     } catch {}
   }
   return null
+}
+
+async function logoutRecgovPage (page, isSpaLoggedInFn) {
+  await page.goto(RECGOV_HOME_URL, {
+    waitUntil: 'domcontentloaded',
+    timeout: RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS,
+  }).catch((err) => {
+    console.log(`Cart: could not open Recreation.gov for logout — ${err.message}`)
+  })
+  await page.waitForTimeout(RECGOV_LOGIN_STATE_SETTLE_MS)
+
+  const initialLoggedIn = await isSpaLoggedInFn(page)
+  if (initialLoggedIn === false) {
+    recordRecgovLogout()
+    return {
+      ok: true,
+      logged_in: false,
+      clicked: false,
+      reason: 'already_logged_out',
+      page_url: safePageUrl(page),
+    }
+  }
+
+  let menuSelector = null
+  let logoutSelector = await clickLogoutActionIfVisible(page)
+  if (!logoutSelector) {
+    menuSelector = await clickFirstVisible(page, LOGOUT_MENU_SELECTORS, {
+      visibleTimeoutMs: RECGOV_LOGOUT_SELECTOR_TIMEOUT_MS,
+      actionTimeoutMs: RECGOV_LOGOUT_CLICK_TIMEOUT_MS,
+    })
+    if (menuSelector) await page.waitForTimeout(RECGOV_LOGOUT_MENU_SETTLE_MS)
+    logoutSelector = await clickLogoutActionIfVisible(page)
+  }
+
+  if (!logoutSelector) {
+    return logoutFailure('logout_button_not_found', 'Recreation.gov logout control was not visible in the companion browser.', {
+      menu_selector: menuSelector,
+      page_url: safePageUrl(page),
+    })
+  }
+
+  const verified = await waitForLogoutVerification(page, isSpaLoggedInFn)
+  if (!verified) {
+    return logoutFailure('logout_not_verified', 'Recreation.gov logout was clicked, but the page did not show a logged-out state.', {
+      clicked: true,
+      selector: logoutSelector,
+      menu_selector: menuSelector,
+      page_url: safePageUrl(page),
+    })
+  }
+
+  recordRecgovLogout()
+  return {
+    ok: true,
+    logged_in: false,
+    clicked: true,
+    selector: logoutSelector,
+    menu_selector: menuSelector,
+    page_url: safePageUrl(page),
+  }
+}
+
+async function clickLogoutActionIfVisible (page) {
+  return clickFirstVisible(page, LOGOUT_ACTION_SELECTORS, {
+    visibleTimeoutMs: RECGOV_LOGOUT_SELECTOR_TIMEOUT_MS,
+    actionTimeoutMs: RECGOV_LOGOUT_CLICK_TIMEOUT_MS,
+  })
+}
+
+async function waitForLogoutVerification (page, isSpaLoggedInFn) {
+  const deadline = Date.now() + RECGOV_LOGOUT_VERIFY_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    if (await isSpaLoggedInFn(page) === false) return true
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) break
+    await page.waitForTimeout(Math.min(RECGOV_LOGOUT_POLL_MS, remaining))
+  }
+  return false
+}
+
+function logoutFailure (reason, detail, extra = {}) {
+  return {
+    ok: false,
+    logged_in: null,
+    error: 'recgov_logout_failed',
+    reason,
+    detail,
+    ...extra,
+  }
 }
 
 async function pressEnterToSubmit (page) {
@@ -559,6 +700,15 @@ function clearLoginDiagnostic () {
   recgovSessionStatus = {
     ...recgovSessionStatus,
     last_login_diagnostic: null,
+  }
+}
+
+function recordRecgovLogout () {
+  recgovSessionStatus = {
+    ...recgovSessionStatus,
+    last_refresh_at: null,
+    last_refresh_expires_at: null,
+    next_refresh_at: null,
   }
 }
 

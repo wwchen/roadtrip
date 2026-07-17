@@ -25,9 +25,11 @@ const PAYLOAD = {
 
 test('cartMatchFromPayload maps backend ATC payload to addToCart match', () => {
   assert.deepEqual(cartMatchFromPayload(PAYLOAD), {
+    vendor: undefined,
     booking_url: 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16',
     campground_id: 232447,
     campsite_id: 131925,
+    provider_campground_id: undefined,
     provider_campsite_id: '300',
     first_date: '2026-07-15',
     checkout_date: '2026-07-16',
@@ -47,6 +49,31 @@ test('cartMatchFromAtcInput accepts raw payload or payload envelope', () => {
   )
 })
 
+test('cartMatchFromAtcInput accepts the flat companion ATC request body', () => {
+  assert.deepEqual(
+    cartMatchFromAtcInput({
+      start_date: '2026-07-15',
+      end_date: '2026-07-16',
+      vendor: 'recgov',
+      booking_url: 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16',
+      campground_id: '232447',
+      campsite_id: '300',
+    }),
+    {
+      vendor: 'recgov',
+      booking_url: 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16',
+      campground_id: '232447',
+      campsite_id: '300',
+      provider_campground_id: undefined,
+      provider_campsite_id: undefined,
+      first_date: '2026-07-15',
+      checkout_date: '2026-07-16',
+      available_dates: ['2026-07-15'],
+      campsite_site: '',
+    },
+  )
+})
+
 test('cartMatchFromArgs builds a direct command-line match', () => {
   assert.deepEqual(
     cartMatchFromArgs({
@@ -56,9 +83,11 @@ test('cartMatchFromArgs builds a direct command-line match', () => {
       site: '116',
     }),
     {
+      vendor: undefined,
       booking_url: 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16',
       campground_id: undefined,
       campsite_id: undefined,
+      provider_campground_id: undefined,
       provider_campsite_id: undefined,
       first_date: '2026-07-15',
       checkout_date: '2026-07-16',
@@ -78,5 +107,9 @@ test('validateCartMatch rejects unusable one-shot inputs', () => {
   assert.equal(
     validateCartMatch(cartMatchFromArgs({ 'booking-url': true, 'start-date': '2026-07-15', 'end-date': '2026-07-16' })),
     'missing booking_url or campsite/campground identifier',
+  )
+  assert.equal(
+    validateCartMatch({ vendor: 'aspira', first_date: '2026-07-15', checkout_date: '2026-07-16', booking_url: 'url' }),
+    'unsupported vendor: aspira',
   )
 })

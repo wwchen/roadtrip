@@ -48,6 +48,7 @@
   <div class="row">
     <button id="refresh-session" class="secondary" type="button">Refresh session</button>
     <button id="health-json" class="secondary" type="button">Health JSON</button>
+    <button id="logout-session" class="secondary" type="button">Log out</button>
   </div>
   <pre id="json-output" class="{{JSON_CLASS}}">{{INITIAL_JSON}}</pre>
   <div id="diagnostic">{{DIAGNOSTIC_HTML}}</div>
@@ -61,12 +62,14 @@
     const loginForm = document.getElementById('login-form')
     const refreshButton = document.getElementById('refresh-session')
     const healthButton = document.getElementById('health-json')
+    const logoutButton = document.getElementById('logout-session')
+    const sessionScreenshot = document.getElementById('session-screenshot')
     const statusMessage = document.getElementById('status-message')
     const jsonOutput = document.getElementById('json-output')
     const diagnostic = document.getElementById('diagnostic')
     const loading = document.getElementById('loading')
     const loadingText = document.getElementById('loading-text')
-    const actionButtons = [loginForm.querySelector('button[type="submit"]'), refreshButton, healthButton]
+    const actionButtons = [loginForm.querySelector('button[type="submit"]'), refreshButton, healthButton, logoutButton]
 
     loginForm.addEventListener('submit', async (event) => {
       event.preventDefault()
@@ -83,6 +86,10 @@
 
     healthButton.addEventListener('click', async () => {
       await runAction('Loading health...', 'Health', '/health')
+    })
+
+    logoutButton.addEventListener('click', async () => {
+      await runAction('Logging out...', 'Logout', '/logout', { method: 'POST' })
     })
 
     async function runAction (loadingLabel, actionLabel, url, options = {}) {
@@ -124,6 +131,7 @@
       statusMessage.textContent = ok ? actionLabel + ' succeeded.' : actionLabel + ' failed: ' + detail
       jsonOutput.classList.remove('hidden')
       jsonOutput.textContent = JSON.stringify(body, null, 2)
+      sessionScreenshot.src = '/screenshot?path=/&_=' + Date.now()
       renderDiagnostic(body?.recgov_auth?.diagnostic || body?.recgov_auth?.last_login_diagnostic)
     }
 

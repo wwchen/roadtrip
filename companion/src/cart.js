@@ -194,7 +194,7 @@ const HEADLESS_NO_SESSION_DETAIL =
 const HEADED_NO_SESSION_DETAIL =
   'No Recreation.gov browser session is available in the companion profile.'
 const LOGIN_FAILED_DETAIL =
-  'Recreation.gov credential login did not produce a browser session. If Recreation.gov prompts for 2FA, submit a current MFA code on the companion /login form.'
+  'Recreation.gov credential login did not produce a browser session. If Recreation.gov prompts for 2FA, submit a current MFA code on the companion root page.'
 const REFRESH_FAILED_DETAIL =
   'Recreation.gov browser session refresh failed. The stored session may be expired or rejected.'
 const SPA_LOGGED_OUT_DETAIL =
@@ -204,7 +204,7 @@ const CONFIRMATION_DISABLED_DETAIL =
 const LOGIN_ON_HOST_ACTION =
   'Run make recgov-login on the host profile mounted by the companion, or start the companion headed and log in once.'
 const LOGIN_ON_COMPANION_ACTION =
-  'Open the companion /login page and submit the Recreation.gov username, password, and MFA code when required.'
+  'Open the companion root page and submit the Recreation.gov username, password, and MFA code when required.'
 const INSPECT_COMPANION_ACTION =
   'Open the booking URL in a headed companion session to inspect the Recreation.gov confirmation step; the site may require extra input, reject the date/site, or present a challenge.'
 

@@ -19,7 +19,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 
-private const val RECGOV_ATC_PATH = "/recgov/atc"
+private const val RECGOV_ATC_PATH = "/atc"
 private const val RECGOV_HEALTH_PATH = "/health"
 private const val CONTENT_TYPE_JSON = "application/json"
 private const val HEADER_ACCEPT = "Accept"

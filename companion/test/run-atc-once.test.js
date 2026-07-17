@@ -3,20 +3,12 @@ import assert from 'node:assert/strict'
 import { runAtcOnce } from '../src/runAtcOnce.js'
 
 const PAYLOAD_JSON = JSON.stringify({
-  payload: {
-    start_date: '2026-07-15',
-    end_date: '2026-07-16',
-    openings: [
-      {
-        label: '116',
-        date: '2026-07-15',
-        booking_url: 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16',
-        campground_id: 232447,
-        campsite_id: 131925,
-        vendor_id: '300',
-      },
-    ],
-  },
+  start_date: '2026-07-15',
+  end_date: '2026-07-16',
+  vendor: 'recgov',
+  booking_url: 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16',
+  campground_id: '232447',
+  campsite_id: '300',
 })
 
 test('runAtcOnce emits one success JSON result on stdout', async () => {
@@ -42,7 +34,7 @@ test('runAtcOnce emits one success JSON result on stdout', async () => {
   })
 
   assert.equal(code, 0)
-  assert.equal(receivedMatch.provider_campsite_id, '300')
+  assert.equal(receivedMatch.campsite_id, '300')
   assert.equal(pageClosed, true)
   assert.match(stderr.text(), /browser automation log/)
   assert.doesNotMatch(stdout.text(), /browser automation log/)
@@ -50,7 +42,7 @@ test('runAtcOnce emits one success JSON result on stdout', async () => {
     ok: true,
     cart_added: true,
     booking_url: 'https://www.recreation.gov/camping/campsites/300?startDate=2026-07-15&endDate=2026-07-16',
-    campsite_site: '116',
+    campsite_site: '',
     first_date: '2026-07-15',
     checkout_date: '2026-07-16',
   })

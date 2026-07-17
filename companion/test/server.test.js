@@ -88,9 +88,9 @@ test('runStartupAuthCheck records exceptions as startup auth failures', async ()
   assert.match(log.text(), /recgov auth startup check exception/)
 })
 
-test('GET /login returns a simple operator login form', async () => {
+test('GET / returns a simple operator login form', async () => {
   const response = await request(createCompanionServer(), {
-    path: '/login',
+    path: '/',
     headers: { accept: 'text/html' },
   })
 
@@ -103,6 +103,7 @@ test('GET /login returns a simple operator login form', async () => {
   assert.match(response.text, /id="json-output"/)
   assert.match(response.text, /id="refresh-session"/)
   assert.match(response.text, /id="health-json"/)
+  assert.match(response.text, /id="logout-session"/)
   assert.match(response.text, /id="session-screenshot"/)
   assert.match(response.text, /src="\/screenshot\?path=\/"/)
   assert.match(response.text, /fetch\(url/)
@@ -119,10 +120,12 @@ test('GET /openapi.json returns companion-owned OpenAPI docs', async () => {
   assert.equal(response.headers['content-type'], 'application/json; charset=utf-8')
   assert.equal(response.json.openapi, '3.0.3')
   assert.equal(response.json.info.title, 'Campsite Companion API')
+  assert.ok(response.json.paths['/'])
   assert.ok(response.json.paths['/health'])
   assert.ok(response.json.paths['/login'])
+  assert.ok(response.json.paths['/logout'])
   assert.ok(response.json.paths['/refresh'])
-  assert.ok(response.json.paths['/recgov/atc'])
+  assert.ok(response.json.paths['/atc'])
   assert.ok(response.json.paths['/screenshot'])
   assert.ok(response.json.paths['/diagnostics/{filename}'])
 })
@@ -230,6 +233,60 @@ test('POST /refresh force-refreshes the stored browser session without credentia
   assert.equal(authOptions.forceRefresh, true)
   assert.equal(authOptions.allowManualLogin, false)
   assert.equal(authOptions.credentials, undefined)
+})
+
+test('POST /logout runs the Rec.gov browser logout flow', async () => {
+  const response = await request(createCompanionServer({
+    logoutRecgovSessionFn: async () => ({
+      ok: true,
+      logged_in: false,
+      clicked: true,
+      selector: 'button:has-text("Log Out")',
+      page_url: 'https://www.recreation.gov/',
+    }),
+  }), {
+    method: 'POST',
+    path: '/logout',
+    headers: { accept: 'application/json' },
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.json.ok, true)
+  assert.equal(response.json.recgov_auth.state, 'logged_out')
+  assert.equal(response.json.recgov_auth.logged_in, false)
+  assert.equal(response.json.recgov_auth.logout.clicked, true)
+  assert.equal(response.json.recgov_auth.logout.selector, 'button:has-text("Log Out")')
+})
+
+test('POST /atc passes the flat payload to the one-shot runner', async () => {
+  const payload = {
+    start_date: '2026-07-19',
+    end_date: '2026-07-20',
+    vendor: 'recgov',
+    booking_url: 'https://www.recreation.gov/camping/campsites/102524?startDate=2026-07-19&endDate=2026-07-20',
+    campground_id: '232447',
+    campsite_id: '102524',
+  }
+  let argv = null
+  const response = await request(createCompanionServer({
+    runAtcOnceFn: async ({ argv: receivedArgv, stdout }) => {
+      argv = receivedArgv
+      stdout.write(JSON.stringify({ ok: true, cart_added: true }))
+      return 0
+    },
+  }), {
+    method: 'POST',
+    path: '/atc',
+    headers: {
+      accept: 'application/json',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  assert.equal(response.status, 200)
+  assert.equal(response.json.ok, true)
+  assert.deepEqual(argv, ['--payload-json', JSON.stringify(payload)])
 })
 
 test('GET /screenshot captures a Recreation.gov path with the companion browser session', async () => {

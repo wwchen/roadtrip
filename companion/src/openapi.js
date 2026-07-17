@@ -15,6 +15,15 @@ export const COMPANION_OPENAPI_SPEC = {
     },
   ],
   paths: {
+    '/': {
+      get: {
+        summary: 'Operator login and session page',
+        operationId: 'getOperatorPage',
+        responses: {
+          200: htmlResponse('HTML operator page with Rec.gov login, refresh, logout, health, and live session screenshot controls'),
+        },
+      },
+    },
     '/health': {
       get: {
         summary: 'Companion health and Rec.gov auth status',
@@ -25,13 +34,6 @@ export const COMPANION_OPENAPI_SPEC = {
       },
     },
     '/login': {
-      get: {
-        summary: 'Operator login page',
-        operationId: 'getLoginPage',
-        responses: {
-          200: htmlResponse('HTML login page with live Rec.gov session screenshot'),
-        },
-      },
       post: {
         summary: 'Submit Rec.gov credentials for the companion browser session',
         operationId: 'postLogin',
@@ -55,6 +57,17 @@ export const COMPANION_OPENAPI_SPEC = {
         },
       },
     },
+    '/logout': {
+      post: {
+        summary: 'Click through the Rec.gov logout flow in the companion browser',
+        operationId: 'postLogout',
+        responses: {
+          200: jsonResponse('Logout succeeded or the browser was already logged out', 'AuthResponse'),
+          409: jsonResponse('Companion is already running work', 'ErrorResponse'),
+          500: jsonResponse('Logout failed unexpectedly', 'AuthResponse'),
+        },
+      },
+    },
     '/refresh': {
       get: {
         summary: 'Operator refresh page',
@@ -74,10 +87,10 @@ export const COMPANION_OPENAPI_SPEC = {
         },
       },
     },
-    '/recgov/atc': {
+    '/atc': {
       post: {
-        summary: 'Run one-shot Rec.gov add-to-cart automation',
-        operationId: 'postRecgovAtc',
+        summary: 'Run one-shot add-to-cart automation',
+        operationId: 'postAtc',
         requestBody: {
           required: true,
           content: {
@@ -227,38 +240,19 @@ export const COMPANION_OPENAPI_SPEC = {
           recgov_auth: { $ref: '#/components/schemas/RecgovAuthStatus' },
         },
       },
-      AtcOpening: {
+      AtcRequest: {
         type: 'object',
-        required: ['label', 'date', 'vendor', 'vendor_id', 'booking_url'],
+        required: ['start_date', 'end_date', 'vendor', 'booking_url', 'campground_id', 'campsite_id'],
         properties: {
-          label: { type: 'string', example: '008' },
-          date: { type: 'string', format: 'date' },
-          vendor: { type: 'string', example: 'recgov' },
-          campsite_id: { type: 'integer' },
-          vendor_id: { type: 'string', example: '102524' },
-          loop: { type: 'string' },
-          site_type: { type: 'string' },
-          campground_id: { type: 'integer' },
-          campground: { type: 'string' },
+          vendor: { type: 'string', enum: ['recgov'], example: 'recgov' },
+          start_date: { type: 'string', format: 'date' },
+          end_date: { type: 'string', format: 'date' },
           booking_url: {
             type: 'string',
             example: 'https://www.recreation.gov/camping/campsites/102524?startDate=2026-07-19&endDate=2026-07-20',
           },
-        },
-      },
-      AtcRequest: {
-        type: 'object',
-        required: ['watch_id', 'vendor', 'payload_version', 'start_date', 'end_date', 'openings'],
-        properties: {
-          watch_id: { type: 'integer', example: 14 },
-          vendor: { type: 'string', example: 'recgov' },
-          payload_version: { type: 'string', example: 'atc.recgov.v1' },
-          start_date: { type: 'string', format: 'date' },
-          end_date: { type: 'string', format: 'date' },
-          openings: {
-            type: 'array',
-            items: { $ref: '#/components/schemas/AtcOpening' },
-          },
+          campground_id: idSchema('232447'),
+          campsite_id: idSchema('102524'),
         },
       },
       AtcResult: {
@@ -326,5 +320,15 @@ function pngResponse (description) {
         },
       },
     },
+  }
+}
+
+function idSchema (example) {
+  return {
+    oneOf: [
+      { type: 'string' },
+      { type: 'integer' },
+    ],
+    example,
   }
 }

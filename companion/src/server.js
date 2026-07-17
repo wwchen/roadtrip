@@ -14,6 +14,7 @@ import {
 import {
   RECGOV_DIAGNOSTIC_DIR,
   getRecgovSessionStatus,
+  logoutRecgovBrowserSession,
   recgovLoginCredentialsFromInput,
 } from './recgovSession.js'
 import {
@@ -51,7 +52,9 @@ const EXIT_USAGE = 2
 const LOG_DETAIL_MAX_CHARS = 160
 const AUTH_CHECK_EXCEPTION_ERROR = 'recgov_auth_check_exception'
 const AUTH_CHECK_EXCEPTION_ACTION =
-  'Check the companion logs, then open the companion /login page or run make recgov-login from the host profile.'
+  'Check the companion logs, then open the companion root page or run make recgov-login from the host profile.'
+const LOGOUT_EXCEPTION_ERROR = 'recgov_logout_exception'
+const LOGOUT_CORRECTIVE_ACTION = 'Open the companion root page and verify the Recreation.gov session screenshot.'
 const DIAGNOSTIC_ROUTE_PREFIX = '/diagnostics/'
 const PNG_CONTENT_TYPE = 'image/png'
 
@@ -108,13 +111,16 @@ async function readBody (req) {
 function payloadSummary (raw) {
   try {
     const payload = JSON.parse(raw)
-    const openings = payload?.payload?.openings || payload?.openings || []
-    const first = openings[0] || payload
+    const body = payload?.payload || payload
+    const openings = body?.openings || []
+    const first = openings[0] || body
     return [
-      `watch=${payload?.payload?.watch_id ?? payload?.watch_id ?? '?'}`,
-      `start=${payload?.payload?.start_date ?? payload?.start_date ?? first?.date ?? '?'}`,
-      `end=${payload?.payload?.end_date ?? payload?.end_date ?? '?'}`,
-      `site="${first?.label ?? first?.campsite_site ?? first?.vendor_id ?? '?'}"`,
+      `vendor=${body?.vendor ?? first?.vendor ?? '?'}`,
+      `start=${body?.start_date ?? first?.date ?? '?'}`,
+      `end=${body?.end_date ?? first?.checkout_date ?? '?'}`,
+      `campground=${first?.campground_id ?? body?.campground_id ?? '?'}`,
+      `campsite=${first?.vendor_id ?? first?.campsite_id ?? body?.campsite_id ?? '?'}`,
+      `booking_url="${truncateLogField(first?.booking_url ?? body?.booking_url ?? '', LOG_DETAIL_MAX_CHARS)}"`,
     ].join(' ')
   } catch {
     return 'invalid-json'
@@ -201,7 +207,7 @@ async function waitForStartupAuthCheck () {
   await startupAuthCheck.catch(() => {})
 }
 
-async function handleAtc (req, res) {
+async function handleAtc (req, res, deps) {
   if (busy) {
     jsonResponse(res, HTTP_CONFLICT, {
       ok: false,
@@ -231,7 +237,7 @@ async function handleAtc (req, res) {
 
     log('recgov atc start', payloadSummary(raw))
     await waitForStartupAuthCheck()
-    const code = await runAtcOnce({
+    const code = await deps.runAtcOnceFn({
       argv: ['--payload-json', raw],
       stdout,
       stderr: process.stderr,
@@ -252,6 +258,54 @@ async function handleAtc (req, res) {
       cart_added: false,
       error: 'add_to_cart_exception',
       detail: error.message,
+    })
+  } finally {
+    busy = false
+  }
+}
+
+async function handleLogout (req, res, deps) {
+  if (busy) {
+    jsonResponse(res, HTTP_CONFLICT, {
+      ok: false,
+      error: 'companion_busy',
+      detail: 'companion is already running work',
+    })
+    return
+  }
+
+  busy = true
+  const startedAt = Date.now()
+  try {
+    log('recgov auth logout request start')
+    await waitForStartupAuthCheck()
+    const result = await deps.logoutRecgovSessionFn()
+    recgovAuthStatus = recgovLogoutStatus(result)
+    const status = result.ok ? HTTP_OK : HTTP_INTERNAL_ERROR
+    log(
+      'recgov auth logout request result',
+      result.ok ? 'ok' : 'failed',
+      ...(result.ok ? logoutLogFields(result) : authLogFields(recgovAuthStatus)),
+      `duration_ms=${Date.now() - startedAt}`,
+    )
+    respondAuthResult(req, res, status, {
+      ok: result.ok === true,
+      recgov_auth: recgovAuthStatus,
+    })
+  } catch (error) {
+    recgovAuthStatus = {
+      state: 'failed',
+      logged_in: null,
+      operation: 'logout',
+      checked_at: new Date().toISOString(),
+      error: LOGOUT_EXCEPTION_ERROR,
+      detail: error.message,
+      corrective_action: LOGOUT_CORRECTIVE_ACTION,
+    }
+    log('recgov auth logout request exception', error.message)
+    respondAuthResult(req, res, HTTP_INTERNAL_ERROR, {
+      ok: false,
+      recgov_auth: recgovAuthStatus,
     })
   } finally {
     busy = false
@@ -397,6 +451,29 @@ function authResponseBody (status) {
   }
 }
 
+function recgovLogoutStatus (result) {
+  const base = {
+    state: result.ok ? 'logged_out' : 'failed',
+    logged_in: result.ok ? false : (result.logged_in ?? null),
+    operation: 'logout',
+    checked_at: new Date().toISOString(),
+    logout: {
+      clicked: result.clicked === true,
+      reason: result.reason || null,
+      selector: result.selector || null,
+      menu_selector: result.menu_selector || null,
+      page_url: result.page_url || null,
+    },
+  }
+  if (result.ok) return base
+  return {
+    ...base,
+    error: result.error || 'recgov_logout_failed',
+    detail: result.detail,
+    corrective_action: LOGOUT_CORRECTIVE_ACTION,
+  }
+}
+
 function respondAuthResult (req, res, status, body) {
   if (wantsHtml(req)) {
     htmlResponse(res, status, renderLoginPage({ result: body }))
@@ -435,6 +512,14 @@ function authLogFields (failure) {
     fields.push(`screenshot=${failure.diagnostic.screenshot_url}`)
   }
   return fields
+}
+
+function logoutLogFields (result) {
+  return [
+    `clicked=${result.clicked === true}`,
+    `reason=${result.reason || '?'}`,
+    `selector="${truncateLogField(result.selector || '', LOG_DETAIL_MAX_CHARS)}"`,
+  ]
 }
 
 function captureStdout () {
@@ -485,10 +570,17 @@ function truncateLogField (value, maxLength) {
 
 export function createCompanionServer ({
   testChromiumFn = testChromium,
+  runAtcOnceFn = runAtcOnce,
+  logoutRecgovSessionFn = logoutRecgovBrowserSession,
   ...screenshotOverrides
 } = {}) {
   const deps = {
     testChromiumFn,
+    runAtcOnceFn,
+    logoutRecgovSessionFn: () => logoutRecgovSessionFn({
+      getContextFn: screenshotOverrides.getContextFn,
+      isSpaLoggedInFn: screenshotOverrides.isSpaLoggedInFn,
+    }),
     recgovScreenshotDeps: createRecgovScreenshotDeps(screenshotOverrides),
   }
   return http.createServer(async (req, res) => {
@@ -513,12 +605,16 @@ export function createCompanionServer ({
       jsonResponse(res, HTTP_OK, { ok: true, busy, recgov_auth: getRecgovHealthStatus() })
       return
     }
-    if (req.method === 'GET' && url.pathname === '/login') {
+    if (req.method === 'GET' && url.pathname === '/') {
       htmlResponse(res, HTTP_OK, renderLoginPage())
       return
     }
     if (req.method === 'POST' && url.pathname === '/login') {
       await handleLoginPost(req, res, deps)
+      return
+    }
+    if (req.method === 'POST' && url.pathname === '/logout') {
+      await handleLogout(req, res, deps)
       return
     }
     if (req.method === 'GET' && url.pathname === '/refresh') {
@@ -529,8 +625,8 @@ export function createCompanionServer ({
       await handleRefresh(req, res, deps)
       return
     }
-    if (req.method === 'POST' && url.pathname === '/recgov/atc') {
-      await handleAtc(req, res)
+    if (req.method === 'POST' && url.pathname === '/atc') {
+      await handleAtc(req, res, deps)
       return
     }
     jsonResponse(res, HTTP_BAD_REQUEST, {

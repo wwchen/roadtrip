@@ -23,16 +23,16 @@ class HttpRecGovAtcExecutorTest {
                 responses =
                     mapOf(
                         "/health" to TestResponse(body = HEALTH_OK),
-                        "/recgov/atc" to TestResponse(body = """{"ok":true,"cart_added":true}"""),
+                        "/atc" to TestResponse(body = """{"ok":true,"cart_added":true}"""),
                     ),
             ).use { server ->
                 val executor = HttpRecGovAtcExecutor(RecGovAtcConfig(server.baseUrl, Duration.ofSeconds(5)))
 
-                val outcome = executor.addToCart(buildJsonObject { put("watch_id", 42L) })
+                val outcome = executor.addToCart(flatAtcPayload())
 
                 assertTrue(outcome is RecGovAtcOutcome.Completed)
-                assertEquals(listOf("/health", "/recgov/atc"), server.paths)
-                assertEquals("""{"watch_id":42}""", server.bodies.last())
+                assertEquals(listOf("/health", "/atc"), server.paths)
+                assertEquals(flatAtcPayload().toString(), server.bodies.last())
             }
         }
 
@@ -43,7 +43,7 @@ class HttpRecGovAtcExecutorTest {
                 responses =
                     mapOf(
                         "/health" to TestResponse(body = HEALTH_OK),
-                        "/recgov/atc" to
+                        "/atc" to
                             TestResponse(
                                 status = 500,
                                 body = """{"ok":false,"cart_added":false,"error":"cart_not_added","detail":"no hold"}""",
@@ -52,10 +52,10 @@ class HttpRecGovAtcExecutorTest {
             ).use { server ->
                 val executor = HttpRecGovAtcExecutor(RecGovAtcConfig(server.baseUrl, Duration.ofSeconds(5)))
 
-                val outcome = executor.addToCart(buildJsonObject { put("watch_id", 42L) })
+                val outcome = executor.addToCart(flatAtcPayload())
 
                 val failed = outcome as RecGovAtcOutcome.Failed
-                assertEquals(listOf("/health", "/recgov/atc"), server.paths)
+                assertEquals(listOf("/health", "/atc"), server.paths)
                 assertEquals("cart_not_added", failed.error)
                 assertEquals("no hold", failed.detail)
             }
@@ -83,12 +83,12 @@ class HttpRecGovAtcExecutorTest {
                                     }
                                     """.trimIndent(),
                             ),
-                        "/recgov/atc" to TestResponse(body = """{"ok":true,"cart_added":true}"""),
+                        "/atc" to TestResponse(body = """{"ok":true,"cart_added":true}"""),
                     ),
             ).use { server ->
                 val executor = HttpRecGovAtcExecutor(RecGovAtcConfig(server.baseUrl, Duration.ofSeconds(5)))
 
-                val outcome = executor.addToCart(buildJsonObject { put("watch_id", 42L) })
+                val outcome = executor.addToCart(flatAtcPayload())
 
                 val failed = outcome as RecGovAtcOutcome.Failed
                 assertEquals(listOf("/health"), server.paths)
@@ -106,12 +106,12 @@ class HttpRecGovAtcExecutorTest {
                 responses =
                     mapOf(
                         "/health" to TestResponse(body = """{"ok":true,"busy":true,"recgov_auth":{"login_status":"ok"}}"""),
-                        "/recgov/atc" to TestResponse(body = """{"ok":true,"cart_added":true}"""),
+                        "/atc" to TestResponse(body = """{"ok":true,"cart_added":true}"""),
                     ),
             ).use { server ->
                 val executor = HttpRecGovAtcExecutor(RecGovAtcConfig(server.baseUrl, Duration.ofSeconds(5)))
 
-                val outcome = executor.addToCart(buildJsonObject { put("watch_id", 42L) })
+                val outcome = executor.addToCart(flatAtcPayload())
 
                 val failed = outcome as RecGovAtcOutcome.Failed
                 assertEquals(listOf("/health"), server.paths)
@@ -157,5 +157,18 @@ class HttpRecGovAtcExecutorTest {
 
     companion object {
         private const val HEALTH_OK = """{"ok":true,"busy":false,"recgov_auth":{"login_status":"ok","logged_in":true}}"""
+
+        private fun flatAtcPayload() =
+            buildJsonObject {
+                put("start_date", "2026-07-19")
+                put("end_date", "2026-07-20")
+                put("vendor", "recgov")
+                put(
+                    "booking_url",
+                    "https://www.recreation.gov/camping/campsites/102524?startDate=2026-07-19&endDate=2026-07-20",
+                )
+                put("campground_id", "232447")
+                put("campsite_id", "102524")
+            }
     }
 }

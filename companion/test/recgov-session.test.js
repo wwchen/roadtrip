@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
 import {
   getRecgovSessionStatus,
+  logoutRecgovBrowserSession,
   recgovLoginCredentialsFromInput,
   resolveRecaccount,
 } from '../src/recgovSession.js'
@@ -265,6 +266,27 @@ test('resolveRecaccount fails closed when Recreation.gov 2FA has no supplied cod
   assert.equal(getRecgovSessionStatus().last_login_diagnostic.reason, 'mfa_required')
 })
 
+test('logoutRecgovBrowserSession clicks the Rec.gov logout control and verifies logged-out state', async () => {
+  const page = fakePage({
+    loggedIn: true,
+    logoutSelectorVisible: true,
+  })
+
+  const result = await logoutRecgovBrowserSession({
+    getContextFn: async () => ({
+      newPage: async () => page,
+    }),
+    isSpaLoggedInFn: async () => page.loggedIn,
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.clicked, true)
+  assert.equal(result.selector, 'button:has-text("Log Out")')
+  assert.equal(page.logoutClicks, 1)
+  assert.equal(page.closed, true)
+  assert.equal(getRecgovSessionStatus().next_refresh_at, null)
+})
+
 function fakePage ({
   rawRecaccount,
   rawRecaccountAfterClear = null,
@@ -275,6 +297,8 @@ function fakePage ({
   mfaRequired = false,
   expectedMfaCode = null,
   submitSelectorVisible = true,
+  loggedIn = false,
+  logoutSelectorVisible = false,
 }) {
   let refreshResponseIndex = 0
   let currentRawRecaccount = rawRecaccount
@@ -295,10 +319,13 @@ function fakePage ({
     loginClicks: 0,
     credentialSubmitClicks: 0,
     mfaSubmitClicks: 0,
+    logoutClicks: 0,
+    loggedIn,
     fills: [],
     screenshots: [],
     waits: [],
     enterPresses: 0,
+    closed: false,
     context: () => context,
     url: () => 'https://www.recreation.gov/',
     goto: async (url) => {
@@ -323,6 +350,11 @@ function fakePage ({
             loginOpened = true
             return
           }
+          if (isLogoutSelector(selector)) {
+            page.logoutClicks += 1
+            page.loggedIn = false
+            return
+          }
           if (isSubmitSelector(selector)) {
             if (mfaPromptVisible) {
               page.mfaSubmitClicks += 1
@@ -341,6 +373,9 @@ function fakePage ({
     }),
     waitForTimeout: async (ms) => {
       page.waits.push(ms)
+    },
+    close: async () => {
+      page.closed = true
     },
     keyboard: {
       press: async (key) => {
@@ -371,6 +406,7 @@ function fakePage ({
   }
   function selectorVisible (selector) {
     if (selector.includes('Sign Up / Log In')) return true
+    if (isLogoutSelector(selector)) return logoutSelectorVisible
     if (isMfaInputSelector(selector)) return mfaPromptVisible
     if (isEmailSelector(selector) || isPasswordSelector(selector)) return loginOpened
     if (isSubmitSelector(selector)) return loginOpened && submitSelectorVisible
@@ -393,6 +429,10 @@ function isMfaInputSelector (selector) {
 
 function isSubmitSelector (selector) {
   return /button/.test(selector)
+}
+
+function isLogoutSelector (selector) {
+  return /Log Out|Logout|Sign Out|Sign out/.test(selector)
 }
 
 function testRecaccount ({ token }) {

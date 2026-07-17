@@ -100,7 +100,7 @@ test('recgovAuthenticationFailure reports the operator action for headless missi
 
   assert.equal(failure.error, 'recgov_not_authenticated')
   assert.match(failure.detail, /headless companion is not logged in/)
-  assert.match(failure.corrective_action, /\/login/)
+  assert.match(failure.corrective_action, /companion root page/)
   assert.deepEqual(failure.auth, { headless: true })
 })
 
@@ -112,7 +112,7 @@ test('recgovAuthenticationFailure reports failed login attempts distinctly', () 
 
   assert.equal(failure.error, 'recgov_login_failed')
   assert.match(failure.detail, /MFA code/)
-  assert.match(failure.corrective_action, /\/login/)
+  assert.match(failure.corrective_action, /companion root page/)
 })
 
 test('cartHoldCompletionObserved ignores pre-confirmation cart and multi responses', () => {
