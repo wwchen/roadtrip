@@ -9,10 +9,11 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
-import ca.floo.roadtrip.route.api.availability.availabilityWatchRoutes
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
+import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
+import ca.floo.roadtrip.service.availability.AvailabilityWatchController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
@@ -29,6 +30,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.server.routing.Route
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
@@ -37,10 +39,12 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import org.jooq.DSLContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import ca.floo.roadtrip.route.api.availability.availabilityWatchRoutes as installAvailabilityWatchRoutes
 
 private const val WATCHES_PATH = "/api/watches"
 private const val MODIFY_ACTION = "modify"
@@ -149,6 +153,32 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 ),
             ),
         )
+
+    private fun Route.availabilityWatchRoutes(
+        ctx: DSLContext,
+        watchService: AvailabilityWatchService,
+        watchCapabilities: WatchCapabilityService? = null,
+    ) {
+        installAvailabilityWatchRoutes(availabilityWatchController(ctx, watchService, watchCapabilities))
+    }
+
+    private fun availabilityWatchController(
+        ctx: DSLContext,
+        watchService: AvailabilityWatchService,
+        watchCapabilities: WatchCapabilityService? = null,
+    ): AvailabilityWatchController {
+        val campsitesRepo = CampsiteRepo(ctx)
+        return AvailabilityWatchController(
+            watches = AvailabilityWatchRepo(ctx),
+            watchService = watchService,
+            watchMapper =
+                AvailabilityWatchApiMapper(
+                    campsites = campsitesRepo,
+                    scopeResolver = WatchScopeResolver(campsitesRepo),
+                    capabilities = watchCapabilities,
+                ),
+        )
+    }
 
     @Test
     fun `POST creates a poi-scoped watch with filters`() =
