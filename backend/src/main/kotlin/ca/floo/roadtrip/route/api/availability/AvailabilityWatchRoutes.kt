@@ -4,12 +4,14 @@ import ca.floo.roadtrip.model.api.AvailabilityWatchCreateRequest
 import ca.floo.roadtrip.model.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.route.common.RouteBodyResult
 import ca.floo.roadtrip.route.common.boundedIntQuery
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.intQueryAtLeast
 import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.optionalLongQuery
 import ca.floo.roadtrip.route.common.queryParam
+import ca.floo.roadtrip.route.common.receiveJsonBody
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
@@ -23,7 +25,6 @@ import ca.floo.roadtrip.service.availability.WatchStatus
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
-import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
@@ -84,10 +85,10 @@ internal fun Route.availabilityWatchRoutes(
 
             post {
                 val req =
-                    try {
-                        call.receive<AvailabilityWatchCreateRequest>()
-                    } catch (e: Exception) {
-                        return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, e.message)
+                    when (val body = call.receiveJsonBody<AvailabilityWatchCreateRequest>()) {
+                        is RouteBodyResult.Invalid ->
+                            return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, body.detail)
+                        is RouteBodyResult.Valid -> body.value
                     }
                 val parsed =
                     when (val mapped = AvailabilityWatchRequestMapper.parseCreate(req)) {
@@ -135,10 +136,10 @@ internal fun Route.availabilityWatchRoutes(
                         call.longPath("id")
                             ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
                     val req =
-                        try {
-                            call.receive<AvailabilityWatchUpdateRequest>()
-                        } catch (e: Exception) {
-                            return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, e.message)
+                        when (val body = call.receiveJsonBody<AvailabilityWatchUpdateRequest>()) {
+                            is RouteBodyResult.Invalid ->
+                                return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, body.detail)
+                            is RouteBodyResult.Valid -> body.value
                         }
                     val parsed =
                         when (val mapped = AvailabilityWatchRequestMapper.parseUpdate(req)) {
