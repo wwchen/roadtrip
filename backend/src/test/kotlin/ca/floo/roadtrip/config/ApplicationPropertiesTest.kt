@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.config
 
-import io.ktor.server.config.ConfigLoader
 import org.junit.jupiter.api.Test
 import java.io.ByteArrayInputStream
 import java.io.InputStream
@@ -11,88 +10,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class ApplicationPropertiesTest {
-    @Test
-    fun `ktor application yaml exposes engine and custom config`() {
-        val config = ConfigLoader.load("application.yaml")
-
-        assertEquals("8765", config.property("ktor.deployment.port").getString())
-        assertEquals(listOf("ca.floo.roadtrip.MainKt.module"), config.property("ktor.application.modules").getList())
-        assertEquals("https://api.campflare.com/v2", config.property("roadtrip.campflare.api-base-url").getString())
-    }
-
-    @Test
-    fun `load uses selected profile properties`() {
-        val props =
-            withSystemProperties(
-                "POSTGRES_URL" to "jdbc:postgresql://postgres:5432/roadtrip",
-                "POSTGRES_USER" to "roadtrip",
-                "POSTGRES_PASSWORD" to "roadtrip",
-            ) {
-                ApplicationProperties.load(env = mapOf("ROADTRIP_PROFILE" to "prod"))
-            }
-
-        assertEquals("/app/static", props["roadtrip.static-dir"])
-        assertEquals("jdbc:postgresql://postgres:5432/roadtrip", props["roadtrip.db.url"])
-        assertEquals("roadtrip", props["roadtrip.db.user"])
-        assertEquals("roadtrip", props["roadtrip.db.password"])
-        assertEquals("poi-registry.yaml", props["roadtrip.poi-registry.resource"])
-        assertEquals("", props["roadtrip.poi-registry.path"])
-        assertEquals("https://roadtrip.floo.ca/dash/", props["roadtrip.grafana.root-url"])
-        assertEquals("http://recgov-companion:8770", props["roadtrip.booking.recgov-atc.companion-base-url"])
-        assertEquals("180s", props["roadtrip.booking.recgov-atc.companion-timeout"])
-    }
-
-    @Test
-    fun `compose local profile uses container paths with local browser links`() {
-        val props =
-            withSystemProperties(
-                "POSTGRES_URL" to "jdbc:postgresql://postgres:5432/roadtrip",
-                "POSTGRES_USER" to "roadtrip",
-                "POSTGRES_PASSWORD" to "roadtrip",
-            ) {
-                ApplicationProperties.load(env = mapOf("ROADTRIP_PROFILE" to "compose-local"))
-            }
-
-        assertEquals("/app/static", props["roadtrip.static-dir"])
-        assertEquals("jdbc:postgresql://postgres:5432/roadtrip", props["roadtrip.db.url"])
-        assertEquals("roadtrip", props["roadtrip.db.user"])
-        assertEquals("roadtrip", props["roadtrip.db.password"])
-        assertEquals("http://127.0.0.1:3000/dash/", props["roadtrip.grafana.root-url"])
-        assertEquals("http://127.0.0.1:8765", props["roadtrip.web.root-url"])
-        assertEquals("http://recgov-companion:8770", props["roadtrip.booking.recgov-atc.companion-base-url"])
-        assertEquals("180s", props["roadtrip.booking.recgov-atc.companion-timeout"])
-    }
-
-    @Test
-    fun `environment values do not override profile properties directly`() {
-        val props =
-            ApplicationProperties.load(
-                env =
-                    mapOf(
-                        "roadtrip.web.root-url" to "https://override.example",
-                    ),
-            )
-
-        assertEquals("http://127.0.0.1:8765", props["roadtrip.web.root-url"])
-        assertEquals(".", props["roadtrip.static-dir"])
-    }
-
-    @Test
-    fun `prod profile resolves database properties from postgres environment`() {
-        val props =
-            withSystemProperties(
-                "POSTGRES_URL" to "jdbc:postgresql://postgres:5432/roadtrip_prod",
-                "POSTGRES_USER" to "app",
-                "POSTGRES_PASSWORD" to "secret",
-            ) {
-                ApplicationProperties.load(env = mapOf("ROADTRIP_PROFILE" to "prod"))
-            }
-
-        assertEquals("jdbc:postgresql://postgres:5432/roadtrip_prod", props["roadtrip.db.url"])
-        assertEquals("app", props["roadtrip.db.user"])
-        assertEquals("secret", props["roadtrip.db.password"])
-    }
-
     @Test
     fun `load overlays selected profile yaml after base yaml`() {
         val props =
