@@ -2,8 +2,6 @@ package ca.floo.roadtrip.route.api.availability
 
 import ca.floo.roadtrip.model.api.AvailabilityWatchCreateRequest
 import ca.floo.roadtrip.model.api.AvailabilityWatchUpdateRequest
-import ca.floo.roadtrip.repo.AvailabilityWatchRepo
-import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.route.common.RouteBodyResult
 import ca.floo.roadtrip.route.common.boundedIntQuery
 import ca.floo.roadtrip.route.common.describeApi
@@ -14,13 +12,8 @@ import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.receiveJsonBody
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
-import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
-import ca.floo.roadtrip.service.availability.AvailabilityWatchRequestMapper
-import ca.floo.roadtrip.service.availability.AvailabilityWatchService
-import ca.floo.roadtrip.service.availability.AvailabilityWatchValidationException
-import ca.floo.roadtrip.service.availability.WatchCapabilityService
-import ca.floo.roadtrip.service.availability.WatchRequestMapping
-import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.AvailabilityWatchController
+import ca.floo.roadtrip.service.availability.AvailabilityWatchControllerResult
 import ca.floo.roadtrip.service.availability.WatchStatus
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -32,7 +25,6 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
-import org.jooq.DSLContext
 
 private const val DEFAULT_LIST_LIMIT = 100
 private const val MIN_LIST_LIMIT = 1
@@ -50,16 +42,7 @@ private val watchJson =
         ignoreUnknownKeys = true
     }
 
-internal fun Route.availabilityWatchRoutes(
-    ctx: DSLContext,
-    watchService: AvailabilityWatchService,
-    watchCapabilities: WatchCapabilityService? = null,
-) {
-    val watches = AvailabilityWatchRepo(ctx)
-    val campsitesRepo = CampsiteRepo(ctx)
-    val scopeResolver = WatchScopeResolver(campsitesRepo)
-    val watchMapper = AvailabilityWatchApiMapper(campsitesRepo, scopeResolver, watchCapabilities)
-
+internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController) {
     route("/api") {
         route("/watches") {
             get {
@@ -76,10 +59,8 @@ internal fun Route.availabilityWatchRoutes(
                 val campsiteId = call.optionalLongQuery("campsite_id")
                 val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)
                 val offset = call.intQueryAtLeast("offset", DEFAULT_LIST_OFFSET, MIN_LIST_OFFSET)
-                val rows = watches.list(status, poiId, campsiteId, limit, offset)
-                val total = watches.count(status, poiId, campsiteId)
                 call.respondJson(
-                    watchMapper.listResponse(rows, total, limit, offset),
+                    watches.list(status, poiId, campsiteId, limit, offset),
                 )
             }.describeApi("availability", "List availability watches")
 
@@ -90,32 +71,14 @@ internal fun Route.availabilityWatchRoutes(
                             return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, body.detail)
                         is RouteBodyResult.Valid -> body.value
                     }
-                val parsed =
-                    when (val mapped = AvailabilityWatchRequestMapper.parseCreate(req)) {
-                        is WatchRequestMapping.Invalid ->
-                            return@post call.respondError(
-                                mapped.error,
-                                HttpStatusCode.BadRequest,
-                                mapped.detail,
-                            )
-                        is WatchRequestMapping.Valid -> mapped.value
-                    }
-                val watch =
-                    try {
-                        watchService.create(
-                            targets = parsed.targets,
-                            campsiteFilters = req.campsiteFilters,
-                            startDate = parsed.dateWindow.startDate,
-                            endDate = parsed.dateWindow.endDate,
-                            cadenceSec = req.cadenceSec,
-                            triggerKinds = req.triggerKinds,
-                            triggerConfig = req.triggerConfig,
-                            stopWhenTriggered = req.stopWhenTriggered,
-                        )
-                    } catch (e: AvailabilityWatchValidationException) {
-                        return@post call.respondError(e.error, HttpStatusCode.BadRequest, e.message)
-                    }
-                call.respondJson(watchMapper.response(watch), HttpStatusCode.Created)
+                when (val result = watches.create(req)) {
+                    is AvailabilityWatchControllerResult.Invalid ->
+                        call.respondError(result.error, HttpStatusCode.BadRequest, result.detail)
+                    is AvailabilityWatchControllerResult.NotFound ->
+                        call.respondError("not_found", HttpStatusCode.NotFound)
+                    is AvailabilityWatchControllerResult.Ok ->
+                        call.respondJson(result.value, HttpStatusCode.Created)
+                }
             }.describeApi("availability", "Create a watch")
 
             route("/{id}") {
@@ -124,11 +87,9 @@ internal fun Route.availabilityWatchRoutes(
                         call.longPath("id")
                             ?: return@get call.respondError("invalid_id", HttpStatusCode.BadRequest)
                     val watch =
-                        watches.findById(id)
+                        watches.get(id)
                             ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
-                    call.respondJson(
-                        watchMapper.response(watch, includeCapabilities = true),
-                    )
+                    call.respondJson(watch)
                 }.describeApi("availability", "Get one watch")
 
                 post("/modify") {
@@ -141,42 +102,21 @@ internal fun Route.availabilityWatchRoutes(
                                 return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, body.detail)
                             is RouteBodyResult.Valid -> body.value
                         }
-                    val parsed =
-                        when (val mapped = AvailabilityWatchRequestMapper.parseUpdate(req)) {
-                            is WatchRequestMapping.Invalid ->
-                                return@post call.respondError(
-                                    mapped.error,
-                                    HttpStatusCode.BadRequest,
-                                    mapped.detail,
-                                )
-                            is WatchRequestMapping.Valid -> mapped.value
-                        }
-                    val updated =
-                        try {
-                            watchService.update(
-                                id,
-                                targets = parsed.targets,
-                                campsiteFilters = req.campsiteFilters,
-                                startDate = parsed.dateWindow?.startDate,
-                                endDate = parsed.dateWindow?.endDate,
-                                cadenceSec = req.cadenceSec,
-                                triggerKinds = req.triggerKinds,
-                                triggerConfig = req.triggerConfig,
-                                stopWhenTriggered = req.stopWhenTriggered,
-                                status = parsed.status,
-                            )
-                        } catch (e: AvailabilityWatchValidationException) {
-                            return@post call.respondError(e.error, HttpStatusCode.BadRequest, e.message)
-                        }
-                    if (updated == null) return@post call.respondError("not_found", HttpStatusCode.NotFound)
-                    call.respondJson(watchMapper.response(updated))
+                    when (val result = watches.update(id, req)) {
+                        is AvailabilityWatchControllerResult.Invalid ->
+                            call.respondError(result.error, HttpStatusCode.BadRequest, result.detail)
+                        is AvailabilityWatchControllerResult.NotFound ->
+                            call.respondError("not_found", HttpStatusCode.NotFound)
+                        is AvailabilityWatchControllerResult.Ok ->
+                            call.respondJson(result.value)
+                    }
                 }.describeApi("availability", "Modify a watch")
 
                 post("/delete") {
                     val id =
                         call.longPath("id")
                             ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
-                    if (watchService.delete(id)) {
+                    if (watches.delete(id)) {
                         call.respond(HttpStatusCode.NoContent)
                     } else {
                         call.respondError("not_found", HttpStatusCode.NotFound)

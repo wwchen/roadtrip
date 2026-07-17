@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.di
 
 import ca.floo.roadtrip.config.AppConfig
+import ca.floo.roadtrip.repo.AvailabilityWatchRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.route.api.admin.adminIngestRoutes
 import ca.floo.roadtrip.route.api.availability.availabilityDashboardRoutes
 import ca.floo.roadtrip.route.api.availability.availabilityWatchRoutes
@@ -16,9 +18,12 @@ import ca.floo.roadtrip.route.static.staticSiteRoutes
 import ca.floo.roadtrip.route.test.testEmailRoutes
 import ca.floo.roadtrip.route.test.testSlackRoutes
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
+import ca.floo.roadtrip.service.availability.AvailabilityWatchController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
+import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
@@ -59,7 +64,7 @@ internal fun Application.registerKoinRoutes() {
     routing {
         apiDocsRoutes()
         poiRoutes(poiService)
-        availabilityWatchRoutes(ctx, watchService, watchCapabilities)
+        availabilityWatchRoutes(availabilityWatchController(ctx, watchService, watchCapabilities))
         campsiteRoutes(
             ctx = ctx,
             availabilityProviders = availabilityProviders,
@@ -83,4 +88,22 @@ internal fun Application.registerKoinRoutes() {
         testSlackRoutes(slackNotifications)
         staticSiteRoutes(staticDir)
     }
+}
+
+private fun availabilityWatchController(
+    ctx: DSLContext,
+    watchService: AvailabilityWatchService,
+    watchCapabilities: WatchCapabilityService,
+): AvailabilityWatchController {
+    val campsitesRepo = CampsiteRepo(ctx)
+    return AvailabilityWatchController(
+        watches = AvailabilityWatchRepo(ctx),
+        watchService = watchService,
+        watchMapper =
+            AvailabilityWatchApiMapper(
+                campsites = campsitesRepo,
+                scopeResolver = WatchScopeResolver(campsitesRepo),
+                capabilities = watchCapabilities,
+            ),
+    )
 }
