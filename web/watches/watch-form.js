@@ -84,14 +84,18 @@ export function mountWatchForm(container, config) {
         const to = triggerState.emailTo.trim();
         if (to) triggerConfig[TRIGGER_KIND_EMAIL_NOTIFY] = { to };
       }
-      config.onSubmit({
+      const payload = {
         poi_id: poiField.getValue(),
         start_date: startField.getValue(),
         end_date: endField.getValue(),
         trigger_kinds: triggerKinds,
         trigger_config: triggerConfig,
         stop_when_triggered: triggerState.stopWhenTriggered,
-      });
+      };
+      if (mode === 'edit' && watch?.status === 'done') {
+        payload.status = 'active';
+      }
+      config.onSubmit(payload);
     });
 
     container.querySelector('.rt-watch-form-cancel')?.addEventListener('click', () => {

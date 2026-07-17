@@ -55,15 +55,9 @@ export function checkedCellHtml(watch) {
 }
 
 export function actionsCellHtml(watch) {
-  if (watch.status === 'done') {
-    const glyph = doneKind(watch) === 'expired' ? '⌛' : '✅';
-    const title = glyph === '⌛' ? 'Expired' : 'Found';
-    const deleteHost = `<span data-delete-host data-watch-id="${watch.id}"></span>`;
-    return `<span class="rt-watch-table-actions"><span title="${title}">${glyph}</span>${deleteHost}</span>`;
-  }
-  const toggleBtn = watch.status === 'paused'
-    ? `<button type="button" class="rt-watch-table-act" data-act="resume" data-id="${watch.id}" title="Resume" aria-label="Resume">▶</button>`
-    : `<button type="button" class="rt-watch-table-act" data-act="pause" data-id="${watch.id}" title="Pause" aria-label="Pause">⏸</button>`;
+  const toggleBtn = watch.status === 'active'
+    ? `<button type="button" class="rt-watch-table-act" data-act="pause" data-id="${watch.id}" title="Pause" aria-label="Pause">⏸</button>`
+    : `<button type="button" class="rt-watch-table-act" data-act="resume" data-id="${watch.id}" title="Resume" aria-label="Resume">▶</button>`;
   const editBtn = `<button type="button" class="rt-watch-table-act" data-act="edit" data-id="${watch.id}" title="Edit" aria-label="Edit">✏️</button>`;
   const deleteHost = `<span data-delete-host data-watch-id="${watch.id}"></span>`;
   return `<span class="rt-watch-table-actions">${toggleBtn}${editBtn}${deleteHost}</span>`;
@@ -88,7 +82,3 @@ function relativeTime(iso) {
   return `${days}d ago`;
 }
 
-function doneKind(w) {
-  const end = w.end_date ?? '';
-  return end && end < new Date().toISOString().slice(0, 10) ? 'expired' : 'found';
-}

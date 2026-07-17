@@ -79,7 +79,7 @@ internal fun Application.registerKoinRoutes() {
         geocodeRoutes(mapboxGeocoder)
         healthRoutes()
         adminIngestRoutes(ingestController, ctx)
-        testEmailRoutes(emailNotifications)
+        testEmailRoutes(emailNotifications, config.webApp?.rootUrl)
         testSlackRoutes(slackNotifications)
         staticSiteRoutes(staticDir)
     }

@@ -41,9 +41,12 @@ class EmailNotificationService(
         return sendContent(content, emailTarget.recipients, failureContext = "watch #$watchId opening alert")
     }
 
-    suspend fun sendTestEmail(to: String): Boolean {
-        val recipient = to.trim().takeIf { it.isNotEmpty() } ?: return false
-        return sendContent(EmailContentTestRenderer.render(), listOf(recipient), failureContext = "test email")
+    suspend fun sendTestEmail(
+        recipients: List<String>,
+        appRootUrl: String? = null,
+    ): Boolean {
+        if (recipients.isEmpty()) return false
+        return sendContent(EmailContentTestRenderer.render(appRootUrl), recipients, failureContext = "test email")
     }
 
     private suspend fun sendContent(

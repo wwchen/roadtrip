@@ -6,17 +6,20 @@ import kotlinx.html.p
 import kotlinx.html.stream.createHTML
 
 private const val TEST_EMAIL_SUBJECT = "Roadtrip test email"
-private const val TEST_EMAIL_TEXT = "This is a test email from Roadtrip."
 
 internal object EmailContentTestRenderer {
-    fun render(): EmailContent =
-        EmailContent(
+    fun render(appRootUrl: String?): EmailContent {
+        val origin = appRootUrl ?: "unknown"
+        val text = "This is a test email from Roadtrip.\nSent from: $origin"
+        return EmailContent(
             subject = TEST_EMAIL_SUBJECT,
-            text = TEST_EMAIL_TEXT,
+            text = text,
             html =
                 createHTML().div {
                     h2 { +TEST_EMAIL_SUBJECT }
-                    p { +TEST_EMAIL_TEXT }
+                    p { +"This is a test email from Roadtrip." }
+                    p { +"Sent from: $origin" }
                 },
         )
+    }
 }
