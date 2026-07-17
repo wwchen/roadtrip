@@ -17,7 +17,7 @@ Personal web map for roadtripping a Tesla. Live at [roadtrip.floo.ca](https://ro
 tilt up                  # Compose stack (Postgres/backend/Grafana/observability/Rec.gov companion)
 make run                 # Kotlin/Ktor backend on http://127.0.0.1:8765 (serves static + /api)
 make run env=prod        # on the deploy host: build image + docker compose up
-./scripts/fetch-tesla-supercharger-pricing.sh  # mint cookies + crawl Tesla Supercharger pricing into data/raw/
+make data-fetch TARGET=tesla-locations  # Tesla index + pricing detail raw captures
 ```
 
 `tilt up` is the easiest path for full-stack dev: Tilt uses Docker Compose
@@ -50,8 +50,8 @@ the production Compose stack.
 
 The Tilt UI also has a `data` cluster of manual-trigger background workers
 (none auto-run on `tilt up`) for POI refresh. Tesla Supercharger pricing
-isn't surfaced there — the fetch is interactive (cURL paste) and runs
-from a terminal via `./scripts/fetch-tesla-supercharger-pricing.sh`.
+isn't surfaced there. Refresh Tesla cookies from a terminal when needed, then
+run `make data-fetch TARGET=tesla-locations`.
 
 POI data refresh is a two-step flow. Fetch runs the registry Python fetchers on
 the host; import goes through the backend admin API and writes Postgres rows.
@@ -60,8 +60,10 @@ Tilt exposes both as manual buttons under the `data` cluster:
 ```sh
 make data-fetch                       # spawn fetchers → data/raw/<source>/<ts>.json
 make data-fetch TARGET=campflare-campgrounds-export    # one data_source slug
+make data-fetch TARGET=tesla-locations                 # runs tesla-index first
 make data-import                      # data/raw/ → Postgres rows via the ETL
 make data-import TARGET='Planet Fitness'               # one poi_data/campsite_data row
+make data-import TARGET='Tesla Superchargers'          # import Tesla pricing/details
 ```
 
 `data-fetch` runs the Python fetchers declared under `data_sources:`;
@@ -86,13 +88,10 @@ First time only:
 make install        # Homebrew deps + companion (npm + playwright) + git hooks
 ```
 
-Pricing is served from the on-disk cache (`data/pricing-cache/`). Tesla is
-never called from the user request path — the backend just reads cached JSON
-and 404s with `{"error":"not_cached"}` for sites that haven't been crawled.
-To populate/refresh the cache, run `./scripts/fetch-tesla-supercharger-pricing.sh`,
-which mints fresh cookies, smoke-tests them, and walks the bulk index +
-per-slug detail. (For a cache-aware locations-only re-fetch use
-`make data-fetch TARGET=tesla-locations`.) See `README_PRICING.md` for
+Tesla pricing is imported into the Supercharger catalog from
+`data/raw/tesla-locations/`; the backend never calls Tesla from the user request
+path. To refresh it, run `make data-fetch TARGET=tesla-locations` and then
+`make data-import TARGET='Tesla Superchargers'`. See `README_PRICING.md` for
 cookie details.
 
 ## Refresh POI data
@@ -241,8 +240,9 @@ before import.
    cookie-bot/README notes in the code) — currently disabled because no
    aarch64 Chromium build passes Akamai's TLS fingerprint gate on the mini.
 
-4. **Pricing cache** persists in `$HOME/.roadtrip-map/pricing-cache`
-   (override with `CACHE_DIR=…` in `.env`).
+4. **Tesla pricing captures** are refreshed through the normal data pipeline:
+   `make data-fetch TARGET=tesla-locations`, then
+   `make data-import TARGET='Tesla Superchargers'`.
 
 ### Adding GitHub-backed deploy secrets
 
@@ -270,33 +270,29 @@ from your laptop browser will work from the Docker host **only if the Docker
 host egresses from the same public IP** — i.e., same home network. If the
 Docker host is elsewhere, either grab cookies from a browser *on* that
 network, or have your laptop egress through the host's IP via Tailscale
-exit node before running `./scripts/fetch-tesla-supercharger-pricing.sh`.
+exit node before running `make data-fetch TARGET=tesla-locations`.
 Production hosts mint their own cookies out-of-band.
 
 Cookies expire every day or so. When pricing starts returning 403 or 429,
-re-run `./scripts/fetch-tesla-supercharger-pricing.sh` — its loop will mint fresh
-ones automatically.
+run `./scripts/refresh-tesla-cookies.sh`, then re-run
+`make data-fetch TARGET=tesla-locations`.
 
 ## Architecture notes
 
 - **Backend.** Kotlin/Ktor + Netty serves the entire site: `/` →
-  `index.html`, `/web/*` and `/data/*` → static (with `/data/pricing-cache/*`
-  excluded so it's only reachable through `/api/pricing/{slug}`), plus
-  `/api/pois`, `/api/pricing/{slug}`, `/api/health`. Postgres+PostGIS holds
-  the imported POI data; Supercharger geometry is live from
-  supercharge.info/service/supercharge/allSites.
+  `index.html`, `/web/*` and `/data/*` → static, plus `/api/pois` and
+  `/api/health`. Postgres+PostGIS holds the imported POI data; Supercharger
+  geometry is live from supercharge.info/service/supercharge/allSites.
 - **Campsite alert sub-app.** A separate recreation.gov polling/booking tool
   is mounted at `/campsite/` (UI served from the JAR's classpath at
   `backend/src/main/resources/static/campsite/`) with its own API surface
   under `/api/campsite/*` (alerts, matches, settings, status, events SSE,
   poll, companion, campgrounds/search). Shares the same Postgres instance;
   Flyway migrates both schemas on startup.
-- **Pricing cache.** `/api/pricing/{slug}` is read-only against
-  `data/pricing-cache/{slug}.json`. Misses return 404 with
-  `{"error":"not_cached"}`. Cache is populated offline by
-  `scripts/fetch_tesla_index.py` + `scripts/fetch_tesla_locations.py` (run via `./scripts/fetch-tesla-supercharger-pricing.sh`),
-  which shells out to `curl-impersonate` because Akamai fingerprints TLS
-  ClientHello + HTTP/2 SETTINGS — stock OpenSSL curl gets 403.
+- **Tesla pricing enrichment.** `make data-fetch TARGET=tesla-locations`
+  fetches `tesla-index` first, then per-slug Tesla location captures. The
+  `Tesla Superchargers` import side-loads those raw captures and stores
+  `pricebooks` on the supercharger rows served by `/api/pois`.
 - **Map** — MapLibre GL, vector and raster basemaps, runtime style-swap.
   Overlay data is cached in memory and re-installed on every `style.load`
   so basemap swaps don't wipe POIs.

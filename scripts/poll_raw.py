@@ -147,6 +147,32 @@ def topo_sort(sources: list[Source]) -> list[Source]:
     return out
 
 
+def dependency_chain(target: Source, sources: list[Source]) -> list[Source]:
+    """Return target dependencies in registry order, followed by target."""
+    by_id = {s.slug: s for s in sources}
+    seen: set[str] = set()
+    visiting: set[str] = set()
+    out: list[Source] = []
+
+    def visit(s: Source) -> None:
+        if s.slug in seen:
+            return
+        if s.slug in visiting:
+            raise RuntimeError(f"depends_on cycle on {s.slug}")
+        visiting.add(s.slug)
+        for dep in s.depends_on:
+            dep_source = by_id.get(dep)
+            if dep_source is None:
+                raise RuntimeError(f"{s.slug} depends on unknown source {dep}")
+            visit(dep_source)
+        visiting.discard(s.slug)
+        seen.add(s.slug)
+        out.append(s)
+
+    visit(target)
+    return out
+
+
 def fzf_pick(sources: list[Source]) -> Source | None:
     if not shutil.which("fzf"):
         err("fzf not installed; pass a slug explicitly")
@@ -213,7 +239,16 @@ def main() -> int:
             err(f"unknown source: {args.source}")
             err(f"  available: {', '.join(s.slug for s in sources)}")
             return 1
-        return run_source(match)
+        rc = 0
+        try:
+            selected = dependency_chain(match, sources)
+        except RuntimeError as exc:
+            err(str(exc))
+            return 1
+        for s in selected:
+            if run_source(s) != 0:
+                rc = 1
+        return rc
 
     pick = fzf_pick(sources)
     if pick is None:

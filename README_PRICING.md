@@ -1,48 +1,40 @@
 # Pricing setup
 
-Supercharger pricing is served read-only from `data/pricing-cache/{slug}.json`.
-The cache is populated **offline** by `scripts/fetch_tesla_index.py` +
-`scripts/fetch_tesla_locations.py` (run via
-`./scripts/fetch-tesla-supercharger-pricing.sh`, which mints cookies, smoke-tests
-them, and walks the full fetch; or pick a single fetcher interactively
-with `python3 scripts/poll_raw.py`). The Kotlin backend never calls Tesla on the
-request path. Misses on `/api/pricing/{slug}` return HTTP 404 with
-`{"error":"not_cached"}`.
+Supercharger pricing is part of the `Tesla Superchargers` catalog import. The
+fetch phase writes envelope-wrapped raw captures under `data/raw/tesla-index/`
+and `data/raw/tesla-locations/<slug>/`; the import phase side-loads those
+captures and stores `pricebooks` on the supercharger rows served by `/api/pois`.
+The Kotlin backend never calls Tesla from the user request path.
 
-> Captures also land in envelope-wrapped form under
-> `data/raw/tesla-locations/<slug>/<ts>.json`. `/api/pricing/{slug}`
-> currently serves the legacy `data/pricing-cache/<slug>.json` files
-> until the Kotlin ETL takes over. `scripts/_migrate_tesla_cache.py`
-> mirrors the legacy cache into the new layout (idempotent, no upstream
-> calls) when bootstrapping a new host.
-
-The offline refresh worker hits `tesla.com/api/findus/get-charger-details`
-through `curl-impersonate` (Akamai fingerprints TLS ClientHello + HTTP/2
-SETTINGS) and needs a valid `_abck` cookie tied to the calling IP. Cookies
-live in `.env` as `TESLA_COOKIES=…`.
-
-## One-time setup (or refresh when expired)
+## Refresh Tesla pricing
 
 ```sh
-./scripts/fetch-tesla-supercharger-pricing.sh   # mint cookies + run the full fetch
+./scripts/refresh-tesla-cookies.sh        # only when cookies are missing or expired
+make data-fetch TARGET=tesla-locations    # runs tesla-index first
+make data-import TARGET='Tesla Superchargers'
 ```
 
-Interactive flow: prompts for a Safari cURL paste, mints cookies into
-`.env`, smoke-tests them with one bulk-index call, and on success walks
-the per-slug detail. On 403/429 it loops back and asks for a fresh paste
-(up to 5 attempts). Production hosts mint their own cookies out-of-band
-— there's no remote-push target in this repo.
+`refresh-tesla-cookies.sh` prompts for a browser cURL paste from
+`tesla.com/findus` and writes `TESLA_COOKIES=...` to `.env`. `make data-fetch`
+then runs the registry fetchers through `scripts/poll_raw.py`; the
+`tesla-locations` row depends on `tesla-index`, so the bulk index capture is
+refreshed before the per-slug detail walk.
 
-## When cookies expire
+## When Cookies Expire
 
-Akamai cookies last on the order of a day; they're also IP-bound.
-When pricing starts returning 403/429, re-run
-`./scripts/fetch-tesla-supercharger-pricing.sh` — the loop handles the re-mint.
-(The user-facing site is unaffected — it serves the existing cache; only
-the *next* fetch is blocked.)
+Akamai cookies last on the order of a day and are IP-bound. Cookies pasted from
+your laptop browser work from the Docker host only when the host egresses from
+the same public IP. If pricing fetches return 403 or 429, refresh
+`TESLA_COOKIES` from a browser on the same network as the fetch host, then rerun
+`make data-fetch TARGET=tesla-locations`.
 
-## What gets cached
+## What Gets Cached
 
-Each site's response (including the `availabilityProfile` congestion histogram and
-the `effectivePricebooks` rate schedule) goes to `data/pricing-cache/<slug>.json`.
-Delete a file or the whole directory to force a refetch.
+The fetchers write raw upstream envelopes:
+
+- `data/raw/tesla-index/<ts>.json`
+- `data/raw/tesla-locations/<slug>/<ts>.json`
+
+The `Tesla Superchargers` import reads those files into Postgres. The web UI
+receives pricing inline on supercharger feature properties; there is no separate
+Tesla pricing request on the serving path.
