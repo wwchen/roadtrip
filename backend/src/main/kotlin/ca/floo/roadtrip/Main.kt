@@ -3,6 +3,7 @@ package ca.floo.roadtrip
 import ca.floo.roadtrip.config.ApplicationProperties
 import ca.floo.roadtrip.config.ConfigSection
 import ca.floo.roadtrip.di.infraModule
+import ca.floo.roadtrip.di.repoModule
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStopping
 import io.ktor.server.application.install
@@ -41,7 +42,7 @@ private fun installOptionalShutdownThreadDump(properties: Map<String, String>) {
 
 fun Application.module() {
     install(Koin) {
-        modules(infraModule(environment.config))
+        modules(infraModule(environment.config), repoModule)
     }
     val properties = ApplicationProperties.load(baseConfig = environment.config)
     installOptionalShutdownThreadDump(properties)
