@@ -19,13 +19,10 @@ import {
 } from './recgovSession.js'
 import {
   COMPANION_OPENAPI_SPEC,
-  OPENAPI_ROUTE,
-  SWAGGER_DOCS_ROUTE,
 } from './openapi.js'
+import { matchCompanionRoute } from './apiContract.js'
 import {
   SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX,
-  SCREENSHOT_ROUTE,
-  SCREENSHOT_ROUTE_PREFIX,
   captureRecgovScreenshot,
   createRecgovScreenshotDeps,
   recgovScreenshotTargetUrl,
@@ -603,44 +600,9 @@ export function createCompanionServer ({
   }
   return http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://companion.local')
-    if (req.method === 'GET' && url.pathname.startsWith(`${SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX}/`)) {
-      await handleDiagnosticImage(url, res)
-      return
-    }
-    if (req.method === 'GET' && (url.pathname === SCREENSHOT_ROUTE || url.pathname.startsWith(SCREENSHOT_ROUTE_PREFIX))) {
-      await handleLiveScreenshot(url, res, deps)
-      return
-    }
-    if (req.method === 'GET' && url.pathname === OPENAPI_ROUTE) {
-      jsonResponse(res, HTTP_OK, COMPANION_OPENAPI_SPEC)
-      return
-    }
-    if (req.method === 'GET' && url.pathname === SWAGGER_DOCS_ROUTE) {
-      htmlResponse(res, HTTP_OK, renderSwaggerPage())
-      return
-    }
-    if (req.method === 'GET' && url.pathname === '/health') {
-      jsonResponse(res, HTTP_OK, { ok: true, busy, recgov_auth: getRecgovHealthStatus() })
-      return
-    }
-    if (req.method === 'GET' && url.pathname === '/') {
-      htmlResponse(res, HTTP_OK, renderLoginPage())
-      return
-    }
-    if (req.method === 'POST' && url.pathname === '/login') {
-      await handleLoginPost(req, res, deps)
-      return
-    }
-    if (req.method === 'POST' && url.pathname === '/logout') {
-      await handleLogout(req, res, deps)
-      return
-    }
-    if (req.method === 'POST' && url.pathname === '/refresh') {
-      await handleRefresh(req, res, deps)
-      return
-    }
-    if (req.method === 'POST' && url.pathname === '/atc') {
-      await handleAtc(req, res, deps)
+    const route = matchCompanionRoute(req.method, url.pathname)
+    if (route) {
+      await handleContractRoute(route, req, res, url, deps)
       return
     }
     jsonResponse(res, HTTP_BAD_REQUEST, {
@@ -650,6 +612,34 @@ export function createCompanionServer ({
     })
   })
 }
+
+async function handleContractRoute (route, req, res, url, deps) {
+  const handler = CONTRACT_ROUTE_HANDLERS[route.operationId]
+  if (handler) {
+    await handler({ req, res, url, deps })
+    return
+  }
+  jsonResponse(res, HTTP_INTERNAL_ERROR, {
+    ok: false,
+    error: 'unhandled_route',
+    detail: `${route.method} ${route.path}`,
+  })
+}
+
+const CONTRACT_ROUTE_HANDLERS = {
+  getDiagnosticScreenshot: async ({ url, res }) => handleDiagnosticImage(url, res),
+  getScreenshot: async ({ url, res, deps }) => handleLiveScreenshot(url, res, deps),
+  getOpenApiJson: async ({ res }) => jsonResponse(res, HTTP_OK, COMPANION_OPENAPI_SPEC),
+  getSwaggerDocs: async ({ res }) => htmlResponse(res, HTTP_OK, renderSwaggerPage()),
+  getHealth: async ({ res }) => jsonResponse(res, HTTP_OK, { ok: true, busy, recgov_auth: getRecgovHealthStatus() }),
+  getOperatorPage: async ({ res }) => htmlResponse(res, HTTP_OK, renderLoginPage()),
+  postLogin: async ({ req, res, deps }) => handleLoginPost(req, res, deps),
+  postLogout: async ({ req, res, deps }) => handleLogout(req, res, deps),
+  postRefresh: async ({ req, res, deps }) => handleRefresh(req, res, deps),
+  postAtc: async ({ req, res, deps }) => handleAtc(req, res, deps),
+}
+
+export const HANDLED_OPERATION_IDS = Object.freeze(Object.keys(CONTRACT_ROUTE_HANDLERS))
 
 async function handleDiagnosticImage (url, res) {
   const filename = diagnosticFilename(url)

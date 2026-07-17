@@ -2,11 +2,13 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Readable } from 'node:stream'
 import {
+  HANDLED_OPERATION_IDS,
   createCompanionServer,
   getRecgovAuthStatus,
   getRecgovHealthStatus,
   runStartupAuthCheck,
 } from '../src/server.js'
+import { COMPANION_API_ROUTES } from '../src/apiContract.js'
 
 test('runStartupAuthCheck records logged-in status', async () => {
   const log = logCapture()
@@ -101,10 +103,21 @@ test('GET / returns a simple operator login form', async () => {
   })
 
   assert.equal(response.status, 200)
+  assert.match(response.text, /id="toggle-login"/)
+  assert.match(response.text, /id="toggle-atc"/)
+  assert.match(response.text, /<section id="login-panel" class="panel" hidden>/)
+  assert.match(response.text, /<section id="atc-panel" class="panel" hidden>/)
   assert.match(response.text, /<form id="login-form" method="post" action="\/login">/)
+  assert.match(response.text, /<form id="atc-form" method="post" action="\/atc">/)
   assert.match(response.text, /name="username"/)
   assert.match(response.text, /name="password"/)
   assert.match(response.text, /name="mfa_code"/)
+  assert.match(response.text, /name="start_date"/)
+  assert.match(response.text, /name="end_date"/)
+  assert.match(response.text, /name="vendor"/)
+  assert.match(response.text, /name="booking_url"/)
+  assert.match(response.text, /name="campground_id"/)
+  assert.match(response.text, /name="campsite_id"/)
   assert.match(response.text, /id="loading"/)
   assert.match(response.text, /id="json-output"/)
   assert.match(response.text, /id="refresh-session"/)
@@ -112,6 +125,8 @@ test('GET / returns a simple operator login form', async () => {
   assert.match(response.text, /id="logout-session"/)
   assert.match(response.text, /id="session-screenshot"/)
   assert.match(response.text, /src="\/screenshot\?path=\/"/)
+  assert.match(response.text, /togglePanel\(loginPanel, loginToggle\)/)
+  assert.match(response.text, /JSON\.stringify\(Object\.fromEntries\(new FormData\(atcForm\)\)\)/)
   assert.match(response.text, /fetch\(url/)
   assert.doesNotMatch(response.text, /action="\/refresh"/)
   assert.doesNotMatch(response.text, /RECGOV_EMAIL|RECGOV_PASSWORD|RECGOV_MFA_CODE|RECGOV_OTP/)
@@ -126,6 +141,11 @@ test('GET /openapi.json returns companion-owned OpenAPI docs', async () => {
   assert.equal(response.headers['content-type'], 'application/json; charset=utf-8')
   assert.equal(response.json.openapi, '3.0.3')
   assert.equal(response.json.info.title, 'Campsite Companion API')
+  assert.deepEqual(openApiOperations(response.json), contractOperations(COMPANION_API_ROUTES))
+  assert.deepEqual(
+    HANDLED_OPERATION_IDS.toSorted(),
+    COMPANION_API_ROUTES.map((route) => route.operationId).toSorted(),
+  )
   assert.ok(response.json.paths['/'])
   assert.ok(response.json.paths['/health'])
   assert.ok(response.json.paths['/login'])
@@ -342,6 +362,32 @@ test('GET /screenshot rejects non-Recreation.gov targets', async () => {
   assert.equal(response.status, 400)
   assert.equal(response.json.error, 'invalid_screenshot_target')
 })
+
+test('GET /screenshot path suffix is not an undocumented API route', async () => {
+  const response = await request(createCompanionServer(), {
+    path: '/screenshot/camping/campgrounds/232447',
+  })
+
+  assert.equal(response.status, 400)
+  assert.equal(response.json.error, 'unsupported_route')
+})
+
+function contractOperations (routes) {
+  return routes
+    .map(({ method, path }) => `${method} ${path}`)
+    .sort()
+}
+
+function openApiOperations (spec) {
+  return Object
+    .entries(spec.paths)
+    .flatMap(([path, operations]) =>
+      Object
+        .keys(operations)
+        .map((method) => `${method.toUpperCase()} ${path}`),
+    )
+    .sort()
+}
 
 function logCapture () {
   const lines = []

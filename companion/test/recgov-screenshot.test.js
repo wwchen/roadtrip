@@ -31,6 +31,13 @@ test('recgovScreenshotTargetUrl rejects external targets', () => {
   )
 })
 
+test('recgovScreenshotTargetUrl rejects undocumented screenshot path suffixes', () => {
+  assert.equal(
+    recgovScreenshotTargetUrl(new URL('/screenshot/camping/campgrounds/232447', 'http://companion.local')),
+    null,
+  )
+})
+
 test('captureRecgovScreenshot uses the companion browser session and top viewport', async () => {
   const image = Buffer.from([0x89, 0x50, 0x4e, 0x47])
   const page = fakeScreenshotPage(image)

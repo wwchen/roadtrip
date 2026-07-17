@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 
-const LOGIN_FORM_TITLE = 'Recreation.gov Login'
+const LOGIN_FORM_TITLE = 'Companion API Playground'
 const LOGIN_PAGE_TEMPLATE = readTemplate('./loginPage.html')
 const LOGIN_DIAGNOSTIC_TEMPLATE = readTemplate('./loginDiagnostic.html')
 const SWAGGER_PAGE_TEMPLATE = readTemplate('./swaggerPage.html')

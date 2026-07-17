@@ -10,7 +10,7 @@ import {
 } from './recgovSession.js'
 import { captureRecgovPageImage } from './recgovScreenshotCapture.js'
 import {
-  SCREENSHOT_ROUTE_PREFIX,
+  SCREENSHOT_ROUTE,
 } from './recgovScreenshotRoutes.js'
 
 export {
@@ -67,7 +67,8 @@ export async function captureRecgovScreenshot (target, deps = createRecgovScreen
 
 export function recgovScreenshotTargetUrl (url) {
   const raw = screenshotTargetInput(url)
-  if (!raw) return new URL(RECGOV_HOME_URL)
+  if (raw === null) return new URL(RECGOV_HOME_URL)
+  if (raw === false) return null
   try {
     const target = /^https?:\/\//i.test(raw)
       ? new URL(raw)
@@ -85,8 +86,7 @@ function screenshotTargetInput (url) {
   if (urlParam) return urlParam
   const pathParam = url.searchParams.get('path')
   if (pathParam) return screenshotPathWithExtraParams(pathParam, url.searchParams)
-  if (!url.pathname.startsWith(SCREENSHOT_ROUTE_PREFIX)) return null
-  return `/${decodeURIComponent(url.pathname.slice(SCREENSHOT_ROUTE_PREFIX.length))}${url.search}`
+  return url.pathname === SCREENSHOT_ROUTE ? null : false
 }
 
 function screenshotPathWithExtraParams (pathParam, searchParams) {

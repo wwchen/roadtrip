@@ -5,16 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{LOGIN_FORM_TITLE}}</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 36rem; margin: 3rem auto; padding: 0 1rem; color: #172033; }
+    body { font-family: system-ui, sans-serif; max-width: 48rem; margin: 3rem auto; padding: 0 1rem; color: #172033; }
     label { display: block; font-weight: 650; margin-top: 1rem; }
-    input { box-sizing: border-box; width: 100%; padding: .7rem; margin-top: .35rem; border: 1px solid #c8d0dc; border-radius: 6px; font: inherit; }
+    input, select { box-sizing: border-box; width: 100%; padding: .7rem; margin-top: .35rem; border: 1px solid #c8d0dc; border-radius: 6px; font: inherit; }
     button { margin-top: 1.25rem; padding: .75rem 1rem; border: 0; border-radius: 6px; background: #24579a; color: white; font: inherit; font-weight: 700; cursor: pointer; }
     button:disabled { cursor: wait; opacity: .65; }
     .button-link { display: inline-flex; align-items: center; justify-content: center; margin-top: 1.25rem; padding: .75rem 1rem; border-radius: 6px; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
-    .row { display: flex; gap: .75rem; align-items: center; }
+    .row { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
     .row form { margin: 0; }
+    .panel { margin-top: 1rem; border: 1px solid #d7deea; border-radius: 8px; padding: 1rem; background: #fbfcfe; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; }
+    .wide { grid-column: 1 / -1; }
     .secondary { background: #eef2f7; color: #172033; }
     .secondary:visited { color: #172033; }
+    .toggle[aria-expanded="true"] { background: #1f4b84; }
     .muted { color: #536174; }
     .ok { color: #166534; font-weight: 700; }
     .error { color: #b42318; font-weight: 700; }
@@ -36,20 +40,51 @@
     <h2>Companion browser</h2>
     <img id="session-screenshot" src="/screenshot?path=/" alt="Companion Playwright screenshot of Recreation.gov home page">
   </section>
-  <form id="login-form" method="post" action="/login">
-    <label for="username">Username or email</label>
-    <input id="username" name="username" type="email" autocomplete="username" required>
-    <label for="password">Password</label>
-    <input id="password" name="password" type="password" autocomplete="current-password" required>
-    <label for="mfa_code">MFA code</label>
-    <input id="mfa_code" name="mfa_code" inputmode="numeric" autocomplete="one-time-code">
-    <button type="submit">Log in</button>
-  </form>
   <div class="row">
+    <button id="toggle-login" class="toggle" type="button" aria-expanded="false" aria-controls="login-panel">Login</button>
+    <button id="toggle-atc" class="toggle" type="button" aria-expanded="false" aria-controls="atc-panel">ATC</button>
     <button id="refresh-session" class="secondary" type="button">Refresh session</button>
     <button id="health-json" class="secondary" type="button">Health JSON</button>
     <button id="logout-session" class="secondary" type="button">Log out</button>
   </div>
+  <section id="login-panel" class="panel" hidden>
+    <form id="login-form" method="post" action="/login">
+      <label for="username">Username or email</label>
+      <input id="username" name="username" type="email" autocomplete="username" required>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <label for="mfa_code">MFA code</label>
+      <input id="mfa_code" name="mfa_code" inputmode="numeric" autocomplete="one-time-code">
+      <button type="submit">Submit login</button>
+    </form>
+  </section>
+  <section id="atc-panel" class="panel" hidden>
+    <form id="atc-form" method="post" action="/atc">
+      <div class="grid">
+        <label for="atc_vendor">Vendor
+          <select id="atc_vendor" name="vendor" required>
+            <option value="recgov">recgov</option>
+          </select>
+        </label>
+        <label for="atc_start_date">Start date
+          <input id="atc_start_date" name="start_date" type="date" required>
+        </label>
+        <label for="atc_end_date">End date
+          <input id="atc_end_date" name="end_date" type="date" required>
+        </label>
+        <label for="atc_campground_id">Campground ID
+          <input id="atc_campground_id" name="campground_id" inputmode="numeric" required>
+        </label>
+        <label for="atc_campsite_id">Campsite ID
+          <input id="atc_campsite_id" name="campsite_id" inputmode="numeric" required>
+        </label>
+        <label class="wide" for="atc_booking_url">Booking URL
+          <input id="atc_booking_url" name="booking_url" type="url" required>
+        </label>
+      </div>
+      <button type="submit">Run ATC</button>
+    </form>
+  </section>
   <pre id="json-output" class="{{JSON_CLASS}}">{{INITIAL_JSON}}</pre>
   <div id="diagnostic">{{DIAGNOSTIC_HTML}}</div>
   <div id="loading" class="loading" hidden>
@@ -60,6 +95,11 @@
   </div>
   <script>
     const loginForm = document.getElementById('login-form')
+    const atcForm = document.getElementById('atc-form')
+    const loginPanel = document.getElementById('login-panel')
+    const atcPanel = document.getElementById('atc-panel')
+    const loginToggle = document.getElementById('toggle-login')
+    const atcToggle = document.getElementById('toggle-atc')
     const refreshButton = document.getElementById('refresh-session')
     const healthButton = document.getElementById('health-json')
     const logoutButton = document.getElementById('logout-session')
@@ -69,7 +109,15 @@
     const diagnostic = document.getElementById('diagnostic')
     const loading = document.getElementById('loading')
     const loadingText = document.getElementById('loading-text')
-    const actionButtons = [loginForm.querySelector('button[type="submit"]'), refreshButton, healthButton, logoutButton]
+    const actionButtons = Array.from(document.querySelectorAll('button'))
+
+    loginToggle.addEventListener('click', () => {
+      togglePanel(loginPanel, loginToggle)
+    })
+
+    atcToggle.addEventListener('click', () => {
+      togglePanel(atcPanel, atcToggle)
+    })
 
     loginForm.addEventListener('submit', async (event) => {
       event.preventDefault()
@@ -77,6 +125,15 @@
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams(new FormData(loginForm)),
+      })
+    })
+
+    atcForm.addEventListener('submit', async (event) => {
+      event.preventDefault()
+      await runAction('Running ATC...', 'ATC', '/atc', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(Object.fromEntries(new FormData(atcForm))),
       })
     })
 
@@ -117,6 +174,12 @@
       } finally {
         setLoading(false)
       }
+    }
+
+    function togglePanel (panel, button) {
+      const expanded = panel.hidden
+      panel.hidden = !expanded
+      button.setAttribute('aria-expanded', String(expanded))
     }
 
     function setLoading (active, label = 'Working...') {
