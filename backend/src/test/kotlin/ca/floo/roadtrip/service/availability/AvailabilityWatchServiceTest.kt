@@ -27,6 +27,7 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegist
 import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.jooq.DSLContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -219,6 +220,32 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
 
         assertEquals("unsupported_trigger", error.error)
         assertEquals(listOf("slack_notify"), AvailabilityWatchRepo(ctx).findById(watch.id)!!.triggerKinds)
+    }
+
+    @Test
+    fun `update rejects invalid trigger config and leaves stored config unchanged`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val svc = service()
+        val watch = svc.create(poiInput(poiId, triggerKinds = listOf("slack_notify")))
+
+        val error =
+            assertFailsWith<AvailabilityWatchValidationException> {
+                svc.update(
+                    watch.id,
+                    AvailabilityWatchRepo.UpdateInput(
+                        triggerConfig =
+                            JsonObject(
+                                mapOf(
+                                    "slack_notify" to JsonObject(mapOf("channel" to JsonPrimitive(""))),
+                                ),
+                            ),
+                    ),
+                )
+            }
+
+        assertEquals("invalid_trigger_config", error.error)
+        assertEquals(JsonObject(emptyMap()), AvailabilityWatchRepo(ctx).findById(watch.id)!!.triggerConfig)
     }
 
     @Test

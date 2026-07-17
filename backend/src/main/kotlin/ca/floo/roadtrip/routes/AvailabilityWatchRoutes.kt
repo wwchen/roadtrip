@@ -19,6 +19,8 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.availability.AvailabilityWatchValidationException
+import ca.floo.roadtrip.service.availability.WatchCapabilityService
+import ca.floo.roadtrip.service.availability.WatchInitialNotificationPolicy
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchStatus
 import io.github.smiley4.ktorswaggerui.dsl.routing.delete
@@ -64,6 +66,7 @@ internal fun Route.availabilityWatchRoutes(
     watchService: ca.floo.roadtrip.service.availability.AvailabilityWatchService,
     alertDispatcher: ca.floo.roadtrip.service.availability.WatchAlertDispatcher,
     notifyScope: CoroutineScope,
+    watchCapabilities: WatchCapabilityService? = null,
 ) {
     val watches = AvailabilityWatchRepo(ctx)
     val campsitesRepo = CampsiteRepo(ctx)
@@ -149,7 +152,12 @@ internal fun Route.availabilityWatchRoutes(
         val watch =
             watches.findById(id)
                 ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
-        call.respondJson(AvailabilityWatchResponse(watch.toSchema(campsitesRepo)))
+        call.respondJson(
+            AvailabilityWatchResponse(
+                watch = watch.toSchema(campsitesRepo),
+                watchCapabilities = watch.toCapabilities(scopeResolver, watchCapabilities),
+            ),
+        )
     }
 
     post("/api/availability/watches", {
@@ -252,6 +260,9 @@ internal fun Route.availabilityWatchRoutes(
                 is ResolveResult.Ok -> r.targets
                 null -> null
             }
+        val previous =
+            watches.findById(id)
+                ?: return@patch call.respondError("not_found", HttpStatusCode.NotFound)
         val updated =
             try {
                 watchService.update(
@@ -272,7 +283,7 @@ internal fun Route.availabilityWatchRoutes(
                 return@patch call.respondError(e.error, HttpStatusCode.BadRequest, e.message)
             }
         if (updated == null) return@patch call.respondError("not_found", HttpStatusCode.NotFound)
-        scheduleInitialNotify(updated)
+        if (WatchInitialNotificationPolicy.shouldDispatchAfterUpdate(previous, updated)) scheduleInitialNotify(updated)
         call.respondJson(AvailabilityWatchResponse(updated.toSchema(campsitesRepo)))
     }
 
@@ -459,6 +470,11 @@ private fun datesInWindow(
     startDate: LocalDate,
     endDate: LocalDate,
 ): List<LocalDate> = generateSequence(startDate) { d -> d.plusDays(1).takeIf { it.isBefore(endDate) } }.toList()
+
+private fun Watch.toCapabilities(
+    scopeResolver: WatchScopeResolver,
+    watchCapabilities: WatchCapabilityService?,
+) = watchCapabilities?.capabilitiesFor(scopeResolver.resolve(this))
 
 private fun Watch.toSchema(campsitesRepo: CampsiteRepo): AvailabilityWatchSchema {
     val firstTarget = targets.firstOrNull()

@@ -8,7 +8,6 @@ import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import ca.floo.roadtrip.service.notification.WatchOpening
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
-import kotlinx.serialization.json.JsonPrimitive
 import java.time.LocalDate
 
 /** Grafana dashboards the alert deep-links to. The watch drill-down takes the
@@ -270,9 +269,3 @@ internal class WatchAlertDispatcher(
 // pull a transition on a shorter watch's endDate into the shared fetch, and an
 // inclusive bound would misfire the shorter watch (and wrongly mark it done).
 private fun LocalDate.withinWindow(watch: AvailabilityWatchRepo.Watch): Boolean = !isBefore(watch.startDate) && isBefore(watch.endDate)
-
-internal fun AvailabilityWatchRepo.Watch.channelOverride(): String? =
-    (triggerConfig["channel"] as? JsonPrimitive)
-        ?.takeIf { it.isString }
-        ?.content
-        ?.takeIf { it.isNotBlank() }

@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.models.api.AvailabilityWatchCapabilitiesDto
 import ca.floo.roadtrip.models.booking.BookingAction
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 
@@ -47,5 +48,13 @@ internal class WatchCapabilityService(
             add(AvailabilityTriggerKinds.SLACK_NOTIFY)
             if (BookingAction.ADD_TO_CART in bookingActions) add(AvailabilityTriggerKinds.ATC)
         }
+    }
+
+    fun capabilitiesFor(campsites: List<CampsiteAvailabilityTarget>): AvailabilityWatchCapabilitiesDto {
+        val bookingActions = supportedBookingActions(campsites)
+        return AvailabilityWatchCapabilitiesDto(
+            triggerKinds = supportedTriggerKinds(campsites),
+            bookingActions = BookingAction.entries.filter { it in bookingActions }.map { it.wireValue },
+        )
     }
 }

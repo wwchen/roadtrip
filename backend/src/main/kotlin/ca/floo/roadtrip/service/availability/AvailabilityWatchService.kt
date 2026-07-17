@@ -31,6 +31,7 @@ internal class AvailabilityWatchService(
 ) {
     fun create(input: AvailabilityWatchRepo.CreateInput): Watch =
         ctx.transactionResult { config ->
+            WatchTriggerConfig.validateCreate(input)
             val txn = DSL.using(config)
             val watch = AvailabilityWatchRepo(txn).create(input)
             capabilityValidator.validate(watch)
@@ -43,6 +44,7 @@ internal class AvailabilityWatchService(
         input: AvailabilityWatchRepo.UpdateInput,
     ): Watch? =
         ctx.transactionResult { config ->
+            WatchTriggerConfig.validateUpdate(input)
             val txn = DSL.using(config)
             val updated = AvailabilityWatchRepo(txn).update(id, input) ?: return@transactionResult null
             capabilityValidator.validate(updated)

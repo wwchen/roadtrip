@@ -41,6 +41,7 @@ import io.ktor.server.testing.testApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -93,6 +94,21 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 dateResolver = AvailabilityDateResolver(),
             )
         return AvailabilityWatchService(ctx, alertProviders(campsitesRepo, targets))
+    }
+
+    private fun watchCapabilitiesWithRecgov(): WatchCapabilityService {
+        val campsitesRepo = CampsiteRepo(ctx)
+        val targets =
+            DbAvailabilityTargetResolver(
+                providerRefs = CampsiteProviderRepo(ctx),
+                campsitesRepo = campsitesRepo,
+                availabilityProviders = AvailabilityProviderRegistry(mapOf("test" to FakeRecgovProvider)),
+                dateResolver = AvailabilityDateResolver(),
+            )
+        return WatchCapabilityService(
+            availabilityTargets = targets,
+            bookingTargets = AvailabilityBookingTargetResolver(BookingProviderRegistry(emptyList())),
+        )
     }
 
     private fun watchServiceRejectingAtc(): AvailabilityWatchService {
@@ -581,6 +597,77 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonObject["error"]!!
                     .jsonPrimitive.content,
             )
+
+            val badConfig =
+                client.patch("/api/availability/watches/$id") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"trigger_config": {"slack_notify": {"channel": ""}}}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, badConfig.status)
+            assertEquals(
+                "invalid_trigger_config",
+                Json
+                    .parseToJsonElement(badConfig.bodyAsText())
+                    .jsonObject["error"]!!
+                    .jsonPrimitive.content,
+            )
+        }
+
+    @Test
+    fun `PATCH updates trigger config and stop when triggered`() =
+        testApplication {
+            application {
+                routing {
+                    availabilityWatchRoutes(
+                        ctx,
+                        watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
+                    )
+                }
+            }
+            val poiId = seedPoi(sourceId = "p-trigger-patch", name = "Trigger Patch")
+            val created =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """
+                        {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["slack_notify"]}
+                        """.trimIndent(),
+                    )
+                }
+            val id =
+                Json
+                    .parseToJsonElement(created.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+
+            val resp =
+                client.patch("/api/availability/watches/$id") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """
+                        {
+                          "trigger_kinds": ["slack_notify", "atc"],
+                          "trigger_config": {"slack_notify": {"channel": "#camping"}},
+                          "stop_when_triggered": false
+                        }
+                        """.trimIndent(),
+                    )
+                }
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val watch = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
+            assertEquals(listOf("slack_notify", "atc"), watch["trigger_kinds"]!!.jsonArray.map { it.jsonPrimitive.content })
+            assertEquals(
+                "#camping",
+                watch["trigger_config"]!!
+                    .jsonObject["slack_notify"]!!
+                    .jsonObject["channel"]!!
+                    .jsonPrimitive.content,
+            )
+            assertEquals(false, watch["stop_when_triggered"]!!.jsonPrimitive.boolean)
         }
 
     @Test
@@ -783,6 +870,47 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             assertEquals(HttpStatusCode.NoContent, del.status)
             val getAfter = client.get("/api/availability/watches/$id")
             assertEquals(HttpStatusCode.NotFound, getAfter.status)
+        }
+
+    @Test
+    fun `GET watch includes watch capabilities when configured`() =
+        testApplication {
+            application {
+                routing {
+                    availabilityWatchRoutes(
+                        ctx,
+                        watchServiceWithRecgov(),
+                        disabledDispatcher(),
+                        testNotifyScope,
+                        watchCapabilitiesWithRecgov(),
+                    )
+                }
+            }
+            val poiId = seedPoi(sourceId = "p-capabilities", name = "Capabilities", providerRefJson = """{"recgov_id": "232447"}""")
+            linkCampsiteToPoi(seedCampsite(vendorId = "cap-100"), poiId)
+            val created =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """
+                        {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["slack_notify"]}
+                        """.trimIndent(),
+                    )
+                }
+            val id =
+                Json
+                    .parseToJsonElement(created.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+
+            val resp = client.get("/api/availability/watches/$id")
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            val capabilities = body["watch_capabilities"]!!.jsonObject
+            assertEquals(listOf("slack_notify"), capabilities["trigger_kinds"]!!.jsonArray.map { it.jsonPrimitive.content })
+            assertTrue(capabilities["booking_actions"]!!.jsonArray.isEmpty())
         }
 
     @Test

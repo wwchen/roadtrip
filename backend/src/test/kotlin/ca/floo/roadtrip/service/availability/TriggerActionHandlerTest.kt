@@ -87,6 +87,29 @@ class TriggerActionHandlerTest {
         }
 
     @Test
+    fun `SlackNotifyHandler prefers nested channel override over legacy flat channel`() =
+        runBlocking {
+            val slack = CapturingSlack(result = true)
+            val handler = SlackNotifyHandler(slack = slack, appRootUrl = "https://app.example")
+
+            handler.fire(
+                fakeWatch(
+                    id = 42L,
+                    triggerConfig =
+                        JsonObject(
+                            mapOf(
+                                "channel" to JsonPrimitive("legacy-channel"),
+                                "slack_notify" to JsonObject(mapOf("channel" to JsonPrimitive("nested-channel"))),
+                            ),
+                        ),
+                ),
+                openings = listOf(triggerOpening()),
+            )
+
+            assertEquals("nested-channel", slack.lastChannel)
+        }
+
+    @Test
     fun `SlackNotifyHandler omits channel when triggerConfig has none`() =
         runBlocking {
             val slack = CapturingSlack(result = true)

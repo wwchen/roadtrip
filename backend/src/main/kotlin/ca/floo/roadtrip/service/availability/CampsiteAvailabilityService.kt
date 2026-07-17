@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.api.AvailabilityWatchCapabilitiesDto
 import ca.floo.roadtrip.models.api.PoiCampsitesAvailabilityResponseDto
-import ca.floo.roadtrip.models.booking.BookingAction
 import ca.floo.roadtrip.models.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -78,13 +77,7 @@ private fun emptyPoiAvailability(
 private fun watchCapabilitiesFor(
     campsites: List<CampsiteAvailabilityTarget>,
     capabilities: WatchCapabilityService,
-): AvailabilityWatchCapabilitiesDto {
-    val bookingActions = capabilities.supportedBookingActions(campsites)
-    return AvailabilityWatchCapabilitiesDto(
-        triggerKinds = capabilities.supportedTriggerKinds(campsites),
-        bookingActions = BookingAction.entries.filter { it in bookingActions }.map { it.wireValue },
-    )
-}
+): AvailabilityWatchCapabilitiesDto = capabilities.capabilitiesFor(campsites)
 
 private fun displayWindow(
     poiId: Long,
