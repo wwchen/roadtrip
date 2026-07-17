@@ -1,7 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Buffer } from 'node:buffer'
-import { recgovLoginCredentialsFromEnv, resolveRecaccount } from '../src/recgovSession.js'
+import {
+  getRecgovSessionStatus,
+  logoutRecgovBrowserSession,
+  recgovLoginCredentialsFromInput,
+  resolveRecaccount,
+} from '../src/recgovSession.js'
 
 const JWT_HEADER = { alg: 'none' }
 const JWT_SIGNATURE = 'sig'
@@ -9,9 +14,9 @@ const FRESH_OFFSET_SECONDS = 60 * 60
 const NEAR_EXPIRY_OFFSET_SECONDS = 60
 const REFRESH_RETRY_DELAY_MS = 1000
 
-test('recgovLoginCredentialsFromEnv requires email and password and accepts MFA code', () => {
+test('recgovLoginCredentialsFromInput requires username/email and password and accepts MFA code', () => {
   assert.deepEqual(
-    recgovLoginCredentialsFromEnv({}),
+    recgovLoginCredentialsFromInput({}),
     {
       configured: false,
       reason: 'credentials_not_configured',
@@ -21,7 +26,7 @@ test('recgovLoginCredentialsFromEnv requires email and password and accepts MFA 
     },
   )
   assert.deepEqual(
-    recgovLoginCredentialsFromEnv({ RECGOV_EMAIL: 'user@example.com' }),
+    recgovLoginCredentialsFromInput({ username: 'user@example.com' }),
     {
       configured: false,
       reason: 'credentials_incomplete',
@@ -31,10 +36,10 @@ test('recgovLoginCredentialsFromEnv requires email and password and accepts MFA 
     },
   )
 
-  const credentials = recgovLoginCredentialsFromEnv({
-    RECGOV_EMAIL: ' user@example.com ',
-    RECGOV_PASSWORD: 'secret',
-    RECGOV_MFA_CODE: '123456',
+  const credentials = recgovLoginCredentialsFromInput({
+    username: ' user@example.com ',
+    password: 'secret',
+    mfa_code: '123456',
   })
 
   assert.equal(credentials.configured, true)
@@ -53,6 +58,7 @@ test('resolveRecaccount uses the existing companion browser recaccount', async (
   const resolved = await resolveRecaccount(page)
 
   assert.equal(resolved.access_token, recaccount.access_token)
+  assert.ok(Date.parse(getRecgovSessionStatus().next_refresh_at) > Date.now())
   assert.deepEqual(page.gotos, ['https://www.recreation.gov/'])
   assert.equal(page.refreshCalls.length, 0)
   assert.deepEqual(page.context().cookies, [{
@@ -87,6 +93,10 @@ test('resolveRecaccount refreshes near-expiry recaccount in the companion browse
     account_id: 'acct-1',
     refresh_id: 'refresh-1',
   })
+  const sessionStatus = getRecgovSessionStatus()
+  assert.ok(Date.parse(sessionStatus.last_refresh_at) > 0)
+  assert.equal(sessionStatus.last_refresh_expires_at, refreshed.expiration)
+  assert.ok(Date.parse(sessionStatus.next_refresh_at) < Date.parse(sessionStatus.last_refresh_expires_at))
 })
 
 test('resolveRecaccount force-refreshes a fresh browser recaccount', async () => {
@@ -175,7 +185,7 @@ test('resolveRecaccount prompts manual login after allowed forced refresh failur
   assert.equal(page.loginClicks, 1)
 })
 
-test('resolveRecaccount can log in with Recreation.gov credentials from env', async () => {
+test('resolveRecaccount can log in with request-scoped Recreation.gov credentials', async () => {
   const recaccount = testRecaccount({
     token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-credential' }),
   })
@@ -184,15 +194,37 @@ test('resolveRecaccount can log in with Recreation.gov credentials from env', as
   })
 
   const resolved = await resolveRecaccount(page, {
-    env: {
-      RECGOV_EMAIL: 'user@example.com',
-      RECGOV_PASSWORD: 'secret',
-    },
+    credentials: { username: 'user@example.com', password: 'secret' },
   })
 
   assert.equal(resolved.access_token, recaccount.access_token)
   assert.equal(page.loginClicks, 1)
   assert.equal(page.credentialSubmitClicks, 1)
+  assert.equal(page.screenshots.length, 1)
+  assert.equal(getRecgovSessionStatus().last_login_diagnostic.reason, 'login_success')
+  assert.equal(getRecgovSessionStatus().last_login_diagnostic.screenshot_path, undefined)
+  assert.match(getRecgovSessionStatus().last_login_diagnostic.screenshot_url, /^\/screenshot\/diagnostics\//)
+  assert.deepEqual(page.viewportSize, { width: 1280, height: 1000 })
+  assert.equal(page.screenshots[0].fullPage, false)
+  assert.deepEqual(page.fills.map(({ value }) => value), ['user@example.com', 'secret'])
+})
+
+test('resolveRecaccount can submit credentials with Enter when the login button is not found', async () => {
+  const recaccount = testRecaccount({
+    token: fakeJwt({ offsetSeconds: FRESH_OFFSET_SECONDS, fingerprint: 'fp-enter-submit' }),
+  })
+  const page = fakePage({
+    credentialRawRecaccount: JSON.stringify(recaccount),
+    submitSelectorVisible: false,
+  })
+
+  const resolved = await resolveRecaccount(page, {
+    credentials: { username: 'user@example.com', password: 'secret' },
+  })
+
+  assert.equal(resolved.access_token, recaccount.access_token)
+  assert.equal(page.credentialSubmitClicks, 0)
+  assert.equal(page.enterPresses, 1)
   assert.deepEqual(page.fills.map(({ value }) => value), ['user@example.com', 'secret'])
 })
 
@@ -207,11 +239,7 @@ test('resolveRecaccount can submit a provided Recreation.gov 2FA code', async ()
   })
 
   const resolved = await resolveRecaccount(page, {
-    env: {
-      RECGOV_EMAIL: 'user@example.com',
-      RECGOV_PASSWORD: 'secret',
-      RECGOV_MFA_CODE: '123456',
-    },
+    credentials: { username: 'user@example.com', password: 'secret', mfa_code: '123456' },
   })
 
   assert.equal(resolved.access_token, recaccount.access_token)
@@ -230,16 +258,41 @@ test('resolveRecaccount fails closed when Recreation.gov 2FA has no supplied cod
   })
 
   const resolved = await resolveRecaccount(page, {
-    env: {
-      RECGOV_EMAIL: 'user@example.com',
-      RECGOV_PASSWORD: 'secret',
-      RECGOV_LOGIN_TIMEOUT_MS: '1',
-    },
+    credentials: { username: 'user@example.com', password: 'secret' },
+    loginTimeoutMs: '1',
+    allowManualLogin: false,
   })
 
   assert.equal(resolved, null)
   assert.equal(page.credentialSubmitClicks, 1)
   assert.equal(page.mfaSubmitClicks, 0)
+  assert.equal(page.screenshots.length, 1)
+  assert.equal(getRecgovSessionStatus().last_login_diagnostic.reason, 'mfa_required')
+  assert.equal(getRecgovSessionStatus().last_login_diagnostic.screenshot_path, undefined)
+  assert.match(getRecgovSessionStatus().last_login_diagnostic.screenshot_url, /^\/screenshot\/diagnostics\//)
+  assert.deepEqual(page.viewportSize, { width: 1280, height: 1000 })
+  assert.equal(page.screenshots[0].fullPage, false)
+})
+
+test('logoutRecgovBrowserSession clicks the Rec.gov logout control and verifies logged-out state', async () => {
+  const page = fakePage({
+    loggedIn: true,
+    logoutSelectorVisible: true,
+  })
+
+  const result = await logoutRecgovBrowserSession({
+    getContextFn: async () => ({
+      newPage: async () => page,
+    }),
+    isSpaLoggedInFn: async () => page.loggedIn,
+  })
+
+  assert.equal(result.ok, true)
+  assert.equal(result.clicked, true)
+  assert.equal(result.selector, 'button:has-text("Log Out")')
+  assert.equal(page.logoutClicks, 1)
+  assert.equal(page.closed, true)
+  assert.equal(getRecgovSessionStatus().next_refresh_at, null)
 })
 
 function fakePage ({
@@ -251,6 +304,9 @@ function fakePage ({
   credentialRawRecaccount = null,
   mfaRequired = false,
   expectedMfaCode = null,
+  submitSelectorVisible = true,
+  loggedIn = false,
+  logoutSelectorVisible = false,
 }) {
   let refreshResponseIndex = 0
   let currentRawRecaccount = rawRecaccount
@@ -271,11 +327,23 @@ function fakePage ({
     loginClicks: 0,
     credentialSubmitClicks: 0,
     mfaSubmitClicks: 0,
+    logoutClicks: 0,
+    loggedIn,
     fills: [],
+    screenshots: [],
     waits: [],
+    enterPresses: 0,
+    closed: false,
     context: () => context,
+    url: () => 'https://www.recreation.gov/',
     goto: async (url) => {
       page.gotos.push(url)
+    },
+    screenshot: async (options) => {
+      page.screenshots.push(options)
+    },
+    setViewportSize: async (size) => {
+      page.viewportSize = size
     },
     locator: (selector) => ({
       first: () => ({
@@ -291,6 +359,11 @@ function fakePage ({
           if (selector.includes('Sign Up / Log In')) {
             page.loginClicks += 1
             loginOpened = true
+            return
+          }
+          if (isLogoutSelector(selector)) {
+            page.logoutClicks += 1
+            page.loggedIn = false
             return
           }
           if (isSubmitSelector(selector)) {
@@ -312,6 +385,21 @@ function fakePage ({
     waitForTimeout: async (ms) => {
       page.waits.push(ms)
     },
+    close: async () => {
+      page.closed = true
+    },
+    keyboard: {
+      press: async (key) => {
+        if (key !== 'Enter') throw new Error(`unexpected key: ${key}`)
+        page.enterPresses += 1
+        if (mfaPromptVisible) {
+          if (!expectedMfaCode || submittedMfaCode === expectedMfaCode) currentRawRecaccount = credentialRawRecaccount
+          return
+        }
+        if (mfaRequired) mfaPromptVisible = true
+        else currentRawRecaccount = credentialRawRecaccount
+      },
+    },
     evaluate: async (_fn, arg) => {
       if (arg === 'recaccount') return currentRawRecaccount
       if (arg?.clearRecaccount) {
@@ -329,9 +417,10 @@ function fakePage ({
   }
   function selectorVisible (selector) {
     if (selector.includes('Sign Up / Log In')) return true
+    if (isLogoutSelector(selector)) return logoutSelectorVisible
     if (isMfaInputSelector(selector)) return mfaPromptVisible
     if (isEmailSelector(selector) || isPasswordSelector(selector)) return loginOpened
-    if (isSubmitSelector(selector)) return loginOpened
+    if (isSubmitSelector(selector)) return loginOpened && submitSelectorVisible
     return false
   }
   return page
@@ -351,6 +440,10 @@ function isMfaInputSelector (selector) {
 
 function isSubmitSelector (selector) {
   return /button/.test(selector)
+}
+
+function isLogoutSelector (selector) {
+  return /Log Out|Logout|Sign Out|Sign out/.test(selector)
 }
 
 function testRecaccount ({ token }) {

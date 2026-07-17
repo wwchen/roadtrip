@@ -3,21 +3,31 @@
 // localStorage.recaccount inside the same Chromium context that clicks ATC.
 
 import { Buffer } from 'node:buffer'
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import {
   IS_HEADLESS,
+  getContext,
   injectFingerprintCookie,
+  isSpaLoggedIn,
   readRecaccount,
 } from './browser.js'
+import { captureRecgovPageImage } from './recgovScreenshotCapture.js'
+import { SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX } from './recgovScreenshotRoutes.js'
 
 export const RECGOV_HOME_URL = 'https://www.recreation.gov/'
 export const RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS = 20_000
 export const RECGOV_LOGIN_STATE_SETTLE_MS = 2_000
+export const RECGOV_DIAGNOSTIC_DIR = process.env.RECGOV_DIAGNOSTIC_DIR || '/tmp/campsite-companion/recgov-diagnostics'
 
 const RECGOV_REFRESH_URL = 'https://www.recreation.gov/api/accounts/login/v2/refresh'
 const RECGOV_REFRESH_CONTENT_TYPE = 'text/plain;charset=UTF-8'
 const RECGOV_RECACCOUNT_STORAGE_KEY = 'recaccount'
 const DEFAULT_RECGOV_LOGIN_TIMEOUT_MS = 120_000
+const DEFAULT_RECGOV_CREDENTIAL_SESSION_TIMEOUT_MS = 5_000
+const MAX_RECGOV_CREDENTIAL_SESSION_TIMEOUT_MS = 5_000
 const RECGOV_LOGIN_POLL_MS = 1_000
+const RECGOV_LOGIN_WAIT_PROGRESS_MS = 10_000
 const RECGOV_LOGIN_BUTTON_TIMEOUT_MS = 5_000
 const RECGOV_REFRESH_AHEAD_MS = 5 * 60 * 1_000
 const RECGOV_REFRESH_MAX_ATTEMPTS = 3
@@ -25,17 +35,46 @@ const RECGOV_REFRESH_RETRY_DELAY_MS = 1_000
 const RECGOV_JWT_PAYLOAD_INDEX = 1
 const RECGOV_JWT_MIN_PARTS = 2
 const RECGOV_REFRESH_LOG_BODY_LIMIT = 200
+const LOGIN_SELECTOR_LOG_LIMIT = 120
 const MILLISECONDS_PER_SECOND = 1_000
 const MIN_LOGIN_TIMEOUT_MS = 1
-const RECGOV_EMAIL_ENV = 'RECGOV_EMAIL'
-const RECGOV_PASSWORD_ENV = 'RECGOV_PASSWORD'
-const RECGOV_MFA_CODE_ENV = 'RECGOV_MFA_CODE'
 const LOGIN_FIELD_TIMEOUT_MS = 5_000
 const LOGIN_SUBMIT_TIMEOUT_MS = 5_000
 const LOGIN_BLOCKER_TIMEOUT_MS = 1_000
-const LOGIN_MFA_PROMPT_TIMEOUT_MS = 8_000
+const LOGIN_MFA_PROMPT_TIMEOUT_MS = 5_000
+const DIAGNOSTIC_REASON_MAX_CHARS = 60
+const RECGOV_LOGOUT_MENU_SETTLE_MS = 500
+const RECGOV_LOGOUT_VERIFY_TIMEOUT_MS = 5_000
+const RECGOV_LOGOUT_POLL_MS = 500
+const RECGOV_LOGOUT_SELECTOR_TIMEOUT_MS = 1_500
+const RECGOV_LOGOUT_CLICK_TIMEOUT_MS = 3_000
 
 const LOGIN_LINK_SEL = 'button:has-text("Sign Up / Log In"), a:has-text("Sign Up / Log In")'
+const LOGOUT_MENU_SELECTORS = [
+  'button[aria-label*="account" i]',
+  'button[aria-label*="profile" i]',
+  'button[aria-label*="user" i]',
+  'button:has-text("My Account")',
+  'button:has-text("Account")',
+  '[role="button"]:has-text("My Account")',
+  '[role="button"]:has-text("Account")',
+  'header button:has-text("Hi")',
+  'nav button:has-text("Hi")',
+]
+const LOGOUT_ACTION_SELECTORS = [
+  'button:has-text("Log Out")',
+  'a:has-text("Log Out")',
+  '[role="menuitem"]:has-text("Log Out")',
+  'button:has-text("Logout")',
+  'a:has-text("Logout")',
+  '[role="menuitem"]:has-text("Logout")',
+  'button:has-text("Sign Out")',
+  'a:has-text("Sign Out")',
+  '[role="menuitem"]:has-text("Sign Out")',
+  'button:has-text("Sign out")',
+  'a:has-text("Sign out")',
+  '[role="menuitem"]:has-text("Sign out")',
+]
 const LOGIN_EMAIL_SELECTORS = [
   '[role="dialog"] input[type="email"]',
   '[role="dialog"] input[name*="email" i]',
@@ -58,13 +97,28 @@ const LOGIN_PASSWORD_SELECTORS = [
 ]
 const LOGIN_SUBMIT_SELECTORS = [
   '[role="dialog"] button[type="submit"]',
+  '[role="dialog"] input[type="submit"]',
+  '[role="dialog"] [role="button"]:has-text("Log In")',
   '[role="dialog"] button:has-text("Log In")',
+  '[role="dialog"] [role="button"]:has-text("Sign In")',
   '[role="dialog"] button:has-text("Sign In")',
+  '[role="dialog"] [role="button"]:has-text("Continue")',
+  '[role="dialog"] button:has-text("Continue")',
   'form button[type="submit"]',
+  'form input[type="submit"]',
+  'form [role="button"]:has-text("Log In")',
   'form button:has-text("Log In")',
+  'form [role="button"]:has-text("Sign In")',
   'form button:has-text("Sign In")',
+  'form [role="button"]:has-text("Continue")',
+  'form button:has-text("Continue")',
+  'input[type="submit"]',
+  '[role="button"]:has-text("Log In")',
   'button:has-text("Log In")',
+  '[role="button"]:has-text("Sign In")',
   'button:has-text("Sign In")',
+  '[role="button"]:has-text("Continue")',
+  'button:has-text("Continue")',
 ]
 const LOGIN_MFA_SELECTORS = [
   'input[autocomplete="one-time-code"]',
@@ -109,10 +163,17 @@ const LOGIN_ERROR_SELECTORS = [
   '[data-error]',
 ]
 
+let recgovSessionStatus = {
+  last_refresh_at: null,
+  last_refresh_expires_at: null,
+  next_refresh_at: null,
+  last_login_diagnostic: null,
+}
+
 export async function resolveRecaccount (page, options = {}) {
   const browserSession = await recaccountFromBrowser(page, options)
   if (browserSession.recaccount) return browserSession.recaccount
-  const credentialState = recgovLoginCredentialsFromEnv(options.env)
+  const credentialState = recgovLoginCredentialsFromInput(options.credentials)
   if (
     options.forceRefresh === true &&
     browserSession.foundSession &&
@@ -126,7 +187,7 @@ export async function resolveRecaccount (page, options = {}) {
   const credentialRecaccount = await recaccountFromCredentialLogin(page, options, credentialState)
   if (credentialRecaccount) return credentialRecaccount
 
-  if (!IS_HEADLESS) {
+  if (options.allowManualLogin !== false && !IS_HEADLESS) {
     const loginRecaccount = await recaccountFromManualLogin(page, options)
     if (loginRecaccount) return loginRecaccount
   }
@@ -137,10 +198,27 @@ export async function resolveRecaccount (page, options = {}) {
   return null
 }
 
-export function recgovLoginCredentialsFromEnv (env = process.env) {
-  const email = String(env?.[RECGOV_EMAIL_ENV] || '').trim()
-  const password = String(env?.[RECGOV_PASSWORD_ENV] || '')
-  const mfaCode = String(env?.[RECGOV_MFA_CODE_ENV] || '').trim()
+export function getRecgovSessionStatus () {
+  return { ...recgovSessionStatus }
+}
+
+export async function logoutRecgovBrowserSession ({
+  getContextFn = getContext,
+  isSpaLoggedInFn = isSpaLoggedIn,
+} = {}) {
+  const context = await getContextFn()
+  const page = await context.newPage()
+  try {
+    return await logoutRecgovPage(page, isSpaLoggedInFn)
+  } finally {
+    await page.close().catch(() => {})
+  }
+}
+
+export function recgovLoginCredentialsFromInput (input = {}) {
+  const email = String(input?.email || input?.username || '').trim()
+  const password = String(input?.password || '')
+  const mfaCode = String(input?.mfaCode || input?.mfa_code || '').trim()
   const emailConfigured = Boolean(email)
   const passwordConfigured = Boolean(password)
   const mfaConfigured = Boolean(mfaCode)
@@ -193,11 +271,13 @@ async function activateBrowserRecaccount (page, raw, options) {
   }
 
   await injectFingerprintCookie(page.context(), recaccount.access_token)
-  return refreshBrowserRecaccountIfNeeded(page, recaccount, options)
+  const activeRecaccount = await refreshBrowserRecaccountIfNeeded(page, recaccount, options)
+  recordRecgovSessionExpiry(activeRecaccount)
+  return activeRecaccount
 }
 
 async function recaccountFromManualLogin (page, options) {
-  const timeoutMs = recgovLoginTimeoutMs(options.env)
+  const timeoutMs = recgovLoginTimeoutMs(options)
   console.log(`Cart: log in to Recreation.gov in the companion browser (waiting up to ${secondsLabel(timeoutMs)}s)`)
   await page.goto(RECGOV_HOME_URL, {
     waitUntil: 'domcontentloaded',
@@ -206,30 +286,27 @@ async function recaccountFromManualLogin (page, options) {
     console.log(`Cart: could not reopen Recreation.gov login page — ${err.message}`)
   })
   await openLoginIfPossible(page)
-  const browserSession = await waitForBrowserRecaccount(page, timeoutMs)
+  const browserSession = await waitForBrowserRecaccount(page, timeoutMs, { label: 'manual login' })
   if (!browserSession) {
     console.log(`Cart: Recreation.gov login wait timed out after ${secondsLabel(timeoutMs)}s`)
+    await captureLoginDiagnostic(page, 'manual_login_timeout')
     return null
   }
+  await captureLoginDiagnostic(browserSession.page, 'login_success')
   return activateBrowserRecaccount(browserSession.page, browserSession.raw, options)
 }
 
 async function recaccountFromCredentialLogin (page, options, credentialState) {
   if (!credentialState.configured) {
     if (credentialState.reason === 'credentials_incomplete') {
-      console.log(
-        'Cart: Recreation.gov credential login not attempted — set both ' +
-        `${RECGOV_EMAIL_ENV} and ${RECGOV_PASSWORD_ENV}`
-      )
+      console.log('Cart: Recreation.gov credential login not attempted — username/email and password are required')
     }
     return null
   }
 
-  const timeoutMs = recgovLoginTimeoutMs(options.env)
-  console.log(
-    `Cart: attempting Recreation.gov credential login for ${maskLoginEmail(credentialState.email)} ` +
-    `(waiting up to ${secondsLabel(timeoutMs)}s)`
-  )
+  const credentialSessionTimeoutMs = recgovCredentialSessionTimeoutMs(options)
+  clearLoginDiagnostic()
+  console.log(`Cart: attempting Recreation.gov credential login for ${maskLoginEmail(credentialState.email)}`)
   await page.goto(RECGOV_HOME_URL, {
     waitUntil: 'domcontentloaded',
     timeout: RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS,
@@ -239,41 +316,91 @@ async function recaccountFromCredentialLogin (page, options, credentialState) {
 
   if (!await openLoginIfPossible(page)) {
     console.log('Cart: Recreation.gov credential login failed reason=login_link_not_found')
+    await captureLoginDiagnostic(page, 'login_link_not_found')
     return null
   }
+  console.log('Cart: Recreation.gov login form opened')
 
   const formResult = await submitCredentialLoginForm(page, credentialState)
   if (!formResult.ok) {
     console.log(`Cart: Recreation.gov credential login failed reason=${formResult.reason}`)
+    await captureLoginDiagnostic(page, formResult.reason)
     return null
+  }
+  console.log('Cart: submitted Recreation.gov username/password')
+
+  console.log(`Cart: waiting for Recreation.gov browser session or challenge after credential submit (timeout ${secondsLabel(credentialSessionTimeoutMs)}s)`)
+  const completion = await waitForCredentialLoginCompletion(page, credentialSessionTimeoutMs, credentialState)
+  if (completion.browserSession) {
+    await captureLoginDiagnostic(completion.browserSession.page, 'login_success')
+    return activateBrowserRecaccount(completion.browserSession.page, completion.browserSession.raw, options)
   }
 
-  const mfaResult = await submitMfaCodeIfPrompted(page, credentialState)
-  if (!mfaResult.ok) {
-    console.log(`Cart: Recreation.gov credential login failed reason=${mfaResult.reason}`)
-    return null
-  }
-  if (mfaResult.submitted) {
-    console.log('Cart: submitted Recreation.gov 2FA code')
-  }
-
-  const browserSession = await waitForBrowserRecaccount(page, timeoutMs)
-  if (!browserSession) {
-    const blocker = await credentialLoginBlocker(page)
-    console.log(
-      `Cart: Recreation.gov credential login failed reason=${blocker.reason}` +
-      (blocker.detail ? ` detail="${blocker.detail}"` : '')
-    )
-    return null
-  }
-  return activateBrowserRecaccount(browserSession.page, browserSession.raw, options)
+  const blocker = completion.failure || { reason: 'recaccount_not_observed' }
+  await captureLoginDiagnostic(page, blocker.reason, blocker.detail)
+  console.log(
+    `Cart: Recreation.gov credential login failed reason=${blocker.reason}` +
+    (blocker.detail ? ` detail="${blocker.detail}"` : '')
+  )
+  return null
 }
 
-function recgovLoginTimeoutMs (env = process.env) {
-  const configured = Number.parseInt(env?.RECGOV_LOGIN_TIMEOUT_MS || '', 10)
+async function waitForCredentialLoginCompletion (page, timeoutMs, credentials) {
+  const deadline = Date.now() + timeoutMs
+  const startedAt = Date.now()
+  let mfaSubmitted = false
+  while (Date.now() < deadline) {
+    const browserSession = await readRecaccountFromOpenPages(page)
+    if (browserSession) return { browserSession, mfaSubmitted }
+
+    const challenge = await handleCredentialLoginChallenge(page, credentials, { mfaSubmitted })
+    if (challenge.failure) return { failure: challenge.failure, mfaSubmitted }
+    if (challenge.mfaSubmitted && !mfaSubmitted) {
+      mfaSubmitted = true
+      console.log('Cart: submitted Recreation.gov 2FA code')
+    }
+
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) break
+    await page.waitForTimeout(Math.min(RECGOV_LOGIN_POLL_MS, remaining))
+  }
+
+  const elapsed = secondsLabel(Date.now() - startedAt)
+  console.log(`Cart: Recreation.gov credential login wait exhausted elapsed=${elapsed}s url=${safePageUrl(page)}`)
+  return { failure: await credentialLoginBlocker(page), mfaSubmitted }
+}
+
+async function handleCredentialLoginChallenge (page, credentials, { mfaSubmitted = false } = {}) {
+  if (await anyVisible(page, LOGIN_CAPTCHA_SELECTORS)) return { failure: { reason: 'captcha_required' } }
+
+  const detail = await firstVisibleText(page, LOGIN_ERROR_SELECTORS)
+  if (detail) return { failure: { reason: 'login_error', detail } }
+
+  if (!mfaSubmitted) {
+    const mfaResult = await submitMfaCodeIfPrompted(page, credentials, LOGIN_BLOCKER_TIMEOUT_MS)
+    if (!mfaResult.ok) return { failure: { reason: mfaResult.reason } }
+    if (mfaResult.submitted) return { mfaSubmitted: true }
+  }
+
+  return {}
+}
+
+function recgovLoginTimeoutMs (options = {}) {
+  const configured = Number.parseInt(options.loginTimeoutMs || process.env.RECGOV_LOGIN_TIMEOUT_MS || '', 10)
   return Number.isFinite(configured) && configured >= MIN_LOGIN_TIMEOUT_MS
     ? configured
     : DEFAULT_RECGOV_LOGIN_TIMEOUT_MS
+}
+
+function recgovCredentialSessionTimeoutMs (options = {}) {
+  const configured = Number.parseInt(
+    options.credentialSessionTimeoutMs || process.env.RECGOV_CREDENTIAL_SESSION_TIMEOUT_MS || '',
+    10,
+  )
+  if (!Number.isFinite(configured) || configured < MIN_LOGIN_TIMEOUT_MS) {
+    return DEFAULT_RECGOV_CREDENTIAL_SESSION_TIMEOUT_MS
+  }
+  return Math.min(configured, MAX_RECGOV_CREDENTIAL_SESSION_TIMEOUT_MS)
 }
 
 function secondsLabel (millis) {
@@ -298,13 +425,21 @@ async function submitCredentialLoginForm (page, credentials) {
   if (!password) return { ok: false, reason: 'password_input_not_found' }
 
   const submit = await clickFirstVisible(page, LOGIN_SUBMIT_SELECTORS)
-  if (!submit) return { ok: false, reason: 'submit_button_not_found' }
+  if (submit) {
+    console.log(`Cart: clicked Recreation.gov login submit selector="${truncateLogText(submit, LOGIN_SELECTOR_LOG_LIMIT)}"`)
+    return { ok: true }
+  }
 
-  return { ok: true }
+  if (await pressEnterToSubmit(page)) {
+    console.log('Cart: submitted Recreation.gov login form via Enter')
+    return { ok: true }
+  }
+
+  return { ok: false, reason: 'submit_button_not_found' }
 }
 
-async function submitMfaCodeIfPrompted (page, credentials) {
-  const mfaSelector = await firstVisibleSelector(page, LOGIN_MFA_CODE_SELECTORS, LOGIN_MFA_PROMPT_TIMEOUT_MS)
+async function submitMfaCodeIfPrompted (page, credentials, timeout = LOGIN_MFA_PROMPT_TIMEOUT_MS) {
+  const mfaSelector = await firstVisibleSelector(page, LOGIN_MFA_CODE_SELECTORS, timeout)
   if (!mfaSelector) return { ok: true, submitted: false }
   if (!credentials.mfaCode) return { ok: false, reason: 'mfa_required' }
 
@@ -338,16 +473,121 @@ async function fillFirstVisible (page, selectors, value) {
   }
 }
 
-async function clickFirstVisible (page, selectors) {
-  const selector = selectors.join(', ')
-  const locator = page.locator(selector).first()
+async function clickFirstVisible (
+  page,
+  selectors,
+  {
+    visibleTimeoutMs = LOGIN_BLOCKER_TIMEOUT_MS,
+    actionTimeoutMs = LOGIN_SUBMIT_TIMEOUT_MS,
+  } = {},
+) {
+  for (const selector of selectors) {
+    const locator = page.locator(selector).first()
+    if (!await locator.isVisible({ timeout: visibleTimeoutMs }).catch(() => false)) continue
+    try {
+      await locator.waitFor({ state: 'enabled', timeout: actionTimeoutMs }).catch(() => {})
+      await locator.click({ timeout: actionTimeoutMs })
+      return selector
+    } catch {}
+  }
+  return null
+}
+
+async function logoutRecgovPage (page, isSpaLoggedInFn) {
+  await page.goto(RECGOV_HOME_URL, {
+    waitUntil: 'domcontentloaded',
+    timeout: RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS,
+  }).catch((err) => {
+    console.log(`Cart: could not open Recreation.gov for logout — ${err.message}`)
+  })
+  await page.waitForTimeout(RECGOV_LOGIN_STATE_SETTLE_MS)
+
+  const initialLoggedIn = await isSpaLoggedInFn(page)
+  if (initialLoggedIn === false) {
+    recordRecgovLogout()
+    return {
+      ok: true,
+      logged_in: false,
+      clicked: false,
+      reason: 'already_logged_out',
+      page_url: safePageUrl(page),
+    }
+  }
+
+  let menuSelector = null
+  let logoutSelector = await clickLogoutActionIfVisible(page)
+  if (!logoutSelector) {
+    menuSelector = await clickFirstVisible(page, LOGOUT_MENU_SELECTORS, {
+      visibleTimeoutMs: RECGOV_LOGOUT_SELECTOR_TIMEOUT_MS,
+      actionTimeoutMs: RECGOV_LOGOUT_CLICK_TIMEOUT_MS,
+    })
+    if (menuSelector) await page.waitForTimeout(RECGOV_LOGOUT_MENU_SETTLE_MS)
+    logoutSelector = await clickLogoutActionIfVisible(page)
+  }
+
+  if (!logoutSelector) {
+    return logoutFailure('logout_button_not_found', 'Recreation.gov logout control was not visible in the companion browser.', {
+      menu_selector: menuSelector,
+      page_url: safePageUrl(page),
+    })
+  }
+
+  const verified = await waitForLogoutVerification(page, isSpaLoggedInFn)
+  if (!verified) {
+    return logoutFailure('logout_not_verified', 'Recreation.gov logout was clicked, but the page did not show a logged-out state.', {
+      clicked: true,
+      selector: logoutSelector,
+      menu_selector: menuSelector,
+      page_url: safePageUrl(page),
+    })
+  }
+
+  recordRecgovLogout()
+  return {
+    ok: true,
+    logged_in: false,
+    clicked: true,
+    selector: logoutSelector,
+    menu_selector: menuSelector,
+    page_url: safePageUrl(page),
+  }
+}
+
+async function clickLogoutActionIfVisible (page) {
+  return clickFirstVisible(page, LOGOUT_ACTION_SELECTORS, {
+    visibleTimeoutMs: RECGOV_LOGOUT_SELECTOR_TIMEOUT_MS,
+    actionTimeoutMs: RECGOV_LOGOUT_CLICK_TIMEOUT_MS,
+  })
+}
+
+async function waitForLogoutVerification (page, isSpaLoggedInFn) {
+  const deadline = Date.now() + RECGOV_LOGOUT_VERIFY_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    if (await isSpaLoggedInFn(page) === false) return true
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) break
+    await page.waitForTimeout(Math.min(RECGOV_LOGOUT_POLL_MS, remaining))
+  }
+  return false
+}
+
+function logoutFailure (reason, detail, extra = {}) {
+  return {
+    ok: false,
+    logged_in: null,
+    error: 'recgov_logout_failed',
+    reason,
+    detail,
+    ...extra,
+  }
+}
+
+async function pressEnterToSubmit (page) {
   try {
-    await locator.waitFor({ state: 'visible', timeout: LOGIN_SUBMIT_TIMEOUT_MS })
-    await locator.waitFor({ state: 'enabled', timeout: LOGIN_SUBMIT_TIMEOUT_MS }).catch(() => {})
-    await locator.click({ timeout: LOGIN_SUBMIT_TIMEOUT_MS })
-    return selector
+    await page.keyboard.press('Enter')
+    return true
   } catch {
-    return null
+    return false
   }
 }
 
@@ -368,6 +608,12 @@ async function credentialLoginBlocker (page) {
 
   const detail = await firstVisibleText(page, LOGIN_ERROR_SELECTORS)
   if (detail) return { reason: 'login_error', detail }
+  if (await anyVisible(page, LOGIN_EMAIL_SELECTORS) || await anyVisible(page, LOGIN_PASSWORD_SELECTORS)) {
+    return {
+      reason: 'login_form_still_visible',
+      detail: 'Recreation.gov login form was still visible after submit.',
+    }
+  }
 
   return { reason: 'recaccount_not_observed' }
 }
@@ -399,17 +645,92 @@ function maskLoginEmail (email) {
   return `${visible}@${domain}`
 }
 
-async function waitForBrowserRecaccount (page, timeoutMs) {
+async function waitForBrowserRecaccount (page, timeoutMs, { label = 'login' } = {}) {
   const deadline = Date.now() + timeoutMs
+  const startedAt = Date.now()
+  let nextProgressAt = startedAt + RECGOV_LOGIN_WAIT_PROGRESS_MS
   while (Date.now() < deadline) {
     const browserSession = await readRecaccountFromOpenPages(page)
     if (browserSession) return browserSession
+
+    const now = Date.now()
+    if (now >= nextProgressAt) {
+      const elapsed = secondsLabel(now - startedAt)
+      const remaining = Math.max(0, secondsLabel(deadline - now))
+      console.log(`Cart: still waiting for Recreation.gov ${label} session elapsed=${elapsed}s remaining=${remaining}s url=${safePageUrl(page)}`)
+      nextProgressAt = now + RECGOV_LOGIN_WAIT_PROGRESS_MS
+    }
 
     const remaining = deadline - Date.now()
     if (remaining <= 0) return null
     await page.waitForTimeout(Math.min(RECGOV_LOGIN_POLL_MS, remaining))
   }
   return null
+}
+
+async function captureLoginDiagnostic (page, reason, detail = null) {
+  const capturedAt = new Date().toISOString()
+  const filename = `recgov-login-${capturedAt.replace(/[:.]/g, '-')}-${sanitizeDiagnosticReason(reason)}.png`
+  const screenshotPath = path.join(RECGOV_DIAGNOSTIC_DIR, filename)
+  const diagnostic = {
+    reason,
+    detail: detail || null,
+    captured_at: capturedAt,
+    page_url: safePageUrl(page),
+    screenshot_url: `${SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX}/${filename}`,
+  }
+
+  try {
+    await fs.mkdir(RECGOV_DIAGNOSTIC_DIR, { recursive: true })
+    await captureRecgovPageImage(page, { path: screenshotPath })
+    console.log(`Cart: captured Recreation.gov login diagnostic screenshot reason=${reason} url=${diagnostic.screenshot_url} page=${diagnostic.page_url}`)
+  } catch (error) {
+    diagnostic.screenshot_error = error.message
+    console.log(`Cart: failed to capture Recreation.gov login diagnostic screenshot reason=${reason} error="${error.message}" page=${diagnostic.page_url}`)
+  }
+
+  recgovSessionStatus = {
+    ...recgovSessionStatus,
+    last_login_diagnostic: diagnostic,
+  }
+  return diagnostic
+}
+
+function clearLoginDiagnostic () {
+  recgovSessionStatus = {
+    ...recgovSessionStatus,
+    last_login_diagnostic: null,
+  }
+}
+
+function recordRecgovLogout () {
+  recgovSessionStatus = {
+    ...recgovSessionStatus,
+    last_refresh_at: null,
+    last_refresh_expires_at: null,
+    next_refresh_at: null,
+  }
+}
+
+function safePageUrl (page) {
+  try {
+    return page.url?.() || null
+  } catch {
+    return null
+  }
+}
+
+function sanitizeDiagnosticReason (reason) {
+  return String(reason || 'unknown')
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, DIAGNOSTIC_REASON_MAX_CHARS) || 'unknown'
+}
+
+function truncateLogText (value, maxLength) {
+  const rendered = String(value || '').replace(/\s+/g, ' ').trim()
+  return rendered.length <= maxLength ? rendered : `${rendered.slice(0, maxLength)}...`
 }
 
 async function readRecaccountFromOpenPages (page) {
@@ -440,6 +761,7 @@ async function refreshBrowserRecaccountIfNeeded (page, recaccount, options = {})
   const refreshed = await refreshRecaccountInBrowserWithRetry(page, recaccount.access_token, credentials)
   if (refreshed?.access_token) {
     await injectFingerprintCookie(page.context(), refreshed.access_token)
+    recordRecgovRefresh(refreshed)
     console.log(`Cart: refreshed Recreation.gov browser session (expires ${refreshed.expiration})`)
     return refreshed
   }
@@ -503,7 +825,7 @@ function decodeJwtPayload (token) {
   }
 }
 
-async function clearBrowserRecaccount (page) {
+export async function clearBrowserRecaccount (page) {
   await page.evaluate(({ key }) => {
     localStorage.removeItem(key)
   }, { key: RECGOV_RECACCOUNT_STORAGE_KEY, clearRecaccount: true }).catch(() => {})
@@ -544,4 +866,25 @@ async function refreshRecaccountInBrowser (page, token, credentials) {
   const detail = result.status ? `HTTP ${result.status} ${result.body || ''}` : result.error
   console.log(`Cart: Recreation.gov browser refresh failed — ${detail}`)
   return { recaccount: null, retryable: !result.status }
+}
+
+function recordRecgovRefresh (recaccount) {
+  recgovSessionStatus = {
+    ...recgovSessionStatus,
+    last_refresh_at: new Date().toISOString(),
+    last_refresh_expires_at: recaccount?.expiration || null,
+  }
+}
+
+function recordRecgovSessionExpiry (recaccount) {
+  recgovSessionStatus = {
+    ...recgovSessionStatus,
+    next_refresh_at: nextRefreshAtIso(recaccount),
+  }
+}
+
+function nextRefreshAtIso (recaccount) {
+  const expiresAt = tokenExpiresAtMs(recaccount)
+  if (expiresAt === null) return null
+  return new Date(expiresAt - RECGOV_REFRESH_AHEAD_MS).toISOString()
 }

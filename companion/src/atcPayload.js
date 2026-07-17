@@ -1,14 +1,19 @@
+const RECGOV_VENDOR = 'recgov'
+
 export function cartMatchFromPayload (payload) {
-  const opening = payload.openings?.[0] || {}
-  const dates = [...new Set((payload.openings || []).map((o) => o.date).filter(Boolean))]
-  const firstDate = opening.date || payload.start_date
+  const openings = Array.isArray(payload.openings) ? payload.openings : []
+  const opening = openings[0] || payload
+  const dates = [...new Set(openings.map((o) => o.date).filter(Boolean))]
+  const firstDate = opening.date || opening.first_date || payload.start_date
   return {
-    booking_url: opening.booking_url,
-    campground_id: opening.campground_id,
-    campsite_id: opening.campsite_id,
-    provider_campsite_id: opening.vendor_id,
+    vendor: opening.vendor || payload.vendor,
+    booking_url: opening.booking_url || payload.booking_url,
+    campground_id: opening.campground_id || payload.campground_id,
+    campsite_id: opening.campsite_id || payload.campsite_id,
+    provider_campground_id: opening.provider_campground_id || payload.provider_campground_id,
+    provider_campsite_id: opening.vendor_id || opening.provider_campsite_id || payload.provider_campsite_id,
     first_date: firstDate,
-    checkout_date: payload.end_date,
+    checkout_date: opening.checkout_date || payload.end_date,
     available_dates: dates.length ? dates : (firstDate ? [firstDate] : []),
     campsite_site: opening.label || '',
   }
@@ -35,10 +40,11 @@ export function cartMatchFromArgs (args) {
 }
 
 export function validateCartMatch (match) {
+  if (match.vendor && match.vendor !== RECGOV_VENDOR) return `unsupported vendor: ${match.vendor}`
   if (!match.first_date) return 'missing first_date/start-date'
   if (!match.checkout_date) return 'missing checkout_date/end-date'
-  if (!match.booking_url && !match.campground_id && !match.provider_campsite_id && !match.campsite_id) {
-    return 'missing booking_url or campsite/campground identifier'
+  if (!match.provider_campsite_id && !match.campsite_id) {
+    return 'missing campsite_id'
   }
   return null
 }
@@ -46,9 +52,11 @@ export function validateCartMatch (match) {
 function normalizeCartMatch (match) {
   const firstDate = match.first_date || match.start_date
   return {
+    vendor: match.vendor,
     booking_url: match.booking_url,
     campground_id: match.campground_id,
     campsite_id: match.campsite_id,
+    provider_campground_id: match.provider_campground_id,
     provider_campsite_id: match.provider_campsite_id || match.vendor_id,
     first_date: firstDate,
     checkout_date: match.checkout_date || match.end_date,

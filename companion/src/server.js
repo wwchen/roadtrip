@@ -3,195 +3,142 @@
 // and returns the same JSON result as the recgov:atc CLI.
 
 import http from 'node:http'
+import { pathToFileURL } from 'node:url'
+import { IS_HEADLESS } from './browser.js'
+import { testChromium } from './cart.js'
+import { logoutRecgovBrowserSession } from './recgovSession.js'
+import { createRecgovScreenshotDeps } from './recgovScreenshot.js'
 import { runAtcOnce } from './runAtcOnce.js'
+import {
+  COMPANION_OPENAPI_SPEC,
+} from './openapi.js'
+import { matchCompanionRoute } from './apiContract.js'
+import {
+  renderLoginPage,
+  renderSwaggerPage,
+} from './templates.js'
+import { handleAtc } from './server/routes/atc.js'
+import {
+  getRecgovAuthStatus,
+  getRecgovHealthStatus,
+  runRecgovAuthCheck,
+  runStartupAuthCheck,
+} from './server/authStatus.js'
+import {
+  handleLoginPost,
+  handleLogout,
+  handleRefresh,
+} from './server/routes/auth.js'
+import {
+  DEFAULT_HOST,
+  DEFAULT_PORT,
+  HTTP_BAD_REQUEST,
+  HTTP_INTERNAL_ERROR,
+  HTTP_OK,
+} from './server/constants.js'
+import {
+  htmlResponse,
+  jsonResponse,
+} from './server/http.js'
+import { log } from './server/logging.js'
+import { createServerRuntime } from './server/runtime.js'
+import {
+  handleDiagnosticImage,
+  handleLiveScreenshot,
+} from './server/routes/screenshot.js'
 
-const DEFAULT_HOST = '0.0.0.0'
-const DEFAULT_PORT = 8770
-const MAX_BODY_BYTES = 64 * 1024
-const HTTP_OK = 200
-const HTTP_BAD_REQUEST = 400
-const HTTP_CONFLICT = 409
-const HTTP_PAYLOAD_TOO_LARGE = 413
-const HTTP_UNPROCESSABLE_ENTITY = 422
-const HTTP_INTERNAL_ERROR = 500
-const EXIT_SUCCESS = 0
-const EXIT_USAGE = 2
-const LOG_DETAIL_MAX_CHARS = 160
+export {
+  getRecgovAuthStatus,
+  getRecgovHealthStatus,
+  runRecgovAuthCheck,
+  runStartupAuthCheck,
+}
 
 const HOST = process.env.COMPANION_HOST || DEFAULT_HOST
 const PORT = Number.parseInt(process.env.COMPANION_PORT || String(DEFAULT_PORT), 10)
-const COMPANION_ID = process.env.COMPANION_ID || 'recgov-companion'
 
-let busy = false
-
-function log (...items) {
-  console.log(new Date().toISOString(), `[${COMPANION_ID}]`, ...items)
-}
-
-function jsonResponse (res, status, body) {
-  const rendered = JSON.stringify(body)
-  res.writeHead(status, {
-    'content-type': 'application/json; charset=utf-8',
-    'content-length': Buffer.byteLength(rendered),
-  })
-  res.end(rendered)
-}
-
-async function readBody (req) {
-  const chunks = []
-  let size = 0
-  for await (const chunk of req) {
-    size += chunk.length
-    if (size > MAX_BODY_BYTES) {
-      throw Object.assign(new Error('request body too large'), { status: HTTP_PAYLOAD_TOO_LARGE })
-    }
-    chunks.push(chunk)
+export function createCompanionServer ({
+  testChromiumFn = testChromium,
+  runAtcOnceFn = runAtcOnce,
+  logoutRecgovSessionFn = logoutRecgovBrowserSession,
+  ...screenshotOverrides
+} = {}) {
+  const runtime = createServerRuntime()
+  const deps = {
+    testChromiumFn,
+    runAtcOnceFn,
+    logoutRecgovSessionFn: () => logoutRecgovSessionFn({
+      getContextFn: screenshotOverrides.getContextFn,
+      isSpaLoggedInFn: screenshotOverrides.isSpaLoggedInFn,
+    }),
+    recgovScreenshotDeps: createRecgovScreenshotDeps(screenshotOverrides),
   }
-  return Buffer.concat(chunks).toString('utf8')
-}
-
-function payloadSummary (raw) {
-  try {
-    const payload = JSON.parse(raw)
-    const openings = payload?.payload?.openings || payload?.openings || []
-    const first = openings[0] || payload
-    return [
-      `watch=${payload?.payload?.watch_id ?? payload?.watch_id ?? '?'}`,
-      `start=${payload?.payload?.start_date ?? payload?.start_date ?? first?.date ?? '?'}`,
-      `end=${payload?.payload?.end_date ?? payload?.end_date ?? '?'}`,
-      `site="${first?.label ?? first?.campsite_site ?? first?.vendor_id ?? '?'}"`,
-    ].join(' ')
-  } catch {
-    return 'invalid-json'
-  }
-}
-
-async function handleAtc (req, res) {
-  if (busy) {
-    jsonResponse(res, HTTP_CONFLICT, {
-      ok: false,
-      cart_added: false,
-      error: 'companion_busy',
-      detail: 'companion is already running an ATC request',
-    })
-    return
-  }
-
-  busy = true
-  const stdout = captureStdout()
-  const startedAt = Date.now()
-  try {
-    let raw
-    try {
-      raw = await readBody(req)
-    } catch (error) {
-      jsonResponse(res, error.status || HTTP_BAD_REQUEST, {
-        ok: false,
-        cart_added: false,
-        error: 'invalid_request',
-        detail: error.message,
-      })
+  const companionServer = http.createServer(async (req, res) => {
+    const url = new URL(req.url || '/', 'http://companion.local')
+    const route = matchCompanionRoute(req.method, url.pathname)
+    if (route) {
+      await handleContractRoute(route, req, res, url, runtime, deps)
       return
     }
-
-    log('recgov atc start', payloadSummary(raw))
-    const code = await runAtcOnce({
-      argv: ['--payload-json', raw],
-      stdout,
-      stderr: process.stderr,
-    })
-    const result = parseRunResult(stdout.value())
-    const status =
-      code === EXIT_SUCCESS && result.ok
-        ? HTTP_OK
-        : code === EXIT_USAGE
-          ? HTTP_UNPROCESSABLE_ENTITY
-          : HTTP_INTERNAL_ERROR
-    log('recgov atc result', ...resultLogFields(result), `code=${code}`, `duration_ms=${Date.now() - startedAt}`)
-    jsonResponse(res, status, result)
-  } catch (error) {
-    log('recgov atc exception', error.message)
-    jsonResponse(res, HTTP_INTERNAL_ERROR, {
+    jsonResponse(res, HTTP_BAD_REQUEST, {
       ok: false,
-      cart_added: false,
-      error: 'add_to_cart_exception',
-      detail: error.message,
+      error: 'unsupported_route',
+      detail: `${req.method} ${req.url}`,
     })
-  } finally {
-    busy = false
-  }
+  })
+  companionServer.companionRuntime = runtime
+  return companionServer
 }
 
-function captureStdout () {
-  let data = ''
-  return {
-    write (chunk) {
-      data += chunk
-    },
-    value () {
-      return data
-    },
-  }
-}
-
-function parseRunResult (raw) {
-  try {
-    return JSON.parse(raw.trim())
-  } catch (error) {
-    return {
-      ok: false,
-      cart_added: false,
-      error: 'invalid_companion_result',
-      detail: `companion returned non-json stdout: ${error.message}`,
-    }
-  }
-}
-
-function resultLogFields (result) {
-  const fields = [result.ok ? 'success' : 'fail']
-  if (!result.ok) {
-    fields.push(`error=${result.error || '?'}`)
-    fields.push(`detail="${truncateLogField(result.detail || '', LOG_DETAIL_MAX_CHARS)}"`)
-  }
-  if (result.cart_check?.reason) {
-    fields.push(`cart_reason=${result.cart_check.reason}`)
-    fields.push(`cart_status=${result.cart_check.status ?? '?'}`)
-    fields.push(`cart_reservations=${result.cart_check.reservation_count ?? '?'}`)
-    fields.push(`cart_response_signal=${result.cart_check.response_signal ?? '?'}`)
-    fields.push(`cart_best_score=${result.cart_check.best_match?.score ?? '?'}`)
-  }
-  return fields
-}
-
-function truncateLogField (value, maxLength) {
-  const rendered = String(value).replace(/\s+/g, ' ').trim()
-  return rendered.length <= maxLength ? rendered : `${rendered.slice(0, maxLength)}...`
-}
-
-const server = http.createServer(async (req, res) => {
-  if (req.method === 'GET' && req.url === '/health') {
-    jsonResponse(res, HTTP_OK, { ok: true, busy })
+async function handleContractRoute (route, req, res, url, runtime, deps) {
+  const handler = CONTRACT_ROUTE_HANDLERS[route.operationId]
+  if (handler) {
+    await handler({ req, res, url, runtime, deps })
     return
   }
-  if (req.method === 'POST' && req.url === '/recgov/atc') {
-    await handleAtc(req, res)
-    return
-  }
-  jsonResponse(res, HTTP_BAD_REQUEST, {
+  jsonResponse(res, HTTP_INTERNAL_ERROR, {
     ok: false,
-    error: 'unsupported_route',
-    detail: `${req.method} ${req.url}`,
+    error: 'unhandled_route',
+    detail: `${route.method} ${route.path}`,
   })
-})
+}
 
-server.listen(PORT, HOST, () => {
-  log('listening', `http://${HOST}:${PORT}`)
-})
+const CONTRACT_ROUTE_HANDLERS = {
+  getDiagnosticScreenshot: async ({ url, res }) => handleDiagnosticImage(url, res),
+  getScreenshot: async ({ url, res, runtime, deps }) => handleLiveScreenshot(url, res, { runtime, ...deps }),
+  getOpenApiJson: async ({ res }) => jsonResponse(res, HTTP_OK, COMPANION_OPENAPI_SPEC),
+  getSwaggerDocs: async ({ res }) => htmlResponse(res, HTTP_OK, renderSwaggerPage()),
+  getHealth: async ({ res, runtime }) => jsonResponse(res, HTTP_OK, { ok: true, busy: runtime.isBusy(), recgov_auth: getRecgovHealthStatus() }),
+  getOperatorPage: async ({ res }) => htmlResponse(res, HTTP_OK, renderLoginPage()),
+  postLogin: async ({ req, res, runtime, deps }) => handleLoginPost(req, res, { runtime, ...deps }),
+  postLogout: async ({ req, res, runtime, deps }) => handleLogout(req, res, { runtime, ...deps }),
+  postRefresh: async ({ req, res, runtime, deps }) => handleRefresh(req, res, { runtime, ...deps }),
+  postAtc: async ({ req, res, runtime, deps }) => handleAtc(req, res, { runtime, ...deps }),
+}
 
-for (const sig of ['SIGINT', 'SIGTERM']) {
-  process.on(sig, () => {
-    log('shutting down')
-    server.close(() => process.exit(0))
-    setTimeout(() => process.exit(0), 1000)
+export const HANDLED_OPERATION_IDS = Object.freeze(Object.keys(CONTRACT_ROUTE_HANDLERS))
+
+export const server = createCompanionServer()
+
+export function startServer () {
+  server.listen(PORT, HOST, () => {
+    log('listening', `http://${HOST}:${PORT}`, `headless=${IS_HEADLESS}`)
+    server.companionRuntime.setStartupAuthCheck(runStartupAuthCheck())
   })
+  return server
+}
+
+function installShutdownHandlers (runningServer) {
+  for (const sig of ['SIGINT', 'SIGTERM']) {
+    process.on(sig, () => {
+      log('shutting down')
+      runningServer.close(() => process.exit(0))
+      setTimeout(() => process.exit(0), 1000)
+    })
+  }
+}
+
+const entrypointUrl = process.argv[1] ? pathToFileURL(process.argv[1]).href : null
+if (entrypointUrl && import.meta.url === entrypointUrl) {
+  installShutdownHandlers(startServer())
 }

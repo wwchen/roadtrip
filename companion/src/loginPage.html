@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{LOGIN_FORM_TITLE}}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 48rem; margin: 3rem auto; padding: 0 1rem; color: #172033; }
+    label { display: block; font-weight: 650; margin-top: 1rem; }
+    input, select { box-sizing: border-box; width: 100%; padding: .7rem; margin-top: .35rem; border: 1px solid #c8d0dc; border-radius: 6px; font: inherit; }
+    button { margin-top: 1.25rem; padding: .75rem 1rem; border: 0; border-radius: 6px; background: #24579a; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+    button:disabled { cursor: wait; opacity: .65; }
+    .button-link { display: inline-flex; align-items: center; justify-content: center; margin-top: 1.25rem; padding: .75rem 1rem; border-radius: 6px; font: inherit; font-weight: 700; text-decoration: none; cursor: pointer; }
+    .row { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+    .row form { margin: 0; }
+    .panel { margin-top: 1rem; border: 1px solid #d7deea; border-radius: 8px; padding: 1rem; background: #fbfcfe; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 1rem; }
+    .wide { grid-column: 1 / -1; }
+    .secondary { background: #eef2f7; color: #172033; }
+    .secondary:visited { color: #172033; }
+    .toggle[aria-expanded="true"] { background: #1f4b84; }
+    .muted { color: #536174; }
+    .ok { color: #166534; font-weight: 700; }
+    .error { color: #b42318; font-weight: 700; }
+    .diagnostic { display: block; max-width: 100%; border: 1px solid #c8d0dc; border-radius: 6px; }
+    .session-preview { margin: 1.5rem 0; }
+    .session-preview img { display: block; width: 100%; max-height: 1000px; object-fit: contain; object-position: top left; border: 1px solid #c8d0dc; border-radius: 6px; background: #f6f8fb; }
+    pre { overflow: auto; background: #f6f8fb; padding: .75rem; border-radius: 6px; }
+    .hidden, [hidden] { display: none !important; }
+    .loading { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(23, 32, 51, .34); z-index: 10; }
+    .loading-card { min-width: 16rem; border-radius: 8px; background: white; padding: 1.25rem; box-shadow: 0 16px 48px rgba(23, 32, 51, .28); text-align: center; }
+    .spinner { width: 2rem; height: 2rem; margin: 0 auto .75rem; border: 3px solid #d8e0ec; border-top-color: #24579a; border-radius: 999px; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <h1>{{LOGIN_FORM_TITLE}}</h1>
+  {{STATUS_HTML}}
+  <section class="session-preview">
+    <h2>Companion browser</h2>
+    <img id="session-screenshot" src="/screenshot?path=/" alt="Companion Playwright screenshot of Recreation.gov home page">
+  </section>
+  <div class="row">
+    <button id="toggle-login" class="toggle" type="button" aria-expanded="false" aria-controls="login-panel">Login</button>
+    <button id="toggle-atc" class="toggle" type="button" aria-expanded="false" aria-controls="atc-panel">ATC</button>
+    <button id="refresh-session" class="secondary" type="button">Refresh session</button>
+    <button id="health-json" class="secondary" type="button">Health JSON</button>
+    <button id="logout-session" class="secondary" type="button">Log out</button>
+  </div>
+  <section id="login-panel" class="panel" hidden>
+    <form id="login-form" method="post" action="/login">
+      <label for="username">Username or email</label>
+      <input id="username" name="username" type="email" autocomplete="username" required>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <label for="mfa_code">MFA code</label>
+      <input id="mfa_code" name="mfa_code" inputmode="numeric" autocomplete="one-time-code">
+      <button type="submit">Submit login</button>
+    </form>
+  </section>
+  <section id="atc-panel" class="panel" hidden>
+    <form id="atc-form" method="post" action="/atc">
+      <div class="grid">
+        <label for="atc_start_date">Start date
+          <input id="atc_start_date" name="start_date" type="date" required>
+        </label>
+        <label for="atc_end_date">End date
+          <input id="atc_end_date" name="end_date" type="date" required>
+        </label>
+        <label for="atc_campsite_id">Campsite ID
+          <input id="atc_campsite_id" name="campsite_id" inputmode="numeric" required>
+        </label>
+      </div>
+      <button type="submit">Run ATC</button>
+    </form>
+  </section>
+  <pre id="json-output" class="{{JSON_CLASS}}">{{INITIAL_JSON}}</pre>
+  <div id="diagnostic">{{DIAGNOSTIC_HTML}}</div>
+  <div id="loading" class="loading" hidden>
+    <div class="loading-card">
+      <div class="spinner"></div>
+      <p id="loading-text">Working...</p>
+    </div>
+  </div>
+  <script>
+    const loginForm = document.getElementById('login-form')
+    const atcForm = document.getElementById('atc-form')
+    const loginPanel = document.getElementById('login-panel')
+    const atcPanel = document.getElementById('atc-panel')
+    const loginToggle = document.getElementById('toggle-login')
+    const atcToggle = document.getElementById('toggle-atc')
+    const refreshButton = document.getElementById('refresh-session')
+    const healthButton = document.getElementById('health-json')
+    const logoutButton = document.getElementById('logout-session')
+    const sessionScreenshot = document.getElementById('session-screenshot')
+    const statusMessage = document.getElementById('status-message')
+    const jsonOutput = document.getElementById('json-output')
+    const diagnostic = document.getElementById('diagnostic')
+    const loading = document.getElementById('loading')
+    const loadingText = document.getElementById('loading-text')
+    const actionButtons = Array.from(document.querySelectorAll('button'))
+
+    loginToggle.addEventListener('click', () => {
+      togglePanel(loginPanel, loginToggle)
+    })
+
+    atcToggle.addEventListener('click', () => {
+      togglePanel(atcPanel, atcToggle)
+    })
+
+    loginForm.addEventListener('submit', async (event) => {
+      event.preventDefault()
+      await runAction('Logging in...', 'Login', '/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(new FormData(loginForm)),
+      })
+    })
+
+    atcForm.addEventListener('submit', async (event) => {
+      event.preventDefault()
+      await runAction('Running ATC...', 'ATC', '/atc', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(Object.fromEntries(new FormData(atcForm))),
+      })
+    })
+
+    refreshButton.addEventListener('click', async () => {
+      await runAction('Refreshing session...', 'Refresh', '/refresh', { method: 'POST' })
+    })
+
+    healthButton.addEventListener('click', async () => {
+      await runAction('Loading health...', 'Health', '/health')
+    })
+
+    logoutButton.addEventListener('click', async () => {
+      await runAction('Logging out...', 'Logout', '/logout', { method: 'POST' })
+    })
+
+    async function runAction (loadingLabel, actionLabel, url, options = {}) {
+      setLoading(true, loadingLabel)
+      try {
+        const response = await fetch(url, {
+          ...options,
+          headers: {
+            accept: 'application/json',
+            ...(options.headers || {}),
+          },
+        })
+        const body = await response.json().catch(() => ({
+          ok: false,
+          error: 'invalid_json_response',
+          detail: 'Companion returned a non-JSON response.',
+        }))
+        renderResult(actionLabel, response.ok, body)
+      } catch (error) {
+        renderResult(actionLabel, false, {
+          ok: false,
+          error: 'request_failed',
+          detail: error.message,
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    function togglePanel (panel, button) {
+      const expanded = panel.hidden
+      panel.hidden = !expanded
+      button.setAttribute('aria-expanded', String(expanded))
+    }
+
+    function setLoading (active, label = 'Working...') {
+      loading.hidden = !active
+      loadingText.textContent = label
+      for (const button of actionButtons) button.disabled = active
+    }
+
+    function renderResult (actionLabel, ok, body) {
+      const detail = body?.detail || body?.recgov_auth?.detail || body?.error || body?.recgov_auth?.error || ''
+      statusMessage.className = ok ? 'ok' : 'error'
+      statusMessage.textContent = ok ? actionLabel + ' succeeded.' : actionLabel + ' failed: ' + detail
+      jsonOutput.classList.remove('hidden')
+      jsonOutput.textContent = JSON.stringify(body, null, 2)
+      sessionScreenshot.src = '/screenshot?path=/&_=' + Date.now()
+      renderDiagnostic(body?.diagnostics || body?.recgov_auth?.diagnostic || body?.recgov_auth?.last_login_diagnostic)
+    }
+
+    function renderDiagnostic (data) {
+      diagnostic.textContent = ''
+      if (!data?.screenshot_url) return
+      const section = document.createElement('section')
+      const heading = document.createElement('h2')
+      heading.textContent = 'Last login screenshot'
+      const reason = document.createElement('p')
+      reason.textContent = 'Reason: ' + (data.reason || 'unknown')
+      const image = document.createElement('img')
+      image.className = 'diagnostic'
+      image.src = data.screenshot_url
+      image.alt = 'Recreation.gov login diagnostic screenshot'
+      section.append(heading, reason, image)
+      diagnostic.append(section)
+    }
+  </script>
+</body>
+</html>

@@ -6,6 +6,9 @@ import {
   bookingUrlForMatch,
   cartContainsMatch,
   cartHoldCompletionObserved,
+  clickReserveButton,
+  recgovAuthenticationFailure,
+  testChromium,
   verifyCartContainsMatch,
 } from '../src/cart.js'
 import { parseRecaccount, recaccountNeedsRefresh } from '../src/recgovSession.js'
@@ -90,6 +93,28 @@ test('resolveSessionDir uses mounted companion profile env before legacy session
   assert.equal(resolveSessionDir({}, '/home/test'), '/home/test/.campsite-companion/browser-session')
 })
 
+test('recgovAuthenticationFailure reports the operator action for headless missing session', () => {
+  const failure = recgovAuthenticationFailure({
+    headless: true,
+  })
+
+  assert.equal(failure.error, 'recgov_not_authenticated')
+  assert.match(failure.detail, /headless companion is not logged in/)
+  assert.match(failure.corrective_action, /companion root page/)
+  assert.deepEqual(failure.auth, { headless: true })
+})
+
+test('recgovAuthenticationFailure reports failed login attempts distinctly', () => {
+  const failure = recgovAuthenticationFailure({
+    headless: true,
+    attemptedLogin: true,
+  })
+
+  assert.equal(failure.error, 'recgov_login_failed')
+  assert.match(failure.detail, /MFA code/)
+  assert.match(failure.corrective_action, /companion root page/)
+})
+
 test('cartHoldCompletionObserved ignores pre-confirmation cart and multi responses', () => {
   assert.equal(
     cartHoldCompletionObserved([
@@ -113,6 +138,105 @@ test('cartHoldCompletionObserved accepts reservation detail or buy-now responses
     true,
   )
   assert.equal(cartHoldCompletionObserved([api(200, '/api/cart/buy-now')]), true)
+})
+
+test('clickReserveButton surfaces a login modal as an auth failure', async () => {
+  const page = reserveClickPage({ loginModalVisible: true })
+
+  const result = await clickReserveButton(page)
+
+  assert.equal(result.clicked, false)
+  assert.equal(result.failure.error, 'recgov_spa_logged_out')
+  assert.match(result.failure.detail, /logged-out state/)
+  assert.match(result.failure.corrective_action, /recgov-login/)
+  assert.deepEqual(page.clickedSelectors, ['button:has-text("Add to Cart")'])
+})
+
+test('clickReserveButton skips disabled confirmation candidates and clicks the enabled one', async () => {
+  const page = reserveClickPage({
+    loginModalVisible: false,
+    confirmationCandidates: [
+      { text: 'Continue', visible: true, enabled: false, ariaDisabled: 'true' },
+      { text: 'Continue', visible: true, enabled: true },
+    ],
+  })
+
+  const result = await clickReserveButton(page)
+
+  assert.equal(result.clicked, true)
+  assert.equal(result.confirmation.clicked, true)
+  assert.equal(result.confirmation.index, 1)
+  assert.equal(result.confirmation.text, 'Continue')
+  assert.deepEqual(page.clickedSelectors, ['button:has-text("Add to Cart")'])
+  assert.deepEqual(page.clickedConfirmationIndexes, [1])
+})
+
+test('clickReserveButton reports visible confirmation buttons that never enable', async () => {
+  const page = reserveClickPage({
+    loginModalVisible: false,
+    confirmationCandidates: [
+      { text: 'Continue', visible: true, enabled: false, ariaDisabled: 'true' },
+    ],
+  })
+
+  const result = await clickReserveButton(page)
+
+  assert.equal(result.clicked, true)
+  assert.equal(result.confirmation.clicked, false)
+  assert.equal(result.confirmation.reason, 'confirmation_disabled')
+  assert.deepEqual(result.confirmation.candidates, [
+    {
+      index: 0,
+      text: 'Continue',
+      visible: true,
+      enabled: false,
+      disabled: true,
+      aria_disabled: 'true',
+    },
+  ])
+  assert.deepEqual(page.clickedConfirmationIndexes, [])
+})
+
+test('testChromium falls back after a stored recaccount is rejected by the SPA', async () => {
+  const { context, pages } = authCheckContext()
+  const stale = { access_token: 'stale-token', expiration: '2026-07-16T20:00:00Z' }
+  const fresh = { access_token: 'fresh-token', expiration: '2026-07-16T21:00:00Z' }
+  const resolved = [stale, fresh]
+  const loginStates = [false, true]
+  const clearedPages = []
+  const resolveCalls = []
+
+  const result = await testChromium(null, {
+    credentials: { username: 'user@example.test', password: 'secret' },
+    forceRefresh: true,
+    getContextFn: async () => context,
+    injectStoredCookiesFn: async () => 0,
+    resolveRecaccountFn: async (page, options) => {
+      resolveCalls.push({ page, options })
+      return resolved.shift()
+    },
+    clearBrowserRecaccountFn: async (page) => {
+      clearedPages.push(page)
+    },
+    injectRecaccountFn: async (page, recaccount) => {
+      page.injectedRecaccounts.push(recaccount.access_token)
+    },
+    injectBearerRouteFn: async (page, token) => {
+      page.bearerRoutes.push(token)
+    },
+    isSpaLoggedInFn: async () => loginStates.shift(),
+  })
+
+  assert.deepEqual(result, { ok: true, loggedIn: true })
+  assert.equal(pages.length, 2)
+  assert.equal(pages[0].closed, true)
+  assert.deepEqual(clearedPages, [pages[0]])
+  assert.equal(resolveCalls[0].options.forceRefresh, true)
+  assert.equal(resolveCalls[1].options.forceRefresh, false)
+  assert.equal(resolveCalls[1].options.allowManualLoginAfterRefreshFailure, true)
+  assert.equal(resolveCalls[1].options.credentials.username, 'user@example.test')
+  assert.deepEqual(pages[0].injectedRecaccounts, ['stale-token'])
+  assert.deepEqual(pages[1].injectedRecaccounts, ['fresh-token'])
 })
 
 test('cartContainsMatch requires the requested campsite and dates in a nonempty cart', () => {
@@ -256,6 +380,120 @@ function recgovMatch () {
 
 function api (status, path) {
   return { status, path }
+}
+
+function reserveClickPage ({ loginModalVisible, confirmationCandidates = [] }) {
+  return {
+    clickedSelectors: [],
+    clickedConfirmationIndexes: [],
+    locator (selector) {
+      const page = this
+      if (isConfirmationSelector(selector)) {
+        return confirmationLocator(page, confirmationCandidates)
+      }
+      return {
+        first () {
+          return this
+        },
+        async isVisible () {
+          if (selector.includes('Sign In') || selector.includes('Log In') || selector.includes('login-modal')) {
+            return loginModalVisible
+          }
+          return selector === 'button:has-text("Add to Cart")'
+        },
+        async click () {
+          page.clickedSelectors.push(selector)
+        },
+        async waitFor () {},
+      }
+    },
+    async waitForTimeout () {},
+    async waitForSelector (selector) {
+      if (!isConfirmationSelector(selector)) return
+      const visible = confirmationCandidates.some(candidate => candidate.visible)
+      const enabled = confirmationCandidates.some(candidate => candidate.visible && candidate.enabled)
+      if (isEnabledConfirmationSelector(selector) ? !enabled : !visible) {
+        throw new Error(`selector not found: ${selector}`)
+      }
+    },
+  }
+}
+
+function isConfirmationSelector (selector) {
+  return ['Continue', 'Confirm', 'Book Now', 'Next'].some(label => selector.includes(label))
+}
+
+function isEnabledConfirmationSelector (selector) {
+  return selector.includes(':enabled')
+}
+
+function confirmationLocator (page, candidates) {
+  return {
+    first () {
+      return this.nth(0)
+    },
+    async count () {
+      return candidates.length
+    },
+    nth (index) {
+      return confirmationCandidateLocator(page, candidates[index], index)
+    },
+    async isVisible () {
+      return candidates.some(candidate => candidate.visible)
+    },
+    async isEnabled () {
+      return candidates.some(candidate => candidate.visible && candidate.enabled)
+    },
+  }
+}
+
+function confirmationCandidateLocator (page, candidate = {}, index) {
+  return {
+    async isVisible () {
+      return Boolean(candidate.visible)
+    },
+    async isEnabled () {
+      return Boolean(candidate.enabled)
+    },
+    async innerText () {
+      return candidate.text || ''
+    },
+    async getAttribute (name) {
+      if (name === 'aria-disabled') return candidate.ariaDisabled || null
+      return null
+    },
+    async click () {
+      page.clickedConfirmationIndexes.push(index)
+    },
+  }
+}
+
+function authCheckContext () {
+  const pages = []
+  const context = {
+    addCookies: async () => {},
+    newPage: async () => {
+      const page = {
+        bearerRoutes: [],
+        closed: false,
+        gotos: [],
+        injectedRecaccounts: [],
+        waits: [],
+        close: async () => {
+          page.closed = true
+        },
+        goto: async (url) => {
+          page.gotos.push(url)
+        },
+        waitForTimeout: async (ms) => {
+          page.waits.push(ms)
+        },
+      }
+      pages.push(page)
+      return page
+    },
+  }
+  return { context, pages }
 }
 
 function pickFailureFields (check) {

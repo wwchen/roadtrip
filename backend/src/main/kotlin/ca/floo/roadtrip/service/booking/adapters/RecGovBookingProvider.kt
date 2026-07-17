@@ -7,19 +7,14 @@ import ca.floo.roadtrip.models.booking.BookingAction
 import ca.floo.roadtrip.models.booking.BookingProviderId
 import ca.floo.roadtrip.models.booking.BookingTarget
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.availability.provider.RecGovBookingUrl
 import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.RecGovAtcExecutor
 import ca.floo.roadtrip.service.booking.RecGovAtcOutcome
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonArray
 
-private const val RECGOV_VENDOR = "recgov"
 private const val ERROR_COMPANION_EXCEPTION = "companion_exception"
-private const val RECGOV_ADD_TO_CART_PAYLOAD_VERSION = "atc.recgov.v1"
 
 internal class RecGovBookingProvider(
     private val companionAtc: RecGovAtcExecutor,
@@ -77,32 +72,8 @@ internal class RecGovBookingProvider(
 
     private fun AddToCartRequest.toAtcPayload(): JsonObject =
         buildJsonObject {
-            put("watch_id", watchId)
-            put("vendor", RECGOV_VENDOR)
-            put("payload_version", RECGOV_ADD_TO_CART_PAYLOAD_VERSION)
             put("start_date", arrivalDate.toString())
             put("end_date", checkoutDate.toString())
-            putJsonArray("openings") {
-                add(toOpeningPayload())
-            }
+            put("campsite_id", target.campsiteRef.vendorId)
         }
-
-    private fun AddToCartRequest.toOpeningPayload(): JsonObject =
-        buildJsonObject {
-            put("label", campsiteLabel)
-            put("date", arrivalDate.toString())
-            put("vendor", RECGOV_VENDOR)
-            put("campsite_id", target.campsiteRef.campsiteId)
-            put("vendor_id", target.campsiteRef.vendorId)
-            target.campsiteRef.mapId?.let { put("map_id", it) }
-            target.campsiteRef.resourceLocationId?.let { put("resource_location_id", it) }
-            loop?.let { put("loop", it) }
-            siteType?.let { put("site_type", it) }
-            campgroundId?.let { put("campground_id", it) }
-            campgroundName?.let { put("campground", it) }
-            put("booking_url", recgovCampsiteBookingUrl())
-        }
-
-    private fun AddToCartRequest.recgovCampsiteBookingUrl(): String =
-        RecGovBookingUrl.campsite(target.campsiteRef.vendorId, arrivalDate, checkoutDate)
 }

@@ -20,6 +20,8 @@ export function resolveSessionDir (env = process.env, homeDir = os.homedir()) {
 
 const SESSION_DIR = resolveSessionDir()
 const RECGOV_RECACCOUNT_STORAGE_KEY = 'recaccount'
+export const RECGOV_CAMPSITE_BOOKING_URL_PATTERN =
+  'https://www.recreation.gov/camping/campsites/{campsite_id}?startDate={start_date}&endDate={end_date}'
 export const COMPANION_USER_AGENT =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36'
 
@@ -185,7 +187,10 @@ export function reservationUrl (campgroundId, startDate, checkoutDate) {
 }
 
 export function campsiteUrl (campsiteId, startDate, checkoutDate) {
-  return `https://www.recreation.gov/camping/campsites/${campsiteId}?startDate=${startDate}&endDate=${checkoutDate}`
+  return RECGOV_CAMPSITE_BOOKING_URL_PATTERN
+    .replace('{campsite_id}', campsiteId)
+    .replace('{start_date}', startDate)
+    .replace('{end_date}', checkoutDate)
 }
 
 export function toCheckoutDate (lastNight) {

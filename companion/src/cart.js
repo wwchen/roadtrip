@@ -1,6 +1,8 @@
 // Add-to-cart orchestration. Owns Playwright-driven rec.gov interaction.
 // Returns the browser result to the CLI/HTTP caller; the companion does not persist.
 
+import fs from 'node:fs/promises'
+import path from 'node:path'
 import {
   IS_HEADLESS,
   getContext,
@@ -14,11 +16,15 @@ import {
   toCheckoutDate,
 } from './browser.js'
 import {
+  RECGOV_DIAGNOSTIC_DIR,
   RECGOV_HOME_URL,
   RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS,
   RECGOV_LOGIN_STATE_SETTLE_MS,
+  clearBrowserRecaccount,
   resolveRecaccount,
 } from './recgovSession.js'
+import { captureRecgovPageImage } from './recgovScreenshotCapture.js'
+import { SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX } from './recgovScreenshotRoutes.js'
 
 let lastLoginState = null
 export function getLastLoginState () { return lastLoginState }
@@ -163,15 +169,51 @@ const RESERVE_SELECTORS = [
   '.rec-button-primary:has-text("Reserve")',
 ]
 const RESERVE_COMBINED = RESERVE_SELECTORS.join(', ')
+const CONFIRMATION_BUTTON_LABELS = ['Continue', 'Confirm', 'Book Now', 'Next']
+const CONFIRMATION_SELECTORS = CONFIRMATION_BUTTON_LABELS.map(label => `button:has-text("${label}")`)
+const CONFIRMATION_ENABLED_SELECTORS = CONFIRMATION_BUTTON_LABELS.map(label => `button:enabled:has-text("${label}")`)
+const CONFIRMATION_COMBINED = CONFIRMATION_SELECTORS.join(', ')
+const CONFIRMATION_ENABLED_COMBINED = CONFIRMATION_ENABLED_SELECTORS.join(', ')
 const ENTER_DATES_SEL = 'button:has-text("Enter Dates"), button:has-text("Change Dates")'
 const CART_VERIFY_WAIT_MS = 10_000
 const CART_VERIFY_POLL_MS = 1_000
+const CONFIRMATION_WAIT_MS = 3_000
+const CONFIRMATION_ENABLED_WAIT_MS = 5_000
+const CONFIRMATION_CLICK_TIMEOUT_MS = 3_000
+const POST_CONFIRMATION_CLICK_SETTLE_MS = 2_000
+const CONFIRMATION_DIAGNOSTIC_LIMIT = 8
+const CONFIRMATION_TEXT_LOG_LIMIT = 80
+const ATC_SCREENSHOT_PREFIX = 'recgov-atc'
+const ATC_SCREENSHOT_LABEL_MAX_CHARS = 60
 const CART_URL_CAMPSITE_ID_RE = /\/camping\/campsites\/([^/?#]+)/
 const CART_VERIFY_MATCHED = 'matched'
 const CART_VERIFY_FETCH_FAILED = 'cart_fetch_failed'
 const CART_VERIFY_HTTP_ERROR = 'cart_http_error'
 const CART_VERIFY_EMPTY = 'cart_empty'
 const CART_VERIFY_MISSING_ITEM = 'missing_expected_item'
+const ERROR_RECGOV_NOT_AUTHENTICATED = 'recgov_not_authenticated'
+const ERROR_RECGOV_LOGIN_FAILED = 'recgov_login_failed'
+const ERROR_RECGOV_REFRESH_FAILED = 'recgov_refresh_failed'
+const ERROR_RECGOV_SPA_LOGGED_OUT = 'recgov_spa_logged_out'
+const ERROR_RECGOV_CONFIRMATION_DISABLED = 'recgov_confirmation_disabled'
+const HEADLESS_NO_SESSION_DETAIL =
+  'No Recreation.gov browser session is available in the companion profile, and the headless companion is not logged in.'
+const HEADED_NO_SESSION_DETAIL =
+  'No Recreation.gov browser session is available in the companion profile.'
+const LOGIN_FAILED_DETAIL =
+  'Recreation.gov credential login did not produce a browser session. If Recreation.gov prompts for 2FA, submit a current MFA code on the companion root page.'
+const REFRESH_FAILED_DETAIL =
+  'Recreation.gov browser session refresh failed. The stored session may be expired or rejected.'
+const SPA_LOGGED_OUT_DETAIL =
+  'Recreation.gov rejected the companion browser session after page load; the SPA still shows a logged-out state.'
+const CONFIRMATION_DISABLED_DETAIL =
+  'Recreation.gov showed an add-to-cart confirmation step, but no confirmation button became enabled and the requested campsite/date was not found in the cart.'
+const LOGIN_ON_HOST_ACTION =
+  'Run make recgov-login on the host profile mounted by the companion, or start the companion headed and log in once.'
+const LOGIN_ON_COMPANION_ACTION =
+  'Open the companion root page and submit the Recreation.gov username, password, and MFA code when required.'
+const INSPECT_COMPANION_ACTION =
+  'Open the booking URL in a headed companion session to inspect the Recreation.gov confirmation step; the site may require extra input, reject the date/site, or present a challenge.'
 
 export function cartHoldCompletionObserved (responses) {
   return responses.some(e => e.status >= 200 && e.status < 300 &&
@@ -221,6 +263,68 @@ export function verifyCartContainsMatch (cart, match) {
   }
 
   return { ok: false, reason: CART_VERIFY_MISSING_ITEM, best_match: bestMatch, ...base }
+}
+
+export function recgovAuthenticationFailure ({ headless = IS_HEADLESS, attemptedLogin = false, attemptedRefresh = false } = {}) {
+  if (attemptedLogin) {
+    return {
+      error: ERROR_RECGOV_LOGIN_FAILED,
+      detail: LOGIN_FAILED_DETAIL,
+      corrective_action: LOGIN_ON_COMPANION_ACTION,
+      auth: authFields(headless),
+    }
+  }
+
+  if (attemptedRefresh) {
+    return {
+      error: ERROR_RECGOV_REFRESH_FAILED,
+      detail: REFRESH_FAILED_DETAIL,
+      corrective_action: LOGIN_ON_COMPANION_ACTION,
+      auth: authFields(headless),
+    }
+  }
+
+  if (headless) {
+    return {
+      error: ERROR_RECGOV_NOT_AUTHENTICATED,
+      detail: HEADLESS_NO_SESSION_DETAIL,
+      corrective_action: LOGIN_ON_COMPANION_ACTION,
+      auth: authFields(headless),
+    }
+  }
+
+  return {
+    error: ERROR_RECGOV_NOT_AUTHENTICATED,
+    detail: HEADED_NO_SESSION_DETAIL,
+    corrective_action: LOGIN_ON_HOST_ACTION,
+    auth: authFields(headless),
+  }
+}
+
+function authFields (headless) {
+  return {
+    headless,
+  }
+}
+
+function spaLoggedOutFailure () {
+  return {
+    error: ERROR_RECGOV_SPA_LOGGED_OUT,
+    detail: SPA_LOGGED_OUT_DETAIL,
+    corrective_action: LOGIN_ON_HOST_ACTION,
+  }
+}
+
+function confirmationDisabledFailure (cartCheck, confirmation) {
+  return {
+    error: ERROR_RECGOV_CONFIRMATION_DISABLED,
+    detail: CONFIRMATION_DISABLED_DETAIL,
+    corrective_action: INSPECT_COMPANION_ACTION,
+    cart_check: {
+      ...cartCheck,
+      action_failure: confirmation,
+    },
+  }
 }
 
 function cartReservationMatchResult (reservation, expected) {
@@ -350,37 +454,114 @@ function cartVerificationSummary (check) {
   return fields.join(' ')
 }
 
-async function clickReserveButton (page) {
+export async function clickReserveButton (page, { screenshots = null } = {}) {
   for (const sel of RESERVE_SELECTORS) {
     if (!await page.locator(sel).first().isVisible().catch(() => false)) continue
 
     console.log(`Cart: clicking "${sel}"`)
     await page.locator(sel).first().click()
     await page.waitForTimeout(2000)
+    await screenshots?.capture('reserve-click')
 
     const loginModal = await page.locator(
       'button:has-text("Sign In"), button:has-text("Log In"), [data-testid="login-modal"]'
     ).first().isVisible().catch(() => false)
     if (loginModal) {
       console.log('Cart: login modal appeared after ATC click — SPA still considers user logged out')
-      return false
+      await screenshots?.capture('login-modal-after-reserve-click')
+      return {
+        clicked: false,
+        failure: spaLoggedOutFailure(),
+      }
     }
 
-    const confirmSel = 'button:has-text("Continue"), button:has-text("Confirm"), button:has-text("Book Now"), button:has-text("Next")'
-    await page.waitForSelector(confirmSel, { timeout: 3000 }).catch(() => {})
-    const confirmBtn = page.locator(confirmSel).first()
-    if (await confirmBtn.isVisible().catch(() => false)) {
-      console.log('Cart: clicking confirmation overlay')
-      await confirmBtn.waitFor({ state: 'enabled', timeout: 5000 }).catch(() => {})
-      await confirmBtn.click({ timeout: 3000 }).catch(() => {
-        console.log('Cart: confirmation button still disabled — proceeding (item may already be in cart)')
-      })
-      await page.waitForTimeout(2000)
-    }
+    const confirmation = await clickConfirmationButton(page, { screenshots })
 
-    return true
+    return { clicked: true, confirmation }
   }
-  return false
+  return { clicked: false }
+}
+
+async function clickConfirmationButton (page, { screenshots = null } = {}) {
+  await page.waitForSelector(CONFIRMATION_COMBINED, { timeout: CONFIRMATION_WAIT_MS }).catch(() => {})
+  const candidates = await confirmationButtonCandidates(page)
+  const visibleCandidates = candidates.filter(candidate => candidate.visible)
+  if (!visibleCandidates.length) return { seen: false }
+
+  await page.waitForSelector(CONFIRMATION_ENABLED_COMBINED, { timeout: CONFIRMATION_ENABLED_WAIT_MS }).catch(() => {})
+  const enabled = await firstEnabledConfirmationButton(page)
+  if (!enabled) {
+    console.log(`Cart: confirmation buttons visible but none enabled — ${formatConfirmationCandidates(visibleCandidates)}`)
+    await screenshots?.capture('confirmation-disabled')
+    return {
+      seen: true,
+      clicked: false,
+      reason: 'confirmation_disabled',
+      candidates: visibleCandidates,
+    }
+  }
+
+  console.log(`Cart: clicking confirmation button text="${enabled.text || '?'}" index=${enabled.index}`)
+  await enabled.button.click({ timeout: CONFIRMATION_CLICK_TIMEOUT_MS })
+  await page.waitForTimeout(POST_CONFIRMATION_CLICK_SETTLE_MS)
+  await screenshots?.capture('confirmation-click')
+  return {
+    seen: true,
+    clicked: true,
+    index: enabled.index,
+    text: enabled.text,
+  }
+}
+
+async function firstEnabledConfirmationButton (page) {
+  const locator = page.locator(CONFIRMATION_COMBINED)
+  const count = Math.min(await locator.count().catch(() => 0), CONFIRMATION_DIAGNOSTIC_LIMIT)
+  for (let index = 0; index < count; index++) {
+    const button = locator.nth(index)
+    if (!await button.isVisible().catch(() => false)) continue
+    if (!await button.isEnabled().catch(() => false)) continue
+    return {
+      button,
+      index,
+      text: await normalizedLocatorText(button),
+    }
+  }
+  return null
+}
+
+async function confirmationButtonCandidates (page) {
+  const locator = page.locator(CONFIRMATION_COMBINED)
+  const count = Math.min(await locator.count().catch(() => 0), CONFIRMATION_DIAGNOSTIC_LIMIT)
+  const candidates = []
+  for (let index = 0; index < count; index++) {
+    const button = locator.nth(index)
+    const visible = await button.isVisible().catch(() => false)
+    const enabled = visible && await button.isEnabled().catch(() => false)
+    candidates.push({
+      index,
+      text: await normalizedLocatorText(button),
+      visible,
+      enabled,
+      disabled: visible ? !enabled : null,
+      aria_disabled: await button.getAttribute('aria-disabled').catch(() => null),
+    })
+  }
+  return candidates
+}
+
+async function normalizedLocatorText (locator) {
+  const text = await locator.innerText().catch(() => '')
+  return truncateText(text.replace(/\s+/g, ' ').trim(), CONFIRMATION_TEXT_LOG_LIMIT)
+}
+
+function formatConfirmationCandidates (candidates) {
+  return candidates
+    .map(candidate => `#${candidate.index} "${candidate.text || '?'}" enabled=${candidate.enabled} aria_disabled=${candidate.aria_disabled ?? '?'}`)
+    .join('; ')
+}
+
+function truncateText (value, maxLength) {
+  return value.length <= maxLength ? value : `${value.slice(0, maxLength)}...`
 }
 
 export async function setupAuthPage () {
@@ -389,17 +570,19 @@ export async function setupAuthPage () {
   const page = await context.newPage()
 
   const recaccount = await resolveRecaccount(page)
+  const authFailure = recaccount ? null : recgovAuthenticationFailure()
   if (recaccount) {
     console.log(`Cart: session ready (expires ${recaccount.expiration})`)
   } else {
     console.log('Cart: no Recreation.gov login session available — cannot add to cart')
+    console.log(`Cart: corrective action — ${authFailure.corrective_action}`)
   }
 
   if (recaccount) await injectRecaccount(page, recaccount)
   await injectBearerRoute(page, recaccount?.access_token)
   await injectFingerprintCookie(context, recaccount?.access_token)
 
-  return { context, page, recaccount }
+  return { context, page, recaccount, authFailure }
 }
 
 const CAPTCHA_SELECTORS = [
@@ -431,6 +614,56 @@ async function waitForCaptchaIfPresent (page, solveTimeout = 90000) {
   return true
 }
 
+function createAtcScreenshotCollector (page) {
+  const screenshots = []
+  return {
+    screenshots,
+    async capture (label) {
+      const capturedAt = new Date().toISOString()
+      const filename = `${ATC_SCREENSHOT_PREFIX}-${capturedAt.replace(/[:.]/g, '-')}-${sanitizeScreenshotLabel(label)}.png`
+      const screenshot = {
+        label,
+        captured_at: capturedAt,
+        page_url: safePageUrl(page),
+        screenshot_url: `${SCREENSHOT_DIAGNOSTIC_ROUTE_PREFIX}/${filename}`,
+      }
+      try {
+        await fs.mkdir(RECGOV_DIAGNOSTIC_DIR, { recursive: true })
+        await captureRecgovPageImage(page, { path: path.join(RECGOV_DIAGNOSTIC_DIR, filename) })
+        console.log(`Cart: captured screenshot label=${label} url=${screenshot.screenshot_url}`)
+      } catch (error) {
+        screenshot.screenshot_error = error.message
+        console.log(`Cart: screenshot capture failed label=${label} error="${truncateText(error.message, CONFIRMATION_TEXT_LOG_LIMIT)}"`)
+      }
+      screenshots.push(screenshot)
+      return screenshot
+    },
+  }
+}
+
+function withScreenshots (result, screenshots) {
+  return {
+    ...result,
+    screenshots: screenshots?.screenshots || [],
+  }
+}
+
+function sanitizeScreenshotLabel (value) {
+  return String(value || 'step')
+    .replace(/[^a-z0-9_-]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, ATC_SCREENSHOT_LABEL_MAX_CHARS)
+    .toLowerCase() || 'step'
+}
+
+function safePageUrl (page) {
+  try {
+    return page.url()
+  } catch {
+    return null
+  }
+}
+
 // Adds a match to the cart on rec.gov. Returns true if the cart now has the reservation.
 // `match` is the backend Match shape (snake_case fields from /api/campsite/matches).
 export function bookingUrlForMatch (match) {
@@ -453,8 +686,10 @@ export async function addToCart (match) {
   const url = bookingUrlForMatch(match)
   console.log(`Cart: opening ${url}`)
 
-  const { page, recaccount } = await setupAuthPage()
-  if (!recaccount) return { ok: false, page }
+  const { page, recaccount, authFailure } = await setupAuthPage()
+  const screenshots = createAtcScreenshotCollector(page)
+  await screenshots.capture(recaccount ? 'auth-session-ready' : 'auth-session-missing')
+  if (!recaccount) return withScreenshots({ ok: false, page, ...authFailure }, screenshots)
 
   const captured = []
   let cartVerificationRequests = 0
@@ -478,6 +713,7 @@ export async function addToCart (match) {
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
     await waitForCaptchaIfPresent(page)
+    await screenshots.capture('opened-booking-url')
 
     const signInSel = 'button:has-text("Sign Up / Log In"), a:has-text("Sign Up / Log In")'
     await page.waitForSelector(
@@ -487,25 +723,46 @@ export async function addToCart (match) {
 
     if (await page.locator(signInSel).first().isVisible().catch(() => false)) {
       console.log('Cart: SPA shows logged-out state — cannot add to cart')
-      return { ok: false, page }
+      await screenshots.capture('spa-logged-out')
+      return withScreenshots({
+        ok: false,
+        page,
+        ...spaLoggedOutFailure(),
+      }, screenshots)
     }
-    console.log('Cart: SPA logged-in ✓')
+    console.log('Cart: SPA header does not show logged-out CTA')
+    await screenshots.capture('spa-logged-in')
 
-    if (await clickReserveButton(page)) {
+    const reserveClick = await clickReserveButton(page, { screenshots })
+    if (reserveClick.failure) return withScreenshots({ ok: false, page, ...reserveClick.failure }, screenshots)
+    if (reserveClick.clicked) {
       await waitForCaptchaIfPresent(page)
+      console.log('Cart: verifying requested campsite/date in cart after reserve click')
       const verification = await waitForRequestedCartItem(page, captured, match, getCartForVerification)
+      await screenshots.capture('cart-verification-after-reserve-click')
       if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
-      return { ok: verification.ok, page, cart_check: verification.check }
+      if (!verification.ok && reserveClick.confirmation?.reason === 'confirmation_disabled') {
+        return withScreenshots({ ok: false, page, ...confirmationDisabledFailure(verification.check, reserveClick.confirmation) }, screenshots)
+      }
+      return withScreenshots({ ok: verification.ok, page, cart_check: verification.check }, screenshots)
     }
 
     if (await page.locator(ENTER_DATES_SEL).first().isVisible().catch(() => false)) {
       await enterDates(page, firstDate, checkout)
+      await screenshots.capture('dates-entered')
       await page.waitForSelector(RESERVE_COMBINED, { timeout: 12000 }).catch(() => {})
-      if (await clickReserveButton(page)) {
+      const datedReserveClick = await clickReserveButton(page, { screenshots })
+      if (datedReserveClick.failure) return withScreenshots({ ok: false, page, ...datedReserveClick.failure }, screenshots)
+      if (datedReserveClick.clicked) {
         await waitForCaptchaIfPresent(page)
+        console.log('Cart: verifying requested campsite/date in cart after dated reserve click')
         const verification = await waitForRequestedCartItem(page, captured, match, getCartForVerification)
+        await screenshots.capture('cart-verification-after-dated-reserve-click')
         if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
-        return { ok: verification.ok, page, cart_check: verification.check }
+        if (!verification.ok && datedReserveClick.confirmation?.reason === 'confirmation_disabled') {
+          return withScreenshots({ ok: false, page, ...confirmationDisabledFailure(verification.check, datedReserveClick.confirmation) }, screenshots)
+        }
+        return withScreenshots({ ok: verification.ok, page, cart_check: verification.check }, screenshots)
       }
     }
 
@@ -517,35 +774,90 @@ export async function addToCart (match) {
     } else {
       console.log(`Cart: no Reserve button for Site ${site} — buttons: [${btnStr}]`)
     }
-    return { ok: false, page }
+    await screenshots.capture('no-reserve-button')
+    return withScreenshots({ ok: false, page }, screenshots)
   } catch (err) {
     console.error('Cart automation error:', err.message)
-    return { ok: false, page }
+    await screenshots.capture('automation-error')
+    return withScreenshots({ ok: false, page }, screenshots)
   }
 }
 
 export async function testChromium (rawCookieInput = null, options = {}) {
-  const context = await getContext()
-  await injectStoredCookies(context, rawCookieInput)
-  const page = await context.newPage()
+  const {
+    getContextFn = getContext,
+    injectStoredCookiesFn = injectStoredCookies,
+    resolveRecaccountFn = resolveRecaccount,
+    clearBrowserRecaccountFn = clearBrowserRecaccount,
+    injectRecaccountFn = injectRecaccount,
+    injectBearerRouteFn = injectBearerRoute,
+    isSpaLoggedInFn = isSpaLoggedIn,
+    ...resolveOptions
+  } = options
+
+  const context = await getContextFn()
+  await injectStoredCookiesFn(context, rawCookieInput)
+  let page = await context.newPage()
   try {
-    const recaccount = await resolveRecaccount(page, options)
-    if (!recaccount) {
+    const first = await resolveAndVerifyRecgovSession(page, resolveOptions, {
+      resolveRecaccountFn,
+      injectRecaccountFn,
+      injectBearerRouteFn,
+      isSpaLoggedInFn,
+    })
+    if (first.loggedIn) {
+      lastLoginState = true
+      console.log(`Logged in to recreation.gov ✓ (token expires ${first.recaccount.expiration})`)
+      return { ok: true, loggedIn: true }
+    }
+    if (!first.recaccount) {
       console.log('testChromium: no logged-in Recreation.gov browser session found')
       lastLoginState = false
       return { ok: true, loggedIn: false }
     }
 
-    await injectRecaccount(page, recaccount)
-    await injectBearerRoute(page, recaccount.access_token)
-    await page.goto(RECGOV_HOME_URL, { waitUntil: 'domcontentloaded', timeout: RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS })
-    await page.waitForTimeout(RECGOV_LOGIN_STATE_SETTLE_MS)
-    const loggedIn = (await isSpaLoggedIn(page)) === true
-    lastLoginState = loggedIn
-    if (loggedIn) console.log(`Logged in to recreation.gov ✓ (token expires ${recaccount.expiration})`)
-    else console.log('Companion browser recaccount injected but SPA still shows logged-out — token may have been rejected')
-    return { ok: true, loggedIn }
+    console.log('Companion browser recaccount injected but SPA still shows logged-out — token may have been rejected')
+    console.log('Cart: clearing stale Recreation.gov browser session and retrying auth flow')
+    await clearBrowserRecaccountFn(page)
+    await page.close().catch(() => {})
+    page = await context.newPage()
+
+    const recovered = await resolveAndVerifyRecgovSession(page, recgovAuthRecoveryOptions(resolveOptions), {
+      resolveRecaccountFn,
+      injectRecaccountFn,
+      injectBearerRouteFn,
+      isSpaLoggedInFn,
+    })
+    lastLoginState = recovered.loggedIn
+    if (recovered.loggedIn) {
+      console.log(`Logged in to recreation.gov ✓ (token expires ${recovered.recaccount.expiration})`)
+    } else {
+      console.log('testChromium: no logged-in Recreation.gov browser session found after fallback')
+    }
+    return { ok: true, loggedIn: recovered.loggedIn }
   } finally {
     await page.close().catch(() => {})
+  }
+}
+
+async function resolveAndVerifyRecgovSession (page, options, helpers) {
+  const recaccount = await helpers.resolveRecaccountFn(page, options)
+  if (!recaccount) return { recaccount: null, loggedIn: false }
+
+  await helpers.injectRecaccountFn(page, recaccount)
+  await helpers.injectBearerRouteFn(page, recaccount.access_token)
+  await page.goto(RECGOV_HOME_URL, { waitUntil: 'domcontentloaded', timeout: RECGOV_LOGIN_NAVIGATION_TIMEOUT_MS })
+  await page.waitForTimeout(RECGOV_LOGIN_STATE_SETTLE_MS)
+  return {
+    recaccount,
+    loggedIn: (await helpers.isSpaLoggedInFn(page)) === true,
+  }
+}
+
+function recgovAuthRecoveryOptions (options) {
+  return {
+    ...options,
+    forceRefresh: false,
+    allowManualLoginAfterRefreshFailure: true,
   }
 }

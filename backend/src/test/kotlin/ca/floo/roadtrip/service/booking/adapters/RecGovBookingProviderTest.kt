@@ -12,8 +12,6 @@ import ca.floo.roadtrip.service.booking.RecGovAtcOutcome
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.Test
@@ -27,10 +25,6 @@ private const val TEST_WATCH_ID = 42L
 private const val TEST_CAMPSITE_ID = 7L
 private const val TEST_VENDOR_ID = "300"
 private const val TEST_RECGOV_CAMPGROUND_ID = "232447"
-private const val TEST_RECGOV_CAMPSITE_URL =
-    "https://www.recreation.gov/camping/campsites/300?startDate=2026-07-04&endDate=2026-07-05"
-private const val TEST_RECGOV_VENDOR = "recgov"
-private const val TEST_ADD_TO_CART_PAYLOAD_VERSION = "atc.recgov.v1"
 
 class RecGovBookingProviderTest {
     @Test
@@ -52,7 +46,11 @@ class RecGovBookingProviderTest {
     fun `target for ignores non recgov refs`() {
         val provider = provider()
 
-        val target = provider.targetFor(ProviderRef.Aspira(1L, 2L), CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_VENDOR_ID))
+        val target =
+            provider.targetFor(
+                ProviderRef.Aspira(1L, 2L),
+                CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_VENDOR_ID),
+            )
 
         assertNull(target)
     }
@@ -93,45 +91,13 @@ class RecGovBookingProviderTest {
                     ?.toBoolean()
             assertEquals(true, ok)
             val payload = executor.payload
-            assertEquals(TEST_WATCH_ID.toString(), payload?.get("watch_id")?.jsonPrimitive?.content)
-            assertEquals(TEST_RECGOV_VENDOR, payload?.get("vendor")?.jsonPrimitive?.content)
-            assertEquals(TEST_ADD_TO_CART_PAYLOAD_VERSION, payload?.get("payload_version")?.jsonPrimitive?.content)
+            assertEquals(setOf("start_date", "end_date", "campsite_id"), payload?.keys)
             assertEquals("2026-07-04", payload?.get("start_date")?.jsonPrimitive?.content)
             assertEquals("2026-07-05", payload?.get("end_date")?.jsonPrimitive?.content)
-            val opening =
-                payload
-                    ?.get("openings")
-                    ?.jsonArray
-                    ?.single()
-                    ?.jsonObject
-            assertEquals("Site 7", opening?.get("label")?.jsonPrimitive?.content)
-            assertEquals(TEST_CAMPSITE_ID.toString(), opening?.get("campsite_id")?.jsonPrimitive?.content)
-            assertEquals(TEST_VENDOR_ID, opening?.get("vendor_id")?.jsonPrimitive?.content)
-            assertEquals(TEST_RECGOV_CAMPSITE_URL, opening?.get("booking_url")?.jsonPrimitive?.content)
-        }
-
-    @Test
-    fun `add to cart uses recgov campsite page for companion booking url`() =
-        runBlocking {
-            val executor = RecordingAtcExecutor(completedOutcome())
-            val provider = provider(executor)
-            val request =
-                request(
-                    recgovTarget(),
-                    bookingUrl =
-                        "https://www.recreation.gov/camping/campgrounds/" +
-                            "$TEST_RECGOV_CAMPGROUND_ID?startDate=2026-07-04&endDate=2026-07-05",
-                )
-
-            provider.addToCart(request)
-
-            val opening =
-                executor.payload
-                    ?.get("openings")
-                    ?.jsonArray
-                    ?.single()
-                    ?.jsonObject
-            assertEquals(TEST_RECGOV_CAMPSITE_URL, opening?.get("booking_url")?.jsonPrimitive?.content)
+            assertEquals(TEST_VENDOR_ID, payload?.get("campsite_id")?.jsonPrimitive?.content)
+            assertFalse(payload?.containsKey("watch_id") == true)
+            assertFalse(payload?.containsKey("payload_version") == true)
+            assertFalse(payload?.containsKey("openings") == true)
         }
 
     @Test
@@ -156,13 +122,6 @@ class RecGovBookingProviderTest {
                     ?.content
                     ?.toBoolean()
             assertEquals(true, ok)
-            val opening =
-                executor.payload
-                    ?.get("openings")
-                    ?.jsonArray
-                    ?.single()
-                    ?.jsonObject
-            assertEquals(TEST_RECGOV_CAMPSITE_URL, opening?.get("booking_url")?.jsonPrimitive?.content)
         }
 
     @Test
