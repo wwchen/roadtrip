@@ -1,8 +1,6 @@
 package ca.floo.roadtrip
 
 import ca.floo.roadtrip.http.cacheOptionsFor
-import ca.floo.roadtrip.routes.api.roadtripApiRoutes
-import ca.floo.roadtrip.routes.static.staticSiteRoutes
 import io.ktor.http.ContentType
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -16,7 +14,6 @@ import io.ktor.server.plugins.compression.minimumSize
 import io.ktor.server.plugins.conditionalheaders.ConditionalHeaders
 import io.ktor.server.request.httpMethod
 import io.ktor.server.request.path
-import io.ktor.server.routing.routing
 import org.slf4j.event.Level
 
 private const val API_ACCESS_LOG_PREFIX = "http_api request"
@@ -58,12 +55,5 @@ internal fun Application.installRoadtripPlugins() {
         options { call, content ->
             cacheOptionsFor(call.request.path(), content.contentType)
         }
-    }
-}
-
-internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
-    routing {
-        roadtripApiRoutes(runtime)
-        staticSiteRoutes(runtime.staticDir)
     }
 }

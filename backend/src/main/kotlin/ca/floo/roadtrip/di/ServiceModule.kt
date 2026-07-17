@@ -4,7 +4,8 @@ import ca.floo.roadtrip.SlackInteractivityWiring
 import ca.floo.roadtrip.clients.companion.HttpRecGovAtcExecutor
 import ca.floo.roadtrip.clients.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.config.AppConfig
-import ca.floo.roadtrip.notificationTriggerKinds
+import ca.floo.roadtrip.config.ReadPathProviderConfig
+import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -21,6 +22,7 @@ import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
+import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CampgroundAvailabilitySupport
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
@@ -50,6 +52,7 @@ import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler
 import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
 import ca.floo.roadtrip.service.poi.CampgroundService
+import ca.floo.roadtrip.service.poi.DEFAULT_POI_TYPES
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiDetailService
 import ca.floo.roadtrip.service.poi.PoiReader
@@ -64,7 +67,6 @@ import ca.floo.roadtrip.service.scheduler.PollerBackfill
 import ca.floo.roadtrip.service.scheduler.WatchReaper
 import ca.floo.roadtrip.service.scheduler.framework.Scheduler
 import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutor
-import ca.floo.roadtrip.validateReadPathDataSources
 import kotlinx.coroutines.CoroutineScope
 import org.jooq.DSLContext
 import org.koin.dsl.module
@@ -289,3 +291,36 @@ val serviceModule =
 private fun AppConfig.isProviderEnabled(id: AvailabilityProviderId): Boolean =
     readPathProviders.isAvailabilityProviderEnabled(id.name.lowercase()) &&
         (id != AvailabilityProviderId.CAMPFLARE || !campflare.apiKey.isNullOrBlank())
+
+internal fun notificationTriggerKinds(emailConfigured: Boolean): List<String> =
+    buildList {
+        add(AvailabilityTriggerKinds.SLACK_NOTIFY)
+        if (emailConfigured) {
+            add(AvailabilityTriggerKinds.EMAIL_NOTIFY)
+        }
+    }
+
+internal fun validateReadPathDataSources(
+    providers: ReadPathProviderConfig,
+    registry: PoiRegistry,
+) {
+    val supported = supportedReadPathDataSources(registry)
+    val unknown = providers.enabledDataSources - supported
+    require(unknown.isEmpty()) {
+        "roadtrip.read-path.enabled-data-sources contains unknown source(s): " +
+            "${unknown.sorted()}. Expected one of: ${supported.sorted()}."
+    }
+}
+
+private fun supportedReadPathDataSources(registry: PoiRegistry): Set<String> =
+    registry.poiData
+        .mapNotNull { row -> row.etls.lastOrNull()?.slug }
+        .toSet() +
+        canonicalCampgroundSourceKeys(registry) +
+        DEFAULT_POI_TYPES.filter { it != CampgroundService.POI_TYPE }
+
+private fun canonicalCampgroundSourceKeys(registry: PoiRegistry): Set<String> =
+    buildSet {
+        if (registry.campflareSources().isNotEmpty()) add("campflare")
+        if (registry.recgovSources().isNotEmpty()) add("recgov")
+    }

@@ -3,10 +3,10 @@ package ca.floo.roadtrip
 import ca.floo.roadtrip.config.ApplicationProperties
 import ca.floo.roadtrip.config.ConfigSection
 import ca.floo.roadtrip.di.infraModule
+import ca.floo.roadtrip.di.registerKoinRoutes
 import ca.floo.roadtrip.di.repoModule
 import ca.floo.roadtrip.di.serviceModule
 import io.ktor.server.application.Application
-import io.ktor.server.application.ApplicationStopping
 import io.ktor.server.application.install
 import io.ktor.server.netty.EngineMain
 import org.koin.ktor.plugin.Koin
@@ -45,19 +45,9 @@ fun Application.module() {
     install(Koin) {
         modules(infraModule(environment.config), repoModule, serviceModule)
     }
-    val properties = ApplicationProperties.load(baseConfig = environment.config)
+    val properties: Map<String, String> =
+        ApplicationProperties.load(baseConfig = environment.config)
     installOptionalShutdownThreadDump(properties)
-    val boot = createRoadtripBootContext(properties)
-
     installRoadtripPlugins()
-    val runtime = startRoadtripRuntime(boot)
-    monitor.subscribe(ApplicationStopping) {
-        runtime.close()
-    }
-    try {
-        registerRoadtripRoutes(runtime)
-    } catch (e: Throwable) {
-        runtime.close()
-        throw e
-    }
+    registerKoinRoutes()
 }
