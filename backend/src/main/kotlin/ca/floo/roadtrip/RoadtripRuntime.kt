@@ -267,7 +267,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                     override fun setStatus(
                         id: Long,
                         status: WatchStatus,
-                    ) = availabilityWatchService.update(id, AvailabilityWatchRepo.UpdateInput(status = status))
+                    ) = availabilityWatchService.update(id = id, status = status)
 
                     override fun snapshotAndDelete(id: Long): AvailabilityWatchRepo.Watch? {
                         // Snapshot pre-delete so the goodbye card can still resolve

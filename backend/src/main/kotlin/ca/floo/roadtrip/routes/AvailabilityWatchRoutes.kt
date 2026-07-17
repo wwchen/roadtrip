@@ -162,14 +162,23 @@ internal fun Route.availabilityWatchRoutes(
             } catch (e: Exception) {
                 return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, e.message)
             }
-        val input =
-            when (val mapped = AvailabilityWatchRequestMapper.createInput(req)) {
+        val parsed =
+            when (val mapped = AvailabilityWatchRequestMapper.parseCreate(req)) {
                 is WatchRequestMapping.Invalid -> return@post call.respondError(mapped.error, HttpStatusCode.BadRequest, mapped.detail)
                 is WatchRequestMapping.Valid -> mapped.value
             }
         val watch =
             try {
-                watchService.create(input)
+                watchService.create(
+                    targets = parsed.targets,
+                    campsiteFilters = req.campsiteFilters,
+                    startDate = parsed.dateWindow.startDate,
+                    endDate = parsed.dateWindow.endDate,
+                    cadenceSec = req.cadenceSec,
+                    triggerKinds = req.triggerKinds,
+                    triggerConfig = req.triggerConfig,
+                    stopWhenTriggered = req.stopWhenTriggered,
+                )
             } catch (e: AvailabilityWatchValidationException) {
                 return@post call.respondError(e.error, HttpStatusCode.BadRequest, e.message)
             }
@@ -200,8 +209,8 @@ internal fun Route.availabilityWatchRoutes(
             } catch (e: Exception) {
                 return@patch call.respondError("invalid_body", HttpStatusCode.BadRequest, e.message)
             }
-        val input =
-            when (val mapped = AvailabilityWatchRequestMapper.updateInput(req)) {
+        val parsed =
+            when (val mapped = AvailabilityWatchRequestMapper.parseUpdate(req)) {
                 is WatchRequestMapping.Invalid -> return@patch call.respondError(mapped.error, HttpStatusCode.BadRequest, mapped.detail)
                 is WatchRequestMapping.Valid -> mapped.value
             }
@@ -212,7 +221,15 @@ internal fun Route.availabilityWatchRoutes(
             try {
                 watchService.update(
                     id,
-                    input,
+                    targets = parsed.targets,
+                    campsiteFilters = req.campsiteFilters,
+                    startDate = parsed.dateWindow?.startDate,
+                    endDate = parsed.dateWindow?.endDate,
+                    cadenceSec = req.cadenceSec,
+                    triggerKinds = req.triggerKinds,
+                    triggerConfig = req.triggerConfig,
+                    stopWhenTriggered = req.stopWhenTriggered,
+                    status = parsed.status,
                 )
             } catch (e: AvailabilityWatchValidationException) {
                 return@patch call.respondError(e.error, HttpStatusCode.BadRequest, e.message)

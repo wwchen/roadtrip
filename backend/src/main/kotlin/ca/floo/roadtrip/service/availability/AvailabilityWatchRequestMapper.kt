@@ -3,7 +3,6 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.models.api.AvailabilityWatchCreateRequest
 import ca.floo.roadtrip.models.api.AvailabilityWatchTargetSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchUpdateRequest
-import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 
 private const val MIN_CADENCE_SEC = 5
@@ -19,8 +18,19 @@ internal sealed class WatchRequestMapping<out T> {
     ) : WatchRequestMapping<Nothing>()
 }
 
+internal data class ParsedCreateWatchRequest(
+    val targets: List<AvailabilityWatchTargetRepo.TargetInput>,
+    val dateWindow: AvailabilityWatchDateWindow,
+)
+
+internal data class ParsedUpdateWatchRequest(
+    val targets: List<AvailabilityWatchTargetRepo.TargetInput>?,
+    val dateWindow: AvailabilityWatchDateWindow?,
+    val status: WatchStatus?,
+)
+
 internal object AvailabilityWatchRequestMapper {
-    fun createInput(req: AvailabilityWatchCreateRequest): WatchRequestMapping<AvailabilityWatchRepo.CreateInput> {
+    fun parseCreate(req: AvailabilityWatchCreateRequest): WatchRequestMapping<ParsedCreateWatchRequest> {
         validateCadence(req.cadenceSec)?.let { return it }
         validateTriggerKinds(req.triggerKinds)?.let { return it }
         val targets =
@@ -31,21 +41,10 @@ internal object AvailabilityWatchRequestMapper {
         val window =
             AvailabilityWatchDateWindow.parse(req.startDate, req.endDate)
                 ?: return invalidDateWindow("end_date must be after start_date")
-        return valid(
-            AvailabilityWatchRepo.CreateInput(
-                targets = targets,
-                campsiteFilters = req.campsiteFilters,
-                startDate = window.startDate,
-                endDate = window.endDate,
-                cadenceSec = req.cadenceSec,
-                triggerKinds = req.triggerKinds,
-                triggerConfig = req.triggerConfig,
-                stopWhenTriggered = req.stopWhenTriggered,
-            ),
-        )
+        return valid(ParsedCreateWatchRequest(targets = targets, dateWindow = window))
     }
 
-    fun updateInput(req: AvailabilityWatchUpdateRequest): WatchRequestMapping<AvailabilityWatchRepo.UpdateInput> {
+    fun parseUpdate(req: AvailabilityWatchUpdateRequest): WatchRequestMapping<ParsedUpdateWatchRequest> {
         validateCadence(req.cadenceSec)?.let { return it }
         req.triggerKinds?.let { validateTriggerKinds(it)?.let { error -> return error } }
         val status =
@@ -70,19 +69,7 @@ internal object AvailabilityWatchRequestMapper {
                 is WatchRequestMapping.Invalid -> return mapped
                 is WatchRequestMapping.Valid -> mapped.value
             }
-        return valid(
-            AvailabilityWatchRepo.UpdateInput(
-                targets = targets,
-                campsiteFilters = req.campsiteFilters,
-                startDate = window?.startDate,
-                endDate = window?.endDate,
-                cadenceSec = req.cadenceSec,
-                triggerKinds = req.triggerKinds,
-                triggerConfig = req.triggerConfig,
-                stopWhenTriggered = req.stopWhenTriggered,
-                status = status,
-            ),
-        )
+        return valid(ParsedUpdateWatchRequest(targets = targets, dateWindow = window, status = status))
     }
 
     private fun createTargets(req: AvailabilityWatchCreateRequest): WatchRequestMapping<List<AvailabilityWatchTargetRepo.TargetInput>> {
