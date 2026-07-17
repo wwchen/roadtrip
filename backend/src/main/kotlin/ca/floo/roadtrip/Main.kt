@@ -39,8 +39,8 @@ import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
-import ca.floo.roadtrip.routes.IP_RATE_LIMIT_PER_MINUTE
-import ca.floo.roadtrip.routes.IpRateLimiter
+import ca.floo.roadtrip.routes.api.pois.IP_RATE_LIMIT_PER_MINUTE
+import ca.floo.roadtrip.routes.api.pois.IpRateLimiter
 import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
@@ -180,10 +180,6 @@ private fun installOptionalShutdownThreadDump(properties: Map<String, String>) {
         },
     )
 }
-
-internal fun includeInRoadtripOpenApi(path: List<String>): Boolean =
-    (path.firstOrNull() == "api" && path.getOrNull(1) != "docs") ||
-        path.firstOrNull() == "test"
 
 fun Application.module() {
     val properties = ApplicationProperties.load(baseConfig = environment.config)

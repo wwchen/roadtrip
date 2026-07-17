@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.routes
+package ca.floo.roadtrip.routes.common
 
 import io.ktor.server.application.ApplicationCall
 import java.time.LocalDate

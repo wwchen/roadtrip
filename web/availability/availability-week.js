@@ -40,6 +40,7 @@ const CALENDAR_MAX_DAYS_OUT = 365;
 const DEFAULT_STOP_WHEN_FOUND = true;
 const DEFAULT_WATCH_CADENCE_SEC = 60;
 const TRIGGER_KIND_SLACK_NOTIFY = 'slack_notify';
+const TRIGGER_KIND_EMAIL_NOTIFY = 'email_notify';
 const TRIGGER_KIND_ATC = 'atc';
 const BOOKING_ACTION_ADD_TO_CART = 'add_to_cart';
 
@@ -621,6 +622,7 @@ function openWatchPopover(ctx, anchorEl, date) {
     watching: Boolean(existingWatch),
     stopWhenFound: watchStopWhenFound(existingWatch),
     supportsAddToCart: supportsAddToCart(ctx),
+    watchCapabilities: ctx.watchCapabilities,
     onSave: async (triggerPayload) => {
       const existing = ctx.watchesByWindow.get(key);
       if (existing) {
@@ -936,7 +938,7 @@ async function toggleWatch(ctx, button) {
   }
 }
 
-function buildWatchPayload(ctx, date, endDate, triggerPayload = defaultTriggerPayload()) {
+function buildWatchPayload(ctx, date, endDate, triggerPayload = defaultTriggerPayload(ctx)) {
   if (!supportsWatchAlerts(ctx)) {
     throw new Error('Watch alerts are not available for this campground.');
   }
@@ -950,9 +952,15 @@ function buildWatchPayload(ctx, date, endDate, triggerPayload = defaultTriggerPa
   };
 }
 
-function defaultTriggerPayload() {
+function defaultTriggerPayload(ctx) {
+  const triggerKinds = [];
+  if (ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY)) {
+    triggerKinds.push(TRIGGER_KIND_SLACK_NOTIFY);
+  } else if (ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_EMAIL_NOTIFY)) {
+    triggerKinds.push(TRIGGER_KIND_EMAIL_NOTIFY);
+  }
   return {
-    trigger_kinds: [TRIGGER_KIND_SLACK_NOTIFY],
+    trigger_kinds: triggerKinds,
     trigger_config: {},
     stop_when_triggered: DEFAULT_STOP_WHEN_FOUND,
   };
@@ -964,7 +972,8 @@ function supportsAddToCart(ctx) {
 }
 
 function supportsWatchAlerts(ctx) {
-  return ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY);
+  return ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY)
+    || ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_EMAIL_NOTIFY);
 }
 
 function normalizeWatchCapabilities(value) {

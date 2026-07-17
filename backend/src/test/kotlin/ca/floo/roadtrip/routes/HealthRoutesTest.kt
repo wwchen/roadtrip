@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.routes.api.health.encodeHealthJson
+import ca.floo.roadtrip.routes.api.health.healthResponseDto
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
