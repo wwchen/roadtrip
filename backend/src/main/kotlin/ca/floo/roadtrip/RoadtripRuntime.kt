@@ -103,7 +103,7 @@ internal class RoadtripRuntime(
     val slackNotifications: SlackNotificationService,
     val failoverFetcher: FailoverAvailabilityFetcher,
     private val notifications: NotificationFanout,
-) {
+) : AutoCloseable {
     val appConfig: AppConfig get() = boot.appConfig
     val ctx: DSLContext get() = boot.ctx
     val staticDir: File get() = boot.staticDir
@@ -112,7 +112,7 @@ internal class RoadtripRuntime(
     val poiRegistry: PoiRegistry get() = boot.poiRegistry
     val ingestController: IngestController get() = boot.ingestController
 
-    fun close() {
+    override fun close() {
         schedulerScope.cancel()
         boot.availabilityProviderClients.close()
         notifications.close()
