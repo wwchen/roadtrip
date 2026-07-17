@@ -108,7 +108,7 @@ class ApplicationPropertiesTest {
     }
 
     @Test
-    fun `load overlays optional application properties after yaml resources`() {
+    fun `load overlays selected profile yaml after base yaml`() {
         val props =
             ApplicationProperties.load(
                 env =
@@ -121,25 +121,20 @@ class ApplicationPropertiesTest {
                             """
                             shared: base-yaml
                             base-only: base
-                            """.trimIndent(),
-                        "application.properties" to
-                            """
-                            shared=base-properties
-                            prop-only=${'$'}{SECRET_VALUE}
+                            secret: ${'$'}{SECRET_VALUE}
                             """.trimIndent(),
                         "application-local.yml" to
                             """
                             profile-only: profile-yaml
                             shared: profile-yaml
                             """.trimIndent(),
-                        "application-local.properties" to "shared=profile-properties",
                     ),
             )
 
         assertEquals("base", props["base-only"])
-        assertEquals("from-env", props["prop-only"])
+        assertEquals("from-env", props["secret"])
         assertEquals("profile-yaml", props["profile-only"])
-        assertEquals("profile-properties", props["shared"])
+        assertEquals("profile-yaml", props["shared"])
     }
 
     @Test

@@ -1,6 +1,4 @@
-# Base application YAML. Runtime loads this first, then optional
-# application.properties, then application-<profile>.yml and optional
-# application-<profile>.properties.
+# Base application YAML. Runtime loads this first, then application-<profile>.yml.
 #
 # Values may reference process environment with ${ENV_VAR}. This keeps backend
 # config in application*.yml while secrets stay in .env/deploy env.
@@ -25,6 +23,10 @@ roadtrip:
     bot-token: ${SLACK_BOT_TOKEN}
     default-channel: ${SLACK_ALERT_CHANNEL}
     signing-secret: ${SLACK_SIGNING_SECRET}
+  email:
+    resend-api-key: ${RESEND_API_KEY}
+    from: Roadtrip Alerts <roadtrip@floo.ca>
+    default-to:
   poi-registry:
     resource: poi-registry.yaml
     path:
