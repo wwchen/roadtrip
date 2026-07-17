@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.route.api.pois
 
-import ca.floo.roadtrip.model.api.ApiErrorSchema
 import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
 import ca.floo.roadtrip.model.api.poi.PoiFeatureCollectionSchema
 import ca.floo.roadtrip.model.api.poi.PoisRequestSchema
@@ -8,6 +7,7 @@ import ca.floo.roadtrip.model.domain.poi.Bbox
 import ca.floo.roadtrip.route.common.boundedIntQuery
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
+import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.POI_LIMIT
 import ca.floo.roadtrip.service.poi.PoiReader
@@ -187,7 +187,7 @@ private suspend fun ApplicationCall.respondPoiError(
     status: HttpStatusCode,
     detail: String? = null,
 ) {
-    respondPoiJson(ApiErrorSchema(error = error, detail = detail), status)
+    respondApiError(error = error, status = status, detail = detail)
 }
 
 private suspend inline fun <reified T> ApplicationCall.respondPoiJson(

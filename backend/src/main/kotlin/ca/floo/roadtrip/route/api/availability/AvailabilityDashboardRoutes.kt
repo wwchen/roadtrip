@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.route.api.availability
 
-import ca.floo.roadtrip.model.api.ApiErrorSchema
 import ca.floo.roadtrip.model.api.AvailabilityPollerSchema
 import ca.floo.roadtrip.model.api.AvailabilityPollersListResponse
 import ca.floo.roadtrip.model.api.AvailabilityPollersSummary
@@ -23,6 +22,7 @@ import ca.floo.roadtrip.route.common.intQueryAtLeast
 import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.optionalLongQuery
 import ca.floo.roadtrip.route.common.optionalOffsetDateTimeQuery
+import ca.floo.roadtrip.route.common.respondApiError
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -276,7 +276,4 @@ private suspend fun ApplicationCall.respondError(
     error: String,
     status: HttpStatusCode,
     detail: String? = null,
-) {
-    val payload = ApiErrorSchema(error = error, detail = detail)
-    respondText(dashboardJson.encodeToString(payload), ContentType.Application.Json, status)
-}
+) = respondApiError(error = error, status = status, detail = detail)

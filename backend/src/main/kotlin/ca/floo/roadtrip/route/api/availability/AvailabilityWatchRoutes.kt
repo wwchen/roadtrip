@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.route.api.availability
 
-import ca.floo.roadtrip.model.api.ApiErrorSchema
 import ca.floo.roadtrip.model.api.AvailabilityWatchCreateRequest
 import ca.floo.roadtrip.model.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
@@ -10,6 +9,7 @@ import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.intQueryAtLeast
 import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.optionalLongQuery
+import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchRequestMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
@@ -198,7 +198,4 @@ private suspend fun ApplicationCall.respondError(
     error: String,
     status: HttpStatusCode,
     detail: String? = null,
-) {
-    val payload = ApiErrorSchema(error = error, detail = detail)
-    respondText(watchJson.encodeToString(payload), ContentType.Application.Json, status)
-}
+) = respondApiError(error = error, status = status, detail = detail)

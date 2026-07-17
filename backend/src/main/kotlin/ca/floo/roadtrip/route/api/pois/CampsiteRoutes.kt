@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.route.api.pois
 
-import ca.floo.roadtrip.model.api.ApiErrorSchema
 import ca.floo.roadtrip.model.api.AvailabilityErrorDto
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -10,6 +9,7 @@ import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.optionalDateQuery
 import ca.floo.roadtrip.route.common.queryValues
+import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
@@ -216,7 +216,7 @@ private suspend fun ApplicationCall.respondCampsiteError(
     status: HttpStatusCode,
     detail: String? = null,
 ) {
-    respondCampsiteJson(ApiErrorSchema(error = error, detail = detail), status)
+    respondApiError(error = error, status = status, detail = detail)
 }
 
 private suspend inline fun <reified T> ApplicationCall.respondCampsiteJson(
