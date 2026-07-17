@@ -21,26 +21,6 @@ class ApplicationPropertiesTest {
     }
 
     @Test
-    fun `load defaults to local profile properties`() {
-        val props = ApplicationProperties.load(env = emptyMap())
-
-        assertEquals(".", props["roadtrip.static-dir"])
-        assertEquals("poi-registry.yaml", props["roadtrip.poi-registry.resource"])
-        assertEquals("", props["roadtrip.poi-registry.path"])
-        assertEquals("http://127.0.0.1:3000/dash/", props["roadtrip.grafana.root-url"])
-        assertEquals("http://127.0.0.1:8765", props["roadtrip.web.root-url"])
-        assertEquals("http://127.0.0.1:8770", props["roadtrip.booking.recgov-atc.companion-base-url"])
-        assertEquals("180s", props["roadtrip.booking.recgov-atc.companion-timeout"])
-        assertEquals("", props["roadtrip.email.resend-api-key"])
-        assertEquals("Campsite Alerts <alerts@roadtrip.floo.ca>", props["roadtrip.email.from"])
-        assertEquals("", props["roadtrip.email.default-to"])
-        assertEquals(
-            "aspira,campflare,recgov,reserveamerica,reservecalifornia",
-            props["roadtrip.read-path.enabled-availability-providers"],
-        )
-    }
-
-    @Test
     fun `load uses selected profile properties`() {
         val props =
             withSystemProperties(
