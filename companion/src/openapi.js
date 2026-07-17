@@ -69,13 +69,6 @@ export const COMPANION_OPENAPI_SPEC = {
       },
     },
     '/refresh': {
-      get: {
-        summary: 'Operator refresh page',
-        operationId: 'getRefreshPage',
-        responses: {
-          200: htmlResponse('HTML refresh page'),
-        },
-      },
       post: {
         summary: 'Force refresh the stored Rec.gov browser session',
         operationId: 'postRefresh',
@@ -225,11 +218,18 @@ export const COMPANION_OPENAPI_SPEC = {
         type: 'object',
         required: ['username', 'password'],
         properties: {
-          username: { type: 'string', format: 'email' },
-          email: { type: 'string', format: 'email' },
+          username: {
+            type: 'string',
+            format: 'email',
+            description: 'Recreation.gov username or email address',
+            example: 'user@example.com',
+          },
           password: { type: 'string', format: 'password' },
-          mfa_code: { type: 'string', description: 'Current Rec.gov MFA code when prompted' },
-          mfaCode: { type: 'string', description: 'JSON alias for mfa_code' },
+          mfa_code: {
+            type: 'string',
+            description: 'Current Recreation.gov MFA code when prompted',
+            example: '123456',
+          },
         },
       },
       AuthResponse: {

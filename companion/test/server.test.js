@@ -128,6 +128,12 @@ test('GET /openapi.json returns companion-owned OpenAPI docs', async () => {
   assert.ok(response.json.paths['/atc'])
   assert.ok(response.json.paths['/screenshot'])
   assert.ok(response.json.paths['/diagnostics/{filename}'])
+  assert.equal(response.json.paths['/refresh'].get, undefined)
+  assert.ok(response.json.paths['/refresh'].post)
+
+  const loginSchema = response.json.components.schemas.LoginRequest
+  assert.deepEqual(Object.keys(loginSchema.properties), ['username', 'password', 'mfa_code'])
+  assert.deepEqual(loginSchema.required, ['username', 'password'])
 })
 
 test('GET /docs returns Swagger UI for the companion OpenAPI spec', async () => {

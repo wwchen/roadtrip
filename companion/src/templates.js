@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs'
 
 const LOGIN_FORM_TITLE = 'Recreation.gov Login'
 const LOGIN_PAGE_TEMPLATE = readTemplate('./loginPage.html')
-const REFRESH_PAGE_TEMPLATE = readTemplate('./refreshPage.html')
 const LOGIN_DIAGNOSTIC_TEMPLATE = readTemplate('./loginDiagnostic.html')
 const SWAGGER_PAGE_TEMPLATE = readTemplate('./swaggerPage.html')
 
@@ -28,10 +27,6 @@ export function renderLoginPage ({ result = null } = {}) {
     INITIAL_JSON: escapeHtml(initialJson),
     DIAGNOSTIC_HTML: diagnosticHtml,
   })
-}
-
-export function renderRefreshPage () {
-  return REFRESH_PAGE_TEMPLATE
 }
 
 export function renderSwaggerPage () {

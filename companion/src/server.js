@@ -32,7 +32,6 @@ import {
 import { runAtcOnce } from './runAtcOnce.js'
 import {
   renderLoginPage,
-  renderRefreshPage,
   renderSwaggerPage,
 } from './templates.js'
 
@@ -615,10 +614,6 @@ export function createCompanionServer ({
     }
     if (req.method === 'POST' && url.pathname === '/logout') {
       await handleLogout(req, res, deps)
-      return
-    }
-    if (req.method === 'GET' && url.pathname === '/refresh') {
-      htmlResponse(res, HTTP_OK, renderRefreshPage())
       return
     }
     if (req.method === 'POST' && url.pathname === '/refresh') {
