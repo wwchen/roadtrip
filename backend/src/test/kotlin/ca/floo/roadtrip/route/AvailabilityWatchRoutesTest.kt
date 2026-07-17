@@ -22,9 +22,7 @@ import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
-import io.ktor.client.request.delete
 import io.ktor.client.request.get
-import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -44,6 +42,16 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+
+private const val WATCHES_PATH = "/api/watches"
+private const val MODIFY_ACTION = "modify"
+private const val DELETE_ACTION = "delete"
+
+private fun watchPath(id: Long): String = "$WATCHES_PATH/$id"
+
+private fun modifyWatchPath(id: Long): String = "${watchPath(id)}/$MODIFY_ACTION"
+
+private fun deleteWatchPath(id: Long): String = "${watchPath(id)}/$DELETE_ACTION"
 
 class AvailabilityWatchRoutesTest : SharedDbTest() {
     @BeforeEach
@@ -167,7 +175,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
                 """.trimIndent()
             val resp =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -198,7 +206,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 {"poi_id": $poiId, "start_date": "2026-07-06", "end_date": "2026-07-04", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val resp =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -232,7 +240,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
                 """.trimIndent()
             val resp =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -259,7 +267,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 {"start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val resp =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -288,7 +296,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
 
             val resp =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -323,7 +331,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
                 """.trimIndent()
             val resp =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -353,7 +361,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val resp =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -382,7 +390,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 {"targets": [{"poi_id": $poiId}], "poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val resp =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -410,7 +418,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 {"targets": [{"poi_id": $poiId, "campsite_id": $campsiteId}], "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val resp =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -436,19 +444,19 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             repeat(3) {
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
             }
-            val resp = client.get("/api/availability/watches?status=active")
+            val resp = client.get("$WATCHES_PATH?status=active")
             assertEquals(HttpStatusCode.OK, resp.status)
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(3, obj["total"]!!.jsonPrimitive.int)
         }
 
     @Test
-    fun `PATCH pauses a watch`() =
+    fun `POST modify pauses a watch`() =
         testApplication {
             application {
                 routing {
@@ -464,7 +472,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -475,7 +483,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonObject["id"]!!
                     .jsonPrimitive.long
             val resp =
-                client.patch("/api/availability/watches/$id") {
+                client.post(modifyWatchPath(id)) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"status": "paused"}""")
                 }
@@ -485,7 +493,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `PATCH rejects invalid cadence and triggers`() =
+    fun `POST modify rejects invalid cadence and triggers`() =
         testApplication {
             application {
                 routing {
@@ -501,7 +509,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -513,7 +521,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonPrimitive.long
 
             val badCadence =
-                client.patch("/api/availability/watches/$id") {
+                client.post(modifyWatchPath(id)) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"cadence_sec": 1}""")
                 }
@@ -527,7 +535,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             )
 
             val badTriggers =
-                client.patch("/api/availability/watches/$id") {
+                client.post(modifyWatchPath(id)) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"trigger_kinds": []}""")
                 }
@@ -541,7 +549,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             )
 
             val badEmailTrigger =
-                client.patch("/api/availability/watches/$id") {
+                client.post(modifyWatchPath(id)) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"trigger_kinds": ["email_notify"]}""")
                 }
@@ -555,7 +563,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             )
 
             val badConfig =
-                client.patch("/api/availability/watches/$id") {
+                client.post(modifyWatchPath(id)) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"trigger_config": {"slack_notify": {"channel": ""}}}""")
                 }
@@ -570,7 +578,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `PATCH updates trigger config and stop when triggered`() =
+    fun `POST modify updates trigger config and stop when triggered`() =
         testApplication {
             application {
                 routing {
@@ -582,7 +590,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             }
             val poiId = seedPoi(sourceId = "p-trigger-patch", name = "Trigger Patch")
             val created =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(
                         """
@@ -598,7 +606,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonPrimitive.long
 
             val resp =
-                client.patch("/api/availability/watches/$id") {
+                client.post(modifyWatchPath(id)) {
                     contentType(ContentType.Application.Json)
                     setBody(
                         """
@@ -635,7 +643,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `PATCH ignores removed date fields`() =
+    fun `POST modify ignores removed date fields`() =
         testApplication {
             application {
                 routing {
@@ -651,7 +659,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -663,7 +671,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonPrimitive.long
 
             val resp =
-                client.patch("/api/availability/watches/$id") {
+                client.post(modifyWatchPath(id)) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"target_dates": ["2026-07-04"], "min_nights": 1}""")
                 }
@@ -675,7 +683,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `PATCH rejects an empty targets array`() =
+    fun `POST modify rejects an empty targets array`() =
         testApplication {
             application {
                 routing {
@@ -691,7 +699,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -703,7 +711,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonPrimitive.long
 
             val resp =
-                client.patch("/api/availability/watches/$id") {
+                client.post(modifyWatchPath(id)) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"targets": []}""")
                 }
@@ -713,7 +721,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `PATCH rejects a target with both poi_id and campsite_id set`() =
+    fun `POST modify rejects a target with both poi_id and campsite_id set`() =
         testApplication {
             application {
                 routing {
@@ -731,7 +739,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -743,7 +751,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonPrimitive.long
 
             val resp =
-                client.patch("/api/availability/watches/$id") {
+                client.post(modifyWatchPath(id)) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"targets": [{"poi_id": $poiId, "campsite_id": $campsiteId}]}""")
                 }
@@ -753,7 +761,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `PATCH with a valid single-target targets array updates the watch`() =
+    fun `POST modify with a valid single-target targets array updates the watch`() =
         testApplication {
             application {
                 routing {
@@ -770,7 +778,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 {"poi_id": $poiA, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -782,7 +790,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonPrimitive.long
 
             val resp =
-                client.patch("/api/availability/watches/$id") {
+                client.post(modifyWatchPath(id)) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"targets": [{"poi_id": $poiB}]}""")
                 }
@@ -794,7 +802,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `DELETE removes a watch`() =
+    fun `POST delete removes a watch`() =
         testApplication {
             application {
                 routing {
@@ -810,7 +818,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -820,9 +828,9 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonObject["watch"]!!
                     .jsonObject["id"]!!
                     .jsonPrimitive.long
-            val del = client.delete("/api/availability/watches/$id")
+            val del = client.post(deleteWatchPath(id))
             assertEquals(HttpStatusCode.NoContent, del.status)
-            val getAfter = client.get("/api/availability/watches/$id")
+            val getAfter = client.get(watchPath(id))
             assertEquals(HttpStatusCode.NotFound, getAfter.status)
         }
 
@@ -841,7 +849,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             val poiId = seedPoi(sourceId = "p-capabilities", name = "Capabilities", providerRefJson = """{"recgov_id": "232447"}""")
             linkCampsiteToPoi(seedCampsite(vendorId = "cap-100"), poiId)
             val created =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(
                         """
@@ -856,7 +864,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonObject["id"]!!
                     .jsonPrimitive.long
 
-            val resp = client.get("/api/availability/watches/$id")
+            val resp = client.get(watchPath(id))
 
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
@@ -866,7 +874,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `POST links a poller and PATCH paused drops the link and deactivates it`() =
+    fun `POST links a poller and POST modify paused drops the link and deactivates it`() =
         testApplication {
             application {
                 routing {
@@ -882,7 +890,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
-                client.post("/api/availability/watches") {
+                client.post(WATCHES_PATH) {
                     contentType(ContentType.Application.Json)
                     setBody(createBody)
                 }
@@ -900,7 +908,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             assertTrue(pollers.findById(linked.single())!!.active)
 
             val paused =
-                client.patch("/api/availability/watches/$watchId") {
+                client.post(modifyWatchPath(watchId)) {
                     contentType(ContentType.Application.Json)
                     setBody("""{"status": "paused"}""")
                 }

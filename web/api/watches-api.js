@@ -1,12 +1,19 @@
 // web/api/watches-api.js
 //
-// Client for /api/availability/watches CRUD. Watches are user intent for
+// Client for /api/watches actions. Watches are user intent for
 // availability polling; the backend persists them and (in later PRs) a
 // scheduler will turn them into actual polling jobs.
 
 import { HttpError, jsonGetOk } from './http.js';
 
-const BASE = '/api/availability/watches';
+const BASE = '/api/watches';
+const MODIFY_ACTION = 'modify';
+const DELETE_ACTION = 'delete';
+
+function watchUrl(id, action) {
+  const base = `${BASE}/${encodeURIComponent(id)}`;
+  return action ? `${base}/${action}` : base;
+}
 
 /**
  * @param {object}        [params]
@@ -29,7 +36,7 @@ export function listWatches({ status, poiId, campsiteId, limit, offset, signal }
 }
 
 export function getWatch(id, { signal } = {}) {
-  return jsonGetOk(`${BASE}/${id}`, { signal });
+  return jsonGetOk(watchUrl(id), { signal });
 }
 
 export async function createWatch(body, { signal } = {}) {
@@ -49,15 +56,16 @@ export async function createWatch(body, { signal } = {}) {
 }
 
 export async function updateWatch(id, body, { signal } = {}) {
-  const r = await fetch(`${BASE}/${id}`, {
-    method: 'PATCH',
+  const url = watchUrl(id, MODIFY_ACTION);
+  const r = await fetch(url, {
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
     signal,
   });
   if (!r.ok) {
     const text = await r.text().catch(() => '');
-    const err = new HttpError(`${BASE}/${id}`, r.status);
+    const err = new HttpError(url, r.status);
     err.body = text;
     throw err;
   }
@@ -65,8 +73,9 @@ export async function updateWatch(id, body, { signal } = {}) {
 }
 
 export async function deleteWatch(id, { signal } = {}) {
-  const r = await fetch(`${BASE}/${id}`, { method: 'DELETE', signal });
+  const url = watchUrl(id, DELETE_ACTION);
+  const r = await fetch(url, { method: 'POST', signal });
   if (!r.ok && r.status !== 404) {
-    throw new HttpError(`${BASE}/${id}`, r.status);
+    throw new HttpError(url, r.status);
   }
 }

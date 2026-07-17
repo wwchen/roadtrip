@@ -10,7 +10,7 @@ class CachePolicyTest {
     fun `mutable API responses are not browser cached`() {
         assertEquals(
             "no-store",
-            cacheOptionsFor("/api/availability/watches", ContentType.Application.Json)?.cacheControl.toString(),
+            cacheOptionsFor("/api/watches", ContentType.Application.Json)?.cacheControl.toString(),
         )
         assertEquals(
             "no-store",
