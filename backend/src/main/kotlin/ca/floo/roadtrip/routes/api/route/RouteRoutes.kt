@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.routes
+package ca.floo.roadtrip.routes.api.route
 
 import ca.floo.roadtrip.exceptions.RoutingException
 import ca.floo.roadtrip.models.api.CorridorFeatureDto
@@ -22,6 +22,7 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import io.ktor.server.routing.route
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -50,136 +51,138 @@ internal fun Route.routeRoutes(
     routeCache: RouteCache,
     routeCorridorService: RouteCorridorService,
 ) {
-    get("/api/route") {
-        if (!routeCache.configured) {
-            call.respondRouteError(
-                error = "routing_unavailable",
-                detail = "roadtrip.mapbox.token not set",
-                status = HttpStatusCode.ServiceUnavailable,
-            )
-            return@get
-        }
-
-        val raw = call.request.queryParameters["coords"].orEmpty()
-        val pieces = raw.split(";").map { it.trim() }.filter { it.isNotEmpty() }
-
-        if (pieces.size < 2) {
-            call.respondRouteError(
-                error = "too_few_points",
-                detail = "need >= 2 waypoints in coords=lng,lat;lng,lat[;...]",
-                status = HttpStatusCode.BadRequest,
-            )
-            return@get
-        }
-        if (pieces.size > MAX_ROUTE_WAYPOINTS) {
-            call.respondRouteError(
-                error = "too_many_points",
-                detail = "max $MAX_ROUTE_WAYPOINTS waypoints",
-                status = HttpStatusCode.BadRequest,
-            )
-            return@get
-        }
-
-        val coords = mutableListOf<Pair<Double, Double>>()
-        for ((i, p) in pieces.withIndex()) {
-            val parts = p.split(",")
-            if (parts.size != 2) {
-                call.respondRouteError(
-                    error = "bad_coords",
-                    detail = "point $i: '$p' is not 'lng,lat'",
-                    status = HttpStatusCode.BadRequest,
-                )
-                return@get
-            }
-            val lng = parts[0].toDoubleOrNull()
-            val lat = parts[1].toDoubleOrNull()
-            if (lng == null || lat == null) {
-                call.respondRouteError(
-                    error = "bad_coords",
-                    detail = "point $i: '$p' is not 'lng,lat'",
-                    status = HttpStatusCode.BadRequest,
-                )
-                return@get
-            }
-            if (lng !in -180.0..180.0 || lat !in -90.0..90.0) {
-                call.respondRouteError(
-                    error = "out_of_range",
-                    detail = "point $i out of lng/lat range",
-                    status = HttpStatusCode.BadRequest,
-                )
-                return@get
-            }
-            coords.add(lng to lat)
-        }
-        val corridorRadiusMiles =
-            call.request.queryParameters["radius_miles"]?.let { rawRadius ->
-                val radius =
-                    rawRadius.toDoubleOrNull()
-                        ?: return@get call.respondRouteError(
-                            error = "bad_radius",
-                            detail = "radius_miles must be a number",
-                            status = HttpStatusCode.BadRequest,
-                        )
-                if (radius !in MIN_ROUTE_CORRIDOR_RADIUS_MILES..MAX_ROUTE_CORRIDOR_RADIUS_MILES) {
-                    return@get call.respondRouteError(
-                        error = "bad_radius",
-                        detail = "radius_miles must be in [$MIN_ROUTE_CORRIDOR_RADIUS_MILES, $MAX_ROUTE_CORRIDOR_RADIUS_MILES]",
-                        status = HttpStatusCode.BadRequest,
-                    )
-                }
-                radius
-            }
-        // Mapbox rejects identical adjacent waypoints with code:"InvalidInput".
-        // Catch it before the round-trip.
-        for (i in 1 until coords.size) {
-            if (coords[i] == coords[i - 1]) {
-                call.respondRouteError(
-                    error = "duplicate_adjacent",
-                    detail = "points $i and ${i - 1} are identical",
-                    status = HttpStatusCode.BadRequest,
-                )
-                return@get
-            }
-        }
-
-        val response =
-            try {
-                routeCache.directions(coords)
-            } catch (e: RoutingException) {
+    route("/api") {
+        get("/route") {
+            if (!routeCache.configured) {
                 call.respondRouteError(
                     error = "routing_unavailable",
-                    detail = e.message ?: "",
+                    detail = "roadtrip.mapbox.token not set",
                     status = HttpStatusCode.ServiceUnavailable,
                 )
                 return@get
             }
 
-        val routeLineGeoJson = lineStringGeoJson(response.coordinates)
-        val corridorPolygonGeoJson =
-            corridorRadiusMiles?.let { radiusMiles ->
-                try {
-                    routeCorridorService.bufferedPolygonGeoJson(
-                        routeLineGeoJson,
-                        radiusMiles,
-                    )
-                } catch (e: DataAccessException) {
+            val raw = call.request.queryParameters["coords"].orEmpty()
+            val pieces = raw.split(";").map { it.trim() }.filter { it.isNotEmpty() }
+
+            if (pieces.size < 2) {
+                call.respondRouteError(
+                    error = "too_few_points",
+                    detail = "need >= 2 waypoints in coords=lng,lat;lng,lat[;...]",
+                    status = HttpStatusCode.BadRequest,
+                )
+                return@get
+            }
+            if (pieces.size > MAX_ROUTE_WAYPOINTS) {
+                call.respondRouteError(
+                    error = "too_many_points",
+                    detail = "max $MAX_ROUTE_WAYPOINTS waypoints",
+                    status = HttpStatusCode.BadRequest,
+                )
+                return@get
+            }
+
+            val coords = mutableListOf<Pair<Double, Double>>()
+            for ((i, p) in pieces.withIndex()) {
+                val parts = p.split(",")
+                if (parts.size != 2) {
                     call.respondRouteError(
-                        error = "corridor_unavailable",
-                        detail = e.message ?: "",
-                        status = HttpStatusCode.ServiceUnavailable,
+                        error = "bad_coords",
+                        detail = "point $i: '$p' is not 'lng,lat'",
+                        status = HttpStatusCode.BadRequest,
+                    )
+                    return@get
+                }
+                val lng = parts[0].toDoubleOrNull()
+                val lat = parts[1].toDoubleOrNull()
+                if (lng == null || lat == null) {
+                    call.respondRouteError(
+                        error = "bad_coords",
+                        detail = "point $i: '$p' is not 'lng,lat'",
+                        status = HttpStatusCode.BadRequest,
+                    )
+                    return@get
+                }
+                if (lng !in -180.0..180.0 || lat !in -90.0..90.0) {
+                    call.respondRouteError(
+                        error = "out_of_range",
+                        detail = "point $i out of lng/lat range",
+                        status = HttpStatusCode.BadRequest,
+                    )
+                    return@get
+                }
+                coords.add(lng to lat)
+            }
+            val corridorRadiusMiles =
+                call.request.queryParameters["radius_miles"]?.let { rawRadius ->
+                    val radius =
+                        rawRadius.toDoubleOrNull()
+                            ?: return@get call.respondRouteError(
+                                error = "bad_radius",
+                                detail = "radius_miles must be a number",
+                                status = HttpStatusCode.BadRequest,
+                            )
+                    if (radius !in MIN_ROUTE_CORRIDOR_RADIUS_MILES..MAX_ROUTE_CORRIDOR_RADIUS_MILES) {
+                        return@get call.respondRouteError(
+                            error = "bad_radius",
+                            detail = "radius_miles must be in [$MIN_ROUTE_CORRIDOR_RADIUS_MILES, $MAX_ROUTE_CORRIDOR_RADIUS_MILES]",
+                            status = HttpStatusCode.BadRequest,
+                        )
+                    }
+                    radius
+                }
+            // Mapbox rejects identical adjacent waypoints with code:"InvalidInput".
+            // Catch it before the round-trip.
+            for (i in 1 until coords.size) {
+                if (coords[i] == coords[i - 1]) {
+                    call.respondRouteError(
+                        error = "duplicate_adjacent",
+                        detail = "points $i and ${i - 1} are identical",
+                        status = HttpStatusCode.BadRequest,
                     )
                     return@get
                 }
             }
 
-        call.respondRouteJson(
-            routeResponseFeatureCollection(
-                response = response,
-                waypoints = coords,
-                corridorRadiusMiles = corridorRadiusMiles,
-                corridorPolygonGeoJson = corridorPolygonGeoJson,
-            ),
-        )
+            val response =
+                try {
+                    routeCache.directions(coords)
+                } catch (e: RoutingException) {
+                    call.respondRouteError(
+                        error = "routing_unavailable",
+                        detail = e.message ?: "",
+                        status = HttpStatusCode.ServiceUnavailable,
+                    )
+                    return@get
+                }
+
+            val routeLineGeoJson = lineStringGeoJson(response.coordinates)
+            val corridorPolygonGeoJson =
+                corridorRadiusMiles?.let { radiusMiles ->
+                    try {
+                        routeCorridorService.bufferedPolygonGeoJson(
+                            routeLineGeoJson,
+                            radiusMiles,
+                        )
+                    } catch (e: DataAccessException) {
+                        call.respondRouteError(
+                            error = "corridor_unavailable",
+                            detail = e.message ?: "",
+                            status = HttpStatusCode.ServiceUnavailable,
+                        )
+                        return@get
+                    }
+                }
+
+            call.respondRouteJson(
+                routeResponseFeatureCollection(
+                    response = response,
+                    waypoints = coords,
+                    corridorRadiusMiles = corridorRadiusMiles,
+                    corridorPolygonGeoJson = corridorPolygonGeoJson,
+                ),
+            )
+        }
     }
 }
 

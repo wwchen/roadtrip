@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.routes
+package ca.floo.roadtrip.routes.api.geocode
 
 import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.exceptions.GeocodeException
@@ -12,6 +12,7 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import io.ktor.server.routing.route
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -35,41 +36,43 @@ private val geocodeRouteJson =
  *   { "results": [ { id, place_name, place_type, lng, lat }, ... ] }
  */
 fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
-    get("/api/geocode") {
-        if (!geocoder.configured) {
-            call.respondGeocodeError(
-                "geocoding_unavailable",
-                HttpStatusCode.ServiceUnavailable,
-                detail = "roadtrip.mapbox.token not set",
-            )
-            return@get
-        }
-
-        val q =
-            call.request.queryParameters["q"]
-                ?.trim()
-                .orEmpty()
-        if (q.isBlank() || q.length > 200) {
-            call.respondGeocodeError("bad_query", HttpStatusCode.BadRequest)
-            return@get
-        }
-
-        val autocomplete = call.request.queryParameters["autocomplete"] != "0"
-        val limit =
-            call.request.queryParameters["limit"]
-                ?.toIntOrNull()
-                ?.coerceIn(1, 10) ?: 5
-        val proximity = call.request.queryParameters["proximity"]?.takeIf { LNGLAT_RE.matches(it) }
-
-        val results =
-            try {
-                geocoder.forward(q, autocomplete = autocomplete, proximity = proximity, limit = limit)
-            } catch (e: GeocodeException) {
-                call.respondGeocodeError("geocoding_unavailable", HttpStatusCode.ServiceUnavailable)
+    route("/api") {
+        get("/geocode") {
+            if (!geocoder.configured) {
+                call.respondGeocodeError(
+                    "geocoding_unavailable",
+                    HttpStatusCode.ServiceUnavailable,
+                    detail = "roadtrip.mapbox.token not set",
+                )
                 return@get
             }
 
-        call.respondGeocodeJson(geocodeResponseDto(results))
+            val q =
+                call.request.queryParameters["q"]
+                    ?.trim()
+                    .orEmpty()
+            if (q.isBlank() || q.length > 200) {
+                call.respondGeocodeError("bad_query", HttpStatusCode.BadRequest)
+                return@get
+            }
+
+            val autocomplete = call.request.queryParameters["autocomplete"] != "0"
+            val limit =
+                call.request.queryParameters["limit"]
+                    ?.toIntOrNull()
+                    ?.coerceIn(1, 10) ?: 5
+            val proximity = call.request.queryParameters["proximity"]?.takeIf { LNGLAT_RE.matches(it) }
+
+            val results =
+                try {
+                    geocoder.forward(q, autocomplete = autocomplete, proximity = proximity, limit = limit)
+                } catch (e: GeocodeException) {
+                    call.respondGeocodeError("geocoding_unavailable", HttpStatusCode.ServiceUnavailable)
+                    return@get
+                }
+
+            call.respondGeocodeJson(geocodeResponseDto(results))
+        }
     }
 }
 

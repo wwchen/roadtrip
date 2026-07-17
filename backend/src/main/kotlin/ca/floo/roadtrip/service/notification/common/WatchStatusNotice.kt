@@ -13,7 +13,7 @@ import java.time.LocalDate
  *
  * [watchId] is echoed into every interactive button's `value` so the Slack
  * interactivity handler (see
- * [ca.floo.roadtrip.routes.SlackInteractivityRoute]) can identify the target
+ * [ca.floo.roadtrip.routes.api.slack.slackInteractivityRoute]) can identify the target
  * watch on pause / resume / delete without trusting the client for a routing
  * key. Scope is one of: a single named site ([siteName] set), a whole
  * campground ([campgroundName] set — the watch covers every site in one POI),

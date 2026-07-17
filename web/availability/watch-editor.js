@@ -7,6 +7,7 @@
 import { escapeHtml } from '../core.js';
 
 export const TRIGGER_KIND_SLACK_NOTIFY = 'slack_notify';
+export const TRIGGER_KIND_EMAIL_NOTIFY = 'email_notify';
 export const TRIGGER_KIND_ATC = 'atc';
 
 const WATCH_EDITOR_STYLE_ID = 'rt-watch-editor-styles';
@@ -82,6 +83,7 @@ export function mountWatchEditor(host, args) {
     const tgt = e.target;
     if (!(tgt instanceof HTMLInputElement)) return;
     if (tgt.name === 'slack_notify') state = { ...state, slackNotify: tgt.checked, error: null };
+    if (tgt.name === 'email_notify') state = { ...state, emailNotify: tgt.checked, error: null };
     if (tgt.name === 'atc') state = { ...state, addToCart: tgt.checked, error: null };
     if (tgt.name === 'stop_when_triggered') state = { ...state, stopWhenTriggered: tgt.checked, error: null };
     rerender();
@@ -140,6 +142,7 @@ export function watchHasTrigger(watch, kind) {
 export function buildTriggerPayload(state) {
   const triggerKinds = [];
   if (state.slackNotify) triggerKinds.push(TRIGGER_KIND_SLACK_NOTIFY);
+  if (state.emailNotify) triggerKinds.push(TRIGGER_KIND_EMAIL_NOTIFY);
   if (state.addToCart) triggerKinds.push(TRIGGER_KIND_ATC);
   const triggerConfig = {};
   const channel = String(state.slackChannel || '').trim();
@@ -157,6 +160,7 @@ function initialState(watch, capabilities) {
   const hasWatch = !!watch;
   return {
     slackNotify: hasWatch ? watchHasTrigger(watch, TRIGGER_KIND_SLACK_NOTIFY) : capabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY),
+    emailNotify: hasWatch ? watchHasTrigger(watch, TRIGGER_KIND_EMAIL_NOTIFY) : capabilities.triggerKinds.has(TRIGGER_KIND_EMAIL_NOTIFY),
     addToCart: hasWatch ? watchHasTrigger(watch, TRIGGER_KIND_ATC) : false,
     stopWhenTriggered: watchStopWhenTriggered(watch, true),
     slackChannel: watchSlackChannel(watch),
@@ -167,6 +171,7 @@ function initialState(watch, capabilities) {
 
 function renderEditor({ title, subtitle, watch, capabilities, state, onRemove, onClose }) {
   const canSlack = capabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY) || state.slackNotify;
+  const canEmail = capabilities.triggerKinds.has(TRIGGER_KIND_EMAIL_NOTIFY) || state.emailNotify;
   const canAtc = capabilities.triggerKinds.has(TRIGGER_KIND_ATC);
   const showAtc = canAtc || state.addToCart;
   const busyAttr = state.busy ? 'disabled' : '';
@@ -186,13 +191,16 @@ function renderEditor({ title, subtitle, watch, capabilities, state, onRemove, o
         checked: state.slackNotify,
         disabled: state.busy,
       })}
-      ${state.slackNotify ? `
-        <label class="rt-watch-editor-field">
-          <span>Channel override</span>
-          <input type="text" name="slack_channel" value="${escapeHtml(state.slackChannel)}" placeholder="#camping" ${busyAttr}>
-        </label>
-      ` : ''}
     `
+    : '';
+  const emailHtml = canEmail
+    ? toggleRow({
+      name: 'email_notify',
+      title: 'Email',
+      help: 'Send email when a matching site opens.',
+      checked: state.emailNotify,
+      disabled: state.busy,
+    })
     : '';
   const atcHtml = showAtc
     ? toggleRow({
@@ -215,6 +223,7 @@ function renderEditor({ title, subtitle, watch, capabilities, state, onRemove, o
       </div>
       <div class="rt-watch-editor-body">
         ${slackHtml}
+        ${emailHtml}
         ${atcHtml}
         ${toggleRow({
           name: 'stop_when_triggered',
@@ -259,10 +268,11 @@ function injectWatchEditorStyles() {
   if (document.getElementById(WATCH_EDITOR_STYLE_ID)) return;
   const css = `
   .rt-watch-editor {
-    min-width: 240px;
-    color: var(--rt-text);
-    background: var(--rt-panel, #fff);
-    border: 1px solid var(--rt-border);
+    width: 240px;
+    box-sizing: border-box;
+    color: var(--rt-text, #e8eaed);
+    background: var(--rt-surface, #26272d);
+    border: 1px solid var(--rt-border-strong, rgba(255,255,255,0.13));
     border-radius: 8px;
     box-shadow: 0 12px 32px rgba(0,0,0,0.18);
     padding: 12px;
@@ -276,13 +286,13 @@ function injectWatchEditorStyles() {
     margin-bottom: 8px;
   }
   .rt-watch-editor-title { font-weight: 700; font-size: 13px; }
-  .rt-watch-editor-subtitle { color: var(--rt-muted); margin-top: 2px; }
+  .rt-watch-editor-subtitle { color: var(--rt-muted, #9aa0a8); margin-top: 2px; }
   .rt-watch-editor-icon {
     width: 24px; height: 24px;
-    border: 0; background: transparent; color: var(--rt-muted);
+    border: 0; background: transparent; color: var(--rt-muted, #9aa0a8);
     border-radius: 4px; cursor: pointer;
   }
-  .rt-watch-editor-icon:hover { background: var(--rt-fill-hover); color: var(--rt-text); }
+  .rt-watch-editor-icon:hover { background: var(--rt-fill-hover, rgba(255,255,255,0.06)); color: var(--rt-text, #e8eaed); }
   .rt-watch-editor-body { display: grid; gap: 8px; }
   .rt-watch-editor-toggle {
     display: flex;
@@ -292,12 +302,12 @@ function injectWatchEditorStyles() {
   }
   .rt-watch-editor-toggle-text { display: grid; gap: 2px; min-width: 0; }
   .rt-watch-editor-toggle-title { font-weight: 600; }
-  .rt-watch-editor-toggle-help { color: var(--rt-muted); font-size: 11px; line-height: 1.25; }
+  .rt-watch-editor-toggle-help { color: var(--rt-muted, #9aa0a8); font-size: 11px; line-height: 1.25; }
   .rt-watch-editor-switch { position: relative; display: inline-grid; flex: 0 0 auto; }
   .rt-watch-editor-switch input { position: absolute; opacity: 0; pointer-events: none; }
   .rt-watch-editor-switch-track {
     width: 34px; height: 18px; border-radius: 999px;
-    background: var(--rt-border); transition: background 120ms ease;
+    background: var(--rt-border-strong, rgba(255,255,255,0.13)); transition: background 120ms ease;
   }
   .rt-watch-editor-switch-track::after {
     content: "";
@@ -308,28 +318,28 @@ function injectWatchEditorStyles() {
     box-shadow: 0 1px 2px rgba(0,0,0,0.2);
     transition: transform 120ms ease;
   }
-  .rt-watch-editor-switch input:checked + .rt-watch-editor-switch-track { background: var(--rt-brand); }
+  .rt-watch-editor-switch input:checked + .rt-watch-editor-switch-track { background: var(--rt-brand, #3b82f6); }
   .rt-watch-editor-switch input:checked + .rt-watch-editor-switch-track::after { transform: translateX(16px); }
   .rt-watch-editor-switch input:disabled + .rt-watch-editor-switch-track { opacity: 0.55; }
   .rt-watch-editor-field {
     display: grid;
     gap: 4px;
-    color: var(--rt-muted);
+    color: var(--rt-muted, #9aa0a8);
     font-size: 11px;
   }
   .rt-watch-editor-field input {
     width: 100%;
     box-sizing: border-box;
-    border: 1px solid var(--rt-border);
+    border: 1px solid var(--rt-border-strong, rgba(255,255,255,0.13));
     border-radius: 6px;
     padding: 7px 8px;
-    color: var(--rt-text);
-    background: var(--rt-bg, #fff);
+    color: var(--rt-text, #e8eaed);
+    background: var(--rt-bg-sunken, #1c1d21);
     font: inherit;
   }
   .rt-watch-editor-error {
     margin-top: 8px;
-    color: var(--rt-error);
+    color: var(--rt-error, #f56565);
     font-size: 11px;
   }
   .rt-watch-editor-actions {
@@ -347,14 +357,14 @@ function injectWatchEditorStyles() {
     cursor: pointer;
   }
   .rt-watch-editor-save {
-    border: 1px solid var(--rt-brand);
-    background: var(--rt-brand);
+    border: 1px solid var(--rt-brand, #3b82f6);
+    background: var(--rt-brand, #3b82f6);
     color: #fff;
   }
   .rt-watch-editor-remove {
-    border: 1px solid var(--rt-border);
+    border: 1px solid var(--rt-border-strong, rgba(255,255,255,0.13));
     background: transparent;
-    color: var(--rt-error);
+    color: var(--rt-error, #f56565);
   }
   .rt-watch-editor-save:disabled,
   .rt-watch-editor-remove:disabled { opacity: 0.6; cursor: wait; }

@@ -25,7 +25,7 @@ class ApplicationPropertiesTest {
         val props =
             withSystemProperties(
                 "RESEND_API_KEY" to "",
-                "ROADTRIP_EMAIL_FROM" to "Roadtrip Alerts <roadtrip@floo.ca>",
+                "ROADTRIP_EMAIL_FROM" to "Campsite Alerts <alerts@roadtrip.floo.ca>",
                 "ROADTRIP_EMAIL_DEFAULT_TO" to "",
             ) {
                 ApplicationProperties.load(env = emptyMap())
@@ -39,7 +39,7 @@ class ApplicationPropertiesTest {
         assertEquals("http://127.0.0.1:8770", props["roadtrip.booking.recgov-atc.companion-base-url"])
         assertEquals("180s", props["roadtrip.booking.recgov-atc.companion-timeout"])
         assertEquals("", props["roadtrip.email.resend-api-key"])
-        assertEquals("Roadtrip Alerts <roadtrip@floo.ca>", props["roadtrip.email.from"])
+        assertEquals("Campsite Alerts <alerts@roadtrip.floo.ca>", props["roadtrip.email.from"])
         assertEquals("", props["roadtrip.email.default-to"])
         assertEquals(
             "aspira,campflare,recgov,reserveamerica,reservecalifornia",

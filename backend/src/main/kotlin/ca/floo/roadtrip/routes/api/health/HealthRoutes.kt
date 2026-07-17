@@ -1,13 +1,14 @@
-package ca.floo.roadtrip.routes
+package ca.floo.roadtrip.routes.api.health
 
 import ca.floo.roadtrip.models.api.HealthResponseDto
-import io.github.smiley4.ktorswaggerui.dsl.routing.get
+import ca.floo.roadtrip.routes.common.describeApi
 import io.ktor.http.ContentType
-import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
+import io.ktor.server.routing.get
+import io.ktor.server.routing.route
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -22,21 +23,10 @@ private val healthRouteJson =
 // Infra liveness/readiness JSON. Keep this endpoint boring: probes should only
 // need to know that the Ktor app booted and can answer requests.
 fun Route.healthRoutes() {
-    get("/api/health", {
-        tags = listOf("health")
-        summary = "Application liveness/readiness probe"
-        response {
-            code(HttpStatusCode.OK) {
-                body<HealthResponseDto> {
-                    mediaTypes(ContentType.Application.Json)
-                    example("ok") {
-                        value = HealthResponseDto(now = 1717683240)
-                    }
-                }
-            }
-        }
-    }) {
-        call.respondHealthJson(healthResponseDto(Instant.now().epochSecond))
+    route("/api") {
+        get("/health") {
+            call.respondHealthJson(healthResponseDto(Instant.now().epochSecond))
+        }.describeApi("health", "Application liveness/readiness probe")
     }
 }
 
