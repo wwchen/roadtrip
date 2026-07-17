@@ -16,7 +16,13 @@ import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.route.common.boundedIntQuery
+import ca.floo.roadtrip.route.common.dateQueryValues
 import ca.floo.roadtrip.route.common.describeApi
+import ca.floo.roadtrip.route.common.intQueryAtLeast
+import ca.floo.roadtrip.route.common.longPath
+import ca.floo.roadtrip.route.common.optionalLongQuery
+import ca.floo.roadtrip.route.common.optionalOffsetDateTimeQuery
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -34,9 +40,19 @@ import java.time.Duration
 import java.time.OffsetDateTime
 
 private const val DEFAULT_LIST_LIMIT = 100
+private const val MIN_LIST_LIMIT = 1
 private const val MAX_LIST_LIMIT = 500
+private const val DEFAULT_LIST_OFFSET = 0
+private const val MIN_LIST_OFFSET = 0
 private const val SNAPSHOT_DEFAULT_LIMIT = 200
 private const val SNAPSHOT_MAX_LIMIT = 1000
+private const val SNAPSHOT_WINDOW_HOURS_MIN = 1
+private const val SNAPSHOT_WINDOW_HOURS_MAX = 24 * 30
+private const val SNAPSHOT_WINDOW_HOURS_DEFAULT = 24 * 7
+
+private val listLimitRange = MIN_LIST_LIMIT..MAX_LIST_LIMIT
+private val snapshotLimitRange = MIN_LIST_LIMIT..SNAPSHOT_MAX_LIMIT
+private val snapshotWindowHoursRange = SNAPSHOT_WINDOW_HOURS_MIN..SNAPSHOT_WINDOW_HOURS_MAX
 
 @OptIn(ExperimentalSerializationApi::class)
 private val dashboardJson =
@@ -64,13 +80,8 @@ fun Route.availabilityDashboardRoutes(
                             it.toBooleanStrictOrNull()
                                 ?: return@get call.respondError("invalid_active", HttpStatusCode.BadRequest, "active must be true or false")
                         }
-                    val limit =
-                        (call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_LIST_LIMIT)
-                            .coerceIn(1, MAX_LIST_LIMIT)
-                    val offset =
-                        call.request.queryParameters["offset"]
-                            ?.toIntOrNull()
-                            ?.coerceAtLeast(0) ?: 0
+                    val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)
+                    val offset = call.intQueryAtLeast("offset", DEFAULT_LIST_OFFSET, MIN_LIST_OFFSET)
                     val rows = pollers.list(active = active, limit = limit, offset = offset)
                     val total = pollers.count(active = active)
                     call.respondJson(
@@ -98,18 +109,16 @@ fun Route.availabilityDashboardRoutes(
                 route("/{id}") {
                     get("/runs") {
                         val id =
-                            call.parameters["id"]?.toLongOrNull()
+                            call.longPath("id")
                                 ?: return@get call.respondError("invalid_id", HttpStatusCode.BadRequest)
-                        val limit =
-                            (call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_LIST_LIMIT)
-                                .coerceIn(1, MAX_LIST_LIMIT)
+                        val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)
                         val rows = runs.listForPoller(id, limit = limit)
                         call.respondJson(AvailabilityRunsListResponse(runs = rows.map { it.toSchema() }))
                     }.describeApi("availability", "Runs for one poller, newest first")
 
                     post("/force") {
                         val id =
-                            call.parameters["id"]?.toLongOrNull()
+                            call.longPath("id")
                                 ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
                         when (val result = pollers.forcePull(id, OffsetDateTime.now(), cooldown = forcePullCooldown)) {
                             is AvailabilityPollerRepo.ForcePullResult.Accepted ->
@@ -133,14 +142,9 @@ fun Route.availabilityDashboardRoutes(
             route("/runs") {
                 get {
                     val status = call.request.queryParameters["status"]
-                    val pollerId = call.request.queryParameters["poller_id"]?.toLongOrNull()
-                    val since =
-                        call.request.queryParameters["since"]?.let {
-                            runCatching { OffsetDateTime.parse(it) }.getOrNull()
-                        }
-                    val limit =
-                        (call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_LIST_LIMIT)
-                            .coerceIn(1, MAX_LIST_LIMIT)
+                    val pollerId = call.optionalLongQuery("poller_id")
+                    val since = call.optionalOffsetDateTimeQuery("since")
+                    val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)
                     val rows = runs.listSince(since = since, status = status, pollerId = pollerId, limit = limit)
                     call.respondJson(AvailabilityRunsListResponse(runs = rows.map { it.toSchema() }))
                 }.describeApi("availability", "Recent runs across all pollers")
@@ -148,8 +152,8 @@ fun Route.availabilityDashboardRoutes(
 
             route("/snapshots") {
                 get {
-                    val campsiteId = call.request.queryParameters["campsite_id"]?.toLongOrNull()
-                    val runId = call.request.queryParameters["run_id"]?.toLongOrNull()
+                    val campsiteId = call.optionalLongQuery("campsite_id")
+                    val runId = call.optionalLongQuery("run_id")
                     if ((campsiteId == null) == (runId == null)) {
                         return@get call.respondError(
                             "invalid_filter",
@@ -157,9 +161,7 @@ fun Route.availabilityDashboardRoutes(
                             "exactly one of campsite_id or run_id must be set",
                         )
                     }
-                    val limit =
-                        (call.request.queryParameters["limit"]?.toIntOrNull() ?: SNAPSHOT_DEFAULT_LIMIT)
-                            .coerceIn(1, SNAPSHOT_MAX_LIMIT)
+                    val limit = call.boundedIntQuery("limit", SNAPSHOT_DEFAULT_LIMIT, snapshotLimitRange)
                     val rows =
                         if (campsiteId != null) {
                             campsitesRepo.findById(campsiteId)
@@ -177,7 +179,7 @@ fun Route.availabilityDashboardRoutes(
 
                 get("/summary") {
                     val campsiteId =
-                        call.request.queryParameters["campsite_id"]?.toLongOrNull()
+                        call.optionalLongQuery("campsite_id")
                             ?: return@get call.respondError(
                                 "missing_campsite_id",
                                 HttpStatusCode.BadRequest,
@@ -190,16 +192,12 @@ fun Route.availabilityDashboardRoutes(
                             "no campsite with id $campsiteId",
                         )
                     val windowHours =
-                        call.request.queryParameters["window_hours"]
-                            ?.toIntOrNull()
-                            ?.coerceIn(1, 24 * 30) ?: (24 * 7)
-                    val explicitDates =
-                        call.request.queryParameters["dates"]
-                            ?.split(",")
-                            ?.map { it.trim() }
-                            ?.filter { it.isNotEmpty() }
-                            ?.mapNotNull { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
-                            .orEmpty()
+                        call.boundedIntQuery(
+                            "window_hours",
+                            SNAPSHOT_WINDOW_HOURS_DEFAULT,
+                            snapshotWindowHoursRange,
+                        )
+                    val explicitDates = call.dateQueryValues("dates")
                     val dates =
                         explicitDates.ifEmpty {
                             availability.datesWithSnapshotsInWindow(

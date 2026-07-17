@@ -7,6 +7,7 @@ import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.route.common.describeApi
+import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.optionalDateQuery
 import ca.floo.roadtrip.route.common.queryValues
 import ca.floo.roadtrip.service.api.availabilityErrorDto
@@ -77,7 +78,7 @@ internal fun Route.campsiteRoutes(
                 route("/campsites") {
                     get {
                         val poiId =
-                            call.parameters["id"]?.toLongOrNull()
+                            call.longPath("id")
                                 ?: return@get call.respondCampsiteError("bad_id", HttpStatusCode.BadRequest)
                         try {
                             call.respondCampsiteJson(
@@ -99,7 +100,7 @@ internal fun Route.campsiteRoutes(
 
                     get("/availability") {
                         val poiId =
-                            call.parameters["id"]?.toLongOrNull()
+                            call.longPath("id")
                                 ?: return@get call.respondAvailabilityError("bad_poi_id", HttpStatusCode.BadRequest)
 
                         if (!rateLimit.allow(call.request.origin.remoteHost)) {

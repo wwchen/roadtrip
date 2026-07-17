@@ -19,6 +19,7 @@ import ca.floo.roadtrip.model.metadata.ingest.RunKind
 import ca.floo.roadtrip.model.metadata.ingest.RunOutcome
 import ca.floo.roadtrip.repo.AdminIngestReadRepo
 import ca.floo.roadtrip.route.common.describeApi
+import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.support.TargetBusyException
 import ca.floo.roadtrip.support.TargetNotFoundException
@@ -84,7 +85,7 @@ fun Route.adminIngestRoutes(
                     }.describeApi("admin", "Last 50 parent ingest runs (filter by ?target=)")
 
                     get("/{id}") {
-                        val id = call.parameters["id"]?.toLongOrNull()
+                        val id = call.longPath("id")
                         if (id == null) {
                             call.respondAdminJson(ErrorNotFoundSchema(error = "bad id"), HttpStatusCode.BadRequest)
                             return@get
