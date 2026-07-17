@@ -6,7 +6,6 @@ import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.service.notification.common.NotificationSender
-import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.notification.common.WatchOpening
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import java.time.LocalDate
@@ -81,14 +80,14 @@ internal class WatchAlertDispatcher(
      * future edge). Fire-and-forget from the route, so like [dispatch] it never
      * throws into its caller.
      *
-     * A **paused/done** `slack_notify` watch reports its lifecycle state and
+     * A **paused/done** notification watch reports its lifecycle state and
      * stops — no availability lookup, never a trigger. An **active** watch reads
      * the current cube face for its window:
      *  - **some cells bookable** → the same openings alert [dispatch] sends; a
      *    real trigger, so `stopWhenTriggered` still marks the watch `DONE`.
-     *  - **cells known, none bookable** → `slack_notify` gets informational
+     *  - **cells known, none bookable** → notification targets get informational
      *    "nothing open yet".
-     *  - **no cells (cold POI)** → `slack_notify` gets informational "not
+     *  - **no cells (cold POI)** → notification targets get informational "not
      *    checked yet"; the immediate poll `create()` schedules will observe the
      *    window and its first observation is itself an edge, so the real opening
      *    fires via [dispatch].
@@ -96,12 +95,12 @@ internal class WatchAlertDispatcher(
      */
     suspend fun dispatchInitial(watch: AvailabilityWatchRepo.Watch) {
         val handlers = triggerActions.forKinds(watch.triggerKinds)
-        val hasSlack = AvailabilityTriggerKinds.SLACK_NOTIFY in watch.triggerKinds
-        if (!hasSlack && handlers.isEmpty()) return
+        val notificationTargets = watch.notificationTargets()
+        if (notificationTargets.isEmpty() && handlers.isEmpty()) return
 
         val campsites = scopeResolver.resolve(watch)
         if (watch.status != WatchStatus.ACTIVE) {
-            if (!hasSlack) return
+            if (notificationTargets.isEmpty()) return
             val state =
                 when (watch.status) {
                     WatchStatus.PAUSED -> WatchStatusNotice.State.PAUSED
@@ -110,7 +109,7 @@ internal class WatchAlertDispatcher(
                 }
             notifications.sendWatchStatus(
                 statusNotice(watch, campsites, state),
-                targets = listOf(watch.slackNotificationTarget()),
+                targets = notificationTargets,
             )
             return
         }
@@ -120,27 +119,28 @@ internal class WatchAlertDispatcher(
         if (bookable.isNotEmpty()) {
             val covered = bookable.map { CellTransition(it.campsiteId, it.targetDate, it.status) }
             postOpenings(watch, covered, campsitesById, handlers)
-        } else if (hasSlack) {
+        } else if (notificationTargets.isNotEmpty()) {
             val state = if (cells.isNotEmpty()) WatchStatusNotice.State.WATCHING else WatchStatusNotice.State.UNCHECKED
             notifications.sendWatchStatus(
                 statusNotice(watch, campsites, state),
-                targets = listOf(watch.slackNotificationTarget()),
+                targets = notificationTargets,
             )
         }
     }
 
     /**
-     * The terminal "watch stopped" message for a `slack_notify` watch the user
+     * The terminal "watch stopped" message for a notification watch the user
      * just deleted. Sent once, from the delete route, *before* the row is
      * removed (its scope is still resolvable). Like [dispatchInitial] it never
-     * throws into its caller and no-ops for a watch that never opted into Slack.
+     * throws into its caller and no-ops for a watch with no notification target.
      */
     suspend fun dispatchStopped(watch: AvailabilityWatchRepo.Watch) {
-        if (AvailabilityTriggerKinds.SLACK_NOTIFY !in watch.triggerKinds) return
+        val notificationTargets = watch.notificationTargets()
+        if (notificationTargets.isEmpty()) return
         val campsites = scopeResolver.resolve(watch)
         notifications.sendWatchStatus(
             statusNotice(watch, campsites, WatchStatusNotice.State.STOPPED),
-            targets = listOf(watch.slackNotificationTarget()),
+            targets = notificationTargets,
         )
     }
 
@@ -280,6 +280,3 @@ internal class WatchAlertDispatcher(
 // pull a transition on a shorter watch's endDate into the shared fetch, and an
 // inclusive bound would misfire the shorter watch (and wrongly mark it done).
 private fun LocalDate.withinWindow(watch: AvailabilityWatchRepo.Watch): Boolean = !isBefore(watch.startDate) && isBefore(watch.endDate)
-
-private fun AvailabilityWatchRepo.Watch.slackNotificationTarget(): NotificationTarget.Slack =
-    NotificationTarget.Slack(channel = channelOverride())

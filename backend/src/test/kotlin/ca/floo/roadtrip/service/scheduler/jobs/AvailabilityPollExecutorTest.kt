@@ -28,6 +28,7 @@ import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
+import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
@@ -231,6 +232,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         val channel: String?,
         val text: String,
         val attachments: List<SlackAttachmentDto>?,
+        val targets: List<NotificationTarget>,
     ) {
         val blocks: List<SlackBlockDto>? get() = attachments?.flatMap { it.blocks }
 
@@ -265,7 +267,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             targets: List<NotificationTarget>,
         ): Boolean {
             val (fallback, attachments) = SlackContentWatchStatusRenderer.render(notice)
-            posts += Post(channel = channelFor(targets), text = fallback, attachments = attachments)
+            posts +=
+                Post(
+                    channel = channelFor(targets),
+                    text = fallback,
+                    attachments = attachments,
+                    targets = targets,
+                )
             return result
         }
 
@@ -278,7 +286,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             appRootUrl: String?,
         ): Boolean {
             val (fallback, attachments) = SlackContentAvailabilityRenderer.openings(watchId, startDate, endDate, openings, appRootUrl)
-            posts += Post(channel = channelFor(targets), text = fallback, attachments = attachments)
+            posts +=
+                Post(
+                    channel = channelFor(targets),
+                    text = fallback,
+                    attachments = attachments,
+                    targets = targets,
+                )
             return result
         }
 
@@ -286,8 +300,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             targets
                 .filterIsInstance<NotificationTarget.Slack>()
                 .singleOrNull()
-                ?.channel
-                ?: defaultChannel
+                ?.let { it.channel ?: defaultChannel }
     }
 
     private class RecordingTriggerActionHandler(
@@ -778,6 +791,36 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val text = notifier.posts.single().allText
             assertTrue(text.contains("Watching"), text)
             assertTrue(text.contains("not checked yet"), text)
+        }
+
+    @Test
+    fun `initial notify on a cold cube sends status to email recipients`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val poiId = seedPoi("232447")
+            seedCampsite(poiId, "100")
+            val watchId =
+                seedWatch(
+                    poiId,
+                    farStart.toString(),
+                    farStart.plusDays(2).toString(),
+                    triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY),
+                    triggerConfig =
+                        """{"email_notify":{"to":"one@example.test, two@example.test"}}""",
+                )
+            // No cube data: this is the confirmation/status path, not an opening alert.
+            val notifier = RecordingSlackNotifications()
+
+            dispatcherWith(provider, notifier).dispatchInitial(findWatch(watchId))
+
+            val post = notifier.posts.single()
+            assertNull(post.channel)
+            assertEquals(
+                listOf(NotificationTarget.Email(listOf("one@example.test", "two@example.test"))),
+                post.targets,
+            )
+            assertTrue(post.allText.contains("Watching"), post.allText)
+            assertTrue(post.allText.contains("not checked yet"), post.allText)
         }
 
     @Test

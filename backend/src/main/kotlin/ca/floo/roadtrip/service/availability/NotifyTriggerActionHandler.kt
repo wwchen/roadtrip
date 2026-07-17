@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.notification.common.NotificationSender
-import ca.floo.roadtrip.service.notification.common.NotificationTarget
 
 /**
  * Aggregate notification trigger action. A watch can ask for multiple
@@ -24,7 +23,7 @@ internal class NotifyTriggerActionHandler(
         watch: AvailabilityWatchRepo.Watch,
         openings: List<TriggerOpening>,
     ): Boolean {
-        val targets = watch.openingNotificationTargets()
+        val targets = watch.notificationTargets()
         if (targets.isEmpty()) return false
         return notifications.sendWatchOpenings(
             watchId = watch.id,
@@ -36,13 +35,3 @@ internal class NotifyTriggerActionHandler(
         )
     }
 }
-
-internal fun AvailabilityWatchRepo.Watch.openingNotificationTargets(): List<NotificationTarget> =
-    buildList {
-        if (AvailabilityTriggerKinds.SLACK_NOTIFY in triggerKinds) {
-            add(NotificationTarget.Slack(channel = channelOverride()))
-        }
-        if (AvailabilityTriggerKinds.EMAIL_NOTIFY in triggerKinds) {
-            add(NotificationTarget.Email(recipients = emailRecipients()))
-        }
-    }
