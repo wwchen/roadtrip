@@ -197,6 +197,8 @@ test('resolveRecaccount can log in with request-scoped Recreation.gov credential
   assert.equal(resolved.access_token, recaccount.access_token)
   assert.equal(page.loginClicks, 1)
   assert.equal(page.credentialSubmitClicks, 1)
+  assert.equal(page.screenshots.length, 1)
+  assert.equal(getRecgovSessionStatus().last_login_diagnostic.reason, 'login_success')
   assert.deepEqual(page.fills.map(({ value }) => value), ['user@example.com', 'secret'])
 })
 

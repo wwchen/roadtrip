@@ -122,12 +122,13 @@ export async function runRecgovAuthCheck ({
   try {
     const result = await testChromiumFn(null, options)
     if (result?.loggedIn === true) {
+      const diagnostic = result?.diagnostic || getRecgovSessionStatus().last_login_diagnostic || null
       recgovAuthStatus = {
         state: 'ok',
         logged_in: true,
         operation,
         checked_at: new Date().toISOString(),
-        diagnostic: null,
+        diagnostic,
       }
       logger('recgov auth', operation, 'ok')
       return recgovAuthStatus

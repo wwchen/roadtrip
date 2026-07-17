@@ -243,7 +243,7 @@ async function recaccountFromManualLogin (page, options) {
     await captureLoginDiagnostic(page, 'manual_login_timeout')
     return null
   }
-  clearLoginDiagnostic()
+  await captureLoginDiagnostic(browserSession.page, 'login_success')
   return activateBrowserRecaccount(browserSession.page, browserSession.raw, options)
 }
 
@@ -283,7 +283,7 @@ async function recaccountFromCredentialLogin (page, options, credentialState) {
   console.log(`Cart: waiting for Recreation.gov browser session or challenge after credential submit (timeout ${secondsLabel(credentialSessionTimeoutMs)}s)`)
   const completion = await waitForCredentialLoginCompletion(page, credentialSessionTimeoutMs, credentialState)
   if (completion.browserSession) {
-    clearLoginDiagnostic()
+    await captureLoginDiagnostic(completion.browserSession.page, 'login_success')
     return activateBrowserRecaccount(completion.browserSession.page, completion.browserSession.raw, options)
   }
 
@@ -717,6 +717,7 @@ async function refreshRecaccountInBrowser (page, token, credentials) {
 
 function recordRecgovRefresh (recaccount) {
   recgovSessionStatus = {
+    ...recgovSessionStatus,
     last_refresh_at: new Date().toISOString(),
     last_refresh_expires_at: recaccount?.expiration || null,
   }

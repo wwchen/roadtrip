@@ -112,7 +112,14 @@ test('POST /login passes request-scoped credentials to the auth check', async ()
   const response = await request(createCompanionServer({
     testChromiumFn: async (_rawCookieInput, options) => {
       authOptions = options
-      return { ok: true, loggedIn: true }
+      return {
+        ok: true,
+        loggedIn: true,
+        diagnostic: {
+          reason: 'login_success',
+          screenshot_url: '/diagnostics/recgov-login-success.png',
+        },
+      }
     },
   }), {
     method: 'POST',
@@ -136,6 +143,10 @@ test('POST /login passes request-scoped credentials to the auth check', async ()
     mfaCode: '123456',
   })
   assert.equal(authOptions.allowManualLogin, false)
+  assert.deepEqual(response.json.recgov_auth.diagnostic, {
+    reason: 'login_success',
+    screenshot_url: '/diagnostics/recgov-login-success.png',
+  })
 })
 
 test('POST /login HTML response renders a failed login diagnostic screenshot', async () => {
