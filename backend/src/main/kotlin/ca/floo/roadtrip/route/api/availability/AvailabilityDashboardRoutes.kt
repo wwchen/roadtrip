@@ -26,17 +26,15 @@ import ca.floo.roadtrip.route.common.optionalLongQuery
 import ca.floo.roadtrip.route.common.optionalOffsetDateTimeQuery
 import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.respondApiError
-import io.ktor.http.ContentType
+import ca.floo.roadtrip.route.common.respondEncodedJson
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jooq.DSLContext
 import java.time.Duration
@@ -279,7 +277,7 @@ private fun AvailabilityRepo.TargetDateStats.toSchema(): AvailabilitySnapshotSta
 private suspend inline fun <reified T> ApplicationCall.respondJson(
     body: T,
     status: HttpStatusCode = HttpStatusCode.OK,
-) = respondText(dashboardJson.encodeToString(body), ContentType.Application.Json, status)
+) = respondEncodedJson(dashboardJson, body, status)
 
 private suspend fun ApplicationCall.respondError(
     error: String,

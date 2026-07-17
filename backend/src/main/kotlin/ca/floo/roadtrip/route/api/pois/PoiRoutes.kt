@@ -8,6 +8,7 @@ import ca.floo.roadtrip.route.common.boundedIntQuery
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.respondApiError
+import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.route.common.splitQueryValues
 import ca.floo.roadtrip.route.common.trimmedQuery
 import ca.floo.roadtrip.service.poi.CampgroundService
@@ -25,7 +26,6 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -179,5 +179,5 @@ private suspend inline fun <reified T> ApplicationCall.respondPoiJson(
     value: T,
     status: HttpStatusCode = HttpStatusCode.OK,
 ) {
-    respondText(poiRoutesJson.encodeToString(value), ContentType.Application.Json, status)
+    respondEncodedJson(poiRoutesJson, value, status)
 }

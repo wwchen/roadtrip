@@ -11,6 +11,7 @@ import ca.floo.roadtrip.model.api.RoutePropertiesDto
 import ca.floo.roadtrip.model.routing.RouteResponse
 import ca.floo.roadtrip.route.common.OptionalQuery
 import ca.floo.roadtrip.route.common.optionalDoubleQuery
+import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.route.common.trimmedQuery
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_CORRIDOR_RADIUS_MILES
 import ca.floo.roadtrip.service.routing.MAX_ROUTE_WAYPOINTS
@@ -19,10 +20,8 @@ import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import ca.floo.roadtrip.service.routing.lineStringGeoJson
 import ca.floo.roadtrip.support.RoutingException
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
@@ -248,5 +247,5 @@ private suspend inline fun <reified T> ApplicationCall.respondRouteJson(
     value: T,
     status: HttpStatusCode = HttpStatusCode.OK,
 ) {
-    respondText(routeJson.encodeToString(value), ContentType.Application.Json, status)
+    respondEncodedJson(routeJson, value, status)
 }
