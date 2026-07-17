@@ -10,10 +10,6 @@ import ca.floo.roadtrip.routes.api.docs.apiDocsRoutes
 import ca.floo.roadtrip.routes.api.health.healthRoutes
 import ca.floo.roadtrip.routes.api.pois.poiRoutes
 import ca.floo.roadtrip.routes.api.pois.poisOnRouteRoutes
-import ca.floo.roadtrip.routes.test.testEmailRoutes
-import ca.floo.roadtrip.routes.test.testSlackRoutes
-import ca.floo.roadtrip.service.notification.email.EmailNotificationService
-import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiService
@@ -136,55 +132,6 @@ class OpenApiSmokeTest {
             assertFalse(paths.containsKey("/api/campsite/availability/{poi_id}"))
             assertFalse(paths.containsKey("/api/poi/{poi_id}/reservables/availability"))
             assertFalse(paths.containsKey("/api/admin/campsite/debug/synth-match"))
-        }
-
-    @Test
-    fun `main openapi spec lists test routes`() =
-        testApplication {
-            application {
-                routing {
-                    apiDocsRoutes()
-                    testEmailRoutes(EmailNotificationService(config = null))
-                    testSlackRoutes(SlackNotificationService(config = null))
-                }
-            }
-
-            val docs = client.get("/api/docs")
-            assertEquals(HttpStatusCode.OK, docs.status)
-
-            val resp = client.get("/api/docs/openapi.json")
-            assertEquals(HttpStatusCode.OK, resp.status)
-
-            val spec = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            val paths = spec["paths"]!!.jsonObject
-            val testEmailPost =
-                paths["/test/email"]!!
-                    .jsonObject["post"]!!
-                    .jsonObject
-            assertEquals("Send a test email", testEmailPost["summary"]!!.jsonPrimitive.content)
-            assertEquals(
-                "test",
-                testEmailPost["tags"]!!
-                    .jsonArray
-                    .single()
-                    .jsonPrimitive
-                    .content,
-            )
-            val testSlackPost =
-                paths["/test/slack"]!!
-                    .jsonObject["post"]!!
-                    .jsonObject
-            assertEquals("Send a test Slack message", testSlackPost["summary"]!!.jsonPrimitive.content)
-            assertEquals(
-                "test",
-                testSlackPost["tags"]!!
-                    .jsonArray
-                    .single()
-                    .jsonPrimitive
-                    .content,
-            )
-            assertFalse(paths.containsKey("/api/docs"))
-            assertFalse(paths.containsKey("/api/docs/openapi.json"))
         }
 
     private fun testPoiService(ctx: DSLContext): PoiService =

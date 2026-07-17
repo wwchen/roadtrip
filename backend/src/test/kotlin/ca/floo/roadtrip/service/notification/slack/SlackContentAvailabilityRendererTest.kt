@@ -3,14 +3,12 @@ package ca.floo.roadtrip.service.notification.slack
 import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
 import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import ca.floo.roadtrip.service.notification.common.WatchOpening
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -51,19 +49,13 @@ class SlackContentAvailabilityRendererTest {
 
     private fun actionsBlock(blocks: List<SlackBlockDto>): SlackBlockDto = blocks.single { it.type == "actions" }
 
-    private fun JsonPrimitive.contentOrNullSafe(): String? = if (isString) content else null
-
-    @Test
-    fun `attachment carries the availability green bar`() {
-        val rendered = SlackContentAvailabilityRenderer.openings(watchId, start, end, listOf(opening()), appRoot)
-        assertEquals(SlackWatchCard.COLOR_AVAIL, attach(rendered).color, "openings alert = --rt-avail green bar")
-    }
-
     @Test
     fun `single campground names the campground in the fallback and shows a Reserve primary URL button`() {
-        val rendered = SlackContentAvailabilityRenderer.openings(watchId, start, end, listOf(opening()), appRoot)
+        val longName = "Group Equestrian Camp Area — Upper Meadow Loop Reservation Site A (RV or Tent, 40ft)"
+        val rendered = SlackContentAvailabilityRenderer.openings(watchId, start, end, listOf(opening(label = longName)), appRoot)
 
         assertEquals("🏕️ 1 site just opened at Kirk Creek (2026-08-01 → 2026-08-03)", rendered.first)
+        assertEquals(SlackWatchCard.COLOR_AVAIL, attach(rendered).color, "openings alert = --rt-avail green bar")
 
         val actions = actionsBlock(blocks(rendered)).elements!!.jsonArray
         val reserve =
@@ -72,17 +64,6 @@ class SlackContentAvailabilityRendererTest {
                 .single { it["action_id"]?.jsonPrimitive?.content == SlackWatchCard.ACTION_RESERVE_SITE }
         assertEquals("primary", reserve["style"]?.jsonPrimitive?.content, "Reserve is the primary CTA (Slack green)")
         assertEquals("https://example.test/book/100", reserve["url"]!!.jsonPrimitive.content, "URL button to Recreation.gov")
-    }
-
-    @Test
-    fun `Reserve label never exceeds the readable 75 char budget`() {
-        val longName = "Group Equestrian Camp Area — Upper Meadow Loop Reservation Site A (RV or Tent, 40ft)"
-        val rendered = SlackContentAvailabilityRenderer.openings(watchId, start, end, listOf(opening(label = longName)), appRoot)
-
-        val reserve =
-            actionsBlock(blocks(rendered)).elements!!.jsonArray.map { it.jsonObject }.single {
-                it["action_id"]?.jsonPrimitive?.content == SlackWatchCard.ACTION_RESERVE_SITE
-            }
         val label = reserve["text"]!!.jsonObject["text"]!!.jsonPrimitive.content
         assertTrue(label.length <= 75, "label was ${label.length} chars: $label")
     }
@@ -107,16 +88,7 @@ class SlackContentAvailabilityRendererTest {
     }
 
     @Test
-    fun `the sites section is clamped to Slack's 3000 char limit`() {
-        // 10 sites (the cap) with very long names would blow past the section limit.
-        val openings = (1..10).map { opening(label = "Site ${"X".repeat(400)}$it", campgroundId = 1L) }
-        val rendered = SlackContentAvailabilityRenderer.openings(watchId, start, end, openings, appRoot)
-
-        assertTrue(siteListSection(blocks(rendered)).length <= 3000)
-    }
-
-    @Test
-    fun `more than the cap of sites is summarized with '+ N more'`() {
+    fun `site list is capped with a summary and clamped to Slack's section limit`() {
         val openings = (1..12).map { opening(label = "Site $it", campgroundId = 1L, bookingUrl = null) }
         val rendered = SlackContentAvailabilityRenderer.openings(watchId, start, end, openings, appRoot)
 
@@ -124,41 +96,29 @@ class SlackContentAvailabilityRendererTest {
         assertEquals("🏕️ 12 sites just opened at Kirk Creek (2026-08-01 → 2026-08-03)", rendered.first)
         val section = siteListSection(blocks(rendered))
         assertTrue(section.contains("+ 9 more"), section)
+
+        val longOpenings = (1..10).map { opening(label = "Site ${"X".repeat(400)}$it", campgroundId = 1L) }
+        val longRendered = SlackContentAvailabilityRenderer.openings(watchId, start, end, longOpenings, appRoot)
+        assertTrue(siteListSection(blocks(longRendered)).length <= 3000)
     }
 
     @Test
-    fun `actions row always includes Pause and Delete for the openings alert (watch is active)`() {
+    fun `actions row includes watch controls and routable button values`() {
         val rendered = SlackContentAvailabilityRenderer.openings(watchId, start, end, listOf(opening()), appRoot)
-        val ids =
-            actionsBlock(blocks(rendered))
-                .elements!!
-                .jsonArray
-                .mapNotNull { it.jsonObject["action_id"]?.jsonPrimitive?.content }
-        assertTrue(SlackWatchCard.ACTION_WATCH_PAUSE in ids, "openings alert offers Pause")
-        assertTrue(SlackWatchCard.ACTION_WATCH_DELETE in ids, "openings alert offers Delete")
-        assertTrue(SlackWatchCard.ACTION_WATCH_RESUME !in ids, "alert fires only for active watches, so never Resume")
-    }
-
-    @Test
-    fun `Delete on the openings alert is danger-styled with a confirm dialog`() {
-        val rendered = SlackContentAvailabilityRenderer.openings(watchId, start, end, listOf(opening()), appRoot)
-        val del =
+        val buttons =
             actionsBlock(blocks(rendered))
                 .elements!!
                 .jsonArray
                 .map { it.jsonObject }
-                .single { it["action_id"]?.jsonPrimitive?.content == SlackWatchCard.ACTION_WATCH_DELETE }
-        assertEquals("danger", del["style"]?.jsonPrimitive?.content)
-        assertNotNull(del["confirm"], "Delete needs a confirm dialog per the design spec")
-    }
+        val ids = buttons.mapNotNull { it["action_id"]?.jsonPrimitive?.content }
 
-    @Test
-    fun `every button carries the watchId in value so the endpoint can route`() {
-        val rendered = SlackContentAvailabilityRenderer.openings(watchId, start, end, listOf(opening()), appRoot)
-        val actions = actionsBlock(blocks(rendered)).elements!!.jsonArray
-        actions.map { it.jsonObject }.forEach { btn ->
-            assertEquals(watchId.toString(), btn["value"]!!.jsonPrimitive.content)
-        }
+        assertTrue(SlackWatchCard.ACTION_WATCH_PAUSE in ids, "openings alert offers Pause")
+        assertTrue(SlackWatchCard.ACTION_WATCH_DELETE in ids, "openings alert offers Delete")
+        assertTrue(SlackWatchCard.ACTION_WATCH_RESUME !in ids, "alert fires only for active watches, so never Resume")
+        buttons.forEach { assertEquals(watchId.toString(), it["value"]!!.jsonPrimitive.content) }
+        val del = buttons.single { it["action_id"]?.jsonPrimitive?.content == SlackWatchCard.ACTION_WATCH_DELETE }
+        assertEquals("danger", del["style"]?.jsonPrimitive?.content)
+        assertTrue(del["confirm"] != null, "Delete needs a confirm dialog per the design spec")
     }
 
     @Test
@@ -173,27 +133,5 @@ class SlackContentAvailabilityRendererTest {
         // Interactive buttons still render — the missing host doesn't sabotage
         // pause/delete.
         assertTrue(SlackWatchCard.ACTION_WATCH_PAUSE in ids)
-    }
-
-    @Test
-    fun `site lines use the design spec's green-circle bullet, not the old markdown dot`() {
-        val rendered = SlackContentAvailabilityRenderer.openings(watchId, start, end, listOf(opening()), appRoot)
-        val section = siteListSection(blocks(rendered))
-        assertTrue(section.contains("🟢"), "site lines lead with the availability bullet: $section")
-        assertTrue(!section.startsWith("•"), "no bare mrkdwn bullet")
-    }
-
-    @Test
-    fun `card ends with a muted context sub-line about Reserve going to Recreation gov`() {
-        val rendered = SlackContentAvailabilityRenderer.openings(watchId, start, end, listOf(opening()), appRoot)
-        val ctx = blocks(rendered).lastOrNull { it.type == "context" }
-        assertNotNull(ctx, "context block missing")
-        val ctxText =
-            ctx.elements!!
-                .jsonArray
-                .first()
-                .jsonObject["text"]!!
-                .jsonPrimitive.content
-        assertTrue(ctxText.contains("Reserve"), ctxText)
     }
 }

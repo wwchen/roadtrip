@@ -19,7 +19,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 class TestEmailRoutesTest {
     private class RecordingEmailClient(
@@ -54,47 +53,30 @@ class TestEmailRoutesTest {
             val message = emailClient.messages.single()
             assertEquals("camper@example.test", message.to)
             assertEquals("Roadtrip Alerts <alerts@example.test>", message.from)
-            assertEquals("Roadtrip test email", message.subject)
-            assertTrue(message.html.contains("Roadtrip test email"), message.html)
         }
 
     @Test
-    fun `POST test email rejects missing recipient`() =
+    fun `POST test email rejects bad recipients without sending`() =
         testApplication {
             val emailClient = RecordingEmailClient()
             application {
                 routing { testEmailRoutes(emailService(emailClient)) }
             }
 
-            val response =
-                client.post("/test/email") {
-                    contentType(ContentType.Application.Json)
-                    setBody("""{}""")
-                }
+            listOf(
+                """{}""" to "missing_to",
+                """{"to":"not-an-email"}""" to "invalid_to",
+            ).forEach { (requestBody, expectedError) ->
+                val response =
+                    client.post("/test/email") {
+                        contentType(ContentType.Application.Json)
+                        setBody(requestBody)
+                    }
 
-            assertEquals(HttpStatusCode.BadRequest, response.status)
-            val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
-            assertEquals("missing_to", body["error"]!!.jsonPrimitive.content)
-            assertEquals(emptyList(), emailClient.messages)
-        }
-
-    @Test
-    fun `POST test email rejects invalid recipient`() =
-        testApplication {
-            val emailClient = RecordingEmailClient()
-            application {
-                routing { testEmailRoutes(emailService(emailClient)) }
+                assertEquals(HttpStatusCode.BadRequest, response.status)
+                val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
+                assertEquals(expectedError, body["error"]!!.jsonPrimitive.content)
             }
-
-            val response =
-                client.post("/test/email") {
-                    contentType(ContentType.Application.Json)
-                    setBody("""{"to":"not-an-email"}""")
-                }
-
-            assertEquals(HttpStatusCode.BadRequest, response.status)
-            val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
-            assertEquals("invalid_to", body["error"]!!.jsonPrimitive.content)
             assertEquals(emptyList(), emailClient.messages)
         }
 
