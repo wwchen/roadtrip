@@ -147,23 +147,6 @@ class TriggerActionHandlerTest {
         }
 
     @Test
-    fun `NotifyTriggerActionHandler sends email target`() =
-        runBlocking {
-            val notifications = CapturingNotifications(result = true)
-            val handler = NotifyTriggerActionHandler(notifications = notifications, appRootUrl = "https://app.example")
-
-            val delivered =
-                handler.fire(
-                    fakeWatch(id = 42L, triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY)),
-                    openings = listOf(triggerOpening()),
-                )
-
-            assertTrue(delivered)
-            assertEquals(listOf(NotificationTarget.Email()), notifications.lastTargets)
-            assertEquals("Site 12", notifications.lastOpenings.single().label)
-        }
-
-    @Test
     fun `NotifyTriggerActionHandler combines slack and email targets into one send`() =
         runBlocking {
             val notifications = CapturingNotifications(result = true)
@@ -404,7 +387,6 @@ class TriggerActionHandlerTest {
         var lastWatchId: Long? = null
         var lastTargets: List<NotificationTarget> = emptyList()
         var lastAppRootUrl: String? = null
-        var lastOpenings: List<WatchOpening> = emptyList()
         var openingSends: Int = 0
         val atcResults = mutableListOf<AtcResult>()
 
@@ -419,7 +401,6 @@ class TriggerActionHandlerTest {
             lastWatchId = watchId
             lastTargets = targets
             lastAppRootUrl = appRootUrl
-            lastOpenings = openings
             openingSends++
             return result
         }

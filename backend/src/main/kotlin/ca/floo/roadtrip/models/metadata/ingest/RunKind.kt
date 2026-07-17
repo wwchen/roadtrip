@@ -1,11 +1,9 @@
 package ca.floo.roadtrip.models.metadata.ingest
 
-// What a run does. Each target has both a fetch list (web → data/) and an
-// import list (data/ → Postgres). They share a per-target mutex so a fetch
-// and an import on the same target serialize.
+// What a backend ingest run does. Fetchers run outside the Ktor app; backend
+// ingest runs import existing raw captures into Postgres.
 enum class RunKind(
     val rowValue: String,
 ) {
-    FETCH("fetch"),
     IMPORT("import"),
 }

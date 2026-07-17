@@ -48,19 +48,18 @@ private val adminIngestJson =
 // Admin surface for the ingestion controller (RFC 0004 / issue #44).
 //
 // Vocabulary:
-//   POST /api/admin/data/fetch[/{target}]    web → data/<target>.{json,geojson}
 //   POST /api/admin/data/import[/{target}]   data/ → Postgres rows via Importer
 //   GET  /api/admin/data/runs[?target=…|/:id] history
 //   GET  /api/admin/data/status              per-target last-completed + age
 //
-// With no {target}, fetch and import fan out across every known target,
-// sequentially, in `targetsFromRegistry` order (see the POI registry resource). The response is the
-// per-target outcome list.
+// With no {target}, import fans out across every known target, sequentially, in
+// `targetsFromRegistry` order (see the POI registry resource). The response is
+// the per-target outcome list. Fetchers run outside the backend process.
 //
 // Auth boundary lives upstream at the Cloudflare Zero Trust path rule on
 // /api/admin/* (existing tunnel). Locally the routes are reachable on
-// 127.0.0.1:8765 directly — Tilt buttons and `make data-fetch`/`data-import`
-// curl them. If you ever expose dev to the internet, bind to loopback only.
+// 127.0.0.1:8765 directly for Tilt buttons and `make data-import`. If you ever
+// expose dev to the internet, bind to loopback only.
 fun Route.adminIngestRoutes(
     controller: IngestController,
     ctx: DSLContext,
@@ -70,16 +69,6 @@ fun Route.adminIngestRoutes(
     route("/api") {
         route("/admin") {
             route("/data") {
-                route("/fetch") {
-                    // One target — sync default; ?async=1 fires-and-forgets.
-                    post("/{target}") { runOne(controller, RunKind.FETCH) }
-                        .describeApi("admin", "Fetch upstream data into data/{target}.* for one target")
-
-                    // No target — fan out across every known target sequentially.
-                    post { runAll(controller, RunKind.FETCH) }
-                        .describeApi("admin", "Fetch upstream data for every known target (sequential fan-out)")
-                }
-
                 route("/import") {
                     post("/{target}") { runOne(controller, RunKind.IMPORT) }
                         .describeApi("admin", "Import data/ files into Postgres for one target")

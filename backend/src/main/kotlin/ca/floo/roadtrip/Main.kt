@@ -90,7 +90,6 @@ import ca.floo.roadtrip.service.booking.RecGovAtcExecutor
 import ca.floo.roadtrip.service.booking.adapters.RecGovBookingProvider
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
-import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.importTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.sweepStaleIngestRuns
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
@@ -532,15 +531,12 @@ internal fun roadtripKoinModule(
         }
         single {
             val ctx = get<DSLContext>()
-            val staticDir = get<File>()
             val registry = get<PoiRegistry>()
             sweepStaleIngestRuns(ctx)
             IngestController(
                 ctx = ctx,
                 etl = get(),
-                fetchTargets = fetchTargetsFromRegistry(registry, staticDir),
                 importTargets = importTargetsFromRegistry(registry),
-                workingDir = staticDir,
             )
         }
         single<IpRateLimiter> { IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE) }

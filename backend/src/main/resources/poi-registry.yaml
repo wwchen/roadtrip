@@ -2,8 +2,8 @@
 #
 # Four sections.
 # 1. data_sources — fetchers. Pure network acquisition. Output to data/raw/<slug>/.
-#    Always wired up; the IngestController will run a fetcher whenever it's
-#    asked to. Unreachable upstreams produce failed runs, not boot failures.
+#    Run outside the backend process through scripts/poll_raw.py / make data-fetch.
+#    Unreachable upstreams produce failed host fetch commands, not boot failures.
 # 2. poi_data — POI-backed catalog datasets. Each row carries `name`,
 #    optional `enabled` (default true), `category`, optional `subcategory`,
 #    optional `agency` (constant string OR `{derived_from_field: <raw path>}`),

@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.models.metadata
 
 // Validation outcome for a single DTO row. Errors are counted in
-// poller_runs.counts and the row is dropped — bad upstream data doesn't
+// import counts and the row is dropped — bad upstream data doesn't
 // silently poison `pois` (RFC decision #20).
 sealed class ValidationResult<out DTO> {
     data class Ok<DTO>(

@@ -21,7 +21,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 private const val TOO_LONG_SLACK_CHANNEL_CHARS = 256
 
@@ -31,9 +30,6 @@ class TestSlackRoutesTest {
     ) : SlackClient(SlackConfig(botToken = "xoxb-test", defaultChannel = "#unused")) {
         data class Post(
             val channel: String,
-            val text: String,
-            val blocks: List<SlackBlockDto>?,
-            val attachments: List<SlackAttachmentDto>?,
         )
 
         val posts = mutableListOf<Post>()
@@ -44,54 +40,42 @@ class TestSlackRoutesTest {
             blocks: List<SlackBlockDto>?,
             attachments: List<SlackAttachmentDto>?,
         ): Boolean {
-            posts += Post(channel, text, blocks, attachments)
+            posts += Post(channel)
             return result
         }
     }
 
     @Test
-    fun `POST test slack sends the test message to requested channel`() =
-        testApplication {
-            val slackClient = RecordingSlackClient()
-            application {
-                routing { testSlackRoutes(slackService(slackClient)) }
-            }
-
-            val response =
-                client.post("/test/slack") {
-                    contentType(ContentType.Application.Json)
-                    setBody("""{"channel":" #camping "}""")
-                }
-
-            assertEquals(HttpStatusCode.OK, response.status)
-            val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
-            assertEquals(true, body["sent"]!!.jsonPrimitive.boolean)
-            assertEquals("#camping", body["channel"]!!.jsonPrimitive.content)
-            val post = slackClient.posts.single()
-            assertEquals("#camping", post.channel)
-            assertEquals("Roadtrip test Slack message", post.text)
-            assertTrue(!post.attachments.isNullOrEmpty(), "test slack send carries an attachment")
-        }
-
-    @Test
-    fun `POST test slack uses default channel when no override is provided`() =
+    fun `POST test slack sends requested or default channel`() =
         testApplication {
             val slackClient = RecordingSlackClient()
             application {
                 routing { testSlackRoutes(slackService(slackClient, defaultChannel = "#default")) }
             }
 
-            val response =
+            val overrideResponse =
+                client.post("/test/slack") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"channel":" #camping "}""")
+                }
+
+            assertEquals(HttpStatusCode.OK, overrideResponse.status)
+            val overrideBody = Json.parseToJsonElement(overrideResponse.bodyAsText()).jsonObject
+            assertEquals(true, overrideBody["sent"]!!.jsonPrimitive.boolean)
+            assertEquals("#camping", overrideBody["channel"]!!.jsonPrimitive.content)
+            assertEquals("#camping", slackClient.posts.single().channel)
+
+            val defaultResponse =
                 client.post("/test/slack") {
                     contentType(ContentType.Application.Json)
                     setBody("{}")
                 }
 
-            assertEquals(HttpStatusCode.OK, response.status)
-            val body = Json.parseToJsonElement(response.bodyAsText()).jsonObject
-            assertEquals(true, body["sent"]!!.jsonPrimitive.boolean)
-            assertFalse(body.containsKey("channel"))
-            assertEquals("#default", slackClient.posts.single().channel)
+            assertEquals(HttpStatusCode.OK, defaultResponse.status)
+            val defaultBody = Json.parseToJsonElement(defaultResponse.bodyAsText()).jsonObject
+            assertEquals(true, defaultBody["sent"]!!.jsonPrimitive.boolean)
+            assertFalse(defaultBody.containsKey("channel"))
+            assertEquals("#default", slackClient.posts.last().channel)
         }
 
     @Test

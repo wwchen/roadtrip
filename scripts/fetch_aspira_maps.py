@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Capture Aspira NextGen `/api/maps` for one host.
 
-Per RFC 0007 PR 3.5: vendor-centric, host-parameterized. The poller
-(or `bin/refresh GOVERNING=...`) invokes this once per host that the
-registry declares — three times today (PC/BC/WA). The `--source` flag
-controls the data/raw subdir (must match the POI registry resource).
+Per RFC 0007 PR 3.5: vendor-centric, host-parameterized. The host fetch
+command invokes this once per host that the registry declares — three times
+today (PC/BC/WA). The `--source` flag controls the data/raw subdir (must
+match the POI registry resource).
 
   python3 scripts/fetch_aspira_maps.py --host=reservation.pc.gc.ca --source=aspira-maps-pc
   python3 scripts/fetch_aspira_maps.py --host=camping.bcparks.ca   --source=aspira-maps-bc

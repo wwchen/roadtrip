@@ -28,12 +28,9 @@ plugins {
     application
     kotlin("jvm") version "2.3.10"
     kotlin("plugin.serialization") version "2.3.10"
+    id("io.ktor.plugin") version "3.5.1"
     id("org.flywaydb.flyway") version "10.20.1"
     id("nu.studer.jooq") version "9.0"
-    // shadowJar produces a single executable fat-jar with all dependencies
-    // merged in. The Dockerfile uses this so the runtime image is just
-    // eclipse-temurin:25-jre + one .jar.
-    id("com.gradleup.shadow") version "8.3.5"
     id("org.jlleitschuh.gradle.ktlint") version "12.1.1"
     // Line/branch coverage. `./gradlew :backend:koverXmlReport` produces the XML the
     // CI job uploads to Codecov.
@@ -91,6 +88,29 @@ val timeshapeVersion = "2025b.26"
 val resendVersion = "4.13.0"
 val junitVersion = "5.11.3"
 val playwrightVersion = "1.50.0"
+val backendImageName = "roadtrip/backend"
+val backendPort = 8765
+
+ktor {
+    fatJar {
+        archiveFileName.set("roadtrip-backend-${project.version}-all.jar")
+    }
+
+    docker {
+        jreVersion.set(JavaVersion.toVersion(25))
+        localImageName.set(backendImageName)
+        imageTag.set(project.version.toString())
+        portMappings.set(
+            listOf(
+                io.ktor.plugin.features.DockerPortMapping(
+                    backendPort,
+                    backendPort,
+                    io.ktor.plugin.features.DockerPortMappingProtocol.TCP,
+                ),
+            ),
+        )
+    }
+}
 
 // Isolated source set (src/smokeTest/kotlin) for the Playwright-driven
 // SmokeTest. It compiles against main output only — not the ~60-class `test`
@@ -321,11 +341,10 @@ flyway {
 }
 
 tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
-    archiveBaseName.set("roadtrip-backend")
-    // Flyway and other ServiceLoader-based libraries register implementations
-    // via META-INF/services/. Without merging, the last copy wins and Flyway
-    // loses its CoreMigrationTypeResolver, rejecting V_*.sql migrations with
-    // "Unrecognised migration name format" at runtime.
+    // Ktor's buildFatJar delegates to its Shadow-backed jar task. Flyway and
+    // other ServiceLoader libraries need merged META-INF/services entries, or
+    // the last dependency wins and runtime migration parsing can break.
+    duplicatesStrategy = org.gradle.api.file.DuplicatesStrategy.INCLUDE
     mergeServiceFiles()
 }
 
