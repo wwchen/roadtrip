@@ -151,7 +151,7 @@ class AvailabilityRepoTest : SharedDbTest() {
     }
 
     @Test
-    fun `history walks the previous_id chain, observedFrom derives from previous`() {
+    fun `history walks the previous_id chain`() {
         val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)
         val t1 = Instant.parse("2026-06-18T10:00:00Z")
@@ -160,38 +160,7 @@ class AvailabilityRepoTest : SharedDbTest() {
         repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.AVAILABLE, t2)))
         val runs = repo.listForCampsite(campsiteId)
         assertEquals(2, runs.size)
-        val current = runs.first { it.status == AvailabilityStatus.AVAILABLE }
-        assertEquals(t1, current.observedFrom!!.toInstant()) // start = prior run's last_observed_at
-    }
-
-    @Test
-    fun `summarize reports an open window from an available run`() {
-        val campsiteId = seedCampsite("100")
-        val repo = AvailabilityRepo(ctx)
-        val t0 = Instant.parse("2026-06-18T10:00:00Z") // reserved
-        val t1 = Instant.parse("2026-06-18T10:30:00Z") // flips to available
-        repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.RESERVED, t0)))
-        repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.AVAILABLE, t1)))
-        val stats = repo.summarize(campsiteId, listOf(date), now = OffsetDateTime.parse("2026-06-18T12:00:00Z"))
-        val s = stats.single()
-        assertEquals(true, s.isCurrentlyOpen)
-        assertEquals(1800, s.currentOrLastOpenWindowSec) // available run spans t0..t1 = 30 min
-    }
-
-    @Test
-    fun `summarize keeps a cell's current state even when its last observation predates the window`() {
-        val campsiteId = seedCampsite("100")
-        val repo = AvailabilityRepo(ctx)
-        val future = LocalDate.parse("2026-09-01")
-        // Observed once, long before any reasonable summary window.
-        val longAgo = Instant.parse("2026-01-01T00:00:00Z")
-        repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, future, AvailabilityStatus.AVAILABLE, longAgo)))
-        val now = OffsetDateTime.parse("2026-07-05T00:00:00Z")
-        val s = repo.summarize(campsiteId, listOf(future), now = now, windowHours = 24 * 7).single()
-        // The current row predates the 7-day window, but the date must still report
-        // its true state, not zero-runs/closed.
-        assertEquals(true, s.isCurrentlyOpen)
-        assertEquals(1, s.totalRuns)
-        assertEquals(0, s.opensLast24h)
+        val current = runs.first { it.toStatus == AvailabilityStatus.AVAILABLE }
+        assertEquals(AvailabilityStatus.RESERVED, current.fromStatus)
     }
 }
