@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.config
 
-data class ReadPathProviderConfig(
+class ReadPathProviderConfig(
     val enabledDataSources: Set<String>,
     val enabledAvailabilityProviders: Set<String>,
 ) {
@@ -11,7 +11,7 @@ data class ReadPathProviderConfig(
     companion object {
         private const val ENABLED_DATA_SOURCES_KEY = "enabled-data-sources"
         private const val ENABLED_AVAILABILITY_PROVIDERS_KEY = "enabled-availability-providers"
-        private val AVAILABILITY_PROVIDER_IDS =
+        private val availabilityProviderIds =
             setOf(
                 "aspira",
                 "campflare",
@@ -35,10 +35,10 @@ data class ReadPathProviderConfig(
             key: String,
         ): Set<String> {
             val normalized = raw.map { it.lowercase() }.toSet()
-            val unknown = normalized - AVAILABILITY_PROVIDER_IDS
+            val unknown = normalized - availabilityProviderIds
             require(unknown.isEmpty()) {
                 "$key contains unknown provider(s): " +
-                    "${unknown.sorted()}. Expected one of: ${AVAILABILITY_PROVIDER_IDS.sorted()}."
+                    "${unknown.sorted()}. Expected one of: ${availabilityProviderIds.sorted()}."
             }
             return normalized
         }

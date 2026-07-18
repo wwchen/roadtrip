@@ -29,7 +29,7 @@ internal class NotifyTriggerActionHandler(
             watchId = watch.id,
             startDate = watch.startDate,
             endDate = watch.endDate,
-            openings = openings.map { it.notification },
+            openings = openings.map { it.watchOpening },
             targets = targets,
             appRootUrl = appRootUrl,
         )

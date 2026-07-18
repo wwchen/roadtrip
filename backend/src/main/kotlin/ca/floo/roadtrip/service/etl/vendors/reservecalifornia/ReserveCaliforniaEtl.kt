@@ -297,7 +297,7 @@ internal fun parseHighlights(raw: String?): List<String> =
 
 internal fun isActivityHighlight(label: String): Boolean {
     val normalized = label.lowercase()
-    return ACTIVITY_HINTS.any { normalized.contains(it) }
+    return activityHints.any { normalized.contains(it) }
 }
 
 internal fun reserveCaliforniaParkUrl(placeId: Long): String = "https://reservecalifornia.com/park/$placeId"
@@ -309,7 +309,7 @@ internal const val REGION = "CA"
 internal const val COUNTRY = "US"
 internal const val PARENT_PLACE_ID_KEY = "_parent_place_id"
 
-internal val ACTIVITY_HINTS =
+internal val activityHints =
     setOf(
         "biking",
         "bird",

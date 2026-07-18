@@ -41,7 +41,7 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
         )
         val support =
             CampgroundAvailabilitySupport(
-                providerRefs = CampsiteProviderRepo(ctx),
+                campsiteProviderRepo = CampsiteProviderRepo(ctx),
                 availabilityProviders =
                     AvailabilityProviderRegistry(
                         mapOf(
@@ -91,7 +91,7 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
 
     private fun supportFor(campflareEnabled: Boolean = true): CampgroundAvailabilitySupport =
         CampgroundAvailabilitySupport(
-            providerRefs = CampsiteProviderRepo(ctx),
+            campsiteProviderRepo = CampsiteProviderRepo(ctx),
             availabilityProviders =
                 AvailabilityProviderRegistry(
                     adaptersBySource =

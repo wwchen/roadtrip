@@ -29,6 +29,8 @@ import kotlin.test.assertTrue
 class AvailabilityPollerMembershipTest : SharedDbTest() {
     private lateinit var campsiteRepo: CampsiteRepo
     private lateinit var scopeResolver: WatchScopeResolver
+    private var poiSeq = 0
+    private val fakeDateContext = PoiDateContext(timeZone = ZoneId.of("UTC"), earliestDate = LocalDate.now())
 
     @BeforeAll
     fun setUp() {
@@ -42,8 +44,6 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
     }
 
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
-
-    private var poiSeq = 0
 
     private fun insertPoi(name: String = "Upper Pines"): Long {
         val sourceId = "poi-${poiSeq++}"
@@ -144,8 +144,6 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used by AvailabilityPollerMembershipTest")
     }
-
-    private val fakeDateContext = PoiDateContext(timeZone = ZoneId.of("UTC"), earliestDate = LocalDate.now())
 
     /**
      * In-memory fake keyed by campsite id, so a test can control exactly

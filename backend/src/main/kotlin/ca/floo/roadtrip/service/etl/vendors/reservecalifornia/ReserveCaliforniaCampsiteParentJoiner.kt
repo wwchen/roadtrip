@@ -13,12 +13,12 @@ class ReserveCaliforniaCampsiteParentJoiner : CampsiteParentJoiner {
 
     override fun discoverLinks(ctx: JoinerCtx): List<CampsiteParentLink> {
         val campgroundIdsByExternalId =
-            ctx.repo
+            ctx.campsiteParentJoinerRepo
                 .fetchReserveCaliforniaCampgroundParentCandidates()
                 .groupBy({ it.externalId }, { it.campgroundId })
 
         val links = LinkedHashSet<CampsiteParentLink>()
-        for (site in ctx.repo.fetchReserveCaliforniaCampsiteParentCandidates()) {
+        for (site in ctx.campsiteParentJoinerRepo.fetchReserveCaliforniaCampsiteParentCandidates()) {
             val parentExternalId = site.parentExternalId() ?: continue
             for (campgroundId in campgroundIdsByExternalId[parentExternalId].orEmpty()) {
                 links += CampsiteParentLink(campsiteId = site.campsiteId, campgroundId = campgroundId)

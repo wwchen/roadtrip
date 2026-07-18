@@ -8,11 +8,11 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
-private val GLOBAL_EARLIEST_DATE_CUTOFF: LocalTime = LocalTime.of(18, 0)
+private val globalEarliestDateCutoff: LocalTime = LocalTime.of(18, 0)
 
 internal class AvailabilityDateResolver(
     private val clock: Clock = Clock.systemUTC(),
-    private val cutoff: LocalTime = GLOBAL_EARLIEST_DATE_CUTOFF,
+    private val cutoff: LocalTime = globalEarliestDateCutoff,
 ) {
     fun context(
         lat: Double?,

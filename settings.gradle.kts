@@ -8,3 +8,4 @@ plugins {
 rootProject.name = "roadtrip"
 
 include("backend")
+include("detekt-rules")

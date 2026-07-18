@@ -18,13 +18,13 @@ class ReserveAmericaCampsiteParentJoiner : CampsiteParentJoiner {
 
     override fun discoverLinks(ctx: JoinerCtx): List<CampsiteParentLink> {
         val campgroundsByParentKey =
-            ctx.repo
+            ctx.campsiteParentJoinerRepo
                 .fetchReserveAmericaCampgroundParentCandidates()
                 .mapNotNull(::parentKeyForCampground)
                 .groupBy({ it.key }, { it.campgroundId })
 
         val links = LinkedHashSet<CampsiteParentLink>()
-        for (site in ctx.repo.fetchReserveAmericaCampsiteParentCandidates()) {
+        for (site in ctx.campsiteParentJoinerRepo.fetchReserveAmericaCampsiteParentCandidates()) {
             val key = parentKeyForSite(site) ?: continue
             for (campgroundId in campgroundsByParentKey[key].orEmpty()) {
                 links += CampsiteParentLink(campsiteId = site.campsiteId, campgroundId = campgroundId)

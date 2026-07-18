@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.scheduler.HandlerResult
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
@@ -10,9 +9,9 @@ import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.FetchOutcome
-import ca.floo.roadtrip.service.availability.ProviderCandidate
 import ca.floo.roadtrip.service.availability.ResolvedAvailabilityTarget
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
+import ca.floo.roadtrip.service.availability.catalogRefsFor
 import ca.floo.roadtrip.service.availability.parentRefKey
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
@@ -116,23 +115,10 @@ internal class AvailabilityPollExecutor(
                 if (candidate === groupCandidates.first()) {
                     preferredRefs
                 } else {
-                    catalogRefsFor(candidate, rows)
+                    rows.catalogRefsFor(candidate)
                 }
             },
         )
-    }
-
-    private fun catalogRefsFor(
-        candidate: ProviderCandidate,
-        rows: List<ResolvedAvailabilityTarget>,
-    ): List<CatalogCampsiteRef> {
-        val refs =
-            rows.mapNotNull { row ->
-                row.candidates
-                    .firstOrNull { it.provider.id == candidate.provider.id && it.parentRef == candidate.parentRef }
-                    ?.catalogRef
-            }
-        return refs.takeIf { it.size == rows.size } ?: emptyList()
     }
 
     private fun synthesizedError(last: FailoverAvailabilityFetcher.AttemptRecord?): AvailabilityProviderError {

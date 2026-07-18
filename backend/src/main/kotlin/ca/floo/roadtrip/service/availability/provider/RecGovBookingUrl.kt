@@ -14,6 +14,7 @@ import java.time.LocalDate
 internal object RecGovBookingUrl {
     private const val CAMPGROUND_URL = "https://www.recreation.gov/camping/campgrounds"
     private const val CAMPSITE_URL = "https://www.recreation.gov/camping/campsites"
+    private val campsitePath = Regex("""(?:^|/)campsites/([^/?#]+)""")
 
     fun campground(recgovId: String): String = "$CAMPGROUND_URL/${urlEncode(recgovId)}"
 
@@ -42,10 +43,8 @@ internal object RecGovBookingUrl {
         val trimmed = url?.trim().orEmpty()
         if (trimmed.isEmpty()) return null
         val path = runCatching { URI(trimmed).path }.getOrNull() ?: trimmed
-        return CAMPSITE_PATH.find(path)?.groupValues?.get(1)
+        return campsitePath.find(path)?.groupValues?.get(1)
     }
 
     private fun urlEncode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
-
-    private val CAMPSITE_PATH = Regex("""(?:^|/)campsites/([^/?#]+)""")
 }

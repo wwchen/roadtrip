@@ -78,7 +78,7 @@ class NotificationServicesTest {
         defaultChannel: String = "#default",
     ) = SlackNotificationService(
         config = SlackConfig(botToken = "xoxb-test", defaultChannel = defaultChannel),
-        client = client,
+        slackClient = client,
     )
 
     private fun emailService(client: RecordingEmailClient) =
@@ -88,7 +88,7 @@ class NotificationServicesTest {
                     resendApiKey = "re_test",
                     from = "Roadtrip Alerts <alerts@example.test>",
                 ),
-            client = client,
+            emailDeliveryClient = client,
         )
 
     private fun fanout(
@@ -98,7 +98,7 @@ class NotificationServicesTest {
         listOf(
             SlackNotificationService(
                 config = SlackConfig(botToken = "xoxb-test", defaultChannel = "#default"),
-                client = slackClient,
+                slackClient = slackClient,
             ),
             EmailNotificationService(
                 config =
@@ -106,7 +106,7 @@ class NotificationServicesTest {
                         resendApiKey = "re_test",
                         from = "Roadtrip Alerts <alerts@example.test>",
                     ),
-                client = emailClient,
+                emailDeliveryClient = emailClient,
             ),
         ),
     )

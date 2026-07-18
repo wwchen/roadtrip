@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.route.api.pois
 
+import ca.floo.roadtrip.config.RouteConfig
 import ca.floo.roadtrip.model.api.ApiErrorSchema
 import ca.floo.roadtrip.model.api.poi.PointGeometrySchema
 import ca.floo.roadtrip.model.api.poi.PoisOnRouteFeaturePropertiesSchema
@@ -14,9 +15,6 @@ import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.service.poi.OnRouteWaypoint
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.poi.canonicalPoiCategories
-import ca.floo.roadtrip.service.routing.MAX_ROUTE_CORRIDOR_RADIUS_MILES
-import ca.floo.roadtrip.service.routing.MAX_ROUTE_WAYPOINTS
-import ca.floo.roadtrip.service.routing.MIN_ROUTE_CORRIDOR_RADIUS_MILES
 import ca.floo.roadtrip.support.RoutingException
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -46,7 +44,10 @@ private val onRouteLog = LoggerFactory.getLogger("PoisOnRouteRoutes")
 // Returns every POI inside the buffered route corridor — no viewport bound,
 // no per-category cap. Drives the trip planner's "campgrounds along route"
 // card list, which the user wants to scan end-to-end instead of pan-by-pan.
-internal fun Route.poisOnRouteRoutes(poisOnRouteService: PoisOnRouteService) {
+internal fun Route.poisOnRouteRoutes(
+    poisOnRouteService: PoisOnRouteService,
+    routeConfig: RouteConfig,
+) {
     route("/api") {
         route("/pois") {
             post("/on-route") {
@@ -55,7 +56,7 @@ internal fun Route.poisOnRouteRoutes(poisOnRouteService: PoisOnRouteService) {
                         val body =
                             call
                                 .receiveJsonBody<OnRouteRequestDto>()
-                                .mapCatching(::parseOnRouteRequest)
+                                .mapCatching { parseOnRouteRequest(it, routeConfig) }
                     ) {
                         is RouteBodyResult.Invalid -> {
                             call.respondOnRouteJson(
@@ -88,8 +89,8 @@ internal fun Route.poisOnRouteRoutes(poisOnRouteService: PoisOnRouteService) {
                 tag = "poi",
                 summary = "Slim POIs inside a buffered route corridor (no viewport, no truncation)",
                 description =
-                    "Body: { waypoints: [{lat,lng}...2..$MAX_ROUTE_WAYPOINTS], " +
-                        "radius_miles: ${MIN_ROUTE_CORRIDOR_RADIUS_MILES}..$MAX_ROUTE_CORRIDOR_RADIUS_MILES, categories? }. " +
+                    "Body: { waypoints: [{lat,lng}...2..${routeConfig.maxWaypoints}], " +
+                        "radius_miles: ${routeConfig.minCorridorRadiusMiles}..${routeConfig.maxCorridorRadiusMiles}, categories? }. " +
                         "Returns every matching POI as a slim GeoJSON FeatureCollection. " +
                         "Backed by RouteCache; the FE typically primes it via /api/route just before this call.",
             )
@@ -104,18 +105,18 @@ private data class OnRouteRequest(
 )
 
 @Serializable
-private data class OnRouteRequestDto(
+private class OnRouteRequestDto(
     val waypoints: List<WaypointDto> = emptyList(),
     @SerialName("radius_miles") val radiusMiles: Double? = null,
     val categories: List<String>? = null,
 ) {
-    fun validated(): OnRouteRequest {
-        require(waypoints.size in 2..MAX_ROUTE_WAYPOINTS) {
-            "waypoints must have 2..$MAX_ROUTE_WAYPOINTS entries (got ${waypoints.size})"
+    fun validated(routeConfig: RouteConfig): OnRouteRequest {
+        require(waypoints.size in 2..routeConfig.maxWaypoints) {
+            "waypoints must have 2..${routeConfig.maxWaypoints} entries (got ${waypoints.size})"
         }
         val radius = radiusMiles ?: error("radius_miles is missing or not a number")
-        require(radius in MIN_ROUTE_CORRIDOR_RADIUS_MILES..MAX_ROUTE_CORRIDOR_RADIUS_MILES) {
-            "radius_miles must be in [$MIN_ROUTE_CORRIDOR_RADIUS_MILES, $MAX_ROUTE_CORRIDOR_RADIUS_MILES] (got $radius)"
+        require(radius in routeConfig.minCorridorRadiusMiles..routeConfig.maxCorridorRadiusMiles) {
+            "radius_miles must be in [${routeConfig.minCorridorRadiusMiles}, ${routeConfig.maxCorridorRadiusMiles}] (got $radius)"
         }
         val parsedCategories =
             categories
@@ -132,7 +133,7 @@ private data class OnRouteRequestDto(
 }
 
 @Serializable
-private data class WaypointDto(
+private class WaypointDto(
     val lat: Double? = null,
     val lng: Double? = null,
 ) {
@@ -145,7 +146,10 @@ private data class WaypointDto(
     }
 }
 
-private fun parseOnRouteRequest(dto: OnRouteRequestDto): OnRouteRequest = dto.validated()
+private fun parseOnRouteRequest(
+    dto: OnRouteRequestDto,
+    routeConfig: RouteConfig,
+): OnRouteRequest = dto.validated(routeConfig)
 
 /**
  * On-route FeatureCollection. Same per-feature shape as the bbox endpoint

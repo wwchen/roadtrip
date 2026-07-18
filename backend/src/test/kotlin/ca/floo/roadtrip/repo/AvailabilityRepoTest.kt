@@ -13,6 +13,8 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class AvailabilityRepoTest : SharedDbTest() {
+    private val date = LocalDate.parse("2026-07-04")
+
     @BeforeEach
     fun cleanup() {
         ctx.cleanCanonicalCatalogFixtures()
@@ -30,8 +32,6 @@ class AvailabilityRepoTest : SharedDbTest() {
             vendorId = vendorId,
             name = "site",
         )
-
-    private val date = LocalDate.parse("2026-07-04")
 
     @Test
     fun `unchanged status bumps last_observed_at in place, no new row`() {

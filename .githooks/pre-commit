@@ -1,13 +1,24 @@
 #!/usr/bin/env bash
-# Run ktlint against staged Kotlin files. Skip entirely if none are staged so
-# non-backend commits are unaffected. Enable with `make install-hooks`.
+# Run Kotlin static checks against staged Kotlin/config files. Skip entirely
+# if none are staged so non-backend commits are unaffected. Enable with
+# `make install-hooks`.
 set -euo pipefail
 
-staged=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^backend/.*\.kts?$' || true)
+staged=$(
+  git diff --cached --name-only --diff-filter=ACMR |
+    grep -E '^backend/.*\.kts?$|^detekt-rules/.*\.kts?$|^config/detekt/|(^|/)build\.gradle\.kts$|^settings\.gradle\.kts$' ||
+    true
+)
 [ -z "$staged" ] && exit 0
 
 if ! ./gradlew --quiet :backend:ktlintCheck -x :backend:generateJooq; then
   echo
   echo "ktlint failed. Auto-fix with: ./gradlew :backend:ktlintFormat -x :backend:generateJooq"
+  exit 1
+fi
+
+if ! ./gradlew --quiet :backend:detekt; then
+  echo
+  echo "detekt failed. Run locally with: ./gradlew :backend:detekt"
   exit 1
 fi

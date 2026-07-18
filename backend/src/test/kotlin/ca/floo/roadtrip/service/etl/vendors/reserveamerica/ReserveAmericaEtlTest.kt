@@ -16,6 +16,12 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class ReserveAmericaEtlTest {
+    private val kotlinx.serialization.json.JsonObject.contractCode: String
+        get() = this["contract_code"]!!.jsonPrimitive.content
+
+    private val kotlinx.serialization.json.JsonObject.parkId: String
+        get() = this["park_id"]!!.jsonPrimitive.content
+
     @Test
     fun `new york args stamp state campground metadata with reserveamerica provider ref`() {
         val etl = ReserveAmericaEtl("new-york-state-parks")
@@ -68,7 +74,7 @@ class ReserveAmericaEtlTest {
                                     infoUrl = "https://shop.albertaparks.ca/camping/x/r/campgroundDetails.do?contractCode=ABPP&parkId=123",
                                 ),
                             ),
-                        fetchedAt = FETCHED_AT,
+                        fetchedAt = fetchedAt,
                     ),
                     transformCtx(),
                 ).campgrounds
@@ -90,12 +96,6 @@ class ReserveAmericaEtlTest {
         assertEquals("ABPP", extras["contract"]!!.jsonPrimitive.content)
     }
 
-    private val kotlinx.serialization.json.JsonObject.contractCode: String
-        get() = this["contract_code"]!!.jsonPrimitive.content
-
-    private val kotlinx.serialization.json.JsonObject.parkId: String
-        get() = this["park_id"]!!.jsonPrimitive.content
-
     private fun kotlinx.serialization.json.JsonElement.jsonObjectArrayFirstUrl(): String =
         this
             .jsonArray
@@ -109,7 +109,7 @@ class ReserveAmericaEtlTest {
         return Envelope(
             fetcher = "fetch_reserveamerica",
             fetcherVersion = "1",
-            fetchedAt = FETCHED_AT.toString(),
+            fetchedAt = fetchedAt.toString(),
             request =
                 RequestMeta(
                     url = url,
@@ -145,6 +145,6 @@ class ReserveAmericaEtlTest {
         TransformCtx.load(File("build/tmp/reserveamerica-etl-test-raw"), PoiRegistry.loadResource("poi-registry.yaml"))
 
     private companion object {
-        val FETCHED_AT: Instant = Instant.parse("2026-01-01T00:00:00Z")
+        val fetchedAt: Instant = Instant.parse("2026-01-01T00:00:00Z")
     }
 }

@@ -17,17 +17,6 @@ internal interface WatchLifecycleNotifications {
     fun afterDelete(watch: AvailabilityWatchRepo.Watch)
 }
 
-internal object NoopWatchLifecycleNotifications : WatchLifecycleNotifications {
-    override fun afterCreate(watch: AvailabilityWatchRepo.Watch) = Unit
-
-    override fun afterUpdate(
-        before: AvailabilityWatchRepo.Watch,
-        after: AvailabilityWatchRepo.Watch,
-    ) = Unit
-
-    override fun afterDelete(watch: AvailabilityWatchRepo.Watch) = Unit
-}
-
 internal class DispatchingWatchLifecycleNotifications(
     private val dispatcher: WatchAlertDispatcher,
     private val scope: CoroutineScope,
@@ -42,7 +31,7 @@ internal class DispatchingWatchLifecycleNotifications(
         before: AvailabilityWatchRepo.Watch,
         after: AvailabilityWatchRepo.Watch,
     ) {
-        if (WatchInitialNotificationPolicy.shouldDispatchAfterUpdate(before, after)) {
+        if (shouldDispatchAfterUpdate(before, after)) {
             scheduleInitial(after)
         }
     }
@@ -59,5 +48,17 @@ internal class DispatchingWatchLifecycleNotifications(
             runCatching { dispatcher.dispatchInitial(watch) }
                 .onFailure { log.warn("initial notify for watch {} failed", watch.id, it) }
         }
+    }
+
+    private fun shouldDispatchAfterUpdate(
+        before: AvailabilityWatchRepo.Watch,
+        after: AvailabilityWatchRepo.Watch,
+    ): Boolean {
+        if (before.status != after.status) return true
+        if (after.status != WatchStatus.ACTIVE) return false
+        if (before.startDate != after.startDate || before.endDate != after.endDate) return true
+        if (before.targets.toSet() != after.targets.toSet()) return true
+        if (before.campsiteFilters != after.campsiteFilters) return true
+        return (after.triggerKinds.toSet() - before.triggerKinds.toSet()).isNotEmpty()
     }
 }

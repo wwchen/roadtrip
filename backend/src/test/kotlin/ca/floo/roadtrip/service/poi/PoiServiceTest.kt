@@ -198,7 +198,7 @@ class PoiServiceTest : SharedDbTest() {
         val categories =
             poiService()
                 .pois(
-                    bbox = VANCOUVER_BBOX,
+                    bbox = vancouverBbox,
                     zoom = CampgroundService.MIN_POI_ZOOM - 1,
                     categories = null,
                 ).features
@@ -216,7 +216,7 @@ class PoiServiceTest : SharedDbTest() {
         val features =
             poiService()
                 .pois(
-                    bbox = VANCOUVER_BBOX,
+                    bbox = vancouverBbox,
                     zoom = CampgroundService.MIN_POI_ZOOM - 1,
                     categories = listOf("campground"),
                 ).features
@@ -260,6 +260,6 @@ class PoiServiceTest : SharedDbTest() {
 
     private companion object {
         const val SOURCE = "poi-serving-test"
-        val VANCOUVER_BBOX = Bbox(west = -125.0, south = 47.0, east = -120.0, north = 51.0)
+        val vancouverBbox = Bbox(west = -125.0, south = 47.0, east = -120.0, north = 51.0)
     }
 }

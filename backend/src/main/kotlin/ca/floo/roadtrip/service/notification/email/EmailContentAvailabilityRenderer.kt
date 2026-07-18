@@ -16,7 +16,7 @@ import java.util.Locale
 
 private const val MAX_SUBJECT_CAMPGROUND_CHARS = 80
 private const val ELLIPSIS = "..."
-private val DATE_FORMATTER = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)
+private val dateFormatter = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)
 
 internal object EmailContentAvailabilityRenderer {
     fun openings(
@@ -40,7 +40,7 @@ internal object EmailContentAvailabilityRenderer {
             }
         val watchUrl = appRootUrl?.let { "${it.trimEnd('/')}/availability?watch=$watchId" }
         val modifyUrl = appRootUrl?.let { "${it.trimEnd('/')}/watches?action=modify&id=$watchId" }
-        val window = "${startDate.format(DATE_FORMATTER)}-${endDate.format(DATE_FORMATTER)}"
+        val window = "${startDate.format(dateFormatter)}-${endDate.format(dateFormatter)}"
         val text =
             buildString {
                 appendLine("Sites available for watch #$watchId")
@@ -51,7 +51,7 @@ internal object EmailContentAvailabilityRenderer {
                 openings.forEachIndexed { index, opening ->
                     appendLine("${index + 1}. ${opening.label}")
                     opening.campground?.let { appendLine("   Campground: $it") }
-                    appendLine("   Date: ${opening.date.format(DATE_FORMATTER)}")
+                    appendLine("   Date: ${opening.date.format(dateFormatter)}")
                     opening.loop?.let { appendLine("   Loop: $it") }
                     opening.siteType?.let { appendLine("   Type: $it") }
                     opening.bookingUrl?.let { appendLine("   Book: $it") }
@@ -92,7 +92,7 @@ internal object EmailContentAvailabilityRenderer {
                             +"Campground: $it"
                             br()
                         }
-                        +"Date: ${opening.date.format(DATE_FORMATTER)}"
+                        +"Date: ${opening.date.format(dateFormatter)}"
                         opening.loop?.let {
                             br()
                             +"Loop: $it"

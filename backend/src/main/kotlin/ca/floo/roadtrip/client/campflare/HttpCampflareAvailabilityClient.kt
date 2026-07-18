@@ -23,7 +23,7 @@ import java.time.LocalDate
 class HttpCampflareAvailabilityClient(
     private val apiBaseUrl: String = DEFAULT_API_BASE_URL,
     private val apiKey: String? = null,
-    private val client: HttpClient = defaultClient(),
+    private val httpClient: HttpClient = defaultClient(),
 ) : CampflareAvailabilityClient {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -76,7 +76,7 @@ class HttpCampflareAvailabilityClient(
         val req =
             HttpRequest
                 .newBuilder(URI.create(url))
-                .timeout(REQUEST_TIMEOUT)
+                .timeout(requestTimeout)
                 .header("User-Agent", USER_AGENT)
                 .header("Accept", "application/json")
                 .header("Authorization", apiKey)
@@ -85,7 +85,7 @@ class HttpCampflareAvailabilityClient(
                 .build()
         val resp =
             try {
-                client.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
+                httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
             } catch (e: Exception) {
                 throw CampflareException("campflare request failed: ${e.message}", httpStatus = null)
             }
@@ -99,7 +99,7 @@ class HttpCampflareAvailabilityClient(
         private const val MAX_BULK_CAMPGROUNDS = 25
         private const val DEFAULT_API_BASE_URL = "https://api.campflare.com/v2"
         private const val USER_AGENT = "roadtrip-campflare-availability/1.0"
-        private val REQUEST_TIMEOUT: Duration = Duration.ofSeconds(30)
+        private val requestTimeout: Duration = Duration.ofSeconds(30)
 
         fun defaultClient(): HttpClient =
             HttpClient

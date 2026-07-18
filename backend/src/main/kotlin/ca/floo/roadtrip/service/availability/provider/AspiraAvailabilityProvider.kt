@@ -33,7 +33,7 @@ private const val ASPIRA_MAX_POLL_WINDOW_DAYS = 30
  */
 class AspiraAvailabilityProvider(
     private val tenant: AspiraTenant,
-    private val client: AspiraAvailabilityClient,
+    private val availabilityClient: AspiraAvailabilityClient,
     private val enabled: Boolean,
     /**
      * When true, catalog availability with a known `resourceLocationId` uses
@@ -64,7 +64,7 @@ class AspiraAvailabilityProvider(
         val mapId = mapIdOrThrow(ref)
         return runWithErrorMapping {
             fetchAspiraAvailabilityObservations(
-                client = client,
+                client = availabilityClient,
                 host = tenant.host,
                 mapId = mapId,
                 startDate = startDate,
@@ -97,7 +97,7 @@ class AspiraAvailabilityProvider(
         return runWithErrorMapping {
             if (occupancyEnabled && resourceLocationId != null) {
                 fetchAspiraCatalogOccupancyObservations(
-                    client = client,
+                    client = availabilityClient,
                     host = tenant.host,
                     parentMapId = parentMapId,
                     resourceLocationId = resourceLocationId,
@@ -107,7 +107,7 @@ class AspiraAvailabilityProvider(
                 )
             } else {
                 fetchAspiraCatalogObservations(
-                    client = client,
+                    client = availabilityClient,
                     host = tenant.host,
                     parentMapId = parentMapId,
                     campsites = targets,

@@ -60,13 +60,13 @@ open class EtlOrchestrator(
      */
     private val joinerRegistry: Map<String, CampsiteParentJoiner> = Companion.joinerRegistry,
     /** Canonical materialized view refresh repo. */
-    private val canonicalViews: CanonicalViewRepo = CanonicalViewRepo(ctx),
+    private val canonicalViewRepo: CanonicalViewRepo = CanonicalViewRepo(ctx),
     /**
      * Repo for post-import campsite parent lookup and reparent writes. Kept
      * injectable so tests can still exercise chunk retry behavior through the
      * same repo boundary as production.
      */
-    private val campsiteParentJoiners: CampsiteParentJoinerRepo = CampsiteParentJoinerRepo(ctx),
+    private val campsiteParentJoinerRepo: CampsiteParentJoinerRepo = CampsiteParentJoinerRepo(ctx),
     private val joinerChunkSize: Int = DEFAULT_JOINER_CHUNK_SIZE,
 ) {
     init {
@@ -223,13 +223,17 @@ open class EtlOrchestrator(
                 ?: error("no joiner adapter registered for '${row.adapter}'")
 
         log.info("joiner '{}' starting adapter={}", row.name, row.adapter)
-        val joinerCtx = JoinerCtx(repo = campsiteParentJoiners, args = row.args)
+        val joinerCtx =
+            JoinerCtx(
+                campsiteParentJoinerRepo = campsiteParentJoinerRepo,
+                args = row.args,
+            )
         val links = joiner.discoverLinks(joinerCtx)
         var reparented = 0
         val chunks = links.chunked(joinerChunkSize)
         for ((chunkIndex, chunk) in chunks.withIndex()) {
             try {
-                reparented += campsiteParentJoiners.reparentCampsites(chunk)
+                reparented += campsiteParentJoinerRepo.reparentCampsites(chunk)
             } catch (e: Exception) {
                 log.error(
                     "joiner '{}' adapter={} failed at chunk {}/{} after committing {} reparent(s); retrying the joiner resumes idempotently",
@@ -269,7 +273,7 @@ open class EtlOrchestrator(
     }
 
     open fun refreshCanonicalViews() {
-        canonicalViews.refreshCanonicalViews()
+        canonicalViewRepo.refreshCanonicalViews()
         log.info("canonical views refreshed")
     }
 

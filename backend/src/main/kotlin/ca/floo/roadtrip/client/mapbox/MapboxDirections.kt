@@ -19,7 +19,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 
 /**
- * Thin client around the Mapbox Directions API. v1 only handles driving
+ * Thin httpClient around the Mapbox Directions API. v1 only handles driving
  * profile + GeoJSON geometry.
  *
  * Verified shape (2026-06-06):
@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory
  */
 class MapboxDirections(
     private val token: String?,
-    private val client: HttpClient = defaultClient(),
+    private val httpClient: HttpClient = defaultClient(),
     private val baseUrl: String = "https://api.mapbox.com",
 ) {
     private val log = LoggerFactory.getLogger(MapboxDirections::class.java)
@@ -62,7 +62,7 @@ class MapboxDirections(
 
         val response =
             try {
-                client.get(url)
+                httpClient.get(url)
             } catch (e: Exception) {
                 log.warn("Mapbox network failure: {}", e.message)
                 throw RoutingException("network error: ${e.message}", e)

@@ -24,12 +24,12 @@ data class RecGovAtcConfig(
     val companionEnabled: Boolean get() = companionBaseUrl != null
 
     companion object {
-        private val DEFAULT_COMPANION_TIMEOUT: Duration = Duration.ofSeconds(180)
+        private val defaultCompanionTimeout: Duration = Duration.ofSeconds(180)
 
         fun fromConfig(config: ConfigSection): RecGovAtcConfig =
             RecGovAtcConfig(
                 companionBaseUrl = config.value("companion-base-url")?.trimEnd('/'),
-                companionTimeout = config.duration("companion-timeout", DEFAULT_COMPANION_TIMEOUT),
+                companionTimeout = config.duration("companion-timeout", defaultCompanionTimeout),
             )
     }
 }

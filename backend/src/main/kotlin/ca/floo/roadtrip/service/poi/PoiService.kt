@@ -28,13 +28,13 @@ private val poiFeatureJson =
         explicitNulls = false
     }
 
-private val POI_CATEGORY_ALIASES =
+private val poiCategoryAliases =
     mapOf(
         "planet-fitness" to PlanetFitnessLocationService.POI_TYPE,
         "supercharger" to TeslaSuperchargerService.POI_TYPE,
     )
 
-internal fun canonicalPoiCategory(category: String): String = POI_CATEGORY_ALIASES[category] ?: category
+internal fun canonicalPoiCategory(category: String): String = poiCategoryAliases[category] ?: category
 
 internal fun canonicalPoiCategories(categories: List<String>): List<String> =
     categories
@@ -44,7 +44,7 @@ internal fun canonicalPoiCategories(categories: List<String>): List<String> =
 internal class PoiService(
     private val poiRepo: PoiServingRepo,
     detailServices: List<PoiDetailService>,
-    private val categoryPolicies: List<PoiCategoryPolicy> = DEFAULT_POI_CATEGORY_POLICIES,
+    private val categoryPolicies: List<PoiCategoryPolicy> = defaultPoiCategoryPolicies,
     private val limit: Int = POI_LIMIT,
 ) : PoiReader {
     private val detailServicesByType = detailServices.associateBy { it.poiType }

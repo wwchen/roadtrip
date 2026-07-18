@@ -72,6 +72,9 @@ class AvailabilityProviderRegistry(
         adaptersBySource.values.firstOrNull { it.id == id && it.isEnabled() }
 
     companion object {
+        private const val CAMPFLARE_VENDOR = "campflare"
+        private const val RECGOV_VENDOR = "recgov"
+
         fun fromPoiRegistry(
             registry: PoiRegistry,
             clients: AvailabilityProviderClients,
@@ -82,7 +85,7 @@ class AvailabilityProviderRegistry(
             // RecGov — single adapter instance shared across every recgov source.
             val recgov =
                 RecGovAvailabilityProvider(
-                    client = clients.recgovClient,
+                    availabilityClient = clients.recgovClient,
                     enabled = isProviderEnabled(AvailabilityProviderId.RECGOV),
                 )
             adaptersBySource[RECGOV_VENDOR] = recgov
@@ -94,7 +97,7 @@ class AvailabilityProviderRegistry(
             // while registry YAML exposes the terminal ETL slug ("campflare-campgrounds").
             val campflare =
                 CampflareAvailabilityProvider(
-                    client = clients.campflareClient,
+                    availabilityClient = clients.campflareClient,
                     enabled = isProviderEnabled(AvailabilityProviderId.CAMPFLARE),
                 )
             adaptersBySource[CAMPFLARE_VENDOR] = campflare
@@ -118,7 +121,7 @@ class AvailabilityProviderRegistry(
                                 )
                         AspiraAvailabilityProvider(
                             tenant = tenant,
-                            client = clients.aspiraClient,
+                            availabilityClient = clients.aspiraClient,
                             enabled = isProviderEnabled(AvailabilityProviderId.ASPIRA),
                         )
                     }
@@ -137,7 +140,7 @@ class AvailabilityProviderRegistry(
                 adaptersBySource[config.source] =
                     ReserveAmericaAvailabilityProvider(
                         tenant = tenant,
-                        client = clients.reserveAmericaClient,
+                        availabilityClient = clients.reserveAmericaClient,
                         enabled = isProviderEnabled(AvailabilityProviderId.RESERVEAMERICA),
                     )
             }
@@ -146,7 +149,7 @@ class AvailabilityProviderRegistry(
             if (reserveCaliforniaSources.isNotEmpty()) {
                 val reserveCalifornia =
                     ReserveCaliforniaAvailabilityProvider(
-                        client = clients.reserveCaliforniaClient,
+                        availabilityClient = clients.reserveCaliforniaClient,
                         enabled = isProviderEnabled(AvailabilityProviderId.RESERVECALIFORNIA),
                     )
                 for (source in reserveCaliforniaSources) {
@@ -176,8 +179,5 @@ class AvailabilityProviderRegistry(
             // Reverse direction is informational, not fatal: a tenant row with no
             // YAML source is harmless (the adapter just won't be exercised).
         }
-
-        private const val CAMPFLARE_VENDOR = "campflare"
-        private const val RECGOV_VENDOR = "recgov"
     }
 }

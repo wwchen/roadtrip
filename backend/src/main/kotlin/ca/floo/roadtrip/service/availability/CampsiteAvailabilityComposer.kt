@@ -4,7 +4,6 @@ import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.model.api.AvailabilityResponseDto
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.ProviderRef
@@ -23,11 +22,11 @@ private const val DEFAULT_AVAILABILITY_DAYS: Int = 7
 internal class CampsiteAvailabilityComposer(
     private val targets: AvailabilityTargetResolver,
     private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
-    availability: AvailabilityRepo? = null,
+    availabilityRepo: AvailabilityRepo? = null,
     private val snapshotFreshnessTtl: (AvailabilityProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
     private val failoverFetcher: FailoverAvailabilityFetcher,
 ) {
-    private val availabilityLoader = AvailabilityLoader(availability)
+    private val availabilityLoader = AvailabilityLoader(availabilityRepo)
 
     suspend fun availabilityFor(
         campsites: List<CampsiteAvailabilityTarget>,
@@ -118,24 +117,11 @@ internal class CampsiteAvailabilityComposer(
                     if (candidate === groupCandidates.first()) {
                         preferredRefs
                     } else {
-                        catalogRefsFor(candidate, rows)
+                        rows.catalogRefsFor(candidate)
                     }
                 },
             )
         return result.batch ?: throw synthesizedError(result.attempts.lastOrNull())
-    }
-
-    private fun catalogRefsFor(
-        candidate: ProviderCandidate,
-        rows: List<ResolvedAvailabilityTarget>,
-    ): List<CatalogCampsiteRef> {
-        val refs =
-            rows.mapNotNull { row ->
-                row.candidates
-                    .firstOrNull { it.provider.id == candidate.provider.id && it.parentRef == candidate.parentRef }
-                    ?.catalogRef
-            }
-        return refs.takeIf { it.size == rows.size } ?: emptyList()
     }
 
     private fun synthesizedError(last: FailoverAvailabilityFetcher.AttemptRecord?): AvailabilityProviderError {

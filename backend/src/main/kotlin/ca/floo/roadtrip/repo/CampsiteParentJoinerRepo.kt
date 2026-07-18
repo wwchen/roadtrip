@@ -24,7 +24,7 @@ class CampsiteParentJoinerRepo(
     fun fetchAspiraCampsiteParentCandidates(): List<AspiraCampsiteParentCandidate> =
         ctx
             .fetch(
-                ASPIRA_CAMPSITE_PARENT_CANDIDATES_SQL,
+                aspiraCampsiteParentCandidatesSql,
                 ASPIRA_TXN_LOC_KEY,
                 ASPIRA_MAP_ID_KEY,
                 ASPIRA_RESOURCE_LOCATION_ID_KEY,
@@ -37,7 +37,7 @@ class CampsiteParentJoinerRepo(
     fun fetchAspiraCampgroundParentCandidates(): List<AspiraCampgroundParentCandidate> =
         ctx
             .fetch(
-                ASPIRA_CAMPGROUND_PARENT_CANDIDATES_SQL,
+                aspiraCampgroundParentCandidatesSql,
                 ASPIRA_RESOURCE_LOCATION_ID_KEY,
                 ASPIRA_WA_CAMPGROUND_VENDOR,
                 ASPIRA_BC_CAMPGROUND_VENDOR,
@@ -47,7 +47,7 @@ class CampsiteParentJoinerRepo(
     fun fetchReserveAmericaCampsiteParentCandidates(): List<ReserveAmericaCampsiteParentCandidate> =
         ctx
             .fetch(
-                RESERVE_AMERICA_CAMPSITE_PARENT_CANDIDATES_SQL,
+                reserveAmericaCampsiteParentCandidatesSql,
                 RESERVE_AMERICA_PARENT_CONTRACT_KEY,
                 RESERVE_AMERICA_PARENT_CONTRACT_KEY,
                 RESERVE_AMERICA_PARENT_PARK_KEY,
@@ -58,7 +58,7 @@ class CampsiteParentJoinerRepo(
     fun fetchReserveAmericaCampgroundParentCandidates(): List<ReserveAmericaCampgroundParentCandidate> =
         ctx
             .fetch(
-                RESERVE_AMERICA_CAMPGROUND_PARENT_CANDIDATES_SQL,
+                reserveAmericaCampgroundParentCandidatesSql,
                 RESERVE_AMERICA_PROVIDER_CONTRACT_KEY,
                 RESERVE_AMERICA_ALBERTA_CAMPGROUND_VENDOR,
                 RESERVE_AMERICA_NEW_YORK_CAMPGROUND_VENDOR,
@@ -67,7 +67,7 @@ class CampsiteParentJoinerRepo(
     fun fetchReserveCaliforniaCampsiteParentCandidates(): List<ReserveCaliforniaCampsiteParentCandidate> =
         ctx
             .fetch(
-                RESERVE_CALIFORNIA_CAMPSITE_PARENT_CANDIDATES_SQL,
+                reserveCaliforniaCampsiteParentCandidatesSql,
                 RESERVE_CALIFORNIA_POI_PLACE_KEY,
                 RESERVE_CALIFORNIA_PARENT_PLACE_KEY,
                 RESERVE_CALIFORNIA_VENDOR,
@@ -76,7 +76,7 @@ class CampsiteParentJoinerRepo(
     fun fetchReserveCaliforniaCampgroundParentCandidates(): List<ReserveCaliforniaCampgroundParentCandidate> =
         ctx
             .fetch(
-                RESERVE_CALIFORNIA_CAMPGROUND_PARENT_CANDIDATES_SQL,
+                reserveCaliforniaCampgroundParentCandidatesSql,
                 RESERVE_CALIFORNIA_PARENT_CAMPGROUND_VENDOR,
             ).map(::reserveCaliforniaCampgroundParentCandidate)
 
@@ -169,7 +169,7 @@ class CampsiteParentJoinerRepo(
         private const val REPARENT_CAMPSITE_SQL =
             "UPDATE campsites SET campground_id = ? WHERE id = ? AND campground_id <> ?"
 
-        private val ASPIRA_CAMPSITE_PARENT_CANDIDATES_SQL =
+        private val aspiraCampsiteParentCandidatesSql =
             """
             SELECT
               c.id AS campsite_id,
@@ -188,7 +188,7 @@ class CampsiteParentJoinerRepo(
               AND site_ref.vendor IN (?, ?, ?)
             """.trimIndent()
 
-        private val ASPIRA_CAMPGROUND_PARENT_CANDIDATES_SQL =
+        private val aspiraCampgroundParentCandidatesSql =
             """
             SELECT
               cg.id AS campground_id,
@@ -205,7 +205,7 @@ class CampsiteParentJoinerRepo(
               AND campground_ref.vendor IN (?, ?, ?)
             """.trimIndent()
 
-        private val RESERVE_AMERICA_CAMPSITE_PARENT_CANDIDATES_SQL =
+        private val reserveAmericaCampsiteParentCandidatesSql =
             """
             SELECT
               c.id AS campsite_id,
@@ -223,7 +223,7 @@ class CampsiteParentJoinerRepo(
               AND site_ref.vendor LIKE ?
             """.trimIndent()
 
-        private val RESERVE_AMERICA_CAMPGROUND_PARENT_CANDIDATES_SQL =
+        private val reserveAmericaCampgroundParentCandidatesSql =
             """
             SELECT
               cg.id AS campground_id,
@@ -239,7 +239,7 @@ class CampsiteParentJoinerRepo(
               AND campground_ref.deleted_at IS NULL
             """.trimIndent()
 
-        private val RESERVE_CALIFORNIA_CAMPSITE_PARENT_CANDIDATES_SQL =
+        private val reserveCaliforniaCampsiteParentCandidatesSql =
             """
             SELECT
               c.id AS campsite_id,
@@ -255,7 +255,7 @@ class CampsiteParentJoinerRepo(
               AND site_ref.vendor = ?
             """.trimIndent()
 
-        private val RESERVE_CALIFORNIA_CAMPGROUND_PARENT_CANDIDATES_SQL =
+        private val reserveCaliforniaCampgroundParentCandidatesSql =
             """
             SELECT
               cg.id AS campground_id,

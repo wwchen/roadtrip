@@ -9,6 +9,7 @@ data class AppConfig(
     val campflare: CampflareConfig,
     val email: EmailConfig?,
     val readPathProviders: ReadPathProviderConfig,
+    val route: RouteConfig,
     val slack: SlackConfig?,
     val grafana: GrafanaConfig?,
     val webApp: WebAppConfig?,
@@ -24,6 +25,7 @@ data class AppConfig(
                 campflare = CampflareConfig.fromConfig(roadtrip.section("campflare")),
                 email = EmailConfig.fromConfig(roadtrip.section("email")),
                 readPathProviders = ReadPathProviderConfig.fromConfig(roadtrip.section("read-path")),
+                route = RouteConfig.fromConfig(roadtrip.section("route")),
                 slack = SlackConfig.fromConfig(roadtrip.section("slack")),
                 grafana = GrafanaConfig.fromConfig(roadtrip.section("grafana")),
                 webApp = WebAppConfig.fromConfig(roadtrip.section("web")),
@@ -33,7 +35,7 @@ data class AppConfig(
     }
 }
 
-private val SIMPLE_DURATION = Regex("""^(\d+)(ms|s|m|h|d)?$""")
+private val simpleDurationRegex = Regex("""^(\d+)(ms|s|m|h|d)?$""")
 
 internal fun parseDuration(
     raw: String?,
@@ -60,7 +62,7 @@ private fun parseDurationValue(
 ): Duration {
     val parsed =
         runCatching { Duration.parse(value) }.getOrNull()
-            ?: SIMPLE_DURATION
+            ?: simpleDurationRegex
                 .matchEntire(value.lowercase())
                 ?.let { match ->
                     val amount = match.groupValues[1].toLong()

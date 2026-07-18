@@ -24,7 +24,7 @@ data class AvailabilityProviderCapabilities(
 ) {
     companion object {
         /** Reasonable starting point for a stub; can be flipped on as features land. */
-        val UNSUPPORTED: AvailabilityProviderCapabilities =
+        val unsupported: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsInternalPolling = false,
                 bookingHorizonDays = 0,

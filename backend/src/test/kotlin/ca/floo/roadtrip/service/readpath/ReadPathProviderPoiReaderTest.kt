@@ -54,7 +54,7 @@ class ReadPathProviderPoiReaderTest : SharedDbTest() {
         val ids =
             poiReader(enabledDataSources = setOf("recgov", "tesla_supercharger"))
                 .pois(
-                    bbox = VANCOUVER_BBOX,
+                    bbox = vancouverBbox,
                     zoom = CampgroundService.MIN_POI_ZOOM,
                     categories = null,
                 ).features
@@ -121,14 +121,14 @@ class ReadPathProviderPoiReaderTest : SharedDbTest() {
             providers =
                 ReadPathProviderConfig(
                     enabledDataSources = enabledDataSources,
-                    enabledAvailabilityProviders = ENABLED_AVAILABILITY_PROVIDERS,
+                    enabledAvailabilityProviders = enabledAvailabilityProviders,
                 ),
         )
     }
 
     private companion object {
-        val VANCOUVER_BBOX = Bbox(west = -125.0, south = 47.0, east = -120.0, north = 51.0)
-        val ENABLED_AVAILABILITY_PROVIDERS =
+        val vancouverBbox = Bbox(west = -125.0, south = 47.0, east = -120.0, north = 51.0)
+        val enabledAvailabilityProviders =
             setOf(
                 "aspira",
                 "campflare",

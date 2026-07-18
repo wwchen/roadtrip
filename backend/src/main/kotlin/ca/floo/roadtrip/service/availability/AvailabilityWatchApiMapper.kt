@@ -9,9 +9,9 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 
 internal class AvailabilityWatchApiMapper(
-    private val campsites: CampsiteRepo,
+    private val campsiteRepo: CampsiteRepo,
     private val scopeResolver: WatchScopeResolver,
-    private val capabilities: WatchCapabilityService? = null,
+    private val watchCapabilityService: WatchCapabilityService? = null,
 ) {
     fun listResponse(
         rows: List<AvailabilityWatchRepo.Watch>,
@@ -34,7 +34,7 @@ internal class AvailabilityWatchApiMapper(
             watch = schema(watch),
             watchCapabilities =
                 if (includeCapabilities) {
-                    capabilities?.capabilitiesFor(scopeResolver.resolve(watch))
+                    watchCapabilityService?.capabilitiesFor(scopeResolver.resolve(watch))
                 } else {
                     null
                 },
@@ -46,7 +46,7 @@ internal class AvailabilityWatchApiMapper(
             firstTarget
                 ?.campsiteId
                 ?.takeIf { watch.targets.size == 1 }
-                ?.let(campsites::findAvailabilityTargetById)
+                ?.let(campsiteRepo::findAvailabilityTargetById)
                 ?.let { campsite ->
                     CampsiteSummarySchema(
                         id = campsite.id,

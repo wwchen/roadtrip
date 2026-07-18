@@ -574,7 +574,7 @@ class TriggerActionHandlerTest {
                     parentPoiId = 100L,
                     dateContext = PoiDateContext(ZoneId.of("UTC"), LocalDate.parse("2026-07-01")),
                 ),
-            notification =
+            watchOpening =
                 WatchOpening(
                     label = "Site 12",
                     loop = "Loop A",

@@ -18,24 +18,24 @@ import java.time.OffsetDateTime
 class TeslaSuperchargerRepo(
     private val ctx: DSLContext,
 ) {
-    private val importRuns = ImportRunRepo(ctx)
-    private val pois = PoiRepo(ctx)
+    private val importRunRepo = ImportRunRepo(ctx)
+    private val poiRepo = PoiRepo(ctx)
 
     fun upsertTeslaSuperchargers(
         records: List<TeslaSuperchargerUpsertCandidate>,
         source: String,
     ): CatalogUpsertResult {
-        val runId = importRuns.start(source)
+        val runId = importRunRepo.start(source)
         try {
             val upserted =
                 ctx.transactionResult { cfg ->
                     val tx = TeslaSuperchargerRepo(DSL.using(cfg))
                     records.sumOf { record -> if (tx.upsertTeslaSupercharger(record)) 1 else 0 }
                 }
-            importRuns.complete(runId, records.size)
+            importRunRepo.complete(runId, records.size)
             return CatalogUpsertResult(runId = runId, seenCount = records.size, upsertedCount = upserted)
         } catch (e: Throwable) {
-            importRuns.fail(runId, e.message ?: e.javaClass.simpleName)
+            importRunRepo.fail(runId, e.message ?: e.javaClass.simpleName)
             throw e
         }
     }
@@ -43,14 +43,14 @@ class TeslaSuperchargerRepo(
     fun findById(id: Long): TeslaSupercharger? =
         ctx
             .fetchOne(
-                "$BASE_SELECT WHERE ts.id = ? AND ts.deleted_at IS NULL",
+                "$baseSelect WHERE ts.id = ? AND ts.deleted_at IS NULL",
                 id,
             )?.let(::fromRecord)
 
     fun findByLocationSlug(locationSlug: String): TeslaSupercharger? =
         ctx
             .fetchOne(
-                "$BASE_SELECT WHERE ts.location_slug = ? AND ts.deleted_at IS NULL",
+                "$baseSelect WHERE ts.location_slug = ? AND ts.deleted_at IS NULL",
                 locationSlug,
             )?.let(::fromRecord)
 
@@ -58,7 +58,7 @@ class TeslaSuperchargerRepo(
         ctx
             .fetchOne(
                 """
-                $BASE_SELECT
+                $baseSelect
                 JOIN poi_tesla_superchargers pts
                   ON pts.tesla_supercharger_id = ts.id
                 JOIN pois p
@@ -75,7 +75,7 @@ class TeslaSuperchargerRepo(
             ctx.fetchOne(
                 """
                 SELECT
-                  $BASE_SELECT_COLUMNS,
+                  $baseSelectColumns,
                   to_jsonb(ts)::text AS properties_text
                 FROM tesla_superchargers ts
                 JOIN poi_tesla_superchargers pts
@@ -97,7 +97,7 @@ class TeslaSuperchargerRepo(
     fun findAll(): List<TeslaSupercharger> =
         ctx
             .fetch(
-                "$BASE_SELECT WHERE ts.deleted_at IS NULL ORDER BY ts.common_site_name, ts.id",
+                "$baseSelect WHERE ts.deleted_at IS NULL ORDER BY ts.common_site_name, ts.id",
             ).map(::fromRecord)
 
     private fun fromRecord(record: Record): TeslaSupercharger =
@@ -265,21 +265,21 @@ class TeslaSuperchargerRepo(
                     superchargerId,
                 )?.get("poi_id", Long::class.java)
         if (existingPoiId == null) {
-            val poiId = pois.insertPoi(TESLA_SUPERCHARGER_POI_TYPE, longitude, latitude)
+            val poiId = poiRepo.insertPoi(TESLA_SUPERCHARGER_POI_TYPE, longitude, latitude)
             ctx.execute(
                 "INSERT INTO poi_tesla_superchargers (poi_id, tesla_supercharger_id) VALUES (?, ?)",
                 poiId,
                 superchargerId,
             )
         } else {
-            pois.updatePoiGeometry(existingPoiId, longitude, latitude)
+            poiRepo.updatePoiGeometry(existingPoiId, longitude, latitude)
         }
     }
 
     private companion object {
         private const val TESLA_SUPERCHARGER_POI_TYPE = "tesla_supercharger"
 
-        private val BASE_SELECT_COLUMNS =
+        private val baseSelectColumns =
             """
             ts.id,
             ts.location_slug,
@@ -309,10 +309,10 @@ class TeslaSuperchargerRepo(
             ts.deleted_at
             """.trimIndent()
 
-        private val BASE_SELECT =
+        private val baseSelect =
             """
             SELECT
-              $BASE_SELECT_COLUMNS
+              $baseSelectColumns
             FROM tesla_superchargers ts
             """.trimIndent()
     }

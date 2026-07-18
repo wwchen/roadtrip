@@ -163,5 +163,5 @@ class CampsiteParentJoinerRepoTest : SharedDbTest() {
         )
     }
 
-    private fun joinerCtx(): JoinerCtx = JoinerCtx(repo = CampsiteParentJoinerRepo(ctx))
+    private fun joinerCtx(): JoinerCtx = JoinerCtx(campsiteParentJoinerRepo = CampsiteParentJoinerRepo(ctx))
 }

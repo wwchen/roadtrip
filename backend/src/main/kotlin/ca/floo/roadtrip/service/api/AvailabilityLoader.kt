@@ -19,7 +19,7 @@ import java.time.temporal.ChronoUnit
  * interval rows are fresh enough or a live upstream call is needed.
  */
 class AvailabilityLoader(
-    private val availability: AvailabilityRepo?,
+    private val availabilityRepo: AvailabilityRepo?,
     private val clock: Clock = Clock.systemUTC(),
 ) {
     data class CampsiteTarget(
@@ -47,7 +47,7 @@ class AvailabilityLoader(
         request: Request,
         fetch: suspend () -> AvailabilityObservationBatch,
     ): AvailabilityObservationBatch {
-        val repo = availability
+        val repo = availabilityRepo
         if (repo == null || request.targets.isEmpty()) return sliceToTarget(fetch(), request)
 
         val dates = datesInWindow(request.startDate, request.endDate)

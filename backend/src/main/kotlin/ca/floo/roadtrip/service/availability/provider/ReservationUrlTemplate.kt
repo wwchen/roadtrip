@@ -20,7 +20,7 @@ object ReservationUrlTemplate {
     const val END_DATE = "{end_date}"
     const val NIGHTS = "{nights}"
 
-    private val PLACEHOLDERS = listOf(START_DATE, END_DATE, NIGHTS)
+    private val placeholders = listOf(START_DATE, END_DATE, NIGHTS)
 
     /**
      * Concrete booking URL for the half-open window `[startDate, endDate)`.
@@ -32,7 +32,7 @@ object ReservationUrlTemplate {
         startDate: LocalDate,
         endDate: LocalDate,
     ): String {
-        if (PLACEHOLDERS.none { template.contains(it) }) return template
+        if (placeholders.none { template.contains(it) }) return template
         val nights = ChronoUnit.DAYS.between(startDate, endDate)
         return template
             .replace(START_DATE, startDate.toString())

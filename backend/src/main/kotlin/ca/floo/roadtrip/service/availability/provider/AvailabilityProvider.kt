@@ -31,10 +31,10 @@ interface AvailabilityProvider : Dispatchable<AvailabilityProviderId> {
     /** Stable identity. Mapped from catalog source slug + `provider_ref` shape by the registry. */
     val id: AvailabilityProviderId
 
-    override fun canHandle(key: AvailabilityProviderId): Boolean = isEnabled() && key == id
-
     /** Static per adapter; cheap to read and safe to surface to API clients. */
     val capabilities: AvailabilityProviderCapabilities
+
+    override fun canHandle(key: AvailabilityProviderId): Boolean = isEnabled() && key == id
 
     /** Whether this provider is configured for this process. */
     fun isEnabled(): Boolean

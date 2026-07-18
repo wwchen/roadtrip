@@ -105,6 +105,6 @@ class TestEmailRoutesTest {
                     resendApiKey = "re_test",
                     from = "Roadtrip Alerts <alerts@example.test>",
                 ),
-            client = client,
+            emailDeliveryClient = client,
         )
 }

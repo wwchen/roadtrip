@@ -121,6 +121,6 @@ class TestSlackRoutesTest {
         defaultChannel: String = "#default",
     ) = SlackNotificationService(
         config = SlackConfig(botToken = "xoxb-test", defaultChannel = defaultChannel),
-        client = client,
+        slackClient = client,
     )
 }

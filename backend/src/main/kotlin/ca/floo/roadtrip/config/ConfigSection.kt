@@ -2,7 +2,7 @@ package ca.floo.roadtrip.config
 
 import java.time.Duration
 
-data class ConfigSection(
+class ConfigSection(
     private val values: Map<String, String>,
     val prefix: String = "",
 ) {

@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.model.api
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 // Swagger + response DTOs for the admin ingest API.
@@ -10,9 +11,9 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class RunOutcomeSchema(
-    val run_id: Long,
+    @SerialName("run_id") val runId: Long,
     val target: String,
     val kind: String,
     val status: String,
-    val failed_phase: String? = null,
+    @SerialName("failed_phase") val failedPhase: String? = null,
 )

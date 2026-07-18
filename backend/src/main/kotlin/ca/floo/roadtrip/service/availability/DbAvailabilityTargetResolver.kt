@@ -14,11 +14,11 @@ import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
 import ca.floo.roadtrip.service.availability.provider.availabilityProviderId
 
 internal class DbAvailabilityTargetResolver(
-    private val providerRefs: CampsiteProviderRepo,
+    private val campsiteProviderRepo: CampsiteProviderRepo,
     private val campsitesRepo: CampsiteRepo,
     private val availabilityProviders: AvailabilityProviderRegistry,
     private val dateResolver: AvailabilityDateResolver,
-    private val pollers: AvailabilityPollerRepo,
+    private val pollerRepo: AvailabilityPollerRepo,
 ) : AvailabilityTargetResolver {
     private data class ResolvedRow(
         val poiId: Long,
@@ -30,7 +30,7 @@ internal class DbAvailabilityTargetResolver(
         val poiIds = campsitesRepo.poiIdsForCampsite(campsite.id)
         if (poiIds.isEmpty()) return null
 
-        val providerRefsByPoiId = providerRefs.findProviderRefCandidates(poiIds)
+        val providerRefsByPoiId = campsiteProviderRepo.findProviderRefCandidates(poiIds)
         val resolvedRows: List<ResolvedRow> =
             poiIds
                 .asSequence()
@@ -54,10 +54,10 @@ internal class DbAvailabilityTargetResolver(
     }
 
     override fun resolve(poller: AvailabilityPollerRepo.Poller): PollerFetchPlan? {
-        val liveWatches = pollers.liveWatchesForPoller(poller.id)
+        val liveWatches = pollerRepo.liveWatchesForPoller(poller.id)
         if (liveWatches.isEmpty()) return null
 
-        val poiCadenceOverrideSec = pollers.cadenceOverrideForPoller(poller.id)
+        val poiCadenceOverrideSec = pollerRepo.cadenceOverrideForPoller(poller.id)
         val cadenceSec = resolveCadenceSec(liveWatches, poiCadenceOverrideSec)
 
         val targets =
@@ -112,7 +112,7 @@ internal class DbAvailabilityTargetResolver(
     ): CatalogCampsiteRef {
         val fallback = campsite.toCatalogCampsiteRef()
         val ref =
-            providerRefs
+            campsiteProviderRepo
                 .findCampsiteProviderRefs(campsite.id)
                 .asSequence()
                 .mapNotNull { ProviderRefParser.parse(it.providerRefJson) }

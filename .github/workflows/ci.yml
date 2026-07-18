@@ -61,6 +61,10 @@ jobs:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
       - name: ktlint
         run: ./gradlew :backend:ktlintCheck -x :backend:generateJooq
+      - name: detekt
+        run: ./gradlew :backend:detekt
+      - name: detekt rule tests
+        run: ./gradlew :detekt-rules:test
 
   backend-tests:
     needs: changes

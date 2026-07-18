@@ -81,19 +81,19 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
 
     private fun service(
         alertProviders: AlertProviderRegistry? = null,
-        capabilityValidator: WatchCapabilityValidator = NoopWatchCapabilityValidator,
+        capabilityValidator: WatchCapabilityValidator = WatchCapabilityValidator { },
         availabilityProvider: AvailabilityProvider = FakeProvider,
-        lifecycleNotifications: WatchLifecycleNotifications = NoopWatchLifecycleNotifications,
+        lifecycleNotifications: WatchLifecycleNotifications = ignoredLifecycleNotifications(),
     ): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
         val registry = AvailabilityProviderRegistry(mapOf("test" to availabilityProvider))
         val targets =
             DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
+                campsiteProviderRepo = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
-                pollers = AvailabilityPollerRepo(ctx),
+                pollerRepo = AvailabilityPollerRepo(ctx),
             )
         val providers =
             alertProviders ?: AlertProviderRegistry(
@@ -119,11 +119,11 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val registry = AvailabilityProviderRegistry(mapOf("test" to availabilityProvider))
         val targets =
             DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
+                campsiteProviderRepo = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
-                pollers = AvailabilityPollerRepo(ctx),
+                pollerRepo = AvailabilityPollerRepo(ctx),
             )
         val scopeResolver = WatchScopeResolver(campsitesRepo)
         val providers =
@@ -140,35 +140,48 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
             capabilityValidator =
                 WatchTriggerCapabilityValidator(
                     scopeResolver = scopeResolver,
-                    capabilities =
+                    watchCapabilityService =
                         WatchCapabilityService(
                             availabilityTargets = targets,
                             bookingTargets = AvailabilityBookingTargetResolver(bookingProviders),
                             notificationTriggerKinds = notificationTriggerKinds,
                         ),
                 ),
+            lifecycleNotifications = ignoredLifecycleNotifications(),
         )
     }
+
+    private fun ignoredLifecycleNotifications(): WatchLifecycleNotifications =
+        object : WatchLifecycleNotifications {
+            override fun afterCreate(watch: AvailabilityWatchRepo.Watch) = Unit
+
+            override fun afterUpdate(
+                before: AvailabilityWatchRepo.Watch,
+                after: AvailabilityWatchRepo.Watch,
+            ) = Unit
+
+            override fun afterDelete(watch: AvailabilityWatchRepo.Watch) = Unit
+        }
 
     private fun dispatchingLifecycleNotifications(notifications: NotificationSender): WatchLifecycleNotifications {
         val campsitesRepo = CampsiteRepo(ctx)
         val registry = AvailabilityProviderRegistry(mapOf("test" to FakeProvider))
         val targets =
             DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
+                campsiteProviderRepo = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
-                pollers = AvailabilityPollerRepo(ctx),
+                pollerRepo = AvailabilityPollerRepo(ctx),
             )
         val dispatcher =
             WatchAlertDispatcher(
                 notifications = notifications,
                 scopeResolver = WatchScopeResolver(campsitesRepo),
-                watches = AvailabilityWatchRepo(ctx),
+                watchRepo = AvailabilityWatchRepo(ctx),
                 targets = targets,
-                pois = PoiServingRepo(ctx),
-                availability = AvailabilityRepo(ctx),
+                poiRepo = PoiServingRepo(ctx),
+                availabilityRepo = AvailabilityRepo(ctx),
                 triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, appRootUrl = null))),
                 grafanaRootUrl = null,
                 appRootUrl = null,
@@ -234,7 +247,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     )
 
     @Test
-    fun `a watch spanning two campgrounds links to two pollers`() {
+    fun `a watch spanning two campgrounds links to two pollerRepo`() {
         val poiA = seedPoi("232447")
         seedCampsite(poiA, "100")
         val poiB = seedPoi("232999")
@@ -259,10 +272,10 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 ),
             )
 
-        val pollers = AvailabilityPollerRepo(ctx)
-        val linked = pollers.pollerIdsForWatch(watch.id)
+        val pollerRepo = AvailabilityPollerRepo(ctx)
+        val linked = pollerRepo.pollerIdsForWatch(watch.id)
         assertEquals(2, linked.size)
-        val parentRefs = linked.map { pollers.findById(it)!!.parentRef }.toSet()
+        val parentRefs = linked.map { pollerRepo.findById(it)!!.parentRef }.toSet()
         assertEquals(setOf("232447", "232999"), parentRefs)
     }
 
@@ -272,10 +285,10 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         seedCampsite(poiId, "100")
         val watch = service().createForTest(poiInput(poiId))
 
-        val pollers = AvailabilityPollerRepo(ctx)
-        val linked = pollers.pollerIdsForWatch(watch.id)
+        val pollerRepo = AvailabilityPollerRepo(ctx)
+        val linked = pollerRepo.pollerIdsForWatch(watch.id)
         assertEquals(1, linked.size)
-        val poller = pollers.findById(linked.single())!!
+        val poller = pollerRepo.findById(linked.single())!!
         assertTrue(poller.active)
         assertEquals("recgov", poller.provider)
         assertEquals("232447", poller.parentRef)
@@ -504,11 +517,11 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val w1 = svc.createForTest(poiInput(poiId))
         val w2 = svc.createForTest(poiInput(poiId))
 
-        val pollers = AvailabilityPollerRepo(ctx)
-        val p1 = pollers.pollerIdsForWatch(w1.id).single()
-        val p2 = pollers.pollerIdsForWatch(w2.id).single()
+        val pollerRepo = AvailabilityPollerRepo(ctx)
+        val p1 = pollerRepo.pollerIdsForWatch(w1.id).single()
+        val p2 = pollerRepo.pollerIdsForWatch(w2.id).single()
         assertEquals(p1, p2)
-        assertEquals(1, pollers.count(active = true))
+        assertEquals(1, pollerRepo.count(active = true))
     }
 
     @Test
@@ -517,13 +530,13 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         seedCampsite(poiId, "100")
         val svc = service()
         val watch = svc.createForTest(poiInput(poiId))
-        val pollers = AvailabilityPollerRepo(ctx)
-        val pollerId = pollers.pollerIdsForWatch(watch.id).single()
+        val pollerRepo = AvailabilityPollerRepo(ctx)
+        val pollerId = pollerRepo.pollerIdsForWatch(watch.id).single()
 
         svc.updateForTest(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))
 
-        assertTrue(pollers.pollerIdsForWatch(watch.id).isEmpty())
-        assertEquals(false, pollers.findById(pollerId)!!.active)
+        assertTrue(pollerRepo.pollerIdsForWatch(watch.id).isEmpty())
+        assertEquals(false, pollerRepo.findById(pollerId)!!.active)
     }
 
     @Test
@@ -532,14 +545,14 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         seedCampsite(poiId, "100")
         val svc = service()
         val watch = svc.createForTest(poiInput(poiId))
-        val pollers = AvailabilityPollerRepo(ctx)
-        val pollerId = pollers.pollerIdsForWatch(watch.id).single()
+        val pollerRepo = AvailabilityPollerRepo(ctx)
+        val pollerId = pollerRepo.pollerIdsForWatch(watch.id).single()
 
         assertTrue(svc.delete(watch.id))
 
         // Cascade dropped the link; the now-orphaned poller is deactivated (dormant, not deleted).
-        assertTrue(pollers.watchIdsForPoller(pollerId).isEmpty())
-        assertEquals(false, pollers.findById(pollerId)!!.active)
+        assertTrue(pollerRepo.watchIdsForPoller(pollerId).isEmpty())
+        assertEquals(false, pollerRepo.findById(pollerId)!!.active)
     }
 
     @Test

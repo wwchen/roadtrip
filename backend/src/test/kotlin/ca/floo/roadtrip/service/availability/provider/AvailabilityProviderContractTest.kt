@@ -21,7 +21,7 @@ class AvailabilityProviderContractTest {
     fun `all reservation vendor adapters implement availability provider contract`() {
         val providers: List<AvailabilityProvider> =
             listOf(
-                RecGovAvailabilityProvider(client = stubRecgovClient(), enabled = true),
+                RecGovAvailabilityProvider(availabilityClient = stubRecgovClient(), enabled = true),
                 AspiraAvailabilityProvider(
                     tenant =
                         AspiraTenant(
@@ -29,7 +29,7 @@ class AvailabilityProviderContractTest {
                             vendorCode = "aspira_pc",
                             bookingHorizonDays = 365,
                         ),
-                    client = stubAspiraClient(),
+                    availabilityClient = stubAspiraClient(),
                     enabled = true,
                 ),
                 ReserveAmericaAvailabilityProvider(
@@ -40,10 +40,10 @@ class AvailabilityProviderContractTest {
                             contractCode = "NY",
                             bookingHorizonDays = 270,
                         ),
-                    client = stubReserveAmericaClient(),
+                    availabilityClient = stubReserveAmericaClient(),
                     enabled = true,
                 ),
-                ReserveCaliforniaAvailabilityProvider(client = stubReserveCaliforniaClient(), enabled = true),
+                ReserveCaliforniaAvailabilityProvider(availabilityClient = stubReserveCaliforniaClient(), enabled = true),
             )
 
         assertEquals(4, providers.size)
@@ -52,7 +52,7 @@ class AvailabilityProviderContractTest {
     @Test
     fun `availability provider accepts direct arguments instead of request wrappers`() =
         runBlocking {
-            val provider: AvailabilityProvider = RecGovAvailabilityProvider(client = stubRecgovClient(), enabled = true)
+            val provider: AvailabilityProvider = RecGovAvailabilityProvider(availabilityClient = stubRecgovClient(), enabled = true)
             val startDate = LocalDate.parse("2026-07-01")
             val endDate = LocalDate.parse("2026-07-02")
 

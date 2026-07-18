@@ -14,9 +14,9 @@ private const val BACKOFF_BASE_MULTIPLIER = 2.0
 private const val BACKOFF_CEILING_SEC = 3_600L
 
 internal class AvailabilityRunService(
-    private val runs: AvailabilityRunRepo,
-    private val availability: AvailabilityRepo,
-    private val fetchCalls: AvailabilityFetchCallRepo,
+    private val runRepo: AvailabilityRunRepo,
+    private val availabilityRepo: AvailabilityRepo,
+    private val fetchCallRepo: AvailabilityFetchCallRepo,
     private val clock: Clock = Clock.systemUTC(),
 ) {
     data class RunHandle(
@@ -36,7 +36,7 @@ internal class AvailabilityRunService(
 
     fun start(pollerId: Long): RunHandle {
         val startedAt = OffsetDateTime.now(clock)
-        val runId = runs.start(pollerId, startedAt)
+        val runId = runRepo.start(pollerId, startedAt)
         return RunHandle(runId, startedAt)
     }
 
@@ -49,15 +49,15 @@ internal class AvailabilityRunService(
         val transitions = results.flatMap { writeObservations(it, handle.runId) }
         val observedCampsiteIds =
             results.flatMap { r -> r.campsites.map { it.id } }.distinct()
-        availability.markElapsedAsPast(observedCampsiteIds, LocalDate.now(clock))
+        availabilityRepo.markElapsedAsPast(observedCampsiteIds, LocalDate.now(clock))
         recordFetchCalls(results, attemptsByGroup, handle.runId)
         val completedAt = OffsetDateTime.now(clock)
         val durationMs = durationMs(handle.startedAt, completedAt)
         return if (failure != null) {
-            runs.fail(handle.runId, error = failure.outcome.name.lowercase(), completedAt = completedAt, durationMs = durationMs)
+            runRepo.fail(handle.runId, error = failure.outcome.name.lowercase(), completedAt = completedAt, durationMs = durationMs)
             RunOutcome.Failed(failure.outcome.name.lowercase())
         } else {
-            runs.complete(handle.runId, transitions.size, completedAt, durationMs)
+            runRepo.complete(handle.runId, transitions.size, completedAt, durationMs)
             RunOutcome.Completed(transitions)
         }
     }
@@ -67,7 +67,7 @@ internal class AvailabilityRunService(
         error: String,
     ) {
         val completedAt = OffsetDateTime.now(clock)
-        runs.fail(handle.runId, error = error, completedAt = completedAt, durationMs = durationMs(handle.startedAt, completedAt))
+        runRepo.fail(handle.runId, error = error, completedAt = completedAt, durationMs = durationMs(handle.startedAt, completedAt))
     }
 
     fun computeNextRunAt(
@@ -76,7 +76,7 @@ internal class AvailabilityRunService(
         failed: Boolean,
     ): OffsetDateTime =
         if (failed) {
-            val failures = runs.countConsecutiveFailures(pollerId)
+            val failures = runRepo.countConsecutiveFailures(pollerId)
             val backoffSec = (cadenceSec * Math.pow(BACKOFF_BASE_MULTIPLIER, failures.toDouble())).toLong()
             OffsetDateTime.now(clock).plusSeconds(backoffSec.coerceAtMost(BACKOFF_CEILING_SEC))
         } else {
@@ -88,7 +88,7 @@ internal class AvailabilityRunService(
         startDate: LocalDate,
         endDate: LocalDate,
         freshAtOrAfter: OffsetDateTime,
-    ): Boolean = availability.hasFreshCoverage(campsiteIds, startDate, endDate, freshAtOrAfter)
+    ): Boolean = availabilityRepo.hasFreshCoverage(campsiteIds, startDate, endDate, freshAtOrAfter)
 
     private fun writeObservations(
         result: GroupFetchResult,
@@ -107,7 +107,7 @@ internal class AvailabilityRunService(
                 )
             }
         if (observations.isEmpty()) return emptyList()
-        return availability.recordObservations(runId, observations)
+        return availabilityRepo.recordObservations(runId, observations)
     }
 
     private fun recordFetchCalls(
@@ -119,7 +119,7 @@ internal class AvailabilityRunService(
             val key = r.provider.id to parentRefKey(r.parentRef)
             val attempts = attemptsByGroup[key].orEmpty()
             if (attempts.isEmpty()) {
-                fetchCalls.record(
+                fetchCallRepo.record(
                     AvailabilityFetchCallRepo.NewCall(
                         runId = runId,
                         provider =
@@ -137,7 +137,7 @@ internal class AvailabilityRunService(
                 return@forEach
             }
             attempts.forEach { attempt ->
-                fetchCalls.record(
+                fetchCallRepo.record(
                     AvailabilityFetchCallRepo.NewCall(
                         runId = runId,
                         provider = attempt.provider.name.lowercase(),

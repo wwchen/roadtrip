@@ -24,15 +24,15 @@ private const val LATITUDE_KEY = "latitude"
 private const val LONGITUDE_KEY = "longitude"
 
 internal class CampgroundService(
-    private val repo: CampgroundRepo,
+    private val campgroundRepo: CampgroundRepo,
     private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     private val availabilitySupport: CampgroundAvailabilitySupport? = null,
-    private val cta: CampgroundCta = CampgroundCta.Default,
+    private val cta: CampgroundCta = CampgroundCta.default,
 ) : PoiDetailService {
     override val poiType: String = POI_TYPE
 
     override fun poiDetailProperties(poi: PoiIndexRow): PoiDetailPropertiesSchema? {
-        val detail = repo.findPoiDetailByPoi(poi.id) ?: return null
+        val detail = campgroundRepo.findPoiDetailByPoi(poi.id) ?: return null
         val campground = detail.campground
         val raw = Json.parseToJsonElement(detail.propertiesJson)
         val rawObject = raw as? JsonObject ?: JsonObject(emptyMap())

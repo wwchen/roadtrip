@@ -25,7 +25,7 @@ private val slackJson =
 /**
  * Outbound Slack `chat.postMessage` transport — the only thing that talks to
  * Slack over the wire. Business callers go through
- * [ca.floo.roadtrip.service.notification.slack.SlackNotificationService]; this client
+ * [ca.floo.roadtrip.service.notification.slack.SlackNotificationService]; this httpClient
  * only knows how to put bytes on the network.
  *
  * A message is a channel + fallback text + either a rich [SlackAttachmentDto]
@@ -41,7 +41,7 @@ private val slackJson =
  */
 open class SlackClient(
     private val config: SlackConfig,
-    private val client: HttpClient = HttpClient(CIO) { engine { requestTimeout = SLACK_REQUEST_TIMEOUT_MS } },
+    private val httpClient: HttpClient = HttpClient(CIO) { engine { requestTimeout = SLACK_REQUEST_TIMEOUT_MS } },
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -95,7 +95,7 @@ open class SlackClient(
                 ),
             )
         val resp =
-            client.post(SLACK_POST_MESSAGE_URL) {
+            httpClient.post(SLACK_POST_MESSAGE_URL) {
                 header("Authorization", "Bearer ${config.botToken}")
                 contentType(ContentType.Application.Json)
                 setBody(body)
@@ -129,7 +129,7 @@ open class SlackClient(
                 ),
             )
         val resp =
-            client.post(responseUrl) {
+            httpClient.post(responseUrl) {
                 contentType(ContentType.Application.Json)
                 setBody(body)
             }
@@ -138,8 +138,8 @@ open class SlackClient(
         return ok
     }
 
-    /** Releases the underlying HTTP client. Call on app shutdown. */
-    fun close() = client.close()
+    /** Releases the underlying HTTP httpClient. Call on app shutdown. */
+    fun close() = httpClient.close()
 
     private fun List<SlackAttachmentDto>?.withFallback(text: String): List<SlackAttachmentDto>? =
         this?.mapIndexed { index, attachment ->

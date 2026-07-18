@@ -2,7 +2,7 @@ package ca.floo.roadtrip.config
 
 import java.time.Duration
 
-data class ApiCacheConfig(
+class ApiCacheConfig(
     private val ttlByEntity: Map<ApiCacheEntity, Duration>,
 ) {
     fun ttlFor(entity: ApiCacheEntity): Duration = ttlByEntity[entity] ?: entity.defaultTtl

@@ -7,12 +7,12 @@ import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import kotlinx.serialization.json.Json
 
 internal class TeslaSuperchargerService(
-    private val repo: TeslaSuperchargerRepo,
+    private val teslaSuperchargerRepo: TeslaSuperchargerRepo,
 ) : PoiDetailService {
     override val poiType: String = POI_TYPE
 
     override fun poiDetailProperties(poi: PoiIndexRow): PoiDetailPropertiesSchema? {
-        val detail = repo.findPoiDetailByPoi(poi.id) ?: return null
+        val detail = teslaSuperchargerRepo.findPoiDetailByPoi(poi.id) ?: return null
         val supercharger = detail.supercharger
         val raw = Json.parseToJsonElement(detail.propertiesJson)
         return PoiDetailPropertiesSchema(

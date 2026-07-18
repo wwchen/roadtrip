@@ -25,8 +25,8 @@ import java.time.temporal.ChronoUnit
  * date appears inside larger strings.
  */
 internal object AspiraBookingUrl {
-    private val TEMPLATE_START_DATE: LocalDate = LocalDate.parse("2001-01-02")
-    private val TEMPLATE_END_DATE: LocalDate = LocalDate.parse("2001-01-03")
+    private val templateStartDate: LocalDate = LocalDate.parse("2001-01-02")
+    private val templateEndDate: LocalDate = LocalDate.parse("2001-01-03")
 
     /**
      * Booking-page template for a campsite, or null when neither the
@@ -62,9 +62,9 @@ internal object AspiraBookingUrl {
         mapId: Long,
         resourceLocationId: Long?,
     ): String =
-        url(host, transactionLocationId, mapId, resourceLocationId, TEMPLATE_START_DATE, TEMPLATE_END_DATE)
-            .replace(TEMPLATE_START_DATE.toString(), ReservationUrlTemplate.START_DATE)
-            .replace(TEMPLATE_END_DATE.toString(), ReservationUrlTemplate.END_DATE)
+        url(host, transactionLocationId, mapId, resourceLocationId, templateStartDate, templateEndDate)
+            .replace(templateStartDate.toString(), ReservationUrlTemplate.START_DATE)
+            .replace(templateEndDate.toString(), ReservationUrlTemplate.END_DATE)
             .replace("nights=1", "nights=${ReservationUrlTemplate.NIGHTS}")
 
     private fun url(

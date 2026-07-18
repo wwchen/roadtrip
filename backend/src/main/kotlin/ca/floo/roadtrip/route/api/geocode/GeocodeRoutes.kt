@@ -20,7 +20,7 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-private val LNGLAT_RE = Regex("""^-?\d{1,3}(\.\d{1,8})?,-?\d{1,3}(\.\d{1,8})?$""")
+private val lngLatRegex = Regex("""^-?\d{1,3}(\.\d{1,8})?,-?\d{1,3}(\.\d{1,8})?$""")
 private const val DEFAULT_GEOCODE_LIMIT = 5
 private const val MIN_GEOCODE_LIMIT = 1
 private const val MAX_GEOCODE_LIMIT = 10
@@ -63,7 +63,7 @@ fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
 
             val autocomplete = call.queryParam("autocomplete") != "0"
             val limit = call.boundedIntQuery("limit", DEFAULT_GEOCODE_LIMIT, geocodeLimitRange)
-            val proximity = call.matchingQuery("proximity", LNGLAT_RE)
+            val proximity = call.matchingQuery("proximity", lngLatRegex)
 
             val results =
                 try {

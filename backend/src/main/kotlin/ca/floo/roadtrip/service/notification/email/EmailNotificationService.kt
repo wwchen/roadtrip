@@ -13,7 +13,7 @@ import java.time.LocalDate
 
 class EmailNotificationService(
     private val config: EmailConfig?,
-    private val client: EmailDeliveryClient? = config?.let { ResendEmailClient(it) },
+    private val emailDeliveryClient: EmailDeliveryClient? = config?.let { ResendEmailClient(it) },
 ) : NotificationService {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -55,7 +55,7 @@ class EmailNotificationService(
         failureContext: String,
     ): Boolean {
         val emailConfig = config
-        val emailClient = client
+        val emailClient = emailDeliveryClient
         if (emailConfig == null || emailClient == null) {
             log.warn("Email disabled (resend-api-key/from unset); {} not sent", failureContext)
             return false

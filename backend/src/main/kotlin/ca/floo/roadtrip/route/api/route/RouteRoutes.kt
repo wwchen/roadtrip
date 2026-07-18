@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.route.api.route
 
+import ca.floo.roadtrip.config.RouteConfig
 import ca.floo.roadtrip.model.api.CorridorFeatureDto
 import ca.floo.roadtrip.model.api.CorridorPropertiesDto
 import ca.floo.roadtrip.model.api.RouteErrorDto
@@ -13,9 +14,6 @@ import ca.floo.roadtrip.route.common.OptionalQuery
 import ca.floo.roadtrip.route.common.optionalDoubleQuery
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.route.common.trimmedQuery
-import ca.floo.roadtrip.service.routing.MAX_ROUTE_CORRIDOR_RADIUS_MILES
-import ca.floo.roadtrip.service.routing.MAX_ROUTE_WAYPOINTS
-import ca.floo.roadtrip.service.routing.MIN_ROUTE_CORRIDOR_RADIUS_MILES
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import ca.floo.roadtrip.service.routing.lineStringGeoJson
@@ -52,6 +50,7 @@ private val routeJson =
 internal fun Route.routeRoutes(
     routeCache: RouteCache,
     routeCorridorService: RouteCorridorService,
+    routeConfig: RouteConfig,
 ) {
     route("/api") {
         get("/route") {
@@ -75,10 +74,10 @@ internal fun Route.routeRoutes(
                 )
                 return@get
             }
-            if (pieces.size > MAX_ROUTE_WAYPOINTS) {
+            if (pieces.size > routeConfig.maxWaypoints) {
                 call.respondRouteError(
                     error = "too_many_points",
-                    detail = "max $MAX_ROUTE_WAYPOINTS waypoints",
+                    detail = "max ${routeConfig.maxWaypoints} waypoints",
                     status = HttpStatusCode.BadRequest,
                 )
                 return@get
@@ -126,10 +125,12 @@ internal fun Route.routeRoutes(
                         )
                     is OptionalQuery.Parsed -> {
                         val radius = radiusQuery.value
-                        if (radius !in MIN_ROUTE_CORRIDOR_RADIUS_MILES..MAX_ROUTE_CORRIDOR_RADIUS_MILES) {
+                        if (radius !in routeConfig.minCorridorRadiusMiles..routeConfig.maxCorridorRadiusMiles) {
                             return@get call.respondRouteError(
                                 error = "bad_radius",
-                                detail = "radius_miles must be in [$MIN_ROUTE_CORRIDOR_RADIUS_MILES, $MAX_ROUTE_CORRIDOR_RADIUS_MILES]",
+                                detail =
+                                    "radius_miles must be in " +
+                                        "[${routeConfig.minCorridorRadiusMiles}, ${routeConfig.maxCorridorRadiusMiles}]",
                                 status = HttpStatusCode.BadRequest,
                             )
                         }

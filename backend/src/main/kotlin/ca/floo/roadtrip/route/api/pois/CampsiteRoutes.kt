@@ -48,25 +48,25 @@ internal fun Route.campsiteRoutes(
     watchCapabilities: WatchCapabilityService,
 ) {
     val campsitesRepo = CampsiteRepo(ctx)
-    val providerRefs = CampsiteProviderRepo(ctx)
+    val campsiteProviderRepo = CampsiteProviderRepo(ctx)
     val targets =
         DbAvailabilityTargetResolver(
-            providerRefs = providerRefs,
+            campsiteProviderRepo = campsiteProviderRepo,
             campsitesRepo = campsitesRepo,
             availabilityProviders = availabilityProviders,
             dateResolver = dateResolver,
-            pollers = AvailabilityPollerRepo(ctx),
+            pollerRepo = AvailabilityPollerRepo(ctx),
         )
-    val catalogService = CampsiteCatalogService(providerRefs, campsitesRepo, targets)
+    val catalogService = CampsiteCatalogService(campsiteProviderRepo, campsitesRepo, targets)
     val availabilityService =
         CampsiteAvailabilityService(
-            providerRefs = providerRefs,
+            campsiteProviderRepo = campsiteProviderRepo,
             campsitesRepo = campsitesRepo,
             composer =
                 CampsiteAvailabilityComposer(
                     targets = targets,
                     dateResolver = dateResolver,
-                    availability = AvailabilityRepo(ctx),
+                    availabilityRepo = AvailabilityRepo(ctx),
                     failoverFetcher = failoverFetcher,
                 ),
             dateResolver = dateResolver,
@@ -159,7 +159,7 @@ private class IpRateLimiter(
     private val perMinute: Int,
     private val nowMs: () -> Long = { System.currentTimeMillis() },
 ) {
-    private data class Bucket(
+    private class Bucket(
         var tokens: Double,
         var lastRefillMs: Long,
     )

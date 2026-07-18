@@ -121,34 +121,34 @@ class ReserveAmericaEtl(
         html: String,
     ): ParsedPark? {
         val lat =
-            LATITUDE
+            latitudeRegex
                 .find(html)
                 ?.groupValues
                 ?.get(1)
                 ?.toDoubleOrNull() ?: return null
         val lon =
-            LONGITUDE
+            longitudeRegex
                 .find(html)
                 ?.groupValues
                 ?.get(1)
                 ?.toDoubleOrNull() ?: return null
-        val rawTitle = OG_TITLE.find(html)?.groupValues?.get(1) ?: return null
+        val rawTitle = ogTitleRegex.find(html)?.groupValues?.get(1) ?: return null
         val name = rawTitle.trim().ifBlank { return null }
         val phone =
-            TELEPHONE
+            telephoneRegex
                 .find(html)
                 ?.groupValues
                 ?.get(1)
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
         val photoUrl =
-            OG_IMAGE
+            ogImageRegex
                 .find(html)
                 ?.groupValues
                 ?.get(1)
                 ?.takeIf { it.isNotBlank() }
         val description =
-            OG_DESCRIPTION
+            ogDescriptionRegex
                 .find(html)
                 ?.groupValues
                 ?.get(1)
@@ -158,7 +158,7 @@ class ReserveAmericaEtl(
         // HTML keeps the host + querystring shape owned by upstream rather
         // than hardcoded in the ETL.
         val infoUrl =
-            OG_URL
+            ogUrlRegex
                 .find(html)
                 ?.groupValues
                 ?.get(1)
@@ -243,13 +243,13 @@ class ReserveAmericaEtl(
         }
 
     companion object {
-        private val LATITUDE = Regex("""place:location:latitude"\s+content='([^']+)'""")
-        private val LONGITUDE = Regex("""place:location:longitude"\s+content='([^']+)'""")
-        private val OG_TITLE = Regex("""og:title"\s+content='([^']+)'""")
-        private val OG_DESCRIPTION = Regex("""og:description"\s+content='([^']*)'""")
-        private val OG_IMAGE = Regex("""og:image"\s+content='([^']+)'""")
-        private val OG_URL = Regex("""og:url"\s+content='([^']+)'""")
-        private val TELEPHONE = Regex("""itemprop="telephone"[^>]*>([^<]+)""")
+        private val latitudeRegex = Regex("""place:location:latitude"\s+content='([^']+)'""")
+        private val longitudeRegex = Regex("""place:location:longitude"\s+content='([^']+)'""")
+        private val ogTitleRegex = Regex("""og:title"\s+content='([^']+)'""")
+        private val ogDescriptionRegex = Regex("""og:description"\s+content='([^']*)'""")
+        private val ogImageRegex = Regex("""og:image"\s+content='([^']+)'""")
+        private val ogUrlRegex = Regex("""og:url"\s+content='([^']+)'""")
+        private val telephoneRegex = Regex("""itemprop="telephone"[^>]*>([^<]+)""")
         private const val RESERVE_AMERICA_CONTRACT_CODE_KEY = "contract_code"
         private const val RESERVE_AMERICA_PARK_ID_KEY = "park_id"
     }

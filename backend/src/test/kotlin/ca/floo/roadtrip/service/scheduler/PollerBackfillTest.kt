@@ -76,11 +76,11 @@ class PollerBackfillTest : SharedDbTest() {
         val registry = AvailabilityProviderRegistry(mapOf("test" to FakeProvider))
         val targets =
             DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
+                campsiteProviderRepo = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
-                pollers = AvailabilityPollerRepo(ctx),
+                pollerRepo = AvailabilityPollerRepo(ctx),
             )
         return AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets)
     }
@@ -90,23 +90,23 @@ class PollerBackfillTest : SharedDbTest() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
         val watchId = seedActiveWatch(poiId)
-        val pollers = AvailabilityPollerRepo(ctx)
+        val pollerRepo = AvailabilityPollerRepo(ctx)
         // Orphaned: no links yet (V28 dropped the old job; nothing linked it).
-        assertTrue(pollers.pollerIdsForWatch(watchId).isEmpty())
+        assertTrue(pollerRepo.pollerIdsForWatch(watchId).isEmpty())
 
         val backfill = PollerBackfill(ctx, membership())
         backfill.run()
 
         // Linked to exactly one active poller.
-        val linked = pollers.pollerIdsForWatch(watchId)
+        val linked = pollerRepo.pollerIdsForWatch(watchId)
         assertEquals(1, linked.size)
         val pollerId = linked.single()
-        assertTrue(pollers.findById(pollerId)!!.active)
+        assertTrue(pollerRepo.findById(pollerId)!!.active)
 
         // Re-run is a no-op: same single link, same poller row (no duplicate poller).
         backfill.run()
-        assertEquals(listOf(pollerId), pollers.pollerIdsForWatch(watchId))
-        assertEquals(1, pollers.count(active = true))
+        assertEquals(listOf(pollerId), pollerRepo.pollerIdsForWatch(watchId))
+        assertEquals(1, pollerRepo.count(active = true))
     }
 
     private object FakeProvider : AvailabilityProvider {

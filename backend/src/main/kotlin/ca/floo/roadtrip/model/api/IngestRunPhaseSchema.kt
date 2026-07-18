@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.model.api
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
@@ -7,11 +8,11 @@ import kotlinx.serialization.json.JsonElement
 data class IngestRunPhaseSchema(
     val id: Long,
     val phase: String,
-    val phase_kind: String,
+    @SerialName("phase_kind") val phaseKind: String,
     val status: String,
-    val exit_code: Int? = null,
-    val started_at: String,
-    val completed_at: String? = null,
+    @SerialName("exit_code") val exitCode: Int? = null,
+    @SerialName("started_at") val startedAt: String,
+    @SerialName("completed_at") val completedAt: String? = null,
     val counts: JsonElement? = null,
     val notes: String? = null,
 )

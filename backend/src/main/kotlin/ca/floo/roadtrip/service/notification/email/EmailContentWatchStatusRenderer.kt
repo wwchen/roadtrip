@@ -13,13 +13,13 @@ import kotlinx.html.ul
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val STATUS_DATE_FORMATTER = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)
+private val statusDateFormatter = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)
 
 internal object EmailContentWatchStatusRenderer {
     fun render(notice: WatchStatusNotice): EmailContent {
         val header = headerFor(notice.state)
         val scope = scopeFor(notice)
-        val window = "${notice.startDate.format(STATUS_DATE_FORMATTER)}-${notice.endDate.format(STATUS_DATE_FORMATTER)}"
+        val window = "${notice.startDate.format(statusDateFormatter)}-${notice.endDate.format(statusDateFormatter)}"
         val status = statusLine(notice.state)
         val links = linksFor(notice)
         return EmailContent(

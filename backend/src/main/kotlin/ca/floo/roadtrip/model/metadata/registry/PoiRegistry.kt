@@ -56,7 +56,7 @@ private const val CAMPSITE_DATA_SECTION = "campsite_data"
 // Then add a campsite_parent_joiner row pointing at the matching joiner
 // adapter so the catalog rows get linked to their parent POIs.
 @Serializable
-data class PoiRegistry(
+class PoiRegistry(
     @kotlinx.serialization.SerialName("data_sources")
     val dataSources: List<DataSourceEntry>,
     @kotlinx.serialization.SerialName("poi_data")
@@ -66,44 +66,6 @@ data class PoiRegistry(
     @kotlinx.serialization.SerialName("campsite_parent_joiner")
     val campsiteParentJoiners: List<CampsiteParentJoinerEntry> = emptyList(),
 ) {
-    companion object {
-        private val yaml =
-            Yaml(
-                configuration =
-                    com.charleskorn.kaml.YamlConfiguration(strictMode = false),
-            )
-
-        fun load(file: File): PoiRegistry =
-            loadString(
-                content = file.readText(),
-                sourceName = file.path,
-            )
-
-        fun loadResource(
-            resourceName: String,
-            classLoader: ClassLoader = Thread.currentThread().contextClassLoader ?: PoiRegistry::class.java.classLoader,
-        ): PoiRegistry {
-            val normalized = resourceName.trim().removePrefix("/")
-            require(normalized.isNotEmpty()) { "POI registry resource name must not be blank" }
-            val content =
-                classLoader
-                    .getResourceAsStream(normalized)
-                    ?.bufferedReader(StandardCharsets.UTF_8)
-                    ?.use { it.readText() }
-                    ?: error("POI registry resource '$normalized' not found on classpath")
-            return loadString(content = content, sourceName = "classpath:$normalized")
-        }
-
-        fun loadString(
-            content: String,
-            sourceName: String = "POI registry",
-        ): PoiRegistry {
-            val r = yaml.decodeFromString(serializer(), content)
-            r.validate(sourceName)
-            return r
-        }
-    }
-
     /**
      * Sanity-check the registry after deserialization. Catches typos /
      * dangling references / cycles at boot rather than at first row-insert.
@@ -424,6 +386,44 @@ data class PoiRegistry(
             .filter { it.adapter == "ReserveCaliforniaEtl" }
             .map { it.slug }
             .toSet()
+
+    companion object {
+        private val yaml =
+            Yaml(
+                configuration =
+                    com.charleskorn.kaml.YamlConfiguration(strictMode = false),
+            )
+
+        fun load(file: File): PoiRegistry =
+            loadString(
+                content = file.readText(),
+                sourceName = file.path,
+            )
+
+        fun loadResource(
+            resourceName: String,
+            classLoader: ClassLoader = Thread.currentThread().contextClassLoader ?: PoiRegistry::class.java.classLoader,
+        ): PoiRegistry {
+            val normalized = resourceName.trim().removePrefix("/")
+            require(normalized.isNotEmpty()) { "POI registry resource name must not be blank" }
+            val content =
+                classLoader
+                    .getResourceAsStream(normalized)
+                    ?.bufferedReader(StandardCharsets.UTF_8)
+                    ?.use { it.readText() }
+                    ?: error("POI registry resource '$normalized' not found on classpath")
+            return loadString(content = content, sourceName = "classpath:$normalized")
+        }
+
+        fun loadString(
+            content: String,
+            sourceName: String = "POI registry",
+        ): PoiRegistry {
+            val r = yaml.decodeFromString(serializer(), content)
+            r.validate(sourceName)
+            return r
+        }
+    }
 }
 
 private fun detectCycles(edges: Map<String, Set<String>>): List<List<String>> {

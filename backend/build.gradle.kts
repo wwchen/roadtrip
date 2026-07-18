@@ -26,12 +26,13 @@ buildscript {
 
 plugins {
     application
-    kotlin("jvm") version "2.3.10"
-    kotlin("plugin.serialization") version "2.3.10"
+    kotlin("jvm")
+    kotlin("plugin.serialization")
     id("io.ktor.plugin") version "3.5.1"
     id("org.flywaydb.flyway") version "10.20.1"
     id("nu.studer.jooq") version "9.0"
     id("org.jlleitschuh.gradle.ktlint") version "12.1.1"
+    id("dev.detekt") version "2.0.0-alpha.5"
     // Line/branch coverage. `./gradlew :backend:koverXmlReport` produces the XML the
     // CI job uploads to Codecov.
     id("org.jetbrains.kotlinx.kover") version "0.9.8"
@@ -43,6 +44,12 @@ ktlint {
     filter {
         exclude { it.file.path.contains("/build/generated/") }
     }
+}
+
+detekt {
+    toolVersion = "2.0.0-alpha.5"
+    config.setFrom(rootProject.file("config/detekt/detekt.yml"))
+    buildUponDefaultConfig = false
 }
 
 group = "ca.floo.roadtrip"
@@ -126,6 +133,8 @@ sourceSets {
 }
 
 dependencies {
+    detektPlugins(project(":detekt-rules"))
+
     implementation("io.ktor:ktor-server-core:$ktorVersion")
     implementation("io.ktor:ktor-server-netty:$ktorVersion")
     implementation("io.ktor:ktor-server-config-yaml:$ktorVersion")
