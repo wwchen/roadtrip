@@ -192,6 +192,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
+                pollers = AvailabilityPollerRepo(ctx),
             )
         return AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets)
     }
@@ -325,6 +326,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             campsitesRepo = CampsiteRepo(ctx),
             availabilityProviders = AvailabilityProviderRegistry(mapOf("test" to provider)),
             dateResolver = AvailabilityDateResolver(),
+            pollers = AvailabilityPollerRepo(ctx),
         )
 
     /** Dispatcher with Slack disabled — a null-config service that no-ops and
@@ -341,6 +343,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     campsitesRepo = CampsiteRepo(ctx),
                     availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
                     dateResolver = AvailabilityDateResolver(),
+                    pollers = AvailabilityPollerRepo(ctx),
                 ),
             pois = PoiServingRepo(ctx),
             availability = AvailabilityRepo(ctx),
@@ -385,6 +388,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
                 dateResolver = dateResolver,
+                pollers = AvailabilityPollerRepo(ctx),
             )
         return AvailabilityPollExecutor(
             pollers = AvailabilityPollerRepo(ctx),

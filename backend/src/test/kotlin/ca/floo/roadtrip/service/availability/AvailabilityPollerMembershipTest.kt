@@ -179,6 +179,11 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         }
 
         override fun resolve(campsite: CampsiteAvailabilityTarget): ResolvedAvailabilityTarget? = byCampsiteId[campsite.id]
+
+        override fun resolve(poller: AvailabilityPollerRepo.Poller): PollerFetchPlan? {
+            // Unused by AvailabilityPollerMembership tests
+            throw UnsupportedOperationException("resolve(poller) not implemented in test fake")
+        }
     }
 
     @Test

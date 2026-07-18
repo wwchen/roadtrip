@@ -1,9 +1,11 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
@@ -16,6 +18,7 @@ internal class DbAvailabilityTargetResolver(
     private val campsitesRepo: CampsiteRepo,
     private val availabilityProviders: AvailabilityProviderRegistry,
     private val dateResolver: AvailabilityDateResolver,
+    private val pollers: AvailabilityPollerRepo,
 ) : AvailabilityTargetResolver {
     private data class ResolvedRow(
         val poiId: Long,
@@ -47,6 +50,46 @@ internal class DbAvailabilityTargetResolver(
             parentPoiId = head.poiId,
             dateContext = dateResolver.context(lat = head.row.lat, lng = head.row.lng),
             candidates = resolvedRows.map { it.candidate },
+        )
+    }
+
+    override fun resolve(poller: AvailabilityPollerRepo.Poller): PollerFetchPlan? {
+        val liveWatches = pollers.liveWatchesForPoller(poller.id)
+        if (liveWatches.isEmpty()) return null
+
+        val poiCadenceOverrideSec = pollers.cadenceOverrideForPoller(poller.id)
+        val cadenceSec = resolveCadenceSec(liveWatches, poiCadenceOverrideSec)
+
+        val targets =
+            campsitesRepo
+                .findAvailabilityTargetsByPoi(poller.poiId)
+                .mapNotNull { resolve(it) }
+                .filter {
+                    parentRefKey(it.parentRef) == poller.parentRef &&
+                        it.provider.id.name
+                            .lowercase() == poller.provider
+                }.distinctBy { it.campsite.id }
+
+        val windowFor = {
+                context: ca.floo.roadtrip.model.availability.PoiDateContext,
+                caps: ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities,
+            ->
+            val resolvedWindow =
+                dateResolver.resolvePollingWindow(
+                    context = context,
+                    maxPollWindowDays = caps.maxPollWindowDays,
+                    bookingHorizonDays = caps.bookingHorizonDays,
+                )
+            resolvedWindow?.let {
+                AvailabilityWindows(target = it, fetch = it)
+            }
+        }
+
+        return PollerFetchPlan(
+            targets = targets,
+            windowFor = windowFor,
+            cadenceSec = cadenceSec,
+            liveWatches = liveWatches,
         )
     }
 

@@ -4,6 +4,7 @@ import ca.floo.roadtrip.fixtures.CatalogPoiFixture
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.CanonicalViewRepo
@@ -117,6 +118,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             campsitesRepo = campsitesRepo,
             availabilityProviders = AvailabilityProviderRegistry(providers),
             dateResolver = AvailabilityDateResolver(),
+            pollers = AvailabilityPollerRepo(ctx),
         )
 
     @Test

@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
@@ -52,6 +53,7 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = AvailabilityProviderRegistry(mapOf("test" to TemplateProvider)),
                 dateResolver = AvailabilityDateResolver(),
+                pollers = AvailabilityPollerRepo(ctx),
             )
         val service = CampsiteCatalogService(providerRefs, campsitesRepo, targets)
 
@@ -95,6 +97,7 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                         mapOf("campflare" to CampflareAvailabilityProvider(unusedCampflareClient(), enabled = true)),
                     ),
                 dateResolver = AvailabilityDateResolver(),
+                pollers = AvailabilityPollerRepo(ctx),
             )
         val service = CampsiteCatalogService(providerRefs, campsitesRepo, targets)
 

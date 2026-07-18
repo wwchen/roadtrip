@@ -115,6 +115,7 @@ val serviceModule =
                 campsitesRepo = get<CampsiteRepo>(),
                 availabilityProviders = get<AvailabilityProviderRegistry>(),
                 dateResolver = get<AvailabilityDateResolver>(),
+                pollers = get<AvailabilityPollerRepo>(),
             )
         }
         single { AvailabilityPollerMembership(get<WatchScopeResolver>(), get<DbAvailabilityTargetResolver>()) }
