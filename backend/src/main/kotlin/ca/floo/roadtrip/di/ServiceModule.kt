@@ -21,6 +21,7 @@ import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
+import ca.floo.roadtrip.service.availability.AvailabilityRunService
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CampgroundAvailabilitySupport
@@ -203,6 +204,13 @@ val serviceModule =
             VendorRateLimiter(get<AppConfig>().vendorRateLimit, get<DataSource>())
         }
 
+        single {
+            AvailabilityRunService(
+                runs = get<AvailabilityRunRepo>(),
+                availability = get<AvailabilityRepo>(),
+                fetchCalls = get<AvailabilityFetchCallRepo>(),
+            )
+        }
         single {
             AvailabilityPollExecutor(
                 pollers = get<AvailabilityPollerRepo>(),
