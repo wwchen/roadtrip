@@ -9,61 +9,42 @@ import org.jooq.DSLContext
 class CampsiteProviderRepo(
     private val ctx: DSLContext,
 ) {
-    /** Provider ref for a single campground POI, or null when not found / unsupported. */
     fun findProviderRef(poiId: Long): CampsiteProviderRefRow? = findProviderRefCandidates(poiId).firstOrNull()
 
-    /** Provider refs for the campground row linked to a single POI. */
     fun findProviderRefCandidates(poiId: Long): List<CampsiteProviderRefRow> =
         ctx
             .fetch(
                 """
                 SELECT p.id,
-                       vr.vendor AS source,
+                       cg.booking_provider AS source,
                        ST_X(ST_PointOnSurface(p.geom)) AS lng,
                        ST_Y(ST_PointOnSurface(p.geom)) AS lat,
-                       vr.payload::text AS pref
+                       cg.source_payload::text AS pref
                 FROM pois p
                 JOIN poi_campgrounds pc
                   ON pc.poi_id = p.id
                 JOIN campgrounds cg
                   ON cg.id = pc.campground_id
-                JOIN campground_vendor_refs cvr
-                  ON cvr.campground_id = cg.id
-                JOIN vendor_refs vr
-                  ON vr.id = cvr.vendor_ref_id
                 WHERE p.id = ?
                   AND p.deleted_at IS NULL
                   AND p.poi_type = 'campground'
                   AND cg.deleted_at IS NULL
-                  AND vr.entity_type = 'campground'
-                  AND vr.deleted_at IS NULL
-                ORDER BY
-                  CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
-                  cvr.vendor_ref_id ASC
+                  AND cg.booking_provider IS NOT NULL
                 """.trimIndent(),
                 poiId,
             ).mapNotNull(::campgroundProviderRow)
 
-    /** Provider refs for a campground catalog row, keyed by campground id. */
     fun findCampgroundProviderRefCandidates(campgroundId: Long): List<CampgroundProviderRefRow> =
         ctx
             .fetch(
                 """
                 SELECT cg.id AS campground_id,
-                       vr.vendor AS source,
-                       vr.payload::text AS pref
+                       cg.booking_provider AS source,
+                       cg.source_payload::text AS pref
                 FROM campgrounds cg
-                JOIN campground_vendor_refs cvr
-                  ON cvr.campground_id = cg.id
-                JOIN vendor_refs vr
-                  ON vr.id = cvr.vendor_ref_id
                 WHERE cg.id = ?
                   AND cg.deleted_at IS NULL
-                  AND vr.entity_type = 'campground'
-                  AND vr.deleted_at IS NULL
-                ORDER BY
-                  CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
-                  cvr.vendor_ref_id ASC
+                  AND cg.booking_provider IS NOT NULL
                 """.trimIndent(),
                 campgroundId,
             ).mapNotNull { r ->
@@ -79,17 +60,13 @@ class CampsiteProviderRepo(
         ctx
             .fetch(
                 """
-                SELECT vr.vendor AS source,
-                       vr.payload::text AS pref
-                FROM campsite_vendor_refs cvr
-                JOIN vendor_refs vr
-                  ON vr.id = cvr.vendor_ref_id
-                WHERE cvr.campsite_id = ?
-                  AND vr.entity_type = 'campsite'
-                  AND vr.deleted_at IS NULL
-                ORDER BY
-                  CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
-                  cvr.vendor_ref_id ASC
+                SELECT c.booking_provider AS source,
+                       cg.source_payload::text AS pref
+                FROM campsites c
+                JOIN campgrounds cg ON cg.id = c.campground_id
+                WHERE c.id = ?
+                  AND c.deleted_at IS NULL
+                  AND c.booking_provider IS NOT NULL
                 """.trimIndent(),
                 campsiteId,
             ).mapNotNull { r ->
@@ -138,12 +115,6 @@ class CampsiteProviderRepo(
         )
     }
 
-    /**
-     * Existence-only check for an active campground POI. Use when you need
-     * to distinguish "POI doesn't exist" (404) from "POI exists but has no
-     * provider_ref" (no online reservations) — [findProviderRef] returns null
-     * in both cases.
-     */
     fun campgroundExists(poiId: Long): Boolean =
         ctx
             .fetchOne(
@@ -162,40 +133,30 @@ class CampsiteProviderRepo(
                 poiId,
             ) != null
 
-    /** Same as [findProviderRef] but for a batch — one DB round-trip. */
     fun findProviderRefs(poiIds: List<Long>): Map<Long, CampsiteProviderRefRow> =
         findProviderRefCandidates(poiIds).mapValues { (_, rows) -> rows.first() }
 
-    /** Same as [findProviderRefCandidates] but for a batch — one DB round-trip. */
     fun findProviderRefCandidates(poiIds: List<Long>): Map<Long, List<CampsiteProviderRefRow>> {
         if (poiIds.isEmpty()) return emptyMap()
         val placeholders = poiIds.joinToString(",") { "?" }
         val sql =
             """
             SELECT p.id,
-                   vr.vendor AS source,
+                   cg.booking_provider AS source,
                    ST_X(ST_PointOnSurface(p.geom)) AS lng,
                    ST_Y(ST_PointOnSurface(p.geom)) AS lat,
-                   vr.payload::text AS pref
+                   cg.source_payload::text AS pref
             FROM pois p
             JOIN poi_campgrounds pc
               ON pc.poi_id = p.id
             JOIN campgrounds cg
               ON cg.id = pc.campground_id
-            JOIN campground_vendor_refs cvr
-              ON cvr.campground_id = cg.id
-            JOIN vendor_refs vr
-              ON vr.id = cvr.vendor_ref_id
             WHERE p.id IN ($placeholders)
               AND p.deleted_at IS NULL
               AND p.poi_type = 'campground'
               AND cg.deleted_at IS NULL
-              AND vr.entity_type = 'campground'
-              AND vr.deleted_at IS NULL
-            ORDER BY
-              p.id,
-              CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
-              cvr.vendor_ref_id ASC
+              AND cg.booking_provider IS NOT NULL
+            ORDER BY p.id, cg.id ASC
             """.trimIndent()
 
         val out = linkedMapOf<Long, MutableList<CampsiteProviderRefRow>>()

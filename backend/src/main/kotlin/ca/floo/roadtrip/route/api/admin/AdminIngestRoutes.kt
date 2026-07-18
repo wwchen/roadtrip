@@ -117,11 +117,6 @@ private suspend fun io.ktor.server.routing.RoutingContext.runOne(
             withContext(NonCancellable) {
                 controller.startRun(target, kind, "admin-api")
             }
-        if (kind == RunKind.IMPORT && outcome.status == "completed") {
-            withContext(NonCancellable) {
-                controller.etl.refreshCanonicalViews()
-            }
-        }
         val status =
             when (outcome.status) {
                 "completed", "noop" -> HttpStatusCode.OK
@@ -186,10 +181,6 @@ private suspend fun io.ktor.server.routing.RoutingContext.runAll(
                         ),
                     )
                 }
-            }
-            if (kind == RunKind.IMPORT && outcomes.any { it.status == "completed" }) {
-                log.info("fan-out: refreshing canonical views")
-                controller.etl.refreshCanonicalViews()
             }
             val totalElapsed = (System.currentTimeMillis() - started) / 1000.0
             log.info(

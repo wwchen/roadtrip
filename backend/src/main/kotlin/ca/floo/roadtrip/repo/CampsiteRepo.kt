@@ -4,8 +4,6 @@ import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
-import ca.floo.roadtrip.model.domain.catalog.CatalogVendorRefKey
-import ca.floo.roadtrip.model.domain.catalog.CatalogVendorRefSpec
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
@@ -14,18 +12,10 @@ import org.jooq.impl.DSL
 import java.time.Instant
 import java.time.OffsetDateTime
 
-/**
- * Persistence boundary for canonical campsite catalog reads and writes.
- *
- * Availability services consume [CampsiteAvailabilityTarget], a provider-facing
- * projection that includes vendor refs. The [Campsite] model remains a direct
- * representation of the `campsites` table row.
- */
 class CampsiteRepo(
     private val ctx: DSLContext,
 ) {
     private val importRunRepo = ImportRunRepo(ctx)
-    private val vendorRefRepo = VendorRefRepo(ctx)
 
     data class SearchFilters(
         val vendors: List<String> = emptyList(),
@@ -64,72 +54,28 @@ class CampsiteRepo(
     private fun bulkUpsertCampsitesTx(records: List<CampsiteUpsertCandidate>): Pair<Int, Int> {
         if (records.isEmpty()) return 0 to 0
 
-        // Records without a declared parent are skipped upfront.
-        val withParent = records.filter { it.parentVendor != null && it.parentVendorRefId != null }
+        val withParent = records.filter { it.parentDataProvider != null && it.parentDataProviderRef != null }
         val skippedForMissingParent = records.size - withParent.size
 
         val parentMap = HashMap<ParentKey, Long>()
-        val parentKeys = withParent.map { ParentKey(it.parentVendor!!, it.parentVendorRefId!!) }.distinct()
+        val parentKeys = withParent.map { ParentKey(it.parentDataProvider!!, it.parentDataProviderRef!!) }.distinct()
         parentMap.putAll(loadParentCampgroundMap(parentKeys))
 
         val withResolvedParent =
             withParent.filter {
-                ParentKey(it.parentVendor!!, it.parentVendorRefId!!) in parentMap
+                ParentKey(it.parentDataProvider!!, it.parentDataProviderRef!!) in parentMap
             }
         val skippedForUnresolvedParent = withParent.size - withResolvedParent.size
         val totalSkipped = skippedForMissingParent + skippedForUnresolvedParent
 
         if (withResolvedParent.isEmpty()) return 0 to totalSkipped
 
-        val vendorRefSpecs = mutableListOf<CatalogVendorRefSpec>()
-        for (record in withResolvedParent) {
-            vendorRefSpecs +=
-                CatalogVendorRefSpec(
-                    vendor = record.vendor,
-                    entityType = CAMPSITE_ENTITY,
-                    externalId = record.vendorRefId,
-                    externalName = record.name,
-                    sourceUrl = record.reservationUrl,
-                    payload = record.vendorRefPayload,
-                )
-            for (additionalRef in record.additionalVendorRefs) {
-                vendorRefSpecs +=
-                    CatalogVendorRefSpec(
-                        vendor = additionalRef.vendor,
-                        entityType = CAMPSITE_ENTITY,
-                        externalId = additionalRef.vendorRefId,
-                        externalName = record.name,
-                        sourceUrl = additionalRef.sourceUrl,
-                        payload = additionalRef.payload,
-                    )
-            }
-        }
-        val vendorRefIds = vendorRefRepo.bulkUpsertVendorRefs(vendorRefSpecs)
-
         val campsiteRows =
             withResolvedParent.map { record ->
-                val primaryRefId = vendorRefIds.getValue(CatalogVendorRefKey(record.vendor, CAMPSITE_ENTITY, record.vendorRefId))
-                val campgroundId = parentMap.getValue(ParentKey(record.parentVendor!!, record.parentVendorRefId!!))
-                CampsiteBulkRow(
-                    record = record,
-                    campgroundId = campgroundId,
-                    primaryVendorRefId = primaryRefId,
-                )
+                val campgroundId = parentMap.getValue(ParentKey(record.parentDataProvider!!, record.parentDataProviderRef!!))
+                CampsiteBulkRow(record = record, campgroundId = campgroundId)
             }
-        val campsiteIdByPrimaryRef = bulkUpsertCampsiteRows(campsiteRows)
-
-        val links = mutableListOf<Pair<Long, Long>>()
-        for (record in withResolvedParent) {
-            val primaryRefId = vendorRefIds.getValue(CatalogVendorRefKey(record.vendor, CAMPSITE_ENTITY, record.vendorRefId))
-            val campsiteId = campsiteIdByPrimaryRef.getValue(primaryRefId)
-            links += campsiteId to primaryRefId
-            for (additionalRef in record.additionalVendorRefs) {
-                links +=
-                    campsiteId to
-                    vendorRefIds.getValue(CatalogVendorRefKey(additionalRef.vendor, CAMPSITE_ENTITY, additionalRef.vendorRefId))
-            }
-        }
-        bulkUpsertCampsiteVendorLinks(links)
+        bulkUpsertCampsiteRows(campsiteRows)
 
         return campsiteRows.size to totalSkipped
     }
@@ -141,28 +87,24 @@ class CampsiteRepo(
             val placeholders = chunk.joinToString(", ") { "(?, ?)" }
             val sql =
                 """
-                SELECT vr.vendor, vr.external_id, cvr.campground_id
-                FROM (VALUES $placeholders) AS pk(vendor, external_id)
-                JOIN vendor_refs vr
-                  ON vr.vendor = pk.vendor
-                 AND vr.entity_type = ?
-                 AND vr.external_id = pk.external_id
-                 AND vr.deleted_at IS NULL
-                JOIN campground_vendor_refs cvr ON cvr.vendor_ref_id = vr.id
-                JOIN campgrounds cg ON cg.id = cvr.campground_id AND cg.deleted_at IS NULL
+                SELECT cg.data_provider, cg.data_provider_ref, cg.id AS campground_id
+                FROM (VALUES $placeholders) AS pk(data_provider, data_provider_ref)
+                JOIN campgrounds cg
+                  ON cg.data_provider = pk.data_provider
+                 AND cg.data_provider_ref = pk.data_provider_ref
+                 AND cg.deleted_at IS NULL
                 """.trimIndent()
             val params = mutableListOf<Any?>()
             for (key in chunk) {
-                params += key.vendor
-                params += key.externalId
+                params += key.dataProvider
+                params += key.dataProviderRef
             }
-            params += CAMPGROUND_ENTITY
             val rows = ctx.fetch(sql, *params.toTypedArray())
             for (row in rows) {
                 val key =
                     ParentKey(
-                        vendor = row.get("vendor", String::class.java),
-                        externalId = row.get("external_id", String::class.java),
+                        dataProvider = row.get("data_provider", String::class.java),
+                        dataProviderRef = row.get("data_provider_ref", String::class.java),
                     )
                 result[key] = row.get("campground_id", Long::class.java)
             }
@@ -170,14 +112,13 @@ class CampsiteRepo(
         return result
     }
 
-    private fun bulkUpsertCampsiteRows(rows: List<CampsiteBulkRow>): Map<Long, Long> {
-        if (rows.isEmpty()) return emptyMap()
-        val deduped = rows.distinctBy { it.record.vendor to it.primaryVendorRefId }
-        val result = HashMap<Long, Long>(deduped.size)
+    private fun bulkUpsertCampsiteRows(rows: List<CampsiteBulkRow>) {
+        if (rows.isEmpty()) return
+        val deduped = rows.distinctBy { it.record.dataProvider to it.record.dataProviderRef }
         for (chunk in deduped.chunked(BULK_CHUNK_SIZE)) {
             val placeholders =
                 chunk.joinToString(", ") {
-                    "(?, ?, " +
+                    "(?, ?, ?, ?, " +
                         "?, ?, ?, ?, ?, ?, ?, " +
                         "?::jsonb, ?, ?::jsonb, ?::jsonb, " +
                         "?, ?, ?, " +
@@ -189,7 +130,7 @@ class CampsiteRepo(
             val sql =
                 """
                 INSERT INTO campsites (
-                  data_source, primary_vendor_ref_id,
+                  data_provider, data_provider_ref, booking_provider, booking_provider_ref,
                   campground_id, name, kind, loop_name, latitude, longitude, reservation_url,
                   equipment, kind_listed, schedule, price,
                   firepit, picnic_table, ada_accessible,
@@ -199,8 +140,10 @@ class CampsiteRepo(
                   updated_at, deleted_at
                 )
                 VALUES $placeholders
-                ON CONFLICT (data_source, primary_vendor_ref_id) WHERE deleted_at IS NULL
+                ON CONFLICT (data_provider, data_provider_ref) WHERE deleted_at IS NULL
                 DO UPDATE SET
+                  booking_provider = EXCLUDED.booking_provider,
+                  booking_provider_ref = EXCLUDED.booking_provider_ref,
                   campground_id = EXCLUDED.campground_id,
                   name = EXCLUDED.name,
                   kind = EXCLUDED.kind,
@@ -228,13 +171,14 @@ class CampsiteRepo(
                   source_payload = EXCLUDED.source_payload,
                   updated_at = now(),
                   deleted_at = NULL
-                RETURNING id, primary_vendor_ref_id
                 """.trimIndent()
             val params = mutableListOf<Any?>()
             for (row in chunk) {
                 val record = row.record
-                params += record.vendor
-                params += row.primaryVendorRefId
+                params += record.dataProvider
+                params += record.dataProviderRef
+                params += record.bookingProvider
+                params += record.bookingProviderRef
                 params += row.campgroundId
                 params += record.name
                 params += record.kind
@@ -260,32 +204,6 @@ class CampsiteRepo(
                 params += record.maxTrailerLength
                 params += jsonArray(record.photos)
                 params += jsonObject(record.sourcePayload)
-            }
-            val returned = ctx.fetch(sql, *params.toTypedArray())
-            for (row in returned) {
-                result[row.get("primary_vendor_ref_id", Long::class.java)] =
-                    row.get("id", Long::class.java)
-            }
-        }
-        return result
-    }
-
-    private fun bulkUpsertCampsiteVendorLinks(links: List<Pair<Long, Long>>) {
-        if (links.isEmpty()) return
-        val deduped = links.distinct()
-        for (chunk in deduped.chunked(BULK_CHUNK_SIZE)) {
-            val placeholders = chunk.joinToString(", ") { "(?, ?, now())" }
-            val sql =
-                """
-                INSERT INTO campsite_vendor_refs (campsite_id, vendor_ref_id, updated_at)
-                VALUES $placeholders
-                ON CONFLICT (campsite_id, vendor_ref_id)
-                DO UPDATE SET updated_at = now()
-                """.trimIndent()
-            val params = mutableListOf<Any?>()
-            for ((campsiteId, vendorRefId) in chunk) {
-                params += campsiteId
-                params += vendorRefId
             }
             ctx.execute(sql, *params.toTypedArray())
         }
@@ -352,8 +270,6 @@ class CampsiteRepo(
                 """
                 SELECT COUNT(*) AS n
                 FROM campsites c
-                JOIN vendor_refs primary_ref
-                  ON primary_ref.id = c.primary_vendor_ref_id
                 WHERE ${where.clauses.joinToString(" AND ")}
                 """.trimIndent(),
                 *where.params.toTypedArray(),
@@ -378,8 +294,6 @@ class CampsiteRepo(
             .fetch(
                 """
                 $campsiteSelect
-                JOIN vendor_refs primary_ref
-                  ON primary_ref.id = c.primary_vendor_ref_id
                 WHERE ${where.clauses.joinToString(" AND ")}
                 ORDER BY c.name, c.id
                 LIMIT ? OFFSET ?
@@ -391,8 +305,8 @@ class CampsiteRepo(
     private fun searchWhere(filters: SearchFilters): SearchWhere {
         val clauses = mutableListOf("c.deleted_at IS NULL")
         val params = mutableListOf<Any?>()
-        addInClause(clauses, params, "c.data_source", filters.vendors)
-        addInClause(clauses, params, "primary_ref.external_id", filters.vendorIds)
+        addInClause(clauses, params, "c.data_provider", filters.vendors)
+        addInClause(clauses, params, "c.data_provider_ref", filters.vendorIds)
         addInClause(clauses, params, "c.loop_name", filters.loops)
         addInClause(clauses, params, "c.kind", filters.siteTypes)
         if (filters.names.isNotEmpty()) {
@@ -485,13 +399,15 @@ class CampsiteRepo(
             createdAt = record.instant("created_at"),
             updatedAt = record.instant("updated_at"),
             deletedAt = record.nullableInstant("deleted_at"),
-            dataSource = record.get("data_source", String::class.java),
-            primaryVendorRefId = record.get("primary_vendor_ref_id", Long::class.java),
+            dataProvider = record.get("data_provider", String::class.java),
+            dataProviderRef = record.get("data_provider_ref", String::class.java),
+            bookingProvider = record.get("booking_provider", String::class.java),
+            bookingProviderRef = record.get("booking_provider_ref", String::class.java),
         )
 
     internal fun availabilityTargetFromRecord(r: Record): CampsiteAvailabilityTarget {
-        val vendor = r.get("vendor", String::class.java) ?: CANONICAL_VENDOR
-        val externalId = r.get("external_id", String::class.java) ?: r.get("id", Long::class.java).toString()
+        val vendor = r.get("data_provider", String::class.java) ?: CANONICAL_VENDOR
+        val externalId = r.get("data_provider_ref", String::class.java) ?: r.get("id", Long::class.java).toString()
         return CampsiteAvailabilityTarget(
             id = r.get("id", Long::class.java),
             vendor = vendor,
@@ -517,14 +433,13 @@ class CampsiteRepo(
     private fun Record.nullableInstant(column: String): Instant? = get(column, OffsetDateTime::class.java)?.toInstant()
 
     private data class ParentKey(
-        val vendor: String,
-        val externalId: String,
+        val dataProvider: String,
+        val dataProviderRef: String,
     )
 
     private data class CampsiteBulkRow(
         val record: CampsiteUpsertCandidate,
         val campgroundId: Long,
-        val primaryVendorRefId: Long,
     )
 
     private data class SearchWhere(
@@ -580,8 +495,10 @@ class CampsiteRepo(
               c.created_at,
               c.updated_at,
               c.deleted_at,
-              c.data_source,
-              c.primary_vendor_ref_id
+              c.data_provider,
+              c.data_provider_ref,
+              c.booking_provider,
+              c.booking_provider_ref
             FROM campsites c
             """.trimIndent()
 
@@ -592,6 +509,10 @@ class CampsiteRepo(
               c.name,
               c.loop_name,
               c.kind,
+              c.data_provider,
+              c.data_provider_ref,
+              c.booking_provider,
+              c.booking_provider_ref,
               c.source_payload::text AS source_payload_text,
               jsonb_build_object(
                 'kind_listed', c.kind_listed,
@@ -609,23 +530,9 @@ class CampsiteRepo(
                 'ada_accessible', c.ada_accessible,
                 'pull_through', c.pull_through
               )::text AS tags_text,
-              primary_ref.vendor,
-              primary_ref.external_id,
-              primary_ref.payload::text AS provider_ref_text
+              cg.source_payload::text AS provider_ref_text
             FROM campsites c
-            LEFT JOIN LATERAL (
-              SELECT vr.vendor, vr.external_id, vr.payload
-              FROM campsite_vendor_refs cvr
-              JOIN vendor_refs vr
-                ON vr.id = cvr.vendor_ref_id
-              WHERE cvr.campsite_id = c.id
-                AND vr.entity_type = 'campsite'
-                AND vr.deleted_at IS NULL
-              ORDER BY
-                CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
-                cvr.vendor_ref_id ASC
-              LIMIT 1
-            ) primary_ref ON true
+            JOIN campgrounds cg ON cg.id = c.campground_id
             """.trimIndent()
 
         private val campsiteTagsJsonSql =

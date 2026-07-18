@@ -12,7 +12,6 @@ import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteParentJoinerRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
-import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampsiteParentJoiner
@@ -59,8 +58,6 @@ open class EtlOrchestrator(
      * for tests.
      */
     private val joinerRegistry: Map<String, CampsiteParentJoiner> = Companion.joinerRegistry,
-    /** Canonical materialized view refresh repo. */
-    private val canonicalViewRepo: CanonicalViewRepo = CanonicalViewRepo(ctx),
     /**
      * Repo for post-import campsite parent lookup and reparent writes. Kept
      * injectable so tests can still exercise chunk retry behavior through the
@@ -270,11 +267,6 @@ open class EtlOrchestrator(
             linksInserted = reparented,
             staleLinksDeleted = staleDeleted,
         )
-    }
-
-    open fun refreshCanonicalViews() {
-        canonicalViewRepo.refreshCanonicalViews()
-        log.info("canonical views refreshed")
     }
 
     @Suppress("UNCHECKED_CAST")

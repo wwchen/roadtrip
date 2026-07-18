@@ -37,17 +37,18 @@ class ReserveCaliforniaSitesEtl(
                     val kind = place.unitTypeByFacilityId[grid.facilityId] ?: DEFAULT_CAMPSITE_KIND
                     grid.units.map { unit ->
                         CampsiteUpsertCandidate(
-                            vendor = RESERVECALIFORNIA_VENDOR,
-                            vendorRefId = unit.unitId.toString(),
-                            parentVendor = PARENT_CAMPGROUND_VENDOR,
-                            parentVendorRefId = "$CAMPGROUND_REF_PREFIX$placeId",
+                            dataProvider = RESERVECALIFORNIA_VENDOR,
+                            dataProviderRef = unit.unitId.toString(),
+                            bookingProvider = RESERVECALIFORNIA_VENDOR,
+                            bookingProviderRef = unit.unitId.toString(),
+                            parentDataProvider = PARENT_CAMPGROUND_VENDOR,
+                            parentDataProviderRef = "$CAMPGROUND_REF_PREFIX$placeId",
                             name = unit.name?.takeIf { it.isNotBlank() } ?: unit.unitId.toString(),
                             kind = kind,
                             loopName = grid.facilityName ?: facility?.name,
                             reservationUrl = reserveCaliforniaParkUrl(placeId),
                             kindListed = kind,
                             sourcePayload = campsiteSourcePayload(unit, grid, placeId, facility),
-                            vendorRefPayload = campsiteProviderRefPayload(unit, grid, placeId),
                         )
                     }
                 },

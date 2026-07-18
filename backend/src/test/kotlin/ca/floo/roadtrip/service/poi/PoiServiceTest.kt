@@ -5,7 +5,6 @@ import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
 import ca.floo.roadtrip.model.domain.poi.Bbox
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
 import ca.floo.roadtrip.repo.CampgroundRepo
-import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
@@ -34,7 +33,6 @@ class PoiServiceTest : SharedDbTest() {
                 providerRefJson = """{"transactionLocationId":-2147483647,"mapId":-2147483026,"resourceLocationId":-2147483640}""",
                 propertiesJson = """{"upstream":{"booking_cta_provider_ref":null}}""",
             )
-        CanonicalViewRepo(ctx).refreshCanonicalViews()
 
         val feature = poiService().poiDetail(poiId)
         val row = campgroundDetailRow(poiId)
@@ -61,7 +59,6 @@ class PoiServiceTest : SharedDbTest() {
                     }}}
                     """.trimIndent(),
             )
-        CanonicalViewRepo(ctx).refreshCanonicalViews()
 
         val row = campgroundDetailRow(poiId)
 
@@ -89,7 +86,6 @@ class PoiServiceTest : SharedDbTest() {
             """[{"url":"$link","title":"Lake of the Woods"}]""",
             fixture.catalogId,
         )
-        CanonicalViewRepo(ctx).refreshCanonicalViews()
 
         val feature = poiService().poiDetail(fixture.poiId)
 
@@ -135,7 +131,6 @@ class PoiServiceTest : SharedDbTest() {
             fixture.catalogId,
             recgovVendorRefId,
         )
-        CanonicalViewRepo(ctx).refreshCanonicalViews()
 
         val feature = poiService().poiDetail(fixture.poiId)
 
@@ -245,7 +240,7 @@ class PoiServiceTest : SharedDbTest() {
 
     private fun poiService(): PoiService =
         PoiService(
-            poiRepo = PoiServingRepo(ctx),
+            poiRepo = PoiServingRepo(ctx, enabledDataProviders = emptySet()),
             detailServices =
                 listOf(
                     CampgroundService(CampgroundRepo(ctx)),

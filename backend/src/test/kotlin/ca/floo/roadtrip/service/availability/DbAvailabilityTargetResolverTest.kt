@@ -7,7 +7,6 @@ import ca.floo.roadtrip.model.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
-import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
@@ -355,7 +354,6 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                         source = "not-a-vendor",
                         providerRefJson = """{"recgov_id":"232447"}""",
                     ).poiId
-            CanonicalViewRepo(ctx).refreshCanonicalViews()
 
             val campsiteId =
                 ctx.seedCampsite(
@@ -394,7 +392,6 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             externalId = "recgov-232447",
             payloadJson = """{"recgov_id":"232447"}""",
         )
-        CanonicalViewRepo(ctx).refreshCanonicalViews()
         return fixture
     }
 

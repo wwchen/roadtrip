@@ -40,7 +40,7 @@ class PoiRoutesTest : SharedDbTest() {
 
     private fun poiService(): PoiService =
         PoiService(
-            poiRepo = PoiServingRepo(ctx),
+            poiRepo = PoiServingRepo(ctx, enabledDataProviders = emptySet()),
             detailServices =
                 listOf(
                     CampgroundService(CampgroundRepo(ctx)),

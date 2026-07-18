@@ -136,8 +136,10 @@ class RecGovCampgroundsEtl(
         val cell = cellCoverage(enrichment)
 
         return CampgroundUpsertCandidate(
-            vendor = VENDOR,
-            vendorRefId = "$CAMPGROUND_REF_PREFIX${row.FacilityID}",
+            dataProvider = VENDOR,
+            dataProviderRef = "$CAMPGROUND_REF_PREFIX${row.FacilityID}",
+            bookingProvider = if (reservable) VENDOR else null,
+            bookingProviderRef = if (reservable) "$CAMPGROUND_REF_PREFIX${row.FacilityID}" else null,
             name = name,
             latitude = lat,
             longitude = lon,
@@ -153,14 +155,6 @@ class RecGovCampgroundsEtl(
             metadata = metadataPayload(activities, rating),
             sourceUrl = infoUrl,
             sourcePayload = raw,
-            vendorRefPayload =
-                if (reservable) {
-                    buildJsonObject {
-                        put("recgov_id", row.FacilityID.toString())
-                    }
-                } else {
-                    null
-                },
         )
     }
 

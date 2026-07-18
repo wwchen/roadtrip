@@ -216,8 +216,10 @@ class AspiraJoinByNameEtl(
             val bookingCtaRef = leaf.resourceLocationId?.let { bookingCtaRefsByResourceLocationId[it] }
             campgrounds +=
                 CampgroundUpsertCandidate(
-                    vendor = etlSlug,
-                    vendorRefId = vendorRefId,
+                    dataProvider = etlSlug,
+                    dataProviderRef = vendorRefId,
+                    bookingProvider = ASPIRA_BOOKING_PROVIDER,
+                    bookingProviderRef = bookingCtaRef?.let { aspiraBookingCtaProviderRefPayload(leaf, it).toString() },
                     name = leaf.name,
                     latitude = lat,
                     longitude = lon,
@@ -235,7 +237,6 @@ class AspiraJoinByNameEtl(
                         ),
                     sourceUrl = "https://$host/",
                     sourcePayload = aspiraSourcePayload(leaf, matchKind, bookingCtaRef),
-                    vendorRefPayload = aspiraProviderRefPayload(leaf),
                 )
         }
 
@@ -395,6 +396,7 @@ class AspiraJoinByNameEtl(
         private const val ASPIRA_TRANSACTION_LOCATION_ID_KEY = "transactionLocationId"
         private const val ASPIRA_MAP_ID_KEY = "mapId"
         private const val ASPIRA_RESOURCE_LOCATION_ID_KEY = "resourceLocationId"
+        private const val ASPIRA_BOOKING_PROVIDER = "aspira"
     }
 }
 

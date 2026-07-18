@@ -56,21 +56,17 @@ class ReserveAmericaSitesEtl(
                 .distinctBy { it.siteId }
                 .map { site ->
                     CampsiteUpsertCandidate(
-                        vendor = vendor,
-                        vendorRefId = site.siteId,
-                        parentVendor = parentCampgroundVendor(contractCode),
-                        parentVendorRefId = "$PARENT_CAMPGROUND_REF_PREFIX${site.parkId}",
+                        dataProvider = vendor,
+                        dataProviderRef = site.siteId,
+                        bookingProvider = "reserveamerica",
+                        bookingProviderRef = site.siteId,
+                        parentDataProvider = parentCampgroundVendor(contractCode),
+                        parentDataProviderRef = "$PARENT_CAMPGROUND_REF_PREFIX${site.parkId}",
                         name = site.name,
                         sourcePayload =
                             buildJsonObject {
                                 put("site_id", site.siteId)
                                 put("name", site.name)
-                                put(PARENT_CONTRACT_KEY, contractCode)
-                                put(PARENT_PARK_KEY, site.parkId)
-                            },
-                        vendorRefPayload =
-                            buildJsonObject {
-                                put("site_id", site.siteId)
                                 put(PARENT_CONTRACT_KEY, contractCode)
                                 put(PARENT_PARK_KEY, site.parkId)
                             },

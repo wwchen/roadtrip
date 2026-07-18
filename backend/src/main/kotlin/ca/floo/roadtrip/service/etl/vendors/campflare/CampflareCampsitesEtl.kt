@@ -8,8 +8,6 @@ import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 
 class CampflareCampsitesEtl : SourceEtl<List<JsonObject>, CampsiteEtlOutput> {
     override val etlSlug = CAMPSITES_ETL_SLUG
@@ -33,11 +31,14 @@ class CampflareCampsitesEtl : SourceEtl<List<JsonObject>, CampsiteEtlOutput> {
         val name = raw.stringField("name") ?: return null
         val kind = raw.stringField("kind") ?: DEFAULT_CAMPSITE_KIND
         val reservationUrl = raw.stringField("reservation_url")
+        val recgovRef = recgovCampsiteVendorRef(raw, id, reservationUrl)
         return CampsiteUpsertCandidate(
-            vendor = CAMPFLARE_VENDOR,
-            vendorRefId = id,
-            parentVendor = CAMPFLARE_VENDOR,
-            parentVendorRefId = campgroundId,
+            dataProvider = CAMPFLARE_VENDOR,
+            dataProviderRef = id,
+            bookingProvider = recgovRef?.vendor,
+            bookingProviderRef = recgovRef?.vendorRefId,
+            parentDataProvider = CAMPFLARE_VENDOR,
+            parentDataProviderRef = campgroundId,
             name = name,
             kind = kind,
             loopName = raw.stringField("loop_name"),
@@ -62,12 +63,6 @@ class CampflareCampsitesEtl : SourceEtl<List<JsonObject>, CampsiteEtlOutput> {
             maxTrailerLength = raw.doubleField("max_trailer_length"),
             photos = raw.arrayField("photos"),
             sourcePayload = raw,
-            vendorRefPayload =
-                buildJsonObject {
-                    put("campflare_id", id)
-                    put("campground_id", campgroundId)
-                },
-            additionalVendorRefs = listOfNotNull(recgovCampsiteVendorRef(raw, id, reservationUrl)),
         )
     }
 }

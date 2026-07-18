@@ -4,7 +4,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
@@ -122,7 +121,6 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
             externalId = "recgov-232447",
             payloadJson = """{"recgov_id":"232447"}""",
         )
-        CanonicalViewRepo(ctx).refreshCanonicalViews()
         return MultiRefCampground(campgroundId = fixture.catalogId)
     }
 

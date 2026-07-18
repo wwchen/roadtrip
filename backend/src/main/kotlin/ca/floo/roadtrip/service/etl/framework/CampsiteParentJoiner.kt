@@ -6,8 +6,8 @@ import ca.floo.roadtrip.model.domain.CampsiteParentLink
  * Post-import parent reconciler for vendor-specific campsite → campground
  * relationships.
  *
- * Canonical campsite ETLs emit `parentVendor` + `parentVendorRefId` and
- * CampsiteRepo.upsertCampsites resolves them through `vendor_refs` to set
+ * Canonical campsite ETLs emit `parentDataProvider` + `parentDataProviderRef`
+ * and CampsiteRepo.upsertCampsites resolves them to set
  * `campsites.campground_id`. That's the source of truth for the parent link
  * at write time.
  *

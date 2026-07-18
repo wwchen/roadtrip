@@ -18,11 +18,11 @@ class RecGovCampsitesEtlTest {
         val etl = RecGovCampsitesEtl("federal-campsites")
         val campsite = etl.transform(etl.parse(bundle()), transformCtx()).campsites.single()
 
-        assertEquals("123456", campsite.vendorRefId)
+        assertEquals("123456", campsite.dataProviderRef)
         assertEquals("123456", campsite.name)
         assertEquals("site", campsite.kind)
-        assertEquals("recgov", campsite.parentVendor)
-        assertEquals("recgov-232447", campsite.parentVendorRefId)
+        assertEquals("recgov", campsite.parentDataProvider)
+        assertEquals("recgov-232447", campsite.parentDataProviderRef)
         assertNull(campsite.kindListed)
         assertNull(campsite.loopName)
     }

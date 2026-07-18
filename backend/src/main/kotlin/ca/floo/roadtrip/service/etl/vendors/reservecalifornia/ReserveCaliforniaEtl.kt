@@ -47,8 +47,10 @@ class ReserveCaliforniaEtl(
                     .map { place ->
                         val parkUrl = reserveCaliforniaParkUrl(place.placeId)
                         CampgroundUpsertCandidate(
-                            vendor = etlSlug,
-                            vendorRefId = "$CAMPGROUND_REF_PREFIX${place.placeId}",
+                            dataProvider = etlSlug,
+                            dataProviderRef = "$CAMPGROUND_REF_PREFIX${place.placeId}",
+                            bookingProvider = RESERVECALIFORNIA_VENDOR,
+                            bookingProviderRef = "$CAMPGROUND_REF_PREFIX${place.placeId}",
                             name = place.name,
                             latitude = place.latitude,
                             longitude = place.longitude,
@@ -63,7 +65,6 @@ class ReserveCaliforniaEtl(
                             metadata = metadataPayload(place),
                             sourceUrl = parkUrl,
                             sourcePayload = place.raw,
-                            vendorRefPayload = providerRefPayload(place),
                         )
                     },
         )
@@ -121,29 +122,6 @@ internal fun metadataPayload(place: ReserveCaliforniaPlace): JsonObject? {
         }
     return payload.takeIf { it.isNotEmpty() }
 }
-
-internal fun providerRefPayload(place: ReserveCaliforniaPlace): JsonObject =
-    buildJsonObject {
-        put("place_id", place.placeId)
-        put(
-            "facility_ids",
-            buildJsonArray {
-                place.facilityIds.forEach { add(it) }
-            },
-        )
-    }
-
-internal fun campsiteProviderRefPayload(
-    unit: ReserveCaliforniaUnit,
-    grid: ReserveCaliforniaGridCatalog,
-    placeId: Long,
-): JsonObject =
-    buildJsonObject {
-        put("unit_id", unit.unitId)
-        put("facility_id", grid.facilityId)
-        put(PARENT_PLACE_ID_KEY, placeId)
-        put("place_id", placeId)
-    }
 
 internal fun campsiteSourcePayload(
     unit: ReserveCaliforniaUnit,

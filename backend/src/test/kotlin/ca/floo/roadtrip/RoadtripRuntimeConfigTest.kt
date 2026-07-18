@@ -2,7 +2,7 @@ package ca.floo.roadtrip
 
 import ca.floo.roadtrip.config.ReadPathProviderConfig
 import ca.floo.roadtrip.di.notificationTriggerKinds
-import ca.floo.roadtrip.di.validateReadPathDataSources
+import ca.floo.roadtrip.di.validateReadPathDataProviders
 import ca.floo.roadtrip.model.metadata.registry.EtlEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
@@ -14,10 +14,10 @@ import kotlin.test.assertFailsWith
 class RoadtripRuntimeConfigTest {
     @Test
     fun `read path data source validation accepts registry and detail source keys`() {
-        validateReadPathDataSources(
+        validateReadPathDataProviders(
             providers =
                 ReadPathProviderConfig(
-                    enabledDataSources =
+                    enabledDataProviders =
                         setOf(
                             "federal-campgrounds",
                             "recgov",
@@ -35,10 +35,10 @@ class RoadtripRuntimeConfigTest {
     fun `read path data source validation rejects unknown keys`() {
         val err =
             assertFailsWith<IllegalArgumentException> {
-                validateReadPathDataSources(
+                validateReadPathDataProviders(
                     providers =
                         ReadPathProviderConfig(
-                            enabledDataSources = setOf("recgov", "recgvo"),
+                            enabledDataProviders = setOf("recgov", "recgvo"),
                             enabledAvailabilityProviders = emptySet(),
                         ),
                     registry = registryWith("federal-campgrounds"),
@@ -46,7 +46,7 @@ class RoadtripRuntimeConfigTest {
             }
 
         assertEquals(
-            "roadtrip.read-path.enabled-data-sources contains unknown source(s): " +
+            "roadtrip.read-path.enabled-data-providers contains unknown provider(s): " +
                 "[recgvo]. Expected one of: [federal-campgrounds, planet_fitness_location, recgov, tesla_supercharger].",
             err.message,
         )

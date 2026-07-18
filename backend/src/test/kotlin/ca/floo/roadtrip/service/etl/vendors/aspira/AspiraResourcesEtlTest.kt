@@ -84,15 +84,11 @@ class AspiraResourcesEtlTest {
             )
 
         val campsite = etl.transform(dto, ctx).campsites.single()
-        val providerRef = campsite.vendorRefPayload!!.jsonObject
         val sourcePayload = campsite.sourcePayload!!.jsonObject
 
-        assertEquals("aspira-wa-pins", campsite.parentVendor)
-        assertEquals("aspira--2147483630--2147483388", campsite.parentVendorRefId)
+        assertEquals("aspira-wa-pins", campsite.parentDataProvider)
+        assertEquals("aspira--2147483630--2147483388", campsite.parentDataProviderRef)
         assertEquals("Deception Pass", campsite.loopName)
-        assertEquals(-2147483630, providerRef["transactionLocationId"]!!.jsonPrimitive.long)
-        assertEquals(-2147483615, providerRef["mapId"]!!.jsonPrimitive.long)
-        assertEquals(-2147483624, providerRef["resourceLocationId"]!!.jsonPrimitive.long)
         assertEquals(-2147483388, sourcePayload["_parent_aspira_map_id"]!!.jsonPrimitive.long)
         assertEquals(-2147483615, sourcePayload["_aspira_resource_map_id"]!!.jsonPrimitive.long)
     }

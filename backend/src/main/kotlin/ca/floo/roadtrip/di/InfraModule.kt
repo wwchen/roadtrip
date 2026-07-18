@@ -22,7 +22,6 @@ import ca.floo.roadtrip.db.dsl
 import ca.floo.roadtrip.db.migrate
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ApiCacheRepo
-import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.importTargetsFromRegistry
@@ -125,7 +124,6 @@ fun infraModule(baseConfig: ApplicationConfig) =
                         ctx = ctx,
                         rawDir = staticDir.resolveConfiguredPath(RAW_DATA_DIR),
                         poiRegistry = get(),
-                        canonicalViewRepo = get<CanonicalViewRepo>(),
                     ),
                 importTargets = importTargetsFromRegistry(get()),
             )

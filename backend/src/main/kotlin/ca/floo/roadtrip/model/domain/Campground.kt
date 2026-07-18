@@ -36,6 +36,8 @@ data class Campground(
     val createdAt: Instant,
     val updatedAt: Instant,
     val deletedAt: Instant?,
-    val dataSource: String,
-    val primaryVendorRefId: Long,
+    val dataProvider: String,
+    val dataProviderRef: String,
+    val bookingProvider: String?,
+    val bookingProviderRef: String?,
 )

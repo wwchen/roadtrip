@@ -3,8 +3,10 @@ package ca.floo.roadtrip.model.domain
 import kotlinx.serialization.json.JsonElement
 
 data class CampgroundUpsertCandidate(
-    val vendor: String,
-    val vendorRefId: String,
+    val dataProvider: String,
+    val dataProviderRef: String,
+    val bookingProvider: String? = null,
+    val bookingProviderRef: String? = null,
     val name: String,
     val latitude: Double,
     val longitude: Double,
@@ -33,6 +35,4 @@ data class CampgroundUpsertCandidate(
     val metadata: JsonElement? = null,
     val sourceUrl: String? = null,
     val sourcePayload: JsonElement? = null,
-    val vendorRefPayload: JsonElement? = null,
-    val additionalVendorRefs: List<CatalogVendorRefUpsertCandidate> = emptyList(),
 )

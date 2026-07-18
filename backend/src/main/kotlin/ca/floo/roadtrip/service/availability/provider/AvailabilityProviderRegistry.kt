@@ -6,9 +6,9 @@ import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 
 /**
  * Holds the live availability-provider adapters and dispatches a selected
- * `(vendor_ref.vendor, provider_ref)` pair to the right one.
+ * `(booking_provider, booking_provider_ref)` pair to the right one.
  *
- * Construction is the only place that knows the mapping from source/vendor
+ * Construction is the only place that knows the mapping from source/booking
  * keys to a [AvailabilityProvider] instance. Once built, the registry exposes a
  * single lookup — routes and the watch poller never see the source string, and
  * adapters never see the source either.
@@ -16,7 +16,7 @@ import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
  * Key shape note: a single [AvailabilityProviderId] value can map to multiple
  * adapter *instances* (Aspira NextGen runs three tenants — PC/BC/WA — that
  * share a wire shape but have different hosts, caches, and campsite
- * vendor codes). The registry is keyed by the catalog source slug (`vendor_refs.vendor` tenant key), not by id, so
+ * booking codes). The registry is keyed by the catalog source slug (booking_provider tenant key), not by id, so
  * each tenant's source resolves to its own adapter while the public
  * provider id stays vendor-shaped.
  *
@@ -24,8 +24,8 @@ import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
  */
 class AvailabilityProviderRegistry(
     /**
-     * Source/vendor key → adapter instance. Most keys are terminal ETL slugs
-     * from YAML; canonical catalog reads can also surface `vendor_refs.vendor`
+     * Source/booking key → adapter instance. Most keys are terminal ETL slugs
+     * from YAML; canonical catalog reads can also surface `booking_provider`
      * values such as `campflare`.
      */
     private val adaptersBySource: Map<String, AvailabilityProvider>,
@@ -93,7 +93,7 @@ class AvailabilityProviderRegistry(
                 adaptersBySource[source] = recgov
             }
 
-            // Canonical catalog reads expose `vendor_refs.vendor` ("campflare"),
+            // Canonical catalog reads expose `booking_provider` ("campflare"),
             // while registry YAML exposes the terminal ETL slug ("campflare-campgrounds").
             val campflare =
                 CampflareAvailabilityProvider(

@@ -1,15 +1,15 @@
 package ca.floo.roadtrip.config
 
 class ReadPathProviderConfig(
-    val enabledDataSources: Set<String>,
+    val enabledDataProviders: Set<String>,
     val enabledAvailabilityProviders: Set<String>,
 ) {
-    fun isDataSourceEnabled(source: String): Boolean = enabledDataSources.contains(source)
+    fun isDataProviderEnabled(provider: String): Boolean = enabledDataProviders.contains(provider)
 
     fun isAvailabilityProviderEnabled(provider: String): Boolean = enabledAvailabilityProviders.contains(provider.trim().lowercase())
 
     companion object {
-        private const val ENABLED_DATA_SOURCES_KEY = "enabled-data-sources"
+        private const val ENABLED_DATA_PROVIDERS_KEY = "enabled-data-providers"
         private const val ENABLED_AVAILABILITY_PROVIDERS_KEY = "enabled-availability-providers"
         private val availabilityProviderIds =
             setOf(
@@ -22,7 +22,7 @@ class ReadPathProviderConfig(
 
         fun fromConfig(config: ConfigSection): ReadPathProviderConfig =
             ReadPathProviderConfig(
-                enabledDataSources = config.csvSet(ENABLED_DATA_SOURCES_KEY),
+                enabledDataProviders = config.csvSet(ENABLED_DATA_PROVIDERS_KEY),
                 enabledAvailabilityProviders =
                     parseAvailabilityProviderAllowList(
                         raw = config.csvSet(ENABLED_AVAILABILITY_PROVIDERS_KEY),

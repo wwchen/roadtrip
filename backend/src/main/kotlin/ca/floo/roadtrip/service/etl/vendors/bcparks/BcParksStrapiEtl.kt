@@ -96,8 +96,8 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, CampgroundEtlOutput> {
         val infoUrl = row.url?.takeIf { it.isNotBlank() }
         val photoUrl = parkPhotoUrl(row.parkPhotos)
         return CampgroundUpsertCandidate(
-            vendor = etlSlug,
-            vendorRefId = "$ORCS_REF_PREFIX$orcs",
+            dataProvider = etlSlug,
+            dataProviderRef = "$ORCS_REF_PREFIX$orcs",
             name = name,
             latitude = lat,
             longitude = lon,
@@ -111,10 +111,6 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, CampgroundEtlOutput> {
             contact = row.parkContact?.takeIf { it.isNotBlank() }?.let(::contactPayload),
             sourceUrl = infoUrl,
             sourcePayload = raw,
-            vendorRefPayload =
-                buildJsonObject {
-                    put("orcs", orcs)
-                },
         )
     }
 

@@ -1,7 +1,8 @@
+@file:Suppress("MatchingDeclarationName")
+
 package ca.floo.roadtrip.service.etl.vendors.campflare
 
 import ca.floo.roadtrip.model.domain.CampflareUrls
-import ca.floo.roadtrip.model.domain.CatalogVendorRefUpsertCandidate
 import ca.floo.roadtrip.model.metadata.Envelope
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -15,25 +16,24 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
+internal data class BookingProviderRef(
+    val vendor: String,
+    val vendorRefId: String,
+)
+
 internal fun recgovCampgroundVendorRef(
     raw: JsonObject,
     campflareId: String,
-): CatalogVendorRefUpsertCandidate? {
+): BookingProviderRef? {
     val recgovId =
         raw
             .objectField("connections")
             ?.stringField("ridb_facility_id")
             ?: recgovCampgroundIdFromUrl(raw.stringField("reservation_url"))
             ?: return null
-    return CatalogVendorRefUpsertCandidate(
+    return BookingProviderRef(
         vendor = RECGOV_CAMPGROUND_VENDOR,
         vendorRefId = "$RECGOV_CAMPGROUND_REF_PREFIX$recgovId",
-        sourceUrl = raw.stringField("reservation_url"),
-        payload =
-            buildJsonObject {
-                put("recgov_id", recgovId)
-                put("campflare_id", campflareId)
-            },
     )
 }
 
@@ -41,18 +41,11 @@ internal fun recgovCampsiteVendorRef(
     raw: JsonObject,
     campflareId: String,
     reservationUrl: String?,
-): CatalogVendorRefUpsertCandidate? {
+): BookingProviderRef? {
     val recgovId = recgovCampsiteIdFromUrl(reservationUrl) ?: return null
-    return CatalogVendorRefUpsertCandidate(
+    return BookingProviderRef(
         vendor = RECGOV_CAMPSITE_VENDOR,
         vendorRefId = recgovId,
-        sourceUrl = reservationUrl,
-        payload =
-            buildJsonObject {
-                put("recgov_id", recgovId)
-                put("campflare_id", campflareId)
-                raw.stringField("campground_id")?.let { put("campflare_campground_id", it) }
-            },
     )
 }
 

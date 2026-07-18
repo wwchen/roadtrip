@@ -3,8 +3,6 @@ package ca.floo.roadtrip.repo
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
-import ca.floo.roadtrip.model.domain.catalog.CatalogVendorRefKey
-import ca.floo.roadtrip.model.domain.catalog.CatalogVendorRefSpec
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
 import ca.floo.roadtrip.model.domain.poi.PoiGeometryUpdate
 import kotlinx.serialization.json.Json
@@ -15,14 +13,10 @@ import org.jooq.impl.DSL
 import java.time.Instant
 import java.time.OffsetDateTime
 
-/**
- * Persistence boundary for canonical campground catalog reads and writes.
- */
 class CampgroundRepo(
     private val ctx: DSLContext,
 ) {
     private val importRunRepo = ImportRunRepo(ctx)
-    private val vendorRefRepo = VendorRefRepo(ctx)
     private val poiRepo = PoiRepo(ctx)
     private val campsiteProviderRepo = CampsiteProviderRepo(ctx)
 
@@ -87,21 +81,17 @@ class CampgroundRepo(
                 """
                 SELECT
                   $baseSelectColumns,
-                  primary_ref.vendor AS detail_source,
-                  primary_ref.external_id AS detail_source_id,
+                  cg.data_provider AS detail_source,
+                  cg.data_provider_ref AS detail_source_id,
                   NULLIF(cg.source_payload->'booking_cta_provider_ref', 'null'::jsonb)::text
                     AS cta_provider_ref_text,
-                  to_jsonb(cc)::text AS properties_text,
-                  cc.member_sources AS member_sources
+                  COALESCE(cg.source_payload::text, '{}') AS properties_text,
+                  ARRAY[cg.data_provider]::TEXT[] AS member_sources
                 FROM poi_campgrounds pc
                 JOIN pois p
                   ON p.id = pc.poi_id
-                JOIN campground_canonical cc
-                  ON cc.id = pc.campground_id
                 JOIN campgrounds cg
-                  ON cg.id = cc.id
-                JOIN vendor_refs primary_ref
-                  ON primary_ref.id = cg.primary_vendor_ref_id
+                  ON cg.id = pc.campground_id
                 WHERE pc.poi_id = ?
                   AND cg.deleted_at IS NULL
                   AND p.deleted_at IS NULL
@@ -126,8 +116,8 @@ class CampgroundRepo(
     ): List<Campground> {
         val clauses = mutableListOf("cg.deleted_at IS NULL")
         val params = mutableListOf<Any?>()
-        addInClause(clauses, params, "cg.data_source", filters.vendors)
-        addInClause(clauses, params, "primary_ref.external_id", filters.vendorIds)
+        addInClause(clauses, params, "cg.data_provider", filters.vendors)
+        addInClause(clauses, params, "cg.data_provider_ref", filters.vendorIds)
         addInClause(clauses, params, "cg.kind", filters.kinds)
         if (filters.names.isNotEmpty()) {
             clauses +=
@@ -182,8 +172,10 @@ class CampgroundRepo(
             createdAt = record.instant("created_at"),
             updatedAt = record.instant("updated_at"),
             deletedAt = record.nullableInstant("deleted_at"),
-            dataSource = record.get("data_source", String::class.java),
-            primaryVendorRefId = record.get("primary_vendor_ref_id", Long::class.java),
+            dataProvider = record.get("data_provider", String::class.java),
+            dataProviderRef = record.get("data_provider_ref", String::class.java),
+            bookingProvider = record.get("booking_provider", String::class.java),
+            bookingProviderRef = record.get("booking_provider_ref", String::class.java),
         )
 
     private fun parseJsonElement(raw: String): JsonElement = Json.parseToJsonElement(raw)
@@ -206,65 +198,12 @@ class CampgroundRepo(
     private fun bulkUpsertCampgroundsTx(records: List<CampgroundUpsertCandidate>): Int {
         if (records.isEmpty()) return 0
 
-        val vendorRefSpecs = mutableListOf<CatalogVendorRefSpec>()
-        for (record in records) {
-            vendorRefSpecs +=
-                CatalogVendorRefSpec(
-                    vendor = record.vendor,
-                    entityType = CAMPGROUND_ENTITY,
-                    externalId = record.vendorRefId,
-                    externalName = record.name,
-                    sourceUrl = record.sourceUrl,
-                    payload = record.vendorRefPayload,
-                )
-            for (additionalRef in record.additionalVendorRefs) {
-                vendorRefSpecs +=
-                    CatalogVendorRefSpec(
-                        vendor = additionalRef.vendor,
-                        entityType = CAMPGROUND_ENTITY,
-                        externalId = additionalRef.vendorRefId,
-                        externalName = record.name,
-                        sourceUrl = additionalRef.sourceUrl,
-                        payload = additionalRef.payload,
-                    )
-            }
-        }
-        val vendorRefIds = vendorRefRepo.bulkUpsertVendorRefs(vendorRefSpecs)
-
-        val campgroundRows =
-            records.map { record ->
-                CampgroundBulkRow(
-                    record = record,
-                    primaryVendorRefId =
-                        vendorRefIds.getValue(
-                            CatalogVendorRefKey(record.vendor, CAMPGROUND_ENTITY, record.vendorRefId),
-                        ),
-                )
-            }
-        val campgroundIdByPrimaryRef = bulkUpsertCampgroundRows(campgroundRows)
-
-        val links = mutableListOf<Pair<Long, Long>>()
-        for (record in records) {
-            val primaryRefId =
-                vendorRefIds.getValue(CatalogVendorRefKey(record.vendor, CAMPGROUND_ENTITY, record.vendorRefId))
-            val campgroundId = campgroundIdByPrimaryRef.getValue(primaryRefId)
-            links += campgroundId to primaryRefId
-            for (additionalRef in record.additionalVendorRefs) {
-                links +=
-                    campgroundId to
-                    vendorRefIds.getValue(
-                        CatalogVendorRefKey(additionalRef.vendor, CAMPGROUND_ENTITY, additionalRef.vendorRefId),
-                    )
-            }
-        }
-        bulkUpsertCampgroundVendorLinks(links)
+        val campgroundIdByProviderRef = bulkUpsertCampgroundRows(records)
 
         val poiRows =
             records.map { record ->
-                val primaryRefId =
-                    vendorRefIds.getValue(CatalogVendorRefKey(record.vendor, CAMPGROUND_ENTITY, record.vendorRefId))
                 CampgroundPoiRow(
-                    campgroundId = campgroundIdByPrimaryRef.getValue(primaryRefId),
+                    campgroundId = campgroundIdByProviderRef.getValue(record.dataProvider to record.dataProviderRef),
                     longitude = record.longitude,
                     latitude = record.latitude,
                 )
@@ -274,14 +213,14 @@ class CampgroundRepo(
         return records.size
     }
 
-    private fun bulkUpsertCampgroundRows(rows: List<CampgroundBulkRow>): Map<Long, Long> {
-        if (rows.isEmpty()) return emptyMap()
-        val deduped = rows.distinctBy { it.record.vendor to it.primaryVendorRefId }
-        val result = HashMap<Long, Long>(deduped.size)
+    private fun bulkUpsertCampgroundRows(records: List<CampgroundUpsertCandidate>): Map<Pair<String, String>, Long> {
+        if (records.isEmpty()) return emptyMap()
+        val deduped = records.distinctBy { it.dataProvider to it.dataProviderRef }
+        val result = HashMap<Pair<String, String>, Long>(deduped.size)
         for (chunk in deduped.chunked(BULK_CHUNK_SIZE)) {
             val placeholders =
                 chunk.joinToString(", ") {
-                    "(?, ?, " +
+                    "(?, ?, ?, ?, " +
                         "?, ?, ?, ?, " +
                         "?, ?, ?, " +
                         "?::jsonb, ?::jsonb, ?::jsonb, " +
@@ -293,7 +232,7 @@ class CampgroundRepo(
             val sql =
                 """
                 INSERT INTO campgrounds (
-                  data_source, primary_vendor_ref_id,
+                  data_provider, data_provider_ref, booking_provider, booking_provider_ref,
                   name, status, status_description, kind,
                   short_description, medium_description, long_description,
                   location, default_campsite_schedule, amenities,
@@ -303,8 +242,10 @@ class CampgroundRepo(
                   updated_at, deleted_at
                 )
                 VALUES $placeholders
-                ON CONFLICT (data_source, primary_vendor_ref_id) WHERE deleted_at IS NULL
+                ON CONFLICT (data_provider, data_provider_ref) WHERE deleted_at IS NULL
                 DO UPDATE SET
+                  booking_provider = EXCLUDED.booking_provider,
+                  booking_provider_ref = EXCLUDED.booking_provider_ref,
                   name = EXCLUDED.name,
                   status = EXCLUDED.status,
                   status_description = EXCLUDED.status_description,
@@ -332,13 +273,14 @@ class CampgroundRepo(
                   source_payload = EXCLUDED.source_payload,
                   updated_at = now(),
                   deleted_at = NULL
-                RETURNING id, primary_vendor_ref_id
+                RETURNING id, data_provider, data_provider_ref
                 """.trimIndent()
             val params = mutableListOf<Any?>()
-            for (row in chunk) {
-                val record = row.record
-                params += record.vendor
-                params += row.primaryVendorRefId
+            for (record in chunk) {
+                params += record.dataProvider
+                params += record.dataProviderRef
+                params += record.bookingProvider
+                params += record.bookingProviderRef
                 params += record.name
                 params += record.status
                 params += record.statusDescription
@@ -367,41 +309,15 @@ class CampgroundRepo(
             }
             val returned = ctx.fetch(sql, *params.toTypedArray())
             for (row in returned) {
-                result[row.get("primary_vendor_ref_id", Long::class.java)] =
-                    row.get("id", Long::class.java)
+                val key =
+                    row.get("data_provider", String::class.java) to
+                        row.get("data_provider_ref", String::class.java)
+                result[key] = row.get("id", Long::class.java)
             }
         }
         return result
     }
 
-    private fun bulkUpsertCampgroundVendorLinks(links: List<Pair<Long, Long>>) {
-        if (links.isEmpty()) return
-        val deduped = links.distinct()
-        for (chunk in deduped.chunked(BULK_CHUNK_SIZE)) {
-            val placeholders = chunk.joinToString(", ") { "(?, ?, now())" }
-            val sql =
-                """
-                INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id, updated_at)
-                VALUES $placeholders
-                ON CONFLICT (campground_id, vendor_ref_id)
-                DO UPDATE SET updated_at = now()
-                """.trimIndent()
-            val params = mutableListOf<Any?>()
-            for ((campgroundId, vendorRefId) in chunk) {
-                params += campgroundId
-                params += vendorRefId
-            }
-            ctx.execute(sql, *params.toTypedArray())
-        }
-    }
-
-    /**
-     * Bulk equivalent of the previous per-campground POI wrapper upsert.
-     *
-     * poi_campgrounds has UNIQUE(campground_id) so each campground has at
-     * most one POI row. Existing POIs get a geometry refresh; new
-     * campgrounds get a fresh POI + link.
-     */
     private fun bulkUpsertCampgroundPois(rows: List<CampgroundPoiRow>) {
         if (rows.isEmpty()) return
         val deduped = rows.distinctBy { it.campgroundId }
@@ -457,11 +373,6 @@ class CampgroundRepo(
         }
     }
 
-    private data class CampgroundBulkRow(
-        val record: CampgroundUpsertCandidate,
-        val primaryVendorRefId: Long,
-    )
-
     private data class CampgroundPoiRow(
         val campgroundId: Long,
         val longitude: Double,
@@ -504,8 +415,10 @@ class CampgroundRepo(
             cg.created_at,
             cg.updated_at,
             cg.deleted_at,
-            cg.data_source,
-            cg.primary_vendor_ref_id
+            cg.data_provider,
+            cg.data_provider_ref,
+            cg.booking_provider,
+            cg.booking_provider_ref
             """.trimIndent()
 
         private val baseSelect =
@@ -513,8 +426,6 @@ class CampgroundRepo(
             SELECT
               $baseSelectColumns
             FROM campgrounds cg
-            JOIN vendor_refs primary_ref
-              ON primary_ref.id = cg.primary_vendor_ref_id
             """.trimIndent()
     }
 }
