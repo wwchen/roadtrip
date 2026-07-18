@@ -221,17 +221,17 @@ class AvailabilityRepo(
         val targetDate: LocalDate,
         val fromStatus: AvailabilityStatus?,
         val toStatus: AvailabilityStatus,
-        val observedFrom: OffsetDateTime?,
-        val observedAt: OffsetDateTime,
+        val fetchedAt: OffsetDateTime,
     )
 
     private val statusRunSelect =
         """
-        SELECT campsite_id, run_id, target_date, status, last_observed_at,
-               lag(last_observed_at) OVER w AS observed_from,
-               lag(status) OVER w AS from_status
-        FROM availability
-        WINDOW w AS (PARTITION BY campsite_id, target_date ORDER BY last_observed_at, id)
+        SELECT a.campsite_id, a.run_id, a.target_date, a.status,
+               COALESCE(r.completed_at, a.last_observed_at) AS fetched_at,
+               lag(a.status) OVER w AS from_status
+        FROM availability a
+        LEFT JOIN availability_run r ON r.id = a.run_id
+        WINDOW w AS (PARTITION BY a.campsite_id, a.target_date ORDER BY a.last_observed_at, a.id)
         """.trimIndent()
 
     private fun mapStatusRun(r: org.jooq.Record): StatusRun {
@@ -243,8 +243,7 @@ class AvailabilityRepo(
             targetDate = r.get("target_date", LocalDate::class.java),
             fromStatus = fromStatusRaw?.let { AvailabilityStatus.parse(it) },
             toStatus = toStatus,
-            observedFrom = r.get("observed_from", OffsetDateTime::class.java),
-            observedAt = r.get("last_observed_at", OffsetDateTime::class.java),
+            fetchedAt = r.get("fetched_at", OffsetDateTime::class.java),
         )
     }
 
@@ -263,7 +262,7 @@ class AvailabilityRepo(
         val dateClause = if (targetDate != null) " AND target_date = ?" else ""
         val sql =
             "SELECT * FROM ($statusRunSelect) t WHERE campsite_id = ANY(?::bigint[])" +
-                "$dateClause ORDER BY target_date DESC, last_observed_at DESC LIMIT ?"
+                "$dateClause ORDER BY target_date DESC, fetched_at DESC LIMIT ?"
         return if (targetDate != null) {
             ctx
                 .resultQuery(sql, campsiteIds.toTypedArray(), targetDate, limit.coerceIn(1, 1000))
@@ -281,7 +280,7 @@ class AvailabilityRepo(
     // the old union.
     fun datesWithSnapshotsInWindow(
         campsiteId: Long,
-        windowStart: OffsetDateTime,
+        windowStart: OffsetDateTime = OffsetDateTime.now().minusHours(DEFAULT_SUMMARY_WINDOW_HOURS.toLong()),
         today: LocalDate = LocalDate.now(),
     ): List<LocalDate> =
         ctx
@@ -310,88 +309,76 @@ class AvailabilityRepo(
     data class TargetDateStats(
         val targetDate: LocalDate,
         val totalRuns: Int,
+        val firstRunAt: OffsetDateTime? = null,
+        val lastRunAt: OffsetDateTime? = null,
+        val medianCadenceSec: Int? = null,
         val lastOpenAt: OffsetDateTime?,
         val isCurrentlyOpen: Boolean,
-        val currentOrLastOpenWindowSec: Int?,
-        val medianOpenWindowSec: Int?,
-        val opensLast24h: Int,
+        val minOpenWindowSec: Int? = null,
+        val maxOpenWindowSec: Int? = null,
     )
 
-    fun summarize(
+    fun projectAvailabilityRuns(
         campsiteId: Long,
         dates: List<LocalDate>,
-        now: OffsetDateTime = OffsetDateTime.now(),
-        windowHours: Int = DEFAULT_SUMMARY_WINDOW_HOURS,
     ): List<TargetDateStats> {
         if (dates.isEmpty()) return emptyList()
-        val windowStart = now.minusHours(windowHours.toLong())
-        val opensSince = now.minusHours(24)
-        // Count runs within the window, but always keep each cell's current row
-        // (rn = 1) even when its last observation predates the window — otherwise a
-        // date last polled before windowStart would report zero runs / not-open
-        // rather than its true current state. observed_from still derives from the
-        // full per-cell chain (the lag window runs before the row filter).
         val rows =
             ctx
                 .resultQuery(
                     """
-                    SELECT campsite_id, run_id, target_date, status, last_observed_at, observed_from, from_status
-                    FROM (
-                        SELECT campsite_id, run_id, target_date, status, last_observed_at,
-                               lag(last_observed_at) OVER w AS observed_from,
-                               lag(status) OVER w AS from_status,
-                               row_number() OVER (
-                                 PARTITION BY campsite_id, target_date ORDER BY last_observed_at DESC, id DESC
-                               ) AS rn
-                        FROM availability
-                        WHERE campsite_id = ? AND target_date = ANY(?::date[])
-                        WINDOW w AS (PARTITION BY campsite_id, target_date ORDER BY last_observed_at, id)
-                    ) t
-                    WHERE last_observed_at >= ?::timestamptz OR rn = 1
-                    ORDER BY target_date, last_observed_at
+                    SELECT a.campsite_id, a.run_id, a.target_date, a.status,
+                           COALESCE(r.completed_at, a.last_observed_at) AS fetched_at,
+                           lag(a.status) OVER w AS from_status
+                    FROM availability a
+                    LEFT JOIN availability_run r ON r.id = a.run_id
+                    WHERE a.campsite_id = ? AND a.target_date = ANY(?::date[])
+                    WINDOW w AS (PARTITION BY a.campsite_id, a.target_date ORDER BY a.last_observed_at, a.id)
+                    ORDER BY a.target_date, a.last_observed_at, a.id
                     """.trimIndent(),
                     campsiteId,
                     dates.toTypedArray(),
-                    windowStart,
                 ).fetch { mapStatusRun(it) }
         val byDate = rows.groupBy { it.targetDate }
-        return dates.map { d -> statsFor(d, byDate[d].orEmpty(), opensSince) }
+        return dates.map { d -> statsFor(d, byDate[d].orEmpty()) }
     }
 
     private fun statsFor(
         date: LocalDate,
         runs: List<StatusRun>,
-        opensSince: OffsetDateTime,
     ): TargetDateStats {
         if (runs.isEmpty()) {
-            return TargetDateStats(date, 0, null, false, null, null, 0)
+            return TargetDateStats(
+                targetDate = date,
+                totalRuns = 0,
+                lastOpenAt = null,
+                isCurrentlyOpen = false,
+            )
         }
         val openRuns = runs.filter { it.toStatus.isOnlineBookable }
-        val openWindows =
-            openRuns.map { r ->
-                val from = r.observedFrom ?: r.observedAt
-                java.time.Duration
-                    .between(from, r.observedAt)
-                    .seconds
-                    .toInt()
-                    .coerceAtLeast(0)
+        val openWindows = mutableListOf<Int>()
+        for (i in runs.indices) {
+            if (runs[i].toStatus.isOnlineBookable && (runs[i].fromStatus == null || !runs[i].fromStatus!!.isOnlineBookable)) {
+                val closeIdx = ((i + 1) until runs.size).firstOrNull { !runs[it].toStatus.isOnlineBookable }
+                if (closeIdx != null) {
+                    val sec =
+                        java.time.Duration
+                            .between(runs[i].fetchedAt, runs[closeIdx].fetchedAt)
+                            .seconds
+                            .toInt()
+                            .coerceAtLeast(0)
+                    openWindows.add(sec)
+                }
             }
+        }
         return TargetDateStats(
             targetDate = date,
             totalRuns = runs.size,
-            lastOpenAt = openRuns.lastOrNull()?.observedAt,
+            lastOpenAt = openRuns.lastOrNull()?.fetchedAt,
             isCurrentlyOpen = runs.last().toStatus.isOnlineBookable,
-            currentOrLastOpenWindowSec = openWindows.lastOrNull(),
-            medianOpenWindowSec = medianOrNull(openWindows),
-            opensLast24h = openRuns.count { (it.observedFrom ?: it.observedAt) >= opensSince },
+            minOpenWindowSec = openWindows.minOrNull(),
+            maxOpenWindowSec = openWindows.maxOrNull(),
         )
-    }
-
-    private fun medianOrNull(values: List<Int>): Int? {
-        if (values.isEmpty()) return null
-        val s = values.sorted()
-        val mid = s.size / 2
-        return if (s.size % 2 == 0) (s[mid - 1] + s[mid]) / 2 else s[mid]
     }
 }
 

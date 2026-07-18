@@ -161,35 +161,58 @@ internal class AvailabilityDashboardController(
         )
     }
 
-    fun snapshotsSummary(
-        campsiteId: Long?,
-        windowHours: Int,
+    fun changeSummary(
+        poiId: Long?,
         explicitDates: List<LocalDate>,
     ): AvailabilityDashboardResult<AvailabilitySnapshotsSummaryResponse> {
         val id =
-            campsiteId
+            poiId
                 ?: return AvailabilityDashboardResult.Invalid(
-                    "missing_campsite_id",
-                    "campsite_id is required",
+                    "missing_poi_id",
+                    "poi_id is required",
                 )
-        campsites.findById(id)
-            ?: return AvailabilityDashboardResult.NotFound(
-                "campsite_not_found",
-                "no campsite with id $id",
+        val poiCampsites = campsites.findByPoi(id)
+        if (poiCampsites.isEmpty()) {
+            return AvailabilityDashboardResult.NotFound(
+                "poi_not_found",
+                "no campsites for poi $id",
             )
-        val currentTime = now()
+        }
+        val campsiteIds = poiCampsites.map { it.id }
         val dates =
             explicitDates.ifEmpty {
-                availability.datesWithSnapshotsInWindow(
-                    campsiteId = id,
-                    windowStart = currentTime.minusHours(windowHours.toLong()),
-                )
+                campsiteIds
+                    .flatMap { csId ->
+                        availability.datesWithSnapshotsInWindow(campsiteId = csId)
+                    }.distinct()
+                    .sorted()
             }
-        val stats = availability.summarize(id, dates, now = currentTime, windowHours = windowHours)
+        val stats =
+            campsiteIds.flatMap { csId ->
+                availability.projectAvailabilityRuns(csId, dates)
+            }
+        val timeRange = runs.timeRangeForPoi(id)
+        val poiCadence = timeRange?.medianCadenceSec
+        val aggregated =
+            stats
+                .groupBy { it.targetDate }
+                .map { (date, group) ->
+                    AvailabilityRepo.TargetDateStats(
+                        targetDate = date,
+                        totalRuns = timeRange?.totalRuns ?: 0,
+                        firstRunAt = timeRange?.firstStartedAt,
+                        lastRunAt = timeRange?.lastStartedAt,
+                        medianCadenceSec = poiCadence,
+                        lastOpenAt = group.mapNotNull { it.lastOpenAt }.maxOrNull(),
+                        isCurrentlyOpen = group.any { it.isCurrentlyOpen },
+                        minOpenWindowSec = group.mapNotNull { it.minOpenWindowSec }.minOrNull(),
+                        maxOpenWindowSec = group.mapNotNull { it.maxOpenWindowSec }.maxOrNull(),
+                    )
+                }.sortedBy { it.targetDate }
         return AvailabilityDashboardResult.Ok(
             AvailabilitySnapshotsSummaryResponse(
-                campsiteId = id,
-                stats = stats.map { it.toSchema() },
+                poiId = id,
+                stats = aggregated.map { it.toSchema() },
             ),
         )
     }
@@ -227,7 +250,7 @@ private fun AvailabilityRepo.StatusRun.toSchema(name: String? = null): Availabil
         campsiteId = campsiteId,
         campsiteName = name,
         targetDate = targetDate.toString(),
-        observedAt = observedAt.toString(),
+        observedAt = fetchedAt.toString(),
         fromStatus = fromStatus,
         toStatus = toStatus,
     )
@@ -238,9 +261,11 @@ private fun AvailabilityRepo.TargetDateStats.toSchema(): AvailabilitySnapshotSta
     AvailabilitySnapshotStatsSchema(
         targetDate = targetDate.toString(),
         totalRuns = totalRuns,
+        firstRunAt = firstRunAt?.toString(),
+        lastRunAt = lastRunAt?.toString(),
+        medianCadenceSec = medianCadenceSec,
         lastOpenAt = lastOpenAt?.toString(),
         isCurrentlyOpen = isCurrentlyOpen,
-        currentOrLastOpenWindowSec = currentOrLastOpenWindowSec,
-        medianOpenWindowSec = medianOpenWindowSec,
-        opensLast24h = opensLast24h,
+        minOpenWindowSec = minOpenWindowSec,
+        maxOpenWindowSec = maxOpenWindowSec,
     )

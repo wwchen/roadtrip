@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.db.generated.tables.AvailabilityPoller.Companion.AVAILABILITY_POLLER
 import ca.floo.roadtrip.db.generated.tables.AvailabilityRun.Companion.AVAILABILITY_RUN
 import org.jooq.DSLContext
 import org.jooq.Record
@@ -154,6 +155,44 @@ class AvailabilityRunRepo(
                 .limit(CONSECUTIVE_FAILURE_SCAN_LIMIT)
                 .fetch(AVAILABILITY_RUN.STATUS)
         return statuses.takeWhile { it == "failed" }.count()
+    }
+
+    data class RunTimeRange(
+        val totalRuns: Int,
+        val firstStartedAt: OffsetDateTime,
+        val lastStartedAt: OffsetDateTime,
+        val medianCadenceSec: Int?,
+    )
+
+    fun timeRangeForPoi(poiId: Long): RunTimeRange? {
+        val timestamps = runTimestampsForPoi(poiId)
+        if (timestamps.isEmpty()) return null
+        if (timestamps.size == 1) return RunTimeRange(1, timestamps.first(), timestamps.first(), null)
+        return RunTimeRange(timestamps.size, timestamps.first(), timestamps.last(), medianGap(timestamps))
+    }
+
+    private fun runTimestampsForPoi(poiId: Long): List<OffsetDateTime> =
+        ctx
+            .select(AVAILABILITY_RUN.STARTED_AT)
+            .from(AVAILABILITY_RUN)
+            .join(AVAILABILITY_POLLER)
+            .on(AVAILABILITY_RUN.POLLER_ID.eq(AVAILABILITY_POLLER.ID))
+            .where(AVAILABILITY_POLLER.POI_ID.eq(poiId))
+            .orderBy(AVAILABILITY_RUN.STARTED_AT.asc())
+            .fetch { it.get(AVAILABILITY_RUN.STARTED_AT)!! }
+
+    private fun medianGap(timestamps: List<OffsetDateTime>): Int? {
+        if (timestamps.size < 2) return null
+        val gaps =
+            (1 until timestamps.size).map { i ->
+                java.time.Duration
+                    .between(timestamps[i - 1], timestamps[i])
+                    .seconds
+                    .toInt()
+                    .coerceAtLeast(0)
+            }
+        val sorted = gaps.sorted()
+        return sorted[sorted.size / 2]
     }
 
     private fun fromRecord(r: Record): Run =

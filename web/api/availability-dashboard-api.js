@@ -57,8 +57,8 @@ export function listChangesForPoi(poiId, { targetDate, limit, signal } = {}) {
   return jsonGetOk(`/api/availability/changes?${qs}`, { signal });
 }
 
-export function getChangesSummary(campsiteId, { dates, signal } = {}) {
-  const qs = new URLSearchParams({ campsite_id: String(campsiteId) });
+export function getChangesSummary(poiId, { dates, signal } = {}) {
+  const qs = new URLSearchParams({ poi_id: String(poiId) });
   if (Array.isArray(dates) && dates.length > 0) qs.set('dates', dates.join(','));
   return jsonGetOk(`/api/availability/changes/summary?${qs}`, { signal });
 }

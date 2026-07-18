@@ -71,6 +71,11 @@ export async function mount(rootEl, { urlParams }) {
       hideStats();
       return;
     }
+    const qs = new URLSearchParams({ tab: 'changes' });
+    if (poiId) qs.set('poi_id', poiId);
+    if (campsiteId) qs.set('campsite_id', campsiteId);
+    if (targetDate) qs.set('target_date', targetDate);
+    window.history.replaceState(null, '', `/availability?${qs}`);
     statusEl.textContent = 'Loading…';
     try {
       const data = campsiteId
@@ -79,8 +84,8 @@ export async function mount(rootEl, { urlParams }) {
       statusEl.textContent = `${data.changes.length} change${data.changes.length === 1 ? '' : 's'}.`;
       render(data.changes);
       renderChart(data.changes);
-      if (campsiteId) {
-        await refreshStats(campsiteId);
+      if (poiId) {
+        await refreshStats(poiId);
       } else {
         hideStats();
       }
@@ -203,9 +208,9 @@ export async function mount(rootEl, { urlParams }) {
     });
   }
 
-  async function refreshStats(campsiteId) {
+  async function refreshStats(poiId) {
     try {
-      const data = await getChangesSummary(campsiteId);
+      const data = await getChangesSummary(poiId);
       if (data.stats.length === 0) {
         hideStats();
         return;
@@ -214,8 +219,10 @@ export async function mount(rootEl, { urlParams }) {
       statsEl.innerHTML = `
         <table class="data-table">
           <thead><tr>
-            <th>target date</th><th>last available</th><th>available window</th>
-            <th>median 24h</th><th>opens 24h</th><th>runs</th>
+            <th>target date</th><th>total runs</th><th>median cadence</th>
+            <th>first run</th><th>last run</th>
+            <th>last available seen</th>
+            <th>shortest avail window</th><th>longest avail window</th>
           </tr></thead>
           <tbody>
             ${data.stats.map(renderStatsRow).join('')}
@@ -233,24 +240,35 @@ export async function mount(rootEl, { urlParams }) {
   }
 
   function renderStatsRow(s) {
-    const lastAvailable =
-      s.is_currently_open ? '<strong>available NOW</strong>' :
-      s.last_open_at ? `${escapeHtml(formatTimestamp(s.last_open_at))}` :
-      '<span class="muted">never seen available</span>';
-    const window =
-      s.current_or_last_open_window_sec != null
-        ? formatDuration(s.current_or_last_open_window_sec)
-        : '—';
-    const median =
-      s.median_open_window_sec != null ? formatDuration(s.median_open_window_sec) : '—';
+    let lastAvailable;
+    if (s.last_open_at) {
+      const targetStart = new Date(s.target_date + 'T00:00:00Z');
+      const lastOpen = new Date(s.last_open_at);
+      const deltaSec = Math.round((targetStart - lastOpen) / 1000);
+      const rel = deltaSec <= 0 ? 'on date'
+        : deltaSec < 3600 ? `${Math.round(deltaSec / 60)}m before`
+        : deltaSec < 86400 ? `${Math.round(deltaSec / 3600)}h before`
+        : `${Math.round(deltaSec / 86400)}d before`;
+      lastAvailable = `<span title="${escapeHtml(s.last_open_at)}">${escapeHtml(rel)}</span>`;
+    } else {
+      lastAvailable = '∞';
+    }
+    const cadence = s.median_cadence_sec != null ? formatDuration(s.median_cadence_sec) : '—';
+    const firstRun = s.first_run_at ? formatTimestamp(s.first_run_at) : '—';
+    const lastRun = s.last_run_at ? formatTimestamp(s.last_run_at) : '—';
+    const minWin = s.min_open_window_sec != null ? formatDuration(s.min_open_window_sec) : '—';
+    const maxWin = s.max_open_window_sec != null ? formatDuration(s.max_open_window_sec) : '—';
+    const dow = dayOfWeek(s.target_date);
     return `
       <tr>
-        <td>${escapeHtml(s.target_date)}</td>
+        <td>${escapeHtml(s.target_date)} <span class="muted">${dow}</span></td>
+        <td>${escapeHtml(String(s.total_runs))}</td>
+        <td>${escapeHtml(cadence)}</td>
+        <td>${escapeHtml(firstRun)}</td>
+        <td>${escapeHtml(lastRun)}</td>
         <td>${lastAvailable}</td>
-        <td>${escapeHtml(window)}</td>
-        <td>${escapeHtml(median)}</td>
-        <td>${escapeHtml(s.opens_last_24h)}</td>
-        <td>${escapeHtml(s.total_runs)}</td>
+        <td>${escapeHtml(minWin)}</td>
+        <td>${escapeHtml(maxWin)}</td>
       </tr>
     `;
   }
@@ -273,4 +291,9 @@ function escapeHtml(s) {
 
 function formatTimestamp(iso) {
   return iso.replace('T', ' ').replace(/\.\d+/, '').replace(/Z$/, '');
+}
+
+function dayOfWeek(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getDay()];
 }

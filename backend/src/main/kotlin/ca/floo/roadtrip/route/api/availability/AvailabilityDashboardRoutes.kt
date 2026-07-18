@@ -137,19 +137,12 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                 }.describeApi("availability", "Availability change rows filtered by campsite_id or poi_id")
 
                 get("/summary") {
-                    val campsiteId = call.optionalLongQuery("campsite_id")
-                    val windowHours =
-                        call.boundedIntQuery(
-                            "window_hours",
-                            SNAPSHOT_WINDOW_HOURS_DEFAULT,
-                            snapshotWindowHoursRange,
-                        )
+                    val poiId = call.optionalLongQuery("poi_id")
                     val explicitDates = call.dateQueryValues("dates")
                     when (
                         val result =
-                            dashboard.snapshotsSummary(
-                                campsiteId = campsiteId,
-                                windowHours = windowHours,
+                            dashboard.changeSummary(
+                                poiId = poiId,
                                 explicitDates = explicitDates,
                             )
                     ) {
@@ -160,7 +153,7 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                         is AvailabilityDashboardResult.Ok ->
                             call.respondJson(result.value)
                     }
-                }.describeApi("availability", "Per-date stats for one campsite's change history")
+                }.describeApi("availability", "Per-date stats aggregated across a POI's campsites")
             }
         }
     }

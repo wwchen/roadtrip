@@ -5,6 +5,6 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class AvailabilitySnapshotsSummaryResponse(
-    @SerialName("campsite_id") val campsiteId: Long,
+    @SerialName("poi_id") val poiId: Long,
     val stats: List<AvailabilitySnapshotStatsSchema>,
 )
