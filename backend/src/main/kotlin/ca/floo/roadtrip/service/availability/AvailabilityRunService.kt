@@ -154,6 +154,8 @@ internal class AvailabilityRunService(
         }
     }
 
+    fun nowUtc(): OffsetDateTime = OffsetDateTime.now(clock)
+
     private fun durationMs(
         start: OffsetDateTime,
         end: OffsetDateTime,

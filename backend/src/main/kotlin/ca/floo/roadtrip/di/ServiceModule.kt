@@ -213,14 +213,9 @@ val serviceModule =
         }
         single {
             AvailabilityPollExecutor(
-                pollers = get<AvailabilityPollerRepo>(),
-                campsitesRepo = get<CampsiteRepo>(),
+                targetResolver = get<DbAvailabilityTargetResolver>(),
                 batcher = CatalogAvailabilityBatcher(),
-                availability = get<AvailabilityRepo>(),
-                runs = get<AvailabilityRunRepo>(),
-                dateResolver = get<AvailabilityDateResolver>(),
-                targets = get<DbAvailabilityTargetResolver>(),
-                fetchCalls = get<AvailabilityFetchCallRepo>(),
+                runService = get<AvailabilityRunService>(),
                 limiter = get<VendorRateLimiter>(),
                 alertDispatcher = get<WatchAlertDispatcher>(),
                 failoverFetcher = get<FailoverAvailabilityFetcher>(),
