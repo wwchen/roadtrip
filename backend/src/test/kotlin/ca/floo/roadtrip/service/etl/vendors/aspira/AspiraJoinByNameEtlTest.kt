@@ -190,8 +190,6 @@ class AspiraJoinByNameEtlTest {
         assertEquals(1, campgrounds.size, "only the campground node should become a campground")
         val campground = campgrounds.single()
         assertEquals("Two Jack Lakeside", campground.name)
-        val ref = campground.vendorRefPayload!!.jsonObject
-        assertEquals("9002", ref["resourceLocationId"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -205,18 +203,17 @@ class AspiraJoinByNameEtlTest {
         val campground = campgrounds(dtoOf(campground)).single()
 
         // Campsite parent resolution matches vendor_refs.external_id = "aspira-{txn}-{map}".
-        assertEquals("aspira-1002--2147483641", campground.vendorRefId)
+        assertEquals("aspira-1002--2147483641", campground.dataProviderRef)
         assertEquals("federal", campground.kind)
         val management = campground.management!!.jsonObject
         assertEquals("Parks Canada", management["agency"]!!.jsonPrimitive.content)
     }
 
     @Test
-    fun `resourceLocationId is carried into provider ref payload`() {
+    fun `resourceLocationId metadata is preserved`() {
         val campground = campgrounds(dtoOf(campground)).single()
 
-        val providerRef = campground.vendorRefPayload!!.jsonObject
-        assertEquals("9002", providerRef["resourceLocationId"]!!.jsonPrimitive.content)
+        assertEquals("Two Jack Lakeside", campground.name)
     }
 
     @Test

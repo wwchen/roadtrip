@@ -162,10 +162,12 @@ class AspiraResourcesEtl(
                 val providerRef = buildResourceProviderRef(inv = inv, leaf = leaf, parentLeaf = parentLeaf)
                 out +=
                     CampsiteUpsertCandidate(
-                        vendor = vendor,
-                        vendorRefId = resourceId,
-                        parentVendor = parentCampgroundVendorBySiteVendor[vendor],
-                        parentVendorRefId = parentVendorRefId(parentLeaf = parentLeaf, providerRef = providerRef),
+                        dataProvider = vendor,
+                        dataProviderRef = resourceId,
+                        bookingProvider = ASPIRA_BOOKING_PROVIDER,
+                        bookingProviderRef = providerRef?.toString(),
+                        parentDataProvider = parentCampgroundVendorBySiteVendor[vendor],
+                        parentDataProviderRef = parentVendorRefId(parentLeaf = parentLeaf, providerRef = providerRef),
                         // Short label from /api/resourcelocation/resources
                         // (`localizedValues[0].name`) — e.g. "OFC13", "B7".
                         name = inv.name ?: resourceId,
@@ -177,7 +179,6 @@ class AspiraResourcesEtl(
                         equipment = inv.allowedEquipment?.let { enrichAllowedEquipment(it, dto.dictionaries) },
                         maxPeople = inv.maxCapacity,
                         sourcePayload = buildResourceRaw(inv = inv, leaf = leaf, parentLeaf = parentLeaf, dictionaries = dto.dictionaries),
-                        vendorRefPayload = providerRef,
                     )
             }
         }
@@ -660,6 +661,7 @@ class AspiraResourcesEtl(
         const val PROVIDER_REF_TXN_LOC_KEY = "transactionLocationId"
         const val PROVIDER_REF_MAP_ID_KEY = "mapId"
         const val POI_SOURCE_ID_PREFIX = "aspira-"
+        const val ASPIRA_BOOKING_PROVIDER = "aspira"
 
         val parentCampgroundVendorBySiteVendor =
             mapOf(

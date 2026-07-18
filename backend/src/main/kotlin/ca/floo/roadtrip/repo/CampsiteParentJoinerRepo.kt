@@ -11,13 +11,6 @@ import org.jooq.DSLContext
 import org.jooq.Record
 import org.jooq.impl.DSL
 
-/**
- * Persistence boundary for post-import campsite -> campground reconciliation.
- *
- * Vendor joiner adapters decide which matching strategy to invoke; this repo
- * owns the SQL over campsite/campground catalog tables and the durable
- * reparent write.
- */
 class CampsiteParentJoinerRepo(
     private val ctx: DSLContext,
 ) {
@@ -173,101 +166,71 @@ class CampsiteParentJoinerRepo(
             """
             SELECT
               c.id AS campsite_id,
-              site_ref.vendor AS vendor,
-              jsonb_extract_path_text(site_ref.payload, ?) AS transaction_location_id,
-              jsonb_extract_path_text(site_ref.payload, ?) AS map_id,
-              jsonb_extract_path_text(site_ref.payload, ?) AS vendor_ref_resource_location_id,
+              c.data_provider AS vendor,
+              jsonb_extract_path_text(c.source_payload, ?) AS transaction_location_id,
+              jsonb_extract_path_text(c.source_payload, ?) AS map_id,
+              jsonb_extract_path_text(c.source_payload, ?) AS vendor_ref_resource_location_id,
               jsonb_extract_path_text(c.source_payload, ?) AS source_parent_resource_location_id
             FROM campsites c
-            JOIN vendor_refs site_ref
-              ON site_ref.id = c.primary_vendor_ref_id
             WHERE c.deleted_at IS NULL
-              AND site_ref.deleted_at IS NULL
-              AND site_ref.entity_type = 'campsite'
-              AND c.data_source = site_ref.vendor
-              AND site_ref.vendor IN (?, ?, ?)
+              AND c.data_provider IN (?, ?, ?)
             """.trimIndent()
 
         private val aspiraCampgroundParentCandidatesSql =
             """
             SELECT
               cg.id AS campground_id,
-              campground_ref.vendor AS vendor,
-              campground_ref.external_id AS external_id,
-              jsonb_extract_path_text(campground_ref.payload, ?) AS resource_location_id
+              cg.data_provider AS vendor,
+              cg.data_provider_ref AS external_id,
+              jsonb_extract_path_text(cg.source_payload, ?) AS resource_location_id
             FROM campgrounds cg
-            JOIN vendor_refs campground_ref
-              ON campground_ref.id = cg.primary_vendor_ref_id
             WHERE cg.deleted_at IS NULL
-              AND campground_ref.deleted_at IS NULL
-              AND campground_ref.entity_type = 'campground'
-              AND cg.data_source = campground_ref.vendor
-              AND campground_ref.vendor IN (?, ?, ?)
+              AND cg.data_provider IN (?, ?, ?)
             """.trimIndent()
 
         private val reserveAmericaCampsiteParentCandidatesSql =
             """
             SELECT
               c.id AS campsite_id,
-              jsonb_extract_path_text(site_ref.payload, ?) AS vendor_ref_parent_contract_code,
+              jsonb_extract_path_text(c.source_payload, ?) AS vendor_ref_parent_contract_code,
               jsonb_extract_path_text(c.source_payload, ?) AS source_parent_contract_code,
-              jsonb_extract_path_text(site_ref.payload, ?) AS vendor_ref_parent_park_id,
+              jsonb_extract_path_text(c.source_payload, ?) AS vendor_ref_parent_park_id,
               jsonb_extract_path_text(c.source_payload, ?) AS source_parent_park_id
             FROM campsites c
-            JOIN vendor_refs site_ref
-              ON site_ref.id = c.primary_vendor_ref_id
             WHERE c.deleted_at IS NULL
-              AND site_ref.deleted_at IS NULL
-              AND site_ref.entity_type = 'campsite'
-              AND c.data_source = site_ref.vendor
-              AND site_ref.vendor LIKE ?
+              AND c.data_provider LIKE ?
             """.trimIndent()
 
         private val reserveAmericaCampgroundParentCandidatesSql =
             """
             SELECT
               cg.id AS campground_id,
-              campground_ref.external_id AS external_id,
-              jsonb_extract_path_text(campground_ref.payload, ?) AS contract_code
-            FROM vendor_refs campground_ref
-            JOIN campgrounds cg
-              ON cg.primary_vendor_ref_id = campground_ref.id
-             AND cg.data_source = campground_ref.vendor
-             AND cg.deleted_at IS NULL
-            WHERE campground_ref.vendor IN (?, ?)
-              AND campground_ref.entity_type = 'campground'
-              AND campground_ref.deleted_at IS NULL
+              cg.data_provider_ref AS external_id,
+              jsonb_extract_path_text(cg.source_payload, ?) AS contract_code
+            FROM campgrounds cg
+            WHERE cg.deleted_at IS NULL
+              AND cg.data_provider IN (?, ?)
             """.trimIndent()
 
         private val reserveCaliforniaCampsiteParentCandidatesSql =
             """
             SELECT
               c.id AS campsite_id,
-              jsonb_extract_path_text(site_ref.payload, ?) AS vendor_ref_place_id,
+              jsonb_extract_path_text(c.source_payload, ?) AS vendor_ref_place_id,
               jsonb_extract_path_text(c.source_payload, ?) AS source_parent_place_id
             FROM campsites c
-            JOIN vendor_refs site_ref
-              ON site_ref.id = c.primary_vendor_ref_id
             WHERE c.deleted_at IS NULL
-              AND site_ref.deleted_at IS NULL
-              AND site_ref.entity_type = 'campsite'
-              AND c.data_source = site_ref.vendor
-              AND site_ref.vendor = ?
+              AND c.data_provider = ?
             """.trimIndent()
 
         private val reserveCaliforniaCampgroundParentCandidatesSql =
             """
             SELECT
               cg.id AS campground_id,
-              campground_ref.external_id AS external_id
-            FROM vendor_refs campground_ref
-            JOIN campgrounds cg
-              ON cg.primary_vendor_ref_id = campground_ref.id
-             AND cg.data_source = campground_ref.vendor
-             AND cg.deleted_at IS NULL
-            WHERE campground_ref.vendor = ?
-              AND campground_ref.entity_type = 'campground'
-              AND campground_ref.deleted_at IS NULL
+              cg.data_provider_ref AS external_id
+            FROM campgrounds cg
+            WHERE cg.deleted_at IS NULL
+              AND cg.data_provider = ?
             """.trimIndent()
     }
 }

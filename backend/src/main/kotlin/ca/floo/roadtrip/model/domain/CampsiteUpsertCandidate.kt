@@ -5,10 +5,12 @@ import kotlinx.serialization.json.JsonElement
 const val DEFAULT_CAMPSITE_KIND = "site"
 
 data class CampsiteUpsertCandidate(
-    val vendor: String,
-    val vendorRefId: String,
-    val parentVendor: String?,
-    val parentVendorRefId: String?,
+    val dataProvider: String,
+    val dataProviderRef: String,
+    val bookingProvider: String? = null,
+    val bookingProviderRef: String? = null,
+    val parentDataProvider: String?,
+    val parentDataProviderRef: String?,
     val name: String,
     val kind: String = DEFAULT_CAMPSITE_KIND,
     val loopName: String? = null,
@@ -33,6 +35,4 @@ data class CampsiteUpsertCandidate(
     val maxTrailerLength: Double? = null,
     val photos: JsonElement? = null,
     val sourcePayload: JsonElement? = null,
-    val vendorRefPayload: JsonElement? = null,
-    val additionalVendorRefs: List<CatalogVendorRefUpsertCandidate> = emptyList(),
 )

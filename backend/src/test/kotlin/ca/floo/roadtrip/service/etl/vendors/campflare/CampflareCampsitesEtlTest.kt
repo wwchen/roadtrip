@@ -21,10 +21,10 @@ class CampflareCampsitesEtlTest {
         val out = etl.transform(etl.parse(bundle(campsitePayload())), transformCtx())
         val row = out.campsites.single()
 
-        assertEquals("campflare", row.vendor)
-        assertEquals("upper-pines-site-001", row.vendorRefId)
-        assertEquals("campflare", row.parentVendor)
-        assertEquals("upper-pines-campground-447", row.parentVendorRefId)
+        assertEquals("campflare", row.dataProvider)
+        assertEquals("upper-pines-site-001", row.dataProviderRef)
+        assertEquals("campflare", row.parentDataProvider)
+        assertEquals("upper-pines-campground-447", row.parentDataProviderRef)
         assertEquals("Site 001", row.name)
         assertEquals("tent-only", row.kind)
         assertEquals("A", row.loopName)
@@ -37,29 +37,16 @@ class CampflareCampsitesEtlTest {
                 .jsonObject["name"]!!
                 .jsonPrimitive
                 .content
-        val parentCampgroundId =
-            row.vendorRefPayload!!
-                .jsonObject["campground_id"]!!
-                .jsonPrimitive
-                .content
         val sourceName =
             row.sourcePayload!!
                 .jsonObject["name"]!!
                 .jsonPrimitive
                 .content
-        val recgovRef = row.additionalVendorRefs.single()
         assertEquals("Tent", equipmentName)
         assertEquals(6, row.maxPeople)
-        assertEquals("upper-pines-campground-447", parentCampgroundId)
         assertEquals("Site 001", sourceName)
-        assertEquals("recgov", recgovRef.vendor)
-        assertEquals("001", recgovRef.vendorRefId)
-        assertEquals(
-            "001",
-            recgovRef.payload!!
-                .jsonObject["recgov_id"]!!
-                .jsonPrimitive.content,
-        )
+        assertEquals("recgov", row.bookingProvider)
+        assertEquals("001", row.bookingProviderRef)
     }
 
     @Test
@@ -82,8 +69,8 @@ class CampflareCampsitesEtlTest {
                 transformCtx(),
             )
 
-        assertEquals(listOf("missing-kind", "ok"), out.campsites.map { it.vendorRefId })
-        assertEquals("site", out.campsites.single { it.vendorRefId == "missing-kind" }.kind)
+        assertEquals(listOf("missing-kind", "ok"), out.campsites.map { it.dataProviderRef })
+        assertEquals("site", out.campsites.single { it.dataProviderRef == "missing-kind" }.kind)
     }
 
     @Test
@@ -118,8 +105,8 @@ class CampflareCampsitesEtlTest {
                 transformCtx(),
             )
 
-        assertEquals(-91.853611, out.campsites.single { it.vendorRefId == "scaled-lon" }.longitude)
-        assertEquals(31.957925, out.campsites.single { it.vendorRefId == "scaled-lat" }.latitude)
+        assertEquals(-91.853611, out.campsites.single { it.dataProviderRef == "scaled-lon" }.longitude)
+        assertEquals(31.957925, out.campsites.single { it.dataProviderRef == "scaled-lat" }.latitude)
     }
 
     private fun bundle(payloadJson: String): InputBundle =

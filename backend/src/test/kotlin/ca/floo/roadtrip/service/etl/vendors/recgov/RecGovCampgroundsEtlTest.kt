@@ -34,28 +34,29 @@ class RecGovCampgroundsEtlTest {
     @Test
     fun `transform treats nonreservable RIDB facilities as agency info pages, not RecGov booking targets`() {
         val etl = RecGovCampgroundsEtl("federal-campgrounds")
-        val campgrounds = etl.transform(etl.parse(bundle()), transformCtx).campgrounds.associateBy { it.vendorRefId }
+        val campgrounds = etl.transform(etl.parse(bundle()), transformCtx).campgrounds.associateBy { it.dataProviderRef }
 
         val reservable = campgrounds.getValue("recgov-232447")
-        assertEquals("recgov", reservable.vendor)
+        assertEquals("recgov", reservable.dataProvider)
         assertEquals("https://www.recreation.gov/camping/campgrounds/232447", reservable.reservationUrl)
-        val reservableRef = reservable.vendorRefPayload!!.jsonObject
-        assertEquals("232447", reservableRef["recgov_id"]!!.jsonPrimitive.content)
 
         val reservableWithoutUpstreamUrl = campgrounds.getValue("recgov-10083567")
         assertEquals("https://www.recreation.gov/camping/campgrounds/10083567", reservableWithoutUpstreamUrl.reservationUrl)
-        val defaultedReservableRef = reservableWithoutUpstreamUrl.vendorRefPayload!!.jsonObject
-        assertEquals("10083567", defaultedReservableRef["recgov_id"]!!.jsonPrimitive.content)
 
         val nonReservable = campgrounds.getValue("recgov-248965")
-        assertNull(nonReservable.vendorRefPayload)
         assertEquals("https://www.fs.usda.gov/recarea/lassen/recarea/?recid=11276", nonReservable.reservationUrl)
     }
 
     @Test
     fun `transform promotes RIDB description media activities and recgov rating cell enrichment`() {
         val etl = RecGovCampgroundsEtl("federal-campgrounds")
-        val campgrounds = etl.transform(etl.parse(bundle(withEnrichment = true)), transformCtx).campgrounds.associateBy { it.vendorRefId }
+        val campgrounds =
+            etl
+                .transform(
+                    etl.parse(bundle(withEnrichment = true)),
+                    transformCtx,
+                ).campgrounds
+                .associateBy { it.dataProviderRef }
 
         val upperPines = campgrounds.getValue("recgov-232447")
 
@@ -125,7 +126,7 @@ class RecGovCampgroundsEtlTest {
 
         val campgrounds = etl.transform(etl.parse(bundle()), ctx).campgrounds
 
-        assertNull(campgrounds.first { it.vendorRefId == "recgov-232447" }.management)
+        assertNull(campgrounds.first { it.dataProviderRef == "recgov-232447" }.management)
     }
 
     private fun bundle(withEnrichment: Boolean = false): InputBundle =

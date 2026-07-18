@@ -6,9 +6,6 @@ import java.io.File
 
 // Read-only context handed to ETL transformers. Today: the raw-capture
 // directory plus per-terminal-etl metadata sourced from the YAML.
-//
-// Reservation provider info is no longer here — ETLs persist provider-ready
-// JSON in vendor_refs payloads using values from upstream rows and args.
 class TransformCtx private constructor(
     private val subcategoryByEtlSlug: Map<String, String?>,
     private val agencyByEtlSlug: Map<String, AgencyConfig?>,

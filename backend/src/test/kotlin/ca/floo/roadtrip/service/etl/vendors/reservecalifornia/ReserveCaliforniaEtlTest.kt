@@ -20,8 +20,8 @@ class ReserveCaliforniaEtlTest {
                 .campgrounds
                 .single()
 
-        assertEquals("california-state-parks", campground.vendor)
-        assertEquals("rc-690", campground.vendorRefId)
+        assertEquals("california-state-parks", campground.dataProvider)
+        assertEquals("rc-690", campground.dataProviderRef)
         assertEquals("Emerald Bay SP", campground.name)
         assertEquals("state", campground.kind)
         assertEquals("https://reservecalifornia.com/park/690", campground.reservationUrl)
@@ -42,10 +42,6 @@ class ReserveCaliforniaEtlTest {
         assertEquals("California State Parks", management["agency"]!!.jsonPrimitive.content)
         val amenities = campground.amenities!!.jsonObject
         assertEquals("true", amenities["Restrooms"]!!.jsonPrimitive.content)
-        val providerRef = campground.vendorRefPayload!!.jsonObject
-        assertEquals("690", providerRef["place_id"]!!.jsonPrimitive.content)
-        assertEquals("611", providerRef["facility_ids"]!!.jsonArray[0].jsonPrimitive.content)
-        assertEquals("612", providerRef["facility_ids"]!!.jsonArray[1].jsonPrimitive.content)
     }
 
     @Test
@@ -56,19 +52,15 @@ class ReserveCaliforniaEtlTest {
                 .campsites
 
         val campsite = campsites.single()
-        assertEquals("reservecalifornia", campsite.vendor)
-        assertEquals("9001", campsite.vendorRefId)
-        assertEquals("california-state-parks", campsite.parentVendor)
-        assertEquals("rc-690", campsite.parentVendorRefId)
+        assertEquals("reservecalifornia", campsite.dataProvider)
+        assertEquals("9001", campsite.dataProviderRef)
+        assertEquals("california-state-parks", campsite.parentDataProvider)
+        assertEquals("rc-690", campsite.parentDataProviderRef)
         assertEquals("PINE 001", campsite.name)
         assertEquals("Tent Site", campsite.kind)
         assertEquals("Tent Site", campsite.kindListed)
         assertEquals("Pine Loop", campsite.loopName)
 
-        val providerRef = campsite.vendorRefPayload!!.jsonObject
-        assertEquals("9001", providerRef["unit_id"]!!.jsonPrimitive.content)
-        assertEquals("611", providerRef["facility_id"]!!.jsonPrimitive.content)
-        assertEquals("690", providerRef["_parent_place_id"]!!.jsonPrimitive.content)
         val sourcePayload = campsite.sourcePayload!!.jsonObject
         assertEquals("690", sourcePayload["_parent_place_id"]!!.jsonPrimitive.content)
     }

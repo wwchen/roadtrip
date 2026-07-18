@@ -70,10 +70,12 @@ class RecGovCampsitesEtl(
                 val campsiteType = raw.stringField("campsite_type")
                 campsites +=
                     CampsiteUpsertCandidate(
-                        vendor = VENDOR,
-                        vendorRefId = campsiteId,
-                        parentVendor = PARENT_CAMPGROUND_VENDOR,
-                        parentVendorRefId = "$PARENT_CAMPGROUND_REF_PREFIX$facilityId",
+                        dataProvider = VENDOR,
+                        dataProviderRef = campsiteId,
+                        bookingProvider = VENDOR,
+                        bookingProviderRef = campsiteId,
+                        parentDataProvider = PARENT_CAMPGROUND_VENDOR,
+                        parentDataProviderRef = "$PARENT_CAMPGROUND_REF_PREFIX$facilityId",
                         name = siteName,
                         loopName = raw.stringField("loop"),
                         kind = campsiteType ?: DEFAULT_CAMPSITE_KIND,
@@ -88,11 +90,6 @@ class RecGovCampsitesEtl(
                                     "_roadtrip_tags" to tags,
                                 ),
                             ),
-                        vendorRefPayload =
-                            buildJsonObject {
-                                put("recgov_id", campsiteId)
-                                put("_parent_facility_id", facilityId)
-                            },
                     )
             }
         }

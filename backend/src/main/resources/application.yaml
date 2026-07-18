@@ -35,7 +35,7 @@ roadtrip:
     resource: poi-registry.yaml
     path:
   read-path:
-    enabled-data-sources:
+    enabled-data-providers:
       - campflare
 #      - recgov
 #      - federal-campgrounds

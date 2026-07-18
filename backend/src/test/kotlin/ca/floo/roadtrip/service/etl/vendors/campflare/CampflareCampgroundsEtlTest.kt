@@ -22,8 +22,8 @@ class CampflareCampgroundsEtlTest {
         val out = etl.transform(etl.parse(bundle("campflare-campgrounds", campgroundPayload())), transformCtx())
         val row = out.campgrounds.single()
 
-        assertEquals("campflare", row.vendor)
-        assertEquals("upper-pines-campground-447", row.vendorRefId)
+        assertEquals("campflare", row.dataProvider)
+        assertEquals("upper-pines-campground-447", row.dataProviderRef)
         assertEquals("Upper Pines", row.name)
         assertEquals("open", row.status)
         assertNull(row.statusDescription)
@@ -50,35 +50,21 @@ class CampflareCampgroundsEtlTest {
                 .jsonObject["name"]!!
                 .jsonPrimitive
                 .content
-        val campflareId =
-            row.vendorRefPayload!!
-                .jsonObject["campflare_id"]!!
-                .jsonPrimitive
-                .content
         val campflareLink =
             row.links!!
                 .jsonArray
                 .last()
                 .jsonObject
-        val recgovRef = row.additionalVendorRefs.single()
         assertEquals("232447", ridbFacilityId)
         assertEquals(true, hasToilets)
         assertEquals(" Upper Pines ", sourceName)
-        assertEquals("upper-pines-campground-447", campflareId)
         assertEquals("Campflare source", campflareLink["title"]!!.jsonPrimitive.content)
         assertEquals(
             "https://campflare.com/campground/upper-pines-campground-447",
             campflareLink["url"]!!.jsonPrimitive.content,
         )
-        assertEquals("recgov", recgovRef.vendor)
-        assertEquals("recgov-232447", recgovRef.vendorRefId)
-        assertEquals(
-            "232447",
-            recgovRef.payload!!
-                .jsonObject["recgov_id"]!!
-                .jsonPrimitive
-                .content,
-        )
+        assertEquals("recgov", row.bookingProvider)
+        assertEquals("recgov-232447", row.bookingProviderRef)
     }
 
     @Test
@@ -101,7 +87,7 @@ class CampflareCampgroundsEtlTest {
                 transformCtx(),
             )
 
-        assertEquals(listOf("ok"), out.campgrounds.map { it.vendorRefId })
+        assertEquals(listOf("ok"), out.campgrounds.map { it.dataProviderRef })
     }
 
     @Test

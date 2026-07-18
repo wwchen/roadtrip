@@ -20,8 +20,8 @@ class BcParksStrapiEtlTest {
         val etl = BcParksStrapiEtl()
         val campground = etl.transform(etl.parse(bundle()), transformCtx()).campgrounds.single()
 
-        assertEquals("bcparks-strapi", campground.vendor)
-        assertEquals("orcs-6648", campground.vendorRefId)
+        assertEquals("bcparks-strapi", campground.dataProvider)
+        assertEquals("orcs-6648", campground.dataProviderRef)
         assertEquals("<p>Camp beside Adams Lake.</p>", campground.mediumDescription)
         assertEquals(
             "https://example.test/featured.jpg",

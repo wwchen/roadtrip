@@ -180,7 +180,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 scopeResolver = WatchScopeResolver(campsitesRepo),
                 watchRepo = AvailabilityWatchRepo(ctx),
                 targets = targets,
-                poiRepo = PoiServingRepo(ctx),
+                poiRepo = PoiServingRepo(ctx, enabledDataProviders = emptySet()),
                 availabilityRepo = AvailabilityRepo(ctx),
                 triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, appRootUrl = null))),
                 grafanaRootUrl = null,

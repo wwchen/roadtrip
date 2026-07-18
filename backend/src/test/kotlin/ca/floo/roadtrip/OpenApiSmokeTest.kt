@@ -138,7 +138,7 @@ class OpenApiSmokeTest {
 
     private fun testPoiService(ctx: DSLContext): PoiService =
         PoiService(
-            poiRepo = PoiServingRepo(ctx),
+            poiRepo = PoiServingRepo(ctx, enabledDataProviders = emptySet()),
             detailServices =
                 listOf(
                     CampgroundService(CampgroundRepo(ctx)),

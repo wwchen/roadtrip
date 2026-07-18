@@ -157,14 +157,14 @@ class AppConfigTest {
         val config =
             appConfig(
                 mapOf(
-                    "roadtrip.read-path.enabled-data-sources" to " recgov, campflare ,tesla_supercharger ",
+                    "roadtrip.read-path.enabled-data-providers" to " recgov, campflare ,tesla_supercharger ",
                     "roadtrip.read-path.enabled-availability-providers" to " RECGOV, campflare ",
                 ),
             )
 
         assertEquals(
             setOf("recgov", "campflare", "tesla_supercharger"),
-            config.readPathProviders.enabledDataSources,
+            config.readPathProviders.enabledDataProviders,
         )
         assertEquals(setOf("recgov", "campflare"), config.readPathProviders.enabledAvailabilityProviders)
     }
@@ -205,14 +205,14 @@ class AppConfigTest {
         val config =
             appConfig(
                 mapOf(
-                    "roadtrip.read-path.enabled-data-sources" to "",
+                    "roadtrip.read-path.enabled-data-providers" to "",
                     "roadtrip.read-path.enabled-availability-providers" to "",
                 ),
             ).readPathProviders
 
-        assertEquals(emptySet(), config.enabledDataSources)
+        assertEquals(emptySet(), config.enabledDataProviders)
         assertEquals(emptySet(), config.enabledAvailabilityProviders)
-        assertEquals(false, config.isDataSourceEnabled("recgov"))
+        assertEquals(false, config.isDataProviderEnabled("recgov"))
         assertEquals(false, config.isAvailabilityProviderEnabled("recgov"))
     }
 

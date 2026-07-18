@@ -7,8 +7,6 @@ import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 
 class CampflareCampgroundsEtl : SourceEtl<List<JsonObject>, CampgroundEtlOutput> {
     override val etlSlug = CAMPGROUNDS_ETL_SLUG
@@ -33,9 +31,12 @@ class CampflareCampgroundsEtl : SourceEtl<List<JsonObject>, CampgroundEtlOutput>
         val latitude = normalizedLatitude(location.doubleField("latitude")) ?: return null
         val longitude = normalizedLongitude(location.doubleField("longitude")) ?: return null
         val sourceUrl = campflareCampgroundSourceUrl(id)
+        val recgovRef = recgovCampgroundVendorRef(raw, id)
         return CampgroundUpsertCandidate(
-            vendor = CAMPFLARE_VENDOR,
-            vendorRefId = id,
+            dataProvider = CAMPFLARE_VENDOR,
+            dataProviderRef = id,
+            bookingProvider = recgovRef?.vendor,
+            bookingProviderRef = recgovRef?.vendorRefId,
             name = name,
             latitude = latitude,
             longitude = longitude,
@@ -60,12 +61,6 @@ class CampflareCampgroundsEtl : SourceEtl<List<JsonObject>, CampgroundEtlOutput>
             metadata = raw.objectField("metadata"),
             sourceUrl = sourceUrl,
             sourcePayload = raw,
-            vendorRefPayload =
-                buildJsonObject {
-                    put("campflare_id", id)
-                    raw.objectField("connections")?.let { put("connections", it) }
-                },
-            additionalVendorRefs = listOfNotNull(recgovCampgroundVendorRef(raw, id)),
         )
     }
 }

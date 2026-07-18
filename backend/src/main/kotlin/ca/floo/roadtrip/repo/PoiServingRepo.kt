@@ -7,16 +7,13 @@ import ca.floo.roadtrip.model.domain.poi.PoiRow
 import ca.floo.roadtrip.model.domain.poi.PoiSearchHit
 import org.jooq.DSLContext
 
-// Spatial sampling grid. 10x10 = 100 cells. row_number() PARTITION BY cell
-// + ORDER BY rn round-robins across cells so pins are spread across viewport.
 private const val SAMPLE_GRID_DIM: Int = 10
 
-// Even when one category dominates the viewport, every present category gets
-// at least this many slots so sparse layers do not disappear.
 private const val MIN_PER_CATEGORY_ALLOCATION: Int = 50
 
 internal class PoiServingRepo(
     private val ctx: DSLContext,
+    private val enabledDataProviders: Set<String>,
 ) {
     fun fetchPois(
         bbox: Bbox,
@@ -79,22 +76,12 @@ internal class PoiServingRepo(
                   p.poi_type AS category,
                   cg.kind AS subcategory,
                   cg.management->>'agency' AS agency,
-                  COALESCE(gvr.vendor, p.poi_type) AS source,
-                  COALESCE(gvr.external_id, ts.location_slug, pf.location_id, p.id::text) AS source_id,
-                  COALESCE(gvr.payload, '{}'::jsonb) AS provider_ref
+                  COALESCE(cg.data_provider, p.poi_type) AS source,
+                  COALESCE(cg.data_provider_ref, ts.location_slug, pf.location_id, p.id::text) AS source_id,
+                  COALESCE(cg.source_payload, '{}'::jsonb) AS provider_ref
                 FROM pois p
                 LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
-                LEFT JOIN campground_canonical cg ON cg.id = pc.campground_id
-                LEFT JOIN LATERAL (
-                  SELECT vr.vendor, vr.external_id, vr.payload
-                  FROM campground_vendor_refs cvr
-                  JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
-                  WHERE cvr.campground_id = cg.id
-                    AND vr.entity_type = 'campground'
-                    AND vr.deleted_at IS NULL
-                  ORDER BY cvr.vendor_ref_id ASC
-                  LIMIT 1
-                ) gvr ON TRUE
+                LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL
                 LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
                 LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id AND ts.deleted_at IS NULL
                 LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
@@ -160,7 +147,7 @@ internal class PoiServingRepo(
                 SELECT COALESCE(cg.name, ts.common_site_name, pf.name) AS name
                 FROM pois p
                 LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
-                LEFT JOIN campground_canonical cg ON cg.id = pc.campground_id
+                LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL
                 LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
                 LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id
                 LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
@@ -209,7 +196,7 @@ internal class PoiServingRepo(
                            COALESCE(cg.location->>'region', ts.region, pf.region) AS region
                     FROM pois p
                     LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
-                    LEFT JOIN campground_canonical cg ON cg.id = pc.campground_id
+                    LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL
                     LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
                     LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id
                     LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
@@ -240,14 +227,21 @@ internal class PoiServingRepo(
     ): Map<String, Int> {
         if (cats.isEmpty()) return emptyMap()
         val placeholders = cats.joinToString(",") { "?" }
+        val providerPlaceholders = enabledDataProviders.joinToString(",") { "?" }
         val sql =
             """
-            SELECT poi_type AS category, COUNT(*) AS n
-            FROM pois
-            WHERE deleted_at IS NULL
-              AND poi_type IN ($placeholders)
-              AND geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
-            GROUP BY poi_type
+            SELECT p.poi_type AS category, COUNT(*) AS n
+            FROM pois p
+            LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
+            LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL
+            WHERE p.deleted_at IS NULL
+              AND p.poi_type IN ($placeholders)
+              AND p.geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
+              AND (
+                p.poi_type <> 'campground'
+                OR cg.data_provider IN ($providerPlaceholders)
+              )
+            GROUP BY p.poi_type
             """.trimIndent()
         val args = mutableListOf<Any>()
         args.addAll(cats)
@@ -255,6 +249,7 @@ internal class PoiServingRepo(
         args.add(bbox.south)
         args.add(bbox.east)
         args.add(bbox.north)
+        args.addAll(enabledDataProviders)
         val out = mutableMapOf<String, Int>()
         for (r in ctx.fetch(sql, *args.toTypedArray())) {
             out[r.get("category") as String] = (r.get("n") as Number).toInt()
@@ -262,12 +257,6 @@ internal class PoiServingRepo(
         return out
     }
 
-    /**
-     * Distribute a global cap across categories with viewport presence:
-     *
-     *   - Sparse layers get `MIN_PER_CATEGORY_ALLOCATION` (or full count if less).
-     *   - Remaining budget splits proportional to remaining category count.
-     */
     private fun allocateBudget(
         presentCounts: Map<String, Int>,
         cap: Int,
@@ -295,6 +284,7 @@ internal class PoiServingRepo(
 
         val dx = (bbox.east - bbox.west) / SAMPLE_GRID_DIM
         val dy = (bbox.north - bbox.south) / SAMPLE_GRID_DIM
+        val providerPlaceholders = enabledDataProviders.joinToString(",") { "?" }
         val sql =
             buildString {
                 cats.forEachIndexed { idx, _ ->
@@ -316,10 +306,14 @@ internal class PoiServingRepo(
                                ) AS rn
                         FROM pois p
                         LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
-                        LEFT JOIN campground_canonical cg ON cg.id = pc.campground_id
+                        LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL
                         WHERE p.deleted_at IS NULL
                           AND p.poi_type = ?
                           AND p.geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
+                          AND (
+                            ? <> 'campground'
+                            OR cg.data_provider IN ($providerPlaceholders)
+                          )
                         """.trimIndent(),
                     )
                     append("\n) sub ORDER BY rn ASC, id ASC LIMIT ?)")
@@ -337,6 +331,8 @@ internal class PoiServingRepo(
             args.add(bbox.south)
             args.add(bbox.east)
             args.add(bbox.north)
+            args.add(cat)
+            args.addAll(enabledDataProviders)
             args.add(allocation.getValue(cat).coerceAtLeast(1))
         }
 

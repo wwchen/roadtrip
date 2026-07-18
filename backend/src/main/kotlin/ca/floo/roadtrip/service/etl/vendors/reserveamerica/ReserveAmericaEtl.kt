@@ -71,8 +71,10 @@ class ReserveAmericaEtl(
                     val vendorRefId = "${settings.sourceIdPrefix}-${park.parkId}"
                     val parkExtras = parkExtras(park, name, settings.contract)
                     CampgroundUpsertCandidate(
-                        vendor = etlSlug,
-                        vendorRefId = vendorRefId,
+                        dataProvider = etlSlug,
+                        dataProviderRef = vendorRefId,
+                        bookingProvider = if (settings.provider.lowercase() == "reserveamerica") "reserveamerica" else null,
+                        bookingProviderRef = if (settings.provider.lowercase() == "reserveamerica") vendorRefId else null,
                         name = name,
                         latitude = park.lat,
                         longitude = park.lon,
@@ -86,7 +88,6 @@ class ReserveAmericaEtl(
                         metadata = parkExtras,
                         sourceUrl = park.infoUrl,
                         sourcePayload = parkExtras,
-                        vendorRefPayload = providerRefPayload(settings, park),
                     )
                 },
         )
@@ -194,20 +195,6 @@ class ReserveAmericaEtl(
         }
     }
 
-    private fun providerRefPayload(
-        settings: ReserveAmericaSettings,
-        park: ParsedPark,
-    ): JsonObject? =
-        when (settings.provider.lowercase()) {
-            "reserveamerica" ->
-                buildJsonObject {
-                    put(RESERVE_AMERICA_CONTRACT_CODE_KEY, settings.contract)
-                    put(RESERVE_AMERICA_PARK_ID_KEY, park.parkId.toString())
-                }
-            "none", "" -> null
-            else -> error("$etlSlug: unsupported ReserveAmerica provider='${settings.provider}'")
-        }
-
     private fun locationPayload(
         park: ParsedPark,
         settings: ReserveAmericaSettings,
@@ -250,8 +237,6 @@ class ReserveAmericaEtl(
         private val ogImageRegex = Regex("""og:image"\s+content='([^']+)'""")
         private val ogUrlRegex = Regex("""og:url"\s+content='([^']+)'""")
         private val telephoneRegex = Regex("""itemprop="telephone"[^>]*>([^<]+)""")
-        private const val RESERVE_AMERICA_CONTRACT_CODE_KEY = "contract_code"
-        private const val RESERVE_AMERICA_PARK_ID_KEY = "park_id"
     }
 }
 

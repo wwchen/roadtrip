@@ -56,7 +56,6 @@ import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.poi.TeslaSuperchargerService
 import ca.floo.roadtrip.service.poi.defaultPoiTypes
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
-import ca.floo.roadtrip.service.readpath.ReadPathProviderPoiReader
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import ca.floo.roadtrip.service.scheduler.PollerBackfill
@@ -97,7 +96,7 @@ val serviceModule =
 
         single {
             val config: AppConfig = get()
-            validateReadPathDataSources(config.readPathProviders, get())
+            validateReadPathDataProviders(config.readPathProviders, get())
             AvailabilityProviderRegistry.fromPoiRegistry(
                 registry = get(),
                 clients = get(),
@@ -253,18 +252,19 @@ val serviceModule =
         }
         single { RouteCorridorService(get<RouteCorridorRepo>()) }
         single {
+            val config: AppConfig = get()
+            PoiServingRepo(
+                ctx = get<DSLContext>(),
+                enabledDataProviders = config.readPathProviders.enabledDataProviders,
+            )
+        }
+        single {
             PoiService(
                 poiRepo = get<PoiServingRepo>(),
                 detailServices = get(named("poiDetailServices")),
             )
         }
-        single<PoiReader> {
-            ReadPathProviderPoiReader(
-                delegate = get<PoiService>(),
-                detailServices = get(named("poiDetailServices")),
-                providers = get<AppConfig>().readPathProviders,
-            )
-        }
+        single<PoiReader> { get<PoiService>() }
         single {
             PoisOnRouteService(
                 routeCache = get<RouteCache>(),
@@ -304,19 +304,19 @@ internal fun notificationTriggerKinds(emailConfigured: Boolean): List<String> =
         }
     }
 
-internal fun validateReadPathDataSources(
+internal fun validateReadPathDataProviders(
     providers: ReadPathProviderConfig,
     registry: PoiRegistry,
 ) {
-    val supported = supportedReadPathDataSources(registry)
-    val unknown = providers.enabledDataSources - supported
+    val supported = supportedReadPathDataProviders(registry)
+    val unknown = providers.enabledDataProviders - supported
     require(unknown.isEmpty()) {
-        "roadtrip.read-path.enabled-data-sources contains unknown source(s): " +
+        "roadtrip.read-path.enabled-data-providers contains unknown provider(s): " +
             "${unknown.sorted()}. Expected one of: ${supported.sorted()}."
     }
 }
 
-private fun supportedReadPathDataSources(registry: PoiRegistry): Set<String> =
+private fun supportedReadPathDataProviders(registry: PoiRegistry): Set<String> =
     registry.poiData
         .mapNotNull { row -> row.etls.lastOrNull()?.slug }
         .toSet() +

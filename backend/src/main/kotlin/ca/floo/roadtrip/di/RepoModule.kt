@@ -11,9 +11,7 @@ import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
-import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
-import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import org.koin.dsl.module
@@ -28,12 +26,10 @@ val repoModule =
         single { AvailabilityRunRepo(get()) }
         single { AvailabilityFetchCallRepo(get()) }
         single { AvailabilityWatchTargetRepo(get()) }
-        single { PoiServingRepo(get()) }
         single { ApiCacheRepo(get()) }
         single { CampgroundRepo(get()) }
         single { TeslaSuperchargerRepo(get()) }
         single { PlanetFitnessLocationRepo(get()) }
         single { RouteCorridorRepo(get()) }
-        single { CanonicalViewRepo(get()) }
         single { AdminIngestReadRepo(get()) }
     }
