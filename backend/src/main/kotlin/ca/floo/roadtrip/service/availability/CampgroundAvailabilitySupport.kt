@@ -5,7 +5,7 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegist
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
 
 internal class CampgroundAvailabilitySupport(
-    private val providerRefs: CampsiteProviderRepo,
+    private val campsiteProviderRepo: CampsiteProviderRepo,
     private val availabilityProviders: AvailabilityProviderRegistry,
 ) {
     /**
@@ -14,7 +14,7 @@ internal class CampgroundAvailabilitySupport(
      * ordering as [CampsiteProviderRepo.findCampgroundProviderRefCandidates].
      */
     fun preferredAvailabilityProvider(campgroundId: Long): String? =
-        providerRefs
+        campsiteProviderRepo
             .findCampgroundProviderRefCandidates(campgroundId)
             .firstNotNullOfOrNull { candidate ->
                 val ref = ProviderRefParser.parse(candidate.providerRefJson) ?: return@firstNotNullOfOrNull null

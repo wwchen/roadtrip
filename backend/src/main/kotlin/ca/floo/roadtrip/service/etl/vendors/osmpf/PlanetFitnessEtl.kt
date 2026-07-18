@@ -41,7 +41,7 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, PlanetFitnessLocationEtl
                 PlanetFitnessRawDto.serializer(),
                 envelope.payload,
             )
-        return payload.copy(_fetchedAt = parseFetchedAt(envelope))
+        return payload.copy(fetchedAt = parseFetchedAt(envelope))
     }
 
     override fun validate(dto: PlanetFitnessRawDto): ValidationResult<PlanetFitnessRawDto> {

@@ -36,6 +36,16 @@ class AvailabilityRepo(
         val observedAt: OffsetDateTime,
     )
 
+    private val statusRunSelect =
+        """
+        SELECT a.campsite_id, a.run_id, a.target_date, a.status,
+               COALESCE(r.completed_at, a.last_observed_at) AS fetched_at,
+               lag(a.status) OVER w AS from_status
+        FROM availability a
+        LEFT JOIN availability_run r ON r.id = a.run_id
+        WINDOW w AS (PARTITION BY a.campsite_id, a.target_date ORDER BY a.last_observed_at, a.id)
+        """.trimIndent()
+
     /**
      * Bump-or-insert each observation; returns one [CellTransition] per status
      * change (new row inserted). Unchanged cells bump `last_observed_at` in place
@@ -223,16 +233,6 @@ class AvailabilityRepo(
         val toStatus: AvailabilityStatus,
         val fetchedAt: OffsetDateTime,
     )
-
-    private val statusRunSelect =
-        """
-        SELECT a.campsite_id, a.run_id, a.target_date, a.status,
-               COALESCE(r.completed_at, a.last_observed_at) AS fetched_at,
-               lag(a.status) OVER w AS from_status
-        FROM availability a
-        LEFT JOIN availability_run r ON r.id = a.run_id
-        WINDOW w AS (PARTITION BY a.campsite_id, a.target_date ORDER BY a.last_observed_at, a.id)
-        """.trimIndent()
 
     private fun mapStatusRun(r: org.jooq.Record): StatusRun {
         val toStatus = AvailabilityStatus.parse(r.get("status", String::class.java))

@@ -28,6 +28,7 @@ import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
+import ca.floo.roadtrip.service.availability.AvailabilityRunService
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
@@ -45,6 +46,7 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
+import ca.floo.roadtrip.service.availability.resolveCadenceSec
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
 import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
@@ -82,6 +84,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             LocalDate.now(ZoneOffset.UTC).atTime(12, 0).toInstant(ZoneOffset.UTC),
             ZoneId.of("UTC"),
         )
+
+    // A window well in the future so both watches are fully live under the
+    // target-local clamp; provider bookingHorizonDays is set high enough to cover it.
+    private val farStart = LocalDate.now(ZoneOffset.UTC).plusYears(1)
 
     @BeforeEach
     fun cleanup() {
@@ -188,10 +194,11 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         val registry = AvailabilityProviderRegistry(mapOf("test" to provider))
         val targets =
             DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
+                campsiteProviderRepo = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
+                pollerRepo = AvailabilityPollerRepo(ctx),
             )
         return AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets)
     }
@@ -203,10 +210,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         watchId: Long,
     ): AvailabilityPollerRepo.Poller {
         val watch = AvailabilityWatchRepo(ctx).findById(watchId)!!
-        val pollers = AvailabilityPollerRepo(ctx)
-        membershipFor(provider).sync(watch, pollers, tighterCadencePull = now())
-        val pollerId = pollers.pollerIdsForWatch(watchId).single()
-        return pollers.findById(pollerId)!!
+        val pollerRepo = AvailabilityPollerRepo(ctx)
+        membershipFor(provider).sync(watch, pollerRepo, tighterCadencePull = now())
+        val pollerId = pollerRepo.pollerIdsForWatch(watchId).single()
+        return pollerRepo.findById(pollerId)!!
     }
 
     /** A limiter double that always grants or always denies, recording every
@@ -321,10 +328,11 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
     private fun targetsFor(provider: AvailabilityProvider): DbAvailabilityTargetResolver =
         DbAvailabilityTargetResolver(
-            providerRefs = CampsiteProviderRepo(ctx),
+            campsiteProviderRepo = CampsiteProviderRepo(ctx),
             campsitesRepo = CampsiteRepo(ctx),
             availabilityProviders = AvailabilityProviderRegistry(mapOf("test" to provider)),
             dateResolver = AvailabilityDateResolver(),
+            pollerRepo = AvailabilityPollerRepo(ctx),
         )
 
     /** Dispatcher with Slack disabled — a null-config service that no-ops and
@@ -334,16 +342,17 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         return WatchAlertDispatcher(
             notifications = notifications,
             scopeResolver = WatchScopeResolver(CampsiteRepo(ctx)),
-            watches = AvailabilityWatchRepo(ctx),
+            watchRepo = AvailabilityWatchRepo(ctx),
             targets =
                 DbAvailabilityTargetResolver(
-                    providerRefs = CampsiteProviderRepo(ctx),
+                    campsiteProviderRepo = CampsiteProviderRepo(ctx),
                     campsitesRepo = CampsiteRepo(ctx),
                     availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
                     dateResolver = AvailabilityDateResolver(),
+                    pollerRepo = AvailabilityPollerRepo(ctx),
                 ),
-            pois = PoiServingRepo(ctx),
-            availability = AvailabilityRepo(ctx),
+            poiRepo = PoiServingRepo(ctx),
+            availabilityRepo = AvailabilityRepo(ctx),
             triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, APP_ROOT_URL))),
             grafanaRootUrl = GRAFANA_ROOT_URL,
             appRootUrl = APP_ROOT_URL,
@@ -360,10 +369,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         WatchAlertDispatcher(
             notifications = notifications,
             scopeResolver = WatchScopeResolver(CampsiteRepo(ctx)),
-            watches = AvailabilityWatchRepo(ctx),
+            watchRepo = AvailabilityWatchRepo(ctx),
             targets = targetsFor(provider),
-            pois = PoiServingRepo(ctx),
-            availability = AvailabilityRepo(ctx),
+            poiRepo = PoiServingRepo(ctx),
+            availabilityRepo = AvailabilityRepo(ctx),
             triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, appRootUrl)) + extraTriggerHandlers),
             grafanaRootUrl = grafanaRootUrl,
             appRootUrl = appRootUrl,
@@ -381,24 +390,26 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         val dateResolver = AvailabilityDateResolver(clock = testClock)
         val targets =
             DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
+                campsiteProviderRepo = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
                 dateResolver = dateResolver,
+                pollerRepo = AvailabilityPollerRepo(ctx),
+            )
+        val runService =
+            AvailabilityRunService(
+                runRepo = AvailabilityRunRepo(ctx),
+                availabilityRepo = AvailabilityRepo(ctx),
+                fetchCallRepo = AvailabilityFetchCallRepo(ctx),
+                clock = testClock,
             )
         return AvailabilityPollExecutor(
-            pollers = AvailabilityPollerRepo(ctx),
-            campsitesRepo = campsitesRepo,
+            targetResolver = targets,
             batcher = CatalogAvailabilityBatcher(),
-            availability = AvailabilityRepo(ctx),
-            runs = AvailabilityRunRepo(ctx),
-            dateResolver = dateResolver,
-            targets = targets,
-            fetchCalls = AvailabilityFetchCallRepo(ctx),
+            runService = runService,
             limiter = limiter,
             alertDispatcher = alertDispatcher,
             failoverFetcher = failoverFetcher,
-            clock = testClock,
         )
     }
 
@@ -497,10 +508,6 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         ): AvailabilityObservationBatch = throw AvailabilityProviderError.RateLimited(RuntimeException("429"))
     }
 
-    // A window well in the future so both watches are fully live under the
-    // target-local clamp; provider bookingHorizonDays is set high enough to cover it.
-    private val farStart = LocalDate.now(ZoneOffset.UTC).plusYears(1)
-
     @Test
     fun `two live watches on one poller make one fetch over the vendor window`() =
         runBlocking {
@@ -560,7 +567,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             AvailabilityRepo(ctx).recordObservations(runId = null, observations = observations)
             val limiter = RecordingLimiter(grant = true)
 
-            val before = OffsetDateTime.now()
+            val before = OffsetDateTime.now(testClock)
             val result = executorFor(provider, limiter = limiter).handle(poller)
 
             assertEquals(0, provider.calls)
@@ -1097,7 +1104,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
             assertEquals(45, AvailabilityPollerRepo(ctx).cadenceOverrideForPoller(poller.id))
 
-            val before = OffsetDateTime.now()
+            val before = OffsetDateTime.now(testClock)
             val result = executorFor(provider).handle(poller)
 
             // watch cadence (30) is specified, so it wins over the override (45).
@@ -1117,7 +1124,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = null)
             val poller = linkWatch(provider, watchId)
 
-            val before = OffsetDateTime.now()
+            val before = OffsetDateTime.now(testClock)
             val result = executorFor(provider).handle(poller)
 
             // NULL watch cadence -> poi override (45), not GLOBAL_DEFAULT_SEC (300).
@@ -1136,7 +1143,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 20)
             val poller = linkWatch(provider, watchId)
 
-            val before = OffsetDateTime.now()
+            val before = OffsetDateTime.now(testClock)
             val result = executorFor(provider).handle(poller)
 
             val delaySec = Duration.between(before, result.nextRunAt).seconds
@@ -1156,7 +1163,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 membershipFor(provider).sync(w, AvailabilityPollerRepo(ctx), tighterCadencePull = now())
             }
 
-            val before = OffsetDateTime.now()
+            val before = OffsetDateTime.now(testClock)
             val result = executorFor(provider).handle(poller)
 
             // min(300, 30) = 30s on success.
@@ -1174,7 +1181,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val poller = linkWatch(provider, watchId)
             val denyingLimiter = RecordingLimiter(grant = false)
 
-            val before = OffsetDateTime.now()
+            val before = OffsetDateTime.now(testClock)
             val result = executorFor(provider, limiter = denyingLimiter).handle(poller)
 
             // No upstream call was made.
@@ -1253,11 +1260,11 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val watchId = seedWatch(poiId, "2020-01-01", "2020-01-05")
             // Link it directly (liveness is ACTIVE + end>=today, and this end_date
             // is past, so link manually to exercise the empty-live-watch tick).
-            val pollers = AvailabilityPollerRepo(ctx)
+            val pollerRepo = AvailabilityPollerRepo(ctx)
             val pollerId =
-                pollers.upsertActive(provider = "recgov", parentRef = "232447", poiId = poiId, pullNextRunAt = now())
-            pollers.linkWatch(watchId, pollerId)
-            val poller = pollers.findById(pollerId)!!
+                pollerRepo.upsertActive(provider = "recgov", parentRef = "232447", poiId = poiId, pullNextRunAt = now())
+            pollerRepo.linkWatch(watchId, pollerId)
+            val poller = pollerRepo.findById(pollerId)!!
 
             executorFor(provider).handle(poller)
 
@@ -1267,8 +1274,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             // The fetch tick does NOT tear down — teardown is the WatchReaper's job.
             // The poller stays active, its link stays, the watch stays active until
             // the reaper sweeps.
-            assertEquals(true, pollers.findById(pollerId)!!.active)
-            assertEquals(listOf(watchId), pollers.watchIdsForPoller(pollerId))
+            assertEquals(true, pollerRepo.findById(pollerId)!!.active)
+            assertEquals(listOf(watchId), pollerRepo.watchIdsForPoller(pollerId))
             val watchStatus =
                 ctx
                     .fetchOne("SELECT status FROM availability_watch WHERE id = ?", watchId)!!
@@ -1290,7 +1297,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val priorRunId = runsRepo.start(poller.id, now().minusMinutes(5))
             runsRepo.fail(priorRunId, error = "rate_limited", completedAt = now().minusMinutes(4), durationMs = 0)
 
-            val before = OffsetDateTime.now()
+            val before = OffsetDateTime.now(testClock)
             val result = executorFor(provider).handle(poller)
 
             val runs = runsRepo.listForPoller(poller.id, limit = 10)

@@ -17,7 +17,7 @@ import java.time.LocalDate
  * the `availability` interval table.
  */
 class RecGovAvailabilityProvider(
-    private val client: RecGovAvailabilityClient,
+    private val availabilityClient: RecGovAvailabilityClient,
     private val enabled: Boolean,
 ) : AvailabilityProvider {
     override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
@@ -39,7 +39,7 @@ class RecGovAvailabilityProvider(
         val recgovId = recgovIdOrThrow(ref)
         return runWithErrorMapping {
             fetchRecgovAvailabilityObservations(
-                client = client,
+                client = availabilityClient,
                 recgovId = recgovId,
                 startDate = startDate,
                 endDate = endDate,
@@ -59,7 +59,7 @@ class RecGovAvailabilityProvider(
         val recgovId = recgovIdOrThrow(ref)
         return runWithErrorMapping {
             fetchRecgovCatalogObservations(
-                client = client,
+                client = availabilityClient,
                 recgovId = recgovId,
                 campsites = campsites,
                 startDate = startDate,
@@ -88,7 +88,7 @@ class RecGovAvailabilityProvider(
         } catch (e: AvailabilityProviderError) {
             throw e
         } catch (e: Exception) {
-            // The recgov client's exception types aren't a single hierarchy
+            // The recgov availabilityClient's exception types aren't a single hierarchy
             // (some throw plain Exception with rate-limit text). Pattern-
             // match on message text the same way the legacy mapper did, but
             // produce typed AvailabilityProviderError so the route doesn't need

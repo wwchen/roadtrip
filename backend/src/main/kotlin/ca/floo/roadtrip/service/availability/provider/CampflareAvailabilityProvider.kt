@@ -20,7 +20,7 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
 class CampflareAvailabilityProvider(
-    private val client: CampflareAvailabilityClient,
+    private val availabilityClient: CampflareAvailabilityClient,
     private val enabled: Boolean,
 ) : AvailabilityProvider {
     override val id: AvailabilityProviderId = AvailabilityProviderId.CAMPFLARE
@@ -110,7 +110,7 @@ class CampflareAvailabilityProvider(
         endDate: LocalDate,
     ): CampflareAvailability =
         runWithErrorMapping {
-            client.fetchAvailability(
+            availabilityClient.fetchAvailability(
                 campgroundIds = listOf(campgroundId),
                 startDate = startDate,
                 endDate = endDate,

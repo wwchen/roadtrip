@@ -18,12 +18,16 @@ object ReserveAmericaCatalogParser {
         val name: String,
     )
 
+    private val siteIdRegex = Regex("""siteId=(\d+)""")
+    private val parkIdRegex = Regex("""parkId=(\d+)""")
+    private val labelTextRegex = Regex(""">([^<]+)</a>""")
+
     fun parse(html: String): List<CatalogSite> =
         ReserveAmericaAvailabilityParser.siteRows(html).mapNotNull { row ->
-            val siteId = SITE_ID.find(row)?.groupValues?.get(1) ?: return@mapNotNull null
-            val parkId = PARK_ID.find(row)?.groupValues?.get(1) ?: return@mapNotNull null
+            val siteId = siteIdRegex.find(row)?.groupValues?.get(1) ?: return@mapNotNull null
+            val parkId = parkIdRegex.find(row)?.groupValues?.get(1) ?: return@mapNotNull null
             val name =
-                LABEL_TEXT
+                labelTextRegex
                     .find(row)
                     ?.groupValues
                     ?.get(1)
@@ -32,8 +36,4 @@ object ReserveAmericaCatalogParser {
                     .ifEmpty { siteId }
             CatalogSite(parkId = parkId, siteId = siteId, name = name)
         }
-
-    private val SITE_ID = Regex("""siteId=(\d+)""")
-    private val PARK_ID = Regex("""parkId=(\d+)""")
-    private val LABEL_TEXT = Regex(""">([^<]+)</a>""")
 }

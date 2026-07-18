@@ -26,7 +26,7 @@ import java.time.ZoneOffset
  * cadence math (handler returns next_run_at).
  */
 class Scheduler<T : Schedulable>(
-    private val repo: SchedulableRepo<T>,
+    private val schedulableRepo: SchedulableRepo<T>,
     private val handler: suspend (T) -> HandlerResult,
     private val tickInterval: Duration = Duration.ofSeconds(5),
     private val claimBatchSize: Int = 10,
@@ -44,7 +44,7 @@ class Scheduler<T : Schedulable>(
         // matching row's lease has not yet expired (we'd wait the full
         // lease duration); bumping reclaim here cuts that to zero.
         try {
-            repo.reclaimExpired(now())
+            schedulableRepo.reclaimExpired(now())
         } catch (e: Exception) {
             log.error("scheduler {} boot recovery failed: {}", name, e.message, e)
         }
@@ -60,8 +60,8 @@ class Scheduler<T : Schedulable>(
         while (currentScopeIsActive()) {
             try {
                 val now = now()
-                repo.reclaimExpired(now)
-                val rows = repo.claimDue(now, claimBatchSize, leaseDuration)
+                schedulableRepo.reclaimExpired(now)
+                val rows = schedulableRepo.claimDue(now, claimBatchSize, leaseDuration)
                 for (row in rows) {
                     runOne(row)
                 }
@@ -94,7 +94,7 @@ class Scheduler<T : Schedulable>(
                 log.warn("row id={} had no claim token; cannot release", row.id)
                 return@withContext
             }
-            val released = repo.release(row.id, token, result.nextRunAt, started)
+            val released = schedulableRepo.release(row.id, token, result.nextRunAt, started)
             if (!released) {
                 log.warn("row id={} release rejected (token mismatch — lease was reclaimed)", row.id)
             }

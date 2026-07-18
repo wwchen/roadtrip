@@ -34,11 +34,11 @@ private val specialJsonSpaceChars = Regex("[\\u00A0\\u1680\\u2000-\\u200A\\u202F
  * [config] is null when Slack is unconfigured. That disabled state returns
  * `false` with a log line instead of throwing into availability polling.
  *
- * [client] is injectable for tests; production builds it from config.
+ * [slackClient] is injectable for tests; production builds it from config.
  */
 class SlackNotificationService(
     private val config: SlackConfig?,
-    private val client: SlackClient? = config?.let { SlackClient(it) },
+    private val slackClient: SlackClient? = config?.let { SlackClient(it) },
 ) : NotificationService,
     SlackResponseSender,
     Closeable {
@@ -118,14 +118,14 @@ class SlackNotificationService(
     ): Boolean {
         // response_url posts don't need a bot token or a configured channel —
         // they use the one-shot URL Slack returned in the interaction payload.
-        // Still gate on `client` since a disabled workspace has no HTTP client
+        // Still gate on `slackClient` since a disabled workspace has no HTTP slackClient
         // to talk to; that's the same "Slack not configured" fallback path.
         val (fallback, attachments) = SlackContentWatchStatusRenderer.render(notice)
-        if (client == null) {
+        if (slackClient == null) {
             log.warn("Slack disabled; response_url update skipped: {}", fallback)
             return false
         }
-        return client.postResponse(responseUrl, fallback, attachments = attachments)
+        return slackClient.postResponse(responseUrl, fallback, attachments = attachments)
     }
 
     override suspend fun postResponseStaleWatch(
@@ -133,11 +133,11 @@ class SlackNotificationService(
         watchId: Long,
     ): Boolean {
         val (fallback, attachments) = SlackContentStaleWatchRenderer.render(watchId)
-        if (client == null) {
+        if (slackClient == null) {
             log.warn("Slack disabled; stale response_url update skipped: {}", fallback)
             return false
         }
-        return client.postResponse(responseUrl, fallback, attachments = attachments)
+        return slackClient.postResponse(responseUrl, fallback, attachments = attachments)
     }
 
     /** The single send gate: no-ops (logging why) when Slack is disabled,
@@ -147,16 +147,16 @@ class SlackNotificationService(
         text: String,
         attachments: List<SlackAttachmentDto>,
     ): Boolean {
-        if (config == null || client == null) {
+        if (config == null || slackClient == null) {
             log.warn("Slack disabled (bot-token/default-channel unset); message not sent: {}", text)
             return false
         }
-        return client.postMessage(channel ?: config.defaultChannel, text, attachments = attachments)
+        return slackClient.postMessage(channel ?: config.defaultChannel, text, attachments = attachments)
     }
 
-    /** Releases the owned [SlackClient]'s HTTP client. Call on app shutdown. */
+    /** Releases the owned [SlackClient]'s HTTP slackClient. Call on app shutdown. */
     override fun close() {
-        client?.close()
+        slackClient?.close()
     }
 
     private fun atcResultColor(status: String): String =

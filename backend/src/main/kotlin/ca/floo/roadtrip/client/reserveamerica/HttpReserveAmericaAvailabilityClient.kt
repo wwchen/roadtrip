@@ -20,7 +20,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 class HttpReserveAmericaAvailabilityClient(
-    private val client: HttpClient = defaultClient(),
+    private val httpClient: HttpClient = defaultClient(),
 ) : ReserveAmericaAvailabilityClient {
     private val log = LoggerFactory.getLogger(javaClass)
     private val sessionMutex = Mutex()
@@ -117,7 +117,7 @@ class HttpReserveAmericaAvailabilityClient(
                 .build()
         val resp =
             try {
-                client.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
+                httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
             } catch (e: Exception) {
                 throw ReserveAmericaException("reserveamerica request failed: ${e.message}", httpStatus = null)
             }
@@ -139,7 +139,7 @@ class HttpReserveAmericaAvailabilityClient(
                 "page" to "calendar",
                 "contractCode" to contractCode,
                 "parkId" to parkId,
-                "calarvdate" to MATRIX_DATE.format(startDate),
+                "calarvdate" to matrixDate.format(startDate),
                 "sitepage" to "true",
                 "startIdx" to startIdx.toString(),
             )
@@ -147,7 +147,7 @@ class HttpReserveAmericaAvailabilityClient(
     companion object {
         private const val PAGE_SIZE = 25
         private const val MATRIX_DAYS = 14
-        private val MATRIX_DATE: DateTimeFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy", Locale.US)
+        private val matrixDate: DateTimeFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy", Locale.US)
         private const val USER_AGENT =
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"

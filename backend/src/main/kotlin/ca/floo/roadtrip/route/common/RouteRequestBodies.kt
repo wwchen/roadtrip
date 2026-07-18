@@ -7,16 +7,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 
-internal sealed interface RouteBodyResult<out T> {
-    data class Valid<T>(
-        val value: T,
-    ) : RouteBodyResult<T>
-
-    data class Invalid(
-        val detail: String?,
-    ) : RouteBodyResult<Nothing>
-}
-
 internal inline fun <T, R> RouteBodyResult<T>.mapCatching(transform: (T) -> R): RouteBodyResult<R> =
     when (this) {
         is RouteBodyResult.Invalid -> this

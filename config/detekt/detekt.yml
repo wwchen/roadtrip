@@ -1,0 +1,78 @@
+naming:
+  BooleanPropertyNaming:
+    active: true
+    allowedPattern: '^(is|has|can|should|are)[A-Z].*'
+
+  ClassNaming:
+    active: true
+    classPattern: '[A-Z][A-Za-z0-9]*'
+
+  ConstructorParameterNaming:
+    active: true
+    parameterPattern: '[a-z][A-Za-z0-9]*'
+    privateParameterPattern: '[a-z][A-Za-z0-9]*'
+
+  EnumNaming:
+    active: true
+    enumEntryPattern: '[A-Z][_A-Z0-9]*'
+
+  FunctionNaming:
+    active: true
+    functionPattern: '[a-z][A-Za-z0-9]*'
+    excludeClassPattern: '.*Test'
+
+  FunctionParameterNaming:
+    active: true
+    parameterPattern: '[a-z][A-Za-z0-9]*'
+    excludeClassPattern: '.*Test'
+
+  LambdaParameterNaming:
+    active: true
+    parameterPattern: '[a-z][A-Za-z0-9]*|_'
+
+  MatchingDeclarationName:
+    active: true
+
+  ObjectPropertyNaming:
+    active: true
+    constantPattern: '[A-Z][_A-Z0-9]*'
+    propertyPattern: '[a-z][A-Za-z0-9]*'
+    privatePropertyPattern: '_?[a-z][A-Za-z0-9]*'
+
+  PackageNaming:
+    active: true
+    packagePattern: '[a-z]+(\.[a-z][A-Za-z0-9]*)*'
+
+  TopLevelPropertyNaming:
+    active: true
+    constantPattern: '[A-Z][_A-Z0-9]*'
+    propertyPattern: '[a-z][A-Za-z0-9]*'
+    privatePropertyPattern: '_?[a-z][A-Za-z0-9]*'
+
+  VariableNaming:
+    active: true
+    variablePattern: '[a-z][A-Za-z0-9]*'
+    privateVariablePattern: '_?[a-z][A-Za-z0-9]*'
+    excludeClassPattern: '.*Test'
+
+roadtrip:
+  TypedInfrastructurePropertyNaming:
+    active: true
+    typeSuffixes:
+      - Repo
+      - Service
+      - Client
+
+style:
+  ClassOrdering:
+    active: true
+
+  DataClassContainsFunctions:
+    active: true
+    conversionFunctionPrefix:
+      - to
+      - as
+    allowOperators: false
+
+  DataClassShouldBeImmutable:
+    active: true

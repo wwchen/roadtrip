@@ -4,18 +4,6 @@ import io.ktor.server.application.ApplicationCall
 import java.time.LocalDate
 import java.time.OffsetDateTime
 
-internal sealed interface OptionalQuery<out T> {
-    data object Missing : OptionalQuery<Nothing>
-
-    data class Parsed<T>(
-        val value: T,
-    ) : OptionalQuery<T>
-
-    data class Invalid(
-        val rawValue: String,
-    ) : OptionalQuery<Nothing>
-}
-
 internal fun ApplicationCall.pathParam(name: String): String? = parameters[name]
 
 internal fun ApplicationCall.longPath(name: String): Long? = pathParam(name)?.toLongOrNull()

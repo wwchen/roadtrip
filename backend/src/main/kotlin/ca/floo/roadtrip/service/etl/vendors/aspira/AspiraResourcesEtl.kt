@@ -112,7 +112,7 @@ class AspiraResourcesEtl(
             dictionariesInputSlug
                 ?.takeIf { slugs.contains(it) }
                 ?.let { parseDictionaries(inputs.envelope(it).payload as? JsonObject) }
-                ?: AspiraDictionaries.EMPTY
+                ?: AspiraDictionaries.empty
         return Parsed(
             inventory = inventoryEnvelopes,
             maps = mapsArray,
@@ -164,7 +164,7 @@ class AspiraResourcesEtl(
                     CampsiteUpsertCandidate(
                         vendor = vendor,
                         vendorRefId = resourceId,
-                        parentVendor = PARENT_CAMPGROUND_VENDOR_BY_SITE_VENDOR[vendor],
+                        parentVendor = parentCampgroundVendorBySiteVendor[vendor],
                         parentVendorRefId = parentVendorRefId(parentLeaf = parentLeaf, providerRef = providerRef),
                         // Short label from /api/resourcelocation/resources
                         // (`localizedValues[0].name`) — e.g. "OFC13", "B7".
@@ -498,7 +498,7 @@ class AspiraResourcesEtl(
     }
 
     private fun parseDictionaries(payload: JsonObject?): AspiraDictionaries {
-        if (payload == null) return AspiraDictionaries.EMPTY
+        if (payload == null) return AspiraDictionaries.empty
         val resourceCategories =
             firstJsonArray(
                 payload,
@@ -632,7 +632,7 @@ class AspiraResourcesEtl(
         val attributes: Map<Int, AttributeDefinition>,
     ) {
         companion object {
-            val EMPTY =
+            val empty =
                 AspiraDictionaries(
                     equipment = emptyMap(),
                     resourceCategories = emptyMap(),
@@ -661,7 +661,7 @@ class AspiraResourcesEtl(
         const val PROVIDER_REF_MAP_ID_KEY = "mapId"
         const val POI_SOURCE_ID_PREFIX = "aspira-"
 
-        val PARENT_CAMPGROUND_VENDOR_BY_SITE_VENDOR =
+        val parentCampgroundVendorBySiteVendor =
             mapOf(
                 "aspira_wa" to "aspira-wa-pins",
                 "aspira_bc" to "aspira-bc-pins",

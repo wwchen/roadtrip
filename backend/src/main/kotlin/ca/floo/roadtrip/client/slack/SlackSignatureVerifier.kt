@@ -26,7 +26,7 @@ import javax.crypto.spec.SecretKeySpec
 class SlackSignatureVerifier(
     private val signingSecret: String,
     private val clock: Clock = Clock.systemUTC(),
-    private val replayWindow: Duration = DEFAULT_REPLAY_WINDOW,
+    private val replayWindow: Duration = defaultReplayWindow,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -100,7 +100,7 @@ class SlackSignatureVerifier(
 
     companion object {
         /** Slack's own recommendation — outside this window the request is treated as replayed. */
-        val DEFAULT_REPLAY_WINDOW: Duration = Duration.ofMinutes(5)
+        val defaultReplayWindow: Duration = Duration.ofMinutes(5)
 
         private const val SIGNATURE_PREFIX = "v0="
 

@@ -136,7 +136,7 @@ private suspend fun io.ktor.server.routing.RoutingContext.runOne(
         )
     } catch (e: TargetBusyException) {
         call.respondAdminJson(
-            ErrorTargetBusySchema(error = "target busy", target = e.target, running_run_id = e.runningRunId),
+            ErrorTargetBusySchema(error = "target busy", target = e.target, runningRunId = e.runningRunId),
             HttpStatusCode.Conflict,
         )
     }
@@ -242,11 +242,11 @@ private suspend inline fun <reified T> ApplicationCall.respondAdminJson(
 
 private fun RunOutcome.toSchema(): RunOutcomeSchema =
     RunOutcomeSchema(
-        run_id = parentRunId,
+        runId = parentRunId,
         target = target,
         kind = kind.rowValue,
         status = status,
-        failed_phase = failedPhase,
+        failedPhase = failedPhase,
     )
 
 private fun IngestRunListItemRow.toSchema(): IngestRunListItemSchema =
@@ -255,9 +255,9 @@ private fun IngestRunListItemRow.toSchema(): IngestRunListItemSchema =
         target = target,
         kind = kind,
         status = status,
-        triggered_by = triggeredBy,
-        started_at = startedAt.toString(),
-        completed_at = completedAt?.toString(),
+        triggeredBy = triggeredBy,
+        startedAt = startedAt.toString(),
+        completedAt = completedAt?.toString(),
     )
 
 private fun IngestRunDetailRow.toSchema(): RunDetailSchema =
@@ -266,9 +266,9 @@ private fun IngestRunDetailRow.toSchema(): RunDetailSchema =
         target = target,
         kind = kind,
         status = status,
-        triggered_by = triggeredBy,
-        started_at = startedAt.toString(),
-        completed_at = completedAt?.toString(),
+        triggeredBy = triggeredBy,
+        startedAt = startedAt.toString(),
+        completedAt = completedAt?.toString(),
         notes = notes,
         phases = phases.map { it.toSchema() },
     )
@@ -277,11 +277,11 @@ private fun IngestRunPhaseRow.toSchema(): IngestRunPhaseSchema =
     IngestRunPhaseSchema(
         id = id,
         phase = phase,
-        phase_kind = phaseKind,
+        phaseKind = phaseKind,
         status = status,
-        exit_code = exitCode,
-        started_at = startedAt.toString(),
-        completed_at = completedAt?.toString(),
+        exitCode = exitCode,
+        startedAt = startedAt.toString(),
+        completedAt = completedAt?.toString(),
         counts = countsJson?.let { adminIngestJson.parseToJsonElement(it) },
         notes = notes,
     )
@@ -289,8 +289,8 @@ private fun IngestRunPhaseRow.toSchema(): IngestRunPhaseSchema =
 private fun TargetIngestStatusRow.toSchema(): TargetStatusSchema =
     TargetStatusSchema(
         target = target,
-        last_run = lastRun,
+        lastRun = lastRun,
         kind = kind,
         status = status,
-        age_sec = ageSec,
+        ageSec = ageSec,
     )

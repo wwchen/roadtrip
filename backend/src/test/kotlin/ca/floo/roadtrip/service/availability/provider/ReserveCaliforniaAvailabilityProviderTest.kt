@@ -28,12 +28,12 @@ class ReserveCaliforniaAvailabilityProviderTest {
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
     private val baseUrl = "http://127.0.0.1:${server.address.port}"
     private var serverStarted = false
-    private var serverExecutor: ExecutorService? = null
+    private var serverExecutorService: ExecutorService? = null
 
     @AfterTest
     fun stopServer() {
         if (serverStarted) server.stop(0)
-        serverExecutor?.shutdownNow()
+        serverExecutorService?.shutdownNow()
     }
 
     @Test
@@ -56,8 +56,8 @@ class ReserveCaliforniaAvailabilityProviderTest {
             }
             startServer()
 
-            val client = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
-            val provider = ReserveCaliforniaAvailabilityProvider(client, enabled = true)
+            val availabilityClient = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
+            val provider = ReserveCaliforniaAvailabilityProvider(availabilityClient = availabilityClient, enabled = true)
 
             val batch =
                 provider.catalogAvailability(
@@ -112,8 +112,8 @@ class ReserveCaliforniaAvailabilityProviderTest {
             }
             startServer(Executors.newFixedThreadPool(2))
 
-            val client = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
-            val provider = ReserveCaliforniaAvailabilityProvider(client, enabled = true)
+            val availabilityClient = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
+            val provider = ReserveCaliforniaAvailabilityProvider(availabilityClient = availabilityClient, enabled = true)
 
             provider.catalogAvailability(
                 ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611, 612)),
@@ -129,10 +129,10 @@ class ReserveCaliforniaAvailabilityProviderTest {
     fun `catalog availability uses provider clock when no facility observations exist`() =
         runBlocking {
             val fixed = Instant.parse("2026-06-22T12:00:00Z")
-            val client = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
+            val availabilityClient = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
             val provider =
                 ReserveCaliforniaAvailabilityProvider(
-                    client = client,
+                    availabilityClient = availabilityClient,
                     enabled = true,
                     clock = Clock.fixed(fixed, ZoneOffset.UTC),
                 )
@@ -154,7 +154,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
 
     private fun startServer(executor: ExecutorService? = null) {
         if (executor != null) {
-            serverExecutor = executor
+            serverExecutorService = executor
             server.executor = executor
         }
         server.start()

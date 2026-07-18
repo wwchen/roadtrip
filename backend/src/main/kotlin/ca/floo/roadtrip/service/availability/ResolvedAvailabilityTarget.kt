@@ -31,3 +31,13 @@ internal data class ResolvedAvailabilityTarget(
         require(first.catalogRef == catalogRef) { "candidates[0].catalogRef must mirror catalogRef" }
     }
 }
+
+internal fun List<ResolvedAvailabilityTarget>.catalogRefsFor(candidate: ProviderCandidate): List<CatalogCampsiteRef> {
+    val refs =
+        mapNotNull { row ->
+            row.candidates
+                .firstOrNull { it.provider.id == candidate.provider.id && it.parentRef == candidate.parentRef }
+                ?.catalogRef
+        }
+    return refs.takeIf { it.size == this.size } ?: emptyList()
+}

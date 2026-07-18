@@ -140,9 +140,9 @@ internal const val LATITUDE_MAX = 90.0
 internal const val LONGITUDE_MIN = -180.0
 internal const val LONGITUDE_MAX = 180.0
 internal const val E6_COORDINATE_SCALE = 1_000_000.0
-internal val RECGOV_CAMPGROUND_URL = Regex("""/campgrounds/(\d+)""")
-internal val RECGOV_CAMPSITE_URL = Regex("""/campsites/(\d+)""")
+internal val recgovCampgroundUrlRegex = Regex("""/campgrounds/(\d+)""")
+internal val recgovCampsiteUrlRegex = Regex("""/campsites/(\d+)""")
 
-internal fun recgovCampgroundIdFromUrl(url: String?): String? = url?.let { RECGOV_CAMPGROUND_URL.find(it)?.groupValues?.get(1) }
+internal fun recgovCampgroundIdFromUrl(url: String?): String? = url?.let { recgovCampgroundUrlRegex.find(it)?.groupValues?.get(1) }
 
-internal fun recgovCampsiteIdFromUrl(url: String?): String? = url?.let { RECGOV_CAMPSITE_URL.find(it)?.groupValues?.get(1) }
+internal fun recgovCampsiteIdFromUrl(url: String?): String? = url?.let { recgovCampsiteUrlRegex.find(it)?.groupValues?.get(1) }

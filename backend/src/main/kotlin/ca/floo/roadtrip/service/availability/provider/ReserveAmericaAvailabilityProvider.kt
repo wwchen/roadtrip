@@ -25,7 +25,7 @@ private const val RESERVEAMERICA_MAX_POLL_WINDOW_DAYS = 30
 
 class ReserveAmericaAvailabilityProvider(
     private val tenant: ReserveAmericaTenant,
-    private val client: ReserveAmericaAvailabilityClient,
+    private val availabilityClient: ReserveAmericaAvailabilityClient,
     private val enabled: Boolean,
 ) : AvailabilityProvider {
     override val id: AvailabilityProviderId = AvailabilityProviderId.RESERVEAMERICA
@@ -105,7 +105,7 @@ class ReserveAmericaAvailabilityProvider(
         endDate: LocalDate,
     ): ReserveAmericaAvailability =
         runWithErrorMapping {
-            client.fetch(
+            availabilityClient.fetch(
                 host = tenant.host,
                 contractCode = contractCode,
                 parkId = parkId,

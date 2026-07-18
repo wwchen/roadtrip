@@ -21,10 +21,10 @@ import java.time.OffsetDateTime
 class CampgroundRepo(
     private val ctx: DSLContext,
 ) {
-    private val importRuns = ImportRunRepo(ctx)
-    private val vendorRefs = VendorRefRepo(ctx)
-    private val pois = PoiRepo(ctx)
-    private val providerRefs = CampsiteProviderRepo(ctx)
+    private val importRunRepo = ImportRunRepo(ctx)
+    private val vendorRefRepo = VendorRefRepo(ctx)
+    private val poiRepo = PoiRepo(ctx)
+    private val campsiteProviderRepo = CampsiteProviderRepo(ctx)
 
     data class SearchFilters(
         val vendors: List<String> = emptyList(),
@@ -37,17 +37,17 @@ class CampgroundRepo(
         records: List<CampgroundUpsertCandidate>,
         source: String,
     ): CatalogUpsertResult {
-        val runId = importRuns.start(source)
+        val runId = importRunRepo.start(source)
         try {
             val upserted =
                 ctx.transactionResult { cfg ->
                     val tx = CampgroundRepo(DSL.using(cfg))
                     tx.bulkUpsertCampgroundsTx(records)
                 }
-            importRuns.complete(runId, records.size)
+            importRunRepo.complete(runId, records.size)
             return CatalogUpsertResult(runId = runId, seenCount = records.size, upsertedCount = upserted)
         } catch (e: Throwable) {
-            importRuns.fail(runId, e.message ?: e.javaClass.simpleName)
+            importRunRepo.fail(runId, e.message ?: e.javaClass.simpleName)
             throw e
         }
     }
@@ -55,21 +55,21 @@ class CampgroundRepo(
     fun findById(id: Long): Campground? =
         ctx
             .fetchOne(
-                "$BASE_SELECT WHERE cg.id = ? AND cg.deleted_at IS NULL",
+                "$baseSelect WHERE cg.id = ? AND cg.deleted_at IS NULL",
                 id,
             )?.let(::fromRecord)
 
     fun findAll(): List<Campground> =
         ctx
             .fetch(
-                "$BASE_SELECT WHERE cg.deleted_at IS NULL ORDER BY cg.id",
+                "$baseSelect WHERE cg.deleted_at IS NULL ORDER BY cg.id",
             ).map(::fromRecord)
 
     fun findByPoi(poiId: Long): Campground? =
         ctx
             .fetchOne(
                 """
-                $BASE_SELECT
+                $baseSelect
                 JOIN poi_campgrounds pc
                   ON pc.campground_id = cg.id
                 JOIN pois p
@@ -86,7 +86,7 @@ class CampgroundRepo(
             ctx.fetchOne(
                 """
                 SELECT
-                  $BASE_SELECT_COLUMNS,
+                  $baseSelectColumns,
                   primary_ref.vendor AS detail_source,
                   primary_ref.external_id AS detail_source_id,
                   NULLIF(cg.source_payload->'booking_cta_provider_ref', 'null'::jsonb)::text
@@ -112,7 +112,7 @@ class CampgroundRepo(
             campground = fromRecord(record),
             source = record.get("detail_source", String::class.java),
             sourceId = record.get("detail_source_id", String::class.java),
-            providerRefJson = providerRefs.findProviderRef(poiId)?.providerRefJson,
+            providerRefJson = campsiteProviderRepo.findProviderRef(poiId)?.providerRefJson,
             ctaProviderRefJson = record.get("cta_provider_ref_text", String::class.java),
             propertiesJson = record.get("properties_text", String::class.java),
             memberSources = memberSourcesOf(record.get("member_sources")),
@@ -142,7 +142,7 @@ class CampgroundRepo(
         return ctx
             .fetch(
                 """
-                $BASE_SELECT
+                $baseSelect
                 WHERE ${clauses.joinToString(" AND ")}
                 ORDER BY cg.name, cg.id
                 LIMIT ? OFFSET ?
@@ -229,7 +229,7 @@ class CampgroundRepo(
                     )
             }
         }
-        val vendorRefIds = vendorRefs.bulkUpsertVendorRefs(vendorRefSpecs)
+        val vendorRefIds = vendorRefRepo.bulkUpsertVendorRefs(vendorRefSpecs)
 
         val campgroundRows =
             records.map { record ->
@@ -422,7 +422,7 @@ class CampgroundRepo(
         val (existingRows, newRows) = deduped.partition { it.campgroundId in existingPoiByCampground }
 
         if (existingRows.isNotEmpty()) {
-            pois.bulkUpdatePoiGeometry(
+            poiRepo.bulkUpdatePoiGeometry(
                 existingRows.map { row ->
                     PoiGeometryUpdate(
                         poiId = existingPoiByCampground.getValue(row.campgroundId),
@@ -436,7 +436,7 @@ class CampgroundRepo(
         if (newRows.isNotEmpty()) {
             val linkPairs =
                 newRows.map { row ->
-                    val poiId = pois.insertPoi(CAMPGROUND_POI_TYPE, row.longitude, row.latitude)
+                    val poiId = poiRepo.insertPoi(CAMPGROUND_POI_TYPE, row.longitude, row.latitude)
                     poiId to row.campgroundId
                 }
             for (chunk in linkPairs.chunked(BULK_CHUNK_SIZE)) {
@@ -473,7 +473,7 @@ class CampgroundRepo(
         private const val MIN_SEARCH_LIMIT = 1
         private const val MAX_SEARCH_LIMIT = 500
 
-        private val BASE_SELECT_COLUMNS =
+        private val baseSelectColumns =
             """
             cg.id,
             cg.name,
@@ -508,10 +508,10 @@ class CampgroundRepo(
             cg.primary_vendor_ref_id
             """.trimIndent()
 
-        private val BASE_SELECT =
+        private val baseSelect =
             """
             SELECT
-              $BASE_SELECT_COLUMNS
+              $baseSelectColumns
             FROM campgrounds cg
             JOIN vendor_refs primary_ref
               ON primary_ref.id = cg.primary_vendor_ref_id

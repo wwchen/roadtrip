@@ -5,7 +5,7 @@ import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 
-data class PersistentCacheEntry(
+class PersistentCacheEntry(
     val payload: JsonElement,
     val createdAt: Instant,
     val expiresAt: Instant,

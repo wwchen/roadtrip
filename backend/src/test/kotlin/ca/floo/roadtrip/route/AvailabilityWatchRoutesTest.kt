@@ -17,6 +17,8 @@ import ca.floo.roadtrip.service.availability.AvailabilityWatchController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
+import ca.floo.roadtrip.service.availability.WatchCapabilityValidator
+import ca.floo.roadtrip.service.availability.WatchLifecycleNotifications
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
@@ -73,12 +75,18 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
+                campsiteProviderRepo = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
                 dateResolver = AvailabilityDateResolver(),
+                pollerRepo = AvailabilityPollerRepo(ctx),
             )
-        return AvailabilityWatchService(ctx, alertProviders(campsitesRepo, targets))
+        return AvailabilityWatchService(
+            ctx = ctx,
+            alertProviders = alertProviders(campsitesRepo, targets),
+            capabilityValidator = WatchCapabilityValidator { },
+            lifecycleNotifications = ignoredLifecycleNotifications(),
+        )
     }
 
     /**
@@ -92,22 +100,29 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         val registry = AvailabilityProviderRegistry(mapOf("test" to FakeRecgovProvider))
         val targets =
             DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
+                campsiteProviderRepo = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
+                pollerRepo = AvailabilityPollerRepo(ctx),
             )
-        return AvailabilityWatchService(ctx, alertProviders(campsitesRepo, targets))
+        return AvailabilityWatchService(
+            ctx = ctx,
+            alertProviders = alertProviders(campsitesRepo, targets),
+            capabilityValidator = WatchCapabilityValidator { },
+            lifecycleNotifications = ignoredLifecycleNotifications(),
+        )
     }
 
     private fun watchCapabilitiesWithRecgov(): WatchCapabilityService {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
+                campsiteProviderRepo = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = AvailabilityProviderRegistry(mapOf("test" to FakeRecgovProvider)),
                 dateResolver = AvailabilityDateResolver(),
+                pollerRepo = AvailabilityPollerRepo(ctx),
             )
         return WatchCapabilityService(
             availabilityTargets = targets,
@@ -119,10 +134,11 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
+                campsiteProviderRepo = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
                 dateResolver = AvailabilityDateResolver(),
+                pollerRepo = AvailabilityPollerRepo(ctx),
             )
         val scopeResolver = WatchScopeResolver(campsitesRepo)
         return AvailabilityWatchService(
@@ -131,14 +147,27 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             capabilityValidator =
                 WatchTriggerCapabilityValidator(
                     scopeResolver = scopeResolver,
-                    capabilities =
+                    watchCapabilityService =
                         WatchCapabilityService(
                             availabilityTargets = targets,
                             bookingTargets = AvailabilityBookingTargetResolver(BookingProviderRegistry(emptyList())),
                         ),
                 ),
+            lifecycleNotifications = ignoredLifecycleNotifications(),
         )
     }
+
+    private fun ignoredLifecycleNotifications(): WatchLifecycleNotifications =
+        object : WatchLifecycleNotifications {
+            override fun afterCreate(watch: AvailabilityWatchRepo.Watch) = Unit
+
+            override fun afterUpdate(
+                before: AvailabilityWatchRepo.Watch,
+                after: AvailabilityWatchRepo.Watch,
+            ) = Unit
+
+            override fun afterDelete(watch: AvailabilityWatchRepo.Watch) = Unit
+        }
 
     /** Wraps the default internal-poller alert provider for tests, mirroring
      *  the production wiring in [ca.floo.roadtrip.di.serviceModule]. */
@@ -169,13 +198,13 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     ): AvailabilityWatchController {
         val campsitesRepo = CampsiteRepo(ctx)
         return AvailabilityWatchController(
-            watches = AvailabilityWatchRepo(ctx),
+            watchRepo = AvailabilityWatchRepo(ctx),
             watchService = watchService,
             watchMapper =
                 AvailabilityWatchApiMapper(
-                    campsites = campsitesRepo,
+                    campsiteRepo = campsitesRepo,
                     scopeResolver = WatchScopeResolver(campsitesRepo),
-                    capabilities = watchCapabilities,
+                    watchCapabilityService = watchCapabilities,
                 ),
         )
     }
@@ -925,11 +954,11 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonObject["id"]!!
                     .jsonPrimitive.long
 
-            val pollers = AvailabilityPollerRepo(ctx)
+            val pollerRepo = AvailabilityPollerRepo(ctx)
             // An active watch is linked to exactly one active poller.
-            val linked = pollers.pollerIdsForWatch(watchId)
+            val linked = pollerRepo.pollerIdsForWatch(watchId)
             assertEquals(1, linked.size)
-            assertTrue(pollers.findById(linked.single())!!.active)
+            assertTrue(pollerRepo.findById(linked.single())!!.active)
 
             val paused =
                 client.post(modifyWatchPath(watchId)) {
@@ -939,8 +968,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             assertEquals(HttpStatusCode.OK, paused.status)
 
             // Pausing drops the watch's poller links; the now-orphaned poller goes dormant.
-            assertTrue(pollers.pollerIdsForWatch(watchId).isEmpty())
-            assertEquals(false, pollers.findById(linked.single())!!.active)
+            assertTrue(pollerRepo.pollerIdsForWatch(watchId).isEmpty())
+            assertEquals(false, pollerRepo.findById(linked.single())!!.active)
         }
 
     private fun seedPoi(

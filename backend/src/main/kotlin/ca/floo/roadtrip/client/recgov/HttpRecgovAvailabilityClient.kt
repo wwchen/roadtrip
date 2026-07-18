@@ -17,7 +17,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 class HttpRecgovAvailabilityClient(
-    private val client: HttpClient = defaultClient(),
+    private val httpClient: HttpClient = defaultClient(),
     private val minGapMs: Long = 1500,
     private val retryDelaysMs: List<Long> = listOf(3_000, 6_000, 12_000),
 ) : RecGovAvailabilityClient {
@@ -40,7 +40,7 @@ class HttpRecgovAvailabilityClient(
                 lastCallAt = System.currentTimeMillis()
             }
             log.info("recgov GET availability campground={} month={} attempt={}", campgroundId, monthLabel, attempt + 1)
-            val resp = client.get(url)
+            val resp = httpClient.get(url)
             if (resp.status == HttpStatusCode.TooManyRequests) {
                 if (attempt >= retryDelaysMs.size) {
                     throw RuntimeException("rec.gov 429 after ${retryDelaysMs.size} retries on $campgroundId/$monthLabel")
@@ -58,11 +58,11 @@ class HttpRecgovAvailabilityClient(
         return emptyMap()
     }
 
-    override fun close() = client.close()
+    override fun close() = httpClient.close()
 
     companion object {
         const val AVAIL_BASE = "https://www.recreation.gov/api/camps/availability/campground"
-        private val UA =
+        private val userAgent =
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
@@ -70,7 +70,7 @@ class HttpRecgovAvailabilityClient(
             HttpClient(CIO) {
                 engine { requestTimeout = 15_000 }
                 defaultRequest {
-                    header("User-Agent", UA)
+                    header("User-Agent", userAgent)
                     header("Accept", "application/json")
                     header("Referer", "https://www.recreation.gov/")
                 }

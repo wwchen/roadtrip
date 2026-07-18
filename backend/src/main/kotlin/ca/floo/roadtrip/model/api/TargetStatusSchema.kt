@@ -1,12 +1,13 @@
 package ca.floo.roadtrip.model.api
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
 data class TargetStatusSchema(
     val target: String,
-    val last_run: Long? = null,
+    @SerialName("last_run") val lastRun: Long? = null,
     val kind: String? = null,
     val status: String? = null,
-    val age_sec: Long? = null,
+    @SerialName("age_sec") val ageSec: Long? = null,
 )

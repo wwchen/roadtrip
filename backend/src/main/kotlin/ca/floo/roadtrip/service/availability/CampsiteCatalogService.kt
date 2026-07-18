@@ -7,7 +7,7 @@ import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 
 internal class CampsiteCatalogService(
-    private val providerRefs: CampsiteProviderRepo,
+    private val campsiteProviderRepo: CampsiteProviderRepo,
     private val campsitesRepo: CampsiteRepo,
     private val targets: AvailabilityTargetResolver,
 ) {
@@ -15,7 +15,7 @@ internal class CampsiteCatalogService(
         poiId: Long,
         siteTypes: List<String>,
     ): PoiCampsitesResponseSchema {
-        if (!providerRefs.campgroundExists(poiId)) throw AvailabilityServiceError.NotFound
+        if (!campsiteProviderRepo.campgroundExists(poiId)) throw AvailabilityServiceError.NotFound
         val campsites =
             campsitesRepo
                 .findAvailabilityTargetsByPoi(poiId)

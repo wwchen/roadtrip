@@ -21,6 +21,7 @@ import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
+import ca.floo.roadtrip.service.availability.AvailabilityRunService
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CampgroundAvailabilitySupport
@@ -48,12 +49,12 @@ import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler
 import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
 import ca.floo.roadtrip.service.poi.CampgroundService
-import ca.floo.roadtrip.service.poi.DEFAULT_POI_TYPES
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiReader
 import ca.floo.roadtrip.service.poi.PoiService
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.poi.TeslaSuperchargerService
+import ca.floo.roadtrip.service.poi.defaultPoiTypes
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.readpath.ReadPathProviderPoiReader
 import ca.floo.roadtrip.service.routing.RouteCache
@@ -111,10 +112,11 @@ val serviceModule =
         single { WatchScopeResolver(get<CampsiteRepo>()) }
         single {
             DbAvailabilityTargetResolver(
-                providerRefs = get<CampsiteProviderRepo>(),
+                campsiteProviderRepo = get<CampsiteProviderRepo>(),
                 campsitesRepo = get<CampsiteRepo>(),
                 availabilityProviders = get<AvailabilityProviderRegistry>(),
                 dateResolver = get<AvailabilityDateResolver>(),
+                pollerRepo = get<AvailabilityPollerRepo>(),
             )
         }
         single { AvailabilityPollerMembership(get<WatchScopeResolver>(), get<DbAvailabilityTargetResolver>()) }
@@ -163,10 +165,10 @@ val serviceModule =
             WatchAlertDispatcher(
                 notifications = get<NotificationFanout>(),
                 scopeResolver = get<WatchScopeResolver>(),
-                watches = get<AvailabilityWatchRepo>(),
+                watchRepo = get<AvailabilityWatchRepo>(),
                 targets = get<DbAvailabilityTargetResolver>(),
-                pois = get<PoiServingRepo>(),
-                availability = get<AvailabilityRepo>(),
+                poiRepo = get<PoiServingRepo>(),
+                availabilityRepo = get<AvailabilityRepo>(),
                 triggerActions = get<TriggerActionRegistry>(),
                 grafanaRootUrl = config.grafana?.rootUrl,
                 appRootUrl = config.webApp?.rootUrl,
@@ -176,7 +178,7 @@ val serviceModule =
         single {
             WatchTriggerCapabilityValidator(
                 scopeResolver = get<WatchScopeResolver>(),
-                capabilities = get<WatchCapabilityService>(),
+                watchCapabilityService = get<WatchCapabilityService>(),
             )
         }
         single {
@@ -197,21 +199,28 @@ val serviceModule =
             ProviderCooldownTracker(cooldown = config.availability.providerCooldown)
         }
         single { FailoverAvailabilityFetcher(cooldowns = get<ProviderCooldownTracker>()) }
-        single { CampgroundAvailabilitySupport(providerRefs = get<CampsiteProviderRepo>(), availabilityProviders = get()) }
+        single {
+            CampgroundAvailabilitySupport(
+                campsiteProviderRepo = get<CampsiteProviderRepo>(),
+                availabilityProviders = get(),
+            )
+        }
         single {
             VendorRateLimiter(get<AppConfig>().vendorRateLimit, get<DataSource>())
         }
 
         single {
+            AvailabilityRunService(
+                runRepo = get<AvailabilityRunRepo>(),
+                availabilityRepo = get<AvailabilityRepo>(),
+                fetchCallRepo = get<AvailabilityFetchCallRepo>(),
+            )
+        }
+        single {
             AvailabilityPollExecutor(
-                pollers = get<AvailabilityPollerRepo>(),
-                campsitesRepo = get<CampsiteRepo>(),
+                targetResolver = get<DbAvailabilityTargetResolver>(),
                 batcher = CatalogAvailabilityBatcher(),
-                availability = get<AvailabilityRepo>(),
-                runs = get<AvailabilityRunRepo>(),
-                dateResolver = get<AvailabilityDateResolver>(),
-                targets = get<DbAvailabilityTargetResolver>(),
-                fetchCalls = get<AvailabilityFetchCallRepo>(),
+                runService = get<AvailabilityRunService>(),
                 limiter = get<VendorRateLimiter>(),
                 alertDispatcher = get<WatchAlertDispatcher>(),
                 failoverFetcher = get<FailoverAvailabilityFetcher>(),
@@ -219,7 +228,7 @@ val serviceModule =
         }
         single(createdAtStart = true) {
             Scheduler(
-                repo = get<AvailabilityPollerRepo>(),
+                schedulableRepo = get<AvailabilityPollerRepo>(),
                 handler = get<AvailabilityPollExecutor>()::handle,
                 name = "availability",
             ).also { it.start(get<CoroutineScope>()) }
@@ -234,7 +243,7 @@ val serviceModule =
         single(named("poiDetailServices")) {
             listOf(
                 CampgroundService(
-                    repo = get<CampgroundRepo>(),
+                    campgroundRepo = get<CampgroundRepo>(),
                     dateResolver = get<AvailabilityDateResolver>(),
                     availabilitySupport = get<CampgroundAvailabilitySupport>(),
                 ),
@@ -312,7 +321,7 @@ private fun supportedReadPathDataSources(registry: PoiRegistry): Set<String> =
         .mapNotNull { row -> row.etls.lastOrNull()?.slug }
         .toSet() +
         canonicalCampgroundSourceKeys(registry) +
-        DEFAULT_POI_TYPES.filter { it != CampgroundService.POI_TYPE }
+        defaultPoiTypes.filter { it != CampgroundService.POI_TYPE }
 
 private fun canonicalCampgroundSourceKeys(registry: PoiRegistry): Set<String> =
     buildSet {

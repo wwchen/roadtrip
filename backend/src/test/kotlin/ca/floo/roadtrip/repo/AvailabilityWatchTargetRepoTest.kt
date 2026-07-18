@@ -6,12 +6,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class AvailabilityWatchTargetRepoTest : SharedDbTest() {
+    private var poiSeq = 0
+
     @BeforeEach
     fun cleanup() {
         ctx.cleanCanonicalCatalogFixtures()
     }
-
-    private var poiSeq = 0
 
     private fun insertPoi(): Long {
         val sourceId = "poi-target-repo-${poiSeq++}"

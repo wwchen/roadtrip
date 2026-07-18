@@ -19,7 +19,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 
 /**
- * Mapbox Geocoding API v5 forward-geocoding client. Backs /api/geocode for
+ * Mapbox Geocoding API v5 forward-geocoding httpClient. Backs /api/geocode for
  * type-as-you-search autofill in the trip planner top bar.
  *
  *   GET https://api.mapbox.com/geocoding/v5/mapbox.places/{q}.json
@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory
  */
 class MapboxGeocoder(
     private val token: String?,
-    private val client: HttpClient = defaultClient(),
+    private val httpClient: HttpClient = defaultClient(),
     private val baseUrl: String = "https://api.mapbox.com",
 ) {
     private val log = LoggerFactory.getLogger(MapboxGeocoder::class.java)
@@ -64,7 +64,7 @@ class MapboxGeocoder(
 
         val response =
             try {
-                client.get(url)
+                httpClient.get(url)
             } catch (e: Exception) {
                 log.warn("Mapbox geocode network failure: {}", e.message)
                 throw GeocodeException("network error: ${e.message}", e)

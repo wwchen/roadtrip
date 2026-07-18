@@ -1,6 +1,7 @@
 package ca.floo.roadtrip
 
 import ca.floo.roadtrip.client.mapbox.MapboxDirections
+import ca.floo.roadtrip.config.RouteConfig
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
@@ -86,6 +87,7 @@ class OpenApiSmokeTest {
                             routeCorridorService = routeCorridorService,
                             poiService = poiService,
                         ),
+                        routeConfig = testRouteConfig(),
                     )
                 }
             }
@@ -143,5 +145,12 @@ class OpenApiSmokeTest {
                     TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
                     PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
                 ),
+        )
+
+    private fun testRouteConfig(): RouteConfig =
+        RouteConfig(
+            maxWaypoints = 25,
+            minCorridorRadiusMiles = 1.0,
+            maxCorridorRadiusMiles = 100.0,
         )
 }

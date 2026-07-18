@@ -30,8 +30,8 @@ import java.time.LocalDate
 internal class AvailabilityWatchService(
     private val ctx: DSLContext,
     private val alertProviders: AlertProviderRegistry,
-    private val capabilityValidator: WatchCapabilityValidator = NoopWatchCapabilityValidator,
-    private val lifecycleNotifications: WatchLifecycleNotifications = NoopWatchLifecycleNotifications,
+    private val capabilityValidator: WatchCapabilityValidator,
+    private val lifecycleNotifications: WatchLifecycleNotifications,
 ) {
     fun create(
         targets: List<AvailabilityWatchTargetRepo.TargetInput>,

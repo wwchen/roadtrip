@@ -32,11 +32,6 @@ internal class CampgroundCta(
             ReserveCaliforniaCampgroundCtaProvider,
         )
 
-    companion object {
-        // Convenience for the route layer — uses system clock.
-        val Default: CampgroundCta = CampgroundCta()
-    }
-
     // Display name for the booking system that reservations on this pin
     // flow through. Same per-vendor knowledge as computeCtas, surfaced as
     // a string for the drawer footer.
@@ -101,6 +96,11 @@ internal class CampgroundCta(
         reserveUrl
             ?.takeIf { it.isNotBlank() }
             ?: infoUrl?.takeIf { it.isNotBlank() }
+
+    companion object {
+        // Convenience for the route layer — uses system clock.
+        val default: CampgroundCta = CampgroundCta()
+    }
 }
 
 private interface CampgroundCtaProvider {
@@ -161,7 +161,7 @@ private class AspiraCampgroundCtaProvider(
         host: String,
         ref: ProviderRef.Aspira,
     ): String {
-        val today = LocalDate.now(clock.withZone(ASPIRA_ANCHOR_TZ))
+        val today = LocalDate.now(clock.withZone(aspiraAnchorTimeZone))
         val template = AspiraBookingUrl.template(host, ref.transactionLocationId, ref.mapId, ref.resourceLocationId)
         return ReservationUrlTemplate.fill(template, today, today.plusDays(1))
     }
@@ -170,7 +170,7 @@ private class AspiraCampgroundCtaProvider(
         // TODO: per-tenant TZ via YAML once we ingest more parks across more zones.
         // For now, every Aspira tenant we run lives close enough to Eastern that
         // an EST anchor produces a usable today/tomorrow booking page.
-        val ASPIRA_ANCHOR_TZ: ZoneId = ZoneId.of("America/New_York")
+        val aspiraAnchorTimeZone: ZoneId = ZoneId.of("America/New_York")
     }
 }
 

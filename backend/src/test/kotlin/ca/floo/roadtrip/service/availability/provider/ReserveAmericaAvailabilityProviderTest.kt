@@ -15,7 +15,7 @@ class ReserveAmericaAvailabilityProviderTest {
     @Test
     fun `catalog availability parses reserveamerica matrix and narrows to requested reservables`() =
         runBlocking {
-            val client =
+            val availabilityClient =
                 ReserveAmericaAvailabilityClient { host, _, _, startDate, _ ->
                     assertEquals("newyorkstateparks.reserveamerica.com", host)
                     assertEquals(LocalDate.parse("2026-06-22"), startDate)
@@ -49,7 +49,7 @@ class ReserveAmericaAvailabilityProviderTest {
                             contractCode = "NY",
                             bookingHorizonDays = 270,
                         ),
-                    client = client,
+                    availabilityClient = availabilityClient,
                     enabled = true,
                 )
 

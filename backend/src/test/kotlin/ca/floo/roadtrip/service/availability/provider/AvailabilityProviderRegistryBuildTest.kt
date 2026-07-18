@@ -77,7 +77,7 @@ class AvailabilityProviderRegistryBuildTest {
                             reserveCaliforniaClient = stubReserveCaliforniaClient(),
                             campflareClient = stubCampflareClient(),
                         ),
-                    isProviderEnabled = ALL_PROVIDERS_ENABLED,
+                    isProviderEnabled = allProvidersEnabled,
                 )
 
             val provider = registry.forPoi(row("test-reserveamerica"))
@@ -148,7 +148,7 @@ class AvailabilityProviderRegistryBuildTest {
                                     )
                                 },
                         ),
-                    isProviderEnabled = ALL_PROVIDERS_ENABLED,
+                    isProviderEnabled = allProvidersEnabled,
                 )
 
             val provider = registry.forPoi(row("campflare-campgrounds"))
@@ -374,6 +374,6 @@ class AvailabilityProviderRegistryBuildTest {
     private fun stubCampflareClient(): CampflareAvailabilityClient = CampflareAvailabilityClient { _, _, _ -> error("not used") }
 
     private companion object {
-        val ALL_PROVIDERS_ENABLED: (AvailabilityProviderId) -> Boolean = { true }
+        val allProvidersEnabled: (AvailabilityProviderId) -> Boolean = { true }
     }
 }

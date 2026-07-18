@@ -11,6 +11,7 @@ import ca.floo.roadtrip.model.booking.BookingProviderId
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.booking.BookingProvider
@@ -172,6 +173,11 @@ class WatchCapabilityServiceTest {
                 parentPoiId = TEST_PARENT_POI_ID,
                 dateContext = PoiDateContext(ZoneId.of("UTC"), LocalDate.parse("2026-07-01")),
             )
+        }
+
+        override fun resolve(poller: AvailabilityPollerRepo.Poller): PollerFetchPlan? {
+            // Unused by WatchCapabilityService tests
+            throw UnsupportedOperationException("resolve(poller) not implemented in test fake")
         }
     }
 

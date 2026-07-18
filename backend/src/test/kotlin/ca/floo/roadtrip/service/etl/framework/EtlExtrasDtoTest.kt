@@ -54,7 +54,7 @@ class EtlExtrasDtoTest {
                                     infoUrl = "https://example.test/park",
                                 ),
                             ),
-                        fetchedAt = FETCHED_AT,
+                        fetchedAt = fetchedAt,
                     ),
                     transformCtx(),
                 ).campgrounds
@@ -89,7 +89,7 @@ class EtlExtrasDtoTest {
                                 ),
                             ),
                         rawBySlug = mapOf("test-slug" to rawIndex),
-                        fetchedAt = FETCHED_AT,
+                        fetchedAt = fetchedAt,
                     ),
                     transformCtx(),
                 ).superchargers
@@ -119,7 +119,7 @@ class EtlExtrasDtoTest {
                 Envelope(
                     fetcher = "fixture",
                     fetcherVersion = "1",
-                    fetchedAt = FETCHED_AT.toString(),
+                    fetchedAt = fetchedAt.toString(),
                     request = RequestMeta(url = "https://example.test/tesla/$slug", method = "GET"),
                     response = ResponseMeta(status = 200),
                     payload =
@@ -155,7 +155,7 @@ class EtlExtrasDtoTest {
                                 ),
                             ),
                         rawBySlug = mapOf(slug to rawIndex),
-                        fetchedAt = FETCHED_AT,
+                        fetchedAt = fetchedAt,
                     ),
                     transformCtx(rawDir),
                 ).superchargers
@@ -177,7 +177,7 @@ class EtlExtrasDtoTest {
                 Envelope(
                     fetcher = "fixture",
                     fetcherVersion = "1",
-                    fetchedAt = FETCHED_AT.toString(),
+                    fetchedAt = fetchedAt.toString(),
                     request = RequestMeta(url = "https://example.test/tesla/$slug", method = "GET"),
                     response = ResponseMeta(status = 200),
                     payload =
@@ -245,7 +245,7 @@ class EtlExtrasDtoTest {
                                 ),
                             ),
                         rawBySlug = mapOf(slug to rawIndex),
-                        fetchedAt = FETCHED_AT,
+                        fetchedAt = fetchedAt,
                     ),
                     transformCtx(rawDir),
                 ).superchargers
@@ -316,7 +316,7 @@ class EtlExtrasDtoTest {
                                         ),
                                 ),
                             ),
-                        _fetchedAt = FETCHED_AT,
+                        fetchedAt = fetchedAt,
                     ),
                     transformCtx(),
                 ).locations
@@ -357,7 +357,7 @@ class EtlExtrasDtoTest {
                                     ),
                             ),
                         geomSources = listOf("fixture" to GeoJsonFeaturesSource(listOf(geoJsonEnvelope()), "fixture")),
-                        fetchedAt = FETCHED_AT,
+                        fetchedAt = fetchedAt,
                     ),
                     transformCtx(),
                 ).campgrounds
@@ -376,7 +376,7 @@ class EtlExtrasDtoTest {
         Envelope(
             fetcher = "fixture",
             fetcherVersion = "1",
-            fetchedAt = FETCHED_AT.toString(),
+            fetchedAt = fetchedAt.toString(),
             request = RequestMeta(url = "https://example.test", method = "GET"),
             response = ResponseMeta(status = 200),
             payload =
@@ -400,6 +400,6 @@ class EtlExtrasDtoTest {
         TransformCtx.load(rawDir, PoiRegistry.loadResource("poi-registry.yaml"))
 
     private companion object {
-        val FETCHED_AT: Instant = Instant.parse("2026-01-01T00:00:00Z")
+        val fetchedAt: Instant = Instant.parse("2026-01-01T00:00:00Z")
     }
 }

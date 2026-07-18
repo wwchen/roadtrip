@@ -11,7 +11,7 @@ class VendorRateLimitConfigTest {
         val bucket = config.forVendor("recgov")
         assertEquals(DEFAULT_VENDOR_BUCKET_CAPACITY, bucket.capacity)
         assertEquals(DEFAULT_VENDOR_BUCKET_REFILL_TOKENS, bucket.refillTokens)
-        assertEquals(DEFAULT_VENDOR_BUCKET_REFILL_PERIOD, bucket.refillPeriod)
+        assertEquals(defaultVendorBucketRefillPeriod, bucket.refillPeriod)
     }
 
     @Test
@@ -69,7 +69,7 @@ class VendorRateLimitConfigTest {
         val recgov = config.forVendor("recgov")
         assertEquals(100, recgov.capacity)
         assertEquals(DEFAULT_VENDOR_BUCKET_REFILL_TOKENS, recgov.refillTokens)
-        assertEquals(DEFAULT_VENDOR_BUCKET_REFILL_PERIOD, recgov.refillPeriod)
+        assertEquals(defaultVendorBucketRefillPeriod, recgov.refillPeriod)
     }
 
     @Test

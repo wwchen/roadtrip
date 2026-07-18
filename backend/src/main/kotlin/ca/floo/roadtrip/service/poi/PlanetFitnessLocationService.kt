@@ -7,12 +7,12 @@ import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import kotlinx.serialization.json.Json
 
 internal class PlanetFitnessLocationService(
-    private val repo: PlanetFitnessLocationRepo,
+    private val planetFitnessLocationRepo: PlanetFitnessLocationRepo,
 ) : PoiDetailService {
     override val poiType: String = POI_TYPE
 
     override fun poiDetailProperties(poi: PoiIndexRow): PoiDetailPropertiesSchema? {
-        val detail = repo.findPoiDetailByPoi(poi.id) ?: return null
+        val detail = planetFitnessLocationRepo.findPoiDetailByPoi(poi.id) ?: return null
         val location = detail.location
         val raw = Json.parseToJsonElement(detail.propertiesJson)
         return PoiDetailPropertiesSchema(

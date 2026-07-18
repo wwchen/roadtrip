@@ -21,7 +21,7 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
 class ReserveCaliforniaAvailabilityProvider(
-    private val client: ReserveCaliforniaAvailabilityClient,
+    private val availabilityClient: ReserveCaliforniaAvailabilityClient,
     private val clock: Clock = Clock.systemUTC(),
     private val enabled: Boolean,
 ) : AvailabilityProvider {
@@ -94,7 +94,7 @@ class ReserveCaliforniaAvailabilityProvider(
                 ref.facilityIds
                     .map { facilityId ->
                         async {
-                            client.fetchGrid(
+                            availabilityClient.fetchGrid(
                                 facilityId = facilityId,
                                 startDate = startDate,
                                 endDate = endDate,

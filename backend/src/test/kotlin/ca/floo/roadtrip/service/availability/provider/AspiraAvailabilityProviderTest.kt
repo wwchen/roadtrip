@@ -27,7 +27,7 @@ class AspiraAvailabilityProviderTest {
                         vendorCode = "aspira_pc",
                         bookingHorizonDays = 365,
                     ),
-                client = fakeAspiraClient(),
+                availabilityClient = fakeAspiraClient(),
                 enabled = true,
             )
 
@@ -41,7 +41,7 @@ class AspiraAvailabilityProviderTest {
         runBlocking {
             var mapFetches = 0
             var occupancyFetches = 0
-            val client =
+            val availabilityClient =
                 fakeAspiraClient(
                     onFetch = { _, mapId, start, end ->
                         mapFetches++
@@ -72,7 +72,7 @@ class AspiraAvailabilityProviderTest {
                             vendorCode = "aspira_pc",
                             bookingHorizonDays = 365,
                         ),
-                    client = client,
+                    availabilityClient = availabilityClient,
                     enabled = true,
                 )
 
@@ -114,7 +114,7 @@ class AspiraAvailabilityProviderTest {
     fun `aspira catalog availability can opt into occupancy search`() =
         runBlocking {
             var mapFetches = 0
-            val client =
+            val availabilityClient =
                 fakeAspiraClient(
                     onFetch = { _, _, _, _ ->
                         mapFetches++
@@ -142,7 +142,7 @@ class AspiraAvailabilityProviderTest {
                             vendorCode = "aspira_pc",
                             bookingHorizonDays = 365,
                         ),
-                    client = client,
+                    availabilityClient = availabilityClient,
                     enabled = true,
                     occupancyEnabled = true,
                 )
@@ -183,7 +183,7 @@ class AspiraAvailabilityProviderTest {
     @Test
     fun `aspira catalog availability uses map resource status when occupancy is disabled`() =
         runBlocking {
-            val client =
+            val availabilityClient =
                 fakeAspiraClient(
                     onFetch = { _, mapId, _, _ ->
                         AspiraAvailability(
@@ -205,7 +205,7 @@ class AspiraAvailabilityProviderTest {
                             vendorCode = "aspira_pc",
                             bookingHorizonDays = 365,
                         ),
-                    client = client,
+                    availabilityClient = availabilityClient,
                     enabled = true,
                     occupancyEnabled = false,
                 )
@@ -239,7 +239,7 @@ class AspiraAvailabilityProviderTest {
     @Test
     fun `available dates returns per-day facts without requiring a same-sub-area stay`() =
         runBlocking {
-            val client =
+            val availabilityClient =
                 fakeAspiraClient(
                     onFetch = { _, mapId, _, _ ->
                         AspiraAvailability(
@@ -262,7 +262,7 @@ class AspiraAvailabilityProviderTest {
                             vendorCode = "aspira_pc",
                             bookingHorizonDays = 365,
                         ),
-                    client = client,
+                    availabilityClient = availabilityClient,
                     enabled = true,
                 )
 
@@ -292,7 +292,7 @@ class AspiraAvailabilityProviderTest {
         val adapter =
             AspiraAvailabilityProvider(
                 tenant = AspiraTenant(host = "washington.goingtocamp.com", vendorCode = "aspira_wa", bookingHorizonDays = 365),
-                client = fakeAspiraClient(),
+                availabilityClient = fakeAspiraClient(),
                 enabled = true,
             )
         val reservable =

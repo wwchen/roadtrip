@@ -21,13 +21,13 @@ internal interface AlertProvider : Dispatchable<AlertProviderId> {
     /** Stable slug identifying this provider ("internal_poller", later "campflare"). */
     val id: String
 
-    override fun canHandle(key: AlertProviderId): Boolean = key.slug == id
-
     /**
      * `false` = platform polls this vendor for openings (internal poller);
      * `true` = vendor pushes alerts and this provider owns the webhook route.
      */
     val hostsAlerts: Boolean
+
+    override fun canHandle(key: AlertProviderId): Boolean = key.slug == id
 
     /**
      * Called after a watch is created or transitions into [ca.floo.roadtrip.service.availability.WatchStatus.ACTIVE].

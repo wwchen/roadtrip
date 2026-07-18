@@ -17,7 +17,7 @@ class AspiraCampsiteParentJoiner : CampsiteParentJoiner {
     override val adapter: String = ADAPTER_NAME
 
     override fun discoverLinks(ctx: JoinerCtx): List<CampsiteParentLink> {
-        val campgrounds = ctx.repo.fetchAspiraCampgroundParentCandidates()
+        val campgrounds = ctx.campsiteParentJoinerRepo.fetchAspiraCampgroundParentCandidates()
         val campgroundsByExternalId =
             campgrounds.groupBy { campground ->
                 AspiraExternalParentKey(
@@ -36,7 +36,7 @@ class AspiraCampsiteParentJoiner : CampsiteParentJoiner {
                 }
 
         val links = LinkedHashSet<CampsiteParentLink>()
-        for (site in ctx.repo.fetchAspiraCampsiteParentCandidates()) {
+        for (site in ctx.campsiteParentJoinerRepo.fetchAspiraCampsiteParentCandidates()) {
             val parentVendor = parentVendorBySiteVendor[site.vendor] ?: continue
             site.parentExternalId()?.let { parentExternalId ->
                 campgroundsByExternalId[AspiraExternalParentKey(parentVendor, parentExternalId)]

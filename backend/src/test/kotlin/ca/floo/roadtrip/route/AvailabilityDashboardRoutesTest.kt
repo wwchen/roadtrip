@@ -7,7 +7,6 @@ import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
-import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.AvailabilityDashboardController
@@ -38,10 +37,10 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     private fun Route.testAvailabilityDashboardRoutes() {
         installAvailabilityDashboardRoutes(
             AvailabilityDashboardController(
-                pollers = AvailabilityPollerRepo(ctx),
-                runs = AvailabilityRunRepo(ctx),
-                availability = AvailabilityRepo(ctx),
-                campsites = CampsiteRepo(ctx),
+                pollerRepo = AvailabilityPollerRepo(ctx),
+                runRepo = AvailabilityRunRepo(ctx),
+                availabilityRepo = AvailabilityRepo(ctx),
+                campsiteRepo = CampsiteRepo(ctx),
                 forcePullCooldown = Duration.ofSeconds(60),
             ),
         )
@@ -85,13 +84,28 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
         return pollerId
     }
 
-    private fun seedCampsite(): Long =
-        ctx.seedCampsite(
-            campgroundId = ctx.seedCampground(name = "Dashboard Campground", source = "test", sourceId = "dashboard-cg"),
-            vendor = "recgov",
-            vendorId = "330257",
-            name = "A12",
-        )
+    private data class SummaryFixture(
+        val poiId: Long,
+        val campsiteId: Long,
+    )
+
+    private fun seedSummaryFixture(): SummaryFixture {
+        val poi =
+            ctx.seedCatalogPoi(
+                sourceId = "dashboard-cg",
+                name = "Dashboard Campground",
+                lon = -119.56,
+                lat = 37.74,
+            )
+        val campsiteId =
+            ctx.seedCampsite(
+                campgroundId = poi.catalogId,
+                vendor = "recgov",
+                vendorId = "330257",
+                name = "A12",
+            )
+        return SummaryFixture(poiId = poi.poiId, campsiteId = campsiteId)
+    }
 
     /** Records one observation into the interval table (bump-or-insert), so the
      *  summary is derived from real status-runs. */
@@ -223,10 +237,10 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `GET snapshots requires exactly one filter`() =
+    fun `GET changes requires exactly one filter`() =
         testApplication {
             application { routing { testAvailabilityDashboardRoutes() } }
-            val resp = client.get("/api/availability/snapshots")
+            val resp = client.get("/api/availability/changes")
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("invalid_filter", body["error"]!!.jsonPrimitive.content)
@@ -241,44 +255,51 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `GET snapshots summary returns stats per date`() =
+    fun `GET changes summary returns stats per date`() =
         testApplication {
             application { routing { testAvailabilityDashboardRoutes() } }
-            val campsiteId = seedCampsite()
+            val fixture = seedSummaryFixture()
             val now = OffsetDateTime.now(ZoneOffset.UTC)
             // reserved → available → available. The two availables bump the same
             // status-run in place, so this collapses to two runs (reserved, available).
-            recordObservation(campsiteId, "2026-07-04", now.minusMinutes(3), available = false)
-            recordObservation(campsiteId, "2026-07-04", now.minusMinutes(2), available = true)
-            recordObservation(campsiteId, "2026-07-04", now.minusMinutes(1), available = true)
-            val resp = client.get("/api/availability/snapshots/summary?campsite_id=$campsiteId")
+            recordObservation(fixture.campsiteId, "2026-07-04", now.minusMinutes(3), available = false)
+            recordObservation(fixture.campsiteId, "2026-07-04", now.minusMinutes(2), available = true)
+            recordObservation(fixture.campsiteId, "2026-07-04", now.minusMinutes(1), available = true)
+            val pollerId =
+                AvailabilityPollerRepo(ctx)
+                    .upsertActive(provider = "recgov", parentRef = "dashboard-cg", poiId = fixture.poiId, pullNextRunAt = null)
+            val runRepo = AvailabilityRunRepo(ctx)
+            val olderRun = runRepo.start(pollerId, now.minusMinutes(3))
+            runRepo.complete(olderRun, snapshotCount = 1, completedAt = now.minusMinutes(3), durationMs = 10)
+            val newerRun = runRepo.start(pollerId, now.minusMinutes(1))
+            runRepo.complete(newerRun, snapshotCount = 1, completedAt = now.minusMinutes(1), durationMs = 10)
+            val resp = client.get("/api/availability/changes/summary?poi_id=${fixture.poiId}")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals(campsiteId, body["campsite_id"]!!.jsonPrimitive.long)
+            assertEquals(fixture.poiId, body["poi_id"]!!.jsonPrimitive.long)
             val stats = body["stats"]!!.jsonArray
             assertEquals(1, stats.size)
             val row = stats[0].jsonObject
             assertEquals("2026-07-04", row["target_date"]!!.jsonPrimitive.content)
             assertEquals(2, row["total_runs"]!!.jsonPrimitive.int)
             assertEquals(true, row["is_currently_open"]!!.jsonPrimitive.boolean)
-            assertEquals(1, row["opens_last_24h"]!!.jsonPrimitive.int)
         }
 
     @Test
-    fun `GET snapshots summary requires campsite id`() =
+    fun `GET changes summary requires poi id`() =
         testApplication {
             application { routing { testAvailabilityDashboardRoutes() } }
-            val resp = client.get("/api/availability/snapshots/summary")
+            val resp = client.get("/api/availability/changes/summary")
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("missing_campsite_id", body["error"]!!.jsonPrimitive.content)
+            assertEquals("missing_poi_id", body["error"]!!.jsonPrimitive.content)
         }
 
     @Test
-    fun `GET snapshots summary returns 404 on unknown campsite id`() =
+    fun `GET changes summary returns 404 on unknown poi id`() =
         testApplication {
             application { routing { testAvailabilityDashboardRoutes() } }
-            val resp = client.get("/api/availability/snapshots/summary?campsite_id=999999")
+            val resp = client.get("/api/availability/changes/summary?poi_id=999999")
             assertEquals(HttpStatusCode.NotFound, resp.status)
         }
 }

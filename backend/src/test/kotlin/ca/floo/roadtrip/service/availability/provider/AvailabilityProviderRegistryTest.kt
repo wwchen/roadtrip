@@ -16,7 +16,7 @@ class AvailabilityProviderRegistryTest {
         override val id: AvailabilityProviderId,
         private val enabled: Boolean,
     ) : AvailabilityProvider {
-        override val capabilities: AvailabilityProviderCapabilities = AvailabilityProviderCapabilities.UNSUPPORTED
+        override val capabilities: AvailabilityProviderCapabilities = AvailabilityProviderCapabilities.unsupported
 
         override fun isEnabled(): Boolean = enabled
 
@@ -60,7 +60,7 @@ class AvailabilityProviderRegistryTest {
         val declining =
             object : AvailabilityProvider {
                 override val id: AvailabilityProviderId = AvailabilityProviderId.CAMPFLARE
-                override val capabilities: AvailabilityProviderCapabilities = AvailabilityProviderCapabilities.UNSUPPORTED
+                override val capabilities: AvailabilityProviderCapabilities = AvailabilityProviderCapabilities.unsupported
 
                 override fun isEnabled(): Boolean = true
 

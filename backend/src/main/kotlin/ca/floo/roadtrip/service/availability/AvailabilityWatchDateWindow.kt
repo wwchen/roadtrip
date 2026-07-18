@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import java.time.LocalDate
 
-internal data class AvailabilityWatchDateWindow(
+internal class AvailabilityWatchDateWindow(
     val startDate: LocalDate,
     val endDate: LocalDate,
 ) {

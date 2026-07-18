@@ -4,6 +4,13 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import java.time.LocalDate
 
 object ReserveAmericaAvailabilityParser {
+    private val siteLabelRegex = Regex("""<div class='siteListLabel'>""")
+    private val siteIdRegex = Regex("""siteId=(\d+)""")
+    private val statusCellRegex =
+        Regex("""<div class='td status\s+([^']*)'[^>]*>(.*?)</div>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+    private val resultTotalRegex = Regex("""id='resulttotal_dr_(?:top|bottom)'\s*>\s*(\d+)\s*</span>""")
+    private val tagRegex = Regex("""<[^>]+>""")
+
     fun parse(
         html: String,
         startDate: LocalDate,
@@ -16,9 +23,9 @@ object ReserveAmericaAvailabilityParser {
         val dates = (0 until dayCount).map { startDate.plusDays(it.toLong()) }
         val statuses = linkedMapOf<String, Map<LocalDate, AvailabilityStatus>>()
         for (row in siteRows(html)) {
-            val siteId = SITE_ID.find(row)?.groupValues?.get(1) ?: continue
+            val siteId = siteIdRegex.find(row)?.groupValues?.get(1) ?: continue
             val byDate = linkedMapOf<LocalDate, AvailabilityStatus>()
-            STATUS_CELL
+            statusCellRegex
                 .findAll(row)
                 .take(dates.size)
                 .forEachIndexed { i, match ->
@@ -37,7 +44,7 @@ object ReserveAmericaAvailabilityParser {
      * (roster), so both read the exact same `siteId` per row.
      */
     fun siteRows(html: String): List<String> {
-        val starts = SITE_LABEL.findAll(html).map { it.range.first }.toList()
+        val starts = siteLabelRegex.findAll(html).map { it.range.first }.toList()
         return starts.mapIndexed { i, start ->
             html.substring(start, starts.getOrNull(i + 1) ?: html.length)
         }
@@ -65,18 +72,11 @@ object ReserveAmericaAvailabilityParser {
     }
 
     private fun totalSites(html: String): Int? =
-        RESULT_TOTAL
+        resultTotalRegex
             .find(html)
             ?.groupValues
             ?.get(1)
             ?.toIntOrNull()
 
-    private fun stripTags(value: String): String = value.replace(TAG, "").trim()
-
-    private val SITE_LABEL = Regex("""<div class='siteListLabel'>""")
-    private val SITE_ID = Regex("""siteId=(\d+)""")
-    private val STATUS_CELL =
-        Regex("""<div class='td status\s+([^']*)'[^>]*>(.*?)</div>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-    private val RESULT_TOTAL = Regex("""id='resulttotal_dr_(?:top|bottom)'\s*>\s*(\d+)\s*</span>""")
-    private val TAG = Regex("""<[^>]+>""")
+    private fun stripTags(value: String): String = value.replace(tagRegex, "").trim()
 }

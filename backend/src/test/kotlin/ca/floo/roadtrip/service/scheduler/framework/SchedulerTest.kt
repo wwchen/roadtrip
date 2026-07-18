@@ -102,10 +102,10 @@ class SchedulerTest {
     @Test
     fun `due rows get handed to the handler`() =
         runBlocking {
-            val repo = FakeRepo()
+            val schedulableRepo = FakeRepo()
             val ranIds = mutableListOf<Long>()
-            repo.add(1L, OffsetDateTime.now().minusSeconds(10), "a")
-            repo.add(2L, OffsetDateTime.now().minusSeconds(10), "b")
+            schedulableRepo.add(1L, OffsetDateTime.now().minusSeconds(10), "a")
+            schedulableRepo.add(2L, OffsetDateTime.now().minusSeconds(10), "b")
             val done = CompletableDeferred<Unit>()
             val handler: suspend (FakeJob) -> HandlerResult = { row ->
                 ranIds += row.id
@@ -114,7 +114,7 @@ class SchedulerTest {
             }
             val scheduler =
                 Scheduler(
-                    repo = repo,
+                    schedulableRepo = schedulableRepo,
                     handler = handler,
                     tickInterval = Duration.ofMillis(20),
                     claimBatchSize = 5,
@@ -126,14 +126,14 @@ class SchedulerTest {
                 scheduler.stop()
             }
             assertEquals(setOf(1L, 2L), ranIds.toSet())
-            assertEquals(2, repo.released.size)
+            assertEquals(2, schedulableRepo.released.size)
         }
 
     @Test
     fun `handler exception still releases the row`() =
         runBlocking {
-            val repo = FakeRepo()
-            repo.add(1L, OffsetDateTime.now().minusSeconds(10), "a")
+            val schedulableRepo = FakeRepo()
+            schedulableRepo.add(1L, OffsetDateTime.now().minusSeconds(10), "a")
             val attempts = AtomicInteger(0)
             val seen = AtomicReference<HandlerResult?>(null)
             val done = CompletableDeferred<Unit>()
@@ -146,7 +146,7 @@ class SchedulerTest {
             }
             val scheduler =
                 Scheduler(
-                    repo = repo,
+                    schedulableRepo = schedulableRepo,
                     handler = handler,
                     tickInterval = Duration.ofMillis(20),
                     claimBatchSize = 1,
@@ -159,22 +159,22 @@ class SchedulerTest {
                 delay(100)
                 scheduler.stop()
             }
-            assertEquals(1, repo.released.size)
+            assertEquals(1, schedulableRepo.released.size)
             // Released even though the handler threw.
             assertNull(seen.get())
         }
 
     @Test
     fun `boot recovery clears expired leases`() {
-        val repo = FakeRepo()
-        repo.add(1L, OffsetDateTime.now().minusMinutes(5), "a")
+        val schedulableRepo = FakeRepo()
+        schedulableRepo.add(1L, OffsetDateTime.now().minusMinutes(5), "a")
         // Pretend a previous run claimed the row and crashed.
-        repo.rows[0]["claim_token"] = "stale"
-        repo.rows[0]["claimed_until"] = OffsetDateTime.now().minusSeconds(1)
+        schedulableRepo.rows[0]["claim_token"] = "stale"
+        schedulableRepo.rows[0]["claimed_until"] = OffsetDateTime.now().minusSeconds(1)
         runBlocking {
             val scheduler =
                 Scheduler(
-                    repo = repo,
+                    schedulableRepo = schedulableRepo,
                     handler = { HandlerResult(OffsetDateTime.now().plusMinutes(1)) },
                     tickInterval = Duration.ofSeconds(60),
                     claimBatchSize = 1,
@@ -186,19 +186,19 @@ class SchedulerTest {
                 scheduler.stop()
             }
         }
-        assertNull(repo.rows[0]["claim_token"])
+        assertNull(schedulableRepo.rows[0]["claim_token"])
     }
 
     @Test
     fun `boot recovery failure does not prevent later ticks`() =
         runBlocking {
-            val repo = FakeRepo()
-            repo.add(1L, OffsetDateTime.now().minusSeconds(10), "a")
-            repo.failNextReclaims(1)
+            val schedulableRepo = FakeRepo()
+            schedulableRepo.add(1L, OffsetDateTime.now().minusSeconds(10), "a")
+            schedulableRepo.failNextReclaims(1)
             val done = CompletableDeferred<Unit>()
             val scheduler =
                 Scheduler(
-                    repo = repo,
+                    schedulableRepo = schedulableRepo,
                     handler = {
                         done.complete(Unit)
                         HandlerResult(OffsetDateTime.now().plusMinutes(1))
@@ -212,6 +212,6 @@ class SchedulerTest {
                 withTimeout(2_000) { done.await() }
                 scheduler.stop()
             }
-            assertEquals(1, repo.released.size)
+            assertEquals(1, schedulableRepo.released.size)
         }
 }

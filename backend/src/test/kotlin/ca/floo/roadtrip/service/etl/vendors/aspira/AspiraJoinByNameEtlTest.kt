@@ -34,6 +34,60 @@ class AspiraJoinByNameEtlTest {
     // constant agency (Parks Canada) resolve from the production YAML.
     private val slug = "aspira-pc-pins"
 
+    // Category 100 is bookable (showResourceCapacityOnline=true, e.g. Campsite);
+    // 200 is non-bookable (false, e.g. Parking). The flag is Aspira's own — the
+    // filter reads it straight from the dictionary, no curated name list.
+    private val categoryDict =
+        """
+        {"resource_categories":[
+          {"resourceCategoryId":100,"showResourceCapacityOnline":true},
+          {"resourceCategoryId":200,"showResourceCapacityOnline":false}
+        ]}
+        """.trimIndent()
+
+    // A dictionary that marks every category bookable — the shape WA/BC ship
+    // today. Nothing should be dropped for such a tenant.
+    private val allBookableDict =
+        """
+        {"resource_categories":[
+          {"resourceCategoryId":100,"showResourceCapacityOnline":true},
+          {"resourceCategoryId":200,"showResourceCapacityOnline":true}
+        ]}
+        """.trimIndent()
+
+    private val parkContainer =
+        AspiraLeaf(
+            name = "Banff",
+            transactionLocationId = -2147483648L,
+            mapId = -2147483630L,
+            resourceLocationId = null,
+            parentName = null,
+        )
+
+    private val campground =
+        AspiraLeaf(
+            name = "Two Jack Lakeside",
+            transactionLocationId = 1002L,
+            mapId = -2147483641L,
+            resourceLocationId = 9002L,
+            parentName = "Banff",
+        )
+
+    // A campground leaf whose own name misses geometry but whose parent park
+    // centroid matches. This is the load-bearing correctness claim of the
+    // change: dropping park-container leaves is only safe because each park's
+    // campground leaves still land — via their own coordinates or, failing
+    // that, the parent park's centroid. If this fallback regressed, parks
+    // would silently vanish from the map while every other test still passed.
+    private val campgroundMissingOwnName =
+        AspiraLeaf(
+            name = "Backcountry Site With No Geometry",
+            transactionLocationId = 1003L,
+            mapId = -2147483642L,
+            resourceLocationId = 9003L,
+            parentName = "Banff National Park of Canada",
+        )
+
     @BeforeAll
     fun setUp() {
         val registry = PoiRegistry.loadResource("poi-registry.yaml")
@@ -118,27 +172,6 @@ class AspiraJoinByNameEtlTest {
             """.trimIndent(),
         )
 
-    // Category 100 is bookable (showResourceCapacityOnline=true, e.g. Campsite);
-    // 200 is non-bookable (false, e.g. Parking). The flag is Aspira's own — the
-    // filter reads it straight from the dictionary, no curated name list.
-    private val categoryDict =
-        """
-        {"resource_categories":[
-          {"resourceCategoryId":100,"showResourceCapacityOnline":true},
-          {"resourceCategoryId":200,"showResourceCapacityOnline":false}
-        ]}
-        """.trimIndent()
-
-    // A dictionary that marks every category bookable — the shape WA/BC ship
-    // today. Nothing should be dropped for such a tenant.
-    private val allBookableDict =
-        """
-        {"resource_categories":[
-          {"resourceCategoryId":100,"showResourceCapacityOnline":true},
-          {"resourceCategoryId":200,"showResourceCapacityOnline":true}
-        ]}
-        """.trimIndent()
-
     // A leaf that name-matches geometry (so it WOULD emit) but whose
     // resourceLocationId varies per test via the inventory.
     private fun nameMatchingLeaf(resLoc: Long) =
@@ -148,24 +181,6 @@ class AspiraJoinByNameEtlTest {
             mapId = -2147483650L,
             resourceLocationId = resLoc,
             parentName = null,
-        )
-
-    private val parkContainer =
-        AspiraLeaf(
-            name = "Banff",
-            transactionLocationId = -2147483648L,
-            mapId = -2147483630L,
-            resourceLocationId = null,
-            parentName = null,
-        )
-
-    private val campground =
-        AspiraLeaf(
-            name = "Two Jack Lakeside",
-            transactionLocationId = 1002L,
-            mapId = -2147483641L,
-            resourceLocationId = 9002L,
-            parentName = "Banff",
         )
 
     @Test
@@ -261,21 +276,6 @@ class AspiraJoinByNameEtlTest {
         val bookingRef = campground.metadata!!.jsonObject["booking_cta_provider_ref"]!!.jsonObject
         assertEquals("-2147483645", bookingRef["mapId"]!!.jsonPrimitive.content)
     }
-
-    // A campground leaf whose own name misses geometry but whose parent park
-    // centroid matches. This is the load-bearing correctness claim of the
-    // change: dropping park-container leaves is only safe because each park's
-    // campground leaves still land — via their own coordinates or, failing
-    // that, the parent park's centroid. If this fallback regressed, parks
-    // would silently vanish from the map while every other test still passed.
-    private val campgroundMissingOwnName =
-        AspiraLeaf(
-            name = "Backcountry Site With No Geometry",
-            transactionLocationId = 1003L,
-            mapId = -2147483642L,
-            resourceLocationId = 9003L,
-            parentName = "Banff National Park of Canada",
-        )
 
     @Test
     fun `campground leaf that misses its own name falls back to the parent park centroid`() {

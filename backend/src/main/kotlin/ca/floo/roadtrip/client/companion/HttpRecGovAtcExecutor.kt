@@ -34,7 +34,7 @@ private const val HEALTH_STATUS_OK = "ok"
 
 internal class HttpRecGovAtcExecutor(
     config: RecGovAtcConfig,
-    private val client: HttpClient = defaultClient(),
+    private val httpClient: HttpClient = defaultClient(),
 ) : RecGovAtcExecutor {
     private val log = LoggerFactory.getLogger(javaClass)
     private val baseUrl = requireNotNull(config.companionBaseUrl) { "recgov ATC companion base URL is required" }
@@ -56,7 +56,7 @@ internal class HttpRecGovAtcExecutor(
         log.info("recgov companion ATC POST {}", endpoint)
         val response =
             try {
-                client.sendAsync(request, HttpResponse.BodyHandlers.ofString()).await()
+                httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).await()
             } catch (e: Exception) {
                 return RecGovAtcOutcome.Failed(
                     error = ERROR_COMPANION_REQUEST_FAILED,
@@ -74,7 +74,7 @@ internal class HttpRecGovAtcExecutor(
                 )
 
         val success =
-            response.statusCode() in SUCCESS_STATUS_RANGE &&
+            response.statusCode() in successStatusRange &&
                 parsed.booleanValue("ok") == true &&
                 parsed.booleanValue("cart_added") == true
         if (success) return RecGovAtcOutcome.Completed(response = parsed)
@@ -99,7 +99,7 @@ internal class HttpRecGovAtcExecutor(
         log.info("recgov companion health GET {}", endpoint)
         val response =
             try {
-                client.sendAsync(request, HttpResponse.BodyHandlers.ofString()).await()
+                httpClient.sendAsync(request, HttpResponse.BodyHandlers.ofString()).await()
             } catch (e: Exception) {
                 return healthPreflightFailed(
                     error = ERROR_COMPANION_HEALTH_REQUEST_FAILED,
@@ -118,7 +118,7 @@ internal class HttpRecGovAtcExecutor(
                     response = null,
                 )
 
-        if (response.statusCode() !in SUCCESS_STATUS_RANGE) {
+        if (response.statusCode() !in successStatusRange) {
             return companionHealthFailed(
                 parsed,
                 fallbackError = ERROR_COMPANION_HEALTH_HTTP,
@@ -162,8 +162,8 @@ internal class HttpRecGovAtcExecutor(
     }
 
     companion object {
-        private val SUCCESS_STATUS_RANGE = 200..299
-        private val DEFAULT_CONNECT_TIMEOUT: Duration = Duration.ofSeconds(10)
+        private val successStatusRange = 200..299
+        private val defaultConnectTimeout: Duration = Duration.ofSeconds(10)
         private val json =
             Json {
                 ignoreUnknownKeys = true
@@ -172,7 +172,7 @@ internal class HttpRecGovAtcExecutor(
         fun defaultClient(): HttpClient =
             HttpClient
                 .newBuilder()
-                .connectTimeout(DEFAULT_CONNECT_TIMEOUT)
+                .connectTimeout(defaultConnectTimeout)
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build()
     }

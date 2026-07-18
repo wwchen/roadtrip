@@ -17,6 +17,7 @@ class WatchScopeResolverTest : SharedDbTest() {
     private lateinit var campsiteRepo: CampsiteRepo
     private lateinit var watchRepo: AvailabilityWatchRepo
     private lateinit var resolver: WatchScopeResolver
+    private var poiSeq = 0
 
     @BeforeEach
     fun setUp() {
@@ -25,8 +26,6 @@ class WatchScopeResolverTest : SharedDbTest() {
         resolver = WatchScopeResolver(campsiteRepo)
         ctx.cleanCanonicalCatalogFixtures()
     }
-
-    private var poiSeq = 0
 
     private fun insertPoi(): Long {
         val sourceId = "poi-scope-${poiSeq++}"

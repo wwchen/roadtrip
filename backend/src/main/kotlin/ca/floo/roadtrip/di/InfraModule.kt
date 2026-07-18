@@ -125,7 +125,7 @@ fun infraModule(baseConfig: ApplicationConfig) =
                         ctx = ctx,
                         rawDir = staticDir.resolveConfiguredPath(RAW_DATA_DIR),
                         poiRegistry = get(),
-                        canonicalViews = get<CanonicalViewRepo>(),
+                        canonicalViewRepo = get<CanonicalViewRepo>(),
                     ),
                 importTargets = importTargetsFromRegistry(get()),
             )

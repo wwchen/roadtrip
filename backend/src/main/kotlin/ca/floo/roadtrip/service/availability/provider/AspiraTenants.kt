@@ -13,7 +13,7 @@ object AspiraTenants {
      * registry declares has a row here, so a forgotten entry fails
      * loudly instead of silently routing to a missing adapter.
      */
-    private val ALL: List<AspiraTenant> =
+    private val all: List<AspiraTenant> =
         listOf(
             AspiraTenant(
                 host = "reservation.pc.gc.ca",
@@ -38,13 +38,13 @@ object AspiraTenants {
             ),
         )
 
-    private val BY_HOST: Map<String, AspiraTenant> = ALL.associateBy { it.host }
-    private val BY_VENDOR_CODE: Map<String, AspiraTenant> = ALL.associateBy { it.vendorCode }
+    private val byHost: Map<String, AspiraTenant> = all.associateBy { it.host }
+    private val byVendorCode: Map<String, AspiraTenant> = all.associateBy { it.vendorCode }
 
-    fun byHost(host: String): AspiraTenant? = BY_HOST[host]
+    fun byHost(host: String): AspiraTenant? = byHost[host]
 
     /** Tenant for a campsite vendor code stamped under that tenant (e.g. `aspira_wa`). */
-    fun byVendorCode(vendorCode: String): AspiraTenant? = BY_VENDOR_CODE[vendorCode]
+    fun byVendorCode(vendorCode: String): AspiraTenant? = byVendorCode[vendorCode]
 
-    fun knownHosts(): Set<String> = BY_HOST.keys
+    fun knownHosts(): Set<String> = byHost.keys
 }

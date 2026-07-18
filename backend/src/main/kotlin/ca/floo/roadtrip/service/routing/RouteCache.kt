@@ -39,6 +39,8 @@ class RouteCache(
     private val log = LoggerFactory.getLogger(RouteCache::class.java)
     private val store = ConcurrentHashMap<String, Entry>()
 
+    val configured: Boolean get() = directions.configured
+
     /**
      * Look up a directions response by [waypoints]. Cache hit returns
      * immediately; miss falls back to [MapboxDirections.directions]. The
@@ -54,7 +56,7 @@ class RouteCache(
             }
             store.remove(key, entry)
         }
-        persistentCache.get(NAMESPACE, key)?.let { persisted ->
+        persistentCache.get(namespace, key)?.let { persisted ->
             try {
                 val response = json.decodeFromJsonElement(RouteResponse.serializer(), persisted.payload)
                 store[key] = Entry(response, persisted.expiresAt)
@@ -62,14 +64,14 @@ class RouteCache(
                 return response
             } catch (e: Exception) {
                 log.warn("route persistent cache decode failed key={}", key)
-                persistentCache.delete(NAMESPACE, key)
+                persistentCache.delete(namespace, key)
             }
         }
         log.debug("route cache miss: key={}", key)
         val fresh = directions.directions(waypoints)
         store[key] = Entry(fresh, nowInstant.plus(ttl))
         persistentCache.put(
-            NAMESPACE,
+            namespace,
             key,
             json.encodeToJsonElement(RouteResponse.serializer(), fresh),
             ttl,
@@ -85,19 +87,17 @@ class RouteCache(
         val key = waypointsKey(waypoints)
         store[key] = Entry(response, now().plus(ttl))
         persistentCache.put(
-            NAMESPACE,
+            namespace,
             key,
             json.encodeToJsonElement(RouteResponse.serializer(), response),
             ttl,
         )
     }
 
-    val configured: Boolean get() = directions.configured
-
     private fun waypointsKey(waypoints: List<Pair<Double, Double>>): String =
         waypoints.joinToString(";") { (lng, lat) -> "%.6f,%.6f".format(lng, lat) }
 
     companion object {
-        private val NAMESPACE = ApiCacheEntity.ROUTE.namespace
+        private val namespace = ApiCacheEntity.ROUTE.namespace
     }
 }

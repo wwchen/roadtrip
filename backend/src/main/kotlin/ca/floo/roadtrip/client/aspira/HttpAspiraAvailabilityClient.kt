@@ -22,7 +22,7 @@ import java.time.Duration
 import java.time.LocalDate
 
 class HttpAspiraAvailabilityClient(
-    private val client: HttpClient = defaultClient(),
+    private val httpClient: HttpClient = defaultClient(),
     private val throttleMs: Long = 1_500,
 ) : AspiraAvailabilityClient {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -77,7 +77,7 @@ class HttpAspiraAvailabilityClient(
             )
             val resp =
                 try {
-                    client.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
+                    httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
                 } catch (e: Exception) {
                     throw AspiraException("aspira request failed: ${e.message}", httpStatus = null)
                 }
@@ -144,7 +144,7 @@ class HttpAspiraAvailabilityClient(
             )
             val resp =
                 try {
-                    client.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
+                    httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
                 } catch (e: Exception) {
                     throw AspiraException("aspira occupancy request failed: ${e.message}", httpStatus = null)
                 }

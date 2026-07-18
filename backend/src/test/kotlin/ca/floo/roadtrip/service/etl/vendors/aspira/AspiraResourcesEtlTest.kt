@@ -17,57 +17,6 @@ import kotlin.test.assertEquals
 class AspiraResourcesEtlTest {
     private lateinit var ctx: TransformCtx
 
-    @BeforeAll
-    fun setUp() {
-        val registry = PoiRegistry.loadResource("poi-registry.yaml")
-        val tmp = Files.createTempDirectory("aspira-resources-").toFile()
-        tmp.deleteOnExit()
-        ctx = TransformCtx.load(tmp, registry)
-    }
-
-    @Test
-    fun `links child-map campsite resources to parent campground leaf by resource location id`() {
-        val etl =
-            AspiraResourcesEtl(
-                etlSlug = "aspira-wa-resources",
-                mapsInputSlug = "aspira-maps-wa",
-                inventoryInputSlug = "aspira-inventory-wa",
-                vendor = "aspira_wa",
-            )
-
-        val dto =
-            AspiraResourcesEtl.Parsed(
-                inventory = listOf(envelopeOf(inventoryPayload)),
-                maps = Json.parseToJsonElement(mapsPayload).jsonObject["payload"] as kotlinx.serialization.json.JsonArray,
-                dictionaries = AspiraResourcesEtl.AspiraDictionaries.EMPTY,
-            )
-
-        val campsite = etl.transform(dto, ctx).campsites.single()
-        val providerRef = campsite.vendorRefPayload!!.jsonObject
-        val sourcePayload = campsite.sourcePayload!!.jsonObject
-
-        assertEquals("aspira-wa-pins", campsite.parentVendor)
-        assertEquals("aspira--2147483630--2147483388", campsite.parentVendorRefId)
-        assertEquals("Deception Pass", campsite.loopName)
-        assertEquals(-2147483630, providerRef["transactionLocationId"]!!.jsonPrimitive.long)
-        assertEquals(-2147483615, providerRef["mapId"]!!.jsonPrimitive.long)
-        assertEquals(-2147483624, providerRef["resourceLocationId"]!!.jsonPrimitive.long)
-        assertEquals(-2147483388, sourcePayload["_parent_aspira_map_id"]!!.jsonPrimitive.long)
-        assertEquals(-2147483615, sourcePayload["_aspira_resource_map_id"]!!.jsonPrimitive.long)
-    }
-
-    private fun envelopeOf(payloadJson: String): Envelope =
-        Json.decodeFromString(
-            Envelope.serializer(),
-            """
-            { "fetcher": "test", "fetcher_version": "1",
-              "fetched_at": "2026-07-05T00:00:00Z",
-              "request": { "url": "test://aspira", "method": "GET" },
-              "response": { "status": 200 },
-              "payload": $payloadJson }
-            """.trimIndent(),
-        )
-
     private val mapsPayload =
         """
         {
@@ -108,4 +57,55 @@ class AspiraResourcesEtlTest {
           }
         }
         """.trimIndent()
+
+    @BeforeAll
+    fun setUp() {
+        val registry = PoiRegistry.loadResource("poi-registry.yaml")
+        val tmp = Files.createTempDirectory("aspira-resources-").toFile()
+        tmp.deleteOnExit()
+        ctx = TransformCtx.load(tmp, registry)
+    }
+
+    @Test
+    fun `links child-map campsite resources to parent campground leaf by resource location id`() {
+        val etl =
+            AspiraResourcesEtl(
+                etlSlug = "aspira-wa-resources",
+                mapsInputSlug = "aspira-maps-wa",
+                inventoryInputSlug = "aspira-inventory-wa",
+                vendor = "aspira_wa",
+            )
+
+        val dto =
+            AspiraResourcesEtl.Parsed(
+                inventory = listOf(envelopeOf(inventoryPayload)),
+                maps = Json.parseToJsonElement(mapsPayload).jsonObject["payload"] as kotlinx.serialization.json.JsonArray,
+                dictionaries = AspiraResourcesEtl.AspiraDictionaries.empty,
+            )
+
+        val campsite = etl.transform(dto, ctx).campsites.single()
+        val providerRef = campsite.vendorRefPayload!!.jsonObject
+        val sourcePayload = campsite.sourcePayload!!.jsonObject
+
+        assertEquals("aspira-wa-pins", campsite.parentVendor)
+        assertEquals("aspira--2147483630--2147483388", campsite.parentVendorRefId)
+        assertEquals("Deception Pass", campsite.loopName)
+        assertEquals(-2147483630, providerRef["transactionLocationId"]!!.jsonPrimitive.long)
+        assertEquals(-2147483615, providerRef["mapId"]!!.jsonPrimitive.long)
+        assertEquals(-2147483624, providerRef["resourceLocationId"]!!.jsonPrimitive.long)
+        assertEquals(-2147483388, sourcePayload["_parent_aspira_map_id"]!!.jsonPrimitive.long)
+        assertEquals(-2147483615, sourcePayload["_aspira_resource_map_id"]!!.jsonPrimitive.long)
+    }
+
+    private fun envelopeOf(payloadJson: String): Envelope =
+        Json.decodeFromString(
+            Envelope.serializer(),
+            """
+            { "fetcher": "test", "fetcher_version": "1",
+              "fetched_at": "2026-07-05T00:00:00Z",
+              "request": { "url": "test://aspira", "method": "GET" },
+              "response": { "status": 200 },
+              "payload": $payloadJson }
+            """.trimIndent(),
+        )
 }

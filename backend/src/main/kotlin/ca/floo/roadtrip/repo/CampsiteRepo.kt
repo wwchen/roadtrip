@@ -24,8 +24,8 @@ import java.time.OffsetDateTime
 class CampsiteRepo(
     private val ctx: DSLContext,
 ) {
-    private val importRuns = ImportRunRepo(ctx)
-    private val vendorRefs = VendorRefRepo(ctx)
+    private val importRunRepo = ImportRunRepo(ctx)
+    private val vendorRefRepo = VendorRefRepo(ctx)
 
     data class SearchFilters(
         val vendors: List<String> = emptyList(),
@@ -41,14 +41,14 @@ class CampsiteRepo(
         records: List<CampsiteUpsertCandidate>,
         source: String,
     ): CatalogUpsertResult {
-        val runId = importRuns.start(source)
+        val runId = importRunRepo.start(source)
         try {
             val (upserted, skipped) =
                 ctx.transactionResult { cfg ->
                     val tx = CampsiteRepo(DSL.using(cfg))
                     tx.bulkUpsertCampsitesTx(records)
                 }
-            importRuns.complete(runId, records.size)
+            importRunRepo.complete(runId, records.size)
             return CatalogUpsertResult(
                 runId = runId,
                 seenCount = records.size,
@@ -56,7 +56,7 @@ class CampsiteRepo(
                 skippedCount = skipped,
             )
         } catch (e: Throwable) {
-            importRuns.fail(runId, e.message ?: e.javaClass.simpleName)
+            importRunRepo.fail(runId, e.message ?: e.javaClass.simpleName)
             throw e
         }
     }
@@ -104,7 +104,7 @@ class CampsiteRepo(
                     )
             }
         }
-        val vendorRefIds = vendorRefs.bulkUpsertVendorRefs(vendorRefSpecs)
+        val vendorRefIds = vendorRefRepo.bulkUpsertVendorRefs(vendorRefSpecs)
 
         val campsiteRows =
             withResolvedParent.map { record ->
@@ -294,21 +294,21 @@ class CampsiteRepo(
     fun findById(id: Long): Campsite? =
         ctx
             .fetchOne(
-                "$CAMPSITE_SELECT WHERE c.id = ? AND c.deleted_at IS NULL",
+                "$campsiteSelect WHERE c.id = ? AND c.deleted_at IS NULL",
                 id,
             )?.let(::campsiteFromRecord)
 
     fun findAll(): List<Campsite> =
         ctx
             .fetch(
-                "$CAMPSITE_SELECT WHERE c.deleted_at IS NULL ORDER BY c.id",
+                "$campsiteSelect WHERE c.deleted_at IS NULL ORDER BY c.id",
             ).map(::campsiteFromRecord)
 
     fun findByPoi(poiId: Long): List<Campsite> =
         ctx
             .fetch(
                 """
-                $CAMPSITE_SELECT
+                $campsiteSelect
                 JOIN poi_campgrounds pc
                   ON pc.campground_id = c.campground_id
                 JOIN pois p
@@ -324,7 +324,7 @@ class CampsiteRepo(
     fun findAvailabilityTargetById(id: Long): CampsiteAvailabilityTarget? =
         ctx
             .fetchOne(
-                "$AVAILABILITY_TARGET_SELECT WHERE c.id = ? AND c.deleted_at IS NULL",
+                "$availabilityTargetSelect WHERE c.id = ? AND c.deleted_at IS NULL",
                 id,
             )?.let(::availabilityTargetFromRecord)
 
@@ -332,7 +332,7 @@ class CampsiteRepo(
         ctx
             .fetch(
                 """
-                $AVAILABILITY_TARGET_SELECT
+                $availabilityTargetSelect
                 JOIN poi_campgrounds pc
                   ON pc.campground_id = c.campground_id
                 JOIN pois p
@@ -377,7 +377,7 @@ class CampsiteRepo(
         return ctx
             .fetch(
                 """
-                $CAMPSITE_SELECT
+                $campsiteSelect
                 JOIN vendor_refs primary_ref
                   ON primary_ref.id = c.primary_vendor_ref_id
                 WHERE ${where.clauses.joinToString(" AND ")}
@@ -407,7 +407,7 @@ class CampsiteRepo(
             params += rawJson
         }
         for (tagsJson in filters.tagsContainsJson) {
-            clauses += "($CAMPSITE_TAGS_JSON_SQL) @> ?::jsonb"
+            clauses += "($campsiteTagsJsonSql) @> ?::jsonb"
             params += tagsJson
         }
         return SearchWhere(clauses, params)
@@ -548,7 +548,7 @@ class CampsiteRepo(
         private const val MIN_SEARCH_LIMIT = 1
         private const val MAX_SEARCH_LIMIT = 500
 
-        private val CAMPSITE_SELECT =
+        private val campsiteSelect =
             """
             SELECT
               c.id,
@@ -585,7 +585,7 @@ class CampsiteRepo(
             FROM campsites c
             """.trimIndent()
 
-        private val AVAILABILITY_TARGET_SELECT =
+        private val availabilityTargetSelect =
             """
             SELECT
               c.id,
@@ -628,7 +628,7 @@ class CampsiteRepo(
             ) primary_ref ON true
             """.trimIndent()
 
-        private val CAMPSITE_TAGS_JSON_SQL =
+        private val campsiteTagsJsonSql =
             """
             jsonb_build_object(
               'kind_listed', c.kind_listed,

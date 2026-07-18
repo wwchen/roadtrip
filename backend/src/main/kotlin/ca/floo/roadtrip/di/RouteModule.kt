@@ -83,8 +83,8 @@ internal fun Application.registerKoinRoutes() {
         availabilityDashboardRoutes(
             availabilityDashboardController(ctx, config.availability.forcePullCooldown),
         )
-        poisOnRouteRoutes(poisOnRouteService)
-        routeRoutes(routeCache, routeCorridorService)
+        poisOnRouteRoutes(poisOnRouteService, config.route)
+        routeRoutes(routeCache, routeCorridorService, config.route)
         geocodeRoutes(mapboxGeocoder)
         healthRoutes()
         adminIngestRoutes(ingestController, ctx)
@@ -99,10 +99,10 @@ private fun availabilityDashboardController(
     forcePullCooldown: Duration,
 ): AvailabilityDashboardController =
     AvailabilityDashboardController(
-        pollers = AvailabilityPollerRepo(ctx),
-        runs = AvailabilityRunRepo(ctx),
-        availability = AvailabilityRepo(ctx),
-        campsites = CampsiteRepo(ctx),
+        pollerRepo = AvailabilityPollerRepo(ctx),
+        runRepo = AvailabilityRunRepo(ctx),
+        availabilityRepo = AvailabilityRepo(ctx),
+        campsiteRepo = CampsiteRepo(ctx),
         forcePullCooldown = forcePullCooldown,
     )
 
@@ -113,13 +113,13 @@ private fun availabilityWatchController(
 ): AvailabilityWatchController {
     val campsitesRepo = CampsiteRepo(ctx)
     return AvailabilityWatchController(
-        watches = AvailabilityWatchRepo(ctx),
+        watchRepo = AvailabilityWatchRepo(ctx),
         watchService = watchService,
         watchMapper =
             AvailabilityWatchApiMapper(
-                campsites = campsitesRepo,
+                campsiteRepo = campsitesRepo,
                 scopeResolver = WatchScopeResolver(campsitesRepo),
-                capabilities = watchCapabilities,
+                watchCapabilityService = watchCapabilities,
             ),
     )
 }

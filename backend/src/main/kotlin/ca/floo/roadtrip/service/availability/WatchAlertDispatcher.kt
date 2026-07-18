@@ -44,10 +44,10 @@ private const val CELL_MATRIX_UID = "availability-cell-matrix"
 internal class WatchAlertDispatcher(
     private val notifications: NotificationSender,
     private val scopeResolver: WatchScopeResolver,
-    private val watches: AvailabilityWatchRepo,
+    private val watchRepo: AvailabilityWatchRepo,
     private val targets: AvailabilityTargetResolver,
-    private val pois: PoiServingRepo,
-    private val availability: AvailabilityRepo,
+    private val poiRepo: PoiServingRepo,
+    private val availabilityRepo: AvailabilityRepo,
     private val triggerActions: TriggerActionRegistry,
     private val grafanaRootUrl: String?,
     private val appRootUrl: String?,
@@ -114,7 +114,7 @@ internal class WatchAlertDispatcher(
             return
         }
         val campsitesById = campsites.associateBy { it.id }
-        val cells = availability.readCurrent(campsites.map { it.id }, datesInWindow(watch))
+        val cells = availabilityRepo.readCurrent(campsites.map { it.id }, datesInWindow(watch))
         val bookable = cells.filter { it.available }
         if (bookable.isNotEmpty()) {
             val covered = bookable.map { CellTransition(it.campsiteId, it.targetDate, it.status) }
@@ -176,7 +176,7 @@ internal class WatchAlertDispatcher(
         // "each handler is invoked exactly once per trigger" contract.
         val fired = handlers.map { it.fire(watch, openings) }.any { it }
         if (fired && watch.stopWhenTriggered) {
-            watches.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE))
+            watchRepo.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE))
         }
     }
 
@@ -197,14 +197,14 @@ internal class WatchAlertDispatcher(
                 campsite = r,
                 date = t.targetDate,
                 resolvedTarget = target,
-                notification =
+                watchOpening =
                     WatchOpening(
                         label = r.name ?: "Site #${r.vendorId}",
                         loop = r.loop,
                         siteType = r.siteType,
                         date = t.targetDate,
                         campgroundId = target?.parentPoiId,
-                        campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { pois.fetchPoiName(it) } },
+                        campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { poiRepo.fetchPoiName(it) } },
                         // Booking link, if the campsite's provider exposes one — the URL
                         // scheme is the adapter's, never this dispatcher's. The parent
                         // ref supplies vendor ids the per-site ref may omit (e.g. Aspira).
@@ -246,7 +246,7 @@ internal class WatchAlertDispatcher(
             siteCount = campsites.size,
             siteName = single?.let { it.name ?: "Site #${it.vendorId}" },
             siteLoop = single?.loop,
-            campgroundName = poiIds.singleOrNull()?.let { pois.fetchPoiName(it) },
+            campgroundName = poiIds.singleOrNull()?.let { poiRepo.fetchPoiName(it) },
             startDate = watch.startDate,
             endDate = watch.endDate,
             dashboardUrl = grafanaRootUrl?.let { "$it/d/$WATCH_DASHBOARD_UID?var-watch_id=${watch.id}" },

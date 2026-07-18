@@ -352,7 +352,7 @@ class RecGovCampgroundsEtl(
         val out = linkedMapOf<String, CellSignal>()
         for (entry in rows) {
             val obj = runCatching { entry.jsonObject }.getOrNull() ?: continue
-            val carrier = CARRIER_SLUG[obj["carrier"]?.jsonPrimitive?.contentOrNull] ?: continue
+            val carrier = carrierSlug[obj["carrier"]?.jsonPrimitive?.contentOrNull] ?: continue
             val count = obj.int("number_of_ratings")
             val avg = obj.float("average_rating")
             if (count == null || count <= 0 || avg == null) continue
@@ -443,7 +443,7 @@ class RecGovCampgroundsEtl(
         private const val VENDOR = "recgov"
         private const val DEFAULT_COUNTRY = "US"
         private const val CAMPGROUND_REF_PREFIX = "recgov-"
-        private val CARRIER_SLUG =
+        private val carrierSlug =
             mapOf(
                 "Verizon" to "verizon",
                 "AT&T" to "att",
@@ -456,7 +456,7 @@ class RecGovCampgroundsEtl(
 private fun JsonObject.stringAtRawPath(path: String): String? {
     var current: JsonElement = this
     for (segment in path.split(RAW_PATH_SEPARATOR)) {
-        val match = RAW_PATH_SEGMENT.matchEntire(segment) ?: return null
+        val match = rawPathSegmentRegex.matchEntire(segment) ?: return null
         val field = match.groupValues[RAW_PATH_FIELD_GROUP]
         val index = match.groupValues[RAW_PATH_INDEX_GROUP].takeIf { it.isNotBlank() }?.toIntOrNull()
         val obj = current as? JsonObject ?: return null
@@ -473,4 +473,4 @@ private fun JsonObject.stringAtRawPath(path: String): String? {
 private const val RAW_PATH_SEPARATOR = "."
 private const val RAW_PATH_FIELD_GROUP = 1
 private const val RAW_PATH_INDEX_GROUP = 2
-private val RAW_PATH_SEGMENT = Regex("""([^\[\]]+)(?:\[(\d+)])?""")
+private val rawPathSegmentRegex = Regex("""([^\[\]]+)(?:\[(\d+)])?""")

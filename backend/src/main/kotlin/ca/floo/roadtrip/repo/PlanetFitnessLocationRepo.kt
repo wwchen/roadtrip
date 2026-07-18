@@ -18,24 +18,24 @@ import java.time.OffsetDateTime
 class PlanetFitnessLocationRepo(
     private val ctx: DSLContext,
 ) {
-    private val importRuns = ImportRunRepo(ctx)
-    private val pois = PoiRepo(ctx)
+    private val importRunRepo = ImportRunRepo(ctx)
+    private val poiRepo = PoiRepo(ctx)
 
     fun upsertPlanetFitnessLocations(
         records: List<PlanetFitnessLocationUpsertCandidate>,
         source: String,
     ): CatalogUpsertResult {
-        val runId = importRuns.start(source)
+        val runId = importRunRepo.start(source)
         try {
             val upserted =
                 ctx.transactionResult { cfg ->
                     val tx = PlanetFitnessLocationRepo(DSL.using(cfg))
                     records.sumOf { record -> if (tx.upsertPlanetFitnessLocation(record)) 1 else 0 }
                 }
-            importRuns.complete(runId, records.size)
+            importRunRepo.complete(runId, records.size)
             return CatalogUpsertResult(runId = runId, seenCount = records.size, upsertedCount = upserted)
         } catch (e: Throwable) {
-            importRuns.fail(runId, e.message ?: e.javaClass.simpleName)
+            importRunRepo.fail(runId, e.message ?: e.javaClass.simpleName)
             throw e
         }
     }
@@ -43,14 +43,14 @@ class PlanetFitnessLocationRepo(
     fun findById(id: Long): PlanetFitnessLocation? =
         ctx
             .fetchOne(
-                "$BASE_SELECT WHERE pfl.id = ? AND pfl.deleted_at IS NULL",
+                "$baseSelect WHERE pfl.id = ? AND pfl.deleted_at IS NULL",
                 id,
             )?.let(::fromRecord)
 
     fun findByLocationId(locationId: String): PlanetFitnessLocation? =
         ctx
             .fetchOne(
-                "$BASE_SELECT WHERE pfl.location_id = ? AND pfl.deleted_at IS NULL",
+                "$baseSelect WHERE pfl.location_id = ? AND pfl.deleted_at IS NULL",
                 locationId,
             )?.let(::fromRecord)
 
@@ -58,7 +58,7 @@ class PlanetFitnessLocationRepo(
         ctx
             .fetchOne(
                 """
-                $BASE_SELECT
+                $baseSelect
                 JOIN poi_planet_fitness_locations ppf
                   ON ppf.planet_fitness_location_id = pfl.id
                 JOIN pois p
@@ -75,7 +75,7 @@ class PlanetFitnessLocationRepo(
             ctx.fetchOne(
                 """
                 SELECT
-                  $BASE_SELECT_COLUMNS,
+                  $baseSelectColumns,
                   to_jsonb(pfl)::text AS properties_text
                 FROM planet_fitness_locations pfl
                 JOIN poi_planet_fitness_locations ppf
@@ -97,7 +97,7 @@ class PlanetFitnessLocationRepo(
     fun findAll(): List<PlanetFitnessLocation> =
         ctx
             .fetch(
-                "$BASE_SELECT WHERE pfl.deleted_at IS NULL ORDER BY pfl.name, pfl.id",
+                "$baseSelect WHERE pfl.deleted_at IS NULL ORDER BY pfl.name, pfl.id",
             ).map(::fromRecord)
 
     private fun fromRecord(record: Record): PlanetFitnessLocation =
@@ -205,21 +205,21 @@ class PlanetFitnessLocationRepo(
                     locationId,
                 )?.get("poi_id", Long::class.java)
         if (existingPoiId == null) {
-            val poiId = pois.insertPoi(PLANET_FITNESS_LOCATION_POI_TYPE, longitude, latitude)
+            val poiId = poiRepo.insertPoi(PLANET_FITNESS_LOCATION_POI_TYPE, longitude, latitude)
             ctx.execute(
                 "INSERT INTO poi_planet_fitness_locations (poi_id, planet_fitness_location_id) VALUES (?, ?)",
                 poiId,
                 locationId,
             )
         } else {
-            pois.updatePoiGeometry(existingPoiId, longitude, latitude)
+            poiRepo.updatePoiGeometry(existingPoiId, longitude, latitude)
         }
     }
 
     private companion object {
         private const val PLANET_FITNESS_LOCATION_POI_TYPE = "planet_fitness_location"
 
-        private val BASE_SELECT_COLUMNS =
+        private val baseSelectColumns =
             """
             pfl.id,
             pfl.location_id,
@@ -236,10 +236,10 @@ class PlanetFitnessLocationRepo(
             pfl.deleted_at
             """.trimIndent()
 
-        private val BASE_SELECT =
+        private val baseSelect =
             """
             SELECT
-              $BASE_SELECT_COLUMNS
+              $baseSelectColumns
             FROM planet_fitness_locations pfl
             """.trimIndent()
     }

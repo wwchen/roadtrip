@@ -11,10 +11,6 @@ internal fun interface WatchCapabilityValidator {
     fun validate(watch: AvailabilityWatchRepo.Watch)
 }
 
-internal object NoopWatchCapabilityValidator : WatchCapabilityValidator {
-    override fun validate(watch: AvailabilityWatchRepo.Watch) = Unit
-}
-
 internal class AvailabilityWatchValidationException(
     val error: String,
     override val message: String,
@@ -29,7 +25,7 @@ internal class AvailabilityWatchValidationException(
  */
 internal class WatchTriggerCapabilityValidator(
     private val scopeResolver: WatchScopeResolver,
-    private val capabilities: WatchCapabilityService,
+    private val watchCapabilityService: WatchCapabilityService,
 ) : WatchCapabilityValidator {
     override fun validate(watch: AvailabilityWatchRepo.Watch) {
         if (watch.status != WatchStatus.ACTIVE) return
@@ -52,7 +48,7 @@ internal class WatchTriggerCapabilityValidator(
             )
         }
 
-        val pollingSupport = capabilities.internalPollingSupportFor(campsites)
+        val pollingSupport = watchCapabilityService.internalPollingSupportFor(campsites)
         if (!pollingSupport.supported) {
             throw AvailabilityWatchValidationException(
                 error = UNSUPPORTED_TRIGGER_ERROR,
@@ -64,7 +60,7 @@ internal class WatchTriggerCapabilityValidator(
 
         if (
             AvailabilityTriggerKinds.EMAIL_NOTIFY in watch.triggerKinds &&
-            AvailabilityTriggerKinds.EMAIL_NOTIFY !in capabilities.supportedTriggerKinds(campsites)
+            AvailabilityTriggerKinds.EMAIL_NOTIFY !in watchCapabilityService.supportedTriggerKinds(campsites)
         ) {
             throw AvailabilityWatchValidationException(
                 error = UNSUPPORTED_TRIGGER_ERROR,
@@ -74,7 +70,7 @@ internal class WatchTriggerCapabilityValidator(
 
         if (AvailabilityTriggerKinds.ATC !in watch.triggerKinds) return
 
-        val bookingSupport = capabilities.bookingSupportFor(BookingAction.ADD_TO_CART, campsites)
+        val bookingSupport = watchCapabilityService.bookingSupportFor(BookingAction.ADD_TO_CART, campsites)
         if (!bookingSupport.supported) {
             throw AvailabilityWatchValidationException(
                 error = UNSUPPORTED_TRIGGER_ERROR,

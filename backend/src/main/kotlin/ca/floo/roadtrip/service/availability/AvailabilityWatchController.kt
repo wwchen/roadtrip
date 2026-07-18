@@ -20,7 +20,7 @@ internal sealed class AvailabilityWatchControllerResult<out T> {
 }
 
 internal class AvailabilityWatchController(
-    private val watches: AvailabilityWatchRepo,
+    private val watchRepo: AvailabilityWatchRepo,
     private val watchService: AvailabilityWatchService,
     private val watchMapper: AvailabilityWatchApiMapper,
 ) {
@@ -31,13 +31,13 @@ internal class AvailabilityWatchController(
         limit: Int,
         offset: Int,
     ): AvailabilityWatchListResponse {
-        val rows = watches.list(status, poiId, campsiteId, limit, offset)
-        val total = watches.count(status, poiId, campsiteId)
+        val rows = watchRepo.list(status, poiId, campsiteId, limit, offset)
+        val total = watchRepo.count(status, poiId, campsiteId)
         return watchMapper.listResponse(rows, total, limit, offset)
     }
 
     fun get(id: Long): AvailabilityWatchResponse? =
-        watches
+        watchRepo
             .findById(id)
             ?.let { watchMapper.response(it, includeCapabilities = true) }
 

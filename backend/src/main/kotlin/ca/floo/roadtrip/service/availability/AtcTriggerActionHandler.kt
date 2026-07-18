@@ -106,18 +106,18 @@ internal class AtcTriggerActionHandler(
     ): AddToCartRequest? {
         val resolved = opening.resolvedTarget ?: return null
         val target = bookingTargets.targetFor(BookingAction.ADD_TO_CART, resolved) ?: return null
-        val notification = opening.notification
+        val watchOpening = opening.watchOpening
         return AddToCartRequest(
             watchId = watch.id,
             target = target,
             arrivalDate = opening.date,
             checkoutDate = watch.endDate,
-            campsiteLabel = notification.label,
-            loop = notification.loop,
-            siteType = notification.siteType,
-            campgroundId = notification.campgroundId,
-            campgroundName = notification.campground,
-            bookingUrl = notification.bookingUrl,
+            campsiteLabel = watchOpening.label,
+            loop = watchOpening.loop,
+            siteType = watchOpening.siteType,
+            campgroundId = watchOpening.campgroundId,
+            campgroundName = watchOpening.campground,
+            bookingUrl = watchOpening.bookingUrl,
             stopWhenTriggered = watch.stopWhenTriggered,
         )
     }

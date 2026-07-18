@@ -21,7 +21,7 @@ import java.time.LocalDate
 
 class HttpReserveCaliforniaAvailabilityClient(
     private val rdrBaseUrl: String = "https://california-rdr.prod.cali.rd12.recreation-management.tylerapp.com/rdr",
-    private val client: HttpClient = defaultClient(),
+    private val httpClient: HttpClient = defaultClient(),
 ) : ReserveCaliforniaAvailabilityClient {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -89,7 +89,7 @@ class HttpReserveCaliforniaAvailabilityClient(
                 .build()
         val resp =
             try {
-                client.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
+                httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
             } catch (e: Exception) {
                 throw ReserveCaliforniaException("reservecalifornia request failed: ${e.message}", httpStatus = null)
             }

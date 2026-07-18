@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
@@ -44,16 +45,17 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 vendorId = "site-100",
                 name = "Site 100",
             )
-        val providerRefs = CampsiteProviderRepo(ctx)
+        val campsiteProviderRepo = CampsiteProviderRepo(ctx)
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                providerRefs = providerRefs,
+                campsiteProviderRepo = campsiteProviderRepo,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = AvailabilityProviderRegistry(mapOf("test" to TemplateProvider)),
                 dateResolver = AvailabilityDateResolver(),
+                pollerRepo = AvailabilityPollerRepo(ctx),
             )
-        val service = CampsiteCatalogService(providerRefs, campsitesRepo, targets)
+        val service = CampsiteCatalogService(campsiteProviderRepo, campsitesRepo, targets)
 
         val response = service.campsitesForPoi(poiId, siteTypes = emptyList())
 
@@ -84,19 +86,20 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 providerRefJson = """{"campflare_id":"campflare-site-10","campground_id":"white-wolf-campground-567"}""",
                 sourcePayloadJson = """{"reservation_url":"https://www.recreation.gov/camping/campsites/10174516"}""",
             )
-        val providerRefs = CampsiteProviderRepo(ctx)
+        val campsiteProviderRepo = CampsiteProviderRepo(ctx)
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                providerRefs = providerRefs,
+                campsiteProviderRepo = campsiteProviderRepo,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders =
                     AvailabilityProviderRegistry(
                         mapOf("campflare" to CampflareAvailabilityProvider(unusedCampflareClient(), enabled = true)),
                     ),
                 dateResolver = AvailabilityDateResolver(),
+                pollerRepo = AvailabilityPollerRepo(ctx),
             )
-        val service = CampsiteCatalogService(providerRefs, campsitesRepo, targets)
+        val service = CampsiteCatalogService(campsiteProviderRepo, campsitesRepo, targets)
 
         val response = service.campsitesForPoi(poi.poiId, siteTypes = emptyList())
 

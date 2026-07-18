@@ -52,10 +52,10 @@ internal sealed class ForcePollerResult {
 }
 
 internal class AvailabilityDashboardController(
-    private val pollers: AvailabilityPollerRepo,
-    private val runs: AvailabilityRunRepo,
-    private val availability: AvailabilityRepo,
-    private val campsites: CampsiteRepo,
+    private val pollerRepo: AvailabilityPollerRepo,
+    private val runRepo: AvailabilityRunRepo,
+    private val availabilityRepo: AvailabilityRepo,
+    private val campsiteRepo: CampsiteRepo,
     private val forcePullCooldown: Duration,
     private val now: () -> OffsetDateTime = { OffsetDateTime.now() },
 ) {
@@ -64,8 +64,8 @@ internal class AvailabilityDashboardController(
         limit: Int,
         offset: Int,
     ): AvailabilityPollersListResponse {
-        val rows = pollers.list(active = active, limit = limit, offset = offset)
-        val total = pollers.count(active = active)
+        val rows = pollerRepo.list(active = active, limit = limit, offset = offset)
+        val total = pollerRepo.count(active = active)
         return AvailabilityPollersListResponse(
             total = total,
             limit = limit,
@@ -75,7 +75,7 @@ internal class AvailabilityDashboardController(
     }
 
     fun pollersSummary(): AvailabilityPollersSummary {
-        val summary = pollers.summary(now())
+        val summary = pollerRepo.summary(now())
         return AvailabilityPollersSummary(
             active = summary.active,
             dormant = summary.dormant,
@@ -89,11 +89,11 @@ internal class AvailabilityDashboardController(
         limit: Int,
     ): AvailabilityRunsListResponse =
         AvailabilityRunsListResponse(
-            runs = runs.listForPoller(pollerId, limit = limit).map { it.toSchema() },
+            runs = runRepo.listForPoller(pollerId, limit = limit).map { it.toSchema() },
         )
 
     fun forcePoller(pollerId: Long): ForcePollerResult =
-        when (val result = pollers.forcePull(pollerId, now(), cooldown = forcePullCooldown)) {
+        when (val result = pollerRepo.forcePull(pollerId, now(), cooldown = forcePullCooldown)) {
             is AvailabilityPollerRepo.ForcePullResult.Accepted ->
                 ForcePollerResult.Accepted(
                     CheckNowResponseDto(pollerId = pollerId, nextRunAt = result.nextRunAt.toString()),
@@ -113,7 +113,7 @@ internal class AvailabilityDashboardController(
         limit: Int,
     ): AvailabilityRunsListResponse =
         AvailabilityRunsListResponse(
-            runs = runs.listSince(since = since, status = status, pollerId = pollerId, limit = limit).map { it.toSchema() },
+            runs = runRepo.listSince(since = since, status = status, pollerId = pollerId, limit = limit).map { it.toSchema() },
         )
 
     fun listChanges(
@@ -132,15 +132,15 @@ internal class AvailabilityDashboardController(
         val rows =
             if (campsiteId != null) {
                 val cs =
-                    campsites.findById(campsiteId)
+                    campsiteRepo.findById(campsiteId)
                         ?: return AvailabilityDashboardResult.NotFound(
                             "campsite_not_found",
                             "no campsite with id $campsiteId",
                         )
                 nameMap = mapOf(cs.id to campsiteDisplayName(cs))
-                availability.listForCampsite(campsiteId, targetDate = targetDate, limit = limit)
+                availabilityRepo.listForCampsite(campsiteId, targetDate = targetDate, limit = limit)
             } else {
-                val poiCampsites = campsites.findByPoi(poiId!!)
+                val poiCampsites = campsiteRepo.findByPoi(poiId!!)
                 if (poiCampsites.isEmpty()) {
                     return AvailabilityDashboardResult.NotFound(
                         "poi_not_found",
@@ -148,7 +148,7 @@ internal class AvailabilityDashboardController(
                     )
                 }
                 nameMap = poiCampsites.associate { it.id to campsiteDisplayName(it) }
-                availability.listForCampsites(
+                availabilityRepo.listForCampsites(
                     campsiteIds = poiCampsites.map { it.id },
                     targetDate = targetDate,
                     limit = limit,
@@ -171,7 +171,7 @@ internal class AvailabilityDashboardController(
                     "missing_poi_id",
                     "poi_id is required",
                 )
-        val poiCampsites = campsites.findByPoi(id)
+        val poiCampsites = campsiteRepo.findByPoi(id)
         if (poiCampsites.isEmpty()) {
             return AvailabilityDashboardResult.NotFound(
                 "poi_not_found",
@@ -183,15 +183,15 @@ internal class AvailabilityDashboardController(
             explicitDates.ifEmpty {
                 campsiteIds
                     .flatMap { csId ->
-                        availability.datesWithSnapshotsInWindow(campsiteId = csId)
+                        availabilityRepo.datesWithSnapshotsInWindow(campsiteId = csId)
                     }.distinct()
                     .sorted()
             }
         val stats =
             campsiteIds.flatMap { csId ->
-                availability.projectAvailabilityRuns(csId, dates)
+                availabilityRepo.projectAvailabilityRuns(csId, dates)
             }
-        val timeRange = runs.timeRangeForPoi(id)
+        val timeRange = runRepo.timeRangeForPoi(id)
         val poiCadence = timeRange?.medianCadenceSec
         val aggregated =
             stats

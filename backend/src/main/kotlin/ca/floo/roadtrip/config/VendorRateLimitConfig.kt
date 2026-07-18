@@ -8,7 +8,7 @@ import java.time.Duration
 // per-vendor via config (see [VendorRateLimitConfig.fromConfig]).
 const val DEFAULT_VENDOR_BUCKET_CAPACITY: Long = 60
 const val DEFAULT_VENDOR_BUCKET_REFILL_TOKENS: Long = 60
-val DEFAULT_VENDOR_BUCKET_REFILL_PERIOD: Duration = Duration.ofMinutes(1)
+val defaultVendorBucketRefillPeriod: Duration = Duration.ofMinutes(1)
 
 private const val CAPACITY_SUFFIX = ".capacity"
 private const val REFILL_TOKENS_SUFFIX = ".refill-tokens"
@@ -18,7 +18,7 @@ private const val REFILL_PERIOD_SUFFIX = ".refill-period"
  * Per-vendor bucket config with a code-level default, overridable via config.
  * Providers not explicitly configured fall through to the code default
  * ([DEFAULT_VENDOR_BUCKET_CAPACITY] / [DEFAULT_VENDOR_BUCKET_REFILL_TOKENS] /
- * [DEFAULT_VENDOR_BUCKET_REFILL_PERIOD]).
+ * [defaultVendorBucketRefillPeriod]).
  *
  * The class itself is pure and testable: the constructor takes an already-parsed
  * overrides map — no I/O. [fromConfig] reads the scoped application config
@@ -36,7 +36,7 @@ class VendorRateLimitConfig(
             ?: VendorBucketConfig(
                 capacity = DEFAULT_VENDOR_BUCKET_CAPACITY,
                 refillTokens = DEFAULT_VENDOR_BUCKET_REFILL_TOKENS,
-                refillPeriod = DEFAULT_VENDOR_BUCKET_REFILL_PERIOD,
+                refillPeriod = defaultVendorBucketRefillPeriod,
             )
 
     companion object {
@@ -75,7 +75,7 @@ class VendorRateLimitConfig(
                     val refillPeriod =
                         parseDuration(
                             raw = config.value(refillPeriodKey(vendor)),
-                            default = DEFAULT_VENDOR_BUCKET_REFILL_PERIOD,
+                            default = defaultVendorBucketRefillPeriod,
                             key = config.key(refillPeriodKey(vendor)),
                         )
                     vendor to

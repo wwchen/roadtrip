@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory
 import java.time.Duration
 
 /** How often the reaper sweeps for elapsed watches. */
-private val DEFAULT_REAP_INTERVAL: Duration = Duration.ofMinutes(5)
+private val defaultReapInterval: Duration = Duration.ofMinutes(5)
 
 /**
  * Owns elapsed-watch teardown, the one lifecycle concern the poll tick used to
@@ -30,8 +30,8 @@ private val DEFAULT_REAP_INTERVAL: Duration = Duration.ofMinutes(5)
  * work is a single global sweep on an interval, not a per-row claim/lease.
  */
 internal class WatchReaper(
-    private val pollers: AvailabilityPollerRepo,
-    private val interval: Duration = DEFAULT_REAP_INTERVAL,
+    private val pollerRepo: AvailabilityPollerRepo,
+    private val interval: Duration = defaultReapInterval,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private var loop: Job? = null
@@ -53,13 +53,13 @@ internal class WatchReaper(
      *  deterministically without the loop. */
     fun sweepOnce() {
         try {
-            val outcome = pollers.reapElapsedWatches()
+            val outcome = pollerRepo.reapElapsedWatches()
             if (outcome.reapedWatchIds.isNotEmpty()) {
                 // Audit event: the exact lifecycle transitions this sweep made,
                 // by id — an elapsed watch completing (-> done) and a poller going dormant
                 // are the state changes worth an audit trail, not just a count.
                 log.info(
-                    "watch-reaper audit: completed elapsed watches {} (-> done); deactivated pollers {}",
+                    "watch-reaper audit: completed elapsed watches {} (-> done); deactivated pollerRepo {}",
                     outcome.reapedWatchIds,
                     outcome.deactivatedPollerIds,
                 )

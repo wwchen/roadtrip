@@ -12,7 +12,7 @@ private const val EMPTY_WINDOW_MAX_DAYS = 60
 private const val EMPTY_WINDOW_HORIZON_DAYS = 365
 
 internal class CampsiteAvailabilityService(
-    private val providerRefs: CampsiteProviderRepo,
+    private val campsiteProviderRepo: CampsiteProviderRepo,
     private val campsitesRepo: CampsiteRepo,
     private val composer: CampsiteAvailabilityComposer,
     private val dateResolver: AvailabilityDateResolver,
@@ -28,7 +28,7 @@ internal class CampsiteAvailabilityService(
         val watchCapabilities = watchCapabilitiesFor(watchScopeCampsites, watchCapabilityService)
         val campsites = watchScopeCampsites.filterBySiteTypes(siteTypes)
         if (campsites.isEmpty()) {
-            val (start, end) = displayWindow(poiId, startDate, endDate, providerRefs, dateResolver)
+            val (start, end) = displayWindow(poiId, startDate, endDate, campsiteProviderRepo, dateResolver)
             return emptyPoiAvailability(poiId, start, end, watchCapabilities)
         }
 
@@ -49,7 +49,7 @@ internal class CampsiteAvailabilityService(
             )
         }
 
-        val (fallbackStart, fallbackEnd) = displayWindow(poiId, startDate, endDate, providerRefs, dateResolver)
+        val (fallbackStart, fallbackEnd) = displayWindow(poiId, startDate, endDate, campsiteProviderRepo, dateResolver)
         return PoiCampsitesAvailabilityResponseDto(
             poiId = poiId,
             startDate = fallbackStart.toString(),
@@ -83,10 +83,10 @@ private fun displayWindow(
     poiId: Long,
     startDate: LocalDate?,
     endDate: LocalDate?,
-    providerRefs: CampsiteProviderRepo,
+    campsiteProviderRepo: CampsiteProviderRepo,
     dateResolver: AvailabilityDateResolver,
 ): Pair<LocalDate, LocalDate> {
-    val row = providerRefs.findDateContext(poiId) ?: throw AvailabilityServiceError.NotFound
+    val row = campsiteProviderRepo.findDateContext(poiId) ?: throw AvailabilityServiceError.NotFound
     val dateContext = dateResolver.context(lat = row.lat, lng = row.lng)
     val window =
         dateResolver.resolveWindow(
