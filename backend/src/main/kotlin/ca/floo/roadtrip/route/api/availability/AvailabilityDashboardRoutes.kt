@@ -7,6 +7,7 @@ import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.intQueryAtLeast
 import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.optionalBooleanQuery
+import ca.floo.roadtrip.route.common.optionalDateQuery
 import ca.floo.roadtrip.route.common.optionalLongQuery
 import ca.floo.roadtrip.route.common.optionalOffsetDateTimeQuery
 import ca.floo.roadtrip.route.common.queryParam
@@ -111,12 +112,21 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                 }.describeApi("availability", "Recent runs across all pollers")
             }
 
-            route("/snapshots") {
+            route("/changes") {
                 get {
                     val campsiteId = call.optionalLongQuery("campsite_id")
-                    val runId = call.optionalLongQuery("run_id")
+                    val poiId = call.optionalLongQuery("poi_id")
+                    val targetDate = call.optionalDateQuery("target_date")
                     val limit = call.boundedIntQuery("limit", SNAPSHOT_DEFAULT_LIMIT, snapshotLimitRange)
-                    when (val result = dashboard.listSnapshots(campsiteId = campsiteId, runId = runId, limit = limit)) {
+                    when (
+                        val result =
+                            dashboard.listChanges(
+                                campsiteId = campsiteId,
+                                poiId = poiId,
+                                targetDate = targetDate,
+                                limit = limit,
+                            )
+                    ) {
                         is AvailabilityDashboardResult.Invalid ->
                             call.respondError(result.error, HttpStatusCode.BadRequest, result.detail)
                         is AvailabilityDashboardResult.NotFound ->
@@ -124,22 +134,15 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                         is AvailabilityDashboardResult.Ok ->
                             call.respondJson(result.value)
                     }
-                }.describeApi("availability", "Snapshot rows filtered by campsite id or run id")
+                }.describeApi("availability", "Availability change rows filtered by campsite_id or poi_id")
 
                 get("/summary") {
-                    val campsiteId = call.optionalLongQuery("campsite_id")
-                    val windowHours =
-                        call.boundedIntQuery(
-                            "window_hours",
-                            SNAPSHOT_WINDOW_HOURS_DEFAULT,
-                            snapshotWindowHoursRange,
-                        )
+                    val poiId = call.optionalLongQuery("poi_id")
                     val explicitDates = call.dateQueryValues("dates")
                     when (
                         val result =
-                            dashboard.snapshotsSummary(
-                                campsiteId = campsiteId,
-                                windowHours = windowHours,
+                            dashboard.changeSummary(
+                                poiId = poiId,
                                 explicitDates = explicitDates,
                             )
                     ) {
@@ -150,7 +153,7 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                         is AvailabilityDashboardResult.Ok ->
                             call.respondJson(result.value)
                     }
-                }.describeApi("availability", "Per-date stats for one campsite's snapshot history")
+                }.describeApi("availability", "Per-date stats aggregated across a POI's campsites")
             }
         }
     }

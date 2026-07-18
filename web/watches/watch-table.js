@@ -39,8 +39,8 @@ export function mountWatchTable(container, config) {
       emptyMessage: 'No watches yet',
       defaultSort: { key: 'id', dir: 'desc' },
       rowClass: (row) => row.status === 'paused' ? 'is-paused' : row.status === 'done' ? 'is-done' : '',
+      onRender: mountDeleteButtons,
     });
-    mountDeleteButtons();
   }
 
   function mountDeleteButtons() {

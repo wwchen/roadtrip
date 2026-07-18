@@ -1,16 +1,17 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.model.api.AvailabilityChangeSchema
 import ca.floo.roadtrip.model.api.AvailabilityPollerSchema
 import ca.floo.roadtrip.model.api.AvailabilityPollersListResponse
 import ca.floo.roadtrip.model.api.AvailabilityPollersSummary
 import ca.floo.roadtrip.model.api.AvailabilityRunSchema
 import ca.floo.roadtrip.model.api.AvailabilityRunsListResponse
-import ca.floo.roadtrip.model.api.AvailabilitySnapshotSchema
 import ca.floo.roadtrip.model.api.AvailabilitySnapshotStatsSchema
-import ca.floo.roadtrip.model.api.AvailabilitySnapshotsListResponse
 import ca.floo.roadtrip.model.api.AvailabilitySnapshotsSummaryResponse
 import ca.floo.roadtrip.model.api.CheckNowCooldownDto
 import ca.floo.roadtrip.model.api.CheckNowResponseDto
+import ca.floo.roadtrip.model.api.ListAvailabilityChangesResponse
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
@@ -115,62 +116,103 @@ internal class AvailabilityDashboardController(
             runs = runs.listSince(since = since, status = status, pollerId = pollerId, limit = limit).map { it.toSchema() },
         )
 
-    fun listSnapshots(
+    fun listChanges(
         campsiteId: Long?,
-        runId: Long?,
+        poiId: Long?,
+        targetDate: LocalDate?,
         limit: Int,
-    ): AvailabilityDashboardResult<AvailabilitySnapshotsListResponse> {
-        if ((campsiteId == null) == (runId == null)) {
+    ): AvailabilityDashboardResult<ListAvailabilityChangesResponse> {
+        if ((campsiteId == null) == (poiId == null)) {
             return AvailabilityDashboardResult.Invalid(
                 "invalid_filter",
-                "exactly one of campsite_id or run_id must be set",
+                "exactly one of campsite_id or poi_id must be set",
             )
         }
+        val nameMap: Map<Long, String>
         val rows =
             if (campsiteId != null) {
-                campsites.findById(campsiteId)
-                    ?: return AvailabilityDashboardResult.NotFound(
-                        "campsite_not_found",
-                        "no campsite with id $campsiteId",
-                    )
-                availability.listForCampsite(campsiteId, limit = limit)
+                val cs =
+                    campsites.findById(campsiteId)
+                        ?: return AvailabilityDashboardResult.NotFound(
+                            "campsite_not_found",
+                            "no campsite with id $campsiteId",
+                        )
+                nameMap = mapOf(cs.id to campsiteDisplayName(cs))
+                availability.listForCampsite(campsiteId, targetDate = targetDate, limit = limit)
             } else {
-                availability.listForRun(runId!!, limit = limit)
+                val poiCampsites = campsites.findByPoi(poiId!!)
+                if (poiCampsites.isEmpty()) {
+                    return AvailabilityDashboardResult.NotFound(
+                        "poi_not_found",
+                        "no campsites for poi $poiId",
+                    )
+                }
+                nameMap = poiCampsites.associate { it.id to campsiteDisplayName(it) }
+                availability.listForCampsites(
+                    campsiteIds = poiCampsites.map { it.id },
+                    targetDate = targetDate,
+                    limit = limit,
+                )
             }
         return AvailabilityDashboardResult.Ok(
-            AvailabilitySnapshotsListResponse(snapshots = rows.map { it.toSchema() }),
+            ListAvailabilityChangesResponse(
+                changes = rows.filter { it.fromStatus != null }.map { it.toSchema(nameMap[it.campsiteId]) },
+            ),
         )
     }
 
-    fun snapshotsSummary(
-        campsiteId: Long?,
-        windowHours: Int,
+    fun changeSummary(
+        poiId: Long?,
         explicitDates: List<LocalDate>,
     ): AvailabilityDashboardResult<AvailabilitySnapshotsSummaryResponse> {
         val id =
-            campsiteId
+            poiId
                 ?: return AvailabilityDashboardResult.Invalid(
-                    "missing_campsite_id",
-                    "campsite_id is required",
+                    "missing_poi_id",
+                    "poi_id is required",
                 )
-        campsites.findById(id)
-            ?: return AvailabilityDashboardResult.NotFound(
-                "campsite_not_found",
-                "no campsite with id $id",
+        val poiCampsites = campsites.findByPoi(id)
+        if (poiCampsites.isEmpty()) {
+            return AvailabilityDashboardResult.NotFound(
+                "poi_not_found",
+                "no campsites for poi $id",
             )
-        val currentTime = now()
+        }
+        val campsiteIds = poiCampsites.map { it.id }
         val dates =
             explicitDates.ifEmpty {
-                availability.datesWithSnapshotsInWindow(
-                    campsiteId = id,
-                    windowStart = currentTime.minusHours(windowHours.toLong()),
-                )
+                campsiteIds
+                    .flatMap { csId ->
+                        availability.datesWithSnapshotsInWindow(campsiteId = csId)
+                    }.distinct()
+                    .sorted()
             }
-        val stats = availability.summarize(id, dates, now = currentTime, windowHours = windowHours)
+        val stats =
+            campsiteIds.flatMap { csId ->
+                availability.projectAvailabilityRuns(csId, dates)
+            }
+        val timeRange = runs.timeRangeForPoi(id)
+        val poiCadence = timeRange?.medianCadenceSec
+        val aggregated =
+            stats
+                .groupBy { it.targetDate }
+                .map { (date, group) ->
+                    AvailabilityRepo.TargetDateStats(
+                        targetDate = date,
+                        totalRuns = timeRange?.totalRuns ?: 0,
+                        firstRunAt = timeRange?.firstStartedAt,
+                        lastRunAt = timeRange?.lastStartedAt,
+                        medianCadenceSec = poiCadence,
+                        lastOpenAt = group.mapNotNull { it.lastOpenAt }.maxOrNull(),
+                        isCurrentlyOpen = group.any { it.isCurrentlyOpen },
+                        minOpenWindowSec = group.mapNotNull { it.minOpenWindowSec }.minOrNull(),
+                        maxOpenWindowSec = group.mapNotNull { it.maxOpenWindowSec }.maxOrNull(),
+                    )
+                }.sortedBy { it.targetDate }
         return AvailabilityDashboardResult.Ok(
             AvailabilitySnapshotsSummaryResponse(
-                campsiteId = id,
-                stats = stats.map { it.toSchema() },
+                poiId = id,
+                stats = aggregated.map { it.toSchema() },
             ),
         )
     }
@@ -203,24 +245,27 @@ private fun AvailabilityRunRepo.Run.toSchema(): AvailabilityRunSchema =
         completedAt = completedAt?.toString(),
     )
 
-private fun AvailabilityRepo.StatusRun.toSchema(): AvailabilitySnapshotSchema =
-    AvailabilitySnapshotSchema(
+private fun AvailabilityRepo.StatusRun.toSchema(name: String? = null): AvailabilityChangeSchema =
+    AvailabilityChangeSchema(
         campsiteId = campsiteId,
-        runId = runId,
+        campsiteName = name,
         targetDate = targetDate.toString(),
-        observedFrom = observedFrom?.toString(),
-        observedAt = lastObservedAt.toString(),
-        status = status,
-        available = available,
+        observedAt = fetchedAt.toString(),
+        fromStatus = fromStatus,
+        toStatus = toStatus,
     )
+
+private fun campsiteDisplayName(cs: Campsite): String = if (cs.loopName != null) "${cs.loopName} / ${cs.name}" else cs.name
 
 private fun AvailabilityRepo.TargetDateStats.toSchema(): AvailabilitySnapshotStatsSchema =
     AvailabilitySnapshotStatsSchema(
         targetDate = targetDate.toString(),
         totalRuns = totalRuns,
+        firstRunAt = firstRunAt?.toString(),
+        lastRunAt = lastRunAt?.toString(),
+        medianCadenceSec = medianCadenceSec,
         lastOpenAt = lastOpenAt?.toString(),
         isCurrentlyOpen = isCurrentlyOpen,
-        currentOrLastOpenWindowSec = currentOrLastOpenWindowSec,
-        medianOpenWindowSec = medianOpenWindowSec,
-        opensLast24h = opensLast24h,
+        minOpenWindowSec = minOpenWindowSec,
+        maxOpenWindowSec = maxOpenWindowSec,
     )

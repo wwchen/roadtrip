@@ -184,11 +184,13 @@
   <nav class="tabs" aria-label="Dashboard tabs">
     <a href="?tab=pollers" data-tab="pollers">Pollers</a>
     <a href="?tab=runs" data-tab="runs">Runs</a>
-    <a href="?tab=snapshots" data-tab="snapshots">Snapshots</a>
+    <a href="?tab=changes" data-tab="changes">Changes</a>
   </nav>
 
   <div id="tab-root"></div>
 </main>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <script type="module" src="/web/availability.js"></script>
 </body>
 </html>

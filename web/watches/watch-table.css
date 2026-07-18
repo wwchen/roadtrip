@@ -17,7 +17,8 @@
 .rt-watch-table-trigger svg { width: 14px; height: 14px; vertical-align: -2px; }
 
 .rt-watch-table-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: 28px 28px 28px;
   gap: 6px;
   align-items: center;
 }
@@ -28,7 +29,7 @@
   display: grid;
   place-items: center;
   background: transparent;
-  border: 0;
+  border: 1px solid var(--rt-border-strong);
   border-radius: var(--rt-r-sm);
   color: var(--rt-faint);
   cursor: pointer;
@@ -36,6 +37,11 @@
 }
 .rt-watch-table-act:hover { background: var(--rt-fill-hover); color: var(--rt-text); }
 .rt-watch-table-act:disabled { opacity: 0.55; cursor: wait; }
+.rt-watch-table-act[data-act="pause"],
+.rt-watch-table-act[data-act="resume"] {
+  color: var(--rt-brand);
+  font-weight: 700;
+}
 
 .rt-watch-table-status {
   display: inline-flex;
