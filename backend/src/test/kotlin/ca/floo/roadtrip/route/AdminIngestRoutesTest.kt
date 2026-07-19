@@ -145,10 +145,12 @@ class AdminIngestRoutesTest : SharedDbTest() {
         targets: Map<String, Target>,
         etl: EtlOrchestrator =
             EtlOrchestrator(
-                ctx,
-                File("/tmp"),
-                ca.floo.roadtrip.model.metadata.registry
-                    .PoiRegistry(emptyList(), emptyList()),
+                ctx = ctx,
+                rawDir = File("/tmp"),
+                poiRegistry =
+                    ca.floo.roadtrip.model.metadata.registry
+                        .PoiRegistry(emptyList(), emptyList()),
+                staticDir = File("/tmp"),
             ),
     ): IngestController =
         IngestController(
