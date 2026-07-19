@@ -140,7 +140,7 @@ class RecGovCampgroundsEtl(
         return CampgroundUpsertCandidate(
             dataProviderRef = DataProviderRef.RecGov(id = row.FacilityID.toString()),
             bookingProvider = if (reservable) BookingProvider.RECGOV else null,
-            bookingProviderRef = if (reservable) "$CAMPGROUND_REF_PREFIX${row.FacilityID}" else null,
+            bookingProviderRef = if (reservable) row.FacilityID.toString() else null,
             name = name,
             latitude = lat,
             longitude = lon,
@@ -436,7 +436,6 @@ class RecGovCampgroundsEtl(
         private const val RIDB_INPUT = "recgov-campgrounds-raw"
         private const val ENRICHMENT_INPUT = "recgov-campground-enrichment"
         private const val DEFAULT_COUNTRY = "US"
-        private const val CAMPGROUND_REF_PREFIX = "recgov-"
         private val carrierSlug =
             mapOf(
                 "Verizon" to "verizon",

@@ -23,7 +23,7 @@ class RecGovCampsitesEtlTest {
         assertEquals("123456", campsite.name)
         assertEquals("site", campsite.kind)
         assertEquals(DataProvider.RECGOV, campsite.parentDataProviderRef!!.provider)
-        assertEquals("recgov-232447", campsite.parentDataProviderRef!!.serialize())
+        assertEquals("232447", campsite.parentDataProviderRef!!.serialize())
         assertNull(campsite.kindListed)
         assertNull(campsite.loopName)
     }

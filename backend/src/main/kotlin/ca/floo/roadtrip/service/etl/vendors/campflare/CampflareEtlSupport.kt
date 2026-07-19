@@ -33,7 +33,7 @@ internal fun recgovCampgroundVendorRef(
             ?: return null
     return BookingProviderRef(
         vendor = BookingProvider.RECGOV,
-        vendorRefId = "$RECGOV_CAMPGROUND_REF_PREFIX$recgovId",
+        vendorRefId = recgovId,
     )
 }
 
@@ -117,7 +117,6 @@ internal fun normalizedCoordinate(
     return scaled.takeIf { it in min..max }
 }
 
-internal const val RECGOV_CAMPGROUND_REF_PREFIX = "recgov-"
 internal const val CAMPGROUNDS_ETL_SLUG = "campflare-campgrounds"
 internal const val CAMPSITES_ETL_SLUG = "campflare-campsites"
 internal const val CAMPFLARE_SOURCE_LINK_TITLE = "Campflare source"

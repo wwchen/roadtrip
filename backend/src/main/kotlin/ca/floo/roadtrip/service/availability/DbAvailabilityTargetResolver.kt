@@ -100,24 +100,29 @@ internal class DbAvailabilityTargetResolver(
     private fun buildCatalogRef(
         campsite: CampsiteAvailabilityTarget,
         parentRef: BookingProviderRef,
-    ): CatalogCampsiteRef =
-        when (parentRef) {
+    ): CatalogCampsiteRef {
+        val campsiteRef =
+            refResolver
+                .resolve<RefValue.CampsiteBookingRef>(RefValue.CampsiteId(campsite.id))
+                .firstOrNull { it.ref.provider == parentRef.provider }
+                ?.ref
+        return when (parentRef) {
             is BookingProviderRef.RecGov ->
                 CatalogCampsiteRef(
                     campsiteId = campsite.id,
-                    vendorId = campsite.vendorId,
+                    vendorId = (campsiteRef as? BookingProviderRef.RecGov)?.facilityId ?: campsite.vendorId,
                 )
             is BookingProviderRef.Campflare ->
                 CatalogCampsiteRef(
                     campsiteId = campsite.id,
-                    vendorId = campsite.vendorId,
+                    vendorId = (campsiteRef as? BookingProviderRef.Campflare)?.campgroundId ?: campsite.vendorId,
                 )
             is BookingProviderRef.Aspira ->
                 CatalogCampsiteRef(
                     campsiteId = campsite.id,
                     vendorId = campsite.vendorId,
-                    mapId = parentRef.mapId,
-                    resourceLocationId = parentRef.resourceLocationId,
+                    mapId = (campsiteRef as? BookingProviderRef.Aspira)?.mapId ?: parentRef.mapId,
+                    resourceLocationId = (campsiteRef as? BookingProviderRef.Aspira)?.resourceLocationId ?: parentRef.resourceLocationId,
                 )
             is BookingProviderRef.ReserveAmerica ->
                 CatalogCampsiteRef(
@@ -130,6 +135,7 @@ internal class DbAvailabilityTargetResolver(
                     vendorId = campsite.vendorId,
                 )
         }
+    }
 
     private fun getPoiLatLng(poiId: Long): Pair<Double, Double>? {
         val r =

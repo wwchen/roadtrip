@@ -143,6 +143,8 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
         override fun reservationUrlTemplate(
             campsite: CampsiteAvailabilityTarget,
             parentRef: BookingProviderRef,
+            catalogMapId: Long?,
+            catalogResourceLocationId: Long?,
         ): String? {
             val parentId = (parentRef as BookingProviderRef.RecGov).facilityId
             return "provider-template://$parentId/${campsite.vendor}/${campsite.vendorId}"

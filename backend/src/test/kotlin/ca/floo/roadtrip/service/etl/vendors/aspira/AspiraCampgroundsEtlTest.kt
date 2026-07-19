@@ -203,8 +203,7 @@ class AspiraCampgroundsEtlTest {
     fun `keeps campground POIs keyed by transactionLocationId and mapId`() {
         val campground = campgrounds(dtoOf(campground)).single()
 
-        // Campsite parent resolution matches vendor_refs.external_id = "aspira-{txn}-{map}".
-        assertEquals("aspira-1002--2147483641", campground.dataProviderRef.serialize())
+        assertEquals("1002:-2147483641", campground.dataProviderRef.serialize())
         assertEquals("federal", campground.kind)
         val management = campground.management!!.jsonObject
         assertEquals("Parks Canada", management["agency"]!!.jsonPrimitive.content)

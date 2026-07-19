@@ -78,7 +78,6 @@ class AvailabilityProviderRegistryTest {
         assertNull(registry.forBooking(BookingProvider.CAMPFLARE, BookingProviderRef.Campflare("upper-pines-campground-447")))
     }
 
-
     @Test
     fun `multiple sources can share one adapter instance`() {
         val recgov = FakeProvider(BookingProvider.RECGOV, enabled = true)

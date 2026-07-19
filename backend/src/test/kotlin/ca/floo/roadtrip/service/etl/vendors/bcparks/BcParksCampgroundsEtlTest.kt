@@ -38,8 +38,8 @@ class BcParksCampgroundsEtlTest {
 
         assertEquals(1, output.campgrounds.size)
         val cg = output.campgrounds.single()
-        assertEquals(DataProvider.ASPIRA, cg.dataProviderRef.provider)
-        assertEquals("aspira-4189--2147483548", cg.dataProviderRef.serialize())
+        assertEquals(DataProvider.STRAPI, cg.dataProviderRef.provider)
+        assertEquals("4189:-2147483548", cg.dataProviderRef.serialize())
         assertEquals(BookingProvider.ASPIRA, cg.bookingProvider)
         assertEquals("bc:4189:-2147483548:9001", cg.bookingProviderRef)
         assertEquals("Rathtrevor Beach", cg.name)

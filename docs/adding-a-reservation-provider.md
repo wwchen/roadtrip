@@ -15,29 +15,32 @@ Adding a provider should produce this shape:
 
 ```
 clients/<vendor>/*Client.kt
-service/availability/provider/adapters/<vendor>/*
-service/api/<Vendor>PoiCtaProvider.kt          # only if POI drawer CTAs apply
+service/availability/provider/<Vendor>AvailabilityProvider.kt
+service/poi/campground/<Vendor>PoiCtaProvider.kt  # only if POI drawer CTAs apply
 service/etl/vendors/<vendor>/*                 # only if importing catalog data
-models/<area>/*                                # shared DTOs/domain values only
+model/<area>/*                                 # shared DTOs/domain values only
 backend/src/main/resources/poi-registry.yaml  # source + dataset wiring
 ```
 
 Routes should not change for a new provider. Availability services should
 continue to call the provider port, not vendor classes.
 
-## Step 1 - Define The Provider Reference
+## Step 1 - Define The Provider References
 
 Decide what stable identifiers the upstream needs to answer availability and
-build booking links. That shape belongs in `ProviderRef` and must be parsed by
-the single provider-ref parser.
+build booking links. Catalog ownership and booking capability are separate:
+source identity belongs in `DataProviderRef`, while availability/booking
+identity belongs in `BookingProviderRef`.
 
 Checklist:
 
-- Add or extend the provider reference value under `models/domain`.
-- Update `ProviderRefParser` to parse the JSON shape written into `pois.provider_ref`.
-- Add parser tests for valid, malformed, and legacy payloads.
-- Keep upstream-specific JSON behind the parsed reference. Routes should never
-  parse `provider_ref` directly.
+- Add or extend `DataProvider`, `DataProviderRef`, `BookingProvider`, and
+  `BookingProviderRef` under `model/domain/provider` as needed.
+- Add parser/round-trip tests for valid, malformed, and legacy payloads.
+- Keep upstream-specific identifiers behind typed refs. Routes should never
+  parse provider-specific ref strings or JSON directly.
+- Add `RefResolver` coverage when the provider can bridge between source rows
+  and another booking system.
 
 The reference should contain durable upstream identifiers, not labels, URLs
 that can be recomputed, or values that only affect presentation.
@@ -67,7 +70,7 @@ has them.
 
 ## Step 3 - Add The Availability Adapter
 
-Create `service/availability/provider/adapters/<vendor>/`.
+Create the provider under `service/availability/provider/`.
 
 The adapter implements the availability-provider port and converts raw upstream
 responses into provider-neutral availability observations. Provider-specific
@@ -111,7 +114,7 @@ beside the adapter and expose drawer CTA behavior through a vendor-specific
 
 Checklist:
 
-- Add a booking URL helper under `service/availability/provider/adapters/<vendor>/`.
+- Add a booking URL helper under `service/availability/provider/`.
 - Add a booking display helper under the same vendor package if labels vary by
   provider or tenant.
 - Add a vendor-specific POI CTA provider if campground-level drawer buttons
@@ -133,7 +136,8 @@ Checklist:
 - Add source rows and ETL rows in `backend/src/main/resources/poi-registry.yaml`.
 - Add fetcher scripts only when raw upstream capture is required.
 - Add ETL code under `service/etl/vendors/<vendor>/`.
-- Write `ProviderRef` payloads on parent POIs.
+- Emit `dataProviderRef` for the imported catalog row and `bookingProvider` /
+  `bookingProviderRef` when the row can be booked or queried for availability.
 - Import campsites with stable vendor ids, types, names, loops, site types,
   and provider metadata.
 - Add a campsite parent joiner (see `CampsiteParentJoiner`) when campsites need reparenting to the right campground.
