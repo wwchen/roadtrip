@@ -3,11 +3,11 @@ package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.DataProvider
-import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
+import ca.floo.roadtrip.model.etl.CampgroundCampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.service.etl.framework.CampgroundCampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
-import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
@@ -37,7 +37,7 @@ import java.time.Instant
 // would shake out as a validation drop, not silent corruption.
 class ReserveAmericaEtl(
     override val etlSlug: String = "alberta-provincial",
-) : SourceEtl<ReserveAmericaDto, CampgroundEtlOutput> {
+) : CampgroundCampsiteEtl<ReserveAmericaDto> {
     override val multiPart: Boolean = true
 
     override fun parse(inputs: InputBundle): ReserveAmericaDto {
@@ -63,10 +63,10 @@ class ReserveAmericaEtl(
     override fun transform(
         dto: ReserveAmericaDto,
         ctx: TransformCtx,
-    ): CampgroundEtlOutput {
+    ): CampgroundCampsiteEtlOutput {
         val bucket = ctx.subcategoryFor(etlSlug)
         val settings = ReserveAmericaSettings.from(ctx, etlSlug)
-        return CampgroundEtlOutput(
+        return CampgroundCampsiteEtlOutput(
             campgrounds =
                 dto.parks.map { park ->
                     val name = displayName(park.name, settings.titleSuffix)
@@ -102,6 +102,7 @@ class ReserveAmericaEtl(
                         sourcePayload = parkExtras,
                     )
                 },
+            campsites = emptyList(),
         )
     }
 

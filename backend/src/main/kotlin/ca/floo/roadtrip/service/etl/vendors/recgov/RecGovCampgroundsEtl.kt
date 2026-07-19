@@ -5,12 +5,12 @@ import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CellSignal
 import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.domain.RatingSummary
-import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
+import ca.floo.roadtrip.model.etl.CampgroundCampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
 import ca.floo.roadtrip.model.metadata.registry.AgencyConfig
+import ca.floo.roadtrip.service.etl.framework.CampgroundCampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
-import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -43,7 +43,7 @@ import kotlin.math.round
 // targets.
 class RecGovCampgroundsEtl(
     override val etlSlug: String,
-) : SourceEtl<RecGovDto, CampgroundEtlOutput> {
+) : CampgroundCampsiteEtl<RecGovDto> {
     override val multiPart: Boolean = true
 
     override fun parse(inputs: InputBundle): RecGovDto {
@@ -92,10 +92,10 @@ class RecGovCampgroundsEtl(
     override fun transform(
         dto: RecGovDto,
         ctx: TransformCtx,
-    ): CampgroundEtlOutput {
+    ): CampgroundCampsiteEtlOutput {
         val bucket = ctx.subcategoryFor(etlSlug)
         val agencyConfig = ctx.agencyFor(etlSlug)
-        return CampgroundEtlOutput(
+        return CampgroundCampsiteEtlOutput(
             campgrounds =
                 dto.rows.mapNotNull {
                     transformRow(
@@ -106,6 +106,7 @@ class RecGovCampgroundsEtl(
                         agencyConfig = agencyConfig,
                     )
                 },
+            campsites = emptyList(),
         )
     }
 
