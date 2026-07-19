@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampgroundProviderRefRow
 import ca.floo.roadtrip.model.domain.CampsiteDateContextRow
 import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.model.domain.CampsiteVendorRefRow
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import org.jooq.DSLContext
 
 class CampsiteProviderRepo(

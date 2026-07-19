@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 
 /**
@@ -12,6 +12,6 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
  */
 internal data class ProviderCandidate(
     val provider: AvailabilityProvider,
-    val parentRef: ProviderRef,
+    val parentRef: BookingProviderRef,
     val catalogRef: CatalogCampsiteRef,
 )

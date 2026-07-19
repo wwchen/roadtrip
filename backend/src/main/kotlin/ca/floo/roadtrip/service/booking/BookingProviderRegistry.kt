@@ -5,7 +5,7 @@ import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 
 internal class BookingProviderRegistry(
     providers: List<BookingProvider>,
@@ -23,7 +23,7 @@ internal class BookingProviderRegistry(
 
     fun targetFor(
         action: BookingAction,
-        parentRef: ProviderRef,
+        parentRef: BookingProviderRef,
         campsiteRef: CatalogCampsiteRef,
     ): BookingTarget? =
         byId.values

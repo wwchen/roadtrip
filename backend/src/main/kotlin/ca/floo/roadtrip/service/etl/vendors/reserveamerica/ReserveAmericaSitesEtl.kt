@@ -1,9 +1,10 @@
 package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaCatalogParser
-import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
-import ca.floo.roadtrip.model.domain.DataProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.DataProvider
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
@@ -52,18 +53,18 @@ class ReserveAmericaSitesEtl(
         dto: Parsed,
         ctx: TransformCtx,
     ): CampsiteEtlOutput {
-        val dataProvider = DataProvider.RESERVEAMERICA
         val campsites =
             dto.sites
                 .distinctBy { it.siteId }
                 .map { site ->
                     CampsiteUpsertCandidate(
-                        dataProvider = dataProvider,
-                        dataProviderRef = site.siteId,
+                        dataProviderRef = DataProviderRef.ReserveAmerica(id = site.siteId),
                         bookingProvider = BookingProvider.RESERVEAMERICA,
                         bookingProviderRef = site.siteId,
-                        parentDataProvider = parentCampgroundVendor(contractCode),
-                        parentDataProviderRef = "$PARENT_CAMPGROUND_REF_PREFIX${site.parkId}",
+                        parentDataProviderRef =
+                            parentCampgroundVendor(contractCode)?.let {
+                                DataProviderRef.ReserveAmerica(id = "$PARENT_CAMPGROUND_REF_PREFIX${site.parkId}")
+                            },
                         name = site.name,
                         sourcePayload =
                             buildJsonObject {

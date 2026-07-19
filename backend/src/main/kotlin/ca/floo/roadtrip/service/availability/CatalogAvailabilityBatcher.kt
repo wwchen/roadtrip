@@ -7,7 +7,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -38,7 +38,7 @@ internal fun AvailabilityProviderError.toFetchOutcome(): FetchOutcome =
 internal class CatalogAvailabilityBatcher {
     private data class GroupKey(
         val provider: AvailabilityProvider,
-        val parentRef: ProviderRef,
+        val parentRef: BookingProviderRef,
         val dateContext: PoiDateContext,
     )
 
@@ -83,7 +83,7 @@ internal class CatalogAvailabilityBatcher {
         targets: List<ResolvedAvailabilityTarget>,
         windowFor: (PoiDateContext, AvailabilityProviderCapabilities) -> AvailabilityWindows?,
         fetch: suspend (
-            parentRef: ProviderRef,
+            parentRef: BookingProviderRef,
             provider: AvailabilityProvider,
             targets: List<ResolvedAvailabilityTarget>,
             windows: AvailabilityWindows,

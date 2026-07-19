@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.model.domain.BookingProvider
-import ca.floo.roadtrip.model.domain.BookingRef
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
@@ -14,17 +14,17 @@ internal class CampgroundAvailabilitySupport(
         campsiteProviderRepo
             .findCampgroundProviderRefCandidates(campgroundId)
             .firstNotNullOfOrNull { candidate ->
-                resolveViaBookingRef(candidate.source, candidate.bookingProviderRef)
+                resolveViaBookingProviderRef(candidate.source, candidate.bookingProviderRef)
                     ?: resolveViaLegacyJson(candidate.source, candidate.providerRefJson)
             }
 
-    private fun resolveViaBookingRef(
+    private fun resolveViaBookingProviderRef(
         source: String,
         bookingProviderRef: String?,
     ): String? {
         val bp = BookingProvider.fromIdOrNull(source) ?: return null
         val bpRef = bookingProviderRef ?: return null
-        val bookingRef = BookingRef.parse(bp, bpRef) ?: return null
+        val bookingRef = BookingProviderRef.parse(bp, bpRef) ?: return null
         return availabilityProviders
             .forBooking(bp, bookingRef)
             ?.id

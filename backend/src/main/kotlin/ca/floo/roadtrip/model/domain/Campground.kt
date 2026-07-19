@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.model.domain
 
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import kotlinx.serialization.json.JsonElement
 import java.time.Instant
 
@@ -36,8 +37,7 @@ data class Campground(
     val createdAt: Instant,
     val updatedAt: Instant,
     val deletedAt: Instant?,
-    val dataProvider: String,
-    val dataProviderRef: String,
+    val dataProviderRef: DataProviderRef,
     val bookingProvider: String?,
     val bookingProviderRef: String?,
 )

@@ -2,10 +2,9 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.model.domain.BookingRef
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -99,7 +98,7 @@ internal class DbAvailabilityTargetResolver(
         row: CampsiteProviderRefRow,
         campsite: CampsiteAvailabilityTarget,
     ): ProviderCandidate? {
-        val (ref, provider) = resolveFromBookingRef(row) ?: resolveFromLegacyJson(row) ?: return null
+        val (ref, provider) = resolveFromBookingProviderRef(row) ?: resolveFromLegacyJson(row) ?: return null
         return ProviderCandidate(
             provider = provider,
             parentRef = ref,
@@ -107,15 +106,15 @@ internal class DbAvailabilityTargetResolver(
         )
     }
 
-    private fun resolveFromBookingRef(row: CampsiteProviderRefRow): Pair<ProviderRef, AvailabilityProvider>? {
+    private fun resolveFromBookingProviderRef(row: CampsiteProviderRefRow): Pair<BookingProviderRef, AvailabilityProvider>? {
         val bp = row.bookingProvider ?: return null
         val bpRef = row.bookingProviderRef ?: return null
-        val bookingRef = BookingRef.parse(bp, bpRef) ?: return null
+        val bookingRef = BookingProviderRef.parse(bp, bpRef) ?: return null
         val provider = availabilityProviders.forBooking(bp, bookingRef) ?: return null
-        return bookingRef.toProviderRef() to provider
+        return bookingRef to provider
     }
 
-    private fun resolveFromLegacyJson(row: CampsiteProviderRefRow): Pair<ProviderRef, AvailabilityProvider>? {
+    private fun resolveFromLegacyJson(row: CampsiteProviderRefRow): Pair<BookingProviderRef, AvailabilityProvider>? {
         val ref = ProviderRefParser.parse(row.providerRefJson) ?: return null
         val provider = availabilityProviders.forPoi(row, ref) ?: return null
         return ref to provider
@@ -136,22 +135,22 @@ internal class DbAvailabilityTargetResolver(
         return ref.toCatalogCampsiteRef(campsiteId = campsite.id, fallback = fallback)
     }
 
-    private fun ProviderRef.toCatalogCampsiteRef(
+    private fun BookingProviderRef.toCatalogCampsiteRef(
         campsiteId: Long,
         fallback: CatalogCampsiteRef,
     ): CatalogCampsiteRef =
         when (this) {
-            is ProviderRef.RecGov ->
+            is BookingProviderRef.RecGov ->
                 CatalogCampsiteRef(
                     campsiteId = campsiteId,
-                    vendorId = recgovId,
+                    vendorId = facilityId,
                 )
-            is ProviderRef.Campflare ->
+            is BookingProviderRef.Campflare ->
                 CatalogCampsiteRef(
                     campsiteId = campsiteId,
                     vendorId = campgroundId,
                 )
-            is ProviderRef.Aspira ->
+            is BookingProviderRef.Aspira ->
                 fallback.copy(
                     campsiteId = campsiteId,
                     mapId = mapId,

@@ -9,7 +9,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.ReserveCaliforniaException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -37,7 +37,7 @@ class ReserveCaliforniaAvailabilityProvider(
     override fun isEnabled(): Boolean = enabled
 
     override suspend fun availability(
-        ref: ProviderRef,
+        ref: BookingProviderRef,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
@@ -59,7 +59,7 @@ class ReserveCaliforniaAvailabilityProvider(
     }
 
     override suspend fun catalogAvailability(
-        ref: ProviderRef,
+        ref: BookingProviderRef,
         campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
@@ -85,7 +85,7 @@ class ReserveCaliforniaAvailabilityProvider(
     }
 
     private suspend fun fetchFacilities(
-        ref: ProviderRef.ReserveCalifornia,
+        ref: BookingProviderRef.ReserveCalifornia,
         startDate: LocalDate,
         endDate: LocalDate,
     ): List<ReserveCaliforniaGridAvailability> =
@@ -122,7 +122,7 @@ class ReserveCaliforniaAvailabilityProvider(
         }
 
     private fun batch(
-        ref: ProviderRef.ReserveCalifornia,
+        ref: BookingProviderRef.ReserveCalifornia,
         startDate: LocalDate,
         endDate: LocalDate,
         observations: List<CampsiteDayObservation>,
@@ -138,8 +138,8 @@ class ReserveCaliforniaAvailabilityProvider(
             mapId = ref.facilityIds.joinToString(","),
         )
 
-    private fun reserveCaliforniaRefOrThrow(ref: ProviderRef): ProviderRef.ReserveCalifornia =
-        (ref as? ProviderRef.ReserveCalifornia)
+    private fun reserveCaliforniaRefOrThrow(ref: BookingProviderRef): BookingProviderRef.ReserveCalifornia =
+        (ref as? BookingProviderRef.ReserveCalifornia)
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), ref::class.simpleName ?: "unknown")
 
     private fun observedAt(grids: List<ReserveCaliforniaGridAvailability>): Instant = grids.firstOrNull()?.observedAt ?: Instant.now(clock)

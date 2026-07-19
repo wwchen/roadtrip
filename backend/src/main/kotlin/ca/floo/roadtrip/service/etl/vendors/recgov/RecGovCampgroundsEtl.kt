@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.etl.vendors.recgov
 
-import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CellSignal
-import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.domain.RatingSummary
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
@@ -138,8 +138,7 @@ class RecGovCampgroundsEtl(
         val cell = cellCoverage(enrichment)
 
         return CampgroundUpsertCandidate(
-            dataProvider = DataProvider.RECGOV,
-            dataProviderRef = "$CAMPGROUND_REF_PREFIX${row.FacilityID}",
+            dataProviderRef = DataProviderRef.RecGov(id = row.FacilityID.toString()),
             bookingProvider = if (reservable) BookingProvider.RECGOV else null,
             bookingProviderRef = if (reservable) "$CAMPGROUND_REF_PREFIX${row.FacilityID}" else null,
             name = name,

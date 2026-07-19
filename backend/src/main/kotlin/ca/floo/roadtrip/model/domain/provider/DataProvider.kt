@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.model.domain
+package ca.floo.roadtrip.model.domain.provider
 
 enum class DataProvider(
     val id: String,

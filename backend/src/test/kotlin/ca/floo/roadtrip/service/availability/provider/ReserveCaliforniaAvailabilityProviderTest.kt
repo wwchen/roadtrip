@@ -3,7 +3,7 @@ package ca.floo.roadtrip.service.availability.provider
 import ca.floo.roadtrip.client.reservecalifornia.HttpReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
@@ -61,7 +61,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
 
             val batch =
                 provider.catalogAvailability(
-                    ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611, 612)),
+                    ref = BookingProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611, 612)),
                     campsites =
                         listOf(
                             CatalogCampsiteRef(campsiteId = 43793, vendorId = "43793"),
@@ -116,7 +116,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
             val provider = ReserveCaliforniaAvailabilityProvider(availabilityClient = availabilityClient, enabled = true)
 
             provider.catalogAvailability(
-                ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611, 612)),
+                ref = BookingProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611, 612)),
                 campsites = emptyList(),
                 startDate = LocalDate.parse("2026-12-15"),
                 endDate = LocalDate.parse("2026-12-16"),
@@ -139,7 +139,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
 
             val batch =
                 provider.catalogAvailability(
-                    ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = emptyList()),
+                    ref = BookingProviderRef.ReserveCalifornia(placeId = 690, facilityIds = emptyList()),
                     campsites =
                         listOf(
                             CatalogCampsiteRef(campsiteId = 43793, vendorId = "43793"),

@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.aspira.AspiraSearchDefaults
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -38,9 +38,9 @@ internal object AspiraBookingUrl {
     fun templateFor(
         host: String,
         reservableProviderRef: JsonElement?,
-        parentRef: ProviderRef?,
+        parentRef: BookingProviderRef?,
     ): String? {
-        val parent = parentRef as? ProviderRef.Aspira
+        val parent = parentRef as? BookingProviderRef.Aspira
         val transactionLocationId =
             reservableProviderRef.aspiraLong("transactionLocationId")
                 ?: parent?.transactionLocationId

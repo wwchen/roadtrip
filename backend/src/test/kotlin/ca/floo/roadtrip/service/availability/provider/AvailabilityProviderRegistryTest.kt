@@ -3,7 +3,7 @@ package ca.floo.roadtrip.service.availability.provider
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,7 +21,7 @@ class AvailabilityProviderRegistryTest {
         override fun isEnabled(): Boolean = enabled
 
         override suspend fun availability(
-            ref: ProviderRef,
+            ref: BookingProviderRef,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = error("not used in this test")
@@ -64,10 +64,10 @@ class AvailabilityProviderRegistryTest {
 
                 override fun isEnabled(): Boolean = true
 
-                override fun supportsRef(ref: ProviderRef): Boolean = false
+                override fun supportsRef(ref: BookingProviderRef): Boolean = false
 
                 override suspend fun availability(
-                    ref: ProviderRef,
+                    ref: BookingProviderRef,
                     startDate: LocalDate,
                     endDate: LocalDate,
                 ): AvailabilityObservationBatch = error("not used in this test")
@@ -75,7 +75,7 @@ class AvailabilityProviderRegistryTest {
         val registry = AvailabilityProviderRegistry(adaptersBySource = mapOf("campflare" to declining))
 
         assertSame(declining, registry.forPoi(row("campflare")))
-        assertNull(registry.forPoi(row("campflare"), ProviderRef.Campflare("upper-pines-campground-447")))
+        assertNull(registry.forPoi(row("campflare"), BookingProviderRef.Campflare("upper-pines-campground-447")))
     }
 
     @Test
@@ -122,7 +122,7 @@ class AvailabilityProviderRegistryTest {
 
         assertSame(recgov, registry.forPoi(row("recgov-campgrounds")))
         assertNull(registry.forPoi(row("campflare-campgrounds")))
-        assertNull(registry.forPoi(row("campflare"), ProviderRef.Campflare("upper-pines-campground-447")))
+        assertNull(registry.forPoi(row("campflare"), BookingProviderRef.Campflare("upper-pines-campground-447")))
         assertSame(recgov, registry.firstByVendor(AvailabilityProviderId.RECGOV))
         assertNull(registry.firstByVendor(AvailabilityProviderId.CAMPFLARE))
         assertEquals(listOf(AvailabilityProviderId.RECGOV), registry.all().map { it.id })

@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.etl.vendors.recgov
 
-import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.DEFAULT_CAMPSITE_KIND
-import ca.floo.roadtrip.model.domain.DataProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
@@ -72,12 +72,10 @@ class RecGovCampsitesEtl(
                 val campsiteType = raw.stringField("campsite_type")
                 campsites +=
                     CampsiteUpsertCandidate(
-                        dataProvider = DataProvider.RECGOV,
-                        dataProviderRef = campsiteId,
+                        dataProviderRef = DataProviderRef.RecGov(id = campsiteId),
                         bookingProvider = BookingProvider.RECGOV,
                         bookingProviderRef = campsiteId,
-                        parentDataProvider = DataProvider.RECGOV,
-                        parentDataProviderRef = "$PARENT_CAMPGROUND_REF_PREFIX$facilityId",
+                        parentDataProviderRef = DataProviderRef.RecGov(id = facilityId),
                         name = siteName,
                         loopName = raw.stringField("loop"),
                         kind = campsiteType ?: DEFAULT_CAMPSITE_KIND,

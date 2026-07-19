@@ -1,9 +1,10 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
-import ca.floo.roadtrip.model.domain.BookingProvider
-import ca.floo.roadtrip.model.domain.BookingRef
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
-import ca.floo.roadtrip.model.domain.DataProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.DataProvider
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
@@ -206,14 +207,13 @@ class AspiraCampgroundsEtl(
             }
 
             val (lat, lon) = coords
-            val dataRef = aspiraDataProviderRef(leaf)
+            val dataRef = DataProviderRef.Aspira(transactionLocationId = leaf.transactionLocationId, mapId = leaf.mapId)
             val bookingCtaRef = leaf.resourceLocationId?.let { bookingCtaRefsByResourceLocationId[it] }
             campgrounds +=
                 CampgroundUpsertCandidate(
-                    dataProvider = dataProviderValue,
                     dataProviderRef = dataRef,
                     bookingProvider = BookingProvider.ASPIRA,
-                    bookingProviderRef = bookingCtaRef?.let { campgroundBookingRef(leaf, it) },
+                    bookingProviderRef = bookingCtaRef?.let { campgroundBookingProviderRef(leaf, it) },
                     name = leaf.name,
                     latitude = lat,
                     longitude = lon,
@@ -250,13 +250,11 @@ class AspiraCampgroundsEtl(
         return CampgroundEtlOutput(campgrounds = campgrounds)
     }
 
-    private fun aspiraDataProviderRef(leaf: AspiraLeaf): String = "$ASPIRA_DATA_REF_PREFIX${leaf.transactionLocationId}-${leaf.mapId}"
-
-    private fun campgroundBookingRef(
+    private fun campgroundBookingProviderRef(
         leaf: AspiraLeaf,
         bookingCtaRef: AspiraBookingCtaRef,
     ): String =
-        BookingRef
+        BookingProviderRef
             .Aspira(
                 tenant = aspiraTenant,
                 transactionLocationId = leaf.transactionLocationId,
@@ -385,7 +383,6 @@ class AspiraCampgroundsEtl(
 
     companion object {
         private const val FUZZY_THRESHOLD = 0.5
-        private const val ASPIRA_DATA_REF_PREFIX = "aspira-"
         private const val ASPIRA_TRANSACTION_LOCATION_ID_KEY = "transactionLocationId"
         private const val ASPIRA_MAP_ID_KEY = "mapId"
         private const val ASPIRA_RESOURCE_LOCATION_ID_KEY = "resourceLocationId"

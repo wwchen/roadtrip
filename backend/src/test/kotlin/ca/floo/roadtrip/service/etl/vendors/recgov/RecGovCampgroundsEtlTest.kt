@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.etl.vendors.recgov
 
-import ca.floo.roadtrip.model.domain.DataProvider
+import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.RequestMeta
 import ca.floo.roadtrip.model.metadata.ResponseMeta
@@ -35,10 +35,10 @@ class RecGovCampgroundsEtlTest {
     @Test
     fun `transform treats nonreservable RIDB facilities as agency info pages, not RecGov booking targets`() {
         val etl = RecGovCampgroundsEtl("recgov-campgrounds")
-        val campgrounds = etl.transform(etl.parse(bundle()), transformCtx).campgrounds.associateBy { it.dataProviderRef }
+        val campgrounds = etl.transform(etl.parse(bundle()), transformCtx).campgrounds.associateBy { it.dataProviderRef.serialize() }
 
         val reservable = campgrounds.getValue("recgov-232447")
-        assertEquals(DataProvider.RECGOV, reservable.dataProvider)
+        assertEquals(DataProvider.RECGOV, reservable.dataProviderRef.provider)
         assertEquals("https://www.recreation.gov/camping/campgrounds/232447", reservable.reservationUrl)
 
         val reservableWithoutUpstreamUrl = campgrounds.getValue("recgov-10083567")
@@ -57,7 +57,7 @@ class RecGovCampgroundsEtlTest {
                     etl.parse(bundle(withEnrichment = true)),
                     transformCtx,
                 ).campgrounds
-                .associateBy { it.dataProviderRef }
+                .associateBy { it.dataProviderRef.serialize() }
 
         val upperPines = campgrounds.getValue("recgov-232447")
 
@@ -127,7 +127,7 @@ class RecGovCampgroundsEtlTest {
 
         val campgrounds = etl.transform(etl.parse(bundle()), ctx).campgrounds
 
-        assertNull(campgrounds.first { it.dataProviderRef == "recgov-232447" }.management)
+        assertNull(campgrounds.first { it.dataProviderRef.serialize() == "recgov-232447" }.management)
     }
 
     private fun bundle(withEnrichment: Boolean = false): InputBundle =

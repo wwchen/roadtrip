@@ -5,6 +5,8 @@ import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
 import ca.floo.roadtrip.model.domain.poi.PoiGeometryUpdate
+import ca.floo.roadtrip.model.domain.provider.DataProvider
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
@@ -141,8 +143,14 @@ class CampgroundRepo(
             ).map(::fromRecord)
     }
 
-    private fun fromRecord(record: Record): Campground =
-        Campground(
+    private fun fromRecord(record: Record): Campground {
+        val dataProvider = DataProvider.fromId(record.get("data_provider", String::class.java))
+        val dataProviderRefStr = record.get("data_provider_ref", String::class.java)
+        val dataProviderRef =
+            DataProviderRef.parse(dataProvider, dataProviderRefStr)
+                ?: error("Failed to parse DataProviderRef for provider=$dataProvider ref=$dataProviderRefStr")
+
+        return Campground(
             id = record.get("id", Long::class.java),
             name = record.get("name", String::class.java),
             status = record.get("status", String::class.java),
@@ -172,11 +180,11 @@ class CampgroundRepo(
             createdAt = record.instant("created_at"),
             updatedAt = record.instant("updated_at"),
             deletedAt = record.nullableInstant("deleted_at"),
-            dataProvider = record.get("data_provider", String::class.java),
-            dataProviderRef = record.get("data_provider_ref", String::class.java),
+            dataProviderRef = dataProviderRef,
             bookingProvider = record.get("booking_provider", String::class.java),
             bookingProviderRef = record.get("booking_provider_ref", String::class.java),
         )
+    }
 
     private fun parseJsonElement(raw: String): JsonElement = Json.parseToJsonElement(raw)
 
@@ -203,7 +211,10 @@ class CampgroundRepo(
         val poiRows =
             records.map { record ->
                 CampgroundPoiRow(
-                    campgroundId = campgroundIdByProviderRef.getValue(record.dataProvider.id to record.dataProviderRef),
+                    campgroundId =
+                        campgroundIdByProviderRef.getValue(
+                            record.dataProviderRef.provider.id to record.dataProviderRef.serialize(),
+                        ),
                     longitude = record.longitude,
                     latitude = record.latitude,
                 )
@@ -215,7 +226,7 @@ class CampgroundRepo(
 
     private fun bulkUpsertCampgroundRows(records: List<CampgroundUpsertCandidate>): Map<Pair<String, String>, Long> {
         if (records.isEmpty()) return emptyMap()
-        val deduped = records.distinctBy { it.dataProvider.id to it.dataProviderRef }
+        val deduped = records.distinctBy { it.dataProviderRef.provider.id to it.dataProviderRef.serialize() }
         val result = HashMap<Pair<String, String>, Long>(deduped.size)
         for (chunk in deduped.chunked(BULK_CHUNK_SIZE)) {
             val placeholders =
@@ -277,8 +288,8 @@ class CampgroundRepo(
                 """.trimIndent()
             val params = mutableListOf<Any?>()
             for (record in chunk) {
-                params += record.dataProvider.id
-                params += record.dataProviderRef
+                params += record.dataProviderRef.provider.id
+                params += record.dataProviderRef.serialize()
                 params += record.bookingProvider?.id
                 params += record.bookingProviderRef
                 params += record.name

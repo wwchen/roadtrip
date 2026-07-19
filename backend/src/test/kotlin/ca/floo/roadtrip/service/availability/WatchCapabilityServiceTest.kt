@@ -10,7 +10,7 @@ import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingProviderId
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
@@ -127,10 +127,10 @@ class WatchCapabilityServiceTest {
         override val id: BookingProviderId = BookingProviderId.RECGOV
 
         override fun targetFor(
-            parentRef: ProviderRef,
+            parentRef: BookingProviderRef,
             campsiteRef: CatalogCampsiteRef,
         ): BookingTarget? {
-            if (parentRef !is ProviderRef.RecGov) return null
+            if (parentRef !is BookingProviderRef.RecGov) return null
             return BookingTarget(
                 providerId = id,
                 parentRef = parentRef,
@@ -144,7 +144,7 @@ class WatchCapabilityServiceTest {
         ): Boolean =
             action == BookingAction.ADD_TO_CART &&
                 target.providerId == BookingProviderId.RECGOV &&
-                target.parentRef is ProviderRef.RecGov &&
+                target.parentRef is BookingProviderRef.RecGov &&
                 target.campsiteRef.vendorId.isNotBlank()
 
         override suspend fun addToCart(request: AddToCartRequest): AddToCartResult = AddToCartResult.Unsupported
@@ -162,7 +162,7 @@ class WatchCapabilityServiceTest {
             val candidate =
                 ProviderCandidate(
                     provider = provider,
-                    parentRef = ProviderRef.RecGov("facility-1"),
+                    parentRef = BookingProviderRef.RecGov(facilityId = "facility-1"),
                     catalogRef = CatalogCampsiteRef(campsiteId = known.id, vendorId = known.vendorId),
                 )
             return ResolvedAvailabilityTarget(
@@ -195,7 +195,7 @@ class WatchCapabilityServiceTest {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: ProviderRef,
+            ref: BookingProviderRef,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")

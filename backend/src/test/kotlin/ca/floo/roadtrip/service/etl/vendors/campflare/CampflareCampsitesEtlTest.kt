@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.campflare
 
-import ca.floo.roadtrip.model.domain.BookingProvider
-import ca.floo.roadtrip.model.domain.DataProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.RequestMeta
 import ca.floo.roadtrip.model.metadata.ResponseMeta
@@ -23,10 +23,10 @@ class CampflareCampsitesEtlTest {
         val out = etl.transform(etl.parse(bundle(campsitePayload())), transformCtx())
         val row = out.campsites.single()
 
-        assertEquals(DataProvider.CAMPFLARE, row.dataProvider)
-        assertEquals("upper-pines-site-001", row.dataProviderRef)
-        assertEquals(DataProvider.CAMPFLARE, row.parentDataProvider)
-        assertEquals("upper-pines-campground-447", row.parentDataProviderRef)
+        assertEquals(DataProvider.CAMPFLARE, row.dataProviderRef.provider)
+        assertEquals("upper-pines-site-001", row.dataProviderRef.serialize())
+        assertEquals(DataProvider.CAMPFLARE, row.parentDataProviderRef!!.provider)
+        assertEquals("upper-pines-campground-447", row.parentDataProviderRef!!.serialize())
         assertEquals("Site 001", row.name)
         assertEquals("tent-only", row.kind)
         assertEquals("A", row.loopName)
@@ -71,8 +71,8 @@ class CampflareCampsitesEtlTest {
                 transformCtx(),
             )
 
-        assertEquals(listOf("missing-kind", "ok"), out.campsites.map { it.dataProviderRef })
-        assertEquals("site", out.campsites.single { it.dataProviderRef == "missing-kind" }.kind)
+        assertEquals(listOf("missing-kind", "ok"), out.campsites.map { it.dataProviderRef.serialize() })
+        assertEquals("site", out.campsites.single { it.dataProviderRef.serialize() == "missing-kind" }.kind)
     }
 
     @Test
@@ -107,8 +107,8 @@ class CampflareCampsitesEtlTest {
                 transformCtx(),
             )
 
-        assertEquals(-91.853611, out.campsites.single { it.dataProviderRef == "scaled-lon" }.longitude)
-        assertEquals(31.957925, out.campsites.single { it.dataProviderRef == "scaled-lat" }.latitude)
+        assertEquals(-91.853611, out.campsites.single { it.dataProviderRef.serialize() == "scaled-lon" }.longitude)
+        assertEquals(31.957925, out.campsites.single { it.dataProviderRef.serialize() == "scaled-lat" }.latitude)
     }
 
     private fun bundle(payloadJson: String): InputBundle =

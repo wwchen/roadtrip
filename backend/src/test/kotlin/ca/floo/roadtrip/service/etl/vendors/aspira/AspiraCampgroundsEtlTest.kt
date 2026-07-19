@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
-import ca.floo.roadtrip.model.domain.DataProvider
+import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -204,7 +204,7 @@ class AspiraCampgroundsEtlTest {
         val campground = campgrounds(dtoOf(campground)).single()
 
         // Campsite parent resolution matches vendor_refs.external_id = "aspira-{txn}-{map}".
-        assertEquals("aspira-1002--2147483641", campground.dataProviderRef)
+        assertEquals("aspira-1002--2147483641", campground.dataProviderRef.serialize())
         assertEquals("federal", campground.kind)
         val management = campground.management!!.jsonObject
         assertEquals("Parks Canada", management["agency"]!!.jsonPrimitive.content)

@@ -6,7 +6,7 @@ import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingProviderId
 import ca.floo.roadtrip.model.booking.BookingTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.Dispatchable
 
 internal interface BookingProvider : Dispatchable<BookingProviderId> {
@@ -17,10 +17,10 @@ internal interface BookingProvider : Dispatchable<BookingProviderId> {
     /**
      * Translates provider-specific catalog identity into a booking target this
      * provider understands. Availability code should not maintain a central
-     * ProviderRef -> BookingProvider map; each booking adapter owns that shape.
+     * BookingProviderRef -> BookingProvider map; each booking adapter owns that shape.
      */
     fun targetFor(
-        parentRef: ProviderRef,
+        parentRef: BookingProviderRef,
         campsiteRef: CatalogCampsiteRef,
     ): BookingTarget?
 

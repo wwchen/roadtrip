@@ -6,7 +6,7 @@ import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingProviderId
 import ca.floo.roadtrip.model.booking.BookingTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import org.junit.jupiter.api.Test
@@ -42,10 +42,10 @@ class BookingProviderRegistryTest {
     fun `target for asks providers to translate provider refs`() {
         val registry = BookingProviderRegistry(listOf(FakeBookingProvider(canAddToCart = true)))
 
-        val target = registry.targetFor(BookingAction.ADD_TO_CART, ProviderRef.RecGov("100"), campsiteRef())
+        val target = registry.targetFor(BookingAction.ADD_TO_CART, BookingProviderRef.RecGov("100"), campsiteRef())
 
         assertEquals(BookingProviderId.RECGOV, target?.providerId)
-        assertEquals(ProviderRef.RecGov("100"), target?.parentRef)
+        assertEquals(BookingProviderRef.RecGov("100"), target?.parentRef)
         assertEquals(campsiteRef(), target?.campsiteRef)
     }
 
@@ -95,10 +95,10 @@ class BookingProviderRegistryTest {
         override val id: BookingProviderId = BookingProviderId.RECGOV
 
         override fun targetFor(
-            parentRef: ProviderRef,
+            parentRef: BookingProviderRef,
             campsiteRef: CatalogCampsiteRef,
         ): BookingTarget? {
-            if (parentRef !is ProviderRef.RecGov) return null
+            if (parentRef !is BookingProviderRef.RecGov) return null
             return BookingTarget(
                 providerId = id,
                 parentRef = parentRef,
@@ -134,7 +134,7 @@ class BookingProviderRegistryTest {
     private fun target(): BookingTarget =
         BookingTarget(
             providerId = BookingProviderId.RECGOV,
-            parentRef = ProviderRef.RecGov("100"),
+            parentRef = BookingProviderRef.RecGov("100"),
             campsiteRef = campsiteRef(),
         )
 
