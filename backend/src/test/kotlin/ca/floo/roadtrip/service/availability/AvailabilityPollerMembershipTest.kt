@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
@@ -14,7 +15,6 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -126,7 +126,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
 
     /** Minimal AvailabilityProvider stub — membership consumes id and internal polling support. */
     private class FakeProvider(
-        override val id: AvailabilityProviderId,
+        override val id: BookingProvider,
         supportsInternalPolling: Boolean,
     ) : AvailabilityProvider {
         override val capabilities: AvailabilityProviderCapabilities =
@@ -155,7 +155,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
 
         fun stub(
             campsite: CampsiteAvailabilityTarget,
-            provider: AvailabilityProviderId,
+            provider: BookingProvider,
             parentRef: BookingProviderRef,
             parentPoiId: Long,
             dateContext: PoiDateContext,
@@ -193,14 +193,14 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val targets = FakeTargetResolver()
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteA)!!,
-            AvailabilityProviderId.RECGOV,
+            BookingProvider.RECGOV,
             BookingProviderRef.RecGov("232447"),
             poi,
             fakeDateContext,
         )
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteB)!!,
-            AvailabilityProviderId.RECGOV,
+            BookingProvider.RECGOV,
             BookingProviderRef.RecGov("232447"),
             poi,
             fakeDateContext,
@@ -233,14 +233,14 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val targets = FakeTargetResolver()
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteX)!!,
-            AvailabilityProviderId.RECGOV,
+            BookingProvider.RECGOV,
             BookingProviderRef.RecGov("999000"),
             poiX,
             fakeDateContext,
         )
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteY)!!,
-            AvailabilityProviderId.RECGOV,
+            BookingProvider.RECGOV,
             BookingProviderRef.RecGov("999000"),
             poiY,
             fakeDateContext,
@@ -269,14 +269,14 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val targets = FakeTargetResolver()
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteA)!!,
-            AvailabilityProviderId.RECGOV,
+            BookingProvider.RECGOV,
             BookingProviderRef.RecGov("111111"),
             poi,
             fakeDateContext,
         )
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteB)!!,
-            AvailabilityProviderId.RECGOV,
+            BookingProvider.RECGOV,
             BookingProviderRef.RecGov("222222"),
             poi,
             fakeDateContext,
@@ -300,7 +300,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val targets = FakeTargetResolver()
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteA)!!,
-            AvailabilityProviderId.RECGOV,
+            BookingProvider.RECGOV,
             BookingProviderRef.RecGov("111111"),
             poi,
             fakeDateContext,
@@ -324,7 +324,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val targets = FakeTargetResolver()
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteA)!!,
-            AvailabilityProviderId.RECGOV,
+            BookingProvider.RECGOV,
             BookingProviderRef.RecGov("333333"),
             poi,
             fakeDateContext,
@@ -342,7 +342,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         // (e.g. the campground's provider ref was corrected).
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteA)!!,
-            AvailabilityProviderId.RECGOV,
+            BookingProvider.RECGOV,
             BookingProviderRef.RecGov("444444"),
             poi,
             fakeDateContext,
@@ -364,7 +364,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val targets = FakeTargetResolver()
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteA)!!,
-            AvailabilityProviderId.RECGOV,
+            BookingProvider.RECGOV,
             BookingProviderRef.RecGov("555555"),
             poi,
             fakeDateContext,
@@ -392,7 +392,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val targets = FakeTargetResolver()
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteA)!!,
-            AvailabilityProviderId.RECGOV,
+            BookingProvider.RECGOV,
             BookingProviderRef.RecGov("666666"),
             poi,
             fakeDateContext,

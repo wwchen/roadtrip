@@ -6,11 +6,11 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -23,7 +23,7 @@ internal class CampsiteAvailabilityComposer(
     private val targets: AvailabilityTargetResolver,
     private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     availabilityRepo: AvailabilityRepo? = null,
-    private val snapshotFreshnessTtl: (AvailabilityProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
+    private val snapshotFreshnessTtl: (BookingProvider) -> Duration = ::defaultSnapshotFreshnessTtl,
     private val failoverFetcher: FailoverAvailabilityFetcher,
 ) {
     private val availabilityLoader = AvailabilityLoader(availabilityRepo)
@@ -142,13 +142,13 @@ internal class CampsiteAvailabilityComposer(
 // attempts (e.g. empty-candidates case). Not user-facing.
 private const val NO_CANDIDATES_ERROR: String = "no availability candidates available"
 
-internal fun defaultSnapshotFreshnessTtl(providerId: AvailabilityProviderId): Duration =
+internal fun defaultSnapshotFreshnessTtl(providerId: BookingProvider): Duration =
     when (providerId) {
-        AvailabilityProviderId.RECGOV -> ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl
-        AvailabilityProviderId.CAMPFLARE -> ApiCacheEntity.CAMPFLARE_AVAILABILITY.defaultTtl
-        AvailabilityProviderId.ASPIRA -> ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl
-        AvailabilityProviderId.RESERVEAMERICA -> ApiCacheEntity.RESERVEAMERICA_AVAILABILITY.defaultTtl
-        AvailabilityProviderId.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl
+        BookingProvider.RECGOV -> ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl
+        BookingProvider.CAMPFLARE -> ApiCacheEntity.CAMPFLARE_AVAILABILITY.defaultTtl
+        BookingProvider.ASPIRA -> ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl
+        BookingProvider.RESERVEAMERICA -> ApiCacheEntity.RESERVEAMERICA_AVAILABILITY.defaultTtl
+        BookingProvider.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl
     }
 
 private fun ResolvedAvailabilityTarget.toAvailabilityTarget(): AvailabilityLoader.CampsiteTarget =
@@ -157,12 +157,12 @@ private fun ResolvedAvailabilityTarget.toAvailabilityTarget(): AvailabilityLoade
     )
 
 private fun availabilityMetadata(
-    providerId: AvailabilityProviderId,
+    providerId: BookingProvider,
     ref: BookingProviderRef,
     campsiteId: Long? = null,
 ): AvailabilityLoader.Metadata =
     AvailabilityLoader.Metadata(
-        provider = providerId.name.lowercase(),
+        provider = providerId.id,
         campgroundId =
             when (ref) {
                 is BookingProviderRef.RecGov -> ref.facilityId

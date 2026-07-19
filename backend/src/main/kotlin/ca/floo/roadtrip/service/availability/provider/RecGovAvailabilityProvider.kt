@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import java.time.LocalDate
 
@@ -20,7 +21,7 @@ class RecGovAvailabilityProvider(
     private val availabilityClient: RecGovAvailabilityClient,
     private val enabled: Boolean,
 ) : AvailabilityProvider {
-    override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
+    override val id: BookingProvider = BookingProvider.RECGOV
 
     override val capabilities: AvailabilityProviderCapabilities =
         AvailabilityProviderCapabilities(

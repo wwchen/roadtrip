@@ -7,16 +7,15 @@ import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
-import ca.floo.roadtrip.model.booking.BookingProviderId
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.booking.BookingProvider
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.booking.BookingAdapter
+import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.notification.common.WatchOpening
@@ -219,7 +218,7 @@ class TriggerActionHandlerTest {
     fun `AtcTriggerActionHandler executes first supported opening through booking provider`() =
         runBlocking {
             val bookingProvider = RecordingBookingProvider()
-            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val registry = BookingAdapterRegistry(listOf(bookingProvider))
             val handler =
                 AtcTriggerActionHandler(
                     bookings = registry,
@@ -233,7 +232,7 @@ class TriggerActionHandlerTest {
             assertTrue(delivered)
             val request = bookingProvider.requests.single()
             assertEquals(42L, request.watchId)
-            assertEquals(BookingProviderId.RECGOV, request.target.providerId)
+            assertEquals(BookingProvider.RECGOV, request.target.providerId)
             assertEquals(7L, request.target.campsiteRef.campsiteId)
             assertEquals("site-7", request.target.campsiteRef.vendorId)
             assertEquals(LocalDate.parse("2026-07-04"), request.arrivalDate)
@@ -249,7 +248,7 @@ class TriggerActionHandlerTest {
                 RecordingBookingProvider(
                     resultFactory = { request: AddToCartRequest ->
                         AddToCartResult.Completed(
-                            providerId = BookingProviderId.RECGOV,
+                            providerId = BookingProvider.RECGOV,
                             request = buildJsonObject { put("watch_id", request.watchId) },
                             response =
                                 buildJsonObject {
@@ -259,7 +258,7 @@ class TriggerActionHandlerTest {
                         )
                     },
                 )
-            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val registry = BookingAdapterRegistry(listOf(bookingProvider))
             val notifications = CapturingNotifications(result = true)
             val handler =
                 AtcTriggerActionHandler(
@@ -292,7 +291,7 @@ class TriggerActionHandlerTest {
                 RecordingBookingProvider(
                     resultFactory = { request: AddToCartRequest ->
                         AddToCartResult.Failed(
-                            providerId = BookingProviderId.RECGOV,
+                            providerId = BookingProvider.RECGOV,
                             error = "cart_not_added",
                             detail = "cart automation did not confirm a cart hold",
                             request = buildJsonObject { put("watch_id", request.watchId) },
@@ -304,7 +303,7 @@ class TriggerActionHandlerTest {
                         )
                     },
                 )
-            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val registry = BookingAdapterRegistry(listOf(bookingProvider))
             val notifications = CapturingNotifications(result = true)
             val handler =
                 AtcTriggerActionHandler(
@@ -330,7 +329,7 @@ class TriggerActionHandlerTest {
                 RecordingBookingProvider(
                     resultFactory = { request: AddToCartRequest ->
                         AddToCartResult.Failed(
-                            providerId = BookingProviderId.RECGOV,
+                            providerId = BookingProvider.RECGOV,
                             error = "recgov_not_authenticated",
                             detail = "run make recgov-login",
                             request = buildJsonObject { put("watch_id", request.watchId) },
@@ -346,7 +345,7 @@ class TriggerActionHandlerTest {
                         )
                     },
                 )
-            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val registry = BookingAdapterRegistry(listOf(bookingProvider))
             val notifications = CapturingNotifications(result = true)
             val handler =
                 AtcTriggerActionHandler(
@@ -372,7 +371,7 @@ class TriggerActionHandlerTest {
     fun `AtcTriggerActionHandler leaves unsupported openings inert`() =
         runBlocking {
             val bookingProvider = RecordingBookingProvider()
-            val registry = BookingProviderRegistry(listOf(bookingProvider))
+            val registry = BookingAdapterRegistry(listOf(bookingProvider))
             val notifications = CapturingNotifications(result = true)
             val handler =
                 AtcTriggerActionHandler(
@@ -483,10 +482,10 @@ class TriggerActionHandlerTest {
 
     private class RecordingBookingProvider(
         private val resultFactory: ((AddToCartRequest) -> AddToCartResult)? = null,
-    ) : BookingProvider {
+    ) : BookingAdapter {
         val requests = mutableListOf<AddToCartRequest>()
 
-        override val id: BookingProviderId = BookingProviderId.RECGOV
+        override val id: BookingProvider = BookingProvider.RECGOV
 
         override fun targetFor(
             parentRef: BookingProviderRef,
@@ -505,14 +504,14 @@ class TriggerActionHandlerTest {
             target: BookingTarget,
         ): Boolean =
             action == BookingAction.ADD_TO_CART &&
-                target.providerId == BookingProviderId.RECGOV &&
+                target.providerId == BookingProvider.RECGOV &&
                 target.parentRef is BookingProviderRef.RecGov
 
         override suspend fun addToCart(request: AddToCartRequest): AddToCartResult {
             requests += request
             resultFactory?.let { return it(request) }
             return AddToCartResult.Completed(
-                providerId = BookingProviderId.RECGOV,
+                providerId = BookingProvider.RECGOV,
                 request = buildJsonObject { put("watch_id", request.watchId) },
                 response =
                     buildJsonObject {
@@ -524,7 +523,7 @@ class TriggerActionHandlerTest {
     }
 
     private class FakeAvailabilityProvider(
-        override val id: AvailabilityProviderId,
+        override val id: BookingProvider,
     ) : AvailabilityProvider {
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
@@ -545,11 +544,11 @@ class TriggerActionHandlerTest {
     private fun triggerOpening(parentRef: BookingProviderRef = BookingProviderRef.RecGov(facilityId = "100")): TriggerOpening {
         val providerId =
             when (parentRef) {
-                is BookingProviderRef.RecGov -> AvailabilityProviderId.RECGOV
-                is BookingProviderRef.Campflare -> AvailabilityProviderId.CAMPFLARE
-                is BookingProviderRef.Aspira -> AvailabilityProviderId.ASPIRA
-                is BookingProviderRef.ReserveAmerica -> AvailabilityProviderId.RESERVEAMERICA
-                is BookingProviderRef.ReserveCalifornia -> AvailabilityProviderId.RESERVECALIFORNIA
+                is BookingProviderRef.RecGov -> BookingProvider.RECGOV
+                is BookingProviderRef.Campflare -> BookingProvider.CAMPFLARE
+                is BookingProviderRef.Aspira -> BookingProvider.ASPIRA
+                is BookingProviderRef.ReserveAmerica -> BookingProvider.RESERVEAMERICA
+                is BookingProviderRef.ReserveCalifornia -> BookingProvider.RESERVECALIFORNIA
             }
         val campsite =
             CampsiteAvailabilityTarget(

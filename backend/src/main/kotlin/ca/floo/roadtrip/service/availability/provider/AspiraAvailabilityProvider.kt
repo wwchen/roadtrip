@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.AspiraException
 import java.time.LocalDate
@@ -43,7 +44,7 @@ class AspiraAvailabilityProvider(
      */
     private val occupancyEnabled: Boolean = false,
 ) : AvailabilityProvider {
-    override val id: AvailabilityProviderId = AvailabilityProviderId.ASPIRA
+    override val id: BookingProvider = BookingProvider.ASPIRA
 
     override val capabilities: AvailabilityProviderCapabilities =
         AvailabilityProviderCapabilities(

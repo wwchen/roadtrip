@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.availability.provider
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import java.time.LocalDate
 import kotlin.test.Test
@@ -13,7 +14,7 @@ import kotlin.test.assertSame
 
 class AvailabilityProviderRegistryTest {
     private class FakeProvider(
-        override val id: AvailabilityProviderId,
+        override val id: BookingProvider,
         private val enabled: Boolean,
     ) : AvailabilityProvider {
         override val capabilities: AvailabilityProviderCapabilities = AvailabilityProviderCapabilities.unsupported
@@ -29,8 +30,8 @@ class AvailabilityProviderRegistryTest {
 
     @Test
     fun `forPoi resolves source to its adapter instance`() {
-        val recgov = FakeProvider(AvailabilityProviderId.RECGOV, enabled = true)
-        val aspiraPc = FakeProvider(AvailabilityProviderId.ASPIRA, enabled = true)
+        val recgov = FakeProvider(BookingProvider.RECGOV, enabled = true)
+        val aspiraPc = FakeProvider(BookingProvider.ASPIRA, enabled = true)
         val registry =
             AvailabilityProviderRegistry(
                 adaptersBySource =
@@ -42,11 +43,11 @@ class AvailabilityProviderRegistryTest {
 
         val resolved = registry.forPoi(row("recgov-campgrounds"))
         assertNotNull(resolved)
-        assertEquals(AvailabilityProviderId.RECGOV, resolved.id)
+        assertEquals(BookingProvider.RECGOV, resolved.id)
 
         val pc = registry.forPoi(row("aspira_pc"))
         assertNotNull(pc)
-        assertEquals(AvailabilityProviderId.ASPIRA, pc.id)
+        assertEquals(BookingProvider.ASPIRA, pc.id)
     }
 
     @Test
@@ -59,7 +60,7 @@ class AvailabilityProviderRegistryTest {
     fun `forPoi with ref returns null when mapped provider declines the ref`() {
         val declining =
             object : AvailabilityProvider {
-                override val id: AvailabilityProviderId = AvailabilityProviderId.CAMPFLARE
+                override val id: BookingProvider = BookingProvider.CAMPFLARE
                 override val capabilities: AvailabilityProviderCapabilities = AvailabilityProviderCapabilities.unsupported
 
                 override fun isEnabled(): Boolean = true
@@ -80,7 +81,7 @@ class AvailabilityProviderRegistryTest {
 
     @Test
     fun `forSource resolves source without requiring a campground row`() {
-        val recgov = FakeProvider(AvailabilityProviderId.RECGOV, enabled = true)
+        val recgov = FakeProvider(BookingProvider.RECGOV, enabled = true)
         val registry =
             AvailabilityProviderRegistry(
                 adaptersBySource = mapOf("recgov-campgrounds" to recgov),
@@ -92,7 +93,7 @@ class AvailabilityProviderRegistryTest {
 
     @Test
     fun `multiple sources can share one adapter instance`() {
-        val recgov = FakeProvider(AvailabilityProviderId.RECGOV, enabled = true)
+        val recgov = FakeProvider(BookingProvider.RECGOV, enabled = true)
         val registry =
             AvailabilityProviderRegistry(
                 adaptersBySource =
@@ -108,8 +109,8 @@ class AvailabilityProviderRegistryTest {
 
     @Test
     fun `disabled providers are hidden from lookup helpers`() {
-        val recgov = FakeProvider(AvailabilityProviderId.RECGOV, enabled = true)
-        val campflare = FakeProvider(AvailabilityProviderId.CAMPFLARE, enabled = false)
+        val recgov = FakeProvider(BookingProvider.RECGOV, enabled = true)
+        val campflare = FakeProvider(BookingProvider.CAMPFLARE, enabled = false)
         val registry =
             AvailabilityProviderRegistry(
                 adaptersBySource =
@@ -123,16 +124,16 @@ class AvailabilityProviderRegistryTest {
         assertSame(recgov, registry.forPoi(row("recgov-campgrounds")))
         assertNull(registry.forPoi(row("campflare-campgrounds")))
         assertNull(registry.forPoi(row("campflare"), BookingProviderRef.Campflare("upper-pines-campground-447")))
-        assertSame(recgov, registry.firstByVendor(AvailabilityProviderId.RECGOV))
-        assertNull(registry.firstByVendor(AvailabilityProviderId.CAMPFLARE))
-        assertEquals(listOf(AvailabilityProviderId.RECGOV), registry.all().map { it.id })
+        assertSame(recgov, registry.firstByVendor(BookingProvider.RECGOV))
+        assertNull(registry.firstByVendor(BookingProvider.CAMPFLARE))
+        assertEquals(listOf(BookingProvider.RECGOV), registry.all().map { it.id })
     }
 
     @Test
     fun `multiple Aspira tenants share an id but have distinct instances`() {
-        val pc = FakeProvider(AvailabilityProviderId.ASPIRA, enabled = true)
-        val bc = FakeProvider(AvailabilityProviderId.ASPIRA, enabled = true)
-        val wa = FakeProvider(AvailabilityProviderId.ASPIRA, enabled = true)
+        val pc = FakeProvider(BookingProvider.ASPIRA, enabled = true)
+        val bc = FakeProvider(BookingProvider.ASPIRA, enabled = true)
+        val wa = FakeProvider(BookingProvider.ASPIRA, enabled = true)
         val registry =
             AvailabilityProviderRegistry(
                 adaptersBySource =

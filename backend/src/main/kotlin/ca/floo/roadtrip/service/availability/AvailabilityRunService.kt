@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.CellTransition
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import java.time.Clock
 import java.time.Duration
 import java.time.LocalDate
@@ -43,7 +43,7 @@ internal class AvailabilityRunService(
     fun recordResults(
         handle: RunHandle,
         results: List<GroupFetchResult>,
-        attemptsByGroup: Map<Pair<AvailabilityProviderId, String>, List<FailoverAvailabilityFetcher.AttemptRecord>>,
+        attemptsByGroup: Map<Pair<BookingProvider, String>, List<FailoverAvailabilityFetcher.AttemptRecord>>,
     ): RunOutcome {
         val failure = results.firstOrNull { it.outcome != FetchOutcome.OK }
         val transitions = results.flatMap { writeObservations(it, handle.runId) }
@@ -112,7 +112,7 @@ internal class AvailabilityRunService(
 
     private fun recordFetchCalls(
         results: List<GroupFetchResult>,
-        attemptsByGroup: Map<Pair<AvailabilityProviderId, String>, List<FailoverAvailabilityFetcher.AttemptRecord>>,
+        attemptsByGroup: Map<Pair<BookingProvider, String>, List<FailoverAvailabilityFetcher.AttemptRecord>>,
         runId: Long,
     ) {
         results.filter { it.window != null }.forEach { r ->
@@ -140,7 +140,7 @@ internal class AvailabilityRunService(
                 fetchCallRepo.record(
                     AvailabilityFetchCallRepo.NewCall(
                         runId = runId,
-                        provider = attempt.provider.name.lowercase(),
+                        provider = attempt.provider.id,
                         parentRef = parentRefKey(attempt.parentRef),
                         campsiteCount = r.campsites.size,
                         windowStart = r.window!!.startDate,

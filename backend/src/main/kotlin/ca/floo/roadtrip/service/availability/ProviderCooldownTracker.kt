@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import java.time.Duration
 import java.time.Instant
 import java.util.concurrent.ConcurrentHashMap
@@ -23,17 +23,17 @@ internal class ProviderCooldownTracker(
     private val cooldown: Duration,
     private val clock: () -> Instant = Instant::now,
 ) {
-    private val expiries = ConcurrentHashMap<AvailabilityProviderId, Instant>()
+    private val expiries = ConcurrentHashMap<BookingProvider, Instant>()
 
-    fun recordFailure(id: AvailabilityProviderId) {
+    fun recordFailure(id: BookingProvider) {
         expiries[id] = clock().plus(cooldown)
     }
 
-    fun recordSuccess(id: AvailabilityProviderId) {
+    fun recordSuccess(id: BookingProvider) {
         expiries.remove(id)
     }
 
-    fun isCooling(id: AvailabilityProviderId): Boolean {
+    fun isCooling(id: BookingProvider): Boolean {
         val expiry = expiries[id] ?: return false
         if (!expiry.isAfter(clock())) {
             // Compare-and-delete: only remove if the entry we saw is still the
@@ -54,6 +54,6 @@ internal class ProviderCooldownTracker(
      */
     fun <T> sortHealthyFirst(
         items: List<T>,
-        idOf: (T) -> AvailabilityProviderId,
+        idOf: (T) -> BookingProvider,
     ): List<T> = items.sortedWith(compareBy { if (isCooling(idOf(it))) 1 else 0 })
 }

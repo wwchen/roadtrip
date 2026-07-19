@@ -4,8 +4,8 @@ import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
-import ca.floo.roadtrip.model.booking.BookingProviderId
 import ca.floo.roadtrip.model.booking.BookingTarget
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
@@ -24,7 +24,7 @@ private const val TEST_CAMPSITE_ID = 7L
 private const val TEST_VENDOR_ID = "300"
 private const val TEST_RECGOV_CAMPGROUND_ID = "232447"
 
-class RecGovBookingProviderTest {
+class RecGovBookingAdapterTest {
     @Test
     fun `target for translates recgov refs into booking target`() {
         val provider = provider()
@@ -35,7 +35,7 @@ class RecGovBookingProviderTest {
                 CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_VENDOR_ID),
             )
 
-        assertEquals(BookingProviderId.RECGOV, target?.providerId)
+        assertEquals(BookingProvider.RECGOV, target?.providerId)
         assertEquals(BookingProviderRef.RecGov(TEST_RECGOV_CAMPGROUND_ID), target?.parentRef)
         assertEquals(CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_VENDOR_ID), target?.campsiteRef)
     }
@@ -64,7 +64,7 @@ class RecGovBookingProviderTest {
     fun `cannot add to cart for wrong provider, wrong parent ref, or missing campsite vendor id`() {
         val provider = provider()
 
-        assertFalse(provider.can(BookingAction.ADD_TO_CART, recgovTarget(providerId = BookingProviderId.ASPIRA)))
+        assertFalse(provider.can(BookingAction.ADD_TO_CART, recgovTarget(providerId = BookingProvider.ASPIRA)))
         assertFalse(provider.can(BookingAction.ADD_TO_CART, recgovTarget(parentRef = BookingProviderRef.Aspira("bc", 1L, 2L, null))))
         assertFalse(provider.can(BookingAction.ADD_TO_CART, recgovTarget(vendorId = "")))
     }
@@ -79,7 +79,7 @@ class RecGovBookingProviderTest {
             val result = provider.addToCart(request)
 
             val completed = result as AddToCartResult.Completed
-            assertEquals(BookingProviderId.RECGOV, completed.providerId)
+            assertEquals(BookingProvider.RECGOV, completed.providerId)
             assertEquals(executor.payload, completed.request)
             val ok =
                 completed.response
@@ -111,7 +111,7 @@ class RecGovBookingProviderTest {
             val result = provider.addToCart(request)
 
             val completed = result as AddToCartResult.Completed
-            assertEquals(BookingProviderId.RECGOV, completed.providerId)
+            assertEquals(BookingProvider.RECGOV, completed.providerId)
             assertEquals(executor.payload, completed.request)
             val ok =
                 completed.response
@@ -134,8 +134,8 @@ class RecGovBookingProviderTest {
             assertNull(executor.payload)
         }
 
-    private fun provider(executor: RecordingAtcExecutor = RecordingAtcExecutor(completedOutcome())): RecGovBookingProvider =
-        RecGovBookingProvider(executor)
+    private fun provider(executor: RecordingAtcExecutor = RecordingAtcExecutor(completedOutcome())): RecGovBookingAdapter =
+        RecGovBookingAdapter(executor)
 
     private fun completedOutcome(): RecGovAtcOutcome.Completed =
         RecGovAtcOutcome.Completed(
@@ -172,7 +172,7 @@ class RecGovBookingProviderTest {
         )
 
     private fun recgovTarget(
-        providerId: BookingProviderId = BookingProviderId.RECGOV,
+        providerId: BookingProvider = BookingProvider.RECGOV,
         parentRef: BookingProviderRef = BookingProviderRef.RecGov(TEST_RECGOV_CAMPGROUND_ID),
         vendorId: String = TEST_VENDOR_ID,
     ): BookingTarget =

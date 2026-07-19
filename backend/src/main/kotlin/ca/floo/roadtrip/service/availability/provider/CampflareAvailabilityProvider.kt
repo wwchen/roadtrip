@@ -10,6 +10,7 @@ import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.CampflareException
 import kotlinx.coroutines.CancellationException
@@ -23,7 +24,7 @@ class CampflareAvailabilityProvider(
     private val availabilityClient: CampflareAvailabilityClient,
     private val enabled: Boolean,
 ) : AvailabilityProvider {
-    override val id: AvailabilityProviderId = AvailabilityProviderId.CAMPFLARE
+    override val id: BookingProvider = BookingProvider.CAMPFLARE
 
     override val capabilities: AvailabilityProviderCapabilities =
         AvailabilityProviderCapabilities(

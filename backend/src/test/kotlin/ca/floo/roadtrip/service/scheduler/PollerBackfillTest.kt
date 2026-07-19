@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.scheduler
 
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
@@ -15,7 +16,6 @@ import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -112,7 +112,7 @@ class PollerBackfillTest : SharedDbTest() {
     }
 
     private object FakeProvider : AvailabilityProvider {
-        override val id = AvailabilityProviderId.RECGOV
+        override val id = BookingProvider.RECGOV
         override val capabilities =
             AvailabilityProviderCapabilities(
                 supportsInternalPolling = true,

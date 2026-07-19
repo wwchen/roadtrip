@@ -6,8 +6,8 @@ import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
-import ca.floo.roadtrip.model.booking.BookingProviderId
 import ca.floo.roadtrip.model.booking.BookingTarget
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -24,10 +24,9 @@ import ca.floo.roadtrip.service.availability.alert.AlertProvider
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
-import ca.floo.roadtrip.service.booking.BookingProvider
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.booking.BookingAdapter
+import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.notification.common.NotificationSender
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.notification.common.WatchOpening
@@ -109,7 +108,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     }
 
     private fun bookingValidatedService(
-        bookingProviders: BookingProviderRegistry,
+        bookingProviders: BookingAdapterRegistry,
         availabilityProvider: AvailabilityProvider = FakeProvider,
         notificationTriggerKinds: List<String> =
             listOf(
@@ -300,7 +299,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     fun `create rejects an atc watch when no booking provider supports its scoped campsite`() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
-        val svc = bookingValidatedService(BookingProviderRegistry(emptyList()))
+        val svc = bookingValidatedService(BookingAdapterRegistry(emptyList()))
 
         val error = assertFailsWith<AvailabilityWatchValidationException> { svc.createForTest(poiInput(poiId)) }
 
@@ -356,7 +355,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         seedCampsite(poiId, "100")
         val svc =
             bookingValidatedService(
-                bookingProviders = BookingProviderRegistry(emptyList()),
+                bookingProviders = BookingAdapterRegistry(emptyList()),
                 notificationTriggerKinds = listOf(AvailabilityTriggerKinds.SLACK_NOTIFY),
             )
 
@@ -379,7 +378,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     fun `update rejects adding atc when no booking provider supports the scoped campsite`() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
-        val svc = bookingValidatedService(BookingProviderRegistry(emptyList()))
+        val svc = bookingValidatedService(BookingAdapterRegistry(emptyList()))
         val watch = svc.createForTest(poiInput(poiId, triggerKinds = listOf("slack_notify")))
 
         val error =
@@ -443,7 +442,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
         val watch = service().createForTest(poiInput(poiId))
-        val validatingService = bookingValidatedService(BookingProviderRegistry(emptyList()))
+        val validatingService = bookingValidatedService(BookingAdapterRegistry(emptyList()))
 
         val updated = validatingService.updateForTest(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))
 
@@ -454,7 +453,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     fun `create allows an atc watch when recgov booking provider supports its scoped campsite`() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
-        val svc = bookingValidatedService(BookingProviderRegistry(listOf(RecGovOnlyBookingProvider)))
+        val svc = bookingValidatedService(BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider)))
 
         val watch = svc.createForTest(poiInput(poiId))
 
@@ -468,7 +467,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         seedCampsite(poiId, "100")
         val svc =
             bookingValidatedService(
-                bookingProviders = BookingProviderRegistry(listOf(RecGovOnlyBookingProvider)),
+                bookingProviders = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider)),
                 availabilityProvider = NonPollableProvider,
             )
 
@@ -492,7 +491,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         seedCampsite(poiId, "100")
         val svc =
             bookingValidatedService(
-                bookingProviders = BookingProviderRegistry(listOf(RecGovOnlyBookingProvider)),
+                bookingProviders = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider)),
                 availabilityProvider = NonPollableProvider,
             )
 
@@ -731,7 +730,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     }
 
     private object FakeProvider : AvailabilityProvider {
-        override val id = AvailabilityProviderId.RECGOV
+        override val id = BookingProvider.RECGOV
         override val capabilities =
             AvailabilityProviderCapabilities(
                 supportsInternalPolling = true,
@@ -749,7 +748,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     }
 
     private object NonPollableProvider : AvailabilityProvider {
-        override val id = AvailabilityProviderId.RECGOV
+        override val id = BookingProvider.RECGOV
         override val capabilities =
             AvailabilityProviderCapabilities(
                 supportsInternalPolling = false,
@@ -766,8 +765,8 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
     }
 
-    private object RecGovOnlyBookingProvider : BookingProvider {
-        override val id: BookingProviderId = BookingProviderId.RECGOV
+    private object RecGovOnlyBookingProvider : BookingAdapter {
+        override val id: BookingProvider = BookingProvider.RECGOV
 
         override fun targetFor(
             parentRef: BookingProviderRef,
@@ -786,7 +785,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
             target: BookingTarget,
         ): Boolean =
             action == BookingAction.ADD_TO_CART &&
-                target.providerId == BookingProviderId.RECGOV &&
+                target.providerId == BookingProvider.RECGOV &&
                 target.parentRef is BookingProviderRef.RecGov &&
                 target.campsiteRef.vendorId.isNotBlank()
 

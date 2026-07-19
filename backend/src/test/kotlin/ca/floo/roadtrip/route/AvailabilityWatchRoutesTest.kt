@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.route
 
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
@@ -24,7 +25,7 @@ import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -126,7 +127,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             )
         return WatchCapabilityService(
             availabilityTargets = targets,
-            bookingTargets = AvailabilityBookingTargetResolver(BookingProviderRegistry(emptyList())),
+            bookingTargets = AvailabilityBookingTargetResolver(BookingAdapterRegistry(emptyList())),
         )
     }
 
@@ -150,7 +151,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     watchCapabilityService =
                         WatchCapabilityService(
                             availabilityTargets = targets,
-                            bookingTargets = AvailabilityBookingTargetResolver(BookingProviderRegistry(emptyList())),
+                            bookingTargets = AvailabilityBookingTargetResolver(BookingAdapterRegistry(emptyList())),
                         ),
                 ),
             lifecycleNotifications = ignoredLifecycleNotifications(),
@@ -1046,7 +1047,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
  * so the availability methods are unsupported.
  */
 private object FakeRecgovProvider : ca.floo.roadtrip.service.availability.provider.AvailabilityProvider {
-    override val id = ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId.RECGOV
+    override val id = BookingProvider.RECGOV
     override val capabilities =
         ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities(
             supportsInternalPolling = true,

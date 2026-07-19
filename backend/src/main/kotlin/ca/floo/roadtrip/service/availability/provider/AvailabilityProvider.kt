@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.Dispatchable
 import java.time.LocalDate
@@ -27,14 +28,14 @@ import java.time.LocalDate
  *   - rate-limit accounting (cross-adapter; lives above the port)
  *   - HTTP response shaping (service/API layer rolls observations into DTOs)
  */
-interface AvailabilityProvider : Dispatchable<AvailabilityProviderId> {
+interface AvailabilityProvider : Dispatchable<BookingProvider> {
     /** Stable identity. Mapped from catalog source slug + `provider_ref` shape by the registry. */
-    val id: AvailabilityProviderId
+    val id: BookingProvider
 
     /** Static per adapter; cheap to read and safe to surface to API clients. */
     val capabilities: AvailabilityProviderCapabilities
 
-    override fun canHandle(key: AvailabilityProviderId): Boolean = isEnabled() && key == id
+    override fun canHandle(key: BookingProvider): Boolean = isEnabled() && key == id
 
     /** Whether this provider is configured for this process. */
     fun isEnabled(): Boolean
@@ -45,7 +46,7 @@ interface AvailabilityProvider : Dispatchable<AvailabilityProviderId> {
      * providers can decline and the availability resolver can try linked
      * fallback refs without hardcoded provider branching.
      */
-    fun supportsRef(ref: BookingProviderRef): Boolean = isEnabled() && id == ref.availabilityProviderId()
+    fun supportsRef(ref: BookingProviderRef): Boolean = isEnabled() && id == ref.bookingProvider()
 
     /**
      * Per-day availability for the half-open window `[startDate, endDate)`.

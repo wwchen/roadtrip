@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId.ASPIRA
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId.CAMPFLARE
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId.RECGOV
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProvider.ASPIRA
+import ca.floo.roadtrip.model.domain.provider.BookingProvider.CAMPFLARE
+import ca.floo.roadtrip.model.domain.provider.BookingProvider.RECGOV
 import java.time.Duration
 import java.time.Instant
 import kotlin.test.Test
@@ -29,7 +29,7 @@ class ProviderCooldownTrackerTest {
     }
 
     private data class Candidate(
-        val id: AvailabilityProviderId,
+        val id: BookingProvider,
     )
 
     private fun trackerWith(

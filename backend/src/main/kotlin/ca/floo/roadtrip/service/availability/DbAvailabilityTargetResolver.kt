@@ -4,15 +4,15 @@ import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
-import ca.floo.roadtrip.service.availability.provider.availabilityProviderId
+import ca.floo.roadtrip.service.availability.provider.bookingProvider
 
 internal class DbAvailabilityTargetResolver(
     private val campsiteProviderRepo: CampsiteProviderRepo,
@@ -122,7 +122,7 @@ internal class DbAvailabilityTargetResolver(
 
     private fun catalogRefFor(
         campsite: CampsiteAvailabilityTarget,
-        providerId: AvailabilityProviderId,
+        providerId: BookingProvider,
     ): CatalogCampsiteRef {
         val fallback = campsite.toCatalogCampsiteRef()
         val ref =
@@ -130,7 +130,7 @@ internal class DbAvailabilityTargetResolver(
                 .findCampsiteProviderRefs(campsite.id)
                 .asSequence()
                 .mapNotNull { ProviderRefParser.parse(it.providerRefJson) }
-                .firstOrNull { it.availabilityProviderId() == providerId }
+                .firstOrNull { it.bookingProvider() == providerId }
                 ?: return fallback
         return ref.toCatalogCampsiteRef(campsiteId = campsite.id, fallback = fallback)
     }

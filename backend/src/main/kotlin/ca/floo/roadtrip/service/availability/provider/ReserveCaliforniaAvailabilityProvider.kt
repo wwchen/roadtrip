@@ -9,6 +9,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.ReserveCaliforniaException
 import kotlinx.coroutines.CancellationException
@@ -25,7 +26,7 @@ class ReserveCaliforniaAvailabilityProvider(
     private val clock: Clock = Clock.systemUTC(),
     private val enabled: Boolean,
 ) : AvailabilityProvider {
-    override val id: AvailabilityProviderId = AvailabilityProviderId.RESERVECALIFORNIA
+    override val id: BookingProvider = BookingProvider.RESERVECALIFORNIA
 
     override val capabilities: AvailabilityProviderCapabilities =
         AvailabilityProviderCapabilities(

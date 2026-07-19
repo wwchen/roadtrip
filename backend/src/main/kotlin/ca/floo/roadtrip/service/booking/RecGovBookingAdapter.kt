@@ -4,8 +4,8 @@ import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
-import ca.floo.roadtrip.model.booking.BookingProviderId
 import ca.floo.roadtrip.model.booking.BookingTarget
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -13,10 +13,10 @@ import kotlinx.serialization.json.put
 
 private const val ERROR_COMPANION_EXCEPTION = "companion_exception"
 
-internal class RecGovBookingProvider(
+internal class RecGovBookingAdapter(
     private val companionAtc: RecGovAtcExecutor,
-) : BookingProvider {
-    override val id: BookingProviderId = BookingProviderId.RECGOV
+) : BookingAdapter {
+    override val id: BookingProvider = BookingProvider.RECGOV
 
     override fun targetFor(
         parentRef: BookingProviderRef,

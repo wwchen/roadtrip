@@ -7,14 +7,13 @@ import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
-import ca.floo.roadtrip.model.booking.BookingProviderId
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.booking.BookingProvider
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.booking.BookingAdapter
+import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import java.time.ZoneId
@@ -29,7 +28,7 @@ private const val TEST_CAMPFLARE_PARENT_ID = "campflare-parent-1"
 class AvailabilityBookingTargetResolverTest {
     @Test
     fun `targetFor skips availability-only campflare candidate and returns recgov booking target`() {
-        val registry = BookingProviderRegistry(listOf(RecGovOnlyBookingProvider()))
+        val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider()))
         val resolver = AvailabilityBookingTargetResolver(registry)
         val resolved =
             resolvedTarget(
@@ -42,14 +41,14 @@ class AvailabilityBookingTargetResolverTest {
 
         val target = resolver.targetFor(BookingAction.ADD_TO_CART, resolved)
 
-        assertEquals(BookingProviderId.RECGOV, target?.providerId)
+        assertEquals(BookingProvider.RECGOV, target?.providerId)
         assertEquals(BookingProviderRef.RecGov(TEST_RECGOV_PARENT_ID), target?.parentRef)
         assertEquals(CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_RECGOV_SITE_ID), target?.campsiteRef)
     }
 
     @Test
     fun `targetFor returns null when no candidate maps to supported booking provider`() {
-        val registry = BookingProviderRegistry(listOf(RecGovOnlyBookingProvider()))
+        val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider()))
         val resolver = AvailabilityBookingTargetResolver(registry)
 
         val target = resolver.targetFor(BookingAction.ADD_TO_CART, resolvedTarget(candidates = listOf(campflareCandidate())))
@@ -57,8 +56,8 @@ class AvailabilityBookingTargetResolverTest {
         assertNull(target)
     }
 
-    private class RecGovOnlyBookingProvider : BookingProvider {
-        override val id: BookingProviderId = BookingProviderId.RECGOV
+    private class RecGovOnlyBookingProvider : BookingAdapter {
+        override val id: BookingProvider = BookingProvider.RECGOV
 
         override fun targetFor(
             parentRef: BookingProviderRef,
@@ -77,14 +76,14 @@ class AvailabilityBookingTargetResolverTest {
             target: BookingTarget,
         ): Boolean =
             action == BookingAction.ADD_TO_CART &&
-                target.providerId == BookingProviderId.RECGOV &&
+                target.providerId == BookingProvider.RECGOV &&
                 target.parentRef is BookingProviderRef.RecGov
 
         override suspend fun addToCart(request: AddToCartRequest): AddToCartResult = AddToCartResult.Unsupported
     }
 
     private class FakeAvailabilityProvider(
-        override val id: AvailabilityProviderId,
+        override val id: BookingProvider,
     ) : AvailabilityProvider {
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
@@ -117,14 +116,14 @@ class AvailabilityBookingTargetResolverTest {
 
     private fun campflareCandidate(): ProviderCandidate =
         ProviderCandidate(
-            provider = FakeAvailabilityProvider(AvailabilityProviderId.CAMPFLARE),
+            provider = FakeAvailabilityProvider(BookingProvider.CAMPFLARE),
             parentRef = BookingProviderRef.Campflare(TEST_CAMPFLARE_PARENT_ID),
             catalogRef = CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_CAMPFLARE_PARENT_ID),
         )
 
     private fun recgovCandidate(): ProviderCandidate =
         ProviderCandidate(
-            provider = FakeAvailabilityProvider(AvailabilityProviderId.RECGOV),
+            provider = FakeAvailabilityProvider(BookingProvider.RECGOV),
             parentRef = BookingProviderRef.RecGov(facilityId = TEST_RECGOV_PARENT_ID),
             catalogRef = CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_RECGOV_SITE_ID),
         )

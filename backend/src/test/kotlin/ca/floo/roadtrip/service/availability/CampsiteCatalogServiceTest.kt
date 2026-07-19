@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
@@ -13,7 +14,6 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.CampflareAvailabilityProvider
 import org.junit.jupiter.api.BeforeEach
@@ -125,7 +125,7 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
         CampflareAvailabilityClient { _, _, _ -> error("Campflare availability client should not be called") }
 
     private object TemplateProvider : AvailabilityProvider {
-        override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
+        override val id: BookingProvider = BookingProvider.RECGOV
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsInternalPolling = true,

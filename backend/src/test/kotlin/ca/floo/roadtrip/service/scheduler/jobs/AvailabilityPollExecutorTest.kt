@@ -12,6 +12,7 @@ import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
@@ -43,7 +44,6 @@ import ca.floo.roadtrip.service.availability.TriggerOpening
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
 import ca.floo.roadtrip.service.availability.resolveCadenceSec
@@ -433,7 +433,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         var lastReservableCount: Int = 0
         var mdcRunIdDuringCall: String? = null
 
-        override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
+        override val id: BookingProvider = BookingProvider.RECGOV
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsInternalPolling = true,
@@ -486,7 +486,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     }
 
     private class RateLimitedProvider : AvailabilityProvider {
-        override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
+        override val id: BookingProvider = BookingProvider.RECGOV
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsInternalPolling = true,
@@ -1407,8 +1407,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 fakeFailoverFetcher(
                     attempts =
                         listOf(
-                            AttemptSpec(AvailabilityProviderId.CAMPFLARE, "cf-1", FetchOutcome.RATE_LIMITED, 42, "429"),
-                            AttemptSpec(AvailabilityProviderId.RECGOV, "232447", FetchOutcome.OK, 84, null),
+                            AttemptSpec(BookingProvider.CAMPFLARE, "cf-1", FetchOutcome.RATE_LIMITED, 42, "429"),
+                            AttemptSpec(BookingProvider.RECGOV, "232447", FetchOutcome.OK, 84, null),
                         ),
                     successBatch =
                         AvailabilityObservationBatch(
@@ -1426,7 +1426,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                                 ),
                             cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
                         ),
-                    servedBy = AvailabilityProviderId.RECGOV,
+                    servedBy = BookingProvider.RECGOV,
                 )
 
             executorFor(provider, failoverFetcher = fake).handle(poller)
@@ -1448,7 +1448,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         }
 
     private data class AttemptSpec(
-        val provider: AvailabilityProviderId,
+        val provider: BookingProvider,
         val parentId: String,
         val outcome: FetchOutcome,
         val durationMs: Int,
@@ -1458,7 +1458,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     private fun fakeFailoverFetcher(
         attempts: List<AttemptSpec>,
         successBatch: AvailabilityObservationBatch?,
-        servedBy: AvailabilityProviderId?,
+        servedBy: BookingProvider?,
     ): FailoverAvailabilityFetcher =
         object : FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = testProviderCooldown)) {
             override suspend fun fetch(

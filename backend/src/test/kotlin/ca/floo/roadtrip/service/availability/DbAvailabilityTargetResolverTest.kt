@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
@@ -12,7 +13,6 @@ import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
@@ -58,7 +58,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             .get("campground_id", Long::class.java)
 
     private class NoopRecgovProvider : AvailabilityProvider {
-        override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
+        override val id: BookingProvider = BookingProvider.RECGOV
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsInternalPolling = true,
@@ -78,7 +78,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
     private open class NoopCampflareProvider(
         private val enabled: Boolean,
     ) : AvailabilityProvider {
-        override val id: AvailabilityProviderId = AvailabilityProviderId.CAMPFLARE
+        override val id: BookingProvider = BookingProvider.CAMPFLARE
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsInternalPolling = false,
@@ -162,7 +162,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals("campflare", reservable.vendor)
             assertEquals("upper-pines-site-100", reservable.vendorId)
             assertEquals(poi, target.parentPoiId)
-            assertEquals(AvailabilityProviderId.CAMPFLARE, target.provider.id)
+            assertEquals(BookingProvider.CAMPFLARE, target.provider.id)
             assertEquals("upper-pines-campground-447", parentRefKey(target.parentRef))
         }
 
@@ -238,7 +238,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
 
             assertEquals("campflare", reservable.vendor)
             assertEquals("upper-pines-site-100", reservable.vendorId)
-            assertEquals(AvailabilityProviderId.RECGOV, target.provider.id)
+            assertEquals(BookingProvider.RECGOV, target.provider.id)
             assertEquals("232447", parentRefKey(target.parentRef))
         }
 
@@ -270,8 +270,8 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 ).resolve(reservable)!!
 
             assertEquals(2, target.candidates.size)
-            assertEquals(AvailabilityProviderId.CAMPFLARE, target.candidates[0].provider.id)
-            assertEquals(AvailabilityProviderId.RECGOV, target.candidates[1].provider.id)
+            assertEquals(BookingProvider.CAMPFLARE, target.candidates[0].provider.id)
+            assertEquals(BookingProvider.RECGOV, target.candidates[1].provider.id)
             assertEquals(target.candidates[0].provider, target.provider)
             assertEquals(target.candidates[0].parentRef, target.parentRef)
             assertEquals(target.candidates[0].catalogRef, target.catalogRef)
@@ -306,8 +306,8 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 ).resolve(reservable)!!
 
             assertEquals(1, target.candidates.size)
-            assertEquals(AvailabilityProviderId.RECGOV, target.candidates[0].provider.id)
-            assertEquals(AvailabilityProviderId.RECGOV, target.provider.id)
+            assertEquals(BookingProvider.RECGOV, target.candidates[0].provider.id)
+            assertEquals(BookingProvider.RECGOV, target.provider.id)
             assertEquals("232447", parentRefKey(target.parentRef))
         }
 
@@ -339,7 +339,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 ).resolve(reservable)!!
 
             assertEquals(1, target.candidates.size)
-            assertEquals(AvailabilityProviderId.RECGOV, target.provider.id)
+            assertEquals(BookingProvider.RECGOV, target.provider.id)
             assertEquals("232447", parentRefKey(target.parentRef))
         }
 

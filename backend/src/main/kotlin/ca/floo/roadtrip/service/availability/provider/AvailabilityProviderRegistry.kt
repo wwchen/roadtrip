@@ -14,7 +14,7 @@ import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
  * single lookup — routes and the watch poller never see the source string, and
  * adapters never see the source either.
  *
- * Key shape note: a single [AvailabilityProviderId] value can map to multiple
+ * Key shape note: a single [BookingProvider] value can map to multiple
  * adapter *instances* (Aspira NextGen runs three tenants — PC/BC/WA — that
  * share a wire shape but have different hosts, caches, and campsite
  * booking codes). The registry is keyed by the catalog source slug (booking_provider tenant key), not by id, so
@@ -62,14 +62,14 @@ class AvailabilityProviderRegistry(
                 is BookingProviderRef.ReserveAmerica ->
                     adaptersBySource.keys.firstOrNull { source ->
                         val adapter = adaptersBySource[source]
-                        adapter?.id == AvailabilityProviderId.RESERVEAMERICA &&
+                        adapter?.id == BookingProvider.RESERVEAMERICA &&
                             (adapter as? ReserveAmericaAvailabilityProvider)?.tenant?.contractCode == ref.contractCode
                     }
                 is BookingProviderRef.RecGov -> RECGOV_VENDOR
                 is BookingProviderRef.Campflare -> CAMPFLARE_VENDOR
                 is BookingProviderRef.ReserveCalifornia ->
                     adaptersBySource.keys.firstOrNull { source ->
-                        adaptersBySource[source]?.id == AvailabilityProviderId.RESERVECALIFORNIA
+                        adaptersBySource[source]?.id == BookingProvider.RESERVECALIFORNIA
                     }
             } ?: return null
         return adaptersBySource[key]?.takeIf { it.isEnabled() }
@@ -97,8 +97,7 @@ class AvailabilityProviderRegistry(
      * and capability endpoints that don't care which tenant they hit.
      * Returns null if no adapter for that vendor is registered.
      */
-    fun firstByVendor(id: AvailabilityProviderId): AvailabilityProvider? =
-        adaptersBySource.values.firstOrNull { it.id == id && it.isEnabled() }
+    fun firstByVendor(id: BookingProvider): AvailabilityProvider? = adaptersBySource.values.firstOrNull { it.id == id && it.isEnabled() }
 
     companion object {
         private const val CAMPFLARE_VENDOR = "campflare"
@@ -113,7 +112,7 @@ class AvailabilityProviderRegistry(
         fun fromPoiRegistry(
             registry: PoiRegistry,
             clients: AvailabilityProviderClients,
-            isProviderEnabled: (AvailabilityProviderId) -> Boolean,
+            isProviderEnabled: (BookingProvider) -> Boolean,
         ): AvailabilityProviderRegistry {
             val adaptersBySource = mutableMapOf<String, AvailabilityProvider>()
 
@@ -121,7 +120,7 @@ class AvailabilityProviderRegistry(
             val recgov =
                 RecGovAvailabilityProvider(
                     availabilityClient = clients.recgovClient,
-                    enabled = isProviderEnabled(AvailabilityProviderId.RECGOV),
+                    enabled = isProviderEnabled(BookingProvider.RECGOV),
                 )
             adaptersBySource[RECGOV_VENDOR] = recgov
             for (source in registry.recgovSources()) {
@@ -133,7 +132,7 @@ class AvailabilityProviderRegistry(
             val campflare =
                 CampflareAvailabilityProvider(
                     availabilityClient = clients.campflareClient,
-                    enabled = isProviderEnabled(AvailabilityProviderId.CAMPFLARE),
+                    enabled = isProviderEnabled(BookingProvider.CAMPFLARE),
                 )
             adaptersBySource[CAMPFLARE_VENDOR] = campflare
             for (source in registry.campflareSources()) {
@@ -159,7 +158,7 @@ class AvailabilityProviderRegistry(
                         AspiraAvailabilityProvider(
                             tenant = tenant,
                             availabilityClient = clients.aspiraClient,
-                            enabled = isProviderEnabled(AvailabilityProviderId.ASPIRA),
+                            enabled = isProviderEnabled(BookingProvider.ASPIRA),
                         )
                     }
                 adaptersBySource[source] = adapter
@@ -180,7 +179,7 @@ class AvailabilityProviderRegistry(
                     ReserveAmericaAvailabilityProvider(
                         tenant = tenant,
                         availabilityClient = clients.reserveAmericaClient,
-                        enabled = isProviderEnabled(AvailabilityProviderId.RESERVEAMERICA),
+                        enabled = isProviderEnabled(BookingProvider.RESERVEAMERICA),
                     )
             }
 
@@ -189,7 +188,7 @@ class AvailabilityProviderRegistry(
                 val reserveCalifornia =
                     ReserveCaliforniaAvailabilityProvider(
                         availabilityClient = clients.reserveCaliforniaClient,
-                        enabled = isProviderEnabled(AvailabilityProviderId.RESERVECALIFORNIA),
+                        enabled = isProviderEnabled(BookingProvider.RESERVECALIFORNIA),
                     )
                 for (source in reserveCaliforniaSources) {
                     adaptersBySource[source] = reserveCalifornia
