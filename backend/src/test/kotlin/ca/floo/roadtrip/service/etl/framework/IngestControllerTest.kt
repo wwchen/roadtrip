@@ -248,6 +248,7 @@ class IngestControllerTest : SharedDbTest() {
                     ctx = ctx,
                     rawDir = dataDir,
                     poiRegistry = registry,
+                    staticDir = dataDir,
                     etlRegistry = etlRegistry,
                 ),
             importTargets = targets,
