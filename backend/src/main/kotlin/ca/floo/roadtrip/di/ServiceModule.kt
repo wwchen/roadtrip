@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.companion.HttpRecGovAtcExecutor
 import ca.floo.roadtrip.client.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.config.ReadPathProviderConfig
+import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
@@ -110,7 +111,8 @@ val serviceModule =
         single { WatchScopeResolver(get<CampsiteRepo>()) }
         single {
             DbAvailabilityTargetResolver(
-                campsiteProviderRepo = get<CampsiteProviderRepo>(),
+                refResolver = get<ca.floo.roadtrip.service.ref.RefResolver>(),
+                ctx = get<DSLContext>(),
                 campsitesRepo = get<CampsiteRepo>(),
                 availabilityProviders = get<AvailabilityProviderRegistry>(),
                 dateResolver = get<AvailabilityDateResolver>(),
@@ -324,6 +326,9 @@ private fun supportedReadPathDataProviders(registry: PoiRegistry): Set<String> =
 
 private fun canonicalCampgroundSourceKeys(registry: PoiRegistry): Set<String> =
     buildSet {
-        if (registry.campflareSources().isNotEmpty()) add("campflare")
-        if (registry.recgovSources().isNotEmpty()) add("recgov")
+        if (registry.campflareSources().isNotEmpty()) add(DataProvider.CAMPFLARE.id)
+        if (registry.recgovSources().isNotEmpty()) add(DataProvider.RECGOV.id)
+        if (registry.aspiraHostBySource().isNotEmpty()) add(DataProvider.ASPIRA.id)
+        if (registry.reserveAmericaSources().isNotEmpty()) add(DataProvider.RESERVEAMERICA.id)
+        if (registry.reserveCaliforniaSources().isNotEmpty()) add(DataProvider.RESERVECALIFORNIA.id)
     }

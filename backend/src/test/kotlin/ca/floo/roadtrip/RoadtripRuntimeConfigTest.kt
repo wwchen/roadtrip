@@ -22,12 +22,22 @@ class RoadtripRuntimeConfigTest {
                             "recgov-campgrounds",
                             "recgov",
                             "campflare",
+                            "aspira",
+                            "reserveamerica",
+                            "reservecalifornia",
                             "tesla_supercharger",
                             "planet_fitness_location",
                         ),
                     enabledAvailabilityProviders = emptySet(),
                 ),
-            registry = registryWith("recgov-campgrounds", "campflare-campgrounds"),
+            registry =
+                registryWith(
+                    "recgov-campgrounds",
+                    "campflare-campgrounds",
+                    "aspira-bc-campgrounds",
+                    "reserveamerica-ny-campgrounds",
+                    "reservecalifornia-campgrounds",
+                ),
         )
     }
 
@@ -77,6 +87,7 @@ class RoadtripRuntimeConfigTest {
                                 EtlEntry(
                                     slug = source,
                                     adapter = adapterFor(source),
+                                    args = argsFor(source),
                                 ),
                             ),
                     )
@@ -87,6 +98,22 @@ class RoadtripRuntimeConfigTest {
         when (source) {
             "recgov-campgrounds" -> "RecGovCampgroundsEtl"
             "campflare-campgrounds" -> "CampflareCampgroundsEtl"
+            "aspira-bc-campgrounds" -> "AspiraCampgroundsEtl"
+            "reserveamerica-ny-campgrounds" -> "ReserveAmericaCampgroundsEtl"
+            "reservecalifornia-campgrounds" -> "ReserveCaliforniaCampgroundsEtl"
             else -> "TestEtl"
+        }
+
+    private fun argsFor(source: String): Map<String, String> =
+        when (source) {
+            "aspira-bc-campgrounds" -> mapOf("host" to "camping.bcparks.ca")
+            "reserveamerica-ny-campgrounds" ->
+                mapOf(
+                    "contract" to "NY",
+                    "host" to "newyorkstateparks.reserveamerica.com",
+                    "booking_horizon_days" to "270",
+                    "provider" to "reserveamerica",
+                )
+            else -> emptyMap()
         }
 }

@@ -21,14 +21,17 @@ class DbRefResolverTest : SharedDbTest() {
 
     @Test
     fun `poiId resolves to campground booking ref`() {
-        val poiId = ctx.seedCatalogPoi(
-            sourceId = "facility-232447",
-            name = "Upper Pines",
-            lon = -119.56, lat = 37.74,
-            source = "recgov",
-            bookingProvider = "recgov",
-            bookingProviderRef = "232447",
-        ).poiId
+        val poiId =
+            ctx
+                .seedCatalogPoi(
+                    sourceId = "facility-232447",
+                    name = "Upper Pines",
+                    lon = -119.56,
+                    lat = 37.74,
+                    source = "recgov",
+                    bookingProvider = "recgov",
+                    bookingProviderRef = "232447",
+                ).poiId
 
         val result = resolver.resolve<RefValue.CampgroundBookingRef>(RefValue.PoiId(poiId))
 
@@ -38,24 +41,31 @@ class DbRefResolverTest : SharedDbTest() {
 
     @Test
     fun `campsiteId resolves to its own campsite booking ref`() {
-        val poi = ctx.seedCatalogPoi(
-            sourceId = "facility-232447",
-            name = "Upper Pines",
-            lon = -119.56, lat = 37.74,
-            source = "recgov",
-            bookingProvider = "recgov",
-            bookingProviderRef = "232447",
-        )
-        val campgroundId = ctx.fetchOne(
-            "SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?", poi.poiId
-        )!!.get("campground_id", Long::class.java)
-        val campsiteId = ctx.seedCampsite(
-            campgroundId = campgroundId,
-            vendor = "recgov",
-            vendorId = "site-1",
-            bookingProvider = "recgov",
-            bookingProviderRef = "site-1",
-        )
+        val poi =
+            ctx.seedCatalogPoi(
+                sourceId = "facility-232447",
+                name = "Upper Pines",
+                lon = -119.56,
+                lat = 37.74,
+                source = "recgov",
+                bookingProvider = "recgov",
+                bookingProviderRef = "232447",
+            )
+        val campgroundId =
+            ctx
+                .fetchOne(
+                    "SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?",
+                    poi.poiId,
+                )!!
+                .get("campground_id", Long::class.java)
+        val campsiteId =
+            ctx.seedCampsite(
+                campgroundId = campgroundId,
+                vendor = "recgov",
+                vendorId = "site-1",
+                bookingProvider = "recgov",
+                bookingProviderRef = "site-1",
+            )
 
         val result = resolver.resolve<RefValue.CampsiteBookingRef>(RefValue.CampsiteId(campsiteId))
 
@@ -65,24 +75,31 @@ class DbRefResolverTest : SharedDbTest() {
 
     @Test
     fun `campsiteId resolves to parent campground booking ref`() {
-        val poi = ctx.seedCatalogPoi(
-            sourceId = "facility-232447",
-            name = "Upper Pines",
-            lon = -119.56, lat = 37.74,
-            source = "recgov",
-            bookingProvider = "recgov",
-            bookingProviderRef = "232447",
-        )
-        val campgroundId = ctx.fetchOne(
-            "SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?", poi.poiId
-        )!!.get("campground_id", Long::class.java)
-        val campsiteId = ctx.seedCampsite(
-            campgroundId = campgroundId,
-            vendor = "recgov",
-            vendorId = "site-1",
-            bookingProvider = "recgov",
-            bookingProviderRef = "site-1",
-        )
+        val poi =
+            ctx.seedCatalogPoi(
+                sourceId = "facility-232447",
+                name = "Upper Pines",
+                lon = -119.56,
+                lat = 37.74,
+                source = "recgov",
+                bookingProvider = "recgov",
+                bookingProviderRef = "232447",
+            )
+        val campgroundId =
+            ctx
+                .fetchOne(
+                    "SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?",
+                    poi.poiId,
+                )!!
+                .get("campground_id", Long::class.java)
+        val campsiteId =
+            ctx.seedCampsite(
+                campgroundId = campgroundId,
+                vendor = "recgov",
+                vendorId = "site-1",
+                bookingProvider = "recgov",
+                bookingProviderRef = "site-1",
+            )
 
         val result = resolver.resolve<RefValue.CampgroundBookingRef>(RefValue.CampsiteId(campsiteId))
 
@@ -92,24 +109,31 @@ class DbRefResolverTest : SharedDbTest() {
 
     @Test
     fun `campsiteId resolves to poiId`() {
-        val poi = ctx.seedCatalogPoi(
-            sourceId = "facility-232447",
-            name = "Upper Pines",
-            lon = -119.56, lat = 37.74,
-            source = "recgov",
-            bookingProvider = "recgov",
-            bookingProviderRef = "232447",
-        )
-        val campgroundId = ctx.fetchOne(
-            "SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?", poi.poiId
-        )!!.get("campground_id", Long::class.java)
-        val campsiteId = ctx.seedCampsite(
-            campgroundId = campgroundId,
-            vendor = "recgov",
-            vendorId = "site-1",
-            bookingProvider = "recgov",
-            bookingProviderRef = "site-1",
-        )
+        val poi =
+            ctx.seedCatalogPoi(
+                sourceId = "facility-232447",
+                name = "Upper Pines",
+                lon = -119.56,
+                lat = 37.74,
+                source = "recgov",
+                bookingProvider = "recgov",
+                bookingProviderRef = "232447",
+            )
+        val campgroundId =
+            ctx
+                .fetchOne(
+                    "SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?",
+                    poi.poiId,
+                )!!
+                .get("campground_id", Long::class.java)
+        val campsiteId =
+            ctx.seedCampsite(
+                campgroundId = campgroundId,
+                vendor = "recgov",
+                vendorId = "site-1",
+                bookingProvider = "recgov",
+                bookingProviderRef = "site-1",
+            )
 
         val result = resolver.resolve<RefValue.PoiId>(RefValue.CampsiteId(campsiteId))
 
@@ -118,48 +142,64 @@ class DbRefResolverTest : SharedDbTest() {
 
     @Test
     fun `campgroundBookingRef resolves to campgroundId`() {
-        val campgroundId = ctx.seedCampground(
-            source = "recgov",
-            sourceId = "232447",
-            bookingProvider = "recgov",
-            bookingProviderRef = "232447",
-        )
+        val campgroundId =
+            ctx.seedCampground(
+                source = "recgov",
+                sourceId = "232447",
+                bookingProvider = "recgov",
+                bookingProviderRef = "232447",
+            )
 
-        val result = resolver.resolve<RefValue.CampgroundId>(
-            RefValue.CampgroundBookingRef(BookingProviderRef.RecGov(facilityId = "232447"))
-        )
+        val result =
+            resolver.resolve<RefValue.CampgroundId>(
+                RefValue.CampgroundBookingRef(BookingProviderRef.RecGov(facilityId = "232447")),
+            )
 
         assertEquals(listOf(RefValue.CampgroundId(campgroundId)), result)
     }
 
     @Test
     fun `campgroundBookingRef resolves to child campsiteIds`() {
-        val campgroundId = ctx.seedCampground(
-            source = "recgov",
-            sourceId = "232447",
-            bookingProvider = "recgov",
-            bookingProviderRef = "232447",
-        )
+        val campgroundId =
+            ctx.seedCampground(
+                source = "recgov",
+                sourceId = "232447",
+                bookingProvider = "recgov",
+                bookingProviderRef = "232447",
+            )
         val cs1 = ctx.seedCampsite(campgroundId = campgroundId, vendor = "recgov", vendorId = "s1")
         val cs2 = ctx.seedCampsite(campgroundId = campgroundId, vendor = "recgov", vendorId = "s2")
 
-        val result = resolver.resolve<RefValue.CampsiteId>(
-            RefValue.CampgroundBookingRef(BookingProviderRef.RecGov(facilityId = "232447"))
-        )
+        val result =
+            resolver.resolve<RefValue.CampsiteId>(
+                RefValue.CampgroundBookingRef(BookingProviderRef.RecGov(facilityId = "232447")),
+            )
 
         assertEquals(setOf(cs1, cs2), result.map { it.id }.toSet())
     }
 
     @Test
     fun `batch resolve returns grouped results`() {
-        val poi1 = ctx.seedCatalogPoi(
-            sourceId = "fac-1", name = "A", lon = -119.0, lat = 37.0,
-            source = "recgov", bookingProvider = "recgov", bookingProviderRef = "1",
-        )
-        val poi2 = ctx.seedCatalogPoi(
-            sourceId = "fac-2", name = "B", lon = -120.0, lat = 38.0,
-            source = "recgov", bookingProvider = "recgov", bookingProviderRef = "2",
-        )
+        val poi1 =
+            ctx.seedCatalogPoi(
+                sourceId = "fac-1",
+                name = "A",
+                lon = -119.0,
+                lat = 37.0,
+                source = "recgov",
+                bookingProvider = "recgov",
+                bookingProviderRef = "1",
+            )
+        val poi2 =
+            ctx.seedCatalogPoi(
+                sourceId = "fac-2",
+                name = "B",
+                lon = -120.0,
+                lat = 38.0,
+                source = "recgov",
+                bookingProvider = "recgov",
+                bookingProviderRef = "2",
+            )
 
         val inputs = listOf(RefValue.PoiId(poi1.poiId), RefValue.PoiId(poi2.poiId))
         val result = resolver.resolve<RefValue.CampgroundBookingRef>(inputs)
@@ -177,9 +217,10 @@ class DbRefResolverTest : SharedDbTest() {
 
     @Test
     fun `unsupported resolution path returns empty list`() {
-        val result = resolver.resolve<RefValue.CampsiteDataRef>(
-            RefValue.CampgroundBookingRef(BookingProviderRef.RecGov("232447"))
-        )
+        val result =
+            resolver.resolve<RefValue.CampsiteDataRef>(
+                RefValue.CampgroundBookingRef(BookingProviderRef.RecGov("232447")),
+            )
         assertEquals(emptyList(), result)
     }
 }

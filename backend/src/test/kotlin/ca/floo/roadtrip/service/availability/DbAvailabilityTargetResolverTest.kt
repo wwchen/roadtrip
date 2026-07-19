@@ -105,7 +105,10 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             ),
     ): DbAvailabilityTargetResolver =
         DbAvailabilityTargetResolver(
-            campsiteProviderRepo = CampsiteProviderRepo(ctx),
+            refResolver =
+                ca.floo.roadtrip.service.ref
+                    .DbRefResolver(ctx),
+            ctx = ctx,
             campsitesRepo = campsitesRepo,
             availabilityProviders = AvailabilityProviderRegistry(providers),
             dateResolver = AvailabilityDateResolver(),

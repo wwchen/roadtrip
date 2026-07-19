@@ -51,7 +51,10 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                campsiteProviderRepo = campsiteProviderRepo,
+                refResolver =
+                    ca.floo.roadtrip.service.ref
+                        .DbRefResolver(ctx),
+                ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = AvailabilityProviderRegistry(mapOf("recgov" to TemplateProvider)),
                 dateResolver = AvailabilityDateResolver(),
@@ -96,7 +99,10 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                campsiteProviderRepo = campsiteProviderRepo,
+                refResolver =
+                    ca.floo.roadtrip.service.ref
+                        .DbRefResolver(ctx),
+                ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders =
                     AvailabilityProviderRegistry(

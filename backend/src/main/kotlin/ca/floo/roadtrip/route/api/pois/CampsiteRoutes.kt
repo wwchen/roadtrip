@@ -49,9 +49,13 @@ internal fun Route.campsiteRoutes(
 ) {
     val campsitesRepo = CampsiteRepo(ctx)
     val campsiteProviderRepo = CampsiteProviderRepo(ctx)
+    val refResolver =
+        ca.floo.roadtrip.service.ref
+            .DbRefResolver(ctx)
     val targets =
         DbAvailabilityTargetResolver(
-            campsiteProviderRepo = campsiteProviderRepo,
+            refResolver = refResolver,
+            ctx = ctx,
             campsitesRepo = campsitesRepo,
             availabilityProviders = availabilityProviders,
             dateResolver = dateResolver,

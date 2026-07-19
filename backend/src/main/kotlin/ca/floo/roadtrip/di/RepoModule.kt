@@ -14,12 +14,15 @@ import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
+import ca.floo.roadtrip.service.ref.DbRefResolver
+import ca.floo.roadtrip.service.ref.RefResolver
 import org.koin.dsl.module
 
 val repoModule =
     module {
         single { CampsiteRepo(get()) }
         single { CampsiteProviderRepo(get()) }
+        single<RefResolver> { DbRefResolver(get()) }
         single { AvailabilityRepo(get()) }
         single { AvailabilityWatchRepo(get()) }
         single { AvailabilityPollerRepo(get()) }
