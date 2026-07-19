@@ -4,9 +4,9 @@ import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.BookingRef
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.DataProvider
-import ca.floo.roadtrip.model.etl.CampgroundCampsiteEtlOutput
+import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.ValidationResult
-import ca.floo.roadtrip.service.etl.framework.CampgroundCampsiteEtl
+import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -19,6 +19,7 @@ import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
@@ -51,38 +52,26 @@ import java.time.Instant
 // Jaccard token overlap; final fallback to the leaf's `parent_name`.
 // Leaves that can't be matched are dropped — the booking ID alone
 // doesn't earn a pin on the map.
-class AspiraJoinByNameEtl(
+class AspiraCampgroundsEtl(
     override val etlSlug: String,
     private val dataProviderValue: DataProvider,
     private val aspiraTenant: String,
-) : CampgroundCampsiteEtl<AspiraJoinDto> {
+) : CampgroundEtl<AspiraJoinDto> {
     private val log = LoggerFactory.getLogger(javaClass)
     override val multiPart: Boolean = true
 
     override fun parse(inputs: InputBundle): AspiraJoinDto {
-        // Etl-typed inputs deserialize to AspiraLeavesPayload (one expected).
-        var leavesPayload: AspiraLeavesPayload? = null
-        for (slug in inputs.etlSlugs()) {
-            val out = inputs.etlOutput(slug)
-            if (out is JsonObject && out["leaves"] != null) {
-                leavesPayload = json.decodeFromJsonElement(AspiraLeavesPayload.serializer(), out)
-            }
-        }
-        val leaves = leavesPayload ?: error("$etlSlug: no AspiraLeavesPayload input declared")
-
-        // The inventory + dictionary captures (when declared) drive the
-        // non-bookable-node filter, not geometry — pull them out first so
-        // detectGeometrySource never sees them.
+        val mapsSlug = inputs.dataSourceSlugs().first { it.contains("maps") }
         val inventorySlug = inputs.dataSourceSlugs().firstOrNull { it.contains("inventory") }
         val dictionarySlug = inputs.dataSourceSlugs().firstOrNull { it.contains("dictionaries") }
 
-        // Remaining data_source-typed inputs become geometry sources, in
-        // declaration order so the YAML's `inputs:` order doubles as a
-        // preference order.
+        val mapsArray = inputs.envelope(mapsSlug).payload.jsonArray
+        val leaves = AspiraLeavesWalk.walk(mapsArray)
+
         val geomEntries =
             inputs
                 .dataSourceSlugs()
-                .filter { it != inventorySlug && it != dictionarySlug }
+                .filter { it != mapsSlug && it != inventorySlug && it != dictionarySlug }
                 .map { slug -> slug to detectGeometrySource(slug, inputs.envelopes(slug)) }
 
         return AspiraJoinDto(
@@ -96,7 +85,7 @@ class AspiraJoinByNameEtl(
 
     override fun validate(dto: AspiraJoinDto): ValidationResult<AspiraJoinDto> {
         val errs = mutableListOf<String>()
-        if (dto.leaves.leaves.isEmpty()) errs += "no leaves to join"
+        if (dto.leaves.isEmpty()) errs += "no leaves from /api/maps"
         if (dto.geomSources.isEmpty()) errs += "no geometry sources declared"
         return if (errs.isEmpty()) ValidationResult.Ok(dto) else ValidationResult.Bad(null, errs)
     }
@@ -104,7 +93,7 @@ class AspiraJoinByNameEtl(
     override fun transform(
         dto: AspiraJoinDto,
         ctx: TransformCtx,
-    ): CampgroundCampsiteEtlOutput {
+    ): CampgroundEtlOutput {
         val host = ctx.argFor(etlSlug, "host") ?: error("$etlSlug: missing args.host")
         val subcategory = ctx.subcategoryFor(etlSlug)
         val agency = ctx.requiredConstantAgency(etlSlug)
@@ -155,7 +144,7 @@ class AspiraJoinByNameEtl(
         var skippedNonBookable = 0
         val missSamples = mutableListOf<String>()
 
-        for (leaf in dto.leaves.leaves) {
+        for (leaf in dto.leaves) {
             // Campground-level model: a POI is one bookable campground node.
             // Aspira's /api/maps also carries park-level container nodes
             // (Banff, Jasper, …) and park-scoped activity mounts. Those have
@@ -248,7 +237,7 @@ class AspiraJoinByNameEtl(
         log.info(
             "$etlSlug: {} leaves → {} pois " +
                 "(exact={} fuzzy={} parent={} miss={} skippedContainer={} skippedNonBookable={}; sample misses: {})",
-            dto.leaves.leaves.size,
+            dto.leaves.size,
             campgrounds.size,
             exact,
             fuzzy,
@@ -258,7 +247,7 @@ class AspiraJoinByNameEtl(
             skippedNonBookable,
             missSamples.take(5),
         )
-        return CampgroundCampsiteEtlOutput(campgrounds = campgrounds, campsites = emptyList())
+        return CampgroundEtlOutput(campgrounds = campgrounds)
     }
 
     private fun aspiraDataProviderRef(leaf: AspiraLeaf): String = "$ASPIRA_DATA_REF_PREFIX${leaf.transactionLocationId}-${leaf.mapId}"
@@ -395,11 +384,6 @@ class AspiraJoinByNameEtl(
     }
 
     companion object {
-        private val json =
-            Json {
-                ignoreUnknownKeys = true
-                coerceInputValues = true
-            }
         private const val FUZZY_THRESHOLD = 0.5
         private const val ASPIRA_DATA_REF_PREFIX = "aspira-"
         private const val ASPIRA_TRANSACTION_LOCATION_ID_KEY = "transactionLocationId"

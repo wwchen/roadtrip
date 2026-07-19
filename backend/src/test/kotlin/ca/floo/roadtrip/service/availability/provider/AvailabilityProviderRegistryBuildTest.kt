@@ -45,7 +45,7 @@ class AvailabilityProviderRegistryBuildTest {
                                             listOf(
                                                 EtlEntry(
                                                     slug = "test-reserveamerica",
-                                                    adapter = "ReserveAmericaEtl",
+                                                    adapter = "ReserveAmericaCampgroundsEtl",
                                                     args =
                                                         mapOf(
                                                             "contract" to "ZZ",
@@ -200,7 +200,7 @@ class AvailabilityProviderRegistryBuildTest {
                                     etls =
                                         listOf(
                                             EtlEntry(
-                                                slug = "federal-campgrounds",
+                                                slug = "recgov-campgrounds",
                                                 adapter = "RecGovCampgroundsEtl",
                                             ),
                                         ),
@@ -228,7 +228,7 @@ class AvailabilityProviderRegistryBuildTest {
         )
         assertEquals(
             AvailabilityProviderId.RECGOV,
-            registry.forPoi(row("federal-campgrounds"), ProviderRef.RecGov("232447"))?.id,
+            registry.forPoi(row("recgov-campgrounds"), ProviderRef.RecGov("232447"))?.id,
         )
     }
 

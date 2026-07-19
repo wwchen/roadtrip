@@ -35,12 +35,12 @@ class AvailabilityProviderRegistryTest {
             AvailabilityProviderRegistry(
                 adaptersBySource =
                     mapOf(
-                        "federal-campgrounds" to recgov,
+                        "recgov-campgrounds" to recgov,
                         "aspira_pc" to aspiraPc,
                     ),
             )
 
-        val resolved = registry.forPoi(row("federal-campgrounds"))
+        val resolved = registry.forPoi(row("recgov-campgrounds"))
         assertNotNull(resolved)
         assertEquals(AvailabilityProviderId.RECGOV, resolved.id)
 
@@ -83,10 +83,10 @@ class AvailabilityProviderRegistryTest {
         val recgov = FakeProvider(AvailabilityProviderId.RECGOV, enabled = true)
         val registry =
             AvailabilityProviderRegistry(
-                adaptersBySource = mapOf("federal-campgrounds" to recgov),
+                adaptersBySource = mapOf("recgov-campgrounds" to recgov),
             )
 
-        assertSame(recgov, registry.forSource("federal-campgrounds"))
+        assertSame(recgov, registry.forSource("recgov-campgrounds"))
         assertNull(registry.forSource("never-registered"))
     }
 
@@ -97,11 +97,11 @@ class AvailabilityProviderRegistryTest {
             AvailabilityProviderRegistry(
                 adaptersBySource =
                     mapOf(
-                        "federal-campgrounds" to recgov,
+                        "recgov-campgrounds" to recgov,
                         "another-recgov-source" to recgov,
                     ),
             )
-        assertSame(recgov, registry.forPoi(row("federal-campgrounds")))
+        assertSame(recgov, registry.forPoi(row("recgov-campgrounds")))
         assertSame(recgov, registry.forPoi(row("another-recgov-source")))
         assertEquals(1, registry.all().size)
     }
@@ -114,13 +114,13 @@ class AvailabilityProviderRegistryTest {
             AvailabilityProviderRegistry(
                 adaptersBySource =
                     mapOf(
-                        "federal-campgrounds" to recgov,
+                        "recgov-campgrounds" to recgov,
                         "campflare-campgrounds" to campflare,
                         "campflare" to campflare,
                     ),
             )
 
-        assertSame(recgov, registry.forPoi(row("federal-campgrounds")))
+        assertSame(recgov, registry.forPoi(row("recgov-campgrounds")))
         assertNull(registry.forPoi(row("campflare-campgrounds")))
         assertNull(registry.forPoi(row("campflare"), ProviderRef.Campflare("upper-pines-campground-447")))
         assertSame(recgov, registry.firstByVendor(AvailabilityProviderId.RECGOV))

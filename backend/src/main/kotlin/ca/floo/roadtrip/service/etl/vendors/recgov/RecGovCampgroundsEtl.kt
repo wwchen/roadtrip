@@ -5,11 +5,11 @@ import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CellSignal
 import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.domain.RatingSummary
-import ca.floo.roadtrip.model.etl.CampgroundCampsiteEtlOutput
+import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
 import ca.floo.roadtrip.model.metadata.registry.AgencyConfig
-import ca.floo.roadtrip.service.etl.framework.CampgroundCampsiteEtl
+import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.Json
@@ -43,7 +43,7 @@ import kotlin.math.round
 // targets.
 class RecGovCampgroundsEtl(
     override val etlSlug: String,
-) : CampgroundCampsiteEtl<RecGovDto> {
+) : CampgroundEtl<RecGovDto> {
     override val multiPart: Boolean = true
 
     override fun parse(inputs: InputBundle): RecGovDto {
@@ -92,10 +92,10 @@ class RecGovCampgroundsEtl(
     override fun transform(
         dto: RecGovDto,
         ctx: TransformCtx,
-    ): CampgroundCampsiteEtlOutput {
+    ): CampgroundEtlOutput {
         val bucket = ctx.subcategoryFor(etlSlug)
         val agencyConfig = ctx.agencyFor(etlSlug)
-        return CampgroundCampsiteEtlOutput(
+        return CampgroundEtlOutput(
             campgrounds =
                 dto.rows.mapNotNull {
                     transformRow(
@@ -106,7 +106,6 @@ class RecGovCampgroundsEtl(
                         agencyConfig = agencyConfig,
                     )
                 },
-            campsites = emptyList(),
         )
     }
 
@@ -435,7 +434,7 @@ class RecGovCampgroundsEtl(
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
-        private const val RIDB_INPUT = "recgov-campgrounds"
+        private const val RIDB_INPUT = "recgov-campgrounds-raw"
         private const val ENRICHMENT_INPUT = "recgov-campground-enrichment"
         private const val DEFAULT_COUNTRY = "US"
         private const val CAMPGROUND_REF_PREFIX = "recgov-"

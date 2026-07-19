@@ -5,18 +5,17 @@ import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.RequestMeta
 import ca.floo.roadtrip.model.metadata.ResponseMeta
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
-import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraJoinByNameEtl
+import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampgroundsEtl
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraJoinDto
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeaf
-import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeavesPayload
 import ca.floo.roadtrip.service.etl.vendors.aspira.GeoJsonFeaturesSource
 import ca.floo.roadtrip.service.etl.vendors.osmpf.OverpassCenter
 import ca.floo.roadtrip.service.etl.vendors.osmpf.OverpassElement
 import ca.floo.roadtrip.service.etl.vendors.osmpf.PlanetFitnessEtl
 import ca.floo.roadtrip.service.etl.vendors.osmpf.PlanetFitnessRawDto
 import ca.floo.roadtrip.service.etl.vendors.reserveamerica.ParsedPark
+import ca.floo.roadtrip.service.etl.vendors.reserveamerica.ReserveAmericaCampgroundsEtl
 import ca.floo.roadtrip.service.etl.vendors.reserveamerica.ReserveAmericaDto
-import ca.floo.roadtrip.service.etl.vendors.reserveamerica.ReserveAmericaEtl
 import ca.floo.roadtrip.service.etl.vendors.tesla.TeslaIndexDto
 import ca.floo.roadtrip.service.etl.vendors.tesla.TeslaIndexEtl
 import ca.floo.roadtrip.service.etl.vendors.tesla.TeslaIndexRow
@@ -39,7 +38,7 @@ class EtlExtrasDtoTest {
     @Test
     fun `reserve america extras serialize through dto with sparse optional fields`() {
         val campground =
-            ReserveAmericaEtl()
+            ReserveAmericaCampgroundsEtl()
                 .transform(
                     ReserveAmericaDto(
                         parks =
@@ -337,25 +336,21 @@ class EtlExtrasDtoTest {
     fun `aspira extras preserve explicit null parent name`() {
         // An emitted aspira POI always carries a non-null resourceLocationId
         // (leaves without one are park containers, dropped by
-        // AspiraJoinByNameEtl before emission). parent_name stays nullable, so
+        // AspiraCampgroundsEtl before emission). parent_name stays nullable, so
         // it is the field that exercises explicitNulls serialization here.
         val campground =
-            AspiraJoinByNameEtl("aspira-bc-pins", DataProvider.ASPIRA, "bc")
+            AspiraCampgroundsEtl("aspira-wa-campgrounds", DataProvider.ASPIRA, "wa")
                 .transform(
                     AspiraJoinDto(
                         leaves =
-                            AspiraLeavesPayload(
-                                slug = "aspira-leaves-bc",
-                                leaves =
-                                    listOf(
-                                        AspiraLeaf(
-                                            name = "Lakeside Campground",
-                                            transactionLocationId = 11,
-                                            mapId = 22,
-                                            resourceLocationId = 33,
-                                            parentName = null,
-                                        ),
-                                    ),
+                            listOf(
+                                AspiraLeaf(
+                                    name = "Lakeside Campground",
+                                    transactionLocationId = 11,
+                                    mapId = 22,
+                                    resourceLocationId = 33,
+                                    parentName = null,
+                                ),
                             ),
                         geomSources = listOf("fixture" to GeoJsonFeaturesSource(listOf(geoJsonEnvelope()), "fixture")),
                         fetchedAt = fetchedAt,
@@ -365,7 +360,7 @@ class EtlExtrasDtoTest {
                 .single()
 
         val extras = campground.metadata!!.jsonObject
-        assertEquals("camping.bcparks.ca", extras["host"]!!.jsonPrimitive.content)
+        assertEquals("washington.goingtocamp.com", extras["host"]!!.jsonPrimitive.content)
         assertEquals(11, extras["transaction_location_id"]!!.jsonPrimitive.int)
         assertEquals(22, extras["map_id"]!!.jsonPrimitive.int)
         assertEquals(33, extras["resource_location_id"]!!.jsonPrimitive.int)

@@ -44,7 +44,7 @@ class ReserveAmericaAvailabilityProviderTest {
                 ReserveAmericaAvailabilityProvider(
                     tenant =
                         ReserveAmericaTenant(
-                            source = "new-york-state-parks",
+                            source = "reserveamerica-ny-campgrounds",
                             host = "newyorkstateparks.reserveamerica.com",
                             contractCode = "NY",
                             bookingHorizonDays = 270,

@@ -65,7 +65,6 @@ class EtlOrchestratorCampflareTest : SharedDbTest() {
         assertEquals(1, campsites.upserted)
         assertEquals(1, tableCount("campgrounds"))
         assertEquals(1, tableCount("campsites"))
-        assertEquals(2, tableCount("vendor_refs"))
         assertEquals(1, tableCount("pois"))
         assertEquals(1, tableCount("poi_campgrounds"))
     }

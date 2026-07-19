@@ -34,7 +34,7 @@ class RecGovCampgroundsEtlTest {
 
     @Test
     fun `transform treats nonreservable RIDB facilities as agency info pages, not RecGov booking targets`() {
-        val etl = RecGovCampgroundsEtl("federal-campgrounds")
+        val etl = RecGovCampgroundsEtl("recgov-campgrounds")
         val campgrounds = etl.transform(etl.parse(bundle()), transformCtx).campgrounds.associateBy { it.dataProviderRef }
 
         val reservable = campgrounds.getValue("recgov-232447")
@@ -50,7 +50,7 @@ class RecGovCampgroundsEtlTest {
 
     @Test
     fun `transform promotes RIDB description media activities and recgov rating cell enrichment`() {
-        val etl = RecGovCampgroundsEtl("federal-campgrounds")
+        val etl = RecGovCampgroundsEtl("recgov-campgrounds")
         val campgrounds =
             etl
                 .transform(
@@ -92,7 +92,7 @@ class RecGovCampgroundsEtlTest {
 
     @Test
     fun `transform treats non-scalar agency paths as missing values`() {
-        val etl = RecGovCampgroundsEtl("federal-campgrounds")
+        val etl = RecGovCampgroundsEtl("recgov-campgrounds")
         val ctx =
             TransformCtx.load(
                 rawDir = File("build/tmp/recgov-campgrounds-etl-test-raw"),
@@ -103,7 +103,7 @@ class RecGovCampgroundsEtlTest {
                             writeText(
                                 """
                                 data_sources:
-                                  - slug: recgov-campgrounds
+                                  - slug: recgov-campgrounds-raw
                                     name: RIDB
                                     fetcher:
                                       executor: python
@@ -116,9 +116,9 @@ class RecGovCampgroundsEtlTest {
                                     agency:
                                       derived_from_field: ORGANIZATION[0]
                                     etls:
-                                      - slug: federal-campgrounds
+                                      - slug: recgov-campgrounds
                                         adapter: RecGovCampgroundsEtl
-                                        inputs: [recgov-campgrounds]
+                                        inputs: [recgov-campgrounds-raw]
                                 """.trimIndent(),
                             )
                         },
@@ -133,7 +133,7 @@ class RecGovCampgroundsEtlTest {
     private fun bundle(withEnrichment: Boolean = false): InputBundle =
         InputBundle(
             rawCaptures =
-                linkedMapOf("recgov-campgrounds" to listOf(envelope())).apply {
+                linkedMapOf("recgov-campgrounds-raw" to listOf(envelope())).apply {
                     if (withEnrichment) {
                         put("recgov-campground-enrichment", listOf(enrichmentEnvelope()))
                     }

@@ -50,7 +50,6 @@ class PoiRegistryValidatorTest {
                 """.trimIndent(),
             )
         assertEquals(emptyList(), r.campsiteData)
-        assertEquals(emptyList(), r.campsiteParentJoiners)
     }
 
     @Test
@@ -77,7 +76,7 @@ class PoiRegistryValidatorTest {
                     agency:
                       derived_from_field: ORGANIZATION[0].OrgName
                     etls:
-                      - slug: federal-campgrounds
+                      - slug: recgov-campgrounds
                         adapter: RecGovCampgroundsEtl
                         inputs: [src-a]
                   - name: Planet Fitness
@@ -141,7 +140,7 @@ class PoiRegistryValidatorTest {
                 campsite_data:
                   - name: Rec.gov Campsites
                     etls:
-                      - slug: federal-campsites
+                      - slug: recgov-campsites
                         adapter: RecGovCampsitesEtl
                         inputs: [src-a]
                 """.trimIndent(),
@@ -286,67 +285,6 @@ class PoiRegistryValidatorTest {
     }
 
     @Test
-    fun `campsite_parent_joiner row with adapter loads`() {
-        val r =
-            load(
-                """
-                data_sources: []
-                poi_data: []
-                campsite_data: []
-                campsite_parent_joiner:
-                  - name: Example join
-                    adapter: ExampleCampsiteParentJoiner
-                """.trimIndent(),
-            )
-        assertEquals(1, r.campsiteParentJoiners.size)
-        assertEquals("ExampleCampsiteParentJoiner", r.campsiteParentJoiners[0].adapter)
-    }
-
-    @Test
-    fun `joiner row with blank adapter fails`() {
-        val ex =
-            assertFailsWith<IllegalArgumentException> {
-                load(
-                    """
-                    data_sources: []
-                    poi_data: []
-                    campsite_data: []
-                    campsite_parent_joiner:
-                      - name: Empty
-                        adapter: ""
-                    """.trimIndent(),
-                )
-            }
-        assertTrue(
-            ex.message!!.contains("empty adapter"),
-            "expected empty-adapter error, got: ${ex.message}",
-        )
-    }
-
-    @Test
-    fun `joiner rows with duplicate names fail`() {
-        val ex =
-            assertFailsWith<IllegalArgumentException> {
-                load(
-                    """
-                    data_sources: []
-                    poi_data: []
-                    campsite_data: []
-                    campsite_parent_joiner:
-                      - name: Dup
-                        adapter: A
-                      - name: Dup
-                        adapter: B
-                    """.trimIndent(),
-                )
-            }
-        assertTrue(
-            ex.message!!.contains("not unique"),
-            "expected duplicate-name error, got: ${ex.message}",
-        )
-    }
-
-    @Test
     fun `production poi-registry resource validates`() {
         PoiRegistry.loadResource("poi-registry.yaml")
     }
@@ -368,7 +306,7 @@ class PoiRegistryValidatorTest {
                     category: campground
                     etls:
                       - slug: test-reserveamerica-parks
-                        adapter: ReserveAmericaEtl
+                        adapter: ReserveAmericaCampgroundsEtl
                         inputs: [reserveamerica-test]
                         args:
                           contract: ZZ

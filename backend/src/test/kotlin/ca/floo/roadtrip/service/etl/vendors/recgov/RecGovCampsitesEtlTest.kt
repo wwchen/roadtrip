@@ -16,7 +16,7 @@ import kotlin.test.assertNull
 class RecGovCampsitesEtlTest {
     @Test
     fun `transform falls back to campsite id when recgov site fields are blank`() {
-        val etl = RecGovCampsitesEtl("federal-campsites")
+        val etl = RecGovCampsitesEtl("recgov-campsites")
         val campsite = etl.transform(etl.parse(bundle()), transformCtx()).campsites.single()
 
         assertEquals("123456", campsite.dataProviderRef)

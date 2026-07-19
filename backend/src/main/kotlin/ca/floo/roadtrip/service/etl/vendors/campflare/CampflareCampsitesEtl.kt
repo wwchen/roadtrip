@@ -5,12 +5,12 @@ import ca.floo.roadtrip.model.domain.DEFAULT_CAMPSITE_KIND
 import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
-import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.JsonObject
 
-class CampflareCampsitesEtl : SourceEtl<List<JsonObject>, CampsiteEtlOutput> {
+class CampflareCampsitesEtl : CampsiteEtl<List<JsonObject>> {
     override val etlSlug = CAMPSITES_ETL_SLUG
     override val multiPart: Boolean = true
 

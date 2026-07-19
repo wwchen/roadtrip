@@ -30,7 +30,7 @@ class TransformCtx private constructor(
         }
 
     /**
-     * Read a per-etl YAML arg by key (e.g. `argFor("aspira-wa-pins", "host")`
+     * Read a per-etl YAML arg by key (e.g. `argFor("aspira-wa-campgrounds", "host")`
      * → "washington.goingtocamp.com"). Returns null when the key isn't set.
      */
     fun argFor(

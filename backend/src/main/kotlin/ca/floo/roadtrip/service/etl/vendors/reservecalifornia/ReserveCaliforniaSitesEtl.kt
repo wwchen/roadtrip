@@ -6,13 +6,13 @@ import ca.floo.roadtrip.model.domain.DEFAULT_CAMPSITE_KIND
 import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
-import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 
 class ReserveCaliforniaSitesEtl(
-    override val etlSlug: String = "california-state-park-sites",
-) : SourceEtl<ReserveCaliforniaCatalog, CampsiteEtlOutput> {
+    override val etlSlug: String = "reservecalifornia-campsites",
+) : CampsiteEtl<ReserveCaliforniaCatalog> {
     override val multiPart: Boolean = true
 
     override fun parse(inputs: InputBundle): ReserveCaliforniaCatalog = parseCatalog(inputs.soleEnvelopes(), etlSlug)

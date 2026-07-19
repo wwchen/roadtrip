@@ -7,9 +7,9 @@ import org.slf4j.LoggerFactory
 
 // Derives the IngestController target maps from the POI registry resource.
 //
-// Backend ingest targets are import-only: one Target per runnable poi_data,
-// campsite_data, or campsite_parent_joiner row. data_sources fetchers run
-// outside the Ktor process through scripts/poll_raw.py.
+// Backend ingest targets are import-only: one Target per runnable poi_data
+// or campsite_data row. data_sources fetchers run outside the Ktor process
+// through scripts/poll_raw.py.
 //
 // Adding a new runnable import: append an enabled registry row and register
 // the ETL adapter(s) in EtlOrchestrator.registry. If a row is disabled or its
@@ -19,7 +19,6 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
     val log = LoggerFactory.getLogger("RegistryTargets")
     val out = mutableMapOf<String, Target>()
     val implemented = EtlOrchestrator.registry.keys
-    val implementedJoiners = EtlOrchestrator.joinerRegistry.keys
 
     // poi_data — produces canonical POI-backed catalog rows.
     for (row in registry.poiData) {
@@ -80,34 +79,5 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
             )
     }
 
-    // campsite_parent_joiner — reconciliation pass. Reparents any campsite
-    // whose current campground_id disagrees with the joiner's cross-vendor
-    // lookup; idempotent on already-correct rows. See runJoiner.
-    for (row in registry.campsiteParentJoiners) {
-        if (!row.enabled) {
-            log.info("campsite_parent_joiner '{}' is disabled - omitting import target", row.name)
-            continue
-        }
-        if (row.adapter !in implementedJoiners) {
-            log.warn(
-                "campsite_parent_joiner '{}' adapter '{}' is disabled or not registered - omitting import target",
-                row.name,
-                row.adapter,
-            )
-            continue
-        }
-        out[row.name] =
-            Target(
-                name = row.name,
-                importPhases =
-                    listOf(
-                        Phase.Import(
-                            label = "import:${row.name}",
-                            name = row.name,
-                            section = Phase.Import.Section.CAMPSITE_PARENT_JOINER,
-                        ),
-                    ),
-            )
-    }
     return out
 }

@@ -14,16 +14,8 @@ import kotlinx.serialization.json.long
  * are the records the deeplink builder keys off (RFC 0006). Internal
  * navigation nodes have null txnLoc and are skipped.
  *
- * Two callers today:
- *   - [AspiraLeavesEtl] (intermediate ETL: maps → leaves payload for the
- *     join-by-name campground emitter).
- *   - [AspiraResourcesEtl] (campsite_data terminal: needs leaf names
- *     and parent context to label resources).
- *
- * Both read the same `/api/maps` raw capture, so the walk lives here as
- * a pure helper. Cross-row etl refs are not supported by the
- * orchestrator (RFC 0008), so duplicating the walk in each consumer is
- * the right shape — but the walk itself is shared code.
+ * Callers: [AspiraCampgroundsEtl], [BcParksCampgroundsEtl], [AspiraCampsitesEtl].
+ * Each reads `/api/maps` directly as a data_source input and walks here.
  */
 object AspiraLeavesWalk {
     /**

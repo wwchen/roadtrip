@@ -522,7 +522,7 @@ class SmokeTest {
                           "id": 45626,
                           "geometry": { "type": "Point", "coordinates": [-122.8127778, 39.00722222] },
                           "properties": {
-                            "source": "california-state-parks",
+                            "source": "reservecalifornia-campgrounds",
                             "source_id": "rc-629",
                             "category": "campground",
                             "subcategory": "state",

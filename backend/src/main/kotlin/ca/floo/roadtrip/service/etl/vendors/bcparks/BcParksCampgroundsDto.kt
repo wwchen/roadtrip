@@ -5,7 +5,7 @@ import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeaf
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 
-data class BcParksMergeDto(
+data class BcParksCampgroundsDto(
     val leaves: List<AspiraLeaf>,
     val strapiRows: List<BcParksStrapiRow>,
     val strapiEnvelopes: List<Envelope>,

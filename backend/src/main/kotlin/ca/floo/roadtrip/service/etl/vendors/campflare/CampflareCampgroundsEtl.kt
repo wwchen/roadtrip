@@ -2,14 +2,14 @@ package ca.floo.roadtrip.service.etl.vendors.campflare
 
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.DataProvider
-import ca.floo.roadtrip.model.etl.CampgroundCampsiteEtlOutput
+import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.ValidationResult
-import ca.floo.roadtrip.service.etl.framework.CampgroundCampsiteEtl
+import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.JsonObject
 
-class CampflareCampgroundsEtl : CampgroundCampsiteEtl<List<JsonObject>> {
+class CampflareCampgroundsEtl : CampgroundEtl<List<JsonObject>> {
     override val etlSlug = CAMPGROUNDS_ETL_SLUG
     override val multiPart: Boolean = true
 
@@ -20,10 +20,9 @@ class CampflareCampgroundsEtl : CampgroundCampsiteEtl<List<JsonObject>> {
     override fun transform(
         dto: List<JsonObject>,
         ctx: TransformCtx,
-    ): CampgroundCampsiteEtlOutput =
-        CampgroundCampsiteEtlOutput(
+    ): CampgroundEtlOutput =
+        CampgroundEtlOutput(
             campgrounds = dto.mapNotNull(::campgroundRecord),
-            campsites = emptyList(),
         )
 
     private fun campgroundRecord(raw: JsonObject): CampgroundUpsertCandidate? {

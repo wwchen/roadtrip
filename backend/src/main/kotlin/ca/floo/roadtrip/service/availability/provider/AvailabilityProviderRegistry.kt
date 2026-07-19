@@ -106,9 +106,9 @@ class AvailabilityProviderRegistry(
         private const val RECGOV_VENDOR = "recgov"
         private val aspiraBookingProviderBySource =
             mapOf(
-                "aspira-wa-pins" to "aspira_wa",
-                "aspira-bc-pins" to "aspira_bc",
-                "aspira-pc-pins" to "aspira_pc",
+                "aspira-wa-campgrounds" to "aspira_wa",
+                "aspira-bc-campgrounds" to "aspira_bc",
+                "aspira-pc-campgrounds" to "aspira_pc",
             )
 
         fun fromPoiRegistry(
@@ -143,7 +143,7 @@ class AvailabilityProviderRegistry(
 
             // Aspira — one adapter instance per upstream host. Sources that share
             // a host share an instance. Registered under both the YAML ETL slug
-            // (e.g. "aspira-wa-pins") and the unified DataProvider id
+            // (e.g. "aspira-wa-campgrounds") and the unified DataProvider id
             // (e.g. "aspira_wa") so lookups from campgrounds.data_provider resolve.
             val hostBySource = registry.aspiraHostBySource()
             validateAspiraHosts(hostBySource)

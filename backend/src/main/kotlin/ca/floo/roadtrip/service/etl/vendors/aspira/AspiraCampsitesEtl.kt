@@ -7,8 +7,8 @@ import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
-import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.campsiteTagKey
 import kotlinx.serialization.json.JsonArray
@@ -37,8 +37,8 @@ import org.slf4j.LoggerFactory
  *      (`/api/resourcelocation/resources`). Source of truth for both
  *      "what campsites exist" and "what we know about them": names,
  *      descriptions, allowed equipment, capacity, attribute IDs.
- *   2. `aspira-maps-{tenant}` — same /api/maps capture
- *      [AspiraLeavesEtl] reads. Walked here for leaf metadata
+ *   2. `aspira-maps-{tenant}` — /api/maps capture walked via
+ *      [AspiraLeavesWalk] for leaf metadata
  *      (transactionLocationId, name, parent name) used to label each
  *      resource by its parent loop. Cross-row etl refs aren't supported
  *      (RFC 0008 / [PoiRegistry] validator), so this ETL re-walks the
@@ -64,7 +64,7 @@ import org.slf4j.LoggerFactory
  * underscore. Three slug instances of this class, one per tenant. The
  * vendor literal is bound by constructor arg.
  */
-class AspiraResourcesEtl(
+class AspiraCampsitesEtl(
     override val etlSlug: String,
     /**
      * YAML data_source slug for the /api/maps capture
@@ -88,7 +88,7 @@ class AspiraResourcesEtl(
      */
     val dictionariesInputSlug: String? = null,
     val aspiraTenant: String,
-) : SourceEtl<AspiraResourcesEtl.Parsed, CampsiteEtlOutput> {
+) : CampsiteEtl<AspiraCampsitesEtl.Parsed> {
     override val multiPart: Boolean = true
 
     private val log = LoggerFactory.getLogger(javaClass)
