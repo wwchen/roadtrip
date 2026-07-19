@@ -266,8 +266,8 @@ open class EtlOrchestrator(
         for (slug in inputSlugs) {
             val ds = poiRegistry.dataSource(slug)
             if (ds != null) {
-                // data_source input: load envelope(s) from data/raw/<slug>/
-                raw[slug] = rawCaptureStore.loadNewestEnvelopes(slug)
+                // data_source input: load envelope(s) from its registry output_dir_prefix.
+                raw[slug] = rawCaptureStore.loadNewestEnvelopes(ds)
             } else if (slug in intermediateOutputs) {
                 // sibling intermediate from earlier in this same row's
                 // etls: chain. PoiRegistry's validator rejects cross-row
