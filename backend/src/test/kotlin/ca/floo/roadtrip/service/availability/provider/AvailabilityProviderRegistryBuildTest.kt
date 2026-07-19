@@ -12,7 +12,6 @@ import ca.floo.roadtrip.client.reservecalifornia.ReserveCaliforniaAvailabilityCl
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.availability.campflare.CampflareCampgroundAvailability
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
-import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.metadata.registry.EtlEntry
@@ -81,7 +80,7 @@ class AvailabilityProviderRegistryBuildTest {
                     isProviderEnabled = allProvidersEnabled,
                 )
 
-            val provider = registry.forPoi(row("test-reserveamerica"))
+            val provider = registry.forSource("test-reserveamerica")
 
             assertNotNull(provider)
             assertEquals(BookingProvider.RESERVEAMERICA, provider.id)
@@ -152,8 +151,8 @@ class AvailabilityProviderRegistryBuildTest {
                     isProviderEnabled = allProvidersEnabled,
                 )
 
-            val provider = registry.forPoi(row("campflare-campgrounds"))
-            val providerByCanonicalVendor = registry.forPoi(row("campflare"))
+            val provider = registry.forSource("campflare-campgrounds")
+            val providerByCanonicalVendor = registry.forSource("campflare")
 
             assertNotNull(provider)
             assertNotNull(providerByCanonicalVendor)
@@ -219,17 +218,17 @@ class AvailabilityProviderRegistryBuildTest {
                 isProviderEnabled = { it !in disabledProviders },
             )
 
-        assertNull(registry.forPoi(row("campflare")))
-        assertNull(registry.forPoi(row("campflare-campgrounds")))
-        assertNull(registry.forPoi(row("campflare"), BookingProviderRef.Campflare("upper-pines-campground-447")))
-        assertNull(registry.forPoi(row("campflare-campgrounds"), BookingProviderRef.Campflare("upper-pines-campground-447")))
+        assertNull(registry.forSource("campflare"))
+        assertNull(registry.forSource("campflare-campgrounds"))
+        assertNull(registry.forBooking(BookingProvider.CAMPFLARE, BookingProviderRef.Campflare("upper-pines-campground-447")))
+        assertNull(registry.forBooking(BookingProvider.CAMPFLARE, BookingProviderRef.Campflare("upper-pines-campground-447")))
         assertEquals(
             BookingProvider.RECGOV,
-            registry.forPoi(row("recgov"), BookingProviderRef.RecGov(facilityId = "232447"))?.id,
+            registry.forBooking(BookingProvider.RECGOV, BookingProviderRef.RecGov(facilityId = "232447"))?.id,
         )
         assertEquals(
             BookingProvider.RECGOV,
-            registry.forPoi(row("recgov-campgrounds"), BookingProviderRef.RecGov(facilityId = "232447"))?.id,
+            registry.forBooking(BookingProvider.RECGOV, BookingProviderRef.RecGov(facilityId = "232447"))?.id,
         )
     }
 
@@ -330,8 +329,6 @@ class AvailabilityProviderRegistryBuildTest {
         val startDate: LocalDate,
         val endDate: LocalDate,
     )
-
-    private fun row(source: String): CampsiteProviderRefRow = CampsiteProviderRefRow(poiId = 1L, source = source, providerRefJson = "{}")
 
     private fun stubRecgovClient(): RecGovAvailabilityClient =
         object : RecGovAvailabilityClient {

@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
-import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import java.time.LocalDate
@@ -29,7 +28,7 @@ class AvailabilityProviderRegistryTest {
     }
 
     @Test
-    fun `forPoi resolves source to its adapter instance`() {
+    fun `forSource resolves source to its adapter instance`() {
         val recgov = FakeProvider(BookingProvider.RECGOV, enabled = true)
         val aspiraPc = FakeProvider(BookingProvider.ASPIRA, enabled = true)
         val registry =
@@ -41,23 +40,23 @@ class AvailabilityProviderRegistryTest {
                     ),
             )
 
-        val resolved = registry.forPoi(row("recgov-campgrounds"))
+        val resolved = registry.forSource("recgov-campgrounds")
         assertNotNull(resolved)
         assertEquals(BookingProvider.RECGOV, resolved.id)
 
-        val pc = registry.forPoi(row("aspira_pc"))
+        val pc = registry.forSource("aspira_pc")
         assertNotNull(pc)
         assertEquals(BookingProvider.ASPIRA, pc.id)
     }
 
     @Test
-    fun `forPoi returns null for unmapped source`() {
+    fun `forSource returns null for unmapped source`() {
         val registry = AvailabilityProviderRegistry(adaptersBySource = emptyMap())
-        assertNull(registry.forPoi(row("never-registered")))
+        assertNull(registry.forSource("never-registered"))
     }
 
     @Test
-    fun `forPoi with ref returns null when mapped provider declines the ref`() {
+    fun `forBooking returns null when mapped provider declines the ref`() {
         val declining =
             object : AvailabilityProvider {
                 override val id: BookingProvider = BookingProvider.CAMPFLARE
@@ -75,21 +74,10 @@ class AvailabilityProviderRegistryTest {
             }
         val registry = AvailabilityProviderRegistry(adaptersBySource = mapOf("campflare" to declining))
 
-        assertSame(declining, registry.forPoi(row("campflare")))
-        assertNull(registry.forPoi(row("campflare"), BookingProviderRef.Campflare("upper-pines-campground-447")))
+        assertSame(declining, registry.forSource("campflare"))
+        assertNull(registry.forBooking(BookingProvider.CAMPFLARE, BookingProviderRef.Campflare("upper-pines-campground-447")))
     }
 
-    @Test
-    fun `forSource resolves source without requiring a campground row`() {
-        val recgov = FakeProvider(BookingProvider.RECGOV, enabled = true)
-        val registry =
-            AvailabilityProviderRegistry(
-                adaptersBySource = mapOf("recgov-campgrounds" to recgov),
-            )
-
-        assertSame(recgov, registry.forSource("recgov-campgrounds"))
-        assertNull(registry.forSource("never-registered"))
-    }
 
     @Test
     fun `multiple sources can share one adapter instance`() {
@@ -102,8 +90,8 @@ class AvailabilityProviderRegistryTest {
                         "another-recgov-source" to recgov,
                     ),
             )
-        assertSame(recgov, registry.forPoi(row("recgov-campgrounds")))
-        assertSame(recgov, registry.forPoi(row("another-recgov-source")))
+        assertSame(recgov, registry.forSource("recgov-campgrounds"))
+        assertSame(recgov, registry.forSource("another-recgov-source"))
         assertEquals(1, registry.all().size)
     }
 
@@ -121,9 +109,9 @@ class AvailabilityProviderRegistryTest {
                     ),
             )
 
-        assertSame(recgov, registry.forPoi(row("recgov-campgrounds")))
-        assertNull(registry.forPoi(row("campflare-campgrounds")))
-        assertNull(registry.forPoi(row("campflare"), BookingProviderRef.Campflare("upper-pines-campground-447")))
+        assertSame(recgov, registry.forSource("recgov-campgrounds"))
+        assertNull(registry.forSource("campflare-campgrounds"))
+        assertNull(registry.forBooking(BookingProvider.CAMPFLARE, BookingProviderRef.Campflare("upper-pines-campground-447")))
         assertSame(recgov, registry.firstByVendor(BookingProvider.RECGOV))
         assertNull(registry.firstByVendor(BookingProvider.CAMPFLARE))
         assertEquals(listOf(BookingProvider.RECGOV), registry.all().map { it.id })
@@ -143,11 +131,9 @@ class AvailabilityProviderRegistryTest {
                         "aspira_wa" to wa,
                     ),
             )
-        assertSame(pc, registry.forPoi(row("aspira_pc")))
-        assertSame(bc, registry.forPoi(row("aspira_bc")))
-        assertSame(wa, registry.forPoi(row("aspira_wa")))
+        assertSame(pc, registry.forSource("aspira_pc"))
+        assertSame(bc, registry.forSource("aspira_bc"))
+        assertSame(wa, registry.forSource("aspira_wa"))
         assertEquals(3, registry.all().size)
     }
-
-    private fun row(source: String): CampsiteProviderRefRow = CampsiteProviderRefRow(poiId = 1L, source = source, providerRefJson = "{}")
 }
