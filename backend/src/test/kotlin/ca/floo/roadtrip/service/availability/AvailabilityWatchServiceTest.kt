@@ -61,6 +61,8 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 lat = 37.74,
                 source = "test",
                 providerRefJson = """{"recgov_id": "$campgroundId"}""",
+                bookingProvider = "recgov",
+                bookingProviderRef = campgroundId,
             ).poiId
 
     private fun seedCampsite(
@@ -86,7 +88,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         lifecycleNotifications: WatchLifecycleNotifications = ignoredLifecycleNotifications(),
     ): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("test" to availabilityProvider))
+        val registry = AvailabilityProviderRegistry(mapOf("recgov" to availabilityProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 campsiteProviderRepo = CampsiteProviderRepo(ctx),
@@ -116,7 +118,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
             ),
     ): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("test" to availabilityProvider))
+        val registry = AvailabilityProviderRegistry(mapOf("recgov" to availabilityProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 campsiteProviderRepo = CampsiteProviderRepo(ctx),
@@ -165,7 +167,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
 
     private fun dispatchingLifecycleNotifications(notifications: NotificationSender): WatchLifecycleNotifications {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("test" to FakeProvider))
+        val registry = AvailabilityProviderRegistry(mapOf("recgov" to FakeProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 campsiteProviderRepo = CampsiteProviderRepo(ctx),

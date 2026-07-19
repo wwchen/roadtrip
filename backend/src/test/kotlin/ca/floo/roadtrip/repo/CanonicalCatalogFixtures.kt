@@ -47,9 +47,8 @@ fun DSLContext.seedCatalogPoi(
     propertiesJson: String = """{"test":true}""",
     cadenceOverrideSec: Int? = null,
     geomGeoJson: String = """{"type":"Point","coordinates":[$lon,$lat]}""",
-    // Bulk-seed callers can pass `refresh = false` and refresh once at the end
-    // to skip N × REFRESH MATERIALIZED VIEW calls (a hot path for tests that
-    // insert hundreds of POIs to exercise pagination / truncation).
+    bookingProvider: String? = null,
+    bookingProviderRef: String? = null,
     refresh: Boolean = true,
 ): CatalogPoiFixture {
     val canonicalType = canonicalPoiType(poiType)
@@ -83,6 +82,8 @@ fun DSLContext.seedCatalogPoi(
                         country = country,
                         providerRefJson = providerRefJson,
                         sourcePayloadJson = propertiesJson,
+                        bookingProvider = bookingProvider,
+                        bookingProviderRef = bookingProviderRef,
                         refresh = false,
                     )
                 execute("INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (?, ?)", poiId, campgroundId)

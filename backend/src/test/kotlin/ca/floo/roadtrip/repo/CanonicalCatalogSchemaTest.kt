@@ -17,9 +17,6 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                         'pois',
                         'campgrounds',
                         'campsites',
-                        'vendor_refs',
-                        'campground_vendor_refs',
-                        'campsite_vendor_refs',
                         'poi_campgrounds',
                         'tesla_superchargers',
                         'poi_tesla_superchargers',
@@ -32,9 +29,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
 
         assertEquals(
             listOf(
-                "campground_vendor_refs",
                 "campgrounds",
-                "campsite_vendor_refs",
                 "campsites",
                 "planet_fitness_locations",
                 "poi_campgrounds",
@@ -42,7 +37,6 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "poi_tesla_superchargers",
                 "pois",
                 "tesla_superchargers",
-                "vendor_refs",
             ),
             tables,
         )
@@ -57,11 +51,14 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "alerts",
                 "amenities",
                 "big_rig_friendly",
+                "booking_provider",
+                "booking_provider_ref",
                 "cell_service",
                 "connections",
                 "contact",
                 "created_at",
-                "data_source",
+                "data_provider",
+                "data_provider_ref",
                 "default_campsite_schedule",
                 "deleted_at",
                 "has_pull_through_sites",
@@ -78,7 +75,6 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "name",
                 "photos",
                 "price",
-                "primary_vendor_ref_id",
                 "reservation_url",
                 "short_description",
                 "source_payload",
@@ -97,9 +93,12 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
         assertEquals(
             listOf(
                 "ada_accessible",
+                "booking_provider",
+                "booking_provider_ref",
                 "campground_id",
                 "created_at",
-                "data_source",
+                "data_provider",
+                "data_provider_ref",
                 "deleted_at",
                 "driveway_length",
                 "electric_hookups",
@@ -119,7 +118,6 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "photos",
                 "picnic_table",
                 "price",
-                "primary_vendor_ref_id",
                 "pull_through",
                 "reservation_url",
                 "schedule",
@@ -247,26 +245,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
     }
 
     @Test
-    fun `vendor refs are unique per vendor entity and external id`() {
-        val constraintCount =
-            ctx
-                .fetchOne(
-                    """
-                    SELECT COUNT(*) AS n
-                    FROM pg_indexes
-                    WHERE schemaname = 'public'
-                      AND tablename = 'vendor_refs'
-                      AND indexname = 'vendor_refs_vendor_entity_external_uidx'
-                    """.trimIndent(),
-                )!!
-                .get("n", Number::class.java)
-                .toInt()
-
-        assertEquals(1, constraintCount)
-    }
-
-    @Test
-    fun `vendor ref link tables keep non unique lookup indexes`() {
+    fun `provider columns have unique index on campgrounds and campsites`() {
         val indexes =
             ctx
                 .fetch(
@@ -274,22 +253,15 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                     SELECT tablename || '.' || indexname AS ref
                     FROM pg_indexes
                     WHERE schemaname = 'public'
-                      AND (
-                        (tablename = 'campground_vendor_refs'
-                         AND indexname = 'campground_vendor_refs_vendor_ref_idx')
-                        OR
-                        (tablename = 'campsite_vendor_refs'
-                         AND indexname = 'campsite_vendor_refs_vendor_ref_idx')
-                      )
-                      AND indexdef NOT ILIKE 'CREATE UNIQUE INDEX%'
+                      AND indexname IN ('campgrounds_provider_uidx', 'campsites_provider_uidx')
                     ORDER BY ref
                     """.trimIndent(),
                 ).map { it.get("ref", String::class.java) }
 
         assertEquals(
             listOf(
-                "campground_vendor_refs.campground_vendor_refs_vendor_ref_idx",
-                "campsite_vendor_refs.campsite_vendor_refs_vendor_ref_idx",
+                "campgrounds.campgrounds_provider_uidx",
+                "campsites.campsites_provider_uidx",
             ),
             indexes,
         )
@@ -418,70 +390,45 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
     }
 
     @Test
-    fun `data_source columns are non-null with non-blank check`() {
-        val dataSourceRows =
+    fun `data_provider and data_provider_ref columns are non-null`() {
+        val providerRows =
             ctx
                 .fetch(
                     """
-                    SELECT table_name || ':' || is_nullable AS ref
+                    SELECT table_name || '.' || column_name || ':' || is_nullable AS ref
                     FROM information_schema.columns
                     WHERE table_schema = 'public'
-                      AND column_name = 'data_source'
+                      AND column_name IN ('data_provider', 'data_provider_ref')
                       AND table_name IN ('campgrounds', 'campsites')
-                    ORDER BY table_name
-                    """.trimIndent(),
-                ).map { it.get("ref", String::class.java) }
-
-        assertEquals(
-            listOf("campgrounds:NO", "campsites:NO"),
-            dataSourceRows,
-        )
-
-        val dataSourceChecks =
-            ctx
-                .fetch(
-                    """
-                    SELECT table_name || '.' || constraint_name AS ref
-                    FROM information_schema.table_constraints
-                    WHERE table_schema = 'public'
-                      AND constraint_type = 'CHECK'
-                      AND constraint_name IN (
-                        'campgrounds_data_source_check',
-                        'campsites_data_source_check'
-                      )
-                    ORDER BY ref
+                    ORDER BY table_name, column_name
                     """.trimIndent(),
                 ).map { it.get("ref", String::class.java) }
 
         assertEquals(
             listOf(
-                "campgrounds.campgrounds_data_source_check",
-                "campsites.campsites_data_source_check",
+                "campgrounds.data_provider:NO",
+                "campgrounds.data_provider_ref:NO",
+                "campsites.data_provider:NO",
+                "campsites.data_provider_ref:NO",
             ),
-            dataSourceChecks,
+            providerRows,
         )
     }
 
     @Test
-    fun `is_primary columns on vendor ref link tables are gone`() {
-        val remaining =
+    fun `vendor_refs and materialized views are removed`() {
+        val oldTables =
             ctx
                 .fetch(
                     """
-                    SELECT table_name || '.' || column_name AS ref
-                    FROM information_schema.columns
+                    SELECT table_name
+                    FROM information_schema.tables
                     WHERE table_schema = 'public'
-                      AND column_name = 'is_primary'
-                      AND table_name IN ('campground_vendor_refs', 'campsite_vendor_refs')
-                    ORDER BY ref
+                      AND table_name IN ('vendor_refs', 'campground_vendor_refs', 'campsite_vendor_refs')
+                    ORDER BY table_name
                     """.trimIndent(),
-                ).map { it.get("ref", String::class.java) }
+                ).map { it.get("table_name", String::class.java) }
 
-        assertEquals(emptyList<String>(), remaining)
-    }
-
-    @Test
-    fun `canonical materialized views exist with unique index on id`() {
         val matviews =
             ctx
                 .fetch(
@@ -490,34 +437,12 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                     FROM pg_matviews
                     WHERE schemaname = 'public'
                       AND matviewname IN ('campground_canonical', 'campsite_canonical')
-                    ORDER BY matviewname
                     """.trimIndent(),
                 ).map { it.get("matviewname", String::class.java) }
 
-        assertEquals(
-            listOf("campground_canonical", "campsite_canonical"),
-            matviews,
-        )
-
-        assertEquals(1, uniqueIdIndexCount("campground_canonical"))
-        assertEquals(1, uniqueIdIndexCount("campsite_canonical"))
+        assertEquals(emptyList<String>(), oldTables)
+        assertEquals(emptyList<String>(), matviews)
     }
-
-    private fun uniqueIdIndexCount(matview: String): Int =
-        ctx
-            .fetchOne(
-                """
-                SELECT COUNT(*) AS n
-                FROM pg_indexes
-                WHERE schemaname = 'public'
-                  AND tablename = ?
-                  AND indexdef ILIKE 'CREATE UNIQUE INDEX%'
-                  AND indexdef ILIKE '%(id)'
-                """.trimIndent(),
-                matview,
-            )!!
-            .get("n", Number::class.java)
-            .toInt()
 
     private fun columnNames(tableName: String): List<String> =
         ctx

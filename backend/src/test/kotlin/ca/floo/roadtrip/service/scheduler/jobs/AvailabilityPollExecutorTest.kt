@@ -110,6 +110,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 source = "test",
                 providerRefJson = """{"recgov_id": "$campgroundId"}""",
                 cadenceOverrideSec = cadenceOverrideSec,
+                bookingProvider = "recgov",
+                bookingProviderRef = campgroundId,
             ).poiId
 
     /** Seeds one child reservable (site) linked to [poiId]. Returns its db id. */
@@ -191,7 +193,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
     private fun membershipFor(provider: AvailabilityProvider): AvailabilityPollerMembership {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("test" to provider))
+        val registry = AvailabilityProviderRegistry(mapOf("recgov" to provider))
         val targets =
             DbAvailabilityTargetResolver(
                 campsiteProviderRepo = CampsiteProviderRepo(ctx),
@@ -330,7 +332,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         DbAvailabilityTargetResolver(
             campsiteProviderRepo = CampsiteProviderRepo(ctx),
             campsitesRepo = CampsiteRepo(ctx),
-            availabilityProviders = AvailabilityProviderRegistry(mapOf("test" to provider)),
+            availabilityProviders = AvailabilityProviderRegistry(mapOf("recgov" to provider)),
             dateResolver = AvailabilityDateResolver(),
             pollerRepo = AvailabilityPollerRepo(ctx),
         )
@@ -386,7 +388,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = testProviderCooldown)),
     ): AvailabilityPollExecutor {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("test" to provider))
+        val registry = AvailabilityProviderRegistry(mapOf("recgov" to provider))
         val dateResolver = AvailabilityDateResolver(clock = testClock)
         val targets =
             DbAvailabilityTargetResolver(

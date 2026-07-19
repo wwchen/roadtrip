@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
+import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
@@ -22,43 +23,44 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
     }
 
     @Test
-    fun `preferredAvailabilityProvider falls back through recgov alias when campflare provider declines the ref`() {
-        val fixture =
-            ctx.seedCatalogPoi(
-                sourceId = "upper-pines-campflare-support",
+    fun `preferredAvailabilityProvider returns null when provider is disabled`() {
+        val campgroundId =
+            ctx.seedCampground(
                 name = "Upper Pines",
-                lon = -119.56,
-                lat = 37.74,
                 source = "campflare",
-                providerRefJson = """{"campflare_id":"upper-pines-campground-447"}""",
+                sourceId = "upper-pines-campground-447",
+                bookingProvider = "campflare",
+                bookingProviderRef = "upper-pines-campground-447",
+                sourcePayloadJson = """{"campflare_id":"upper-pines-campground-447"}""",
             )
-        linkCampgroundRef(
-            campgroundId = fixture.catalogId,
-            vendor = "recgov",
-            externalId = "recgov-232447",
-            payloadJson = """{"recgov_id":"232447"}""",
-        )
         val support =
             CampgroundAvailabilitySupport(
                 campsiteProviderRepo = CampsiteProviderRepo(ctx),
                 availabilityProviders =
                     AvailabilityProviderRegistry(
                         mapOf(
-                            "campflare" to DecliningCampflareProvider(),
-                            "recgov" to NoopRecgovProvider(),
+                            "campflare" to NoopCampflareProvider(enabled = false),
                         ),
                     ),
             )
 
-        assertEquals("recgov", support.preferredAvailabilityProvider(fixture.catalogId))
+        assertEquals(null, support.preferredAvailabilityProvider(campgroundId))
     }
 
     @Test
     fun `preferredAvailabilityProvider returns normalized provider id for the first provider ref`() {
-        val campground = seedDualVendorCampground()
+        val campgroundId =
+            ctx.seedCampground(
+                name = "Upper Pines",
+                source = "campflare",
+                sourceId = "upper-pines-campground-447",
+                bookingProvider = "campflare",
+                bookingProviderRef = "upper-pines-campground-447",
+                sourcePayloadJson = """{"campflare_id":"upper-pines-campground-447"}""",
+            )
         val support = supportFor()
 
-        assertEquals("campflare", support.preferredAvailabilityProvider(campground.campgroundId))
+        assertEquals("campflare", support.preferredAvailabilityProvider(campgroundId))
     }
 
     @Test
@@ -71,6 +73,8 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
                 lat = 37.74,
                 source = "recgov",
                 providerRefJson = """{"recgov_id":"232447"}""",
+                bookingProvider = "recgov",
+                bookingProviderRef = "232447",
             )
         val support = supportFor()
 
@@ -79,13 +83,18 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
 
     @Test
     fun `preferredAvailabilityProvider skips disabled providers`() {
-        val campground = seedDualVendorCampground()
-        val support =
-            supportFor(
-                campflareEnabled = false,
+        val campgroundId =
+            ctx.seedCampground(
+                name = "Upper Pines",
+                source = "campflare",
+                sourceId = "upper-pines-campground-447",
+                bookingProvider = "campflare",
+                bookingProviderRef = "upper-pines-campground-447",
+                sourcePayloadJson = """{"campflare_id":"upper-pines-campground-447"}""",
             )
+        val support = supportFor(campflareEnabled = false)
 
-        assertEquals("recgov", support.preferredAvailabilityProvider(campground.campgroundId))
+        assertEquals(null, support.preferredAvailabilityProvider(campgroundId))
     }
 
     private fun supportFor(campflareEnabled: Boolean = true): CampgroundAvailabilitySupport =
@@ -100,58 +109,6 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
                         ),
                 ),
         )
-
-    private data class MultiRefCampground(
-        val campgroundId: Long,
-    )
-
-    private fun seedDualVendorCampground(): MultiRefCampground {
-        val fixture =
-            ctx.seedCatalogPoi(
-                sourceId = "upper-pines-preferred-provider",
-                name = "Upper Pines",
-                lon = -119.56,
-                lat = 37.74,
-                source = "campflare",
-                providerRefJson = """{"campflare_id":"upper-pines-campground-447"}""",
-            )
-        linkCampgroundRef(
-            campgroundId = fixture.catalogId,
-            vendor = "recgov",
-            externalId = "recgov-232447",
-            payloadJson = """{"recgov_id":"232447"}""",
-        )
-        return MultiRefCampground(campgroundId = fixture.catalogId)
-    }
-
-    private fun linkCampgroundRef(
-        campgroundId: Long,
-        vendor: String,
-        externalId: String,
-        payloadJson: String,
-    ) {
-        val vendorRefId =
-            ctx
-                .fetchOne(
-                    """
-                    INSERT INTO vendor_refs (vendor, entity_type, external_id, payload)
-                    VALUES (?, 'campground', ?, ?::jsonb)
-                    RETURNING id
-                    """.trimIndent(),
-                    vendor,
-                    externalId,
-                    payloadJson,
-                )!!
-                .get("id", Long::class.java)
-        ctx.execute(
-            """
-            INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id)
-            VALUES (?, ?)
-            """.trimIndent(),
-            campgroundId,
-            vendorRefId,
-        )
-    }
 
     private class NoopRecgovProvider : AvailabilityProvider {
         override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV

@@ -38,6 +38,8 @@ class PollerBackfillTest : SharedDbTest() {
                 lat = 37.74,
                 source = "test",
                 providerRefJson = """{"recgov_id": "$campgroundId"}""",
+                bookingProvider = "recgov",
+                bookingProviderRef = campgroundId,
             ).poiId
 
     private fun seedCampsite(
@@ -73,7 +75,7 @@ class PollerBackfillTest : SharedDbTest() {
 
     private fun membership(): AvailabilityPollerMembership {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("test" to FakeProvider))
+        val registry = AvailabilityProviderRegistry(mapOf("recgov" to FakeProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 campsiteProviderRepo = CampsiteProviderRepo(ctx),
