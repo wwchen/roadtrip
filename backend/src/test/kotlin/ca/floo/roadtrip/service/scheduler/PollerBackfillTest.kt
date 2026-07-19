@@ -83,7 +83,7 @@ class PollerBackfillTest : SharedDbTest() {
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
-                dateResolver = AvailabilityDateResolver(),
+                dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         return AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets)

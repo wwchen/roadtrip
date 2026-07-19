@@ -111,7 +111,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             ctx = ctx,
             campsitesRepo = campsitesRepo,
             availabilityProviders = AvailabilityProviderRegistry(providers),
-            dateResolver = AvailabilityDateResolver(),
+            dateResolver = AvailabilityDateResolver(ctx),
             pollerRepo = AvailabilityPollerRepo(ctx),
         )
 

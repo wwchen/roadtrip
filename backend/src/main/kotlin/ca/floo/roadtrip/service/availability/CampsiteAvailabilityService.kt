@@ -3,7 +3,6 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.model.api.AvailabilityWatchCapabilitiesDto
 import ca.floo.roadtrip.model.api.PoiCampsitesAvailabilityResponseDto
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import java.time.LocalDate
 
@@ -12,7 +11,6 @@ private const val EMPTY_WINDOW_MAX_DAYS = 60
 private const val EMPTY_WINDOW_HORIZON_DAYS = 365
 
 internal class CampsiteAvailabilityService(
-    private val campsiteProviderRepo: CampsiteProviderRepo,
     private val campsitesRepo: CampsiteRepo,
     private val composer: CampsiteAvailabilityComposer,
     private val dateResolver: AvailabilityDateResolver,
@@ -28,7 +26,7 @@ internal class CampsiteAvailabilityService(
         val watchCapabilities = watchCapabilitiesFor(watchScopeCampsites, watchCapabilityService)
         val campsites = watchScopeCampsites.filterBySiteTypes(siteTypes)
         if (campsites.isEmpty()) {
-            val (start, end) = displayWindow(poiId, startDate, endDate, campsiteProviderRepo, dateResolver)
+            val (start, end) = displayWindow(poiId, startDate, endDate, dateResolver)
             return emptyPoiAvailability(poiId, start, end, watchCapabilities)
         }
 
@@ -49,7 +47,7 @@ internal class CampsiteAvailabilityService(
             )
         }
 
-        val (fallbackStart, fallbackEnd) = displayWindow(poiId, startDate, endDate, campsiteProviderRepo, dateResolver)
+        val (fallbackStart, fallbackEnd) = displayWindow(poiId, startDate, endDate, dateResolver)
         return PoiCampsitesAvailabilityResponseDto(
             poiId = poiId,
             startDate = fallbackStart.toString(),
@@ -83,11 +81,9 @@ private fun displayWindow(
     poiId: Long,
     startDate: LocalDate?,
     endDate: LocalDate?,
-    campsiteProviderRepo: CampsiteProviderRepo,
     dateResolver: AvailabilityDateResolver,
 ): Pair<LocalDate, LocalDate> {
-    val row = campsiteProviderRepo.findDateContext(poiId) ?: throw AvailabilityServiceError.NotFound
-    val dateContext = dateResolver.context(lat = row.lat, lng = row.lng)
+    val dateContext = dateResolver.contextForPoi(poiId)
     val window =
         dateResolver.resolveWindow(
             startDate = startDate,

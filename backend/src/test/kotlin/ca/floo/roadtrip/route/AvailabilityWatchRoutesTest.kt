@@ -81,7 +81,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
-                dateResolver = AvailabilityDateResolver(),
+                dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         return AvailabilityWatchService(
@@ -109,7 +109,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
-                dateResolver = AvailabilityDateResolver(),
+                dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         return AvailabilityWatchService(
@@ -130,7 +130,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = AvailabilityProviderRegistry(mapOf("recgov" to FakeRecgovProvider)),
-                dateResolver = AvailabilityDateResolver(),
+                dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         return WatchCapabilityService(
@@ -149,7 +149,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
-                dateResolver = AvailabilityDateResolver(),
+                dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         val scopeResolver = WatchScopeResolver(campsitesRepo)

@@ -25,7 +25,7 @@ private const val LONGITUDE_KEY = "longitude"
 
 internal class CampgroundService(
     private val campgroundRepo: CampgroundRepo,
-    private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
+    private val dateResolver: AvailabilityDateResolver,
     private val availabilitySupport: CampgroundAvailabilitySupport? = null,
     private val cta: CampgroundCta = CampgroundCta.default,
 ) : PoiDetailService {

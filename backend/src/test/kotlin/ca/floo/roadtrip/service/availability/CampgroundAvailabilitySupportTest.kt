@@ -4,13 +4,13 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.ref.DbRefResolver
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
@@ -35,7 +35,7 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
             )
         val support =
             CampgroundAvailabilitySupport(
-                campsiteProviderRepo = CampsiteProviderRepo(ctx),
+                refResolver = DbRefResolver(ctx),
                 availabilityProviders =
                     AvailabilityProviderRegistry(
                         mapOf(
@@ -99,7 +99,7 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
 
     private fun supportFor(campflareEnabled: Boolean = true): CampgroundAvailabilitySupport =
         CampgroundAvailabilitySupport(
-            campsiteProviderRepo = CampsiteProviderRepo(ctx),
+            refResolver = DbRefResolver(ctx),
             availabilityProviders =
                 AvailabilityProviderRegistry(
                     adaptersBySource =

@@ -57,7 +57,7 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = AvailabilityProviderRegistry(mapOf("recgov" to TemplateProvider)),
-                dateResolver = AvailabilityDateResolver(),
+                dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         val service = CampsiteCatalogService(campsiteProviderRepo, campsitesRepo, targets)
@@ -108,7 +108,7 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                     AvailabilityProviderRegistry(
                         mapOf("campflare" to CampflareAvailabilityProvider(unusedCampflareClient(), enabled = true)),
                     ),
-                dateResolver = AvailabilityDateResolver(),
+                dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         val service = CampsiteCatalogService(campsiteProviderRepo, campsitesRepo, targets)

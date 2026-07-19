@@ -21,7 +21,7 @@ private const val DEFAULT_AVAILABILITY_DAYS: Int = 7
 
 internal class CampsiteAvailabilityComposer(
     private val targets: AvailabilityTargetResolver,
-    private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
+    private val dateResolver: AvailabilityDateResolver,
     availabilityRepo: AvailabilityRepo? = null,
     private val snapshotFreshnessTtl: (BookingProvider) -> Duration = ::defaultSnapshotFreshnessTtl,
     private val failoverFetcher: FailoverAvailabilityFetcher,

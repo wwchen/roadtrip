@@ -95,7 +95,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
-                dateResolver = AvailabilityDateResolver(),
+                dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         val providers =
@@ -128,7 +128,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
-                dateResolver = AvailabilityDateResolver(),
+                dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         val scopeResolver = WatchScopeResolver(campsitesRepo)
@@ -180,7 +180,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
-                dateResolver = AvailabilityDateResolver(),
+                dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         val dispatcher =

@@ -141,7 +141,12 @@ class OpenApiSmokeTest {
             poiRepo = PoiServingRepo(ctx, enabledDataProviders = emptySet()),
             detailServices =
                 listOf(
-                    CampgroundService(CampgroundRepo(ctx)),
+                    CampgroundService(
+                        campgroundRepo = CampgroundRepo(ctx),
+                        dateResolver =
+                            ca.floo.roadtrip.service.availability
+                                .AvailabilityDateResolver(ctx),
+                    ),
                     TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
                     PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
                 ),

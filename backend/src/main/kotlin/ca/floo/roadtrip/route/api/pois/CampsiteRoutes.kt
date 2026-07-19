@@ -43,7 +43,7 @@ private const val IP_RATE_LIMIT_PER_MINUTE = 30
 internal fun Route.campsiteRoutes(
     ctx: DSLContext,
     availabilityProviders: AvailabilityProviderRegistry,
-    dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
+    dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(ctx),
     failoverFetcher: FailoverAvailabilityFetcher,
     watchCapabilities: WatchCapabilityService,
 ) {
@@ -64,7 +64,6 @@ internal fun Route.campsiteRoutes(
     val catalogService = CampsiteCatalogService(campsiteProviderRepo, campsitesRepo, targets)
     val availabilityService =
         CampsiteAvailabilityService(
-            campsiteProviderRepo = campsiteProviderRepo,
             campsitesRepo = campsitesRepo,
             composer =
                 CampsiteAvailabilityComposer(
