@@ -7,7 +7,6 @@ import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
@@ -47,20 +46,20 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 vendorId = "site-100",
                 name = "Site 100",
             )
-        val campsiteProviderRepo = CampsiteProviderRepo(ctx)
+        val refResolver =
+            ca.floo.roadtrip.service.ref
+                .DbRefResolver(ctx)
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                refResolver =
-                    ca.floo.roadtrip.service.ref
-                        .DbRefResolver(ctx),
+                refResolver = refResolver,
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = AvailabilityProviderRegistry(mapOf("recgov" to TemplateProvider)),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
-        val service = CampsiteCatalogService(campsiteProviderRepo, campsitesRepo, targets)
+        val service = CampsiteCatalogService(refResolver, campsitesRepo, targets)
 
         val response = service.campsitesForPoi(poiId, siteTypes = emptyList())
 
@@ -95,13 +94,13 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 bookingProvider = "campflare",
                 bookingProviderRef = "campflare-site-10",
             )
-        val campsiteProviderRepo = CampsiteProviderRepo(ctx)
+        val refResolver =
+            ca.floo.roadtrip.service.ref
+                .DbRefResolver(ctx)
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                refResolver =
-                    ca.floo.roadtrip.service.ref
-                        .DbRefResolver(ctx),
+                refResolver = refResolver,
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders =
@@ -111,7 +110,7 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
-        val service = CampsiteCatalogService(campsiteProviderRepo, campsitesRepo, targets)
+        val service = CampsiteCatalogService(refResolver, campsitesRepo, targets)
 
         val response = service.campsitesForPoi(poi.poiId, siteTypes = emptyList())
 

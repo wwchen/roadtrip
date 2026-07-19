@@ -3,11 +3,13 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.model.api.CampsiteSummarySchema
 import ca.floo.roadtrip.model.api.PoiCampsitesResponseSchema
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.service.ref.RefResolver
+import ca.floo.roadtrip.service.ref.RefValue
+import ca.floo.roadtrip.service.ref.resolve
 
 internal class CampsiteCatalogService(
-    private val campsiteProviderRepo: CampsiteProviderRepo,
+    private val refResolver: RefResolver,
     private val campsitesRepo: CampsiteRepo,
     private val targets: AvailabilityTargetResolver,
 ) {
@@ -15,7 +17,8 @@ internal class CampsiteCatalogService(
         poiId: Long,
         siteTypes: List<String>,
     ): PoiCampsitesResponseSchema {
-        if (!campsiteProviderRepo.campgroundExists(poiId)) throw AvailabilityServiceError.NotFound
+        val campgrounds = refResolver.resolve<RefValue.CampgroundId>(RefValue.PoiId(poiId))
+        if (campgrounds.isEmpty()) throw AvailabilityServiceError.NotFound
         val campsites =
             campsitesRepo
                 .findAvailabilityTargetsByPoi(poiId)

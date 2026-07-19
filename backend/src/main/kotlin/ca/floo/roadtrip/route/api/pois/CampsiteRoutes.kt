@@ -4,7 +4,6 @@ import ca.floo.roadtrip.model.api.AvailabilityErrorDto
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
@@ -48,7 +47,6 @@ internal fun Route.campsiteRoutes(
     watchCapabilities: WatchCapabilityService,
 ) {
     val campsitesRepo = CampsiteRepo(ctx)
-    val campsiteProviderRepo = CampsiteProviderRepo(ctx)
     val refResolver =
         ca.floo.roadtrip.service.ref
             .DbRefResolver(ctx)
@@ -61,7 +59,7 @@ internal fun Route.campsiteRoutes(
             dateResolver = dateResolver,
             pollerRepo = AvailabilityPollerRepo(ctx),
         )
-    val catalogService = CampsiteCatalogService(campsiteProviderRepo, campsitesRepo, targets)
+    val catalogService = CampsiteCatalogService(refResolver, campsitesRepo, targets)
     val availabilityService =
         CampsiteAvailabilityService(
             campsitesRepo = campsitesRepo,
