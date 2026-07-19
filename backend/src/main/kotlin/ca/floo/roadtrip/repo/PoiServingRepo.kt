@@ -227,7 +227,12 @@ internal class PoiServingRepo(
     ): Map<String, Int> {
         if (cats.isEmpty()) return emptyMap()
         val placeholders = cats.joinToString(",") { "?" }
-        val providerPlaceholders = enabledDataProviders.joinToString(",") { "?" }
+        val providerFilter =
+            if (enabledDataProviders.isEmpty()) {
+                "FALSE"
+            } else {
+                "cg.data_provider IN (${enabledDataProviders.joinToString(",") { "?" }})"
+            }
         val sql =
             """
             SELECT p.poi_type AS category, COUNT(*) AS n
@@ -239,7 +244,7 @@ internal class PoiServingRepo(
               AND p.geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
               AND (
                 p.poi_type <> 'campground'
-                OR cg.data_provider IN ($providerPlaceholders)
+                OR $providerFilter
               )
             GROUP BY p.poi_type
             """.trimIndent()
@@ -284,7 +289,12 @@ internal class PoiServingRepo(
 
         val dx = (bbox.east - bbox.west) / SAMPLE_GRID_DIM
         val dy = (bbox.north - bbox.south) / SAMPLE_GRID_DIM
-        val providerPlaceholders = enabledDataProviders.joinToString(",") { "?" }
+        val providerFilter =
+            if (enabledDataProviders.isEmpty()) {
+                "FALSE"
+            } else {
+                "cg.data_provider IN (${enabledDataProviders.joinToString(",") { "?" }})"
+            }
         val sql =
             buildString {
                 cats.forEachIndexed { idx, _ ->
@@ -312,7 +322,7 @@ internal class PoiServingRepo(
                           AND p.geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
                           AND (
                             ? <> 'campground'
-                            OR cg.data_provider IN ($providerPlaceholders)
+                            OR $providerFilter
                           )
                         """.trimIndent(),
                     )

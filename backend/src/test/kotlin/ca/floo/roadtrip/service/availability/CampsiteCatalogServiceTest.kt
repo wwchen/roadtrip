@@ -37,6 +37,8 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                     lon = -119.56,
                     lat = 37.74,
                     providerRefJson = """{"recgov_id": "232447"}""",
+                    bookingProvider = "recgov",
+                    bookingProviderRef = "232447",
                 ).poiId
         val campsiteId =
             ctx.seedCampsite(
@@ -51,7 +53,7 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
             DbAvailabilityTargetResolver(
                 campsiteProviderRepo = campsiteProviderRepo,
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = AvailabilityProviderRegistry(mapOf("test" to TemplateProvider)),
+                availabilityProviders = AvailabilityProviderRegistry(mapOf("recgov" to TemplateProvider)),
                 dateResolver = AvailabilityDateResolver(),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
@@ -76,6 +78,8 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 lat = 37.87,
                 source = "campflare",
                 providerRefJson = """{"campflare_id":"white-wolf-campground-567"}""",
+                bookingProvider = "campflare",
+                bookingProviderRef = "white-wolf-campground-567",
             )
         val campsiteId =
             ctx.seedCampsite(
@@ -83,8 +87,10 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 vendor = "campflare",
                 vendorId = "campflare-site-10",
                 name = "10",
-                providerRefJson = """{"campflare_id":"campflare-site-10","campground_id":"white-wolf-campground-567"}""",
-                sourcePayloadJson = """{"reservation_url":"https://www.recreation.gov/camping/campsites/10174516"}""",
+                sourcePayloadJson =
+                    """{"campflare_id":"campflare-site-10","campground_id":"white-wolf-campground-567","reservation_url":"https://www.recreation.gov/camping/campsites/10174516"}""",
+                bookingProvider = "campflare",
+                bookingProviderRef = "campflare-site-10",
             )
         val campsiteProviderRepo = CampsiteProviderRepo(ctx)
         val campsitesRepo = CampsiteRepo(ctx)

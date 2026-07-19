@@ -106,30 +106,14 @@ class PoiServiceTest : SharedDbTest() {
                 agency = "USDA Forest Service",
                 region = "CA",
                 country = "US",
-                providerRefJson = """{"catalog_id":"recgov-232869"}""",
+                providerRefJson = """{"recgov_id":"232869"}""",
+                bookingProvider = "recgov",
+                bookingProviderRef = "232869",
             )
         ctx.execute(
             "UPDATE campgrounds SET reservation_url = ? WHERE id = ?",
             "https://www.recreation.gov/camping/campgrounds/232869",
             fixture.catalogId,
-        )
-        val recgovVendorRefId =
-            ctx
-                .fetchOne(
-                    """
-                    INSERT INTO vendor_refs (
-                      vendor, entity_type, external_id, external_name, payload
-                    ) VALUES (
-                      'recgov', 'campground', '232869', 'Cold Creek', '{"recgov_id":"232869"}'::jsonb
-                    )
-                    RETURNING id
-                    """.trimIndent(),
-                )!!
-                .get("id", Long::class.java)
-        ctx.execute(
-            "INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id) VALUES (?, ?)",
-            fixture.catalogId,
-            recgovVendorRefId,
         )
 
         val feature = poiService().poiDetail(fixture.poiId)
@@ -154,22 +138,9 @@ class PoiServiceTest : SharedDbTest() {
                 lat = 37.74,
                 source = "campflare",
                 providerRefJson = """{"campflare_id":"upper-pines-campground-447"}""",
+                bookingProvider = "campflare",
+                bookingProviderRef = "upper-pines-campground-447",
             )
-        val recgovVendorRefId =
-            ctx
-                .fetchOne(
-                    """
-                    INSERT INTO vendor_refs (vendor, entity_type, external_id, payload)
-                    VALUES ('recgov', 'campground', 'recgov-232447', '{"recgov_id":"232447"}'::jsonb)
-                    RETURNING id
-                    """.trimIndent(),
-                )!!
-                .get("id", Long::class.java)
-        ctx.execute(
-            "INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id) VALUES (?, ?)",
-            fixture.catalogId,
-            recgovVendorRefId,
-        )
 
         val defaultRef =
             Json
@@ -236,11 +207,13 @@ class PoiServiceTest : SharedDbTest() {
                 country = "CA",
                 providerRefJson = providerRefJson,
                 propertiesJson = propertiesJson,
+                bookingProvider = SOURCE,
+                bookingProviderRef = "lake-louise",
             ).poiId
 
     private fun poiService(): PoiService =
         PoiService(
-            poiRepo = PoiServingRepo(ctx, enabledDataProviders = emptySet()),
+            poiRepo = PoiServingRepo(ctx, enabledDataProviders = setOf(SOURCE, "campflare", "recgov", "test")),
             detailServices =
                 listOf(
                     CampgroundService(CampgroundRepo(ctx)),

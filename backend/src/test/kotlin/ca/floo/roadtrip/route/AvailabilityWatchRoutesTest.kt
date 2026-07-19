@@ -97,7 +97,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
      */
     private fun watchServiceWithRecgov(): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("test" to FakeRecgovProvider))
+        val registry = AvailabilityProviderRegistry(mapOf("recgov" to FakeRecgovProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 campsiteProviderRepo = CampsiteProviderRepo(ctx),
@@ -120,7 +120,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             DbAvailabilityTargetResolver(
                 campsiteProviderRepo = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = AvailabilityProviderRegistry(mapOf("test" to FakeRecgovProvider)),
+                availabilityProviders = AvailabilityProviderRegistry(mapOf("recgov" to FakeRecgovProvider)),
                 dateResolver = AvailabilityDateResolver(),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
@@ -899,7 +899,14 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     )
                 }
             }
-            val poiId = seedPoi(sourceId = "p-capabilities", name = "Capabilities", providerRefJson = """{"recgov_id": "232447"}""")
+            val poiId =
+                seedPoi(
+                    sourceId = "p-capabilities",
+                    name = "Capabilities",
+                    providerRefJson = """{"recgov_id": "232447"}""",
+                    bookingProvider = "recgov",
+                    bookingProviderRef = "232447",
+                )
             linkCampsiteToPoi(seedCampsite(vendorId = "cap-100"), poiId)
             val created =
                 client.post(WATCHES_PATH) {
@@ -936,7 +943,14 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             }
             // POI with a resolvable recgov provider_ref + a child reservable so the
             // watch resolves to exactly one (recgov, 232447) poller.
-            val poiId = seedPoi(sourceId = "p99", name = "Atomic", providerRefJson = """{"recgov_id": "232447"}""")
+            val poiId =
+                seedPoi(
+                    sourceId = "p99",
+                    name = "Atomic",
+                    providerRefJson = """{"recgov_id": "232447"}""",
+                    bookingProvider = "recgov",
+                    bookingProviderRef = "232447",
+                )
             linkCampsiteToPoi(seedCampsite(vendorId = "100"), poiId)
             val createBody =
                 """
@@ -976,6 +990,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         sourceId: String,
         name: String,
         providerRefJson: String? = null,
+        bookingProvider: String? = null,
+        bookingProviderRef: String? = null,
     ): Long =
         ctx
             .seedCatalogPoi(
@@ -985,6 +1001,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 lat = 37.74,
                 source = "test",
                 providerRefJson = providerRefJson,
+                bookingProvider = bookingProvider,
+                bookingProviderRef = bookingProviderRef,
             ).poiId
 
     private fun seedCampsite(
