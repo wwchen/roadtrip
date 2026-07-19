@@ -361,6 +361,17 @@ poi_data:
         args:
           host: camping.bcparks.ca
 
+  - name: BC Provincial Parks (Merged)
+    category: campground
+    subcategory: provincial
+    agency: BC Parks
+    etls:
+      - slug: bcparks-merge
+        adapter: BcParksMergeEtl
+        inputs: [aspira-maps-bc, bcparks-strapi, aspira-inventory-bc, aspira-dictionaries-bc]
+        args:
+          host: camping.bcparks.ca
+
   - name: Parks Canada
     category: campground
     subcategory: federal
