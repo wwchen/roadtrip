@@ -216,7 +216,12 @@ class PoiServiceTest : SharedDbTest() {
             poiRepo = PoiServingRepo(ctx, enabledDataProviders = setOf(SOURCE, "campflare", "recgov", "test")),
             detailServices =
                 listOf(
-                    CampgroundService(CampgroundRepo(ctx)),
+                    CampgroundService(
+                        campgroundRepo = CampgroundRepo(ctx),
+                        dateResolver =
+                            ca.floo.roadtrip.service.availability
+                                .AvailabilityDateResolver(ctx),
+                    ),
                     TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
                     PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
                 ),

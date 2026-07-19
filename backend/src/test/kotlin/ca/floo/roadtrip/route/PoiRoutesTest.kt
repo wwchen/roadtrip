@@ -9,6 +9,7 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.refreshCanonicalCatalogViews
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.route.api.pois.poiRoutes
+import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.POI_LIMIT
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
@@ -43,7 +44,10 @@ class PoiRoutesTest : SharedDbTest() {
             poiRepo = PoiServingRepo(ctx, enabledDataProviders = setOf("test")),
             detailServices =
                 listOf(
-                    CampgroundService(CampgroundRepo(ctx)),
+                    CampgroundService(
+                        campgroundRepo = CampgroundRepo(ctx),
+                        dateResolver = AvailabilityDateResolver(ctx),
+                    ),
                     TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
                     PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),
                 ),

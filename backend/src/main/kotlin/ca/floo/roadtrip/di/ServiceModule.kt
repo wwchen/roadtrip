@@ -12,7 +12,6 @@ import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
@@ -106,7 +105,7 @@ val serviceModule =
 
         single {
             CoordinateTimeZones.warmUp()
-            AvailabilityDateResolver()
+            AvailabilityDateResolver(ctx = get<DSLContext>())
         }
         single { WatchScopeResolver(get<CampsiteRepo>()) }
         single {
@@ -201,7 +200,7 @@ val serviceModule =
         single { FailoverAvailabilityFetcher(cooldowns = get<ProviderCooldownTracker>()) }
         single {
             CampgroundAvailabilitySupport(
-                campsiteProviderRepo = get<CampsiteProviderRepo>(),
+                refResolver = get<ca.floo.roadtrip.service.ref.RefResolver>(),
                 availabilityProviders = get(),
             )
         }

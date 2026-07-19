@@ -201,7 +201,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
-                dateResolver = AvailabilityDateResolver(),
+                dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         return AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets)
@@ -338,7 +338,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             ctx = ctx,
             campsitesRepo = CampsiteRepo(ctx),
             availabilityProviders = AvailabilityProviderRegistry(mapOf("recgov" to provider)),
-            dateResolver = AvailabilityDateResolver(),
+            dateResolver = AvailabilityDateResolver(ctx),
             pollerRepo = AvailabilityPollerRepo(ctx),
         )
 
@@ -358,7 +358,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     ctx = ctx,
                     campsitesRepo = CampsiteRepo(ctx),
                     availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
-                    dateResolver = AvailabilityDateResolver(),
+                    dateResolver = AvailabilityDateResolver(ctx),
                     pollerRepo = AvailabilityPollerRepo(ctx),
                 ),
             poiRepo = PoiServingRepo(ctx, enabledDataProviders = emptySet()),
@@ -397,7 +397,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     ): AvailabilityPollExecutor {
         val campsitesRepo = CampsiteRepo(ctx)
         val registry = AvailabilityProviderRegistry(mapOf("recgov" to provider))
-        val dateResolver = AvailabilityDateResolver(clock = testClock)
+        val dateResolver = AvailabilityDateResolver(ctx = ctx, clock = testClock)
         val targets =
             DbAvailabilityTargetResolver(
                 refResolver =

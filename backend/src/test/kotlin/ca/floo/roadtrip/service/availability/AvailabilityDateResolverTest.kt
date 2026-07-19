@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.repo.SharedDbTest
 import org.junit.jupiter.api.Test
 import java.time.Clock
 import java.time.Instant
@@ -13,9 +14,12 @@ import kotlin.test.assertNull
  * (the target-local earliest bookable date) and capped by the vendor,
  * deliberately independent of any watch's dates.
  */
-class AvailabilityDateResolverTest {
+class AvailabilityDateResolverTest : SharedDbTest() {
     private fun resolverAt(instant: String): AvailabilityDateResolver =
-        AvailabilityDateResolver(clock = Clock.fixed(Instant.parse(instant), ZoneOffset.UTC))
+        AvailabilityDateResolver(
+            ctx = ctx,
+            clock = Clock.fixed(Instant.parse(instant), ZoneOffset.UTC),
+        )
 
     @Test
     fun `polling window starts at the earliest bookable date and spans the vendor cap`() {
