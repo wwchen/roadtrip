@@ -3,10 +3,10 @@ package ca.floo.roadtrip.service.etl.vendors.aspira
 import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.DataProvider
-import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
+import ca.floo.roadtrip.model.etl.CampgroundCampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.service.etl.framework.CampgroundCampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
-import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
@@ -54,7 +54,7 @@ class AspiraJoinByNameEtl(
     override val etlSlug: String,
     private val dataProviderValue: DataProvider,
     private val aspiraTenant: String,
-) : SourceEtl<AspiraJoinDto, CampgroundEtlOutput> {
+) : CampgroundCampsiteEtl<AspiraJoinDto> {
     private val log = LoggerFactory.getLogger(javaClass)
     override val multiPart: Boolean = true
 
@@ -103,7 +103,7 @@ class AspiraJoinByNameEtl(
     override fun transform(
         dto: AspiraJoinDto,
         ctx: TransformCtx,
-    ): CampgroundEtlOutput {
+    ): CampgroundCampsiteEtlOutput {
         val host = ctx.argFor(etlSlug, "host") ?: error("$etlSlug: missing args.host")
         val subcategory = ctx.subcategoryFor(etlSlug)
         val agency = ctx.requiredConstantAgency(etlSlug)
@@ -257,7 +257,7 @@ class AspiraJoinByNameEtl(
             skippedNonBookable,
             missSamples.take(5),
         )
-        return CampgroundEtlOutput(campgrounds = campgrounds)
+        return CampgroundCampsiteEtlOutput(campgrounds = campgrounds, campsites = emptyList())
     }
 
     private fun aspiraVendorRefId(leaf: AspiraLeaf): String = "$ASPIRA_VENDOR_REF_PREFIX${leaf.transactionLocationId}-${leaf.mapId}"

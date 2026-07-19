@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
 import ca.floo.roadtrip.model.domain.DataProvider
-import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
+import ca.floo.roadtrip.model.etl.CampgroundCampsiteEtlOutput
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.etl.PlanetFitnessLocationEtlOutput
 import ca.floo.roadtrip.model.etl.TeslaSuperchargerEtlOutput
@@ -36,8 +36,8 @@ import java.io.File
 //      the per-run map for later siblings to consume. No disk persistence —
 //      every ETL is f(inputs) → output, so re-running an import recomputes.
 //   4. If terminal, persist the supported catalog output:
-//        - CampgroundEtlOutput -> canonical campgrounds + lean POI wrappers
-//        - CampsiteEtlOutput   -> canonical campsites
+//        - CampgroundCampsiteEtlOutput -> canonical campgrounds + campsites + lean POI wrappers
+//        - CampsiteEtlOutput   -> canonical campsites (standalone)
 //        - TeslaSuperchargerEtlOutput -> canonical Tesla locations + lean POI wrappers
 //        - PlanetFitnessLocationEtlOutput -> canonical PF locations + lean POI wrappers
 //
@@ -289,8 +289,8 @@ open class EtlOrchestrator(
         val output = concrete.transform(validated, transformCtx)
         val ups =
             when (output) {
-                is CampgroundEtlOutput ->
-                    campgroundRepo.upsertCampgrounds(output.campgrounds, source = concrete.etlSlug)
+                is CampgroundCampsiteEtlOutput ->
+                    persistCampgroundCampsiteOutput(output, concrete.etlSlug)
                 is CampsiteEtlOutput ->
                     campsiteRepo.upsertCampsites(output.campsites, source = concrete.etlSlug)
                 is TeslaSuperchargerEtlOutput ->
@@ -328,9 +328,24 @@ open class EtlOrchestrator(
         )
     }
 
+    private fun persistCampgroundCampsiteOutput(
+        output: CampgroundCampsiteEtlOutput,
+        source: String,
+    ): CatalogUpsertResult {
+        val cgResult = campgroundRepo.upsertCampgrounds(output.campgrounds, source = source)
+        val csResult = campsiteRepo.upsertCampsites(output.campsites, source = source)
+        return CatalogUpsertResult(
+            runId = cgResult.runId,
+            seenCount = cgResult.seenCount + csResult.seenCount,
+            upsertedCount = cgResult.upsertedCount + csResult.upsertedCount,
+            skippedCount = cgResult.skippedCount + csResult.skippedCount,
+            sweptCount = cgResult.sweptCount + csResult.sweptCount,
+        )
+    }
+
     private fun outputCount(output: Any): Int =
         when (output) {
-            is CampgroundEtlOutput -> output.campgrounds.size
+            is CampgroundCampsiteEtlOutput -> output.campgrounds.size + output.campsites.size
             is CampsiteEtlOutput -> output.campsites.size
             is TeslaSuperchargerEtlOutput -> output.superchargers.size
             is PlanetFitnessLocationEtlOutput -> output.locations.size

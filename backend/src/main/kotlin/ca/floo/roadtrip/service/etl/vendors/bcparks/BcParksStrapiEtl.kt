@@ -2,11 +2,11 @@ package ca.floo.roadtrip.service.etl.vendors.bcparks
 
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.DataProvider
-import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
+import ca.floo.roadtrip.model.etl.CampgroundCampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.service.etl.framework.CampgroundCampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
-import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -32,7 +32,7 @@ import java.time.Instant
 // Bucketed under campground/provincial (vs the older state-park
 // categorization) so BC Parks dots show up alongside Alberta Parks +
 // US federal/state campgrounds on the same FE legend layer.
-class BcParksStrapiEtl : SourceEtl<BcParksDto, CampgroundEtlOutput> {
+class BcParksStrapiEtl : CampgroundCampsiteEtl<BcParksDto> {
     override val etlSlug = "bcparks-strapi"
     override val multiPart: Boolean = true
 
@@ -69,13 +69,14 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, CampgroundEtlOutput> {
     override fun transform(
         dto: BcParksDto,
         ctx: TransformCtx,
-    ): CampgroundEtlOutput {
+    ): CampgroundCampsiteEtlOutput {
         val bucket = ctx.subcategoryFor(etlSlug)
-        return CampgroundEtlOutput(
+        return CampgroundCampsiteEtlOutput(
             campgrounds =
                 dto.rows.mapNotNull { row ->
                     transformRow(row, dto.rawById[row.orcs], bucket)
                 },
+            campsites = emptyList(),
         )
     }
 
