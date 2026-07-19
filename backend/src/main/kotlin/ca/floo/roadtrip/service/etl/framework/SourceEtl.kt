@@ -7,9 +7,10 @@ import ca.floo.roadtrip.model.metadata.ValidationResult
 //
 // Inputs: declared in YAML as the etl's `inputs:` list. Each input slug
 // resolves to either a data_source (whose newest envelope(s) get loaded
-// from data/raw/<slug>/) or an earlier sibling etl in the same poi_data
-// row (whose typed payload gets loaded from data/etl-out/<slug>/). The
-// orchestrator hands the ETL an InputBundle keyed by slug.
+// from its registry output_dir_prefix) or an earlier sibling etl in the
+// same poi_data row (whose typed payload gets loaded from
+// data/etl-out/<slug>/). The orchestrator hands the ETL an InputBundle keyed
+// by slug.
 //
 // Outputs: an intermediate ETL returns any @Serializable payload. A terminal
 // ETL returns one of the canonical catalog output DTOs; the orchestrator

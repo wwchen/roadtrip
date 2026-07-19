@@ -16,7 +16,10 @@ import kotlin.test.assertEquals
 
 class EtlOrchestratorCampflareTest : SharedDbTest() {
     @TempDir
-    lateinit var rawDir: File
+    lateinit var staticDir: File
+
+    private val rawDir: File
+        get() = staticDir.resolve("data/raw")
 
     @BeforeEach
     fun reset() {
@@ -56,7 +59,13 @@ class EtlOrchestratorCampflareTest : SharedDbTest() {
                 """.trimIndent(),
         )
 
-        val orchestrator = EtlOrchestrator(ctx, rawDir, registry())
+        val orchestrator =
+            EtlOrchestrator(
+                ctx = ctx,
+                rawDir = rawDir,
+                poiRegistry = registry(),
+                staticDir = staticDir,
+            )
 
         val campgrounds = orchestrator.runPoiData("Campflare Campgrounds")
         val campsites = orchestrator.runCampsiteData("Campflare Campsites")

@@ -1,7 +1,7 @@
 # backend/src/main/resources/poi-registry.yaml
 #
 # Four sections.
-# 1. data_sources — fetchers. Pure network acquisition. Output to data/raw/<slug>/.
+# 1. data_sources — fetchers. Pure network acquisition. Output to output_dir_prefix.
 #    Run outside the backend process through scripts/poll_raw.py / make data-fetch.
 #    Unreachable upstreams produce failed host fetch commands, not boot failures.
 # 2. poi_data — POI-backed catalog datasets. Each row carries `name`,
@@ -472,4 +472,3 @@ campsite_data:
       - slug: reserveamerica-ny-campsites
         adapter: ReserveAmericaSitesEtl
         inputs: [reserveamerica-campsites-ny]
-

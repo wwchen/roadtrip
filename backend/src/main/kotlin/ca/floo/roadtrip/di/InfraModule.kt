@@ -124,6 +124,7 @@ fun infraModule(baseConfig: ApplicationConfig) =
                         ctx = ctx,
                         rawDir = staticDir.resolveConfiguredPath(RAW_DATA_DIR),
                         poiRegistry = get(),
+                        staticDir = staticDir,
                     ),
                 importTargets = importTargetsFromRegistry(get()),
             )
