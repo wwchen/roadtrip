@@ -19,7 +19,6 @@ import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
@@ -196,7 +195,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         val registry = AvailabilityProviderRegistry(mapOf("recgov" to provider))
         val targets =
             DbAvailabilityTargetResolver(
-                campsiteProviderRepo = CampsiteProviderRepo(ctx),
+                refResolver =
+                    ca.floo.roadtrip.service.ref
+                        .DbRefResolver(ctx),
+                ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
@@ -330,7 +332,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
     private fun targetsFor(provider: AvailabilityProvider): DbAvailabilityTargetResolver =
         DbAvailabilityTargetResolver(
-            campsiteProviderRepo = CampsiteProviderRepo(ctx),
+            refResolver =
+                ca.floo.roadtrip.service.ref
+                    .DbRefResolver(ctx),
+            ctx = ctx,
             campsitesRepo = CampsiteRepo(ctx),
             availabilityProviders = AvailabilityProviderRegistry(mapOf("recgov" to provider)),
             dateResolver = AvailabilityDateResolver(),
@@ -347,7 +352,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             watchRepo = AvailabilityWatchRepo(ctx),
             targets =
                 DbAvailabilityTargetResolver(
-                    campsiteProviderRepo = CampsiteProviderRepo(ctx),
+                    refResolver =
+                        ca.floo.roadtrip.service.ref
+                            .DbRefResolver(ctx),
+                    ctx = ctx,
                     campsitesRepo = CampsiteRepo(ctx),
                     availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
                     dateResolver = AvailabilityDateResolver(),
@@ -392,7 +400,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         val dateResolver = AvailabilityDateResolver(clock = testClock)
         val targets =
             DbAvailabilityTargetResolver(
-                campsiteProviderRepo = CampsiteProviderRepo(ctx),
+                refResolver =
+                    ca.floo.roadtrip.service.ref
+                        .DbRefResolver(ctx),
+                ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
                 dateResolver = dateResolver,

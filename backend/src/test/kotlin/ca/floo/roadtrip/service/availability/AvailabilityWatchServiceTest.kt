@@ -13,7 +13,6 @@ import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
@@ -90,7 +89,10 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val registry = AvailabilityProviderRegistry(mapOf("recgov" to availabilityProvider))
         val targets =
             DbAvailabilityTargetResolver(
-                campsiteProviderRepo = CampsiteProviderRepo(ctx),
+                refResolver =
+                    ca.floo.roadtrip.service.ref
+                        .DbRefResolver(ctx),
+                ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
@@ -120,7 +122,10 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val registry = AvailabilityProviderRegistry(mapOf("recgov" to availabilityProvider))
         val targets =
             DbAvailabilityTargetResolver(
-                campsiteProviderRepo = CampsiteProviderRepo(ctx),
+                refResolver =
+                    ca.floo.roadtrip.service.ref
+                        .DbRefResolver(ctx),
+                ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
@@ -169,7 +174,10 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val registry = AvailabilityProviderRegistry(mapOf("recgov" to FakeProvider))
         val targets =
             DbAvailabilityTargetResolver(
-                campsiteProviderRepo = CampsiteProviderRepo(ctx),
+                refResolver =
+                    ca.floo.roadtrip.service.ref
+                        .DbRefResolver(ctx),
+                ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),

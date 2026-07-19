@@ -5,7 +5,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
@@ -78,7 +77,10 @@ class PollerBackfillTest : SharedDbTest() {
         val registry = AvailabilityProviderRegistry(mapOf("recgov" to FakeProvider))
         val targets =
             DbAvailabilityTargetResolver(
-                campsiteProviderRepo = CampsiteProviderRepo(ctx),
+                refResolver =
+                    ca.floo.roadtrip.service.ref
+                        .DbRefResolver(ctx),
+                ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),

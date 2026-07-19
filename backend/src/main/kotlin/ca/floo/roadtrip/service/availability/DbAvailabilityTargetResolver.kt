@@ -3,54 +3,57 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
-import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
-import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
-import ca.floo.roadtrip.service.availability.provider.bookingProvider
+import ca.floo.roadtrip.service.ref.RefResolver
+import ca.floo.roadtrip.service.ref.RefValue
+import ca.floo.roadtrip.service.ref.resolve
+import org.jooq.DSLContext
 
 internal class DbAvailabilityTargetResolver(
-    private val campsiteProviderRepo: CampsiteProviderRepo,
+    private val refResolver: RefResolver,
+    private val ctx: DSLContext,
     private val campsitesRepo: CampsiteRepo,
     private val availabilityProviders: AvailabilityProviderRegistry,
     private val dateResolver: AvailabilityDateResolver,
     private val pollerRepo: AvailabilityPollerRepo,
 ) : AvailabilityTargetResolver {
-    private data class ResolvedRow(
-        val poiId: Long,
-        val row: CampsiteProviderRefRow,
-        val candidate: ProviderCandidate,
-    )
-
     override fun resolve(campsite: CampsiteAvailabilityTarget): ResolvedAvailabilityTarget? {
         val poiIds = campsitesRepo.poiIdsForCampsite(campsite.id)
         if (poiIds.isEmpty()) return null
 
-        val providerRefsByPoiId = campsiteProviderRepo.findProviderRefCandidates(poiIds)
-        val resolvedRows: List<ResolvedRow> =
-            poiIds
-                .asSequence()
-                .flatMap { poiId -> providerRefsByPoiId[poiId].orEmpty().asSequence().map { row -> poiId to row } }
-                .mapNotNull { (poiId, row) ->
-                    val candidate = buildCandidate(row, campsite) ?: return@mapNotNull null
-                    ResolvedRow(poiId = poiId, row = row, candidate = candidate)
-                }.toList()
+        val candidates =
+            poiIds.flatMap { poiId ->
+                val bookingRefs = refResolver.resolve<RefValue.CampgroundBookingRef>(RefValue.PoiId(poiId))
+                bookingRefs.mapNotNull { bookingRefValue ->
+                    val provider =
+                        availabilityProviders.forBooking(bookingRefValue.ref.provider, bookingRefValue.ref)
+                            ?: return@mapNotNull null
+                    Triple(poiId, bookingRefValue.ref, provider)
+                }
+            }
 
-        val head = resolvedRows.firstOrNull() ?: return null
+        val (poiId, parentRef, provider) = candidates.firstOrNull() ?: return null
+        val catalogRef = buildCatalogRef(campsite, parentRef)
+        val poiLatLng = getPoiLatLng(poiId)
 
         return ResolvedAvailabilityTarget(
             campsite = campsite,
-            provider = head.candidate.provider,
-            parentRef = head.candidate.parentRef,
-            catalogRef = head.candidate.catalogRef,
-            parentPoiId = head.poiId,
-            dateContext = dateResolver.context(lat = head.row.lat, lng = head.row.lng),
-            candidates = resolvedRows.map { it.candidate },
+            provider = provider,
+            parentRef = parentRef,
+            catalogRef = catalogRef,
+            parentPoiId = poiId,
+            dateContext = dateResolver.context(lat = poiLatLng?.first, lng = poiLatLng?.second),
+            candidates =
+                candidates.map { (_, ref, prov) ->
+                    ProviderCandidate(
+                        provider = prov,
+                        parentRef = ref,
+                        catalogRef = buildCatalogRef(campsite, ref),
+                    )
+                },
         )
     }
 
@@ -94,68 +97,54 @@ internal class DbAvailabilityTargetResolver(
         )
     }
 
-    private fun buildCandidate(
-        row: CampsiteProviderRefRow,
+    private fun buildCatalogRef(
         campsite: CampsiteAvailabilityTarget,
-    ): ProviderCandidate? {
-        val (ref, provider) = resolveFromBookingProviderRef(row) ?: resolveFromLegacyJson(row) ?: return null
-        return ProviderCandidate(
-            provider = provider,
-            parentRef = ref,
-            catalogRef = catalogRefFor(campsite, provider.id),
-        )
-    }
-
-    private fun resolveFromBookingProviderRef(row: CampsiteProviderRefRow): Pair<BookingProviderRef, AvailabilityProvider>? {
-        val bp = row.bookingProvider ?: return null
-        val bpRef = row.bookingProviderRef ?: return null
-        val bookingRef = BookingProviderRef.parse(bp, bpRef) ?: return null
-        val provider = availabilityProviders.forBooking(bp, bookingRef) ?: return null
-        return bookingRef to provider
-    }
-
-    private fun resolveFromLegacyJson(row: CampsiteProviderRefRow): Pair<BookingProviderRef, AvailabilityProvider>? {
-        val ref = ProviderRefParser.parse(row.providerRefJson) ?: return null
-        val provider = availabilityProviders.forPoi(row, ref) ?: return null
-        return ref to provider
-    }
-
-    private fun catalogRefFor(
-        campsite: CampsiteAvailabilityTarget,
-        providerId: BookingProvider,
-    ): CatalogCampsiteRef {
-        val fallback = campsite.toCatalogCampsiteRef()
-        val ref =
-            campsiteProviderRepo
-                .findCampsiteProviderRefs(campsite.id)
-                .asSequence()
-                .mapNotNull { ProviderRefParser.parse(it.providerRefJson) }
-                .firstOrNull { it.bookingProvider() == providerId }
-                ?: return fallback
-        return ref.toCatalogCampsiteRef(campsiteId = campsite.id, fallback = fallback)
-    }
-
-    private fun BookingProviderRef.toCatalogCampsiteRef(
-        campsiteId: Long,
-        fallback: CatalogCampsiteRef,
+        parentRef: BookingProviderRef,
     ): CatalogCampsiteRef =
-        when (this) {
+        when (parentRef) {
             is BookingProviderRef.RecGov ->
                 CatalogCampsiteRef(
-                    campsiteId = campsiteId,
-                    vendorId = facilityId,
+                    campsiteId = campsite.id,
+                    vendorId = campsite.vendorId,
                 )
             is BookingProviderRef.Campflare ->
                 CatalogCampsiteRef(
-                    campsiteId = campsiteId,
-                    vendorId = campgroundId,
+                    campsiteId = campsite.id,
+                    vendorId = campsite.vendorId,
                 )
             is BookingProviderRef.Aspira ->
-                fallback.copy(
-                    campsiteId = campsiteId,
-                    mapId = mapId,
-                    resourceLocationId = resourceLocationId,
+                CatalogCampsiteRef(
+                    campsiteId = campsite.id,
+                    vendorId = campsite.vendorId,
+                    mapId = parentRef.mapId,
+                    resourceLocationId = parentRef.resourceLocationId,
                 )
-            else -> fallback.copy(campsiteId = campsiteId)
+            is BookingProviderRef.ReserveAmerica ->
+                CatalogCampsiteRef(
+                    campsiteId = campsite.id,
+                    vendorId = campsite.vendorId,
+                )
+            is BookingProviderRef.ReserveCalifornia ->
+                CatalogCampsiteRef(
+                    campsiteId = campsite.id,
+                    vendorId = campsite.vendorId,
+                )
         }
+
+    private fun getPoiLatLng(poiId: Long): Pair<Double, Double>? {
+        val r =
+            ctx
+                .fetchOne(
+                    """
+                    SELECT ST_X(ST_PointOnSurface(geom)) AS lng,
+                           ST_Y(ST_PointOnSurface(geom)) AS lat
+                    FROM pois
+                    WHERE id = ?
+                    """.trimIndent(),
+                    poiId,
+                ) ?: return null
+        val lng = r.get("lng") as? Number ?: return null
+        val lat = r.get("lat") as? Number ?: return null
+        return lat.toDouble() to lng.toDouble()
+    }
 }
