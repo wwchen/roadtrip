@@ -17,7 +17,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * Unit test for the campground-level POI emission in [AspiraJoinByNameEtl].
+ * Unit test for the campground-level POI emission in [AspiraCampgroundsEtl].
  *
  * The transform is a pure function of an [AspiraJoinDto] plus a
  * [TransformCtx], so no DB / orchestrator is needed. We seed one geometry
@@ -28,12 +28,12 @@ import kotlin.test.assertTrue
  * name matches geometry.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class AspiraJoinByNameEtlTest {
+class AspiraCampgroundsEtlTest {
     private lateinit var ctx: TransformCtx
 
     // Real terminal slug so args (host), subcategory (federal) and the
     // constant agency (Parks Canada) resolve from the production YAML.
-    private val slug = "aspira-pc-pins"
+    private val slug = "aspira-pc-campgrounds"
 
     // Category 100 is bookable (showResourceCapacityOnline=true, e.g. Campsite);
     // 200 is non-bookable (false, e.g. Parking). The flag is Aspira's own — the
@@ -130,7 +130,7 @@ class AspiraJoinByNameEtlTest {
 
     private fun dtoOf(vararg leaves: AspiraLeaf): AspiraJoinDto =
         AspiraJoinDto(
-            leaves = AspiraLeavesPayload(slug = slug, leaves = leaves.toList()),
+            leaves = leaves.toList(),
             geomSources =
                 listOf(
                     "test-geom" to GeoJsonFeaturesSource(listOf(geomEnvelope()), "test-geom"),
@@ -139,7 +139,7 @@ class AspiraJoinByNameEtlTest {
         )
 
     private fun campgrounds(dto: AspiraJoinDto): List<CampgroundUpsertCandidate> =
-        AspiraJoinByNameEtl(slug, DataProvider.ASPIRA, "pc")
+        AspiraCampgroundsEtl(slug, DataProvider.ASPIRA, "pc")
             .transform(dto, ctx)
             .campgrounds
 
@@ -151,7 +151,7 @@ class AspiraJoinByNameEtlTest {
         etlSlug: String = slug,
     ): AspiraJoinDto =
         AspiraJoinDto(
-            leaves = AspiraLeavesPayload(slug = etlSlug, leaves = listOf(leaf)),
+            leaves = listOf(leaf),
             geomSources =
                 listOf(
                     "test-geom" to GeoJsonFeaturesSource(listOf(geomEnvelope()), "test-geom"),
@@ -349,7 +349,7 @@ class AspiraJoinByNameEtlTest {
         val inventory = """{"r1":{"resourceLocationId":555,"resourceCategoryId":200}}"""
         val dto =
             AspiraJoinDto(
-                leaves = AspiraLeavesPayload(slug = slug, leaves = listOf(nameMatchingLeaf(555L))),
+                leaves = listOf(nameMatchingLeaf(555L)),
                 geomSources = listOf("test-geom" to GeoJsonFeaturesSource(listOf(geomEnvelope()), "test-geom")),
                 inventoryEnvelopes = listOf(envelopeOf(inventory)),
                 dictionaryPayload = null,

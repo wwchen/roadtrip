@@ -16,7 +16,7 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-class ReserveAmericaEtlTest {
+class ReserveAmericaCampgroundsEtlTest {
     private val kotlinx.serialization.json.JsonObject.contractCode: String
         get() = this["contract_code"]!!.jsonPrimitive.content
 
@@ -25,7 +25,7 @@ class ReserveAmericaEtlTest {
 
     @Test
     fun `new york args stamp state campground metadata with reserveamerica provider ref`() {
-        val etl = ReserveAmericaEtl("new-york-state-parks")
+        val etl = ReserveAmericaCampgroundsEtl("reserveamerica-ny-campgrounds")
         val dto = etl.parse(bundle("reserveamerica-ny", nyParkEnvelope()))
         assertEquals("ALGER ISLAND, NY", dto.parks.single().name)
 
@@ -56,7 +56,7 @@ class ReserveAmericaEtlTest {
     @Test
     fun `alberta defaults preserve existing source shape and reserveamerica provider ref`() {
         val campground =
-            ReserveAmericaEtl()
+            ReserveAmericaCampgroundsEtl()
                 .transform(
                     ReserveAmericaDto(
                         parks =

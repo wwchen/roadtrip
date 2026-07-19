@@ -6,8 +6,8 @@ import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
-import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -17,7 +17,7 @@ import kotlinx.serialization.json.put
  * Campsite catalog terminal (RFC 0008) for one ReserveAmerica tenant.
  * Reads the `campsite-<parkId>-<startIdx>` HTML envelopes captured by
  * `scripts/fetch_reserveamerica_campsites.py` and emits one campsite per
- * site. The [ReserveAmericaCampsiteParentJoiner] links them to POIs.
+ * site.
  *
  * `vendor` is per-tenant (`reserveamerica_ny`) — matching the availability
  * adapter's provider key; `vendor_id` is the scraped `siteId`, so catalog rows bind
@@ -27,7 +27,7 @@ import kotlinx.serialization.json.put
 class ReserveAmericaSitesEtl(
     override val etlSlug: String,
     private val contractCode: String,
-) : SourceEtl<ReserveAmericaSitesEtl.Parsed, CampsiteEtlOutput> {
+) : CampsiteEtl<ReserveAmericaSitesEtl.Parsed> {
     override val multiPart: Boolean = true
 
     data class Parsed(

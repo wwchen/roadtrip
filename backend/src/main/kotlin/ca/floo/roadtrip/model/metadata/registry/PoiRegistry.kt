@@ -22,12 +22,6 @@ private const val CAMPSITE_DATA_SECTION = "campsite_data"
 //   - campsite_data: campsite catalogs. Terminal etl emits canonical campsite
 //     rows. Same chain shape as poi_data, minus category/subcategory
 //     (campsites aren't map pins).
-//   - campsite_parent_joiner: post-import parent reconciliation. Each entry
-//     names an adapter that reads canonical campsite/campground vendor refs
-//     and reparents campsites whose campground_id disagrees with the
-//     vendor-ref lookup. No etl chain — joiners don't transform raw data,
-//     they query DB tables.
-//
 // Etl chain semantics (poi_data + campsite_data):
 //   - Terminal stage = last etls entry. Earlier entries are intermediates.
 //   - List order = dependency order. Entry N may only reference
@@ -43,18 +37,16 @@ private const val CAMPSITE_DATA_SECTION = "campsite_data"
 // Loaded once at boot. Used by:
 //   1. EtlOrchestrator — runs etl chains in declared order, dispatching
 //      poi_data terminals to Pois Upsert and campsite_data terminals
-//      to CampsiteRepo. Also runs joiner adapters.
+//      to CampsiteRepo.
 //   2. scripts/poll_raw.py — fetch is per data_source and runs outside
 //      the backend process.
-//   3. IngestController / RegistryTargets — import targets cover all
-//      three of {poi_data, campsite_data, campsite_parent_joiner}.
+//   3. IngestController / RegistryTargets — import targets cover
+//      poi_data and campsite_data.
 //
 // Adding a new POI source: one data_sources row + one poi_data row +
 // one EtlOrchestrator.registry line per ETL slug. No Flyway migration.
 //
 // Adding a new campsite source: same shape but campsite_data row.
-// Then add a campsite_parent_joiner row pointing at the matching joiner
-// adapter so the catalog rows get linked to their parent POIs.
 @Serializable
 class PoiRegistry(
     @kotlinx.serialization.SerialName("data_sources")
@@ -63,8 +55,6 @@ class PoiRegistry(
     val poiData: List<PoiDataEntry>,
     @kotlinx.serialization.SerialName("campsite_data")
     val campsiteData: List<CampsiteDataEntry> = emptyList(),
-    @kotlinx.serialization.SerialName("campsite_parent_joiner")
-    val campsiteParentJoiners: List<CampsiteParentJoinerEntry> = emptyList(),
 ) {
     /**
      * Sanity-check the registry after deserialization. Catches typos /
@@ -125,18 +115,6 @@ class PoiRegistry(
             allEtlSlugs = etlSlugs,
             errs = errs,
         )
-
-        // Joiner-row sanity: name uniqueness + non-empty adapter. Joiners
-        // don't have etl chains so there's no input/forward-ref check.
-        val joinerNames = mutableSetOf<String>()
-        for ((i, j) in campsiteParentJoiners.withIndex()) {
-            if (!joinerNames.add(j.name)) {
-                errs += "campsite_parent_joiner[$i] name='${j.name}' is not unique"
-            }
-            if (j.adapter.isBlank()) {
-                errs += "campsite_parent_joiner '${j.name}' has empty adapter"
-            }
-        }
 
         // Global cycle detection over data_sources.depends_on + every
         // etl.inputs across both etl-bearing sections. Edges run
@@ -281,12 +259,6 @@ class PoiRegistry(
     /** Look up a campsite_data row by its display name. */
     fun campsiteDataByName(name: String): CampsiteDataEntry? = campsiteData.firstOrNull { it.name == name }
 
-    /** campsite_parent_joiner rows that should run during fan-out import. */
-    fun enabledCampsiteParentJoiners(): List<CampsiteParentJoinerEntry> = campsiteParentJoiners.filter { it.enabled }
-
-    /** Look up a campsite_parent_joiner row by its display name. */
-    fun campsiteParentJoinerByName(name: String): CampsiteParentJoinerEntry? = campsiteParentJoiners.firstOrNull { it.name == name }
-
     /**
      * Static subcategory lookup keyed by terminal etl slug.
      * Returns null when the row has no subcategory (e.g. planet-fitness).
@@ -311,7 +283,7 @@ class PoiRegistry(
 
     /**
      * Aspira upstream host keyed by terminal etl slug.
-     * Returns the `host` arg from the terminal AspiraJoinByNameEtl row.
+     * Returns the `host` arg from the terminal AspiraCampgroundsEtl row.
      *
      * Used by [ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry]
      * to construct one [ca.floo.roadtrip.service.availability.provider.AspiraAvailabilityProvider]
@@ -356,7 +328,7 @@ class PoiRegistry(
     fun reserveAmericaSources(): List<ReserveAmericaSourceConfig> =
         poiData
             .mapNotNull { row -> row.etls.lastOrNull() }
-            .filter { it.adapter == "ReserveAmericaEtl" }
+            .filter { it.adapter == "ReserveAmericaCampgroundsEtl" }
             .filter { (it.args["provider"] ?: "reserveamerica").lowercase() == "reserveamerica" }
             .map { terminal ->
                 val contract =
@@ -383,7 +355,7 @@ class PoiRegistry(
     fun reserveCaliforniaSources(): Set<String> =
         poiData
             .mapNotNull { row -> row.etls.lastOrNull() }
-            .filter { it.adapter == "ReserveCaliforniaEtl" }
+            .filter { it.adapter == "ReserveCaliforniaCampgroundsEtl" }
             .map { it.slug }
             .toSet()
 

@@ -7,8 +7,8 @@ import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
-import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.campsiteTagKey
 import kotlinx.serialization.json.JsonArray
@@ -39,7 +39,7 @@ import kotlinx.serialization.json.put
  */
 class RecGovCampsitesEtl(
     override val etlSlug: String,
-) : SourceEtl<List<Envelope>, CampsiteEtlOutput> {
+) : CampsiteEtl<List<Envelope>> {
     override val multiPart: Boolean = true
 
     override fun parse(inputs: InputBundle): List<Envelope> {

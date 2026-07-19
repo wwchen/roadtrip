@@ -3,10 +3,10 @@ package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.DataProvider
-import ca.floo.roadtrip.model.etl.CampgroundCampsiteEtlOutput
+import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
-import ca.floo.roadtrip.service.etl.framework.CampgroundCampsiteEtl
+import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -35,9 +35,9 @@ import java.time.Instant
 // markup (place:location:latitude/longitude, og:title, itemprop=telephone).
 // Brittle to an Active Network redesign but cheap and obvious; a redesign
 // would shake out as a validation drop, not silent corruption.
-class ReserveAmericaEtl(
-    override val etlSlug: String = "alberta-provincial",
-) : CampgroundCampsiteEtl<ReserveAmericaDto> {
+class ReserveAmericaCampgroundsEtl(
+    override val etlSlug: String = "reserveamerica-ab-campgrounds",
+) : CampgroundEtl<ReserveAmericaDto> {
     override val multiPart: Boolean = true
 
     override fun parse(inputs: InputBundle): ReserveAmericaDto {
@@ -63,10 +63,10 @@ class ReserveAmericaEtl(
     override fun transform(
         dto: ReserveAmericaDto,
         ctx: TransformCtx,
-    ): CampgroundCampsiteEtlOutput {
+    ): CampgroundEtlOutput {
         val bucket = ctx.subcategoryFor(etlSlug)
         val settings = ReserveAmericaSettings.from(ctx, etlSlug)
-        return CampgroundCampsiteEtlOutput(
+        return CampgroundEtlOutput(
             campgrounds =
                 dto.parks.map { park ->
                     val name = displayName(park.name, settings.titleSuffix)
@@ -102,7 +102,6 @@ class ReserveAmericaEtl(
                         sourcePayload = parkExtras,
                     )
                 },
-            campsites = emptyList(),
         )
     }
 

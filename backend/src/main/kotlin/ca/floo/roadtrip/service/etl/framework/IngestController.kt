@@ -181,8 +181,7 @@ class IngestController(
     //
     // The phase carries a row's display name + which YAML section it
     // came from. poi_data / campsite_data walk an ETL chain and write
-    // canonical rows; campsite_parent_joiner runs a vendor-scoped
-    // reconciliation pass that reparents campsites via runJoiner.
+    // canonical rows.
     //
     // Each branch writes a section-specific counts DTO so dashboards can
     // render whichever fields are populated; the legacy `seen`/`swept`/
@@ -218,21 +217,6 @@ class IngestController(
                         ),
                     )
                 }
-                Phase.Import.Section.CAMPSITE_PARENT_JOINER -> {
-                    val stats = etl.runJoiner(phase.name)
-                    JSONB.valueOf(
-                        ingestControllerJson.encodeToString(
-                            ImportPhaseCountsDto(
-                                importRunId = -1L,
-                                seen = stats.linksDiscovered,
-                                swept = stats.staleLinksDeleted,
-                                terminalEtl = stats.adapter,
-                                createdLinks = stats.linksInserted,
-                                staleLinksDeleted = stats.staleLinksDeleted,
-                            ),
-                        ),
-                    )
-                }
             }
         }
 
@@ -247,8 +231,7 @@ class IngestController(
  * Counts written into `ingest_runs.counts` (JSONB) for one import phase.
  * Section-specific fields are nullable; readers ignore the ones they
  * don't care about. Existing dashboards keyed off `seen`/`swept`/
- * `import_run_id` keep working. Campsite phases carry their campsite
- * import run id; joiner phases carry created_links / stale_links_deleted.
+ * `import_run_id` keep working.
  */
 @Serializable
 private data class ImportPhaseCountsDto(
@@ -258,6 +241,4 @@ private data class ImportPhaseCountsDto(
     @SerialName("terminal_etl") val terminalEtl: String,
     @SerialName("upserted_campsites") val upsertedCampsites: Int? = null,
     @SerialName("skipped_campsites") val skippedCampsites: Int? = null,
-    @SerialName("created_links") val createdLinks: Int? = null,
-    @SerialName("stale_links_deleted") val staleLinksDeleted: Int? = null,
 )

@@ -21,7 +21,7 @@ import kotlinx.serialization.json.jsonPrimitive
  * categories. We classify a `resourceLocationId` by the flags of the
  * categories its inventory actually contains.
  *
- * Inputs are the same two captures [AspiraResourcesEtl] reads:
+ * Inputs are the same two captures [AspiraCampsitesEtl] reads:
  *   - inventory (`/api/resourcelocation/resources`): a JsonObject keyed by
  *     resourceId; each value carries `resourceLocationId` + `resourceCategoryId`.
  *   - dictionaries (`/api/resourcecategory` …): `resource_categories[]` mapping

@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.model.metadata.registry.CampsiteDataEntry
-import ca.floo.roadtrip.model.metadata.registry.CampsiteParentJoinerEntry
 import ca.floo.roadtrip.model.metadata.registry.EtlEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
@@ -44,13 +43,6 @@ class RegistryTargetsTest {
                             etls = listOf(EtlEntry(slug = "legacy-federal-campsites", adapter = "LegacyFederalSitesEtl")),
                         ),
                     ),
-                campsiteParentJoiners =
-                    listOf(
-                        CampsiteParentJoinerEntry(
-                            name = "Rec.gov Campsites to Rec.gov Campgrounds",
-                            adapter = "LegacyFederalJoiner",
-                        ),
-                    ),
             )
 
         assertEquals(
@@ -83,9 +75,6 @@ class RegistryTargetsTest {
                 "California State Park Sites",
                 "Alberta Provincial Park Sites",
                 "New York State Park Sites",
-                "Aspira Resources → Aspira Pins",
-                "ReserveCalifornia Sites → California State Parks",
-                "ReserveAmerica Sites → Alberta + NY Parks",
             ),
             importTargetsFromRegistry(registry).keys.toList(),
         )

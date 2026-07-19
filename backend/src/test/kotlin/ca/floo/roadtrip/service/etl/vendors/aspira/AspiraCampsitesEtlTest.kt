@@ -15,7 +15,7 @@ import java.nio.file.Files
 import kotlin.test.assertEquals
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class AspiraResourcesEtlTest {
+class AspiraCampsitesEtlTest {
     private lateinit var ctx: TransformCtx
 
     private val mapsPayload =
@@ -70,18 +70,18 @@ class AspiraResourcesEtlTest {
     @Test
     fun `links child-map campsite resources to parent campground leaf by resource location id`() {
         val etl =
-            AspiraResourcesEtl(
-                etlSlug = "aspira-wa-resources",
+            AspiraCampsitesEtl(
+                etlSlug = "aspira-wa-campsites",
                 mapsInputSlug = "aspira-maps-wa",
                 inventoryInputSlug = "aspira-inventory-wa",
                 aspiraTenant = "wa",
             )
 
         val dto =
-            AspiraResourcesEtl.Parsed(
+            AspiraCampsitesEtl.Parsed(
                 inventory = listOf(envelopeOf(inventoryPayload)),
                 maps = Json.parseToJsonElement(mapsPayload).jsonObject["payload"] as kotlinx.serialization.json.JsonArray,
-                dictionaries = AspiraResourcesEtl.AspiraDictionaries.empty,
+                dictionaries = AspiraCampsitesEtl.AspiraDictionaries.empty,
             )
 
         val campsite = etl.transform(dto, ctx).campsites.single()

@@ -17,9 +17,6 @@
 #    omits the row from admin import targets until the row is re-enabled.
 # 3. campsite_data — canonical campsite datasets linked to campgrounds by
 #    vendor refs.
-# 4. campsite_parent_joiner — post-import parent reconciliation rows; each
-#    names an adapter that reparents campsites whose campground_id disagrees
-#    with its vendor-ref lookup.
 #
 # Reservation provider info is NOT in this file. ETLs that need it construct
 # provider-ref JSON directly from upstream rows and per-tenant args such as
@@ -115,17 +112,17 @@ data_sources:
   # One capture covers every RIDB-publishing agency (NPS, USFS, BLM, USACE,
   # FWS, BOR, TVA, …). Per-facility agency lands in campground management
   # metadata at transform time from ORGANIZATION[0].OrgName.
-  - slug: recgov-campgrounds
+  - slug: recgov-campgrounds-raw
     name: Federal campgrounds via RIDB (all agencies)
     fetcher:
       executor: python3
       filename: scripts/fetch_recgov.py
-      args: { slug: recgov-campgrounds }
+      args: { slug: recgov-campgrounds-raw }
       output_dir_prefix: data/raw/recgov-campgrounds
 
   - slug: recgov-campground-enrichment
     name: Federal campground ratings and cell coverage via rec.gov
-    depends_on: [recgov-campgrounds]
+    depends_on: [recgov-campgrounds-raw]
     fetcher:
       executor: python3
       filename: scripts/fetch_recgov_campground_enrichment.py
@@ -139,7 +136,7 @@ data_sources:
   # per park. The response carries the human label ("OFC13"), description
   # ("C13 Phantom RV Pad"), allowed equipment, capacity, attribute IDs, and
   # mapIds[] (parent leaf reference) for every campsite at that park.
-  # AspiraResourcesEtl reads this catalog as the source of truth for both
+  # AspiraCampsitesEtl reads this catalog as the source of truth for both
   # the campsite set and per-site enrichment.
   #
   # ~120-170 calls per tenant at our 1.5s throttle, ~3-5 min wall-clock.
@@ -222,13 +219,13 @@ data_sources:
   # request-time availability stays in CachedAvailability.
   #
   # Heavy fetch (~75min for 3000 facilities at 1.5s gap). Run independently
-  # of recgov-campgrounds so the campground-list refresh stays snappy.
-  - slug: recgov-campsites
+  # of recgov-campgrounds-raw so the campground-list refresh stays snappy.
+  - slug: recgov-campsites-raw
     name: Federal campsites via rec.gov per-facility /month
     fetcher:
       executor: python3
       filename: scripts/fetch_recgov_campsites.py
-      args: { slug: recgov-campsites }
+      args: { slug: recgov-campsites-raw }
       output_dir_prefix: data/raw/recgov-campsites
 
   # --- Alberta provincial parks ----------------------------------------------
@@ -322,24 +319,18 @@ poi_data:
     agency:
       derived_from_field: ORGANIZATION[0].OrgName
     etls:
-      - slug: federal-campgrounds
+      - slug: recgov-campgrounds
         adapter: RecGovCampgroundsEtl
-        inputs: [recgov-campgrounds, recgov-campground-enrichment]
+        inputs: [recgov-campgrounds-raw, recgov-campground-enrichment]
 
   - name: Washington State Parks
     category: campground
     subcategory: state
     agency: WA State Parks
     etls:
-      - slug: aspira-leaves-wa
-        adapter: AspiraLeavesEtl
-        inputs: [aspira-maps-wa]
-      - slug: aspira-wa-pins
-        adapter: AspiraJoinByNameEtl
-        # inventory + dictionaries feed the same data-driven non-bookable
-        # filter. WA's dictionary marks every category bookable today, so
-        # nothing is dropped — the ETL reflects what WA's data shows.
-        inputs: [aspira-leaves-wa, uscampgrounds, aspira-inventory-wa, aspira-dictionaries-wa]
+      - slug: aspira-wa-campgrounds
+        adapter: AspiraCampgroundsEtl
+        inputs: [aspira-maps-wa, uscampgrounds, aspira-inventory-wa, aspira-dictionaries-wa]
         args:
           host: washington.goingtocamp.com
           state_filter: WA
@@ -349,8 +340,8 @@ poi_data:
     subcategory: provincial
     agency: BC Parks
     etls:
-      - slug: bcparks-merge
-        adapter: BcParksMergeEtl
+      - slug: aspira-bc-campgrounds
+        adapter: BcParksCampgroundsEtl
         inputs: [aspira-maps-bc, bcparks-strapi, aspira-inventory-bc, aspira-dictionaries-bc]
         args:
           host: camping.bcparks.ca
@@ -360,16 +351,9 @@ poi_data:
     subcategory: federal
     agency: Parks Canada
     etls:
-      - slug: aspira-leaves-pc
-        adapter: AspiraLeavesEtl
-        inputs: [aspira-maps-pc]
-      - slug: aspira-pc-pins
-        adapter: AspiraJoinByNameEtl
-        # inventory + dictionaries drive the non-bookable filter: a
-        # resourceLocationId whose inventory is entirely non-bookable categories
-        # (Aspira's showResourceCapacityOnline=false — parking, guided hikes,
-        # shuttles) is dropped. Data-driven, no curated category list.
-        inputs: [aspira-leaves-pc, apca-accommodation, apca-places, aspira-inventory-pc, aspira-dictionaries-pc]
+      - slug: aspira-pc-campgrounds
+        adapter: AspiraCampgroundsEtl
+        inputs: [aspira-maps-pc, apca-accommodation, apca-places, aspira-inventory-pc, aspira-dictionaries-pc]
         args:
           host: reservation.pc.gc.ca
           parent_name_fallback: true
@@ -379,8 +363,8 @@ poi_data:
     subcategory: provincial
     agency: Alberta Parks
     etls:
-      - slug: alberta-provincial
-        adapter: ReserveAmericaEtl
+      - slug: reserveamerica-ab-campgrounds
+        adapter: ReserveAmericaCampgroundsEtl
         inputs: [reserveamerica-abpp]
         args:
           contract: ABPP
@@ -393,8 +377,8 @@ poi_data:
     subcategory: state
     agency: New York State Parks
     etls:
-      - slug: new-york-state-parks
-        adapter: ReserveAmericaEtl
+      - slug: reserveamerica-ny-campgrounds
+        adapter: ReserveAmericaCampgroundsEtl
         inputs: [reserveamerica-ny]
         args:
           contract: NY
@@ -409,8 +393,8 @@ poi_data:
     subcategory: state
     agency: California State Parks
     etls:
-      - slug: california-state-parks
-        adapter: ReserveCaliforniaEtl
+      - slug: reservecalifornia-campgrounds
+        adapter: ReserveCaliforniaCampgroundsEtl
         inputs: [reservecalifornia-catalog]
 
   - name: Planet Fitness
@@ -447,67 +431,45 @@ campsite_data:
 
   - name: Rec.gov Campsites
     etls:
-      - slug: federal-campsites
+      - slug: recgov-campsites
         adapter: RecGovCampsitesEtl
-        inputs: [recgov-campsites]
+        inputs: [recgov-campsites-raw]
 
-  # Aspira per-tenant campsite catalogs. Each row's terminal reads two
-  # data_sources:
-  #   1. per-park inventory capture (multi-part) — named-site catalog from
-  #      /api/resourcelocation/resources. The source of truth for both the
-  #      campsite set AND per-site enrichment (name, description,
-  #      allowedEquipment, definedAttributes, capacity, mapIds[]).
-  #   2. tenant dictionaries — small lookup tables for resource category,
-  #      allowed equipment, and defined attribute labels. They stay
-  #      in-memory during ETL and enrich each campsite source payload.
-  #   3. /api/maps capture — leaf metadata. Each inventory record carries
-  #      mapIds[] referencing parent leaves; AspiraLeavesWalk turns the
-  #      maps tree into a mapId-keyed leaf index for loop labeling.
-  # Cross-row etl refs aren't supported, so the maps tree gets walked
-  # again here via AspiraLeavesWalk — same code path AspiraLeavesEtl uses.
+  # Aspira per-tenant campsite catalogs. Each reads inventory, dictionaries,
+  # and maps directly; AspiraLeavesWalk extracts leaf metadata for labeling.
   - name: Washington Aspira Resources
     etls:
-      - slug: aspira-wa-resources
-        adapter: AspiraResourcesEtl
+      - slug: aspira-wa-campsites
+        adapter: AspiraCampsitesEtl
         inputs: [aspira-inventory-wa, aspira-dictionaries-wa, aspira-maps-wa]
+
+  - name: BC Aspira Resources
+    etls:
+      - slug: aspira-bc-campsites
+        adapter: AspiraCampsitesEtl
+        inputs: [aspira-inventory-bc, aspira-dictionaries-bc, aspira-maps-bc]
 
   - name: Parks Canada Aspira Resources
     etls:
-      - slug: aspira-pc-resources
-        adapter: AspiraResourcesEtl
+      - slug: aspira-pc-campsites
+        adapter: AspiraCampsitesEtl
         inputs: [aspira-inventory-pc, aspira-dictionaries-pc, aspira-maps-pc]
 
   - name: California State Park Sites
     etls:
-      - slug: california-state-park-sites
+      - slug: reservecalifornia-campsites
         adapter: ReserveCaliforniaSitesEtl
         inputs: [reservecalifornia-catalog]
 
   - name: Alberta Provincial Park Sites
     etls:
-      - slug: alberta-provincial-park-sites
+      - slug: reserveamerica-ab-campsites
         adapter: ReserveAmericaSitesEtl
         inputs: [reserveamerica-campsites-abpp]
 
   - name: New York State Park Sites
     etls:
-      - slug: new-york-state-park-sites
+      - slug: reserveamerica-ny-campsites
         adapter: ReserveAmericaSitesEtl
         inputs: [reserveamerica-campsites-ny]
 
-# ============================================================================
-# campsite_parent_joiner — post-import parent reconciliation. Each row runs a
-# vendor-scoped SELECT over campsite/campground vendor_refs to compute what
-# each campsite's campground_id should be, then reparents any campsite whose
-# current value disagrees. Idempotent when upsertCampsite already got the
-# parent right; it earns its keep when vendor payloads shift over time.
-# ============================================================================
-campsite_parent_joiner:
-  - name: Aspira Resources → Aspira Pins
-    adapter: AspiraCampsiteParentJoiner
-
-  - name: ReserveCalifornia Sites → California State Parks
-    adapter: ReserveCaliforniaCampsiteParentJoiner
-
-  - name: ReserveAmerica Sites → Alberta + NY Parks
-    adapter: ReserveAmericaCampsiteParentJoiner

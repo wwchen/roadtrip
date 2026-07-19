@@ -210,7 +210,7 @@ class FeatureCollectionContractTest {
             encodePoiFeatureJson(
                 detailFeature(
                     id = 117,
-                    source = "new-york-state-parks",
+                    source = "reserveamerica-ny-campgrounds",
                     sourceId = "ra-117",
                     category = "campground",
                     subcategory = "state",

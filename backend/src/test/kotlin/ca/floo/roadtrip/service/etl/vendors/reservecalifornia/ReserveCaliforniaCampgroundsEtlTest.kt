@@ -12,11 +12,11 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-class ReserveCaliforniaEtlTest {
+class ReserveCaliforniaCampgroundsEtlTest {
     @Test
     fun `campground transform emits canonical provider ref with place and facility ids`() {
         val campground =
-            ReserveCaliforniaEtl("california-state-parks")
+            ReserveCaliforniaCampgroundsEtl("reservecalifornia-campgrounds")
                 .transform(catalog(), transformCtx())
                 .campgrounds
                 .single()
@@ -48,7 +48,7 @@ class ReserveCaliforniaEtlTest {
     @Test
     fun `site transform emits canonical campsites linked to california campgrounds`() {
         val campsites =
-            ReserveCaliforniaSitesEtl("california-state-park-sites")
+            ReserveCaliforniaSitesEtl("reservecalifornia-campsites")
                 .transform(catalog(), transformCtx())
                 .campsites
 

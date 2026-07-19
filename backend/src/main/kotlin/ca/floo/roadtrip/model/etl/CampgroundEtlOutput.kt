@@ -1,9 +1,7 @@
 package ca.floo.roadtrip.model.etl
 
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
-import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 
-data class CampgroundCampsiteEtlOutput(
+data class CampgroundEtlOutput(
     val campgrounds: List<CampgroundUpsertCandidate>,
-    val campsites: List<CampsiteUpsertCandidate>,
 )

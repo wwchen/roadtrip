@@ -18,12 +18,11 @@ import org.junit.jupiter.api.TestInstance
 import java.nio.file.Files
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class BcParksMergeEtlTest {
+class BcParksCampgroundsEtlTest {
     private lateinit var ctx: TransformCtx
-    private val etl = BcParksMergeEtl()
+    private val etl = BcParksCampgroundsEtl()
 
     @BeforeAll
     fun setUp() {
@@ -69,23 +68,6 @@ class BcParksMergeEtlTest {
                 .jsonPrimitive
                 .content
         assertEquals("BC Parks", agency)
-    }
-
-    @Test
-    fun `merge produces campsites from inventory`() {
-        val output = etl.transform(etl.parse(bundle()), ctx)
-
-        assertEquals(1, output.campsites.size)
-        val cs = output.campsites.single()
-        assertEquals(DataProvider.ASPIRA, cs.dataProvider)
-        assertEquals("res-101", cs.dataProviderRef)
-        assertEquals(BookingProvider.ASPIRA, cs.bookingProvider)
-        assertNotNull(cs.bookingProviderRef)
-        assertTrue(cs.bookingProviderRef!!.startsWith("bc:"))
-        assertEquals("A12", cs.name)
-        assertEquals("Rathtrevor Beach", cs.loopName)
-        assertEquals(DataProvider.ASPIRA, cs.parentDataProvider)
-        assertEquals("aspira-4189--2147483548", cs.parentDataProviderRef)
     }
 
     @Test

@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
 import ca.floo.roadtrip.model.domain.DataProvider
-import ca.floo.roadtrip.model.etl.CampgroundCampsiteEtlOutput
+import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.etl.PlanetFitnessLocationEtlOutput
 import ca.floo.roadtrip.model.etl.TeslaSuperchargerEtlOutput
@@ -11,13 +11,9 @@ import ca.floo.roadtrip.model.metadata.ValidationResult
 import ca.floo.roadtrip.model.metadata.registry.EtlEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CampgroundRepo
-import ca.floo.roadtrip.repo.CampsiteParentJoinerRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
-import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampsiteParentJoiner
-import ca.floo.roadtrip.service.etl.vendors.reserveamerica.ReserveAmericaCampsiteParentJoiner
-import ca.floo.roadtrip.service.etl.vendors.reservecalifornia.ReserveCaliforniaCampsiteParentJoiner
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
@@ -36,7 +32,7 @@ import java.io.File
 //      the per-run map for later siblings to consume. No disk persistence —
 //      every ETL is f(inputs) → output, so re-running an import recomputes.
 //   4. If terminal, persist the supported catalog output:
-//        - CampgroundCampsiteEtlOutput -> canonical campgrounds + campsites + lean POI wrappers
+//        - CampgroundEtlOutput -> canonical campgrounds + campsites + lean POI wrappers
 //        - CampsiteEtlOutput   -> canonical campsites (standalone)
 //        - TeslaSuperchargerEtlOutput -> canonical Tesla locations + lean POI wrappers
 //        - PlanetFitnessLocationEtlOutput -> canonical PF locations + lean POI wrappers
@@ -53,24 +49,7 @@ open class EtlOrchestrator(
      * registry under [Companion.registry]; overridable for tests.
      */
     private val etlRegistry: Map<String, SourceEtl<*, *>> = registry,
-    /**
-     * Joiner adapter map keyed by YAML `adapter:` name. Defaults to the
-     * production registry under [Companion.joinerRegistry]; overridable
-     * for tests.
-     */
-    private val joinerRegistry: Map<String, CampsiteParentJoiner> = Companion.joinerRegistry,
-    /**
-     * Repo for post-import campsite parent lookup and reparent writes. Kept
-     * injectable so tests can still exercise chunk retry behavior through the
-     * same repo boundary as production.
-     */
-    private val campsiteParentJoinerRepo: CampsiteParentJoinerRepo = CampsiteParentJoinerRepo(ctx),
-    private val joinerChunkSize: Int = DEFAULT_JOINER_CHUNK_SIZE,
 ) {
-    init {
-        require(joinerChunkSize > 0) { "joinerChunkSize must be positive" }
-    }
-
     private val log = LoggerFactory.getLogger(javaClass)
     private val campgroundRepo = CampgroundRepo(ctx)
     private val campsiteRepo = CampsiteRepo(ctx)
@@ -99,14 +78,6 @@ open class EtlOrchestrator(
         val upserted: Int,
         val skipped: Int,
         val swept: Int,
-    )
-
-    data class JoinerStats(
-        val joinerName: String,
-        val adapter: String,
-        val linksDiscovered: Int,
-        val linksInserted: Int,
-        val staleLinksDeleted: Int,
     )
 
     /**
@@ -192,84 +163,6 @@ open class EtlOrchestrator(
         return terminalStats!!
     }
 
-    /**
-     * Run a campsite_parent_joiner row by name. The joiner walks the canonical
-     * schema through narrow repo candidate projections and adapter-owned
-     * vendor matching policy, then returns a list of (campsite_id,
-     * campground_id) pairs it believes are correct.
-     *
-     * `campsites.campground_id` is the durable parent link; where a
-     * discovered pair disagrees with the current value we reparent the
-     * campsite. A campsite not in the joiner's result set is out of scope
-     * for that joiner and its parent is left alone — vendor scoping in
-     * each repo query is what prevents one joiner from
-     * clobbering another vendor's rows.
-     *
-     * This is a reconciliation pass: if `upsertCampsite` already resolved
-     * the correct parent via `parentVendorRefId`, the UPDATE matches zero
-     * rows and `linksInserted = 0`. It earns its keep when vendor payloads
-     * shift over time (Aspira leaf reassignment, rec.gov facility moves)
-     * or when future cross-vendor merges expose a better parent than the
-     * source-of-truth ETL saw at write time.
-     */
-    fun runJoiner(name: String): JoinerStats {
-        val row =
-            poiRegistry.campsiteParentJoinerByName(name)
-                ?: error("no campsite_parent_joiner row with name='$name'")
-        val joiner =
-            joinerRegistry[row.adapter]
-                ?: error("no joiner adapter registered for '${row.adapter}'")
-
-        log.info("joiner '{}' starting adapter={}", row.name, row.adapter)
-        val joinerCtx =
-            JoinerCtx(
-                campsiteParentJoinerRepo = campsiteParentJoinerRepo,
-                args = row.args,
-            )
-        val links = joiner.discoverLinks(joinerCtx)
-        var reparented = 0
-        val chunks = links.chunked(joinerChunkSize)
-        for ((chunkIndex, chunk) in chunks.withIndex()) {
-            try {
-                reparented += campsiteParentJoinerRepo.reparentCampsites(chunk)
-            } catch (e: Exception) {
-                log.error(
-                    "joiner '{}' adapter={} failed at chunk {}/{} after committing {} reparent(s); retrying the joiner resumes idempotently",
-                    row.name,
-                    row.adapter,
-                    chunkIndex + 1,
-                    chunks.size,
-                    reparented,
-                    e,
-                )
-                throw e
-            }
-        }
-        val staleDeleted = joiner.sweepStaleLinks(joinerCtx)
-        log.info(
-            "joiner '{}' adapter={} discovered={} reparented={} stale_deleted={}",
-            row.name,
-            row.adapter,
-            links.size,
-            reparented,
-            staleDeleted,
-        )
-        if (reparented > 0) {
-            log.warn(
-                "joiner '{}' reparented {} campsite(s) — upsert-time parent didn't match vendor-ref lookup",
-                row.name,
-                reparented,
-            )
-        }
-        return JoinerStats(
-            joinerName = row.name,
-            adapter = row.adapter,
-            linksDiscovered = links.size,
-            linksInserted = reparented,
-            staleLinksDeleted = staleDeleted,
-        )
-    }
-
     @Suppress("UNCHECKED_CAST")
     private fun runTerminal(
         rowName: String,
@@ -289,8 +182,8 @@ open class EtlOrchestrator(
         val output = concrete.transform(validated, transformCtx)
         val ups =
             when (output) {
-                is CampgroundCampsiteEtlOutput ->
-                    persistCampgroundCampsiteOutput(output, concrete.etlSlug)
+                is CampgroundEtlOutput ->
+                    persistCampgroundOutput(output, concrete.etlSlug)
                 is CampsiteEtlOutput ->
                     campsiteRepo.upsertCampsites(output.campsites, source = concrete.etlSlug)
                 is TeslaSuperchargerEtlOutput ->
@@ -328,24 +221,14 @@ open class EtlOrchestrator(
         )
     }
 
-    private fun persistCampgroundCampsiteOutput(
-        output: CampgroundCampsiteEtlOutput,
+    private fun persistCampgroundOutput(
+        output: CampgroundEtlOutput,
         source: String,
-    ): CatalogUpsertResult {
-        val cgResult = campgroundRepo.upsertCampgrounds(output.campgrounds, source = source)
-        val csResult = campsiteRepo.upsertCampsites(output.campsites, source = source)
-        return CatalogUpsertResult(
-            runId = cgResult.runId,
-            seenCount = cgResult.seenCount + csResult.seenCount,
-            upsertedCount = cgResult.upsertedCount + csResult.upsertedCount,
-            skippedCount = cgResult.skippedCount + csResult.skippedCount,
-            sweptCount = cgResult.sweptCount + csResult.sweptCount,
-        )
-    }
+    ): CatalogUpsertResult = campgroundRepo.upsertCampgrounds(output.campgrounds, source = source)
 
     private fun outputCount(output: Any): Int =
         when (output) {
-            is CampgroundCampsiteEtlOutput -> output.campgrounds.size + output.campsites.size
+            is CampgroundEtlOutput -> output.campgrounds.size
             is CampsiteEtlOutput -> output.campsites.size
             is TeslaSuperchargerEtlOutput -> output.superchargers.size
             is PlanetFitnessLocationEtlOutput -> output.locations.size
@@ -400,97 +283,94 @@ open class EtlOrchestrator(
     }
 
     companion object {
-        private const val DEFAULT_JOINER_CHUNK_SIZE = 5000
-
         // Runnable ETLs. Admin import targets use this map to decide what can
         // run; every configured campground/campsite vendor row exposed here
         // writes through the canonical catalog repo.
         val registry: Map<String, SourceEtl<*, *>> =
             mapOf(
+                // Campflare
                 "campflare-campgrounds" to
                     ca.floo.roadtrip.service.etl.vendors.campflare
                         .CampflareCampgroundsEtl(),
                 "campflare-campsites" to
                     ca.floo.roadtrip.service.etl.vendors.campflare
                         .CampflareCampsitesEtl(),
-                "bcparks-strapi" to
-                    ca.floo.roadtrip.service.etl.vendors.bcparks
-                        .BcParksStrapiEtl(),
-                "federal-campgrounds" to
+                // Rec.gov
+                "recgov-campgrounds" to
                     ca.floo.roadtrip.service.etl.vendors.recgov
-                        .RecGovCampgroundsEtl("federal-campgrounds"),
-                "aspira-leaves-wa" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraLeavesEtl("aspira-leaves-wa"),
-                "aspira-wa-pins" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraJoinByNameEtl("aspira-wa-pins", DataProvider.ASPIRA, "wa"),
-                "bcparks-merge" to
-                    ca.floo.roadtrip.service.etl.vendors.bcparks
-                        .BcParksMergeEtl(),
-                "aspira-leaves-pc" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraLeavesEtl("aspira-leaves-pc"),
-                "aspira-pc-pins" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraJoinByNameEtl("aspira-pc-pins", DataProvider.ASPIRA, "pc"),
-                "alberta-provincial" to
-                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
-                        .ReserveAmericaEtl(),
-                "new-york-state-parks" to
-                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
-                        .ReserveAmericaEtl("new-york-state-parks"),
-                "california-state-parks" to
-                    ca.floo.roadtrip.service.etl.vendors.reservecalifornia
-                        .ReserveCaliforniaEtl("california-state-parks"),
-                "federal-campsites" to
+                        .RecGovCampgroundsEtl("recgov-campgrounds"),
+                "recgov-campsites" to
                     ca.floo.roadtrip.service.etl.vendors.recgov
-                        .RecGovCampsitesEtl("federal-campsites"),
-                "aspira-wa-resources" to
+                        .RecGovCampsitesEtl("recgov-campsites"),
+                // Aspira WA
+                "aspira-wa-campgrounds" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraResourcesEtl(
-                            etlSlug = "aspira-wa-resources",
+                        .AspiraCampgroundsEtl("aspira-wa-campgrounds", DataProvider.ASPIRA, "wa"),
+                "aspira-wa-campsites" to
+                    ca.floo.roadtrip.service.etl.vendors.aspira
+                        .AspiraCampsitesEtl(
+                            etlSlug = "aspira-wa-campsites",
                             mapsInputSlug = "aspira-maps-wa",
                             inventoryInputSlug = "aspira-inventory-wa",
                             dictionariesInputSlug = "aspira-dictionaries-wa",
                             aspiraTenant = "wa",
                         ),
-                "aspira-pc-resources" to
+                // Aspira BC
+                "aspira-bc-campgrounds" to
+                    ca.floo.roadtrip.service.etl.vendors.bcparks
+                        .BcParksCampgroundsEtl(),
+                "aspira-bc-campsites" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraResourcesEtl(
-                            etlSlug = "aspira-pc-resources",
+                        .AspiraCampsitesEtl(
+                            etlSlug = "aspira-bc-campsites",
+                            mapsInputSlug = "aspira-maps-bc",
+                            inventoryInputSlug = "aspira-inventory-bc",
+                            dictionariesInputSlug = "aspira-dictionaries-bc",
+                            aspiraTenant = "bc",
+                        ),
+                // Aspira PC
+                "aspira-pc-campgrounds" to
+                    ca.floo.roadtrip.service.etl.vendors.aspira
+                        .AspiraCampgroundsEtl("aspira-pc-campgrounds", DataProvider.ASPIRA, "pc"),
+                "aspira-pc-campsites" to
+                    ca.floo.roadtrip.service.etl.vendors.aspira
+                        .AspiraCampsitesEtl(
+                            etlSlug = "aspira-pc-campsites",
                             mapsInputSlug = "aspira-maps-pc",
                             inventoryInputSlug = "aspira-inventory-pc",
                             dictionariesInputSlug = "aspira-dictionaries-pc",
                             aspiraTenant = "pc",
                         ),
-                "california-state-park-sites" to
+                // ReserveAmerica AB
+                "reserveamerica-ab-campgrounds" to
+                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
+                        .ReserveAmericaCampgroundsEtl("reserveamerica-ab-campgrounds"),
+                "reserveamerica-ab-campsites" to
+                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
+                        .ReserveAmericaSitesEtl("reserveamerica-ab-campsites", "ABPP"),
+                // ReserveAmerica NY
+                "reserveamerica-ny-campgrounds" to
+                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
+                        .ReserveAmericaCampgroundsEtl("reserveamerica-ny-campgrounds"),
+                "reserveamerica-ny-campsites" to
+                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
+                        .ReserveAmericaSitesEtl("reserveamerica-ny-campsites", "NY"),
+                // ReserveCalifornia
+                "reservecalifornia-campgrounds" to
                     ca.floo.roadtrip.service.etl.vendors.reservecalifornia
-                        .ReserveCaliforniaSitesEtl("california-state-park-sites"),
-                "alberta-provincial-park-sites" to
-                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
-                        .ReserveAmericaSitesEtl("alberta-provincial-park-sites", "ABPP"),
-                "new-york-state-park-sites" to
-                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
-                        .ReserveAmericaSitesEtl("new-york-state-park-sites", "NY"),
+                        .ReserveCaliforniaCampgroundsEtl("reservecalifornia-campgrounds"),
+                "reservecalifornia-campsites" to
+                    ca.floo.roadtrip.service.etl.vendors.reservecalifornia
+                        .ReserveCaliforniaSitesEtl("reservecalifornia-campsites"),
+                // Planet Fitness
                 "planet-fitness" to
                     ca.floo.roadtrip.service.etl.vendors.osmpf
                         .PlanetFitnessEtl(),
+                // Tesla
                 "tesla-superchargers" to
                     ca.floo.roadtrip.service.etl.vendors.tesla
                         .TeslaIndexEtl(),
             )
-
-        // Runnable joiner adapters keyed by YAML `adapter:` name. Kept
-        // separate from `registry` because joiners don't emit typed ETL
-        // output. They select vendor-scoped parent links through the
-        // campsite-parent joiner repo; runJoiner owns sequencing and retry.
-        val joinerRegistry: Map<String, CampsiteParentJoiner> =
-            listOf(
-                AspiraCampsiteParentJoiner(),
-                ReserveAmericaCampsiteParentJoiner(),
-                ReserveCaliforniaCampsiteParentJoiner(),
-            ).associateBy { it.adapter }
     }
 }
 

@@ -19,7 +19,7 @@ class RoadtripRuntimeConfigTest {
                 ReadPathProviderConfig(
                     enabledDataProviders =
                         setOf(
-                            "federal-campgrounds",
+                            "recgov-campgrounds",
                             "recgov",
                             "campflare",
                             "tesla_supercharger",
@@ -27,7 +27,7 @@ class RoadtripRuntimeConfigTest {
                         ),
                     enabledAvailabilityProviders = emptySet(),
                 ),
-            registry = registryWith("federal-campgrounds", "campflare-campgrounds"),
+            registry = registryWith("recgov-campgrounds", "campflare-campgrounds"),
         )
     }
 
@@ -41,13 +41,13 @@ class RoadtripRuntimeConfigTest {
                             enabledDataProviders = setOf("recgov", "recgvo"),
                             enabledAvailabilityProviders = emptySet(),
                         ),
-                    registry = registryWith("federal-campgrounds"),
+                    registry = registryWith("recgov-campgrounds"),
                 )
             }
 
         assertEquals(
             "roadtrip.read-path.enabled-data-providers contains unknown provider(s): " +
-                "[recgvo]. Expected one of: [federal-campgrounds, planet_fitness_location, recgov, tesla_supercharger].",
+                "[recgvo]. Expected one of: [planet_fitness_location, recgov, recgov-campgrounds, tesla_supercharger].",
             err.message,
         )
     }
@@ -85,7 +85,7 @@ class RoadtripRuntimeConfigTest {
 
     private fun adapterFor(source: String): String =
         when (source) {
-            "federal-campgrounds" -> "RecGovCampgroundsEtl"
+            "recgov-campgrounds" -> "RecGovCampgroundsEtl"
             "campflare-campgrounds" -> "CampflareCampgroundsEtl"
             else -> "TestEtl"
         }

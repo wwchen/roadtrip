@@ -3,10 +3,10 @@ package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.DataProvider
-import ca.floo.roadtrip.model.etl.CampgroundCampsiteEtlOutput
+import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
-import ca.floo.roadtrip.service.etl.framework.CampgroundCampsiteEtl
+import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.JsonElement
@@ -22,9 +22,9 @@ import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import java.time.Instant
 
-class ReserveCaliforniaEtl(
-    override val etlSlug: String = "california-state-parks",
-) : CampgroundCampsiteEtl<ReserveCaliforniaCatalog> {
+class ReserveCaliforniaCampgroundsEtl(
+    override val etlSlug: String = "reservecalifornia-campgrounds",
+) : CampgroundEtl<ReserveCaliforniaCatalog> {
     override val multiPart: Boolean = true
 
     override fun parse(inputs: InputBundle): ReserveCaliforniaCatalog = parseCatalog(inputs.soleEnvelopes(), etlSlug)
@@ -39,10 +39,10 @@ class ReserveCaliforniaEtl(
     override fun transform(
         dto: ReserveCaliforniaCatalog,
         ctx: TransformCtx,
-    ): CampgroundCampsiteEtlOutput {
+    ): CampgroundEtlOutput {
         val bucket = ctx.subcategoryFor(etlSlug)
         val agency = ctx.requiredConstantAgency(etlSlug)
-        return CampgroundCampsiteEtlOutput(
+        return CampgroundEtlOutput(
             campgrounds =
                 dto.places.values
                     .filter { it.facilityIds.isNotEmpty() }
@@ -69,7 +69,6 @@ class ReserveCaliforniaEtl(
                             sourcePayload = place.raw,
                         )
                     },
-            campsites = emptyList(),
         )
     }
 }
