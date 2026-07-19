@@ -4,6 +4,7 @@ import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.model.api.AvailabilityResponseDto
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
+import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -11,9 +12,6 @@ import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
 import java.time.Duration
 import java.time.LocalDate
 
@@ -73,11 +71,13 @@ internal class CampsiteAvailabilityComposer(
                     }
                 },
             )
+        val catalogRefByCampsiteId = resolved.associate { it.campsite.id to it.catalogRef }
         results.firstOrNull { it.providerError != null }?.let { throw it.providerError!! }
         results.forEach { result ->
             val batch = result.batch ?: return@forEach
             result.campsites.forEach { campsite ->
-                val ref = campsite.providerRefForCampsite(result.parentRef)
+                val catalogRef = catalogRefByCampsiteId[campsite.id]
+                val ref = catalogRef?.toProviderRef(result.parentRef) ?: result.parentRef
                 val metadata = availabilityMetadata(result.provider.id, ref, campsiteId = campsite.id)
                 byCampsiteId[campsite.id] =
                     availabilityResponseFromObservations(
@@ -178,18 +178,12 @@ private fun availabilityMetadata(
         campsiteId = campsiteId,
     )
 
-private fun CampsiteAvailabilityTarget.providerRefForCampsite(parentRef: BookingProviderRef): BookingProviderRef =
+private fun CatalogCampsiteRef.toProviderRef(parentRef: BookingProviderRef): BookingProviderRef =
     when (parentRef) {
         is BookingProviderRef.Aspira ->
             parentRef.copy(
-                mapId = aspiraProviderRefLong("mapId") ?: parentRef.mapId,
-                resourceLocationId = aspiraProviderRefLong("resourceLocationId") ?: parentRef.resourceLocationId,
+                mapId = mapId ?: parentRef.mapId,
+                resourceLocationId = resourceLocationId ?: parentRef.resourceLocationId,
             )
         else -> parentRef
     }
-
-private fun CampsiteAvailabilityTarget.aspiraProviderRefLong(key: String): Long? =
-    (providerRef as? JsonObject)
-        ?.get(key)
-        ?.jsonPrimitive
-        ?.longOrNull

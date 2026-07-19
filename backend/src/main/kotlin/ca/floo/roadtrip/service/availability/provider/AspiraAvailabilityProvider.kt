@@ -121,12 +121,14 @@ class AspiraAvailabilityProvider(
 
     /** goingtocamp `create-booking/results` deep link for this tenant's host;
      *  the concrete-date [bookingUrl] fills the window placeholders. Null when
-     *  neither the campsite's own ref nor [parentRef] carries the ids the
-     *  link needs. */
+     *  neither the campsite's typed catalog ids nor [parentRef] carries the ids
+     *  the link needs. */
     override fun reservationUrlTemplate(
         campsite: CampsiteAvailabilityTarget,
         parentRef: BookingProviderRef,
-    ): String? = AspiraBookingUrl.templateFor(tenant.host, campsite.providerRef, parentRef)
+        catalogMapId: Long?,
+        catalogResourceLocationId: Long?,
+    ): String? = AspiraBookingUrl.templateFor(tenant.host, catalogMapId, catalogResourceLocationId, parentRef)
 
     /**
      * Pull the map id and narrow Long → Int. Real Aspira ids fit comfortably

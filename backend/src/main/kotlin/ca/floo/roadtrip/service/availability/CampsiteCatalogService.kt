@@ -38,7 +38,12 @@ internal class CampsiteCatalogService(
 
     private fun reservationUrlTemplate(campsite: CampsiteAvailabilityTarget): String? =
         targets.resolve(campsite)?.let { resolved ->
-            resolved.provider.reservationUrlTemplate(campsite, resolved.parentRef)
+            resolved.provider.reservationUrlTemplate(
+                campsite,
+                resolved.parentRef,
+                catalogMapId = resolved.catalogRef.mapId,
+                catalogResourceLocationId = resolved.catalogRef.resourceLocationId,
+            )
         }
 }
 
@@ -56,7 +61,6 @@ internal fun CampsiteAvailabilityTarget.toCampsiteSchema(
         siteType = siteType,
         reservationUrlTemplate = reservationUrlTemplate,
         poiIds = poiIds,
-        providerRef = providerRef,
         tags = tags,
         raw = raw,
     )

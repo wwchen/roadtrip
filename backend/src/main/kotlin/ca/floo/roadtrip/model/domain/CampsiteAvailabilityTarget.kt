@@ -17,5 +17,4 @@ data class CampsiteAvailabilityTarget(
     val siteType: String?,
     val raw: JsonElement?,
     val tags: JsonElement? = null,
-    val providerRef: JsonElement? = null,
 )

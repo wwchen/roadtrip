@@ -40,6 +40,8 @@ class CampflareAvailabilityProvider(
     override fun reservationUrlTemplate(
         campsite: CampsiteAvailabilityTarget,
         parentRef: BookingProviderRef,
+        catalogMapId: Long?,
+        catalogResourceLocationId: Long?,
     ): String? = RecGovBookingUrl.templateFromUrl(campsite.rawField(RESERVATION_URL_FIELD))
 
     override suspend fun availability(
