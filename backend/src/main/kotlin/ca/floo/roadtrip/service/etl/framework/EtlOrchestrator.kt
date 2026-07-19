@@ -431,6 +431,9 @@ open class EtlOrchestrator(
                 "aspira-bc-pins" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
                         .AspiraJoinByNameEtl("aspira-bc-pins", DataProvider.ASPIRA, "bc"),
+                "bcparks-merge" to
+                    ca.floo.roadtrip.service.etl.vendors.bcparks
+                        .BcParksMergeEtl(),
                 "aspira-leaves-pc" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
                         .AspiraLeavesEtl("aspira-leaves-pc"),

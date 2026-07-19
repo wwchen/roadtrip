@@ -433,7 +433,7 @@ private data class AspiraBookingCtaProviderRefDto(
     val resourceLocationId: Long,
 )
 
-private data class AspiraBookingCtaRef(
+internal data class AspiraBookingCtaRef(
     val mapId: Long,
     val resourceLocationId: Long,
 )
