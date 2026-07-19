@@ -349,23 +349,6 @@ poi_data:
     subcategory: provincial
     agency: BC Parks
     etls:
-      - slug: aspira-leaves-bc
-        adapter: AspiraLeavesEtl
-        inputs: [aspira-maps-bc]
-      - slug: aspira-bc-pins
-        adapter: AspiraJoinByNameEtl
-        # inventory + dictionaries feed the same data-driven non-bookable
-        # filter. BC's dictionary marks every category bookable today, so
-        # nothing is dropped — the ETL reflects what BC's data shows.
-        inputs: [aspira-leaves-bc, bcparks-strapi, aspira-inventory-bc, aspira-dictionaries-bc]
-        args:
-          host: camping.bcparks.ca
-
-  - name: BC Provincial Parks (Merged)
-    category: campground
-    subcategory: provincial
-    agency: BC Parks
-    etls:
       - slug: bcparks-merge
         adapter: BcParksMergeEtl
         inputs: [aspira-maps-bc, bcparks-strapi, aspira-inventory-bc, aspira-dictionaries-bc]
@@ -487,12 +470,6 @@ campsite_data:
       - slug: aspira-wa-resources
         adapter: AspiraResourcesEtl
         inputs: [aspira-inventory-wa, aspira-dictionaries-wa, aspira-maps-wa]
-
-  - name: BC Aspira Resources
-    etls:
-      - slug: aspira-bc-resources
-        adapter: AspiraResourcesEtl
-        inputs: [aspira-inventory-bc, aspira-dictionaries-bc, aspira-maps-bc]
 
   - name: Parks Canada Aspira Resources
     etls:

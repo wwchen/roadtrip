@@ -425,12 +425,6 @@ open class EtlOrchestrator(
                 "aspira-wa-pins" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
                         .AspiraJoinByNameEtl("aspira-wa-pins", DataProvider.ASPIRA, "wa"),
-                "aspira-leaves-bc" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraLeavesEtl("aspira-leaves-bc"),
-                "aspira-bc-pins" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraJoinByNameEtl("aspira-bc-pins", DataProvider.ASPIRA, "bc"),
                 "bcparks-merge" to
                     ca.floo.roadtrip.service.etl.vendors.bcparks
                         .BcParksMergeEtl(),
@@ -460,15 +454,6 @@ open class EtlOrchestrator(
                             inventoryInputSlug = "aspira-inventory-wa",
                             dictionariesInputSlug = "aspira-dictionaries-wa",
                             aspiraTenant = "wa",
-                        ),
-                "aspira-bc-resources" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraResourcesEtl(
-                            etlSlug = "aspira-bc-resources",
-                            mapsInputSlug = "aspira-maps-bc",
-                            inventoryInputSlug = "aspira-inventory-bc",
-                            dictionariesInputSlug = "aspira-dictionaries-bc",
-                            aspiraTenant = "bc",
                         ),
                 "aspira-pc-resources" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
