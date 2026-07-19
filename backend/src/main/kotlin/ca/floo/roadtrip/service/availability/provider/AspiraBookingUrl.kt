@@ -2,10 +2,6 @@ package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.aspira.AspiraSearchDefaults
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
@@ -30,28 +26,22 @@ internal object AspiraBookingUrl {
 
     /**
      * Booking-page template for a campsite, or null when neither the
-     * campsite's own [reservableProviderRef] nor its [parentRef] carries the
-     * transaction-location and map ids the link needs. The site-level ref wins;
-     * the campground ref fills what the site omits (e.g. `resourceLocationId`
-     * is per-site, `transactionLocationId` is campground-wide).
+     * campsite's own typed [campsiteMapId] / [campsiteResourceLocationId] nor
+     * its [parentRef] carries the transaction-location and map ids the link
+     * needs. The site-level values win; the campground ref fills what the site
+     * omits (e.g. `resourceLocationId` is per-site, `transactionLocationId` is
+     * campground-wide).
      */
     fun templateFor(
         host: String,
-        reservableProviderRef: JsonElement?,
+        campsiteMapId: Long?,
+        campsiteResourceLocationId: Long?,
         parentRef: BookingProviderRef?,
     ): String? {
-        val parent = parentRef as? BookingProviderRef.Aspira
-        val transactionLocationId =
-            reservableProviderRef.aspiraLong("transactionLocationId")
-                ?: parent?.transactionLocationId
-                ?: return null
-        val mapId =
-            reservableProviderRef.aspiraLong("mapId")
-                ?: parent?.mapId
-                ?: return null
-        val resourceLocationId =
-            reservableProviderRef.aspiraLong("resourceLocationId")
-                ?: parent?.resourceLocationId
+        val parent = parentRef as? BookingProviderRef.Aspira ?: return null
+        val transactionLocationId = parent.transactionLocationId
+        val mapId = campsiteMapId ?: parent.mapId
+        val resourceLocationId = campsiteResourceLocationId ?: parent.resourceLocationId
         return template(host, transactionLocationId, mapId, resourceLocationId)
     }
 
@@ -98,9 +88,6 @@ internal object AspiraBookingUrl {
         }
         return "https://$host/create-booking/results?${queryString(params)}"
     }
-
-    private fun JsonElement?.aspiraLong(key: String): Long? =
-        ((this as? JsonObject)?.get(key))?.jsonPrimitive?.contentOrNull?.toLongOrNull()
 
     private fun queryString(params: List<Pair<String, String>>): String =
         params.joinToString("&") { (key, value) -> "${urlEncode(key)}=${urlEncode(value)}" }

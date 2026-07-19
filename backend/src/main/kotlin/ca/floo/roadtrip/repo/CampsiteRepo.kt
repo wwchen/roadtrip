@@ -435,7 +435,6 @@ class CampsiteRepo(
             siteType = r.get("kind", String::class.java),
             raw = parseJsonElement(r.get("source_payload_text", String::class.java)),
             tags = parseJsonElement(r.get("tags_text", String::class.java)),
-            providerRef = parseJsonElement(r.get("provider_ref_text", String::class.java)),
         )
     }
 
@@ -547,10 +546,8 @@ class CampsiteRepo(
                 'picnic_table', c.picnic_table,
                 'ada_accessible', c.ada_accessible,
                 'pull_through', c.pull_through
-              )::text AS tags_text,
-              cg.source_payload::text AS provider_ref_text
+              )::text AS tags_text
             FROM campsites c
-            JOIN campgrounds cg ON cg.id = c.campground_id
             """.trimIndent()
 
         private val campsiteTagsJsonSql =

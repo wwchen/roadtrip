@@ -15,7 +15,6 @@ data class CampsiteSummarySchema(
     @SerialName("site_type") val siteType: String? = null,
     @SerialName("reservation_url_template") val reservationUrlTemplate: String? = null,
     @SerialName("poi_ids") val poiIds: List<Long> = emptyList(),
-    @SerialName("provider_ref") val providerRef: JsonElement? = null,
     val tags: JsonElement? = null,
     val raw: JsonElement? = null,
 )

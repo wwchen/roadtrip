@@ -75,6 +75,8 @@ class RecGovAvailabilityProvider(
     override fun reservationUrlTemplate(
         campsite: CampsiteAvailabilityTarget,
         parentRef: BookingProviderRef,
+        catalogMapId: Long?,
+        catalogResourceLocationId: Long?,
     ): String = RecGovBookingUrl.template(campsite.vendorId)
 
     private fun recgovIdOrThrow(ref: BookingProviderRef): String =

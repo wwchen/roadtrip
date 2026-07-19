@@ -86,10 +86,15 @@ interface AvailabilityProvider : Dispatchable<BookingProvider> {
      * callers (alert notifications, via [reservationUrl]) read it from here rather
      * than hardcoding vendor URLs. Default null keeps deep links opt-in per
      * adapter — a provider without one is not a gap to fill.
+     *
+     * For Aspira, [catalogMapId] and [catalogResourceLocationId] carry the
+     * campsite-specific upstream ids; other providers ignore them.
      */
     fun reservationUrlTemplate(
         campsite: CampsiteAvailabilityTarget,
         parentRef: BookingProviderRef,
+        catalogMapId: Long? = null,
+        catalogResourceLocationId: Long? = null,
     ): String? = null
 
     /**
@@ -102,5 +107,10 @@ interface AvailabilityProvider : Dispatchable<BookingProvider> {
         campsite: CampsiteAvailabilityTarget,
         parentRef: BookingProviderRef,
         date: LocalDate,
-    ): String? = reservationUrlTemplate(campsite, parentRef)?.let { ReservationUrlTemplate.fill(it, date, date.plusDays(1)) }
+        catalogMapId: Long? = null,
+        catalogResourceLocationId: Long? = null,
+    ): String? =
+        reservationUrlTemplate(campsite, parentRef, catalogMapId, catalogResourceLocationId)?.let {
+            ReservationUrlTemplate.fill(it, date, date.plusDays(1))
+        }
 }
