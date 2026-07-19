@@ -17,5 +17,7 @@ enum class DataProvider(
         private val byId = entries.associateBy { it.id }
 
         fun fromId(id: String): DataProvider = byId[id] ?: throw IllegalArgumentException("Unknown data provider: $id")
+
+        fun fromIdOrNull(id: String): DataProvider? = byId[id]
     }
 }
