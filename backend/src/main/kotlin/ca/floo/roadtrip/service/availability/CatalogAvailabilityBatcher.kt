@@ -4,28 +4,9 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.PoiDateContext
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
-
-internal fun CampsiteAvailabilityTarget.toCatalogCampsiteRef(): CatalogCampsiteRef =
-    CatalogCampsiteRef(
-        campsiteId = id,
-        vendorId = vendorId,
-        mapId = aspiraProviderRefLong("mapId"),
-        resourceLocationId = aspiraProviderRefLong("resourceLocationId"),
-    )
-
-private fun CampsiteAvailabilityTarget.aspiraProviderRefLong(key: String): Long? =
-    (providerRef as? JsonObject)
-        ?.get(key)
-        ?.jsonPrimitive
-        ?.longOrNull
 
 internal fun AvailabilityProviderError.toFetchOutcome(): FetchOutcome =
     when (this) {
