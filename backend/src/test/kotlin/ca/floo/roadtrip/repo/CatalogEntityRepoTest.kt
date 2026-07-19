@@ -2,9 +2,9 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
-import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -22,8 +22,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         val repo = CampgroundRepo(ctx)
         val record =
             CampgroundUpsertCandidate(
-                dataProvider = DataProvider.CAMPFLARE,
-                dataProviderRef = "upper-pines-campground-447",
+                dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-campground-447"),
                 name = "Upper Pines",
                 status = "open",
                 kind = "established",
@@ -75,8 +74,8 @@ class CatalogEntityRepoTest : SharedDbTest() {
         val campground = repo.findById(campgroundId)
         assertNotNull(campground)
         assertEquals("Upper Pines Campground", campground.name)
-        assertEquals("campflare", campground.dataProvider)
-        assertEquals("upper-pines-campground-447", campground.dataProviderRef)
+        assertEquals("campflare", campground.dataProviderRef.provider.id)
+        assertEquals("upper-pines-campground-447", campground.dataProviderRef.serialize())
         assertEquals(json("""{"id":"upper-pines-campground-447","name":"Upper Pines"}"""), campground.sourcePayload)
         assertEquals(row.get("id", Long::class.java), campground.id)
         assertEquals(campgroundId, repo.findByPoi(poiId)?.id)
@@ -100,8 +99,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         repo.upsertCampgrounds(
             listOf(
                 CampgroundUpsertCandidate(
-                    dataProvider = DataProvider.RECGOV,
-                    dataProviderRef = "recgov-232447",
+                    dataProviderRef = DataProviderRef.RecGov(id = "recgov-232447"),
                     name = "Upper Pines",
                     latitude = 37.739,
                     longitude = -119.565,
@@ -114,8 +112,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         repo.upsertCampgrounds(
             listOf(
                 CampgroundUpsertCandidate(
-                    dataProvider = DataProvider.CAMPFLARE,
-                    dataProviderRef = "upper-pines-campground-447",
+                    dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-campground-447"),
                     name = "Upper Pines Campflare",
                     latitude = 37.739,
                     longitude = -119.565,
@@ -161,8 +158,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         val repo = CampgroundRepo(ctx)
         val recgovRecord =
             CampgroundUpsertCandidate(
-                dataProvider = DataProvider.RECGOV,
-                dataProviderRef = "232447",
+                dataProviderRef = DataProviderRef.RecGov(id = "232447"),
                 name = "Upper Pines",
                 latitude = 37.739,
                 longitude = -119.565,
@@ -170,8 +166,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
             )
         val campflareRecord =
             CampgroundUpsertCandidate(
-                dataProvider = DataProvider.CAMPFLARE,
-                dataProviderRef = "upper-pines-campground-447",
+                dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-campground-447"),
                 name = "Upper Pines",
                 latitude = 37.739,
                 longitude = -119.565,
@@ -235,8 +230,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         campgrounds.upsertCampgrounds(
             listOf(
                 CampgroundUpsertCandidate(
-                    dataProvider = DataProvider.CAMPFLARE,
-                    dataProviderRef = "upper-pines-campground-447",
+                    dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-campground-447"),
                     name = "Upper Pines",
                     latitude = 37.739,
                     longitude = -119.565,
@@ -251,10 +245,8 @@ class CatalogEntityRepoTest : SharedDbTest() {
             campsites.upsertCampsites(
                 listOf(
                     CampsiteUpsertCandidate(
-                        dataProvider = DataProvider.CAMPFLARE,
-                        dataProviderRef = "upper-pines-site-001",
-                        parentDataProvider = DataProvider.CAMPFLARE,
-                        parentDataProviderRef = "upper-pines-campground-447",
+                        dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-site-001"),
+                        parentDataProviderRef = DataProviderRef.Campflare(id = "upper-pines-campground-447"),
                         name = "Site 001",
                         kind = "tent-only",
                         loopName = "A",
@@ -298,8 +290,8 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertNotNull(persisted)
         assertEquals(campsiteId, persisted.id)
         assertEquals("Site 001", persisted.name)
-        assertEquals("campflare", persisted.dataProvider)
-        assertEquals("upper-pines-site-001", persisted.dataProviderRef)
+        assertEquals("campflare", persisted.dataProviderRef.provider.id)
+        assertEquals("upper-pines-site-001", persisted.dataProviderRef.serialize())
         assertEquals(json("""{"id":"upper-pines-site-001","campground_id":"upper-pines-campground-447"}"""), persisted.sourcePayload)
         assertEquals(campsiteId, campsites.findByPoi(poiIdForCampground("upper-pines-campground-447")).single().id)
 
@@ -318,8 +310,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         campgrounds.upsertCampgrounds(
             listOf(
                 CampgroundUpsertCandidate(
-                    dataProvider = DataProvider.CAMPFLARE,
-                    dataProviderRef = "upper-pines-campground-447",
+                    dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-campground-447"),
                     name = "Upper Pines",
                     latitude = 37.739,
                     longitude = -119.565,
@@ -331,8 +322,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         campgrounds.upsertCampgrounds(
             listOf(
                 CampgroundUpsertCandidate(
-                    dataProvider = DataProvider.RECGOV,
-                    dataProviderRef = "232447",
+                    dataProviderRef = DataProviderRef.RecGov(id = "232447"),
                     name = "Upper Pines",
                     latitude = 37.739,
                     longitude = -119.565,
@@ -344,10 +334,8 @@ class CatalogEntityRepoTest : SharedDbTest() {
         campsites.upsertCampsites(
             listOf(
                 CampsiteUpsertCandidate(
-                    dataProvider = DataProvider.RECGOV,
-                    dataProviderRef = "100",
-                    parentDataProvider = DataProvider.RECGOV,
-                    parentDataProviderRef = "232447",
+                    dataProviderRef = DataProviderRef.RecGov(id = "100"),
+                    parentDataProviderRef = DataProviderRef.RecGov(id = "232447"),
                     name = "Site 100",
                     kind = "standard",
                     sourcePayload = json("""{"site":"100"}"""),
@@ -359,10 +347,8 @@ class CatalogEntityRepoTest : SharedDbTest() {
         campsites.upsertCampsites(
             listOf(
                 CampsiteUpsertCandidate(
-                    dataProvider = DataProvider.CAMPFLARE,
-                    dataProviderRef = "upper-pines-site-100",
-                    parentDataProvider = DataProvider.CAMPFLARE,
-                    parentDataProviderRef = "upper-pines-campground-447",
+                    dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-site-100"),
+                    parentDataProviderRef = DataProviderRef.Campflare(id = "upper-pines-campground-447"),
                     name = "Campflare Site 100",
                     kind = "standard",
                     sourcePayload = json("""{"id":"upper-pines-site-100"}"""),
@@ -497,8 +483,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         val campgroundRecords =
             (0 until batchSize).map { i ->
                 CampgroundUpsertCandidate(
-                    dataProvider = DataProvider.CAMPFLARE,
-                    dataProviderRef = "bulk-cg-$i",
+                    dataProviderRef = DataProviderRef.Campflare(id = "bulk-cg-$i"),
                     name = "Bulk Campground $i",
                     latitude = 40.0 + i * 0.0001,
                     longitude = -120.0 - i * 0.0001,
@@ -517,10 +502,8 @@ class CatalogEntityRepoTest : SharedDbTest() {
         val campsiteRecords =
             (0 until batchSize).map { i ->
                 CampsiteUpsertCandidate(
-                    dataProvider = DataProvider.CAMPFLARE,
-                    dataProviderRef = "bulk-cs-$i",
-                    parentDataProvider = DataProvider.CAMPFLARE,
-                    parentDataProviderRef = "bulk-cg-$i",
+                    dataProviderRef = DataProviderRef.Campflare(id = "bulk-cs-$i"),
+                    parentDataProviderRef = DataProviderRef.Campflare(id = "bulk-cg-$i"),
                     name = "Bulk Campsite $i",
                     kind = "standard",
                     sourcePayload = json("""{"id":"bulk-cs-$i"}"""),

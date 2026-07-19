@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
-import ca.floo.roadtrip.model.domain.DataProvider
+import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.etl.PlanetFitnessLocationEtlOutput

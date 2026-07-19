@@ -9,7 +9,7 @@ import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.client.reservecalifornia.ReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.LocalDate
@@ -58,13 +58,13 @@ class AvailabilityProviderContractTest {
 
             val availability =
                 provider.availability(
-                    ref = ProviderRef.RecGov("232447"),
+                    ref = BookingProviderRef.RecGov("232447"),
                     startDate = startDate,
                     endDate = endDate,
                 )
             val catalog =
                 provider.catalogAvailability(
-                    ref = ProviderRef.RecGov("232447"),
+                    ref = BookingProviderRef.RecGov("232447"),
                     campsites = emptyList(),
                     startDate = startDate,
                     endDate = endDate,

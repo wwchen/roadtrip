@@ -35,11 +35,11 @@ sealed class AvailabilityProviderError(
     ) : AvailabilityProviderError("$providerId does not support $operation")
 
     /**
-     * Registry handed an adapter a `ProviderRef` of the wrong shape.
+     * Registry handed an adapter a `BookingProviderRef` of the wrong shape.
      * Programmer error — registry construction is wrong, not the request.
      */
     class WrongRefType(
         providerId: String,
         gotType: String,
-    ) : AvailabilityProviderError("$providerId received ProviderRef of type $gotType")
+    ) : AvailabilityProviderError("$providerId received BookingProviderRef of type $gotType")
 }

@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.etl.vendors.bcparks
 
-import ca.floo.roadtrip.model.domain.BookingProvider
-import ca.floo.roadtrip.model.domain.BookingRef
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
-import ca.floo.roadtrip.model.domain.DataProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
@@ -157,13 +157,12 @@ class BcParksCampgroundsEtl(
                 "parent" -> viaParent++
             }
 
-            val dataRef = aspiraDataProviderRef(leaf.transactionLocationId, leaf.mapId)
+            val dataRef = DataProviderRef.BcParks(transactionLocationId = leaf.transactionLocationId, mapId = leaf.mapId)
             val bookingCtaRef = leaf.resourceLocationId.let { bookingCtaRefsByResourceLocationId[it] }
             val strapiRow = match.strapiRow
 
             campgrounds +=
                 CampgroundUpsertCandidate(
-                    dataProvider = DataProvider.ASPIRA,
                     dataProviderRef = dataRef,
                     bookingProvider = BookingProvider.ASPIRA,
                     bookingProviderRef = bookingCtaRef?.let { campgroundBookingRef(leaf, it) },
@@ -205,7 +204,7 @@ class BcParksCampgroundsEtl(
         leaf: AspiraLeaf,
         bookingCtaRef: AspiraBookingCtaRef,
     ): String =
-        BookingRef
+        BookingProviderRef
             .Aspira(
                 tenant = ASPIRA_TENANT,
                 transactionLocationId = leaf.transactionLocationId,

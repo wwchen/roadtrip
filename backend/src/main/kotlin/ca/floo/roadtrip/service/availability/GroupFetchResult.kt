@@ -5,7 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 
 /** Result of one (provider, parentRef, dateContext) group's fetch.
@@ -13,7 +13,7 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
  *  (no upstream call, no error). [batch] is non-null iff outcome == OK. */
 internal data class GroupFetchResult(
     val provider: AvailabilityProvider,
-    val parentRef: ProviderRef,
+    val parentRef: BookingProviderRef,
     val dateContext: PoiDateContext,
     val campsites: List<CampsiteAvailabilityTarget>,
     val window: ResolvedDateWindow?,

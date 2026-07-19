@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 
-import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
-import ca.floo.roadtrip.model.domain.DataProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
@@ -49,8 +49,7 @@ class ReserveCaliforniaCampgroundsEtl(
                     .map { place ->
                         val parkUrl = reserveCaliforniaParkUrl(place.placeId)
                         CampgroundUpsertCandidate(
-                            dataProvider = DataProvider.RESERVECALIFORNIA,
-                            dataProviderRef = "$CAMPGROUND_REF_PREFIX${place.placeId}",
+                            dataProviderRef = DataProviderRef.ReserveCalifornia(id = place.placeId.toString()),
                             bookingProvider = BookingProvider.RESERVECALIFORNIA,
                             bookingProviderRef = "${place.placeId}:${place.facilityIds.joinToString(",")}",
                             name = place.name,

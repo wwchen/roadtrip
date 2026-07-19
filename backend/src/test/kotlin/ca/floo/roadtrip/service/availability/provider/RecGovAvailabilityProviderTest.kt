@@ -4,7 +4,7 @@ import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
@@ -46,7 +46,7 @@ class RecGovAvailabilityProviderTest {
 
             val batch =
                 adapter.catalogAvailability(
-                    ref = ProviderRef.RecGov("232447"),
+                    ref = BookingProviderRef.RecGov("232447"),
                     campsites =
                         listOf(
                             CatalogCampsiteRef(
@@ -87,7 +87,7 @@ class RecGovAvailabilityProviderTest {
 
             val batch =
                 adapter.catalogAvailability(
-                    ref = ProviderRef.RecGov("232447"),
+                    ref = BookingProviderRef.RecGov("232447"),
                     campsites =
                         listOf(
                             CatalogCampsiteRef(
@@ -145,7 +145,7 @@ class RecGovAvailabilityProviderTest {
 
             val batch =
                 adapter.catalogAvailability(
-                    ref = ProviderRef.RecGov("232447"),
+                    ref = BookingProviderRef.RecGov("232447"),
                     campsites =
                         listOf(
                             CatalogCampsiteRef(campsiteId = 330257, vendorId = "330257"),
@@ -173,7 +173,7 @@ class RecGovAvailabilityProviderTest {
                 raw = null,
             )
 
-        val url = adapter.reservationUrl(campsite, ProviderRef.RecGov("232447"), LocalDate.parse("2026-07-01"))
+        val url = adapter.reservationUrl(campsite, BookingProviderRef.RecGov("232447"), LocalDate.parse("2026-07-01"))
 
         assertEquals(
             "https://www.recreation.gov/camping/campsites/330257?startDate=2026-07-01&endDate=2026-07-02",

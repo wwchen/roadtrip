@@ -6,7 +6,7 @@ import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingProviderId
 import ca.floo.roadtrip.model.booking.BookingTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -31,12 +31,12 @@ class RecGovBookingProviderTest {
 
         val target =
             provider.targetFor(
-                ProviderRef.RecGov(TEST_RECGOV_CAMPGROUND_ID),
+                BookingProviderRef.RecGov(TEST_RECGOV_CAMPGROUND_ID),
                 CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_VENDOR_ID),
             )
 
         assertEquals(BookingProviderId.RECGOV, target?.providerId)
-        assertEquals(ProviderRef.RecGov(TEST_RECGOV_CAMPGROUND_ID), target?.parentRef)
+        assertEquals(BookingProviderRef.RecGov(TEST_RECGOV_CAMPGROUND_ID), target?.parentRef)
         assertEquals(CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_VENDOR_ID), target?.campsiteRef)
     }
 
@@ -46,7 +46,7 @@ class RecGovBookingProviderTest {
 
         val target =
             provider.targetFor(
-                ProviderRef.Aspira(1L, 2L),
+                BookingProviderRef.Aspira("bc", 1L, 2L, null),
                 CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_VENDOR_ID),
             )
 
@@ -65,7 +65,7 @@ class RecGovBookingProviderTest {
         val provider = provider()
 
         assertFalse(provider.can(BookingAction.ADD_TO_CART, recgovTarget(providerId = BookingProviderId.ASPIRA)))
-        assertFalse(provider.can(BookingAction.ADD_TO_CART, recgovTarget(parentRef = ProviderRef.Aspira(1L, 2L))))
+        assertFalse(provider.can(BookingAction.ADD_TO_CART, recgovTarget(parentRef = BookingProviderRef.Aspira("bc", 1L, 2L, null))))
         assertFalse(provider.can(BookingAction.ADD_TO_CART, recgovTarget(vendorId = "")))
     }
 
@@ -173,7 +173,7 @@ class RecGovBookingProviderTest {
 
     private fun recgovTarget(
         providerId: BookingProviderId = BookingProviderId.RECGOV,
-        parentRef: ProviderRef = ProviderRef.RecGov(TEST_RECGOV_CAMPGROUND_ID),
+        parentRef: BookingProviderRef = BookingProviderRef.RecGov(TEST_RECGOV_CAMPGROUND_ID),
         vendorId: String = TEST_VENDOR_ID,
     ): BookingTarget =
         BookingTarget(

@@ -6,7 +6,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.AspiraException
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -57,7 +57,7 @@ class AspiraAvailabilityProvider(
     override fun isEnabled(): Boolean = enabled
 
     override suspend fun availability(
-        ref: ProviderRef,
+        ref: BookingProviderRef,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
@@ -75,7 +75,7 @@ class AspiraAvailabilityProvider(
     }
 
     override suspend fun catalogAvailability(
-        ref: ProviderRef,
+        ref: BookingProviderRef,
         campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
@@ -124,7 +124,7 @@ class AspiraAvailabilityProvider(
      *  link needs. */
     override fun reservationUrlTemplate(
         campsite: CampsiteAvailabilityTarget,
-        parentRef: ProviderRef,
+        parentRef: BookingProviderRef,
     ): String? = AspiraBookingUrl.templateFor(tenant.host, campsite.providerRef, parentRef)
 
     /**
@@ -132,15 +132,15 @@ class AspiraAvailabilityProvider(
      * in 32 bits; rejecting an out-of-range value loudly is better than
      * silent truncation.
      */
-    private fun mapIdOrThrow(ref: ProviderRef): Int {
+    private fun mapIdOrThrow(ref: BookingProviderRef): Int {
         val ar = aspiraRefOrThrow(ref)
         return intOrThrow("mapId", ar.mapId)
     }
 
     private fun mapIdOrThrow(mapId: Long): Int = intOrThrow("mapId", mapId)
 
-    private fun aspiraRefOrThrow(ref: ProviderRef): ProviderRef.Aspira =
-        (ref as? ProviderRef.Aspira)
+    private fun aspiraRefOrThrow(ref: BookingProviderRef): BookingProviderRef.Aspira =
+        (ref as? BookingProviderRef.Aspira)
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), ref::class.simpleName ?: "unknown")
 
     private fun intOrThrow(

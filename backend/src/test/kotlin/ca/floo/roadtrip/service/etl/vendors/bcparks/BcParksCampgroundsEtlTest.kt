@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.bcparks
 
-import ca.floo.roadtrip.model.domain.BookingProvider
-import ca.floo.roadtrip.model.domain.DataProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.RequestMeta
 import ca.floo.roadtrip.model.metadata.ResponseMeta
@@ -38,8 +38,8 @@ class BcParksCampgroundsEtlTest {
 
         assertEquals(1, output.campgrounds.size)
         val cg = output.campgrounds.single()
-        assertEquals(DataProvider.ASPIRA, cg.dataProvider)
-        assertEquals("aspira-4189--2147483548", cg.dataProviderRef)
+        assertEquals(DataProvider.ASPIRA, cg.dataProviderRef.provider)
+        assertEquals("aspira-4189--2147483548", cg.dataProviderRef.serialize())
         assertEquals(BookingProvider.ASPIRA, cg.bookingProvider)
         assertEquals("bc:4189:-2147483548:9001", cg.bookingProviderRef)
         assertEquals("Rathtrevor Beach", cg.name)

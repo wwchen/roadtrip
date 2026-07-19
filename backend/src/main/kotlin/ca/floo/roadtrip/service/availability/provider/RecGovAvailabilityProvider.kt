@@ -6,7 +6,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import java.time.LocalDate
 
 /**
@@ -32,7 +32,7 @@ class RecGovAvailabilityProvider(
     override fun isEnabled(): Boolean = enabled
 
     override suspend fun availability(
-        ref: ProviderRef,
+        ref: BookingProviderRef,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
@@ -48,7 +48,7 @@ class RecGovAvailabilityProvider(
     }
 
     override suspend fun catalogAvailability(
-        ref: ProviderRef,
+        ref: BookingProviderRef,
         campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
@@ -73,12 +73,12 @@ class RecGovAvailabilityProvider(
      *  addresses the page. */
     override fun reservationUrlTemplate(
         campsite: CampsiteAvailabilityTarget,
-        parentRef: ProviderRef,
+        parentRef: BookingProviderRef,
     ): String = RecGovBookingUrl.template(campsite.vendorId)
 
-    private fun recgovIdOrThrow(ref: ProviderRef): String =
+    private fun recgovIdOrThrow(ref: BookingProviderRef): String =
         when (ref) {
-            is ProviderRef.RecGov -> ref.recgovId
+            is BookingProviderRef.RecGov -> ref.facilityId
             else -> throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), ref::class.simpleName ?: "unknown")
         }
 

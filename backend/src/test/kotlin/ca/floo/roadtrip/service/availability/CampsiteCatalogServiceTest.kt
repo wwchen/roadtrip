@@ -4,7 +4,7 @@ import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -137,14 +137,14 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
 
         override fun reservationUrlTemplate(
             campsite: CampsiteAvailabilityTarget,
-            parentRef: ProviderRef,
+            parentRef: BookingProviderRef,
         ): String? {
-            val parentId = (parentRef as ProviderRef.RecGov).recgovId
+            val parentId = (parentRef as BookingProviderRef.RecGov).facilityId
             return "provider-template://$parentId/${campsite.vendor}/${campsite.vendorId}"
         }
 
         override suspend fun availability(
-            ref: ProviderRef,
+            ref: BookingProviderRef,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")

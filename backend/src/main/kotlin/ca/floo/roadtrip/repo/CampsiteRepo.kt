@@ -4,6 +4,8 @@ import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
+import ca.floo.roadtrip.model.domain.provider.DataProvider
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
@@ -54,16 +56,23 @@ class CampsiteRepo(
     private fun bulkUpsertCampsitesTx(records: List<CampsiteUpsertCandidate>): Pair<Int, Int> {
         if (records.isEmpty()) return 0 to 0
 
-        val withParent = records.filter { it.parentDataProvider != null && it.parentDataProviderRef != null }
+        val withParent = records.filter { it.parentDataProviderRef != null }
         val skippedForMissingParent = records.size - withParent.size
 
         val parentMap = HashMap<ParentKey, Long>()
-        val parentKeys = withParent.map { ParentKey(it.parentDataProvider!!.id, it.parentDataProviderRef!!) }.distinct()
+        val parentKeys =
+            withParent
+                .map {
+                    ParentKey(
+                        it.parentDataProviderRef!!.provider.id,
+                        it.parentDataProviderRef!!.serialize(),
+                    )
+                }.distinct()
         parentMap.putAll(loadParentCampgroundMap(parentKeys))
 
         val withResolvedParent =
             withParent.filter {
-                ParentKey(it.parentDataProvider!!.id, it.parentDataProviderRef!!) in parentMap
+                ParentKey(it.parentDataProviderRef!!.provider.id, it.parentDataProviderRef!!.serialize()) in parentMap
             }
         val skippedForUnresolvedParent = withParent.size - withResolvedParent.size
         val totalSkipped = skippedForMissingParent + skippedForUnresolvedParent
@@ -72,7 +81,10 @@ class CampsiteRepo(
 
         val campsiteRows =
             withResolvedParent.map { record ->
-                val campgroundId = parentMap.getValue(ParentKey(record.parentDataProvider!!.id, record.parentDataProviderRef!!))
+                val campgroundId =
+                    parentMap.getValue(
+                        ParentKey(record.parentDataProviderRef!!.provider.id, record.parentDataProviderRef!!.serialize()),
+                    )
                 CampsiteBulkRow(record = record, campgroundId = campgroundId)
             }
         bulkUpsertCampsiteRows(campsiteRows)
@@ -114,7 +126,7 @@ class CampsiteRepo(
 
     private fun bulkUpsertCampsiteRows(rows: List<CampsiteBulkRow>) {
         if (rows.isEmpty()) return
-        val deduped = rows.distinctBy { it.record.dataProvider.id to it.record.dataProviderRef }
+        val deduped = rows.distinctBy { it.record.dataProviderRef.provider.id to it.record.dataProviderRef.serialize() }
         for (chunk in deduped.chunked(BULK_CHUNK_SIZE)) {
             val placeholders =
                 chunk.joinToString(", ") {
@@ -175,8 +187,8 @@ class CampsiteRepo(
             val params = mutableListOf<Any?>()
             for (row in chunk) {
                 val record = row.record
-                params += record.dataProvider.id
-                params += record.dataProviderRef
+                params += record.dataProviderRef.provider.id
+                params += record.dataProviderRef.serialize()
                 params += record.bookingProvider?.id
                 params += record.bookingProviderRef
                 params += row.campgroundId
@@ -368,8 +380,14 @@ class CampsiteRepo(
             )
     }
 
-    private fun campsiteFromRecord(record: Record): Campsite =
-        Campsite(
+    private fun campsiteFromRecord(record: Record): Campsite {
+        val dataProvider = DataProvider.fromId(record.get("data_provider", String::class.java))
+        val dataProviderRefStr = record.get("data_provider_ref", String::class.java)
+        val dataProviderRef =
+            DataProviderRef.parse(dataProvider, dataProviderRefStr)
+                ?: error("Failed to parse DataProviderRef for provider=$dataProvider ref=$dataProviderRefStr")
+
+        return Campsite(
             id = record.get("id", Long::class.java),
             campgroundId = record.get("campground_id", Long::class.java),
             name = record.get("name", String::class.java),
@@ -399,11 +417,11 @@ class CampsiteRepo(
             createdAt = record.instant("created_at"),
             updatedAt = record.instant("updated_at"),
             deletedAt = record.nullableInstant("deleted_at"),
-            dataProvider = record.get("data_provider", String::class.java),
-            dataProviderRef = record.get("data_provider_ref", String::class.java),
+            dataProviderRef = dataProviderRef,
             bookingProvider = record.get("booking_provider", String::class.java),
             bookingProviderRef = record.get("booking_provider_ref", String::class.java),
         )
+    }
 
     internal fun availabilityTargetFromRecord(r: Record): CampsiteAvailabilityTarget {
         val vendor = r.get("data_provider", String::class.java) ?: CANONICAL_VENDOR

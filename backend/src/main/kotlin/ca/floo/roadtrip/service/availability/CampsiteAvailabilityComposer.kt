@@ -6,7 +6,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
@@ -158,29 +158,29 @@ private fun ResolvedAvailabilityTarget.toAvailabilityTarget(): AvailabilityLoade
 
 private fun availabilityMetadata(
     providerId: AvailabilityProviderId,
-    ref: ProviderRef,
+    ref: BookingProviderRef,
     campsiteId: Long? = null,
 ): AvailabilityLoader.Metadata =
     AvailabilityLoader.Metadata(
         provider = providerId.name.lowercase(),
         campgroundId =
             when (ref) {
-                is ProviderRef.RecGov -> ref.recgovId
-                is ProviderRef.Campflare -> ref.campgroundId
+                is BookingProviderRef.RecGov -> ref.facilityId
+                is BookingProviderRef.Campflare -> ref.campgroundId
                 else -> null
             },
         mapId =
             when (ref) {
-                is ProviderRef.Aspira -> ref.mapId.toString()
-                is ProviderRef.ReserveCalifornia -> ref.facilityIds.joinToString(",")
+                is BookingProviderRef.Aspira -> ref.mapId.toString()
+                is BookingProviderRef.ReserveCalifornia -> ref.facilityIds.joinToString(",")
                 else -> null
             },
         campsiteId = campsiteId,
     )
 
-private fun CampsiteAvailabilityTarget.providerRefForCampsite(parentRef: ProviderRef): ProviderRef =
+private fun CampsiteAvailabilityTarget.providerRefForCampsite(parentRef: BookingProviderRef): BookingProviderRef =
     when (parentRef) {
-        is ProviderRef.Aspira ->
+        is BookingProviderRef.Aspira ->
             parentRef.copy(
                 mapId = aspiraProviderRefLong("mapId") ?: parentRef.mapId,
                 resourceLocationId = aspiraProviderRefLong("resourceLocationId") ?: parentRef.resourceLocationId,

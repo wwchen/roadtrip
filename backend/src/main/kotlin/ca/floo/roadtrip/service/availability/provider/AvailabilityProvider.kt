@@ -5,7 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.Dispatchable
 import java.time.LocalDate
 
@@ -14,7 +14,7 @@ import java.time.LocalDate
  * availability platform (rec.gov, Aspira NextGen instance, ReserveAmerica, ...).
  *
  * Availability services consume this interface; routes stay at the HTTP
- * boundary and never branch on `ProviderRef` variants directly. See
+ * boundary and never branch on `BookingProviderRef` variants directly. See
  * `docs/reservation-providers.md` for the architecture rules.
  *
  * Adapters own:
@@ -45,7 +45,7 @@ interface AvailabilityProvider : Dispatchable<AvailabilityProviderId> {
      * providers can decline and the availability resolver can try linked
      * fallback refs without hardcoded provider branching.
      */
-    fun supportsRef(ref: ProviderRef): Boolean = isEnabled() && id == ref.availabilityProviderId()
+    fun supportsRef(ref: BookingProviderRef): Boolean = isEnabled() && id == ref.availabilityProviderId()
 
     /**
      * Per-day availability for the half-open window `[startDate, endDate)`.
@@ -54,7 +54,7 @@ interface AvailabilityProvider : Dispatchable<AvailabilityProviderId> {
      *   5xx, parse error, or unsupported capability).
      */
     suspend fun availability(
-        ref: ProviderRef,
+        ref: BookingProviderRef,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch
@@ -66,7 +66,7 @@ interface AvailabilityProvider : Dispatchable<AvailabilityProviderId> {
      * split can override this to classify the actual linked resources.
      */
     suspend fun catalogAvailability(
-        ref: ProviderRef,
+        ref: BookingProviderRef,
         campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
@@ -88,7 +88,7 @@ interface AvailabilityProvider : Dispatchable<AvailabilityProviderId> {
      */
     fun reservationUrlTemplate(
         campsite: CampsiteAvailabilityTarget,
-        parentRef: ProviderRef,
+        parentRef: BookingProviderRef,
     ): String? = null
 
     /**
@@ -99,7 +99,7 @@ interface AvailabilityProvider : Dispatchable<AvailabilityProviderId> {
      */
     fun reservationUrl(
         campsite: CampsiteAvailabilityTarget,
-        parentRef: ProviderRef,
+        parentRef: BookingProviderRef,
         date: LocalDate,
     ): String? = reservationUrlTemplate(campsite, parentRef)?.let { ReservationUrlTemplate.fill(it, date, date.plusDays(1)) }
 }

@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -14,20 +14,20 @@ import kotlinx.serialization.json.longOrNull
  * is the discriminator, no explicit type tag.
  *
  * Returns null for unknown shapes / malformed JSON. Adapters and routes
- * branch on the returned [ProviderRef] variant; nobody else parses JSON.
+ * branch on the returned [BookingProviderRef] variant; nobody else parses JSON.
  */
 object ProviderRefParser {
-    fun parse(json: String): ProviderRef? {
+    fun parse(json: String): BookingProviderRef? {
         val obj =
             runCatching { Json.parseToJsonElement(json).jsonObject }.getOrNull()
                 ?: return null
 
         obj["recgov_id"]?.jsonPrimitive?.contentOrNull?.let {
-            return ProviderRef.RecGov(recgovId = it)
+            return BookingProviderRef.RecGov(facilityId = it)
         }
 
         obj["campflare_id"]?.jsonPrimitive?.contentOrNull?.let {
-            return ProviderRef.Campflare(campgroundId = it)
+            return BookingProviderRef.Campflare(campgroundId = it)
         }
 
         // Aspira: writer uses Long for both ids; reading as Long avoids the
@@ -36,7 +36,8 @@ object ProviderRefParser {
         val transactionLocationId = obj["transactionLocationId"]?.jsonPrimitive?.longOrNull
         if (mapId != null && transactionLocationId != null) {
             val resourceLocationId = obj["resourceLocationId"]?.jsonPrimitive?.longOrNull
-            return ProviderRef.Aspira(
+            return BookingProviderRef.Aspira(
+                tenant = null,
                 transactionLocationId = transactionLocationId,
                 mapId = mapId,
                 resourceLocationId = resourceLocationId,
@@ -44,14 +45,14 @@ object ProviderRefParser {
         }
 
         obj["park_id"]?.jsonPrimitive?.contentOrNull?.let {
-            return ProviderRef.ReserveAmerica(
+            return BookingProviderRef.ReserveAmerica(
                 contractCode = obj["contract_code"]?.jsonPrimitive?.contentOrNull,
                 parkId = it,
             )
         }
 
         obj["facility_id"]?.jsonPrimitive?.contentOrNull?.takeIf { it.toLongOrNull() != null }?.let {
-            return ProviderRef.ReserveAmerica(contractCode = null, parkId = it)
+            return BookingProviderRef.ReserveAmerica(contractCode = null, parkId = it)
         }
 
         val placeId = obj["place_id"]?.jsonPrimitive?.longOrNull
@@ -63,18 +64,18 @@ object ProviderRefParser {
                     .orEmpty()
             }.getOrDefault(emptyList())
         if (placeId != null && facilityIds.isNotEmpty()) {
-            return ProviderRef.ReserveCalifornia(placeId = placeId, facilityIds = facilityIds)
+            return BookingProviderRef.ReserveCalifornia(placeId = placeId, facilityIds = facilityIds)
         }
 
         return null
     }
 }
 
-internal fun ProviderRef.availabilityProviderId(): AvailabilityProviderId =
+internal fun BookingProviderRef.availabilityProviderId(): AvailabilityProviderId =
     when (this) {
-        is ProviderRef.RecGov -> AvailabilityProviderId.RECGOV
-        is ProviderRef.Campflare -> AvailabilityProviderId.CAMPFLARE
-        is ProviderRef.Aspira -> AvailabilityProviderId.ASPIRA
-        is ProviderRef.ReserveAmerica -> AvailabilityProviderId.RESERVEAMERICA
-        is ProviderRef.ReserveCalifornia -> AvailabilityProviderId.RESERVECALIFORNIA
+        is BookingProviderRef.RecGov -> AvailabilityProviderId.RECGOV
+        is BookingProviderRef.Campflare -> AvailabilityProviderId.CAMPFLARE
+        is BookingProviderRef.Aspira -> AvailabilityProviderId.ASPIRA
+        is BookingProviderRef.ReserveAmerica -> AvailabilityProviderId.RESERVEAMERICA
+        is BookingProviderRef.ReserveCalifornia -> AvailabilityProviderId.RESERVECALIFORNIA
     }

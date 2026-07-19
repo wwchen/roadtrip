@@ -1,10 +1,11 @@
 package ca.floo.roadtrip.model.domain
 
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import kotlinx.serialization.json.JsonElement
 
 data class CampgroundUpsertCandidate(
-    val dataProvider: DataProvider,
-    val dataProviderRef: String,
+    val dataProviderRef: DataProviderRef,
     val bookingProvider: BookingProvider? = null,
     val bookingProviderRef: String? = null,
     val name: String,

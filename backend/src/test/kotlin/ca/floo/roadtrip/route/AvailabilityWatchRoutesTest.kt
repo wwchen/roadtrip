@@ -1057,7 +1057,7 @@ private object FakeRecgovProvider : ca.floo.roadtrip.service.availability.provid
     override fun isEnabled(): Boolean = true
 
     override suspend fun availability(
-        ref: ca.floo.roadtrip.model.domain.ProviderRef,
+        ref: ca.floo.roadtrip.model.domain.provider.BookingProviderRef,
         startDate: java.time.LocalDate,
         endDate: java.time.LocalDate,
     ): ca.floo.roadtrip.model.availability.AvailabilityObservationBatch = throw UnsupportedOperationException("not used")

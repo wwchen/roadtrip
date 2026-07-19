@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.model.domain
 
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+
 data class CampsiteProviderRefRow(
     val poiId: Long,
     val source: String,

@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -69,7 +69,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: ProviderRef,
+            ref: BookingProviderRef,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
@@ -89,7 +89,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         override fun isEnabled(): Boolean = enabled
 
         override suspend fun availability(
-            ref: ProviderRef,
+            ref: BookingProviderRef,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")

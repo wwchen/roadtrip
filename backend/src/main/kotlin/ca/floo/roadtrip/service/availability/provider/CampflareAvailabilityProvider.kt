@@ -10,7 +10,7 @@ import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.CampflareException
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.JsonObject
@@ -34,15 +34,15 @@ class CampflareAvailabilityProvider(
 
     override fun isEnabled(): Boolean = enabled
 
-    override fun supportsRef(ref: ProviderRef): Boolean = isEnabled() && ref is ProviderRef.Campflare
+    override fun supportsRef(ref: BookingProviderRef): Boolean = isEnabled() && ref is BookingProviderRef.Campflare
 
     override fun reservationUrlTemplate(
         campsite: CampsiteAvailabilityTarget,
-        parentRef: ProviderRef,
+        parentRef: BookingProviderRef,
     ): String? = RecGovBookingUrl.templateFromUrl(campsite.rawField(RESERVATION_URL_FIELD))
 
     override suspend fun availability(
-        ref: ProviderRef,
+        ref: BookingProviderRef,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
@@ -70,7 +70,7 @@ class CampflareAvailabilityProvider(
     }
 
     override suspend fun catalogAvailability(
-        ref: ProviderRef,
+        ref: BookingProviderRef,
         campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
@@ -147,8 +147,8 @@ class CampflareAvailabilityProvider(
             campgroundId = campgroundId,
         )
 
-    private fun campflareRefOrThrow(ref: ProviderRef): ProviderRef.Campflare =
-        (ref as? ProviderRef.Campflare)
+    private fun campflareRefOrThrow(ref: BookingProviderRef): BookingProviderRef.Campflare =
+        (ref as? BookingProviderRef.Campflare)
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), ref::class.simpleName ?: "unknown")
 
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =

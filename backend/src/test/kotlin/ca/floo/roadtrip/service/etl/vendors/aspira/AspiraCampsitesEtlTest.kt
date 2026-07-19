@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
-import ca.floo.roadtrip.model.domain.DataProvider
+import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -87,8 +87,8 @@ class AspiraCampsitesEtlTest {
         val campsite = etl.transform(dto, ctx).campsites.single()
         val sourcePayload = campsite.sourcePayload!!.jsonObject
 
-        assertEquals(DataProvider.ASPIRA, campsite.parentDataProvider)
-        assertEquals("aspira--2147483630--2147483388", campsite.parentDataProviderRef)
+        assertEquals(DataProvider.ASPIRA, campsite.parentDataProviderRef!!.provider)
+        assertEquals("aspira--2147483630--2147483388", campsite.parentDataProviderRef!!.serialize())
         assertEquals("Deception Pass", campsite.loopName)
         assertEquals(-2147483388, sourcePayload["_parent_aspira_map_id"]!!.jsonPrimitive.long)
         assertEquals(-2147483615, sourcePayload["_aspira_resource_map_id"]!!.jsonPrimitive.long)

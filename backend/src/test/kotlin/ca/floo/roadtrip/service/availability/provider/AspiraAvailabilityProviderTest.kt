@@ -7,7 +7,7 @@ import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -79,7 +79,8 @@ class AspiraAvailabilityProviderTest {
             val batch =
                 adapter.catalogAvailability(
                     ref =
-                        ProviderRef.Aspira(
+                        BookingProviderRef.Aspira(
+                            tenant = "pc",
                             transactionLocationId = -2147483630,
                             mapId = -2147483388,
                             resourceLocationId = -2147483624,
@@ -150,7 +151,8 @@ class AspiraAvailabilityProviderTest {
             val batch =
                 adapter.catalogAvailability(
                     ref =
-                        ProviderRef.Aspira(
+                        BookingProviderRef.Aspira(
+                            tenant = "pc",
                             transactionLocationId = -2147483630,
                             mapId = -2147483388,
                             resourceLocationId = -2147483624,
@@ -213,7 +215,8 @@ class AspiraAvailabilityProviderTest {
             val batch =
                 adapter.catalogAvailability(
                     ref =
-                        ProviderRef.Aspira(
+                        BookingProviderRef.Aspira(
+                            tenant = "pc",
                             transactionLocationId = -2147483630,
                             mapId = -2147483388,
                             resourceLocationId = null,
@@ -269,7 +272,8 @@ class AspiraAvailabilityProviderTest {
             val batch =
                 adapter.catalogAvailability(
                     ref =
-                        ProviderRef.Aspira(
+                        BookingProviderRef.Aspira(
+                            tenant = "pc",
                             transactionLocationId = -2147483630,
                             mapId = -2147483388,
                             resourceLocationId = null,
@@ -307,7 +311,13 @@ class AspiraAvailabilityProviderTest {
                 // Site-level ref carries mapId + resourceLocationId; the parent supplies transactionLocationId.
                 providerRef = Json.parseToJsonElement("""{"mapId":-2147483615,"resourceLocationId":-2147483624}"""),
             )
-        val parentRef = ProviderRef.Aspira(transactionLocationId = -2147483630, mapId = -2147483388, resourceLocationId = -2147483624)
+        val parentRef =
+            BookingProviderRef.Aspira(
+                tenant = "pc",
+                transactionLocationId = -2147483630,
+                mapId = -2147483388,
+                resourceLocationId = -2147483624,
+            )
 
         val url = adapter.reservationUrl(reservable, parentRef, LocalDate.parse("2026-07-10"))!!
 

@@ -5,7 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -139,7 +139,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: ProviderRef,
+            ref: BookingProviderRef,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used by AvailabilityPollerMembershipTest")
@@ -156,7 +156,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         fun stub(
             campsite: CampsiteAvailabilityTarget,
             provider: AvailabilityProviderId,
-            parentRef: ProviderRef,
+            parentRef: BookingProviderRef,
             parentPoiId: Long,
             dateContext: PoiDateContext,
             supportsInternalPolling: Boolean = true,
@@ -194,14 +194,14 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteA)!!,
             AvailabilityProviderId.RECGOV,
-            ProviderRef.RecGov("232447"),
+            BookingProviderRef.RecGov("232447"),
             poi,
             fakeDateContext,
         )
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteB)!!,
             AvailabilityProviderId.RECGOV,
-            ProviderRef.RecGov("232447"),
+            BookingProviderRef.RecGov("232447"),
             poi,
             fakeDateContext,
         )
@@ -234,14 +234,14 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteX)!!,
             AvailabilityProviderId.RECGOV,
-            ProviderRef.RecGov("999000"),
+            BookingProviderRef.RecGov("999000"),
             poiX,
             fakeDateContext,
         )
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteY)!!,
             AvailabilityProviderId.RECGOV,
-            ProviderRef.RecGov("999000"),
+            BookingProviderRef.RecGov("999000"),
             poiY,
             fakeDateContext,
         )
@@ -270,14 +270,14 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteA)!!,
             AvailabilityProviderId.RECGOV,
-            ProviderRef.RecGov("111111"),
+            BookingProviderRef.RecGov("111111"),
             poi,
             fakeDateContext,
         )
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteB)!!,
             AvailabilityProviderId.RECGOV,
-            ProviderRef.RecGov("222222"),
+            BookingProviderRef.RecGov("222222"),
             poi,
             fakeDateContext,
         )
@@ -301,7 +301,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteA)!!,
             AvailabilityProviderId.RECGOV,
-            ProviderRef.RecGov("111111"),
+            BookingProviderRef.RecGov("111111"),
             poi,
             fakeDateContext,
             supportsInternalPolling = false,
@@ -325,7 +325,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteA)!!,
             AvailabilityProviderId.RECGOV,
-            ProviderRef.RecGov("333333"),
+            BookingProviderRef.RecGov("333333"),
             poi,
             fakeDateContext,
         )
@@ -343,7 +343,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteA)!!,
             AvailabilityProviderId.RECGOV,
-            ProviderRef.RecGov("444444"),
+            BookingProviderRef.RecGov("444444"),
             poi,
             fakeDateContext,
         )
@@ -365,7 +365,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteA)!!,
             AvailabilityProviderId.RECGOV,
-            ProviderRef.RecGov("555555"),
+            BookingProviderRef.RecGov("555555"),
             poi,
             fakeDateContext,
         )
@@ -393,7 +393,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         targets.stub(
             campsiteRepo.findAvailabilityTargetById(campsiteA)!!,
             AvailabilityProviderId.RECGOV,
-            ProviderRef.RecGov("666666"),
+            BookingProviderRef.RecGov("666666"),
             poi,
             fakeDateContext,
         )

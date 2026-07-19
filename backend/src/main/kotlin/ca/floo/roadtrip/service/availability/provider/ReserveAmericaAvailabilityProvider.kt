@@ -9,7 +9,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.ReserveAmericaException
 import kotlinx.coroutines.CancellationException
 import java.time.Instant
@@ -42,7 +42,7 @@ class ReserveAmericaAvailabilityProvider(
     override fun isEnabled(): Boolean = enabled
 
     override suspend fun availability(
-        ref: ProviderRef,
+        ref: BookingProviderRef,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
@@ -72,7 +72,7 @@ class ReserveAmericaAvailabilityProvider(
     }
 
     override suspend fun catalogAvailability(
-        ref: ProviderRef,
+        ref: BookingProviderRef,
         campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
@@ -162,11 +162,11 @@ class ReserveAmericaAvailabilityProvider(
             campsiteId = campsiteId,
         )
 
-    private fun reserveAmericaRefOrThrow(ref: ProviderRef): ProviderRef.ReserveAmerica =
-        (ref as? ProviderRef.ReserveAmerica)
+    private fun reserveAmericaRefOrThrow(ref: BookingProviderRef): BookingProviderRef.ReserveAmerica =
+        (ref as? BookingProviderRef.ReserveAmerica)
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), ref::class.simpleName ?: "unknown")
 
-    private fun contractCode(ref: ProviderRef.ReserveAmerica): String {
+    private fun contractCode(ref: BookingProviderRef.ReserveAmerica): String {
         val contract = ref.contractCode ?: tenant.contractCode
         if (!contract.equals(tenant.contractCode, ignoreCase = true)) {
             throw AvailabilityProviderError.UpstreamUnavailable(

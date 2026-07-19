@@ -2,8 +2,7 @@
 
 package ca.floo.roadtrip.service.etl.vendors.campflare
 
-import ca.floo.roadtrip.model.domain.BookingProvider
-import ca.floo.roadtrip.model.domain.CampflareUrls
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject

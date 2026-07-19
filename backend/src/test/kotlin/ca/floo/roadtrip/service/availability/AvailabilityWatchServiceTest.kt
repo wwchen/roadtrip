@@ -8,7 +8,7 @@ import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingProviderId
 import ca.floo.roadtrip.model.booking.BookingTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
@@ -742,7 +742,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: ProviderRef,
+            ref: BookingProviderRef,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
@@ -760,7 +760,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: ProviderRef,
+            ref: BookingProviderRef,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
@@ -770,10 +770,10 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         override val id: BookingProviderId = BookingProviderId.RECGOV
 
         override fun targetFor(
-            parentRef: ProviderRef,
+            parentRef: BookingProviderRef,
             campsiteRef: CatalogCampsiteRef,
         ): BookingTarget? {
-            if (parentRef !is ProviderRef.RecGov) return null
+            if (parentRef !is BookingProviderRef.RecGov) return null
             return BookingTarget(
                 providerId = id,
                 parentRef = parentRef,
@@ -787,7 +787,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         ): Boolean =
             action == BookingAction.ADD_TO_CART &&
                 target.providerId == BookingProviderId.RECGOV &&
-                target.parentRef is ProviderRef.RecGov &&
+                target.parentRef is BookingProviderRef.RecGov &&
                 target.campsiteRef.vendorId.isNotBlank()
 
         override suspend fun addToCart(request: AddToCartRequest): AddToCartResult = AddToCartResult.Unsupported

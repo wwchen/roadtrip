@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.etl.vendors.campflare
 
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.DEFAULT_CAMPSITE_KIND
-import ca.floo.roadtrip.model.domain.DataProvider
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
@@ -34,12 +34,10 @@ class CampflareCampsitesEtl : CampsiteEtl<List<JsonObject>> {
         val reservationUrl = raw.stringField("reservation_url")
         val recgovRef = recgovCampsiteVendorRef(raw, id, reservationUrl)
         return CampsiteUpsertCandidate(
-            dataProvider = DataProvider.CAMPFLARE,
-            dataProviderRef = id,
+            dataProviderRef = DataProviderRef.Campflare(id = id),
             bookingProvider = recgovRef?.vendor,
             bookingProviderRef = recgovRef?.vendorRefId,
-            parentDataProvider = DataProvider.CAMPFLARE,
-            parentDataProviderRef = campgroundId,
+            parentDataProviderRef = DataProviderRef.Campflare(id = campgroundId),
             name = name,
             kind = kind,
             loopName = raw.stringField("loop_name"),

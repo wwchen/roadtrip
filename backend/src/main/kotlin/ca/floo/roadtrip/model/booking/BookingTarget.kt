@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.model.booking
 
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 
 /**
  * Provider-neutral target for booking actions. The parent ref is the
@@ -10,6 +10,6 @@ import ca.floo.roadtrip.model.domain.ProviderRef
  */
 data class BookingTarget(
     val providerId: BookingProviderId,
-    val parentRef: ProviderRef,
+    val parentRef: BookingProviderRef,
     val campsiteRef: CatalogCampsiteRef,
 )

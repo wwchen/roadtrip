@@ -13,7 +13,7 @@ import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.availability.campflare.CampflareCampgroundAvailability
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.metadata.registry.EtlEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
@@ -85,7 +85,7 @@ class AvailabilityProviderRegistryBuildTest {
             assertNotNull(provider)
             assertEquals(AvailabilityProviderId.RESERVEAMERICA, provider.id)
             provider.availability(
-                ref = ProviderRef.ReserveAmerica(contractCode = "ZZ", parkId = "489"),
+                ref = BookingProviderRef.ReserveAmerica(contractCode = "ZZ", parkId = "489"),
                 startDate = LocalDate.parse("2026-06-22"),
                 endDate = LocalDate.parse("2026-06-24"),
             )
@@ -159,7 +159,7 @@ class AvailabilityProviderRegistryBuildTest {
             assertEquals(AvailabilityProviderId.CAMPFLARE, provider.id)
             assertEquals(AvailabilityProviderId.CAMPFLARE, providerByCanonicalVendor.id)
             provider.availability(
-                ref = ProviderRef.Campflare("upper-pines-campground-447"),
+                ref = BookingProviderRef.Campflare("upper-pines-campground-447"),
                 startDate = LocalDate.parse("2026-06-01"),
                 endDate = LocalDate.parse("2026-06-07"),
             )
@@ -220,15 +220,15 @@ class AvailabilityProviderRegistryBuildTest {
 
         assertNull(registry.forPoi(row("campflare")))
         assertNull(registry.forPoi(row("campflare-campgrounds")))
-        assertNull(registry.forPoi(row("campflare"), ProviderRef.Campflare("upper-pines-campground-447")))
-        assertNull(registry.forPoi(row("campflare-campgrounds"), ProviderRef.Campflare("upper-pines-campground-447")))
+        assertNull(registry.forPoi(row("campflare"), BookingProviderRef.Campflare("upper-pines-campground-447")))
+        assertNull(registry.forPoi(row("campflare-campgrounds"), BookingProviderRef.Campflare("upper-pines-campground-447")))
         assertEquals(
             AvailabilityProviderId.RECGOV,
-            registry.forPoi(row("recgov"), ProviderRef.RecGov("232447"))?.id,
+            registry.forPoi(row("recgov"), BookingProviderRef.RecGov(facilityId = "232447"))?.id,
         )
         assertEquals(
             AvailabilityProviderId.RECGOV,
-            registry.forPoi(row("recgov-campgrounds"), ProviderRef.RecGov("232447"))?.id,
+            registry.forPoi(row("recgov-campgrounds"), BookingProviderRef.RecGov(facilityId = "232447"))?.id,
         )
     }
 

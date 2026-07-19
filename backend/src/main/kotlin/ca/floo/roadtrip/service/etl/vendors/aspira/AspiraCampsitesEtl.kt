@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
-import ca.floo.roadtrip.model.domain.BookingProvider
-import ca.floo.roadtrip.model.domain.BookingRef
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
-import ca.floo.roadtrip.model.domain.DataProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
@@ -159,12 +159,10 @@ class AspiraCampsitesEtl(
                 if (leafMapId != null && leaf == null) unmatchedLeaf++
                 out +=
                     CampsiteUpsertCandidate(
-                        dataProvider = DataProvider.ASPIRA,
-                        dataProviderRef = resourceId,
+                        dataProviderRef = DataProviderRef.AspiraCampsite(resourceLocationId = resourceId.toLong()),
                         bookingProvider = BookingProvider.ASPIRA,
                         bookingProviderRef = campsiteBookingRef(inv, leaf, parentLeaf),
-                        parentDataProvider = DataProvider.ASPIRA,
-                        parentDataProviderRef = parentDataProviderRef(leaf, parentLeaf, inv),
+                        parentDataProviderRef = parentDataProviderRefTyped(leaf, parentLeaf, inv),
                         // Short label from /api/resourcelocation/resources
                         // (`localizedValues[0].name`) — e.g. "OFC13", "B7".
                         name = inv.name ?: resourceId,
@@ -199,7 +197,7 @@ class AspiraCampsitesEtl(
         val transactionLocationId = leaf?.transactionLocationId ?: parentLeaf?.transactionLocationId ?: return null
         val mapId = leaf?.mapId ?: inv.firstMapId ?: parentLeaf?.mapId ?: return null
         val resourceLocationId = leaf?.resourceLocationId ?: inv.resourceLocationId ?: parentLeaf?.resourceLocationId ?: return null
-        return BookingRef
+        return BookingProviderRef
             .Aspira(
                 tenant = aspiraTenant,
                 transactionLocationId = transactionLocationId,
@@ -208,19 +206,19 @@ class AspiraCampsitesEtl(
             ).serialize()
     }
 
-    private fun parentDataProviderRef(
+    private fun parentDataProviderRefTyped(
         leaf: AspiraLeaf?,
         parentLeaf: AspiraLeaf?,
         inv: ResourceInventory,
-    ): String? {
+    ): DataProviderRef? {
         val parent = leaf ?: parentLeaf
         if (parent != null) {
-            return "$ASPIRA_DATA_REF_PREFIX${parent.transactionLocationId}-${parent.mapId}"
+            return DataProviderRef.Aspira(transactionLocationId = parent.transactionLocationId, mapId = parent.mapId)
         }
         val transactionLocationId = parentLeaf?.transactionLocationId
         val mapId = inv.firstMapId
         return if (transactionLocationId != null && mapId != null) {
-            "$ASPIRA_DATA_REF_PREFIX$transactionLocationId-$mapId"
+            DataProviderRef.Aspira(transactionLocationId = transactionLocationId, mapId = mapId)
         } else {
             null
         }

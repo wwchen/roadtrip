@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.campflare
 
-import ca.floo.roadtrip.model.domain.BookingProvider
-import ca.floo.roadtrip.model.domain.DataProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.RequestMeta
 import ca.floo.roadtrip.model.metadata.ResponseMeta
@@ -24,8 +24,8 @@ class CampflareCampgroundsEtlTest {
         val out = etl.transform(etl.parse(bundle("campflare-campgrounds", campgroundPayload())), transformCtx())
         val row = out.campgrounds.single()
 
-        assertEquals(DataProvider.CAMPFLARE, row.dataProvider)
-        assertEquals("upper-pines-campground-447", row.dataProviderRef)
+        assertEquals(DataProvider.CAMPFLARE, row.dataProviderRef.provider)
+        assertEquals("upper-pines-campground-447", row.dataProviderRef.serialize())
         assertEquals("Upper Pines", row.name)
         assertEquals("open", row.status)
         assertNull(row.statusDescription)
@@ -89,7 +89,7 @@ class CampflareCampgroundsEtlTest {
                 transformCtx(),
             )
 
-        assertEquals(listOf("ok"), out.campgrounds.map { it.dataProviderRef })
+        assertEquals(listOf("ok"), out.campgrounds.map { it.dataProviderRef.serialize() })
     }
 
     @Test

@@ -7,7 +7,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import kotlinx.coroutines.runBlocking
@@ -67,13 +67,13 @@ class FailoverAvailabilityFetcherTest {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: ProviderRef,
+            ref: BookingProviderRef,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
 
         override suspend fun catalogAvailability(
-            ref: ProviderRef,
+            ref: BookingProviderRef,
             campsites: List<CatalogCampsiteRef>,
             startDate: LocalDate,
             endDate: LocalDate,
@@ -127,7 +127,7 @@ class FailoverAvailabilityFetcherTest {
     ): ProviderCandidate =
         ProviderCandidate(
             provider = provider,
-            parentRef = ProviderRef.RecGov(recgovId = parentId),
+            parentRef = BookingProviderRef.RecGov(facilityId = parentId),
             catalogRef = CatalogCampsiteRef(campsiteId = catalogRefId, vendorId = catalogRefId.toString()),
         )
 
@@ -375,7 +375,7 @@ class FailoverAvailabilityFetcherTest {
                     }
 
                     override suspend fun catalogAvailability(
-                        ref: ProviderRef,
+                        ref: BookingProviderRef,
                         campsites: List<CatalogCampsiteRef>,
                         startDate: LocalDate,
                         endDate: LocalDate,

@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.model.domain
+package ca.floo.roadtrip.service.etl.vendors.campflare
 
 internal object CampflareUrls {
     private const val CAMPGROUND_URL_PREFIX = "https://campflare.com/campground"

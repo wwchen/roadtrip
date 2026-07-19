@@ -6,7 +6,7 @@ import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingProviderId
 import ca.floo.roadtrip.model.booking.BookingTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -19,10 +19,10 @@ internal class RecGovBookingProvider(
     override val id: BookingProviderId = BookingProviderId.RECGOV
 
     override fun targetFor(
-        parentRef: ProviderRef,
+        parentRef: BookingProviderRef,
         campsiteRef: CatalogCampsiteRef,
     ): BookingTarget? {
-        if (parentRef !is ProviderRef.RecGov) return null
+        if (parentRef !is BookingProviderRef.RecGov) return null
         return BookingTarget(
             providerId = id,
             parentRef = parentRef,
@@ -36,7 +36,7 @@ internal class RecGovBookingProvider(
     ): Boolean =
         action == BookingAction.ADD_TO_CART &&
             target.providerId == id &&
-            target.parentRef is ProviderRef.RecGov &&
+            target.parentRef is BookingProviderRef.RecGov &&
             target.campsiteRef.vendorId.isNotBlank()
 
     override suspend fun addToCart(request: AddToCartRequest): AddToCartResult {

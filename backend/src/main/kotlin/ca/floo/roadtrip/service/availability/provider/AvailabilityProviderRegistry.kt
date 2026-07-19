@@ -1,9 +1,8 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.model.domain.BookingProvider
-import ca.floo.roadtrip.model.domain.BookingRef
 import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 
 /**
@@ -43,32 +42,32 @@ class AvailabilityProviderRegistry(
 
     fun forPoi(
         row: CampsiteProviderRefRow,
-        ref: ProviderRef,
+        ref: BookingProviderRef,
     ): AvailabilityProvider? =
         adaptersBySource[row.source]
             ?.takeIf { it.isEnabled() && it.supportsRef(ref) }
 
     /**
-     * Typed lookup: resolve adapter from a [BookingProvider] enum + parsed [BookingRef].
+     * Typed lookup: resolve adapter from a [BookingProvider] enum + parsed [BookingProviderRef].
      * For multi-tenant providers (Aspira, ReserveAmerica), extracts the
      * tenant from the ref to select the correct adapter instance.
      */
     fun forBooking(
         provider: BookingProvider,
-        ref: BookingRef,
+        ref: BookingProviderRef,
     ): AvailabilityProvider? {
         val key =
             when (ref) {
-                is BookingRef.Aspira -> "aspira_${ref.tenant}"
-                is BookingRef.ReserveAmerica ->
+                is BookingProviderRef.Aspira -> "aspira_${ref.tenant}"
+                is BookingProviderRef.ReserveAmerica ->
                     adaptersBySource.keys.firstOrNull { source ->
                         val adapter = adaptersBySource[source]
                         adapter?.id == AvailabilityProviderId.RESERVEAMERICA &&
                             (adapter as? ReserveAmericaAvailabilityProvider)?.tenant?.contractCode == ref.contractCode
                     }
-                is BookingRef.RecGov -> RECGOV_VENDOR
-                is BookingRef.Campflare -> CAMPFLARE_VENDOR
-                is BookingRef.ReserveCalifornia ->
+                is BookingProviderRef.RecGov -> RECGOV_VENDOR
+                is BookingProviderRef.Campflare -> CAMPFLARE_VENDOR
+                is BookingProviderRef.ReserveCalifornia ->
                     adaptersBySource.keys.firstOrNull { source ->
                         adaptersBySource[source]?.id == AvailabilityProviderId.RESERVECALIFORNIA
                     }

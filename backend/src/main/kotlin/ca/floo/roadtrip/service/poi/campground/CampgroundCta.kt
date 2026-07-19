@@ -1,8 +1,7 @@
 package ca.floo.roadtrip.service.poi.campground
 
 import ca.floo.roadtrip.model.api.poi.PoiCtaSchema
-import ca.floo.roadtrip.model.domain.CampflareUrls
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AspiraBookingDisplay
 import ca.floo.roadtrip.service.availability.provider.AspiraBookingUrl
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
@@ -11,6 +10,7 @@ import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
 import ca.floo.roadtrip.service.availability.provider.ReserveAmericaBookingDisplay
 import ca.floo.roadtrip.service.availability.provider.ReserveCaliforniaBookingDisplay
 import ca.floo.roadtrip.service.availability.provider.ReserveCaliforniaBookingUrl
+import ca.floo.roadtrip.service.etl.vendors.campflare.CampflareUrls
 import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneId
@@ -71,8 +71,8 @@ internal class CampgroundCta(
         ).distinctBy { it.url }
     }
 
-    private fun campflareCta(providerRef: ProviderRef?): PoiCtaSchema? {
-        val campflare = providerRef as? ProviderRef.Campflare ?: return null
+    private fun campflareCta(providerRef: BookingProviderRef?): PoiCtaSchema? {
+        val campflare = providerRef as? BookingProviderRef.Campflare ?: return null
         return PoiCtaSchema(
             url = CampflareUrls.campground(campflare.campgroundId),
             label = CAMPFLARE_CTA_LABEL,
@@ -81,7 +81,7 @@ internal class CampgroundCta(
     }
 
     private fun primaryReserveCta(
-        providerRef: ProviderRef?,
+        providerRef: BookingProviderRef?,
         reserveUrl: String?,
         infoUrl: String?,
     ): PoiCtaSchema? =
@@ -105,27 +105,27 @@ internal class CampgroundCta(
 
 private interface CampgroundCtaProvider {
     fun bookingSystem(
-        providerRef: ProviderRef?,
+        providerRef: BookingProviderRef?,
         infoUrl: String?,
     ): String? = null
 
     fun reserveCta(
-        providerRef: ProviderRef?,
+        providerRef: BookingProviderRef?,
         infoUrl: String?,
     ): PoiCtaSchema? = null
 }
 
 private object RecGovCampgroundCtaProvider : CampgroundCtaProvider {
     override fun bookingSystem(
-        providerRef: ProviderRef?,
+        providerRef: BookingProviderRef?,
         infoUrl: String?,
-    ): String? = (providerRef as? ProviderRef.RecGov)?.let { RecGovBookingDisplay.BOOKING_SYSTEM_LABEL }
+    ): String? = (providerRef as? BookingProviderRef.RecGov)?.let { RecGovBookingDisplay.BOOKING_SYSTEM_LABEL }
 
     override fun reserveCta(
-        providerRef: ProviderRef?,
+        providerRef: BookingProviderRef?,
         infoUrl: String?,
     ): PoiCtaSchema? {
-        providerRef as? ProviderRef.RecGov ?: return null
+        providerRef as? BookingProviderRef.RecGov ?: return null
         val url = infoUrl?.takeIf { it.isNotBlank() } ?: return null
         return reserveCta(
             url = url,
@@ -138,18 +138,18 @@ private class AspiraCampgroundCtaProvider(
     private val clock: Clock,
 ) : CampgroundCtaProvider {
     override fun bookingSystem(
-        providerRef: ProviderRef?,
+        providerRef: BookingProviderRef?,
         infoUrl: String?,
     ): String? {
-        providerRef as? ProviderRef.Aspira ?: return null
+        providerRef as? BookingProviderRef.Aspira ?: return null
         return AspiraBookingDisplay.bookingSystemLabel(infoUrl?.let(UrlHosts::extract))
     }
 
     override fun reserveCta(
-        providerRef: ProviderRef?,
+        providerRef: BookingProviderRef?,
         infoUrl: String?,
     ): PoiCtaSchema? {
-        val aspira = providerRef as? ProviderRef.Aspira ?: return null
+        val aspira = providerRef as? BookingProviderRef.Aspira ?: return null
         val host = infoUrl?.let(UrlHosts::extract) ?: return null
         return reserveCta(
             url = deeplink(host, aspira),
@@ -159,7 +159,7 @@ private class AspiraCampgroundCtaProvider(
 
     private fun deeplink(
         host: String,
-        ref: ProviderRef.Aspira,
+        ref: BookingProviderRef.Aspira,
     ): String {
         val today = LocalDate.now(clock.withZone(aspiraAnchorTimeZone))
         val template = AspiraBookingUrl.template(host, ref.transactionLocationId, ref.mapId, ref.resourceLocationId)
@@ -176,22 +176,22 @@ private class AspiraCampgroundCtaProvider(
 
 private object ReserveAmericaCampgroundCtaProvider : CampgroundCtaProvider {
     override fun bookingSystem(
-        providerRef: ProviderRef?,
+        providerRef: BookingProviderRef?,
         infoUrl: String?,
-    ): String? = (providerRef as? ProviderRef.ReserveAmerica)?.let { ReserveAmericaBookingDisplay.BOOKING_SYSTEM_LABEL }
+    ): String? = (providerRef as? BookingProviderRef.ReserveAmerica)?.let { ReserveAmericaBookingDisplay.BOOKING_SYSTEM_LABEL }
 }
 
 private object ReserveCaliforniaCampgroundCtaProvider : CampgroundCtaProvider {
     override fun bookingSystem(
-        providerRef: ProviderRef?,
+        providerRef: BookingProviderRef?,
         infoUrl: String?,
-    ): String? = (providerRef as? ProviderRef.ReserveCalifornia)?.let { ReserveCaliforniaBookingDisplay.BOOKING_SYSTEM_LABEL }
+    ): String? = (providerRef as? BookingProviderRef.ReserveCalifornia)?.let { ReserveCaliforniaBookingDisplay.BOOKING_SYSTEM_LABEL }
 
     override fun reserveCta(
-        providerRef: ProviderRef?,
+        providerRef: BookingProviderRef?,
         infoUrl: String?,
     ): PoiCtaSchema? {
-        val reserveCalifornia = providerRef as? ProviderRef.ReserveCalifornia ?: return null
+        val reserveCalifornia = providerRef as? BookingProviderRef.ReserveCalifornia ?: return null
         return reserveCta(
             url = ReserveCaliforniaBookingUrl.park(reserveCalifornia.placeId),
             label = ReserveCaliforniaBookingDisplay.PARK_CTA_LABEL,

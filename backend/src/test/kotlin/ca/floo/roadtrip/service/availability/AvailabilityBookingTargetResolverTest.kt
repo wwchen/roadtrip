@@ -10,7 +10,7 @@ import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingProviderId
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.booking.BookingProvider
@@ -43,7 +43,7 @@ class AvailabilityBookingTargetResolverTest {
         val target = resolver.targetFor(BookingAction.ADD_TO_CART, resolved)
 
         assertEquals(BookingProviderId.RECGOV, target?.providerId)
-        assertEquals(ProviderRef.RecGov(TEST_RECGOV_PARENT_ID), target?.parentRef)
+        assertEquals(BookingProviderRef.RecGov(TEST_RECGOV_PARENT_ID), target?.parentRef)
         assertEquals(CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_RECGOV_SITE_ID), target?.campsiteRef)
     }
 
@@ -61,10 +61,10 @@ class AvailabilityBookingTargetResolverTest {
         override val id: BookingProviderId = BookingProviderId.RECGOV
 
         override fun targetFor(
-            parentRef: ProviderRef,
+            parentRef: BookingProviderRef,
             campsiteRef: CatalogCampsiteRef,
         ): BookingTarget? {
-            if (parentRef !is ProviderRef.RecGov) return null
+            if (parentRef !is BookingProviderRef.RecGov) return null
             return BookingTarget(
                 providerId = id,
                 parentRef = parentRef,
@@ -78,7 +78,7 @@ class AvailabilityBookingTargetResolverTest {
         ): Boolean =
             action == BookingAction.ADD_TO_CART &&
                 target.providerId == BookingProviderId.RECGOV &&
-                target.parentRef is ProviderRef.RecGov
+                target.parentRef is BookingProviderRef.RecGov
 
         override suspend fun addToCart(request: AddToCartRequest): AddToCartResult = AddToCartResult.Unsupported
     }
@@ -96,7 +96,7 @@ class AvailabilityBookingTargetResolverTest {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: ProviderRef,
+            ref: BookingProviderRef,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
@@ -118,14 +118,14 @@ class AvailabilityBookingTargetResolverTest {
     private fun campflareCandidate(): ProviderCandidate =
         ProviderCandidate(
             provider = FakeAvailabilityProvider(AvailabilityProviderId.CAMPFLARE),
-            parentRef = ProviderRef.Campflare(TEST_CAMPFLARE_PARENT_ID),
+            parentRef = BookingProviderRef.Campflare(TEST_CAMPFLARE_PARENT_ID),
             catalogRef = CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_CAMPFLARE_PARENT_ID),
         )
 
     private fun recgovCandidate(): ProviderCandidate =
         ProviderCandidate(
             provider = FakeAvailabilityProvider(AvailabilityProviderId.RECGOV),
-            parentRef = ProviderRef.RecGov(TEST_RECGOV_PARENT_ID),
+            parentRef = BookingProviderRef.RecGov(facilityId = TEST_RECGOV_PARENT_ID),
             catalogRef = CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_RECGOV_SITE_ID),
         )
 

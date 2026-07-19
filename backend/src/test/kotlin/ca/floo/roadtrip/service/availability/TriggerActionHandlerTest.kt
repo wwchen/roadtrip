@@ -10,7 +10,7 @@ import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingProviderId
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
@@ -384,7 +384,7 @@ class TriggerActionHandlerTest {
             val delivered =
                 handler.fire(
                     fakeWatch(id = 42L, triggerKinds = listOf(AtcTriggerActionHandler.KIND)),
-                    openings = listOf(triggerOpening(parentRef = ProviderRef.Campflare("campflare-1"))),
+                    openings = listOf(triggerOpening(parentRef = BookingProviderRef.Campflare("campflare-1"))),
                 )
 
             assertFalse(delivered)
@@ -489,10 +489,10 @@ class TriggerActionHandlerTest {
         override val id: BookingProviderId = BookingProviderId.RECGOV
 
         override fun targetFor(
-            parentRef: ProviderRef,
+            parentRef: BookingProviderRef,
             campsiteRef: CatalogCampsiteRef,
         ): BookingTarget? {
-            if (parentRef !is ProviderRef.RecGov) return null
+            if (parentRef !is BookingProviderRef.RecGov) return null
             return BookingTarget(
                 providerId = id,
                 parentRef = parentRef,
@@ -506,7 +506,7 @@ class TriggerActionHandlerTest {
         ): Boolean =
             action == BookingAction.ADD_TO_CART &&
                 target.providerId == BookingProviderId.RECGOV &&
-                target.parentRef is ProviderRef.RecGov
+                target.parentRef is BookingProviderRef.RecGov
 
         override suspend fun addToCart(request: AddToCartRequest): AddToCartResult {
             requests += request
@@ -536,20 +536,20 @@ class TriggerActionHandlerTest {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: ProviderRef,
+            ref: BookingProviderRef,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
     }
 
-    private fun triggerOpening(parentRef: ProviderRef = ProviderRef.RecGov("100")): TriggerOpening {
+    private fun triggerOpening(parentRef: BookingProviderRef = BookingProviderRef.RecGov(facilityId = "100")): TriggerOpening {
         val providerId =
             when (parentRef) {
-                is ProviderRef.RecGov -> AvailabilityProviderId.RECGOV
-                is ProviderRef.Campflare -> AvailabilityProviderId.CAMPFLARE
-                is ProviderRef.Aspira -> AvailabilityProviderId.ASPIRA
-                is ProviderRef.ReserveAmerica -> AvailabilityProviderId.RESERVEAMERICA
-                is ProviderRef.ReserveCalifornia -> AvailabilityProviderId.RESERVECALIFORNIA
+                is BookingProviderRef.RecGov -> AvailabilityProviderId.RECGOV
+                is BookingProviderRef.Campflare -> AvailabilityProviderId.CAMPFLARE
+                is BookingProviderRef.Aspira -> AvailabilityProviderId.ASPIRA
+                is BookingProviderRef.ReserveAmerica -> AvailabilityProviderId.RESERVEAMERICA
+                is BookingProviderRef.ReserveCalifornia -> AvailabilityProviderId.RESERVECALIFORNIA
             }
         val campsite =
             CampsiteAvailabilityTarget(

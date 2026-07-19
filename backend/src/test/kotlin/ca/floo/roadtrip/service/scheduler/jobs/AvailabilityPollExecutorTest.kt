@@ -12,7 +12,7 @@ import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
-import ca.floo.roadtrip.model.domain.ProviderRef
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -444,13 +444,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: ProviderRef,
+            ref: BookingProviderRef,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
 
         override suspend fun catalogAvailability(
-            ref: ProviderRef,
+            ref: BookingProviderRef,
             campsites: List<CatalogCampsiteRef>,
             startDate: LocalDate,
             endDate: LocalDate,
@@ -481,7 +481,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
         override fun reservationUrlTemplate(
             campsite: CampsiteAvailabilityTarget,
-            parentRef: ProviderRef,
+            parentRef: BookingProviderRef,
         ): String = "https://example.test/book/${campsite.vendorId}?d=${ReservationUrlTemplate.START_DATE}"
     }
 
@@ -497,13 +497,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: ProviderRef,
+            ref: BookingProviderRef,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
 
         override suspend fun catalogAvailability(
-            ref: ProviderRef,
+            ref: BookingProviderRef,
             campsites: List<CatalogCampsiteRef>,
             startDate: LocalDate,
             endDate: LocalDate,
@@ -1474,7 +1474,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                         attempts.map { spec ->
                             FailoverAvailabilityFetcher.AttemptRecord(
                                 provider = spec.provider,
-                                parentRef = ProviderRef.RecGov(recgovId = spec.parentId),
+                                parentRef = BookingProviderRef.RecGov(facilityId = spec.parentId),
                                 outcome = spec.outcome,
                                 durationMs = spec.durationMs,
                                 error = spec.error,
