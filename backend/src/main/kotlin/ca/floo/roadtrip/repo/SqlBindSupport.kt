@@ -2,8 +2,6 @@ package ca.floo.roadtrip.repo
 
 import kotlinx.serialization.json.JsonElement
 
-internal const val CAMPGROUND_ENTITY: String = "campground"
-internal const val CAMPSITE_ENTITY: String = "campsite"
 internal const val EMPTY_JSON_OBJECT: String = "{}"
 internal const val EMPTY_JSON_ARRAY: String = "[]"
 
