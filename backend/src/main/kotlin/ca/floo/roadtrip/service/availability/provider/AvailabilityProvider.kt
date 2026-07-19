@@ -29,7 +29,7 @@ import java.time.LocalDate
  *   - HTTP response shaping (service/API layer rolls observations into DTOs)
  */
 interface AvailabilityProvider : Dispatchable<BookingProvider> {
-    /** Stable identity. Mapped from catalog source slug + `provider_ref` shape by the registry. */
+    /** Stable identity. Mapped from typed booking refs by the registry. */
     val id: BookingProvider
 
     /** Static per adapter; cheap to read and safe to surface to API clients. */
@@ -46,7 +46,7 @@ interface AvailabilityProvider : Dispatchable<BookingProvider> {
      * providers can decline and the availability resolver can try linked
      * fallback refs without hardcoded provider branching.
      */
-    fun supportsRef(ref: BookingProviderRef): Boolean = isEnabled() && id == ref.bookingProvider()
+    fun supportsRef(ref: BookingProviderRef): Boolean = isEnabled() && id == ref.provider
 
     /**
      * Per-day availability for the half-open window `[startDate, endDate)`.

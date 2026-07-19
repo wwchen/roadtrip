@@ -4,13 +4,18 @@ import ca.floo.roadtrip.model.api.poi.PoiCtaSchema
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AspiraBookingDisplay
 import ca.floo.roadtrip.service.availability.provider.AspiraBookingUrl
-import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
 import ca.floo.roadtrip.service.availability.provider.RecGovBookingDisplay
 import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
 import ca.floo.roadtrip.service.availability.provider.ReserveAmericaBookingDisplay
 import ca.floo.roadtrip.service.availability.provider.ReserveCaliforniaBookingDisplay
 import ca.floo.roadtrip.service.availability.provider.ReserveCaliforniaBookingUrl
 import ca.floo.roadtrip.service.etl.vendors.campflare.CampflareUrls
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import java.time.Clock
 import java.time.LocalDate
 import java.time.ZoneId
@@ -40,7 +45,7 @@ internal class CampgroundCta(
         reserveUrl: String?,
         infoUrl: String?,
     ): String? {
-        val providerRef = providerRefJson?.let { ProviderRefParser.parse(it) }
+        val providerRef = providerRefJson?.let { parseProviderRef(it) }
         val upstreamUrl = providerUrl(reserveUrl = reserveUrl, infoUrl = infoUrl)
         return providers.firstNotNullOfOrNull { it.bookingSystem(providerRef, upstreamUrl) }
     }
@@ -51,8 +56,8 @@ internal class CampgroundCta(
         reserveUrl: String?,
         infoUrl: String?,
     ): List<PoiCtaSchema> {
-        val primaryProviderRef = (ctaProviderRefJson ?: providerRefJson)?.let { ProviderRefParser.parse(it) }
-        val sourceProviderRef = providerRefJson?.let { ProviderRefParser.parse(it) }
+        val primaryProviderRef = (ctaProviderRefJson ?: providerRefJson)?.let { parseProviderRef(it) }
+        val sourceProviderRef = providerRefJson?.let { parseProviderRef(it) }
         val primaryCta =
             primaryReserveCta(
                 providerRef = primaryProviderRef,
@@ -69,6 +74,62 @@ internal class CampgroundCta(
             primaryCta,
             campflareCta(sourceProviderRef),
         ).distinctBy { it.url }
+    }
+
+    // Parse booking provider ref JSON into typed ref. Mirrors the writer
+    // in CampgroundRepo.bookingProviderRefJson() — presence of a field
+    // is the discriminator, no explicit type tag.
+    private fun parseProviderRef(json: String): BookingProviderRef? {
+        val obj =
+            runCatching { Json.parseToJsonElement(json).jsonObject }.getOrNull()
+                ?: return null
+
+        obj["recgov_id"]?.jsonPrimitive?.contentOrNull?.let {
+            return BookingProviderRef.RecGov(facilityId = it)
+        }
+
+        obj["campflare_id"]?.jsonPrimitive?.contentOrNull?.let {
+            return BookingProviderRef.Campflare(campgroundId = it)
+        }
+
+        // Aspira: writer uses Long for both ids; reading as Long avoids the
+        // 32-bit truncation that the legacy `Int` parser introduced.
+        val mapId = obj["mapId"]?.jsonPrimitive?.longOrNull
+        val transactionLocationId = obj["transactionLocationId"]?.jsonPrimitive?.longOrNull
+        if (mapId != null && transactionLocationId != null) {
+            val resourceLocationId = obj["resourceLocationId"]?.jsonPrimitive?.longOrNull
+            return BookingProviderRef.Aspira(
+                tenant = null,
+                transactionLocationId = transactionLocationId,
+                mapId = mapId,
+                resourceLocationId = resourceLocationId,
+            )
+        }
+
+        obj["park_id"]?.jsonPrimitive?.contentOrNull?.let {
+            return BookingProviderRef.ReserveAmerica(
+                contractCode = obj["contract_code"]?.jsonPrimitive?.contentOrNull,
+                parkId = it,
+            )
+        }
+
+        obj["facility_id"]?.jsonPrimitive?.contentOrNull?.takeIf { it.toLongOrNull() != null }?.let {
+            return BookingProviderRef.ReserveAmerica(contractCode = null, parkId = it)
+        }
+
+        val placeId = obj["place_id"]?.jsonPrimitive?.longOrNull
+        val facilityIds =
+            runCatching {
+                obj["facility_ids"]
+                    ?.jsonArray
+                    ?.mapNotNull { it.jsonPrimitive.longOrNull }
+                    .orEmpty()
+            }.getOrDefault(emptyList())
+        if (placeId != null && facilityIds.isNotEmpty()) {
+            return BookingProviderRef.ReserveCalifornia(placeId = placeId, facilityIds = facilityIds)
+        }
+
+        return null
     }
 
     private fun campflareCta(providerRef: BookingProviderRef?): PoiCtaSchema? {
@@ -208,3 +269,53 @@ private fun reserveCta(
         label = label,
         kind = RESERVE_CTA_KIND,
     )
+
+private fun parseProviderRef(json: String): BookingProviderRef? {
+    val obj =
+        runCatching { Json.parseToJsonElement(json).jsonObject }.getOrNull()
+            ?: return null
+
+    obj["recgov_id"]?.jsonPrimitive?.contentOrNull?.let {
+        return BookingProviderRef.RecGov(facilityId = it)
+    }
+
+    obj["campflare_id"]?.jsonPrimitive?.contentOrNull?.let {
+        return BookingProviderRef.Campflare(campgroundId = it)
+    }
+
+    val mapId = obj["mapId"]?.jsonPrimitive?.longOrNull
+    val transactionLocationId = obj["transactionLocationId"]?.jsonPrimitive?.longOrNull
+    if (mapId != null && transactionLocationId != null) {
+        return BookingProviderRef.Aspira(
+            tenant = null,
+            transactionLocationId = transactionLocationId,
+            mapId = mapId,
+            resourceLocationId = obj["resourceLocationId"]?.jsonPrimitive?.longOrNull,
+        )
+    }
+
+    obj["park_id"]?.jsonPrimitive?.contentOrNull?.let {
+        return BookingProviderRef.ReserveAmerica(
+            contractCode = obj["contract_code"]?.jsonPrimitive?.contentOrNull,
+            parkId = it,
+        )
+    }
+
+    obj["facility_id"]?.jsonPrimitive?.contentOrNull?.takeIf { it.toLongOrNull() != null }?.let {
+        return BookingProviderRef.ReserveAmerica(contractCode = null, parkId = it)
+    }
+
+    val placeId = obj["place_id"]?.jsonPrimitive?.longOrNull
+    val facilityIds =
+        runCatching {
+            obj["facility_ids"]
+                ?.jsonArray
+                ?.mapNotNull { it.jsonPrimitive.longOrNull }
+                .orEmpty()
+        }.getOrDefault(emptyList())
+    if (placeId != null && facilityIds.isNotEmpty()) {
+        return BookingProviderRef.ReserveCalifornia(placeId = placeId, facilityIds = facilityIds)
+    }
+
+    return null
+}

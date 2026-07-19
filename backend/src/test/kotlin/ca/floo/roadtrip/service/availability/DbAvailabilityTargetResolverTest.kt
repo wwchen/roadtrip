@@ -5,7 +5,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
@@ -14,6 +13,9 @@ import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.ref.DbRefResolver
+import ca.floo.roadtrip.service.ref.RefValue
+import ca.floo.roadtrip.service.ref.resolve
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -167,6 +169,39 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals(poi, target.parentPoiId)
             assertEquals(BookingProvider.CAMPFLARE, target.provider.id)
             assertEquals("upper-pines-campground-447", parentRefKey(target.parentRef))
+            assertEquals("upper-pines-site-100", target.catalogRef.vendorId)
+        }
+
+    @Test
+    fun `resolve translates catalog ref through matching campsite booking ref`() =
+        runBlocking {
+            val poiId = seedDualVendorPoi()
+            val campflareId = campgroundIdFor(poiId, "campflare")
+            val campsiteId =
+                ctx.seedCampsite(
+                    campgroundId = campflareId,
+                    vendor = "campflare",
+                    vendorId = "upper-pines-site-100",
+                    name = "Campflare Site 100",
+                    bookingProvider = "recgov",
+                    bookingProviderRef = "330257",
+                )
+
+            val campsitesRepo = CampsiteRepo(ctx)
+            val reservable = campsitesRepo.findAvailabilityTargetById(campsiteId)!!
+            val target =
+                resolverFor(
+                    campsitesRepo = campsitesRepo,
+                    providers =
+                        mapOf(
+                            "campflare" to NoopCampflareProvider(enabled = false),
+                            "recgov" to NoopRecgovProvider(),
+                        ),
+                ).resolve(reservable)!!
+
+            assertEquals(BookingProvider.RECGOV, target.provider.id)
+            assertEquals("232447", parentRefKey(target.parentRef))
+            assertEquals("330257", target.catalogRef.vendorId)
         }
 
     @Test
@@ -195,7 +230,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             ctx.seedCampground(
                 name = "Upper Pines (recgov)",
                 source = "recgov",
-                sourceId = "recgov-232447",
+                sourceId = "232447",
                 bookingProvider = "recgov",
                 bookingProviderRef = "232447",
                 sourcePayloadJson = """{"recgov_id":"232447"}""",
@@ -203,11 +238,11 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         ctx.execute("INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (?, ?)", poiId, cg1)
         ctx.execute("INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (?, ?)", poiId, cg2)
 
-        val repo = CampsiteProviderRepo(ctx)
-        val candidates = repo.findProviderRefCandidates(poiId)
+        val resolver = DbRefResolver(ctx)
+        val candidates = resolver.resolve<RefValue.CampgroundBookingRef>(RefValue.PoiId(poiId))
         assertEquals(
             listOf("campflare", "recgov"),
-            candidates.map { it.source }.sorted(),
+            candidates.map { it.ref.provider.id }.sorted(),
         )
     }
 
@@ -403,7 +438,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             ctx.seedCampground(
                 name = "Upper Pines (recgov)",
                 source = "recgov",
-                sourceId = "recgov-232447",
+                sourceId = "232447",
                 bookingProvider = "recgov",
                 bookingProviderRef = "232447",
                 sourcePayloadJson = """{"recgov_id":"232447"}""",
