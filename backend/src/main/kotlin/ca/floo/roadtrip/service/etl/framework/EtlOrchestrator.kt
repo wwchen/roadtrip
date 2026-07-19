@@ -24,7 +24,7 @@ import java.io.File
 //
 // Per-row sequence (declared etls: list, in order):
 //   1. Resolve each etls entry's `inputs:` slug into either:
-//        - data_source: newest envelope(s) under data/raw/<slug>/
+//        - data_source: newest envelope(s) under its registry output_dir_prefix
 //        - earlier sibling etl in the SAME poi_data row: typed payload
 //          handed off in-memory by the previous stage.
 //   2. Hand the InputBundle to the etl.parse → validate → transform stages.
@@ -45,6 +45,10 @@ open class EtlOrchestrator(
     private val rawDir: File,
     private val poiRegistry: PoiRegistry,
     /**
+     * Base directory for registry paths such as data_source output_dir_prefix.
+     */
+    private val staticDir: File,
+    /**
      * ETL adapter map keyed by YAML slug. Defaults to the production
      * registry under [Companion.registry]; overridable for tests.
      */
@@ -55,7 +59,7 @@ open class EtlOrchestrator(
     private val campsiteRepo = CampsiteRepo(ctx)
     private val teslaSuperchargerRepo = TeslaSuperchargerRepo(ctx)
     private val planetFitnessLocationRepo = PlanetFitnessLocationRepo(ctx)
-    private val rawCaptureStore = RawCaptureStore(rawDir)
+    private val rawCaptureStore = RawCaptureStore(rawDir = rawDir, staticDir = staticDir)
 
     /**
      * Per-row run summary for import rows. `poi_data` and `campsite_data`

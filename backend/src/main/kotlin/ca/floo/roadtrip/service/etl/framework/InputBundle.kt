@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonElement
 /**
  * Per-input accessor handed to [SourceEtl.parse]. Resolves an `inputs:`
  * slug from the YAML to either:
- *  - data_source: the newest envelope(s) from data/raw/<slug>/
+ *  - data_source: the newest envelope(s) from its registry output_dir_prefix
  *  - prior etl in the same poi_data row: the parsed JsonElement payload
  *    from the etl's newest output under data/etl-out/<slug>/
  *

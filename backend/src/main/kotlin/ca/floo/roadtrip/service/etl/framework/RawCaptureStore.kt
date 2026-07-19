@@ -6,14 +6,12 @@ import ca.floo.roadtrip.support.NoCaptureException
 import kotlinx.serialization.json.Json
 import java.io.File
 
-private const val DATA_RAW_PREFIX = "data/raw/"
-private const val RAW_PREFIX = "raw/"
-
 // Filesystem store for captured upstream envelopes.
 // A capture is either one timestamped JSON file or a timestamped directory
 // containing page-NNN.json files for paginated sources.
 class RawCaptureStore(
     private val rawDir: File,
+    private val staticDir: File,
 ) {
     fun loadNewestEnvelopes(source: String): List<Envelope> {
         val dir = File(rawDir, source)
@@ -27,16 +25,19 @@ class RawCaptureStore(
 
     private fun captureDirFor(source: DataSourceEntry): File {
         val configured = File(source.fetcher.outputDirPrefix)
-        if (configured.isAbsolute) return configured
-
-        val relative = source.fetcher.outputDirPrefix.replace('\\', '/')
-        val underRawDir =
-            when {
-                relative.startsWith(DATA_RAW_PREFIX) -> relative.removePrefix(DATA_RAW_PREFIX)
-                relative.startsWith(RAW_PREFIX) -> relative.removePrefix(RAW_PREFIX)
-                else -> relative
+        val candidate =
+            if (configured.isAbsolute) {
+                configured
+            } else {
+                File(staticDir, source.fetcher.outputDirPrefix)
             }
-        return File(rawDir, underRawDir)
+        val normalizedRawDir = rawDir.toPath().toAbsolutePath().normalize()
+        val normalizedCandidate = candidate.toPath().toAbsolutePath().normalize()
+        require(normalizedCandidate.startsWith(normalizedRawDir)) {
+            "data_source '${source.slug}' output_dir_prefix " +
+                "'${source.fetcher.outputDirPrefix}' resolves outside raw dir '$rawDir'"
+        }
+        return normalizedCandidate.toFile()
     }
 
     private fun loadNewestEnvelopesFrom(dir: File): List<Envelope> {
