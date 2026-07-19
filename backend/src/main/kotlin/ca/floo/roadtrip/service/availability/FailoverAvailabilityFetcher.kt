@@ -5,8 +5,8 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import java.time.Instant
 
 /**
@@ -30,7 +30,7 @@ internal open class FailoverAvailabilityFetcher(
     private val clock: () -> Instant = Instant::now,
 ) {
     data class AttemptRecord(
-        val provider: AvailabilityProviderId,
+        val provider: BookingProvider,
         val parentRef: BookingProviderRef,
         val outcome: FetchOutcome,
         val durationMs: Int,
@@ -41,7 +41,7 @@ internal open class FailoverAvailabilityFetcher(
         /** Non-null iff some attempt returned OK. */
         val batch: AvailabilityObservationBatch?,
         /** Null iff no attempt returned OK. */
-        val servedBy: AvailabilityProviderId?,
+        val servedBy: BookingProvider?,
         /** One record per upstream call the fetcher issued, in walk order. */
         val attempts: List<AttemptRecord>,
     )

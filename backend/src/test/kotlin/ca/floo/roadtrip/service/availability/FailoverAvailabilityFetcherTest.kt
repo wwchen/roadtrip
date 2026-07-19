@@ -7,9 +7,9 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import kotlinx.coroutines.runBlocking
 import java.time.Duration
 import java.time.Instant
@@ -38,7 +38,7 @@ class FailoverAvailabilityFetcherTest {
 
     /** Fake provider whose `catalogAvailability` behaviour is scripted per call. */
     private open class ScriptedProvider(
-        override val id: AvailabilityProviderId,
+        override val id: BookingProvider,
         // A queue of "return this batch" or "throw this" behaviours per call.
         private val script: MutableList<Behaviour> = mutableListOf(),
     ) : AvailabilityProvider {
@@ -146,7 +146,7 @@ class FailoverAvailabilityFetcherTest {
         runBlocking {
             val clock = FakeClock()
             val tracker = trackerWith(clock)
-            val provider = ScriptedProvider(AvailabilityProviderId.RECGOV).apply { scriptReturns(emptyBatch()) }
+            val provider = ScriptedProvider(BookingProvider.RECGOV).apply { scriptReturns(emptyBatch()) }
             val cand = candidate(provider, parentId = "232447")
 
             val result =
@@ -158,7 +158,7 @@ class FailoverAvailabilityFetcherTest {
                 )
 
             assertNotNull(result.batch)
-            assertEquals(AvailabilityProviderId.RECGOV, result.servedBy)
+            assertEquals(BookingProvider.RECGOV, result.servedBy)
             assertEquals(1, result.attempts.size)
             assertEquals(FetchOutcome.OK, result.attempts.single().outcome)
             assertEquals(1, provider.calls)
@@ -170,11 +170,11 @@ class FailoverAvailabilityFetcherTest {
             val clock = FakeClock()
             val tracker = trackerWith(clock)
             val cooling =
-                ScriptedProvider(AvailabilityProviderId.RECGOV).apply {
+                ScriptedProvider(BookingProvider.RECGOV).apply {
                     scriptThrows(AvailabilityProviderError.RateLimited(RuntimeException("429")))
                 }
             val healthy =
-                ScriptedProvider(AvailabilityProviderId.CAMPFLARE).apply { scriptReturns(emptyBatch("campflare")) }
+                ScriptedProvider(BookingProvider.CAMPFLARE).apply { scriptReturns(emptyBatch("campflare")) }
             val candA = candidate(cooling, parentId = "232447")
             val candB = candidate(healthy, parentId = "cf-1")
 
@@ -187,12 +187,12 @@ class FailoverAvailabilityFetcherTest {
                 )
 
             assertNotNull(result.batch)
-            assertEquals(AvailabilityProviderId.CAMPFLARE, result.servedBy)
+            assertEquals(BookingProvider.CAMPFLARE, result.servedBy)
             assertEquals(2, result.attempts.size)
             assertEquals(FetchOutcome.RATE_LIMITED, result.attempts[0].outcome)
             assertEquals(FetchOutcome.OK, result.attempts[1].outcome)
-            assertTrue(tracker.isCooling(AvailabilityProviderId.RECGOV), "rate-limited provider should be cooling")
-            assertFalse(tracker.isCooling(AvailabilityProviderId.CAMPFLARE), "succeeded provider not cooling")
+            assertTrue(tracker.isCooling(BookingProvider.RECGOV), "rate-limited provider should be cooling")
+            assertFalse(tracker.isCooling(BookingProvider.CAMPFLARE), "succeeded provider not cooling")
         }
 
     @Test
@@ -201,15 +201,15 @@ class FailoverAvailabilityFetcherTest {
             val clock = FakeClock()
             val tracker = trackerWith(clock)
             val a =
-                ScriptedProvider(AvailabilityProviderId.RECGOV).apply {
+                ScriptedProvider(BookingProvider.RECGOV).apply {
                     scriptThrows(AvailabilityProviderError.RateLimited())
                 }
             val b =
-                ScriptedProvider(AvailabilityProviderId.CAMPFLARE).apply {
+                ScriptedProvider(BookingProvider.CAMPFLARE).apply {
                     scriptThrows(AvailabilityProviderError.UpstreamUnavailable(RuntimeException("500")))
                 }
             val c =
-                ScriptedProvider(AvailabilityProviderId.ASPIRA).apply {
+                ScriptedProvider(BookingProvider.ASPIRA).apply {
                     scriptThrows(AvailabilityProviderError.UpstreamBlocked())
                 }
 
@@ -232,9 +232,9 @@ class FailoverAvailabilityFetcherTest {
             assertEquals(FetchOutcome.RATE_LIMITED, result.attempts[0].outcome)
             assertEquals(FetchOutcome.UPSTREAM_5XX, result.attempts[1].outcome)
             assertEquals(FetchOutcome.BLOCKED, result.attempts[2].outcome)
-            assertTrue(tracker.isCooling(AvailabilityProviderId.RECGOV))
-            assertTrue(tracker.isCooling(AvailabilityProviderId.CAMPFLARE))
-            assertTrue(tracker.isCooling(AvailabilityProviderId.ASPIRA))
+            assertTrue(tracker.isCooling(BookingProvider.RECGOV))
+            assertTrue(tracker.isCooling(BookingProvider.CAMPFLARE))
+            assertTrue(tracker.isCooling(BookingProvider.ASPIRA))
         }
 
     @Test
@@ -243,11 +243,11 @@ class FailoverAvailabilityFetcherTest {
             val clock = FakeClock()
             val tracker = trackerWith(clock)
             val first =
-                ScriptedProvider(AvailabilityProviderId.RECGOV).apply {
+                ScriptedProvider(BookingProvider.RECGOV).apply {
                     scriptThrows(IllegalStateException("boom"))
                 }
             val second =
-                ScriptedProvider(AvailabilityProviderId.CAMPFLARE).apply { scriptReturns(emptyBatch("campflare")) }
+                ScriptedProvider(BookingProvider.CAMPFLARE).apply { scriptReturns(emptyBatch("campflare")) }
 
             val result =
                 fetcherWith(tracker, clock).fetch(
@@ -263,7 +263,7 @@ class FailoverAvailabilityFetcherTest {
             assertEquals(FetchOutcome.OTHER, result.attempts.single().outcome)
             assertEquals("boom", result.attempts.single().error)
             assertEquals(0, second.calls, "OTHER stops the walk — the second candidate is never tried")
-            assertFalse(tracker.isCooling(AvailabilityProviderId.RECGOV), "OTHER does not cool the provider")
+            assertFalse(tracker.isCooling(BookingProvider.RECGOV), "OTHER does not cool the provider")
         }
 
     @Test
@@ -273,8 +273,8 @@ class FailoverAvailabilityFetcherTest {
             val tracker = trackerWith(clock)
             // Pre-cool the only candidate: sortHealthyFirst demotes but never
             // drops. The fetcher must still call it.
-            tracker.recordFailure(AvailabilityProviderId.RECGOV)
-            val provider = ScriptedProvider(AvailabilityProviderId.RECGOV).apply { scriptReturns(emptyBatch()) }
+            tracker.recordFailure(BookingProvider.RECGOV)
+            val provider = ScriptedProvider(BookingProvider.RECGOV).apply { scriptReturns(emptyBatch()) }
 
             val result =
                 fetcherWith(tracker, clock).fetch(
@@ -286,8 +286,8 @@ class FailoverAvailabilityFetcherTest {
 
             assertEquals(1, provider.calls, "sole cooling candidate must still be tried")
             assertNotNull(result.batch)
-            assertEquals(AvailabilityProviderId.RECGOV, result.servedBy)
-            assertFalse(tracker.isCooling(AvailabilityProviderId.RECGOV), "success cleared the cooldown")
+            assertEquals(BookingProvider.RECGOV, result.servedBy)
+            assertFalse(tracker.isCooling(BookingProvider.RECGOV), "success cleared the cooldown")
         }
 
     @Test
@@ -314,8 +314,8 @@ class FailoverAvailabilityFetcherTest {
         runBlocking {
             val clock = FakeClock()
             val tracker = trackerWith(clock)
-            val first = ScriptedProvider(AvailabilityProviderId.RECGOV)
-            val second = ScriptedProvider(AvailabilityProviderId.CAMPFLARE).apply { scriptReturns(emptyBatch()) }
+            val first = ScriptedProvider(BookingProvider.RECGOV)
+            val second = ScriptedProvider(BookingProvider.CAMPFLARE).apply { scriptReturns(emptyBatch()) }
             val candA = candidate(first, "1")
             val candB = candidate(second, "2")
 
@@ -336,7 +336,7 @@ class FailoverAvailabilityFetcherTest {
             assertEquals(FailoverAvailabilityFetcher.NO_REFS_ERROR, result.attempts.single().error)
             assertEquals(0, first.calls, "empty refs means no upstream call")
             assertEquals(0, second.calls, "walk stops — the sibling is never tried")
-            assertFalse(tracker.isCooling(AvailabilityProviderId.RECGOV), "not a transient failure")
+            assertFalse(tracker.isCooling(BookingProvider.RECGOV), "not a transient failure")
         }
 
     @Test
@@ -345,7 +345,7 @@ class FailoverAvailabilityFetcherTest {
             val clock = FakeClock()
             val tracker = trackerWith(clock)
             val provider =
-                ScriptedProvider(AvailabilityProviderId.RECGOV).apply {
+                ScriptedProvider(BookingProvider.RECGOV).apply {
                     scriptThrows(AvailabilityProviderError.RateLimited(RuntimeException("429")))
                 }
 
@@ -359,7 +359,7 @@ class FailoverAvailabilityFetcherTest {
 
             assertEquals(1, result.attempts.size)
             assertEquals(FetchOutcome.RATE_LIMITED, result.attempts.single().outcome, "RateLimited maps to RATE_LIMITED")
-            assertTrue(tracker.isCooling(AvailabilityProviderId.RECGOV), "retryable failure cools the provider")
+            assertTrue(tracker.isCooling(BookingProvider.RECGOV), "retryable failure cools the provider")
         }
 
     @Test
@@ -369,7 +369,7 @@ class FailoverAvailabilityFetcherTest {
             val tracker = trackerWith(clock)
             // Wrap the scripted provider so the clock ticks forward inside the call.
             val provider =
-                object : ScriptedProvider(AvailabilityProviderId.RECGOV) {
+                object : ScriptedProvider(BookingProvider.RECGOV) {
                     init {
                         scriptReturns(emptyBatch())
                     }

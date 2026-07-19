@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.SharedDbTest
@@ -9,7 +10,6 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -111,7 +111,7 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
         )
 
     private class NoopRecgovProvider : AvailabilityProvider {
-        override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
+        override val id: BookingProvider = BookingProvider.RECGOV
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsInternalPolling = true,
@@ -129,7 +129,7 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
     }
 
     private class DecliningCampflareProvider : AvailabilityProvider {
-        override val id: AvailabilityProviderId = AvailabilityProviderId.CAMPFLARE
+        override val id: BookingProvider = BookingProvider.CAMPFLARE
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsInternalPolling = false,
@@ -151,7 +151,7 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
     private class NoopCampflareProvider(
         private val enabled: Boolean,
     ) : AvailabilityProvider {
-        override val id: AvailabilityProviderId = AvailabilityProviderId.CAMPFLARE
+        override val id: BookingProvider = BookingProvider.CAMPFLARE
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsInternalPolling = false,

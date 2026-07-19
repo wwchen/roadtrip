@@ -7,15 +7,14 @@ import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
-import ca.floo.roadtrip.model.booking.BookingProviderId
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.booking.BookingProvider
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.booking.BookingAdapter
+import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import java.time.ZoneId
@@ -115,7 +114,7 @@ class WatchCapabilityServiceTest {
                 AvailabilityTriggerKinds.EMAIL_NOTIFY,
             ),
     ): WatchCapabilityService {
-        val registry = BookingProviderRegistry(listOf(RecGovOnlyBookingProvider))
+        val registry = BookingAdapterRegistry(listOf(RecGovOnlyBookingProvider))
         return WatchCapabilityService(
             availabilityTargets = FakeTargetResolver(campsites, supportsInternalPolling),
             bookingTargets = AvailabilityBookingTargetResolver(registry),
@@ -123,8 +122,8 @@ class WatchCapabilityServiceTest {
         )
     }
 
-    private object RecGovOnlyBookingProvider : BookingProvider {
-        override val id: BookingProviderId = BookingProviderId.RECGOV
+    private object RecGovOnlyBookingProvider : BookingAdapter {
+        override val id: BookingProvider = BookingProvider.RECGOV
 
         override fun targetFor(
             parentRef: BookingProviderRef,
@@ -143,7 +142,7 @@ class WatchCapabilityServiceTest {
             target: BookingTarget,
         ): Boolean =
             action == BookingAction.ADD_TO_CART &&
-                target.providerId == BookingProviderId.RECGOV &&
+                target.providerId == BookingProvider.RECGOV &&
                 target.parentRef is BookingProviderRef.RecGov &&
                 target.campsiteRef.vendorId.isNotBlank()
 
@@ -184,7 +183,7 @@ class WatchCapabilityServiceTest {
     private class FakeAvailabilityProvider(
         supportsInternalPolling: Boolean,
     ) : AvailabilityProvider {
-        override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
+        override val id: BookingProvider = BookingProvider.RECGOV
         override val capabilities: AvailabilityProviderCapabilities =
             AvailabilityProviderCapabilities(
                 supportsInternalPolling = supportsInternalPolling,

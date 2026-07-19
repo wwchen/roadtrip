@@ -9,6 +9,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.ReserveAmericaException
 import kotlinx.coroutines.CancellationException
@@ -28,7 +29,7 @@ class ReserveAmericaAvailabilityProvider(
     private val availabilityClient: ReserveAmericaAvailabilityClient,
     private val enabled: Boolean,
 ) : AvailabilityProvider {
-    override val id: AvailabilityProviderId = AvailabilityProviderId.RESERVEAMERICA
+    override val id: BookingProvider = BookingProvider.RESERVEAMERICA
 
     override val capabilities: AvailabilityProviderCapabilities =
         AvailabilityProviderCapabilities(

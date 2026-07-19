@@ -7,19 +7,19 @@ import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 
-internal class BookingProviderRegistry(
-    providers: List<BookingProvider>,
+internal class BookingAdapterRegistry(
+    adapters: List<BookingAdapter>,
 ) {
-    private val byId = providers.associateBy { it.id }
+    private val byId = adapters.associateBy { it.id }
 
     init {
-        require(providers.size == byId.size) {
-            "duplicate booking providers: " +
-                providers.groupBy { it.id }.filterValues { it.size > 1 }.keys
+        require(adapters.size == byId.size) {
+            "duplicate booking adapters: " +
+                adapters.groupBy { it.id }.filterValues { it.size > 1 }.keys
         }
     }
 
-    fun providerFor(target: BookingTarget): BookingProvider? = byId[target.providerId]
+    fun adapterFor(target: BookingTarget): BookingAdapter? = byId[target.providerId]
 
     fun targetFor(
         action: BookingAction,
@@ -34,11 +34,11 @@ internal class BookingProviderRegistry(
     fun can(
         action: BookingAction,
         target: BookingTarget,
-    ): Boolean = providerFor(target)?.can(action, target) == true
+    ): Boolean = adapterFor(target)?.can(action, target) == true
 
     suspend fun addToCart(request: AddToCartRequest): AddToCartResult {
-        val provider = providerFor(request.target) ?: return AddToCartResult.Unsupported
-        if (!provider.can(BookingAction.ADD_TO_CART, request.target)) return AddToCartResult.Unsupported
-        return provider.addToCart(request)
+        val adapter = adapterFor(request.target) ?: return AddToCartResult.Unsupported
+        if (!adapter.can(BookingAction.ADD_TO_CART, request.target)) return AddToCartResult.Unsupported
+        return adapter.addToCart(request)
     }
 }

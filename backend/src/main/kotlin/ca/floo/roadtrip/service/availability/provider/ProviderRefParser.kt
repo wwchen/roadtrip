@@ -71,11 +71,11 @@ object ProviderRefParser {
     }
 }
 
-internal fun BookingProviderRef.availabilityProviderId(): AvailabilityProviderId =
+internal fun BookingProviderRef.bookingProvider(): ca.floo.roadtrip.model.domain.provider.BookingProvider =
     when (this) {
-        is BookingProviderRef.RecGov -> AvailabilityProviderId.RECGOV
-        is BookingProviderRef.Campflare -> AvailabilityProviderId.CAMPFLARE
-        is BookingProviderRef.Aspira -> AvailabilityProviderId.ASPIRA
-        is BookingProviderRef.ReserveAmerica -> AvailabilityProviderId.RESERVEAMERICA
-        is BookingProviderRef.ReserveCalifornia -> AvailabilityProviderId.RESERVECALIFORNIA
+        is BookingProviderRef.RecGov -> ca.floo.roadtrip.model.domain.provider.BookingProvider.RECGOV
+        is BookingProviderRef.Campflare -> ca.floo.roadtrip.model.domain.provider.BookingProvider.CAMPFLARE
+        is BookingProviderRef.Aspira -> ca.floo.roadtrip.model.domain.provider.BookingProvider.ASPIRA
+        is BookingProviderRef.ReserveAmerica -> ca.floo.roadtrip.model.domain.provider.BookingProvider.RESERVEAMERICA
+        is BookingProviderRef.ReserveCalifornia -> ca.floo.roadtrip.model.domain.provider.BookingProvider.RESERVECALIFORNIA
     }

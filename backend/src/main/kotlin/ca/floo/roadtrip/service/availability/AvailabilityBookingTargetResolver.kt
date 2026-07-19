@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 
 /**
  * Bridges availability resolution to booking resolution.
@@ -12,7 +12,7 @@ import ca.floo.roadtrip.service.booking.BookingProviderRegistry
  * registry to translate each candidate into a provider-owned booking target.
  */
 internal class AvailabilityBookingTargetResolver(
-    private val bookings: BookingProviderRegistry,
+    private val bookings: BookingAdapterRegistry,
 ) {
     fun targetFor(
         action: BookingAction,

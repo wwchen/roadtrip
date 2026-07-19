@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.availability.provider
 import ca.floo.roadtrip.client.reservecalifornia.HttpReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
@@ -70,7 +71,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
                     endDate = LocalDate.parse("2026-12-18"),
                 )
 
-            assertEquals(AvailabilityProviderId.RESERVECALIFORNIA, provider.id)
+            assertEquals(BookingProvider.RESERVECALIFORNIA, provider.id)
             assertEquals(false, provider.capabilities.supportsInternalPolling)
             assertEquals(183, provider.capabilities.bookingHorizonDays)
             assertEquals("reservecalifornia", batch.provider)

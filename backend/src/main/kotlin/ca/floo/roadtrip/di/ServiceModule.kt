@@ -40,10 +40,9 @@ import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
-import ca.floo.roadtrip.service.booking.RecGovBookingProvider
+import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
+import ca.floo.roadtrip.service.booking.RecGovBookingAdapter
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler
@@ -123,18 +122,18 @@ val serviceModule =
         single(named("alertProviders")) { listOf(InternalPollerAlertProvider(get<AvailabilityPollerMembership>())) }
         single { AlertProviderRegistry(get(named("alertProviders"))) }
 
-        single(named("bookingProviders")) {
+        single(named("bookingAdapters")) {
             val config: AppConfig = get()
             val atcExecutor =
                 config.booking.recgovAtc
                     .takeIf { it.companionEnabled }
                     ?.let(::HttpRecGovAtcExecutor)
             listOfNotNull(
-                atcExecutor?.let(::RecGovBookingProvider),
+                atcExecutor?.let(::RecGovBookingAdapter),
             )
         }
-        single { BookingProviderRegistry(get(named("bookingProviders"))) }
-        single { AvailabilityBookingTargetResolver(get<BookingProviderRegistry>()) }
+        single { BookingAdapterRegistry(get(named("bookingAdapters"))) }
+        single { AvailabilityBookingTargetResolver(get<BookingAdapterRegistry>()) }
 
         single {
             val config: AppConfig = get()
@@ -151,7 +150,7 @@ val serviceModule =
                     appRootUrl = get<AppConfig>().webApp?.rootUrl,
                 ),
                 AtcTriggerActionHandler(
-                    bookings = get<BookingProviderRegistry>(),
+                    bookings = get<BookingAdapterRegistry>(),
                     bookingTargets = get<AvailabilityBookingTargetResolver>(),
                     notifications = get<NotificationFanout>(),
                 ),
@@ -292,9 +291,9 @@ fun slackInteractivityModule(signingSecret: String) =
         }
     }
 
-private fun AppConfig.isProviderEnabled(id: AvailabilityProviderId): Boolean =
-    readPathProviders.isAvailabilityProviderEnabled(id.name.lowercase()) &&
-        (id != AvailabilityProviderId.CAMPFLARE || !campflare.apiKey.isNullOrBlank())
+private fun AppConfig.isProviderEnabled(id: ca.floo.roadtrip.model.domain.provider.BookingProvider): Boolean =
+    readPathProviders.isAvailabilityProviderEnabled(id.id) &&
+        (id != ca.floo.roadtrip.model.domain.provider.BookingProvider.CAMPFLARE || !campflare.apiKey.isNullOrBlank())
 
 internal fun notificationTriggerKinds(emailConfigured: Boolean): List<String> =
     buildList {

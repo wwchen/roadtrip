@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
@@ -64,7 +65,7 @@ class ReserveAmericaAvailabilityProviderTest {
                     endDate = LocalDate.parse("2026-06-24"),
                 )
 
-            assertEquals(AvailabilityProviderId.RESERVEAMERICA, adapter.id)
+            assertEquals(BookingProvider.RESERVEAMERICA, adapter.id)
             assertEquals(false, adapter.capabilities.supportsInternalPolling)
             assertEquals("reserveamerica", batch.provider)
             assertEquals("489", batch.campgroundId)

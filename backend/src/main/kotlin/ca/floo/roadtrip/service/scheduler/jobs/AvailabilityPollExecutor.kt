@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.scheduler.jobs
 
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.scheduler.HandlerResult
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.service.availability.AvailabilityRunService
@@ -13,7 +14,6 @@ import ca.floo.roadtrip.service.availability.ResolvedAvailabilityTarget
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.catalogRefsFor
 import ca.floo.roadtrip.service.availability.parentRefKey
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import kotlinx.coroutines.slf4j.MDCContext
 import kotlinx.coroutines.withContext
@@ -69,7 +69,7 @@ internal class AvailabilityPollExecutor(
         val handle = runService.start(poller.id)
         var runFailed = false
         val attemptsByGroup =
-            mutableMapOf<Pair<AvailabilityProviderId, String>, List<FailoverAvailabilityFetcher.AttemptRecord>>()
+            mutableMapOf<Pair<BookingProvider, String>, List<FailoverAvailabilityFetcher.AttemptRecord>>()
         try {
             withContext(MDCContext(mapOf("run_id" to handle.runId.toString()))) {
                 val results =

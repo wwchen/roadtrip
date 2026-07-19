@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.availability.campflare.CampflareCampgroundAvailability
 import ca.floo.roadtrip.model.availability.campflare.CampflareCampsiteAvailability
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
@@ -63,7 +64,7 @@ class CampflareAvailabilityProviderTest {
                     endDate = LocalDate.parse("2026-06-03"),
                 )
 
-            assertEquals(AvailabilityProviderId.CAMPFLARE, provider.id)
+            assertEquals(BookingProvider.CAMPFLARE, provider.id)
             assertEquals(true, provider.capabilities.supportsInternalPolling)
             assertEquals(365, provider.capabilities.bookingHorizonDays)
             assertEquals(60, provider.capabilities.maxPollWindowDays)

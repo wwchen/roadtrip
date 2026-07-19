@@ -13,6 +13,7 @@ import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.availability.campflare.CampflareCampgroundAvailability
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.metadata.registry.EtlEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiDataEntry
@@ -83,7 +84,7 @@ class AvailabilityProviderRegistryBuildTest {
             val provider = registry.forPoi(row("test-reserveamerica"))
 
             assertNotNull(provider)
-            assertEquals(AvailabilityProviderId.RESERVEAMERICA, provider.id)
+            assertEquals(BookingProvider.RESERVEAMERICA, provider.id)
             provider.availability(
                 ref = BookingProviderRef.ReserveAmerica(contractCode = "ZZ", parkId = "489"),
                 startDate = LocalDate.parse("2026-06-22"),
@@ -156,8 +157,8 @@ class AvailabilityProviderRegistryBuildTest {
 
             assertNotNull(provider)
             assertNotNull(providerByCanonicalVendor)
-            assertEquals(AvailabilityProviderId.CAMPFLARE, provider.id)
-            assertEquals(AvailabilityProviderId.CAMPFLARE, providerByCanonicalVendor.id)
+            assertEquals(BookingProvider.CAMPFLARE, provider.id)
+            assertEquals(BookingProvider.CAMPFLARE, providerByCanonicalVendor.id)
             provider.availability(
                 ref = BookingProviderRef.Campflare("upper-pines-campground-447"),
                 startDate = LocalDate.parse("2026-06-01"),
@@ -175,7 +176,7 @@ class AvailabilityProviderRegistryBuildTest {
 
     @Test
     fun `unconfigured campflare provider declines campflare refs so recgov aliases can be fallback`() {
-        val disabledProviders = setOf(AvailabilityProviderId.CAMPFLARE)
+        val disabledProviders = setOf(BookingProvider.CAMPFLARE)
         val registry =
             AvailabilityProviderRegistry.fromPoiRegistry(
                 registry =
@@ -223,11 +224,11 @@ class AvailabilityProviderRegistryBuildTest {
         assertNull(registry.forPoi(row("campflare"), BookingProviderRef.Campflare("upper-pines-campground-447")))
         assertNull(registry.forPoi(row("campflare-campgrounds"), BookingProviderRef.Campflare("upper-pines-campground-447")))
         assertEquals(
-            AvailabilityProviderId.RECGOV,
+            BookingProvider.RECGOV,
             registry.forPoi(row("recgov"), BookingProviderRef.RecGov(facilityId = "232447"))?.id,
         )
         assertEquals(
-            AvailabilityProviderId.RECGOV,
+            BookingProvider.RECGOV,
             registry.forPoi(row("recgov-campgrounds"), BookingProviderRef.RecGov(facilityId = "232447"))?.id,
         )
     }
@@ -374,6 +375,6 @@ class AvailabilityProviderRegistryBuildTest {
     private fun stubCampflareClient(): CampflareAvailabilityClient = CampflareAvailabilityClient { _, _, _ -> error("not used") }
 
     private companion object {
-        val allProvidersEnabled: (AvailabilityProviderId) -> Boolean = { true }
+        val allProvidersEnabled: (BookingProvider) -> Boolean = { true }
     }
 }

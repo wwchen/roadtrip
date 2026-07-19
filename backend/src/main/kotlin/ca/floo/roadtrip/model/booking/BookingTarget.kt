@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.model.booking
 
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 
 /**
@@ -9,7 +10,7 @@ import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
  * or unit being added to a cart.
  */
 data class BookingTarget(
-    val providerId: BookingProviderId,
+    val providerId: BookingProvider,
     val parentRef: BookingProviderRef,
     val campsiteRef: CatalogCampsiteRef,
 )
