@@ -2,12 +2,14 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.domain.BookingRef
 import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.model.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
@@ -97,13 +99,26 @@ internal class DbAvailabilityTargetResolver(
         row: CampsiteProviderRefRow,
         campsite: CampsiteAvailabilityTarget,
     ): ProviderCandidate? {
-        val ref = ProviderRefParser.parse(row.providerRefJson) ?: return null
-        val provider = availabilityProviders.forPoi(row, ref) ?: return null
+        val (ref, provider) = resolveFromBookingRef(row) ?: resolveFromLegacyJson(row) ?: return null
         return ProviderCandidate(
             provider = provider,
             parentRef = ref,
             catalogRef = catalogRefFor(campsite, provider.id),
         )
+    }
+
+    private fun resolveFromBookingRef(row: CampsiteProviderRefRow): Pair<ProviderRef, AvailabilityProvider>? {
+        val bp = row.bookingProvider ?: return null
+        val bpRef = row.bookingProviderRef ?: return null
+        val bookingRef = BookingRef.parse(bp, bpRef) ?: return null
+        val provider = availabilityProviders.forBooking(bp, bookingRef) ?: return null
+        return bookingRef.toProviderRef() to provider
+    }
+
+    private fun resolveFromLegacyJson(row: CampsiteProviderRefRow): Pair<ProviderRef, AvailabilityProvider>? {
+        val ref = ProviderRefParser.parse(row.providerRefJson) ?: return null
+        val provider = availabilityProviders.forPoi(row, ref) ?: return null
+        return ref to provider
     }
 
     private fun catalogRefFor(

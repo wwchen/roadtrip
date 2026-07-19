@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.RequestMeta
 import ca.floo.roadtrip.model.metadata.ResponseMeta
@@ -30,7 +31,7 @@ class ReserveAmericaEtlTest {
 
         val campground = etl.transform(dto, transformCtx()).campgrounds.single()
 
-        assertEquals("new-york-state-parks", campground.dataProvider)
+        assertEquals(DataProvider.RESERVEAMERICA, campground.dataProvider)
         assertEquals("ra-695", campground.dataProviderRef)
         assertEquals("ALGER ISLAND", campground.name)
         val location = campground.location!!.jsonObject
@@ -77,7 +78,7 @@ class ReserveAmericaEtlTest {
                 ).campgrounds
                 .single()
 
-        assertEquals("alberta-provincial", campground.dataProvider)
+        assertEquals(DataProvider.RESERVEAMERICA, campground.dataProvider)
         assertEquals("ra-123", campground.dataProviderRef)
         assertEquals("Writing-on-Stone Provincial Park", campground.name)
         val location = campground.location!!.jsonObject

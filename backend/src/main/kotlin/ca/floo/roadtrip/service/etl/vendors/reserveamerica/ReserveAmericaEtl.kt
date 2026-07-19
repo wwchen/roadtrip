@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 
+import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
@@ -71,10 +73,20 @@ class ReserveAmericaEtl(
                     val vendorRefId = "${settings.sourceIdPrefix}-${park.parkId}"
                     val parkExtras = parkExtras(park, name, settings.contract)
                     CampgroundUpsertCandidate(
-                        dataProvider = etlSlug,
+                        dataProvider = DataProvider.RESERVEAMERICA,
                         dataProviderRef = vendorRefId,
-                        bookingProvider = if (settings.provider.lowercase() == "reserveamerica") "reserveamerica" else null,
-                        bookingProviderRef = if (settings.provider.lowercase() == "reserveamerica") vendorRefId else null,
+                        bookingProvider =
+                            if (settings.provider.lowercase() == "reserveamerica") {
+                                BookingProvider.RESERVEAMERICA
+                            } else {
+                                null
+                            },
+                        bookingProviderRef =
+                            if (settings.provider.lowercase() == "reserveamerica") {
+                                "${settings.contract}:${park.parkId}"
+                            } else {
+                                null
+                            },
                         name = name,
                         latitude = park.lat,
                         longitude = park.lon,

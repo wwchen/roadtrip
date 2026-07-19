@@ -1,7 +1,9 @@
 package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 
+import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.DEFAULT_CAMPSITE_KIND
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
@@ -37,11 +39,11 @@ class ReserveCaliforniaSitesEtl(
                     val kind = place.unitTypeByFacilityId[grid.facilityId] ?: DEFAULT_CAMPSITE_KIND
                     grid.units.map { unit ->
                         CampsiteUpsertCandidate(
-                            dataProvider = RESERVECALIFORNIA_VENDOR,
+                            dataProvider = DataProvider.RESERVECALIFORNIA,
                             dataProviderRef = unit.unitId.toString(),
-                            bookingProvider = RESERVECALIFORNIA_VENDOR,
+                            bookingProvider = BookingProvider.RESERVECALIFORNIA,
                             bookingProviderRef = unit.unitId.toString(),
-                            parentDataProvider = PARENT_CAMPGROUND_VENDOR,
+                            parentDataProvider = DataProvider.RESERVECALIFORNIA,
                             parentDataProviderRef = "$CAMPGROUND_REF_PREFIX$placeId",
                             name = unit.name?.takeIf { it.isNotBlank() } ?: unit.unitId.toString(),
                             kind = kind,

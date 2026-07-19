@@ -3,7 +3,10 @@ package ca.floo.roadtrip.repo
 import ca.floo.roadtrip.fixtures.CatalogPoiFixture
 import org.jooq.DSLContext
 
-private const val FIXTURE_FETCHED_AT = "2026-06-01 00:00:00+00"
+@Suppress("UnusedReceiverParameter")
+fun DSLContext.refreshCanonicalCatalogViews() {
+    // No-op: materialized views removed in V44.
+}
 
 fun DSLContext.cleanCanonicalCatalogFixtures() {
     execute(
@@ -19,31 +22,14 @@ fun DSLContext.cleanCanonicalCatalogFixtures() {
           poi_campgrounds,
           poi_tesla_superchargers,
           poi_planet_fitness_locations,
-          campsite_vendor_refs,
-          campground_vendor_refs,
           campsites,
           campgrounds,
-          vendor_refs,
           pois,
           tesla_superchargers,
           planet_fitness_locations
         RESTART IDENTITY CASCADE
         """.trimIndent(),
     )
-    refreshCanonicalCatalogViews()
-}
-
-/**
- * Publishes the current campground/campsite state through the canonical
- * materialized views so that read paths going through them (POI detail,
- * campsite serving, availability lookups) see the freshly-seeded data.
- *
- * Seed helpers call this automatically at the end; tests that mutate rows
- * outside the seed helpers can invoke it directly. Cheap in test-sized data.
- */
-fun DSLContext.refreshCanonicalCatalogViews() {
-    execute("REFRESH MATERIALIZED VIEW campground_canonical")
-    execute("REFRESH MATERIALIZED VIEW campsite_canonical")
 }
 
 fun DSLContext.seedCatalogPoi(
@@ -160,7 +146,6 @@ fun DSLContext.seedCatalogPoi(
             else -> error("unsupported canonical poi type: $canonicalType")
         }
 
-    if (refresh) refreshCanonicalCatalogViews()
     return CatalogPoiFixture(poiId = poiId, catalogId = catalogId, poiType = canonicalType)
 }
 
@@ -174,48 +159,35 @@ fun DSLContext.seedCampground(
     country: String? = "US",
     providerRefJson: String? = null,
     sourcePayloadJson: String = "{}",
+    bookingProvider: String? = null,
+    bookingProviderRef: String? = null,
     refresh: Boolean = true,
-): Long {
-    // V40 introduced campgrounds.primary_vendor_ref_id NOT NULL, so the
-    // owning vendor_ref must exist before the canonical row is inserted.
-    val vendorRefId =
-        seedVendorRef(
-            vendor = source,
-            entityType = "campground",
-            externalId = sourceId,
-            externalName = name,
-            payloadJson = providerRefJson ?: "{}",
+): Long =
+    fetchOne(
+        """
+        INSERT INTO campgrounds (
+          name, kind, data_provider, data_provider_ref, booking_provider, booking_provider_ref,
+          location, management, source_payload
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?,
+          jsonb_strip_nulls(jsonb_build_object('region', ?::text, 'country', ?::text)),
+          jsonb_strip_nulls(jsonb_build_object('agency', ?::text)),
+          ?::jsonb
         )
-    val campgroundId =
-        fetchOne(
-            """
-            INSERT INTO campgrounds (
-              name, kind, data_source, primary_vendor_ref_id, location, management, source_payload
-            ) VALUES (
-              ?, ?, ?, ?, jsonb_strip_nulls(jsonb_build_object('region', ?::text, 'country', ?::text)),
-              jsonb_strip_nulls(jsonb_build_object('agency', ?::text)),
-              ?::jsonb
-            )
-            RETURNING id
-            """.trimIndent(),
-            name,
-            kind,
-            source,
-            vendorRefId,
-            region,
-            country,
-            agency,
-            sourcePayloadJson,
-        )!!
-            .get("id", Long::class.java)
-    execute(
-        "INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id) VALUES (?, ?)",
-        campgroundId,
-        vendorRefId,
-    )
-    if (refresh) refreshCanonicalCatalogViews()
-    return campgroundId
-}
+        RETURNING id
+        """.trimIndent(),
+        name,
+        kind,
+        source,
+        sourceId,
+        bookingProvider,
+        bookingProviderRef,
+        region,
+        country,
+        agency,
+        providerRefJson ?: sourcePayloadJson,
+    )!!
+        .get("id", Long::class.java)
 
 fun DSLContext.seedCampsite(
     campgroundId: Long,
@@ -226,67 +198,29 @@ fun DSLContext.seedCampsite(
     loopName: String? = null,
     providerRefJson: String? = null,
     sourcePayloadJson: String = "{}",
+    bookingProvider: String? = null,
+    bookingProviderRef: String? = null,
     refresh: Boolean = true,
-): Long {
-    // V40 introduced campsites.primary_vendor_ref_id NOT NULL, so the
-    // owning vendor_ref must exist before the canonical row is inserted.
-    val vendorRefId =
-        seedVendorRef(
-            vendor = vendor,
-            entityType = "campsite",
-            externalId = vendorId,
-            externalName = name,
-            payloadJson = providerRefJson ?: "{}",
-        )
-    val campsiteId =
-        fetchOne(
-            """
-            INSERT INTO campsites (
-              campground_id, name, kind, data_source, primary_vendor_ref_id, loop_name, source_payload
-            ) VALUES (
-              ?, ?, ?, ?, ?, ?, ?::jsonb
-            )
-            RETURNING id
-            """.trimIndent(),
-            campgroundId,
-            name,
-            kind,
-            vendor,
-            vendorRefId,
-            loopName,
-            sourcePayloadJson,
-        )!!
-            .get("id", Long::class.java)
-    execute(
-        "INSERT INTO campsite_vendor_refs (campsite_id, vendor_ref_id) VALUES (?, ?)",
-        campsiteId,
-        vendorRefId,
-    )
-    if (refresh) refreshCanonicalCatalogViews()
-    return campsiteId
-}
-
-private fun DSLContext.seedVendorRef(
-    vendor: String,
-    entityType: String,
-    externalId: String,
-    externalName: String?,
-    payloadJson: String,
 ): Long =
     fetchOne(
         """
-        INSERT INTO vendor_refs (
-          vendor, entity_type, external_id, external_name, payload, created_at, updated_at
+        INSERT INTO campsites (
+          campground_id, name, kind, data_provider, data_provider_ref,
+          booking_provider, booking_provider_ref, loop_name, source_payload
         ) VALUES (
-          ?, ?, ?, ?, ?::jsonb, '$FIXTURE_FETCHED_AT'::timestamptz, '$FIXTURE_FETCHED_AT'::timestamptz
+          ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb
         )
         RETURNING id
         """.trimIndent(),
+        campgroundId,
+        name,
+        kind,
         vendor,
-        entityType,
-        externalId,
-        externalName,
-        payloadJson,
+        vendorId,
+        bookingProvider,
+        bookingProviderRef,
+        loopName,
+        providerRefJson ?: sourcePayloadJson,
     )!!
         .get("id", Long::class.java)
 

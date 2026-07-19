@@ -24,7 +24,7 @@ import java.time.temporal.ChronoUnit
 private const val RESERVEAMERICA_MAX_POLL_WINDOW_DAYS = 30
 
 class ReserveAmericaAvailabilityProvider(
-    private val tenant: ReserveAmericaTenant,
+    internal val tenant: ReserveAmericaTenant,
     private val availabilityClient: ReserveAmericaAvailabilityClient,
     private val enabled: Boolean,
 ) : AvailabilityProvider {

@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.campflare
 
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
@@ -33,7 +34,7 @@ class CampflareCampgroundsEtl : SourceEtl<List<JsonObject>, CampgroundEtlOutput>
         val sourceUrl = campflareCampgroundSourceUrl(id)
         val recgovRef = recgovCampgroundVendorRef(raw, id)
         return CampgroundUpsertCandidate(
-            dataProvider = CAMPFLARE_VENDOR,
+            dataProvider = DataProvider.CAMPFLARE,
             dataProviderRef = id,
             bookingProvider = recgovRef?.vendor,
             bookingProviderRef = recgovRef?.vendorRefId,

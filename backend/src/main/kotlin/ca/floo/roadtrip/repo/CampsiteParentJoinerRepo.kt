@@ -22,9 +22,7 @@ class CampsiteParentJoinerRepo(
                 ASPIRA_MAP_ID_KEY,
                 ASPIRA_RESOURCE_LOCATION_ID_KEY,
                 ASPIRA_PARENT_RESOURCE_LOCATION_ID_KEY,
-                ASPIRA_WA_VENDOR,
-                ASPIRA_BC_VENDOR,
-                ASPIRA_PC_VENDOR,
+                ASPIRA_VENDOR,
             ).map(::aspiraCampsiteParentCandidate)
 
     fun fetchAspiraCampgroundParentCandidates(): List<AspiraCampgroundParentCandidate> =
@@ -32,9 +30,7 @@ class CampsiteParentJoinerRepo(
             .fetch(
                 aspiraCampgroundParentCandidatesSql,
                 ASPIRA_RESOURCE_LOCATION_ID_KEY,
-                ASPIRA_WA_CAMPGROUND_VENDOR,
-                ASPIRA_BC_CAMPGROUND_VENDOR,
-                ASPIRA_PC_CAMPGROUND_VENDOR,
+                ASPIRA_VENDOR,
             ).map(::aspiraCampgroundParentCandidate)
 
     fun fetchReserveAmericaCampsiteParentCandidates(): List<ReserveAmericaCampsiteParentCandidate> =
@@ -45,7 +41,7 @@ class CampsiteParentJoinerRepo(
                 RESERVE_AMERICA_PARENT_CONTRACT_KEY,
                 RESERVE_AMERICA_PARENT_PARK_KEY,
                 RESERVE_AMERICA_PARENT_PARK_KEY,
-                RESERVE_AMERICA_VENDOR_PREFIX,
+                RESERVE_AMERICA_VENDOR,
             ).map(::reserveAmericaCampsiteParentCandidate)
 
     fun fetchReserveAmericaCampgroundParentCandidates(): List<ReserveAmericaCampgroundParentCandidate> =
@@ -53,8 +49,7 @@ class CampsiteParentJoinerRepo(
             .fetch(
                 reserveAmericaCampgroundParentCandidatesSql,
                 RESERVE_AMERICA_PROVIDER_CONTRACT_KEY,
-                RESERVE_AMERICA_ALBERTA_CAMPGROUND_VENDOR,
-                RESERVE_AMERICA_NEW_YORK_CAMPGROUND_VENDOR,
+                RESERVE_AMERICA_VENDOR,
             ).map(::reserveAmericaCampgroundParentCandidate)
 
     fun fetchReserveCaliforniaCampsiteParentCandidates(): List<ReserveCaliforniaCampsiteParentCandidate> =
@@ -140,22 +135,15 @@ class CampsiteParentJoinerRepo(
         private const val ASPIRA_MAP_ID_KEY = "mapId"
         private const val ASPIRA_RESOURCE_LOCATION_ID_KEY = "resourceLocationId"
         private const val ASPIRA_PARENT_RESOURCE_LOCATION_ID_KEY = "_parent_aspira_resource_loc"
-        private const val ASPIRA_WA_VENDOR = "aspira_wa"
-        private const val ASPIRA_BC_VENDOR = "aspira_bc"
-        private const val ASPIRA_PC_VENDOR = "aspira_pc"
-        private const val ASPIRA_WA_CAMPGROUND_VENDOR = "aspira-wa-pins"
-        private const val ASPIRA_BC_CAMPGROUND_VENDOR = "aspira-bc-pins"
-        private const val ASPIRA_PC_CAMPGROUND_VENDOR = "aspira-pc-pins"
+        private const val ASPIRA_VENDOR = "aspira"
 
-        private const val RESERVE_AMERICA_VENDOR_PREFIX = "reserveamerica_%"
-        private const val RESERVE_AMERICA_ALBERTA_CAMPGROUND_VENDOR = "alberta-provincial"
-        private const val RESERVE_AMERICA_NEW_YORK_CAMPGROUND_VENDOR = "new-york-state-parks"
+        private const val RESERVE_AMERICA_VENDOR = "reserveamerica"
         private const val RESERVE_AMERICA_PARENT_CONTRACT_KEY = "_parent_contract_code"
         private const val RESERVE_AMERICA_PARENT_PARK_KEY = "_parent_park_id"
         private const val RESERVE_AMERICA_PROVIDER_CONTRACT_KEY = "contract_code"
 
         private const val RESERVE_CALIFORNIA_VENDOR = "reservecalifornia"
-        private const val RESERVE_CALIFORNIA_PARENT_CAMPGROUND_VENDOR = "california-state-parks"
+        private const val RESERVE_CALIFORNIA_PARENT_CAMPGROUND_VENDOR = "reservecalifornia"
         private const val RESERVE_CALIFORNIA_PARENT_PLACE_KEY = "_parent_place_id"
         private const val RESERVE_CALIFORNIA_POI_PLACE_KEY = "place_id"
 
@@ -173,7 +161,7 @@ class CampsiteParentJoinerRepo(
               jsonb_extract_path_text(c.source_payload, ?) AS source_parent_resource_location_id
             FROM campsites c
             WHERE c.deleted_at IS NULL
-              AND c.data_provider IN (?, ?, ?)
+              AND c.data_provider = ?
             """.trimIndent()
 
         private val aspiraCampgroundParentCandidatesSql =
@@ -185,7 +173,7 @@ class CampsiteParentJoinerRepo(
               jsonb_extract_path_text(cg.source_payload, ?) AS resource_location_id
             FROM campgrounds cg
             WHERE cg.deleted_at IS NULL
-              AND cg.data_provider IN (?, ?, ?)
+              AND cg.data_provider = ?
             """.trimIndent()
 
         private val reserveAmericaCampsiteParentCandidatesSql =
@@ -198,7 +186,7 @@ class CampsiteParentJoinerRepo(
               jsonb_extract_path_text(c.source_payload, ?) AS source_parent_park_id
             FROM campsites c
             WHERE c.deleted_at IS NULL
-              AND c.data_provider LIKE ?
+              AND c.data_provider = ?
             """.trimIndent()
 
         private val reserveAmericaCampgroundParentCandidatesSql =
@@ -209,7 +197,7 @@ class CampsiteParentJoinerRepo(
               jsonb_extract_path_text(cg.source_payload, ?) AS contract_code
             FROM campgrounds cg
             WHERE cg.deleted_at IS NULL
-              AND cg.data_provider IN (?, ?)
+              AND cg.data_provider = ?
             """.trimIndent()
 
         private val reserveCaliforniaCampsiteParentCandidatesSql =

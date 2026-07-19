@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.Json
@@ -20,7 +21,7 @@ class ReserveCaliforniaEtlTest {
                 .campgrounds
                 .single()
 
-        assertEquals("california-state-parks", campground.dataProvider)
+        assertEquals(DataProvider.RESERVECALIFORNIA, campground.dataProvider)
         assertEquals("rc-690", campground.dataProviderRef)
         assertEquals("Emerald Bay SP", campground.name)
         assertEquals("state", campground.kind)
@@ -52,9 +53,9 @@ class ReserveCaliforniaEtlTest {
                 .campsites
 
         val campsite = campsites.single()
-        assertEquals("reservecalifornia", campsite.dataProvider)
+        assertEquals(DataProvider.RESERVECALIFORNIA, campsite.dataProvider)
         assertEquals("9001", campsite.dataProviderRef)
-        assertEquals("california-state-parks", campsite.parentDataProvider)
+        assertEquals(DataProvider.RESERVECALIFORNIA, campsite.parentDataProvider)
         assertEquals("rc-690", campsite.parentDataProviderRef)
         assertEquals("PINE 001", campsite.name)
         assertEquals("Tent Site", campsite.kind)

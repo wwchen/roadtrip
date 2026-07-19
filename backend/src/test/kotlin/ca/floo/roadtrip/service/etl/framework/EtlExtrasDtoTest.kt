@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.framework
 
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.RequestMeta
 import ca.floo.roadtrip.model.metadata.ResponseMeta
@@ -339,7 +340,7 @@ class EtlExtrasDtoTest {
         // AspiraJoinByNameEtl before emission). parent_name stays nullable, so
         // it is the field that exercises explicitNulls serialization here.
         val campground =
-            AspiraJoinByNameEtl("aspira-bc-pins")
+            AspiraJoinByNameEtl("aspira-bc-pins", DataProvider.ASPIRA, "bc")
                 .transform(
                     AspiraJoinDto(
                         leaves =

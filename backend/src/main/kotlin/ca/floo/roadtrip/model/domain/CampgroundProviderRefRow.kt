@@ -4,4 +4,5 @@ data class CampgroundProviderRefRow(
     val campgroundId: Long,
     val source: String,
     val providerRefJson: String,
+    val bookingProviderRef: String? = null,
 )

@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.vendors.recgov
 
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.RequestMeta
 import ca.floo.roadtrip.model.metadata.ResponseMeta
@@ -37,7 +38,7 @@ class RecGovCampgroundsEtlTest {
         val campgrounds = etl.transform(etl.parse(bundle()), transformCtx).campgrounds.associateBy { it.dataProviderRef }
 
         val reservable = campgrounds.getValue("recgov-232447")
-        assertEquals("recgov", reservable.dataProvider)
+        assertEquals(DataProvider.RECGOV, reservable.dataProvider)
         assertEquals("https://www.recreation.gov/camping/campgrounds/232447", reservable.reservationUrl)
 
         val reservableWithoutUpstreamUrl = campgrounds.getValue("recgov-10083567")

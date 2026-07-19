@@ -203,7 +203,7 @@ class CampgroundRepo(
         val poiRows =
             records.map { record ->
                 CampgroundPoiRow(
-                    campgroundId = campgroundIdByProviderRef.getValue(record.dataProvider to record.dataProviderRef),
+                    campgroundId = campgroundIdByProviderRef.getValue(record.dataProvider.id to record.dataProviderRef),
                     longitude = record.longitude,
                     latitude = record.latitude,
                 )
@@ -215,7 +215,7 @@ class CampgroundRepo(
 
     private fun bulkUpsertCampgroundRows(records: List<CampgroundUpsertCandidate>): Map<Pair<String, String>, Long> {
         if (records.isEmpty()) return emptyMap()
-        val deduped = records.distinctBy { it.dataProvider to it.dataProviderRef }
+        val deduped = records.distinctBy { it.dataProvider.id to it.dataProviderRef }
         val result = HashMap<Pair<String, String>, Long>(deduped.size)
         for (chunk in deduped.chunked(BULK_CHUNK_SIZE)) {
             val placeholders =
@@ -277,9 +277,9 @@ class CampgroundRepo(
                 """.trimIndent()
             val params = mutableListOf<Any?>()
             for (record in chunk) {
-                params += record.dataProvider
+                params += record.dataProvider.id
                 params += record.dataProviderRef
-                params += record.bookingProvider
+                params += record.bookingProvider?.id
                 params += record.bookingProviderRef
                 params += record.name
                 params += record.status

@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampgroundProviderRefRow
 import ca.floo.roadtrip.model.domain.CampsiteDateContextRow
 import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
@@ -17,6 +18,7 @@ class CampsiteProviderRepo(
                 """
                 SELECT p.id,
                        cg.booking_provider AS source,
+                       cg.booking_provider_ref AS bpref,
                        ST_X(ST_PointOnSurface(p.geom)) AS lng,
                        ST_Y(ST_PointOnSurface(p.geom)) AS lat,
                        cg.source_payload::text AS pref
@@ -40,6 +42,7 @@ class CampsiteProviderRepo(
                 """
                 SELECT cg.id AS campground_id,
                        cg.booking_provider AS source,
+                       cg.booking_provider_ref AS bpref,
                        cg.source_payload::text AS pref
                 FROM campgrounds cg
                 WHERE cg.id = ?
@@ -53,6 +56,7 @@ class CampsiteProviderRepo(
                     campgroundId = (r.get("campground_id") as Number).toLong(),
                     source = r.get("source") as String,
                     providerRefJson = pref,
+                    bookingProviderRef = r.get("bpref") as String?,
                 )
             }
 
@@ -79,13 +83,21 @@ class CampsiteProviderRepo(
 
     private fun campgroundProviderRow(r: org.jooq.Record): CampsiteProviderRefRow? {
         val pref = r.get("pref") as String? ?: return null
+        val source = r.get("source") as String
         return CampsiteProviderRefRow(
             poiId = (r.get("id") as Number).toLong(),
-            source = r.get("source") as String,
+            source = source,
             providerRefJson = pref,
+            bookingProvider = parseBookingProvider(source),
+            bookingProviderRef = r.get("bpref") as String?,
             lng = (r.get("lng") as Number?)?.toDouble(),
             lat = (r.get("lat") as Number?)?.toDouble(),
         )
+    }
+
+    private fun parseBookingProvider(source: String?): BookingProvider? {
+        if (source == null) return null
+        return BookingProvider.fromIdOrNull(source)
     }
 
     fun findDateContext(poiId: Long): CampsiteDateContextRow? {
@@ -143,6 +155,7 @@ class CampsiteProviderRepo(
             """
             SELECT p.id,
                    cg.booking_provider AS source,
+                   cg.booking_provider_ref AS bpref,
                    ST_X(ST_PointOnSurface(p.geom)) AS lng,
                    ST_Y(ST_PointOnSurface(p.geom)) AS lat,
                    cg.source_payload::text AS pref
