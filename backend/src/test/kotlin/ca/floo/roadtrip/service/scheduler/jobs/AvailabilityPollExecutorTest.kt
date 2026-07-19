@@ -493,6 +493,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         override fun reservationUrlTemplate(
             campsite: CampsiteAvailabilityTarget,
             parentRef: BookingProviderRef,
+            catalogMapId: Long?,
+            catalogResourceLocationId: Long?,
         ): String = "https://example.test/book/${campsite.vendorId}?d=${ReservationUrlTemplate.START_DATE}"
     }
 

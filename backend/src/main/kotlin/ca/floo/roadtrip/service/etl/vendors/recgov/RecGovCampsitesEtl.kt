@@ -25,9 +25,8 @@ import kotlinx.serialization.json.put
  * envelopes captured by `scripts/fetch_recgov_campsites.py` and emits one
  * campsite per campsite.
  *
- * Parent linking is explicit on every emitted row: `parentVendor` is the
- * Rec.gov campground vendor and `parentVendorRefId` is `recgov-{FacilityID}`.
- * CampsiteRepo resolves that pair through campground vendor refs.
+ * Parent linking is explicit on every emitted row: the parent data ref is the
+ * Rec.gov facility ID that CampsiteRepo resolves to the campground row.
  *
  * The full upstream campsite blob is preserved verbatim in `sourcePayload`
  * for forensic queries — RFC 0008's data trust principle.
@@ -61,7 +60,7 @@ class RecGovCampsitesEtl(
         for (envelope in dto) {
             // FacilityID lives in the captured request URL path. The
             // upstream campsite blob doesn't carry it, but parent resolution
-            // needs it for `parentVendorRefId = recgov-{FacilityID}`.
+            // needs it to link each site to its campground row.
             val facilityId = parseFacilityIdFromUrl(envelope.request.url) ?: continue
             val payload = envelope.payload as? JsonObject ?: continue
             val rawCampsites = payload["campsites"] as? JsonObject ?: continue
@@ -166,8 +165,4 @@ class RecGovCampsitesEtl(
             for ((k, v) in obj) put(k, v)
             for ((k, v) in values) put(k, v)
         }
-
-    private companion object {
-        const val PARENT_CAMPGROUND_REF_PREFIX = "recgov-"
-    }
 }

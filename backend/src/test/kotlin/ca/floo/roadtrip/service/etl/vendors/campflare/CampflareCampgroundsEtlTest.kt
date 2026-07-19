@@ -66,7 +66,7 @@ class CampflareCampgroundsEtlTest {
             campflareLink["url"]!!.jsonPrimitive.content,
         )
         assertEquals(BookingProvider.RECGOV, row.bookingProvider)
-        assertEquals("recgov-232447", row.bookingProviderRef)
+        assertEquals("232447", row.bookingProviderRef)
     }
 
     @Test

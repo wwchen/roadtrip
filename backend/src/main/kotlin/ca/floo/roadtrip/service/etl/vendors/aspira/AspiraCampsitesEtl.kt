@@ -648,10 +648,6 @@ class AspiraCampsitesEtl(
         val valueLabels: Map<Int, String>,
     )
 
-    private companion object {
-        const val ASPIRA_DATA_REF_PREFIX = "aspira-"
-    }
-
     /** A single campsite's catalog row, normalized out of Aspira's wrapping. */
     private data class ResourceInventory(
         val resourceId: String,

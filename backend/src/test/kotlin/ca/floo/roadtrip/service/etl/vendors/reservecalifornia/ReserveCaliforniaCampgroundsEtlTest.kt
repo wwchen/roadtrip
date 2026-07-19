@@ -22,7 +22,7 @@ class ReserveCaliforniaCampgroundsEtlTest {
                 .single()
 
         assertEquals(DataProvider.RESERVECALIFORNIA, campground.dataProviderRef.provider)
-        assertEquals("rc-690", campground.dataProviderRef.serialize())
+        assertEquals("690", campground.dataProviderRef.serialize())
         assertEquals("Emerald Bay SP", campground.name)
         assertEquals("state", campground.kind)
         assertEquals("https://reservecalifornia.com/park/690", campground.reservationUrl)
@@ -56,7 +56,7 @@ class ReserveCaliforniaCampgroundsEtlTest {
         assertEquals(DataProvider.RESERVECALIFORNIA, campsite.dataProviderRef.provider)
         assertEquals("9001", campsite.dataProviderRef.serialize())
         assertEquals(DataProvider.RESERVECALIFORNIA, campsite.parentDataProviderRef!!.provider)
-        assertEquals("rc-690", campsite.parentDataProviderRef!!.serialize())
+        assertEquals("690", campsite.parentDataProviderRef!!.serialize())
         assertEquals("PINE 001", campsite.name)
         assertEquals("Tent Site", campsite.kind)
         assertEquals("Tent Site", campsite.kindListed)

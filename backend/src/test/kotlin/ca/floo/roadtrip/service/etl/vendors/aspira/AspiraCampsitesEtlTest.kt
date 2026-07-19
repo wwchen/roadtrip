@@ -88,7 +88,7 @@ class AspiraCampsitesEtlTest {
         val sourcePayload = campsite.sourcePayload!!.jsonObject
 
         assertEquals(DataProvider.ASPIRA, campsite.parentDataProviderRef!!.provider)
-        assertEquals("aspira--2147483630--2147483388", campsite.parentDataProviderRef!!.serialize())
+        assertEquals("-2147483630:-2147483388", campsite.parentDataProviderRef!!.serialize())
         assertEquals("Deception Pass", campsite.loopName)
         assertEquals(-2147483388, sourcePayload["_parent_aspira_map_id"]!!.jsonPrimitive.long)
         assertEquals(-2147483615, sourcePayload["_aspira_resource_map_id"]!!.jsonPrimitive.long)

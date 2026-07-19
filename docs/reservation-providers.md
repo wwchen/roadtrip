@@ -9,14 +9,16 @@ a POI or reservable into provider-ready targets, then call the adapter.
 ## Why an abstraction
 
 The dispatch logic used to live in parallel paths (single-id availability and
-watch polling), each parsing `provider_ref` JSON inline and importing
+watch polling), each parsing legacy `provider_ref` JSON inline and importing
 per-provider helper functions. Adding a third provider meant editing several
-files; forgetting one was a silent bug. The current shape collapses that into
-one registry lookup behind `AvailabilityTargetResolver`.
+files; forgetting one was a silent bug. The current shape stores typed
+`data_provider(_ref)` and `booking_provider(_ref)` columns and resolves them
+through `RefResolver` plus one registry lookup behind
+`AvailabilityTargetResolver`.
 
-This doc is the contract. **A new availability provider is a new file under
-`service/availability/provider/adapters/<vendor>/` and one row in the registry;
-nothing else outside that directory should change.** That rule is the test of
+This doc is the contract. **A new availability provider is a typed ref plus a
+provider class under `service/availability/provider/` and one row in the
+registry; routes and poller core should not change.** That rule is the test of
 whether the abstraction is right.
 
 For the implementation checklist, use
@@ -27,18 +29,26 @@ tests, and operational wiring for a new provider.
 ## Layout
 
 ```
+model/domain/provider/
+├── DataProvider.kt             # catalog source identity
+├── DataProviderRef.kt          # typed catalog source refs
+├── BookingProvider.kt          # availability/booking provider identity
+└── BookingProviderRef.kt       # typed booking refs
+
+service/ref/
+├── RefResolver.kt              # resolve one typed ref to related refs
+├── DbRefResolver.kt            # DB-backed resolution matrix
+└── RefValue.kt                 # typed ref wrapper values
+
 service/availability/provider/
 ├── AvailabilityProviderClients.kt   # boot-time vendor client set + lifecycle
 ├── AvailabilityProvider.kt          # normalized availability + provider metadata port
-├── AvailabilityProviderId.kt        # enum/provider identity
-├── AvailabilityProviderRegistry.kt  # forPoi(row, ref) → adapter that can handle it
-├── ProviderRefParser.kt            # JSONB → models.ProviderRef (single source)
-└── adapters/
-    ├── recgov/                 # availability + watches
-    ├── campflare/              # availability
-    ├── aspira/                 # availability
-    ├── reserveamerica/         # availability
-    └── reservecalifornia/      # availability
+├── AvailabilityProviderRegistry.kt  # BookingProviderRef → adapter that can handle it
+├── RecGovAvailabilityProvider.kt
+├── CampflareAvailabilityProvider.kt
+├── AspiraAvailabilityProvider.kt
+├── ReserveAmericaAvailabilityProvider.kt
+└── ReserveCaliforniaAvailabilityProvider.kt
 ```
 
 `models/availability/AvailabilityProviderCapabilities.kt`,
@@ -47,9 +57,11 @@ service/availability/provider/
 types, not adapter implementation, because schedulers, API services, routes,
 and provider adapters all read them.
 
-`models.ProviderRef` (sealed class with `RecGov` / `Campflare` / `Aspira` /
-`ReserveAmerica` / `ReserveCalifornia` variants) is the wire shape. Adapters take a `ProviderRef` of their
-matching variant and the registry guarantees the dispatch is correct.
+`BookingProviderRef` (sealed interface with `RecGov` / `Campflare` / `Aspira` /
+`ReserveAmerica` / `ReserveCalifornia` variants) is the availability/booking
+identity. Adapters take a `BookingProviderRef` of their matching variant and
+the registry guarantees the dispatch is correct. `DataProviderRef` is separate
+and identifies the catalog row's source of truth.
 
 Every vendor adapter class implements `AvailabilityProvider`: the shared
 normalized availability contract plus identity, capabilities, ref handling,
@@ -83,7 +95,7 @@ service/availability/
 ├── AvailabilityDateResolver.kt          # target-local earliest date/window policy
 ├── ProviderCandidate.kt                 # (provider, parentRef, catalogRef) one availability candidate
 ├── FailoverAvailabilityFetcher.kt       # walks candidates on retryable failure; records per-attempt outcomes
-├── ProviderCooldownTracker.kt           # in-process demote-on-failure for AvailabilityProviderId
+├── ProviderCooldownTracker.kt           # in-process demote-on-failure for BookingProvider
 ├── TriggerActionHandler.kt              # fire-side registry (notification/ATC kinds; unknown kinds inert)
 ├── NotifyTriggerActionHandler.kt        # `slack_notify` / `email_notify` → notification targets
 └── alert/
@@ -106,12 +118,12 @@ the campground row linked to the POI and enumerate the provider refs attached
 to that row. Cross-vendor catalog matching is intentionally not part of the
 product model.
 
-**Candidate ordering** (`CampsiteProviderRepo.findProviderRefCandidates`
-SQL, single source of truth reused by the resolver and the API):
+**Candidate ordering** (`DbAvailabilityTargetResolver` + `RefResolver`):
 
-1. Rows whose provider ref payload is provider-shaped (existing
-   `providerRefShapeSql` — filters out placeholder refs).
-2. Deterministic tie-break on `vendor_ref_id`.
+1. Booking refs resolved from the campground row linked to the POI.
+2. Providers that are registered and currently support the typed ref.
+3. Deterministic ordering from the resolver's DB query and the provider
+   registry.
 
 `ResolvedAvailabilityTarget.candidates: List<ProviderCandidate>` carries the
 full ordered list. The batcher `GroupKey` still keys on the first (preferred)
@@ -123,7 +135,7 @@ the group fetch.
 - Candidates are cooldown-sorted (cooling providers demoted, sole cooling
   candidate still tried).
 - Retryable outcomes — `RATE_LIMITED`, `UPSTREAM_5XX`, `BLOCKED` — record a
-  cooldown against the failing `AvailabilityProviderId` and continue to the
+  cooldown against the failing `BookingProvider` and continue to the
   next candidate.
 - `OTHER` stops immediately (likely a bug in this env, not an outage).
 - On any candidate returning OK, the fetcher clears that provider's
@@ -280,7 +292,7 @@ availability history only.
 | ReserveCalifornia / Tyler | ✓ | ✗ | Availability reads standard facility grids. Catalog import uses the public Search All Parks `search/place` flow. |
 
 When a row is added here, it should match a real file in
-`service/availability/provider/adapters/<vendor>/`. If the table promises a
+`service/availability/provider/`. If the table promises a
 capability the adapter doesn't implement, that's a doc bug; fix the doc, not the
 adapter.
 
@@ -439,15 +451,16 @@ poller has produced.
 
 ## Adding a new availability provider
 
-1. Add a row to `AvailabilityProviderId` (enum) if this is a new upstream
-   platform.
-2. Add a `ProviderRef.<Vendor>` variant if the wire shape isn't already
-   covered.
-3. Create `service/availability/provider/adapters/<vendor>/<Vendor>AvailabilityProvider.kt`
+1. Add rows to `DataProvider` and/or `BookingProvider` if this is a new
+   catalog source or availability platform.
+2. Add `DataProviderRef` and `BookingProviderRef` variants if the identifier
+   shapes are not already covered.
+3. Create `service/availability/provider/<Vendor>AvailabilityProvider.kt`
    implementing `AvailabilityProvider`. Capabilities default conservatively
    (`supportsInternalPolling = false`); flip them on as features land.
-4. Ensure the terminal ETL emits the right `provider_ref` JSON and that its
-   `pois.source` maps to the adapter in `AvailabilityProviderRegistry.fromPoiRegistry`.
+4. Ensure the terminal ETL emits the right `dataProviderRef` and optional
+   `bookingProviderRef`, and that registry wiring maps configured sources to
+   the adapter.
 5. Update the matrix table above.
 
 Steps 1–5 should be the entire provider-registration diff. If you find
@@ -481,7 +494,7 @@ per-vendor docs own the wire details.
 ## See also
 
 - [backend-architecture.md](backend-architecture.md) — overall layer
-  rules. Adapters live under `service/availability/provider/`; routes consume
+  rules. Providers live under `service/availability/provider/`; routes consume
   availability services, not provider adapters or the provider registry.
 - `rfcs/0007-availability-search-and-alerts.md` — the RFC that introduced
   this abstraction and the monitoring lifecycle it enables.

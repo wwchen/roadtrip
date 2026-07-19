@@ -99,7 +99,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         repo.upsertCampgrounds(
             listOf(
                 CampgroundUpsertCandidate(
-                    dataProviderRef = DataProviderRef.RecGov(id = "recgov-232447"),
+                    dataProviderRef = DataProviderRef.RecGov(id = "232447"),
                     name = "Upper Pines",
                     latitude = 37.739,
                     longitude = -119.565,
@@ -139,7 +139,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertEquals(
             listOf(
                 "campflare:upper-pines-campground-447",
-                "recgov:recgov-232447",
+                "recgov:232447",
             ),
             rows,
         )

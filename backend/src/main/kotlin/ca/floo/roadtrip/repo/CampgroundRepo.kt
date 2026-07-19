@@ -5,10 +5,16 @@ import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
 import ca.floo.roadtrip.model.domain.poi.CampgroundPoiDetail
 import ca.floo.roadtrip.model.domain.poi.PoiGeometryUpdate
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.jooq.DSLContext
 import org.jooq.Record
 import org.jooq.impl.DSL
@@ -99,11 +105,12 @@ class CampgroundRepo(
                 """.trimIndent(),
                 poiId,
             ) ?: return null
+        val campground = fromRecord(record)
         return CampgroundPoiDetail(
-            campground = fromRecord(record),
+            campground = campground,
             source = record.get("detail_source", String::class.java),
             sourceId = record.get("detail_source_id", String::class.java),
-            providerRefJson = null, // Legacy field — booking ref now resolved via RefResolver
+            providerRefJson = bookingProviderRefJson(campground),
             ctaProviderRefJson = record.get("cta_provider_ref_text", String::class.java),
             propertiesJson = record.get("properties_text", String::class.java),
             memberSources = memberSourcesOf(record.get("member_sources")),
@@ -186,6 +193,43 @@ class CampgroundRepo(
     }
 
     private fun parseJsonElement(raw: String): JsonElement = Json.parseToJsonElement(raw)
+
+    private fun bookingProviderRefJson(campground: Campground): String? {
+        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return null
+        val ref = BookingProviderRef.parse(provider, campground.bookingProviderRef ?: return null) ?: return null
+        val json =
+            when (ref) {
+                is BookingProviderRef.RecGov ->
+                    buildJsonObject {
+                        put("recgov_id", ref.facilityId)
+                    }
+
+                is BookingProviderRef.Campflare ->
+                    buildJsonObject {
+                        put("campflare_id", ref.campgroundId)
+                    }
+
+                is BookingProviderRef.Aspira ->
+                    buildJsonObject {
+                        put("transactionLocationId", ref.transactionLocationId)
+                        put("mapId", ref.mapId)
+                        ref.resourceLocationId?.let { put("resourceLocationId", it) }
+                    }
+
+                is BookingProviderRef.ReserveAmerica ->
+                    buildJsonObject {
+                        ref.contractCode?.let { put("contract_code", it) }
+                        put("park_id", ref.parkId)
+                    }
+
+                is BookingProviderRef.ReserveCalifornia ->
+                    buildJsonObject {
+                        put("place_id", ref.placeId)
+                        put("facility_ids", JsonArray(ref.facilityIds.map(::JsonPrimitive)))
+                    }
+            }
+        return json.toString()
+    }
 
     private fun Record.instant(column: String): Instant = get(column, OffsetDateTime::class.java).toInstant()
 

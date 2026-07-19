@@ -10,7 +10,6 @@ import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.Json
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -308,8 +307,6 @@ class AspiraAvailabilityProviderTest {
                 loop = null,
                 siteType = null,
                 raw = null,
-                // Site-level ref carries mapId + resourceLocationId; the parent supplies transactionLocationId.
-                providerRef = Json.parseToJsonElement("""{"mapId":-2147483615,"resourceLocationId":-2147483624}"""),
             )
         val parentRef =
             BookingProviderRef.Aspira(
@@ -319,7 +316,14 @@ class AspiraAvailabilityProviderTest {
                 resourceLocationId = -2147483624,
             )
 
-        val url = adapter.reservationUrl(reservable, parentRef, LocalDate.parse("2026-07-10"))!!
+        val url =
+            adapter.reservationUrl(
+                campsite = reservable,
+                parentRef = parentRef,
+                date = LocalDate.parse("2026-07-10"),
+                catalogMapId = -2147483615,
+                catalogResourceLocationId = -2147483624,
+            )!!
 
         assertTrue(url.startsWith("https://washington.goingtocamp.com/create-booking/results?"), url)
         assertTrue(url.contains("transactionLocationId=-2147483630"), url)

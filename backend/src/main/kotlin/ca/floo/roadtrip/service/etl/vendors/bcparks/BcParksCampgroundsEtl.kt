@@ -384,15 +384,9 @@ class BcParksCampgroundsEtl(
 
     private companion object {
         const val FUZZY_THRESHOLD = 0.5
-        const val ASPIRA_DATA_REF_PREFIX = "aspira-"
         const val ASPIRA_TENANT = "bc"
         const val REGION = "BC"
         const val COUNTRY = "CA"
-
-        fun aspiraDataProviderRef(
-            transactionLocationId: Long,
-            mapId: Long,
-        ): String = "$ASPIRA_DATA_REF_PREFIX$transactionLocationId-$mapId"
     }
 
     private data class StrapiMatch(

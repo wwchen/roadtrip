@@ -37,14 +37,15 @@ class RecGovCampgroundsEtlTest {
         val etl = RecGovCampgroundsEtl("recgov-campgrounds")
         val campgrounds = etl.transform(etl.parse(bundle()), transformCtx).campgrounds.associateBy { it.dataProviderRef.serialize() }
 
-        val reservable = campgrounds.getValue("recgov-232447")
+        val reservable = campgrounds.getValue("232447")
         assertEquals(DataProvider.RECGOV, reservable.dataProviderRef.provider)
+        assertEquals("232447", reservable.bookingProviderRef)
         assertEquals("https://www.recreation.gov/camping/campgrounds/232447", reservable.reservationUrl)
 
-        val reservableWithoutUpstreamUrl = campgrounds.getValue("recgov-10083567")
+        val reservableWithoutUpstreamUrl = campgrounds.getValue("10083567")
         assertEquals("https://www.recreation.gov/camping/campgrounds/10083567", reservableWithoutUpstreamUrl.reservationUrl)
 
-        val nonReservable = campgrounds.getValue("recgov-248965")
+        val nonReservable = campgrounds.getValue("248965")
         assertEquals("https://www.fs.usda.gov/recarea/lassen/recarea/?recid=11276", nonReservable.reservationUrl)
     }
 
@@ -59,7 +60,7 @@ class RecGovCampgroundsEtlTest {
                 ).campgrounds
                 .associateBy { it.dataProviderRef.serialize() }
 
-        val upperPines = campgrounds.getValue("recgov-232447")
+        val upperPines = campgrounds.getValue("232447")
 
         val management = upperPines.management!!.jsonObject
         assertEquals("National Park Service", management["agency"]!!.jsonPrimitive.content)
@@ -127,7 +128,7 @@ class RecGovCampgroundsEtlTest {
 
         val campgrounds = etl.transform(etl.parse(bundle()), ctx).campgrounds
 
-        assertNull(campgrounds.first { it.dataProviderRef.serialize() == "recgov-232447" }.management)
+        assertNull(campgrounds.first { it.dataProviderRef.serialize() == "232447" }.management)
     }
 
     private fun bundle(withEnrichment: Boolean = false): InputBundle =
