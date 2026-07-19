@@ -74,12 +74,14 @@ class PoiServiceTest : SharedDbTest() {
                 name = "Lake Of The Woods Campground",
                 lon = -120.391227722,
                 lat = 39.503097534,
-                source = SOURCE,
+                source = "campflare",
                 subcategory = null,
                 agency = "USDA Forest Service",
                 region = null,
                 country = null,
                 providerRefJson = """{"campflare_id":"lake-of-the-woods-campground-192"}""",
+                bookingProvider = "campflare",
+                bookingProviderRef = "lake-of-the-woods-campground-192",
             )
         ctx.execute(
             "UPDATE campgrounds SET links = ?::jsonb WHERE id = ?",
@@ -97,7 +99,7 @@ class PoiServiceTest : SharedDbTest() {
     fun `detail row exposes sources and vendor refs via canonical view`() {
         val fixture =
             ctx.seedCatalogPoi(
-                sourceId = "recgov-232869",
+                sourceId = "232869",
                 name = "Cold Creek",
                 lon = -120.3147222,
                 lat = 39.5427778,
@@ -120,7 +122,7 @@ class PoiServiceTest : SharedDbTest() {
 
         assertNotNull(feature)
         assertEquals("recgov", feature.properties.source)
-        assertEquals("recgov-232869", feature.properties.sourceId)
+        assertEquals("232869", feature.properties.sourceId)
         val detail = feature.campgroundDetail()
         assertEquals("https://www.recreation.gov/camping/campgrounds/232869", detail.reserveUrl)
         val publicRef = detail.providerRef!!.jsonObject
@@ -142,11 +144,12 @@ class PoiServiceTest : SharedDbTest() {
                 bookingProviderRef = "upper-pines-campground-447",
             )
 
-        val defaultRef =
+        val row = campgroundDetailRow(fixture.poiId)
+        val publicRef =
             Json
-                .parseToJsonElement(campgroundDetailRow(fixture.poiId).providerRefJson!!)
+                .parseToJsonElement(row.providerRefJson!!)
                 .jsonObject
-        assertEquals("upper-pines-campground-447", defaultRef["campflare_id"]!!.jsonPrimitive.content)
+        assertEquals("upper-pines-campground-447", publicRef["campflare_id"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -196,7 +199,7 @@ class PoiServiceTest : SharedDbTest() {
     ): Long =
         ctx
             .seedCatalogPoi(
-                sourceId = "lake-louise",
+                sourceId = "-2147483647:-2147483026",
                 name = "Lake Louise Campground",
                 lon = -116.18,
                 lat = 51.42,
@@ -208,7 +211,7 @@ class PoiServiceTest : SharedDbTest() {
                 providerRefJson = providerRefJson,
                 propertiesJson = propertiesJson,
                 bookingProvider = SOURCE,
-                bookingProviderRef = "lake-louise",
+                bookingProviderRef = "pc:-2147483647:-2147483026:-2147483640",
             ).poiId
 
     private fun poiService(): PoiService =
@@ -232,7 +235,7 @@ class PoiServiceTest : SharedDbTest() {
     private fun PoiDetailFeatureSchema.campgroundDetail(): PoiCategoryDetailSchema = properties.detail
 
     private companion object {
-        const val SOURCE = "poi-serving-test"
+        const val SOURCE = "aspira"
         val vancouverBbox = Bbox(west = -125.0, south = 47.0, east = -120.0, north = 51.0)
     }
 }
