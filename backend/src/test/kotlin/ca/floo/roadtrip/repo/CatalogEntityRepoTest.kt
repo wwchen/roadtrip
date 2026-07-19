@@ -2,6 +2,7 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
 import kotlinx.serialization.json.Json
@@ -21,7 +22,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         val repo = CampgroundRepo(ctx)
         val record =
             CampgroundUpsertCandidate(
-                dataProvider = "campflare",
+                dataProvider = DataProvider.CAMPFLARE,
                 dataProviderRef = "upper-pines-campground-447",
                 name = "Upper Pines",
                 status = "open",
@@ -105,7 +106,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         repo.upsertCampgrounds(
             listOf(
                 CampgroundUpsertCandidate(
-                    dataProvider = "recgov",
+                    dataProvider = DataProvider.RECGOV,
                     dataProviderRef = "recgov-232447",
                     name = "Upper Pines",
                     latitude = 37.739,
@@ -119,7 +120,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         repo.upsertCampgrounds(
             listOf(
                 CampgroundUpsertCandidate(
-                    dataProvider = "campflare",
+                    dataProvider = DataProvider.CAMPFLARE,
                     dataProviderRef = "upper-pines-campground-447",
                     name = "Upper Pines Campflare",
                     latitude = 37.739,
@@ -172,7 +173,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         val repo = CampgroundRepo(ctx)
         val recgovRecord =
             CampgroundUpsertCandidate(
-                dataProvider = "recgov",
+                dataProvider = DataProvider.RECGOV,
                 dataProviderRef = "232447",
                 name = "Upper Pines",
                 latitude = 37.739,
@@ -181,7 +182,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
             )
         val campflareRecord =
             CampgroundUpsertCandidate(
-                dataProvider = "campflare",
+                dataProvider = DataProvider.CAMPFLARE,
                 dataProviderRef = "upper-pines-campground-447",
                 name = "Upper Pines",
                 latitude = 37.739,
@@ -253,7 +254,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         campgrounds.upsertCampgrounds(
             listOf(
                 CampgroundUpsertCandidate(
-                    dataProvider = "campflare",
+                    dataProvider = DataProvider.CAMPFLARE,
                     dataProviderRef = "upper-pines-campground-447",
                     name = "Upper Pines",
                     latitude = 37.739,
@@ -269,9 +270,9 @@ class CatalogEntityRepoTest : SharedDbTest() {
             campsites.upsertCampsites(
                 listOf(
                     CampsiteUpsertCandidate(
-                        dataProvider = "campflare",
+                        dataProvider = DataProvider.CAMPFLARE,
                         dataProviderRef = "upper-pines-site-001",
-                        parentDataProvider = "campflare",
+                        parentDataProvider = DataProvider.CAMPFLARE,
                         parentDataProviderRef = "upper-pines-campground-447",
                         name = "Site 001",
                         kind = "tent-only",
@@ -342,7 +343,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         campgrounds.upsertCampgrounds(
             listOf(
                 CampgroundUpsertCandidate(
-                    dataProvider = "campflare",
+                    dataProvider = DataProvider.CAMPFLARE,
                     dataProviderRef = "upper-pines-campground-447",
                     name = "Upper Pines",
                     latitude = 37.739,
@@ -355,7 +356,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         campgrounds.upsertCampgrounds(
             listOf(
                 CampgroundUpsertCandidate(
-                    dataProvider = "recgov",
+                    dataProvider = DataProvider.RECGOV,
                     dataProviderRef = "232447",
                     name = "Upper Pines",
                     latitude = 37.739,
@@ -368,9 +369,9 @@ class CatalogEntityRepoTest : SharedDbTest() {
         campsites.upsertCampsites(
             listOf(
                 CampsiteUpsertCandidate(
-                    dataProvider = "recgov",
+                    dataProvider = DataProvider.RECGOV,
                     dataProviderRef = "100",
-                    parentDataProvider = "recgov",
+                    parentDataProvider = DataProvider.RECGOV,
                     parentDataProviderRef = "232447",
                     name = "Site 100",
                     kind = "standard",
@@ -383,9 +384,9 @@ class CatalogEntityRepoTest : SharedDbTest() {
         campsites.upsertCampsites(
             listOf(
                 CampsiteUpsertCandidate(
-                    dataProvider = "campflare",
+                    dataProvider = DataProvider.CAMPFLARE,
                     dataProviderRef = "upper-pines-site-100",
-                    parentDataProvider = "campflare",
+                    parentDataProvider = DataProvider.CAMPFLARE,
                     parentDataProviderRef = "upper-pines-campground-447",
                     name = "Campflare Site 100",
                     kind = "standard",
@@ -540,7 +541,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
         val campgroundRecords =
             (0 until batchSize).map { i ->
                 CampgroundUpsertCandidate(
-                    dataProvider = "campflare",
+                    dataProvider = DataProvider.CAMPFLARE,
                     dataProviderRef = "bulk-cg-$i",
                     name = "Bulk Campground $i",
                     latitude = 40.0 + i * 0.0001,
@@ -562,9 +563,9 @@ class CatalogEntityRepoTest : SharedDbTest() {
         val campsiteRecords =
             (0 until batchSize).map { i ->
                 CampsiteUpsertCandidate(
-                    dataProvider = "campflare",
+                    dataProvider = DataProvider.CAMPFLARE,
                     dataProviderRef = "bulk-cs-$i",
-                    parentDataProvider = "campflare",
+                    parentDataProvider = DataProvider.CAMPFLARE,
                     parentDataProviderRef = "bulk-cg-$i",
                     name = "Bulk Campsite $i",
                     kind = "standard",

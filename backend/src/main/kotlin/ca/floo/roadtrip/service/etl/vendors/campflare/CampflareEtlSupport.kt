@@ -2,6 +2,7 @@
 
 package ca.floo.roadtrip.service.etl.vendors.campflare
 
+import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampflareUrls
 import ca.floo.roadtrip.model.metadata.Envelope
 import kotlinx.serialization.json.JsonElement
@@ -17,7 +18,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 internal data class BookingProviderRef(
-    val vendor: String,
+    val vendor: BookingProvider,
     val vendorRefId: String,
 )
 
@@ -32,7 +33,7 @@ internal fun recgovCampgroundVendorRef(
             ?: recgovCampgroundIdFromUrl(raw.stringField("reservation_url"))
             ?: return null
     return BookingProviderRef(
-        vendor = RECGOV_CAMPGROUND_VENDOR,
+        vendor = BookingProvider.RECGOV,
         vendorRefId = "$RECGOV_CAMPGROUND_REF_PREFIX$recgovId",
     )
 }
@@ -44,7 +45,7 @@ internal fun recgovCampsiteVendorRef(
 ): BookingProviderRef? {
     val recgovId = recgovCampsiteIdFromUrl(reservationUrl) ?: return null
     return BookingProviderRef(
-        vendor = RECGOV_CAMPSITE_VENDOR,
+        vendor = BookingProvider.RECGOV,
         vendorRefId = recgovId,
     )
 }
@@ -117,9 +118,6 @@ internal fun normalizedCoordinate(
     return scaled.takeIf { it in min..max }
 }
 
-internal const val CAMPFLARE_VENDOR = "campflare"
-internal const val RECGOV_CAMPGROUND_VENDOR = "recgov"
-internal const val RECGOV_CAMPSITE_VENDOR = "recgov"
 internal const val RECGOV_CAMPGROUND_REF_PREFIX = "recgov-"
 internal const val CAMPGROUNDS_ETL_SLUG = "campflare-campgrounds"
 internal const val CAMPSITES_ETL_SLUG = "campflare-campsites"

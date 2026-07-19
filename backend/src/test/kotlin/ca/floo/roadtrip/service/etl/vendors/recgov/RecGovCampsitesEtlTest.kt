@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.vendors.recgov
 
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.RequestMeta
 import ca.floo.roadtrip.model.metadata.ResponseMeta
@@ -21,7 +22,7 @@ class RecGovCampsitesEtlTest {
         assertEquals("123456", campsite.dataProviderRef)
         assertEquals("123456", campsite.name)
         assertEquals("site", campsite.kind)
-        assertEquals("recgov", campsite.parentDataProvider)
+        assertEquals(DataProvider.RECGOV, campsite.parentDataProvider)
         assertEquals("recgov-232447", campsite.parentDataProviderRef)
         assertNull(campsite.kindListed)
         assertNull(campsite.loopName)

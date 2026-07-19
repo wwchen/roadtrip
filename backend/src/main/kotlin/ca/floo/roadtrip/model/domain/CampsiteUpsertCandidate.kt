@@ -5,11 +5,11 @@ import kotlinx.serialization.json.JsonElement
 const val DEFAULT_CAMPSITE_KIND = "site"
 
 data class CampsiteUpsertCandidate(
-    val dataProvider: String,
+    val dataProvider: DataProvider,
     val dataProviderRef: String,
-    val bookingProvider: String? = null,
+    val bookingProvider: BookingProvider? = null,
     val bookingProviderRef: String? = null,
-    val parentDataProvider: String?,
+    val parentDataProvider: DataProvider?,
     val parentDataProviderRef: String?,
     val name: String,
     val kind: String = DEFAULT_CAMPSITE_KIND,

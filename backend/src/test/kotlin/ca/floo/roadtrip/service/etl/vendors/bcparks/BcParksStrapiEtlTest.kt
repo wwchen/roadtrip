@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.etl.vendors.bcparks
 
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.RequestMeta
 import ca.floo.roadtrip.model.metadata.ResponseMeta
@@ -20,7 +21,7 @@ class BcParksStrapiEtlTest {
         val etl = BcParksStrapiEtl()
         val campground = etl.transform(etl.parse(bundle()), transformCtx()).campgrounds.single()
 
-        assertEquals("bcparks-strapi", campground.dataProvider)
+        assertEquals(DataProvider.STRAPI, campground.dataProvider)
         assertEquals("orcs-6648", campground.dataProviderRef)
         assertEquals("<p>Camp beside Adams Lake.</p>", campground.mediumDescription)
         assertEquals(

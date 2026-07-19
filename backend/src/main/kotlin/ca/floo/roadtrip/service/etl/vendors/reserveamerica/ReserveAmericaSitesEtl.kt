@@ -1,7 +1,9 @@
 package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaCatalogParser
+import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
@@ -50,15 +52,15 @@ class ReserveAmericaSitesEtl(
         dto: Parsed,
         ctx: TransformCtx,
     ): CampsiteEtlOutput {
-        val vendor = "reserveamerica_${contractCode.lowercase()}"
+        val dataProvider = DataProvider.RESERVEAMERICA
         val campsites =
             dto.sites
                 .distinctBy { it.siteId }
                 .map { site ->
                     CampsiteUpsertCandidate(
-                        dataProvider = vendor,
+                        dataProvider = dataProvider,
                         dataProviderRef = site.siteId,
-                        bookingProvider = "reserveamerica",
+                        bookingProvider = BookingProvider.RESERVEAMERICA,
                         bookingProviderRef = site.siteId,
                         parentDataProvider = parentCampgroundVendor(contractCode),
                         parentDataProviderRef = "$PARENT_CAMPGROUND_REF_PREFIX${site.parkId}",
@@ -80,10 +82,9 @@ class ReserveAmericaSitesEtl(
         const val PARENT_PARK_KEY = "_parent_park_id"
         const val PARENT_CAMPGROUND_REF_PREFIX = "ra-"
 
-        fun parentCampgroundVendor(contractCode: String): String? =
+        fun parentCampgroundVendor(contractCode: String): DataProvider? =
             when (contractCode.uppercase()) {
-                "ABPP" -> "alberta-provincial"
-                "NY" -> "new-york-state-parks"
+                "ABPP", "NY" -> DataProvider.RESERVEAMERICA
                 else -> null
             }
     }

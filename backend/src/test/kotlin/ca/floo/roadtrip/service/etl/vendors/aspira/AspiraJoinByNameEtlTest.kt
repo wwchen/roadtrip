@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -138,7 +139,7 @@ class AspiraJoinByNameEtlTest {
         )
 
     private fun campgrounds(dto: AspiraJoinDto): List<CampgroundUpsertCandidate> =
-        AspiraJoinByNameEtl(slug)
+        AspiraJoinByNameEtl(slug, DataProvider.ASPIRA, "pc")
             .transform(dto, ctx)
             .campgrounds
 

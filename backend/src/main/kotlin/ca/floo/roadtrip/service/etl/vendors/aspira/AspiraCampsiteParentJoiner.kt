@@ -57,18 +57,11 @@ class AspiraCampsiteParentJoiner : CampsiteParentJoiner {
 
         private const val ASPIRA_PARENT_REF_PREFIX = "aspira-"
         private const val ASPIRA_PARENT_REF_SEPARATOR = "-"
-        private const val ASPIRA_WA_VENDOR = "aspira_wa"
-        private const val ASPIRA_BC_VENDOR = "aspira_bc"
-        private const val ASPIRA_PC_VENDOR = "aspira_pc"
-        private const val ASPIRA_WA_CAMPGROUND_VENDOR = "aspira-wa-pins"
-        private const val ASPIRA_BC_CAMPGROUND_VENDOR = "aspira-bc-pins"
-        private const val ASPIRA_PC_CAMPGROUND_VENDOR = "aspira-pc-pins"
+        private const val ASPIRA_VENDOR = "aspira"
 
         private val parentVendorBySiteVendor =
             mapOf(
-                ASPIRA_WA_VENDOR to ASPIRA_WA_CAMPGROUND_VENDOR,
-                ASPIRA_BC_VENDOR to ASPIRA_BC_CAMPGROUND_VENDOR,
-                ASPIRA_PC_VENDOR to ASPIRA_PC_CAMPGROUND_VENDOR,
+                ASPIRA_VENDOR to ASPIRA_VENDOR,
             )
 
         private fun AspiraCampsiteParentCandidate.parentExternalId(): String? {

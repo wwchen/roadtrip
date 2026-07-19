@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
+import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
@@ -84,12 +86,7 @@ class AspiraResourcesEtl(
      * into memory for this transform and copied into campsite.raw labels.
      */
     val dictionariesInputSlug: String? = null,
-    /**
-     * `aspira_wa` / `aspira_bc` / `aspira_pc`. Stamped into every emitted
-     * campsite provider `vendor`; provider vendors disallow ':', so we use
-     * underscore-separated tenant codes.
-     */
-    val vendor: String,
+    val aspiraTenant: String,
 ) : SourceEtl<AspiraResourcesEtl.Parsed, CampsiteEtlOutput> {
     override val multiPart: Boolean = true
 
@@ -162,11 +159,11 @@ class AspiraResourcesEtl(
                 val providerRef = buildResourceProviderRef(inv = inv, leaf = leaf, parentLeaf = parentLeaf)
                 out +=
                     CampsiteUpsertCandidate(
-                        dataProvider = vendor,
+                        dataProvider = DataProvider.ASPIRA,
                         dataProviderRef = resourceId,
-                        bookingProvider = ASPIRA_BOOKING_PROVIDER,
-                        bookingProviderRef = providerRef?.toString(),
-                        parentDataProvider = parentCampgroundVendorBySiteVendor[vendor],
+                        bookingProvider = BookingProvider.ASPIRA,
+                        bookingProviderRef = aspiraBookingRef(providerRef),
+                        parentDataProvider = DataProvider.ASPIRA,
                         parentDataProviderRef = parentVendorRefId(parentLeaf = parentLeaf, providerRef = providerRef),
                         // Short label from /api/resourcelocation/resources
                         // (`localizedValues[0].name`) — e.g. "OFC13", "B7".
@@ -336,6 +333,14 @@ class AspiraResourcesEtl(
                 put("resourceLocationId", resourceLocationId)
             }
         }
+    }
+
+    private fun aspiraBookingRef(providerRef: JsonObject?): String? {
+        if (providerRef == null) return null
+        val transactionLocationId = providerRef["transactionLocationId"]?.toString() ?: "0"
+        val mapId = providerRef["mapId"]?.toString() ?: "0"
+        val resourceLocationId = providerRef["resourceLocationId"]?.toString() ?: "0"
+        return "$aspiraTenant:$transactionLocationId:$mapId:$resourceLocationId"
     }
 
     private fun enrichAllowedEquipment(
@@ -661,14 +666,6 @@ class AspiraResourcesEtl(
         const val PROVIDER_REF_TXN_LOC_KEY = "transactionLocationId"
         const val PROVIDER_REF_MAP_ID_KEY = "mapId"
         const val POI_SOURCE_ID_PREFIX = "aspira-"
-        const val ASPIRA_BOOKING_PROVIDER = "aspira"
-
-        val parentCampgroundVendorBySiteVendor =
-            mapOf(
-                "aspira_wa" to "aspira-wa-pins",
-                "aspira_bc" to "aspira-bc-pins",
-                "aspira_pc" to "aspira-pc-pins",
-            )
     }
 
     /** A single campsite's catalog row, normalized out of Aspira's wrapping. */

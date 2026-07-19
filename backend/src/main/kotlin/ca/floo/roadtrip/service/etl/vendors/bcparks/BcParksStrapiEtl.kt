@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.bcparks
 
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
@@ -96,7 +97,7 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, CampgroundEtlOutput> {
         val infoUrl = row.url?.takeIf { it.isNotBlank() }
         val photoUrl = parkPhotoUrl(row.parkPhotos)
         return CampgroundUpsertCandidate(
-            dataProvider = etlSlug,
+            dataProvider = DataProvider.fromId(etlSlug),
             dataProviderRef = "$ORCS_REF_PREFIX$orcs",
             name = name,
             latitude = lat,

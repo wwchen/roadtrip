@@ -58,12 +58,12 @@ class CampsiteRepo(
         val skippedForMissingParent = records.size - withParent.size
 
         val parentMap = HashMap<ParentKey, Long>()
-        val parentKeys = withParent.map { ParentKey(it.parentDataProvider!!, it.parentDataProviderRef!!) }.distinct()
+        val parentKeys = withParent.map { ParentKey(it.parentDataProvider!!.id, it.parentDataProviderRef!!) }.distinct()
         parentMap.putAll(loadParentCampgroundMap(parentKeys))
 
         val withResolvedParent =
             withParent.filter {
-                ParentKey(it.parentDataProvider!!, it.parentDataProviderRef!!) in parentMap
+                ParentKey(it.parentDataProvider!!.id, it.parentDataProviderRef!!) in parentMap
             }
         val skippedForUnresolvedParent = withParent.size - withResolvedParent.size
         val totalSkipped = skippedForMissingParent + skippedForUnresolvedParent
@@ -72,7 +72,7 @@ class CampsiteRepo(
 
         val campsiteRows =
             withResolvedParent.map { record ->
-                val campgroundId = parentMap.getValue(ParentKey(record.parentDataProvider!!, record.parentDataProviderRef!!))
+                val campgroundId = parentMap.getValue(ParentKey(record.parentDataProvider!!.id, record.parentDataProviderRef!!))
                 CampsiteBulkRow(record = record, campgroundId = campgroundId)
             }
         bulkUpsertCampsiteRows(campsiteRows)
@@ -114,7 +114,7 @@ class CampsiteRepo(
 
     private fun bulkUpsertCampsiteRows(rows: List<CampsiteBulkRow>) {
         if (rows.isEmpty()) return
-        val deduped = rows.distinctBy { it.record.dataProvider to it.record.dataProviderRef }
+        val deduped = rows.distinctBy { it.record.dataProvider.id to it.record.dataProviderRef }
         for (chunk in deduped.chunked(BULK_CHUNK_SIZE)) {
             val placeholders =
                 chunk.joinToString(", ") {
@@ -175,9 +175,9 @@ class CampsiteRepo(
             val params = mutableListOf<Any?>()
             for (row in chunk) {
                 val record = row.record
-                params += record.dataProvider
+                params += record.dataProvider.id
                 params += record.dataProviderRef
-                params += record.bookingProvider
+                params += record.bookingProvider?.id
                 params += record.bookingProviderRef
                 params += row.campgroundId
                 params += record.name

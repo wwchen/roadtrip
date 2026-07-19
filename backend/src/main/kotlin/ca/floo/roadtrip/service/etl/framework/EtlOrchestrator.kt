@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.etl.PlanetFitnessLocationEtlOutput
@@ -408,19 +409,19 @@ open class EtlOrchestrator(
                         .AspiraLeavesEtl("aspira-leaves-wa"),
                 "aspira-wa-pins" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraJoinByNameEtl("aspira-wa-pins"),
+                        .AspiraJoinByNameEtl("aspira-wa-pins", DataProvider.ASPIRA, "wa"),
                 "aspira-leaves-bc" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
                         .AspiraLeavesEtl("aspira-leaves-bc"),
                 "aspira-bc-pins" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraJoinByNameEtl("aspira-bc-pins"),
+                        .AspiraJoinByNameEtl("aspira-bc-pins", DataProvider.ASPIRA, "bc"),
                 "aspira-leaves-pc" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
                         .AspiraLeavesEtl("aspira-leaves-pc"),
                 "aspira-pc-pins" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraJoinByNameEtl("aspira-pc-pins"),
+                        .AspiraJoinByNameEtl("aspira-pc-pins", DataProvider.ASPIRA, "pc"),
                 "alberta-provincial" to
                     ca.floo.roadtrip.service.etl.vendors.reserveamerica
                         .ReserveAmericaEtl(),
@@ -440,7 +441,7 @@ open class EtlOrchestrator(
                             mapsInputSlug = "aspira-maps-wa",
                             inventoryInputSlug = "aspira-inventory-wa",
                             dictionariesInputSlug = "aspira-dictionaries-wa",
-                            vendor = "aspira_wa",
+                            aspiraTenant = "wa",
                         ),
                 "aspira-bc-resources" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
@@ -449,7 +450,7 @@ open class EtlOrchestrator(
                             mapsInputSlug = "aspira-maps-bc",
                             inventoryInputSlug = "aspira-inventory-bc",
                             dictionariesInputSlug = "aspira-dictionaries-bc",
-                            vendor = "aspira_bc",
+                            aspiraTenant = "bc",
                         ),
                 "aspira-pc-resources" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
@@ -458,7 +459,7 @@ open class EtlOrchestrator(
                             mapsInputSlug = "aspira-maps-pc",
                             inventoryInputSlug = "aspira-inventory-pc",
                             dictionariesInputSlug = "aspira-dictionaries-pc",
-                            vendor = "aspira_pc",
+                            aspiraTenant = "pc",
                         ),
                 "california-state-park-sites" to
                     ca.floo.roadtrip.service.etl.vendors.reservecalifornia

@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
+import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
@@ -50,6 +52,8 @@ import java.time.Instant
 // doesn't earn a pin on the map.
 class AspiraJoinByNameEtl(
     override val etlSlug: String,
+    private val dataProviderValue: DataProvider,
+    private val aspiraTenant: String,
 ) : SourceEtl<AspiraJoinDto, CampgroundEtlOutput> {
     private val log = LoggerFactory.getLogger(javaClass)
     override val multiPart: Boolean = true
@@ -216,10 +220,10 @@ class AspiraJoinByNameEtl(
             val bookingCtaRef = leaf.resourceLocationId?.let { bookingCtaRefsByResourceLocationId[it] }
             campgrounds +=
                 CampgroundUpsertCandidate(
-                    dataProvider = etlSlug,
+                    dataProvider = dataProviderValue,
                     dataProviderRef = vendorRefId,
-                    bookingProvider = ASPIRA_BOOKING_PROVIDER,
-                    bookingProviderRef = bookingCtaRef?.let { aspiraBookingCtaProviderRefPayload(leaf, it).toString() },
+                    bookingProvider = BookingProvider.ASPIRA,
+                    bookingProviderRef = bookingCtaRef?.let { aspiraBookingRef(leaf, it) },
                     name = leaf.name,
                     latitude = lat,
                     longitude = lon,
@@ -279,6 +283,11 @@ class AspiraJoinByNameEtl(
             put("match_kind", matchKind)
             bookingCtaRef?.let { put("booking_cta_provider_ref", aspiraBookingCtaProviderRefPayload(leaf, it)) }
         }
+
+    private fun aspiraBookingRef(
+        leaf: AspiraLeaf,
+        bookingCtaRef: AspiraBookingCtaRef,
+    ): String = "$aspiraTenant:${leaf.transactionLocationId}:${bookingCtaRef.mapId}:${bookingCtaRef.resourceLocationId}"
 
     private fun aspiraBookingCtaProviderRefPayload(
         leaf: AspiraLeaf,
@@ -396,7 +405,6 @@ class AspiraJoinByNameEtl(
         private const val ASPIRA_TRANSACTION_LOCATION_ID_KEY = "transactionLocationId"
         private const val ASPIRA_MAP_ID_KEY = "mapId"
         private const val ASPIRA_RESOURCE_LOCATION_ID_KEY = "resourceLocationId"
-        private const val ASPIRA_BOOKING_PROVIDER = "aspira"
     }
 }
 

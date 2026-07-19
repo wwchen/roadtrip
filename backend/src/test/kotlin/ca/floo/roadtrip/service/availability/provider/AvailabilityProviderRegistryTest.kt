@@ -36,7 +36,7 @@ class AvailabilityProviderRegistryTest {
                 adaptersBySource =
                     mapOf(
                         "federal-campgrounds" to recgov,
-                        "aspira-pc-pins" to aspiraPc,
+                        "aspira_pc" to aspiraPc,
                     ),
             )
 
@@ -44,7 +44,7 @@ class AvailabilityProviderRegistryTest {
         assertNotNull(resolved)
         assertEquals(AvailabilityProviderId.RECGOV, resolved.id)
 
-        val pc = registry.forPoi(row("aspira-pc-pins"))
+        val pc = registry.forPoi(row("aspira_pc"))
         assertNotNull(pc)
         assertEquals(AvailabilityProviderId.ASPIRA, pc.id)
     }
@@ -137,14 +137,14 @@ class AvailabilityProviderRegistryTest {
             AvailabilityProviderRegistry(
                 adaptersBySource =
                     mapOf(
-                        "aspira-pc-pins" to pc,
-                        "aspira-bc-pins" to bc,
-                        "aspira-wa-pins" to wa,
+                        "aspira_pc" to pc,
+                        "aspira_bc" to bc,
+                        "aspira_wa" to wa,
                     ),
             )
-        assertSame(pc, registry.forPoi(row("aspira-pc-pins")))
-        assertSame(bc, registry.forPoi(row("aspira-bc-pins")))
-        assertSame(wa, registry.forPoi(row("aspira-wa-pins")))
+        assertSame(pc, registry.forPoi(row("aspira_pc")))
+        assertSame(bc, registry.forPoi(row("aspira_bc")))
+        assertSame(wa, registry.forPoi(row("aspira_wa")))
         assertEquals(3, registry.all().size)
     }
 

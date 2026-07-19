@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.availability.provider
 
+import ca.floo.roadtrip.model.domain.BookingProvider
+import ca.floo.roadtrip.model.domain.BookingRef
 import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.model.domain.ProviderRef
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
@@ -47,6 +49,34 @@ class AvailabilityProviderRegistry(
             ?.takeIf { it.isEnabled() && it.supportsRef(ref) }
 
     /**
+     * Typed lookup: resolve adapter from a [BookingProvider] enum + parsed [BookingRef].
+     * For multi-tenant providers (Aspira, ReserveAmerica), extracts the
+     * tenant from the ref to select the correct adapter instance.
+     */
+    fun forBooking(
+        provider: BookingProvider,
+        ref: BookingRef,
+    ): AvailabilityProvider? {
+        val key =
+            when (ref) {
+                is BookingRef.Aspira -> "aspira_${ref.tenant}"
+                is BookingRef.ReserveAmerica ->
+                    adaptersBySource.keys.firstOrNull { source ->
+                        val adapter = adaptersBySource[source]
+                        adapter?.id == AvailabilityProviderId.RESERVEAMERICA &&
+                            (adapter as? ReserveAmericaAvailabilityProvider)?.tenant?.contractCode == ref.contractCode
+                    }
+                is BookingRef.RecGov -> RECGOV_VENDOR
+                is BookingRef.Campflare -> CAMPFLARE_VENDOR
+                is BookingRef.ReserveCalifornia ->
+                    adaptersBySource.keys.firstOrNull { source ->
+                        adaptersBySource[source]?.id == AvailabilityProviderId.RESERVECALIFORNIA
+                    }
+            } ?: return null
+        return adaptersBySource[key]?.takeIf { it.isEnabled() }
+    }
+
+    /**
      * Source-only lookup for call sites that only need static adapter
      * capabilities. Use [forPoi] when future provider routing may need the
      * full campground row.
@@ -74,6 +104,12 @@ class AvailabilityProviderRegistry(
     companion object {
         private const val CAMPFLARE_VENDOR = "campflare"
         private const val RECGOV_VENDOR = "recgov"
+        private val aspiraBookingProviderBySource =
+            mapOf(
+                "aspira-wa-pins" to "aspira_wa",
+                "aspira-bc-pins" to "aspira_bc",
+                "aspira-pc-pins" to "aspira_pc",
+            )
 
         fun fromPoiRegistry(
             registry: PoiRegistry,
@@ -106,7 +142,9 @@ class AvailabilityProviderRegistry(
             }
 
             // Aspira — one adapter instance per upstream host. Sources that share
-            // a host share an instance.
+            // a host share an instance. Registered under both the YAML ETL slug
+            // (e.g. "aspira-wa-pins") and the unified DataProvider id
+            // (e.g. "aspira_wa") so lookups from campgrounds.data_provider resolve.
             val hostBySource = registry.aspiraHostBySource()
             validateAspiraHosts(hostBySource)
             val aspiraByHost = mutableMapOf<String, AspiraAvailabilityProvider>()
@@ -126,6 +164,8 @@ class AvailabilityProviderRegistry(
                         )
                     }
                 adaptersBySource[source] = adapter
+                val bookingProviderCode = aspiraBookingProviderBySource[source]
+                if (bookingProviderCode != null) adaptersBySource[bookingProviderCode] = adapter
             }
 
             // ReserveAmerica / Active Network — one adapter per tenant source.

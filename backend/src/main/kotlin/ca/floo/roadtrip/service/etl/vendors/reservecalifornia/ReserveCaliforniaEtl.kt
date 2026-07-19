@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 
+import ca.floo.roadtrip.model.domain.BookingProvider
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ValidationResult
@@ -47,10 +49,10 @@ class ReserveCaliforniaEtl(
                     .map { place ->
                         val parkUrl = reserveCaliforniaParkUrl(place.placeId)
                         CampgroundUpsertCandidate(
-                            dataProvider = etlSlug,
+                            dataProvider = DataProvider.RESERVECALIFORNIA,
                             dataProviderRef = "$CAMPGROUND_REF_PREFIX${place.placeId}",
-                            bookingProvider = RESERVECALIFORNIA_VENDOR,
-                            bookingProviderRef = "$CAMPGROUND_REF_PREFIX${place.placeId}",
+                            bookingProvider = BookingProvider.RESERVECALIFORNIA,
+                            bookingProviderRef = "${place.placeId}:${place.facilityIds.joinToString(",")}",
                             name = place.name,
                             latitude = place.latitude,
                             longitude = place.longitude,
@@ -280,8 +282,6 @@ internal fun isActivityHighlight(label: String): Boolean {
 
 internal fun reserveCaliforniaParkUrl(placeId: Long): String = "https://reservecalifornia.com/park/$placeId"
 
-internal const val RESERVECALIFORNIA_VENDOR = "reservecalifornia"
-internal const val PARENT_CAMPGROUND_VENDOR = "california-state-parks"
 internal const val CAMPGROUND_REF_PREFIX = "rc-"
 internal const val REGION = "CA"
 internal const val COUNTRY = "US"
