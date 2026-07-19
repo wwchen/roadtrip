@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
 import ca.floo.roadtrip.model.domain.BookingProvider
+import ca.floo.roadtrip.model.domain.BookingRef
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
@@ -156,15 +157,14 @@ class AspiraResourcesEtl(
                 val leaf = leafMapId?.let { leavesByMapId[it] }
                 val parentLeaf = leaf ?: inv.resourceLocationId?.let { leavesByResourceLocationId[it] }
                 if (leafMapId != null && leaf == null) unmatchedLeaf++
-                val providerRef = buildResourceProviderRef(inv = inv, leaf = leaf, parentLeaf = parentLeaf)
                 out +=
                     CampsiteUpsertCandidate(
                         dataProvider = DataProvider.ASPIRA,
                         dataProviderRef = resourceId,
                         bookingProvider = BookingProvider.ASPIRA,
-                        bookingProviderRef = aspiraBookingRef(providerRef),
+                        bookingProviderRef = campsiteBookingRef(inv, leaf, parentLeaf),
                         parentDataProvider = DataProvider.ASPIRA,
-                        parentDataProviderRef = parentVendorRefId(parentLeaf = parentLeaf, providerRef = providerRef),
+                        parentDataProviderRef = parentDataProviderRef(leaf, parentLeaf, inv),
                         // Short label from /api/resourcelocation/resources
                         // (`localizedValues[0].name`) — e.g. "OFC13", "B7".
                         name = inv.name ?: resourceId,
@@ -191,17 +191,36 @@ class AspiraResourcesEtl(
         return CampsiteEtlOutput(campsites = out)
     }
 
-    private fun parentVendorRefId(
+    private fun campsiteBookingRef(
+        inv: ResourceInventory,
+        leaf: AspiraLeaf?,
         parentLeaf: AspiraLeaf?,
-        providerRef: JsonObject?,
     ): String? {
-        if (parentLeaf != null) {
-            return "$POI_SOURCE_ID_PREFIX${parentLeaf.transactionLocationId}-${parentLeaf.mapId}"
+        val transactionLocationId = leaf?.transactionLocationId ?: parentLeaf?.transactionLocationId ?: return null
+        val mapId = leaf?.mapId ?: inv.firstMapId ?: parentLeaf?.mapId ?: return null
+        val resourceLocationId = leaf?.resourceLocationId ?: inv.resourceLocationId ?: parentLeaf?.resourceLocationId ?: return null
+        return BookingRef
+            .Aspira(
+                tenant = aspiraTenant,
+                transactionLocationId = transactionLocationId,
+                mapId = mapId,
+                resourceLocationId = resourceLocationId,
+            ).serialize()
+    }
+
+    private fun parentDataProviderRef(
+        leaf: AspiraLeaf?,
+        parentLeaf: AspiraLeaf?,
+        inv: ResourceInventory,
+    ): String? {
+        val parent = leaf ?: parentLeaf
+        if (parent != null) {
+            return "$ASPIRA_DATA_REF_PREFIX${parent.transactionLocationId}-${parent.mapId}"
         }
-        val transactionLocationId = providerRef?.get(PROVIDER_REF_TXN_LOC_KEY)?.jsonPrimitive?.contentOrNull
-        val mapId = providerRef?.get(PROVIDER_REF_MAP_ID_KEY)?.jsonPrimitive?.contentOrNull
+        val transactionLocationId = parentLeaf?.transactionLocationId
+        val mapId = inv.firstMapId
         return if (transactionLocationId != null && mapId != null) {
-            "$POI_SOURCE_ID_PREFIX$transactionLocationId-$mapId"
+            "$ASPIRA_DATA_REF_PREFIX$transactionLocationId-$mapId"
         } else {
             null
         }
@@ -311,37 +330,6 @@ class AspiraResourcesEtl(
                 put("defined_attributes", flattenAttributes(inv.definedAttributes, dictionaries))
             }
         }
-
-    private fun buildResourceProviderRef(
-        inv: ResourceInventory,
-        leaf: AspiraLeaf?,
-        parentLeaf: AspiraLeaf?,
-    ): JsonObject? {
-        val mapId = leaf?.mapId ?: inv.firstMapId ?: parentLeaf?.mapId
-        val transactionLocationId = leaf?.transactionLocationId ?: parentLeaf?.transactionLocationId
-        val resourceLocationId = leaf?.resourceLocationId ?: inv.resourceLocationId ?: parentLeaf?.resourceLocationId
-        if (mapId == null && transactionLocationId == null && resourceLocationId == null) return null
-
-        return buildJsonObject {
-            if (transactionLocationId != null) {
-                put("transactionLocationId", transactionLocationId)
-            }
-            if (mapId != null) {
-                put("mapId", mapId)
-            }
-            if (resourceLocationId != null) {
-                put("resourceLocationId", resourceLocationId)
-            }
-        }
-    }
-
-    private fun aspiraBookingRef(providerRef: JsonObject?): String? {
-        if (providerRef == null) return null
-        val transactionLocationId = providerRef["transactionLocationId"]?.toString() ?: "0"
-        val mapId = providerRef["mapId"]?.toString() ?: "0"
-        val resourceLocationId = providerRef["resourceLocationId"]?.toString() ?: "0"
-        return "$aspiraTenant:$transactionLocationId:$mapId:$resourceLocationId"
-    }
 
     private fun enrichAllowedEquipment(
         equipment: JsonArray,
@@ -663,9 +651,7 @@ class AspiraResourcesEtl(
     )
 
     private companion object {
-        const val PROVIDER_REF_TXN_LOC_KEY = "transactionLocationId"
-        const val PROVIDER_REF_MAP_ID_KEY = "mapId"
-        const val POI_SOURCE_ID_PREFIX = "aspira-"
+        const val ASPIRA_DATA_REF_PREFIX = "aspira-"
     }
 
     /** A single campsite's catalog row, normalized out of Aspira's wrapping. */

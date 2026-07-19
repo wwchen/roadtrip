@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
 import ca.floo.roadtrip.model.domain.BookingProvider
+import ca.floo.roadtrip.model.domain.BookingRef
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.DataProvider
 import ca.floo.roadtrip.model.etl.CampgroundCampsiteEtlOutput
@@ -216,14 +217,14 @@ class AspiraJoinByNameEtl(
             }
 
             val (lat, lon) = coords
-            val vendorRefId = aspiraVendorRefId(leaf)
+            val dataRef = aspiraDataProviderRef(leaf)
             val bookingCtaRef = leaf.resourceLocationId?.let { bookingCtaRefsByResourceLocationId[it] }
             campgrounds +=
                 CampgroundUpsertCandidate(
                     dataProvider = dataProviderValue,
-                    dataProviderRef = vendorRefId,
+                    dataProviderRef = dataRef,
                     bookingProvider = BookingProvider.ASPIRA,
-                    bookingProviderRef = bookingCtaRef?.let { aspiraBookingRef(leaf, it) },
+                    bookingProviderRef = bookingCtaRef?.let { campgroundBookingRef(leaf, it) },
                     name = leaf.name,
                     latitude = lat,
                     longitude = lon,
@@ -260,14 +261,19 @@ class AspiraJoinByNameEtl(
         return CampgroundCampsiteEtlOutput(campgrounds = campgrounds, campsites = emptyList())
     }
 
-    private fun aspiraVendorRefId(leaf: AspiraLeaf): String = "$ASPIRA_VENDOR_REF_PREFIX${leaf.transactionLocationId}-${leaf.mapId}"
+    private fun aspiraDataProviderRef(leaf: AspiraLeaf): String = "$ASPIRA_DATA_REF_PREFIX${leaf.transactionLocationId}-${leaf.mapId}"
 
-    private fun aspiraProviderRefPayload(leaf: AspiraLeaf): JsonObject =
-        buildJsonObject {
-            put(ASPIRA_TRANSACTION_LOCATION_ID_KEY, leaf.transactionLocationId)
-            put(ASPIRA_MAP_ID_KEY, leaf.mapId)
-            leaf.resourceLocationId?.let { put(ASPIRA_RESOURCE_LOCATION_ID_KEY, it) }
-        }
+    private fun campgroundBookingRef(
+        leaf: AspiraLeaf,
+        bookingCtaRef: AspiraBookingCtaRef,
+    ): String =
+        BookingRef
+            .Aspira(
+                tenant = aspiraTenant,
+                transactionLocationId = leaf.transactionLocationId,
+                mapId = bookingCtaRef.mapId,
+                resourceLocationId = bookingCtaRef.resourceLocationId,
+            ).serialize()
 
     private fun aspiraSourcePayload(
         leaf: AspiraLeaf,
@@ -281,22 +287,16 @@ class AspiraJoinByNameEtl(
             leaf.resourceLocationId?.let { put(ASPIRA_RESOURCE_LOCATION_ID_KEY, it) }
             leaf.parentName?.let { put("parent_name", it) }
             put("match_kind", matchKind)
-            bookingCtaRef?.let { put("booking_cta_provider_ref", aspiraBookingCtaProviderRefPayload(leaf, it)) }
-        }
-
-    private fun aspiraBookingRef(
-        leaf: AspiraLeaf,
-        bookingCtaRef: AspiraBookingCtaRef,
-    ): String = "$aspiraTenant:${leaf.transactionLocationId}:${bookingCtaRef.mapId}:${bookingCtaRef.resourceLocationId}"
-
-    private fun aspiraBookingCtaProviderRefPayload(
-        leaf: AspiraLeaf,
-        bookingCtaRef: AspiraBookingCtaRef,
-    ): JsonObject =
-        buildJsonObject {
-            put(ASPIRA_TRANSACTION_LOCATION_ID_KEY, leaf.transactionLocationId)
-            put(ASPIRA_MAP_ID_KEY, bookingCtaRef.mapId)
-            put(ASPIRA_RESOURCE_LOCATION_ID_KEY, bookingCtaRef.resourceLocationId)
+            bookingCtaRef?.let {
+                put(
+                    "booking_cta_provider_ref",
+                    buildJsonObject {
+                        put(ASPIRA_TRANSACTION_LOCATION_ID_KEY, leaf.transactionLocationId)
+                        put(ASPIRA_MAP_ID_KEY, it.mapId)
+                        put(ASPIRA_RESOURCE_LOCATION_ID_KEY, it.resourceLocationId)
+                    },
+                )
+            }
         }
 
     private fun locationPayload(
@@ -401,7 +401,7 @@ class AspiraJoinByNameEtl(
                 coerceInputValues = true
             }
         private const val FUZZY_THRESHOLD = 0.5
-        private const val ASPIRA_VENDOR_REF_PREFIX = "aspira-"
+        private const val ASPIRA_DATA_REF_PREFIX = "aspira-"
         private const val ASPIRA_TRANSACTION_LOCATION_ID_KEY = "transactionLocationId"
         private const val ASPIRA_MAP_ID_KEY = "mapId"
         private const val ASPIRA_RESOURCE_LOCATION_ID_KEY = "resourceLocationId"
