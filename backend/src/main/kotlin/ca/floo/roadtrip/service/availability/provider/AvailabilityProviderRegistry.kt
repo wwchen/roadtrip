@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.model.domain.CampsiteProviderRefRow
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
@@ -32,22 +31,6 @@ class AvailabilityProviderRegistry(
     private val adaptersBySource: Map<String, AvailabilityProvider>,
 ) {
     /**
-     * Look up the adapter that handles a campground POI row. Returns null
-     * when the source is unmapped (e.g. a brand-new ReserveAmerica tenant,
-     * or a brand-new ETL whose registry entry forgot to set a provider).
-     */
-    fun forPoi(row: CampsiteProviderRefRow): AvailabilityProvider? =
-        adaptersBySource[row.source]
-            ?.takeIf { it.isEnabled() }
-
-    fun forPoi(
-        row: CampsiteProviderRefRow,
-        ref: BookingProviderRef,
-    ): AvailabilityProvider? =
-        adaptersBySource[row.source]
-            ?.takeIf { it.isEnabled() && it.supportsRef(ref) }
-
-    /**
      * Typed lookup: resolve adapter from a [BookingProvider] enum + parsed [BookingProviderRef].
      * For multi-tenant providers (Aspira, ReserveAmerica), extracts the
      * tenant from the ref to select the correct adapter instance.
@@ -72,7 +55,7 @@ class AvailabilityProviderRegistry(
                         adaptersBySource[source]?.id == BookingProvider.RESERVECALIFORNIA
                     }
             } ?: return null
-        return adaptersBySource[key]?.takeIf { it.isEnabled() }
+        return adaptersBySource[key]?.takeIf { it.isEnabled() && it.supportsRef(ref) }
     }
 
     /**

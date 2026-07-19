@@ -20,7 +20,6 @@ class CampgroundRepo(
 ) {
     private val importRunRepo = ImportRunRepo(ctx)
     private val poiRepo = PoiRepo(ctx)
-    private val campsiteProviderRepo = CampsiteProviderRepo(ctx)
 
     data class SearchFilters(
         val vendors: List<String> = emptyList(),
@@ -104,7 +103,7 @@ class CampgroundRepo(
             campground = fromRecord(record),
             source = record.get("detail_source", String::class.java),
             sourceId = record.get("detail_source_id", String::class.java),
-            providerRefJson = campsiteProviderRepo.findProviderRef(poiId)?.providerRefJson,
+            providerRefJson = null, // Legacy field — booking ref now resolved via RefResolver
             ctaProviderRefJson = record.get("cta_provider_ref_text", String::class.java),
             propertiesJson = record.get("properties_text", String::class.java),
             memberSources = memberSourcesOf(record.get("member_sources")),
