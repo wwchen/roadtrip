@@ -329,6 +329,7 @@ poi_data:
         inputs: [aspira-maps-wa, uscampgrounds, aspira-inventory-wa, aspira-dictionaries-wa]
         args:
           host: washington.goingtocamp.com
+          tenant: wa
           state_filter: WA
 
   - name: BC Provincial Parks
@@ -352,6 +353,7 @@ poi_data:
         inputs: [aspira-maps-pc, apca-accommodation, apca-places, aspira-inventory-pc, aspira-dictionaries-pc]
         args:
           host: reservation.pc.gc.ca
+          tenant: pc
           parent_name_fallback: true
 
   - name: Alberta Provincial Parks
@@ -438,18 +440,34 @@ campsite_data:
       - slug: aspira-wa-campsites
         adapter: AspiraCampsitesEtl
         inputs: [aspira-inventory-wa, aspira-dictionaries-wa, aspira-maps-wa]
+        args:
+          tenant: wa
+          maps_input: aspira-maps-wa
+          inventory_input: aspira-inventory-wa
+          dictionaries_input: aspira-dictionaries-wa
 
   - name: BC Aspira Resources
     etls:
       - slug: aspira-bc-campsites
         adapter: AspiraCampsitesEtl
         inputs: [aspira-inventory-bc, aspira-dictionaries-bc, aspira-maps-bc]
+        args:
+          tenant: bc
+          maps_input: aspira-maps-bc
+          inventory_input: aspira-inventory-bc
+          dictionaries_input: aspira-dictionaries-bc
+          parent_data_provider: bcparks-strapi
 
   - name: Parks Canada Aspira Resources
     etls:
       - slug: aspira-pc-campsites
         adapter: AspiraCampsitesEtl
         inputs: [aspira-inventory-pc, aspira-dictionaries-pc, aspira-maps-pc]
+        args:
+          tenant: pc
+          maps_input: aspira-maps-pc
+          inventory_input: aspira-inventory-pc
+          dictionaries_input: aspira-dictionaries-pc
 
   - name: California State Park Sites
     etls:
@@ -462,9 +480,13 @@ campsite_data:
       - slug: reserveamerica-ab-campsites
         adapter: ReserveAmericaSitesEtl
         inputs: [reserveamerica-campsites-abpp]
+        args:
+          contract: ABPP
 
   - name: New York State Park Sites
     etls:
       - slug: reserveamerica-ny-campsites
         adapter: ReserveAmericaSitesEtl
         inputs: [reserveamerica-campsites-ny]
+        args:
+          contract: NY

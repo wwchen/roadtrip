@@ -5,6 +5,8 @@ import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
 import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.DataProvider
+import ca.floo.roadtrip.model.metadata.registry.EtlEntry
+import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
@@ -27,92 +29,79 @@ import org.jooq.DSLContext
 internal fun productionEtlRegistry(ctx: DSLContext): Map<String, TerminalEtlBinding<*, *>> =
     productionTerminalEtlDefinitions.mapValues { (_, definition) -> definition.bind(ctx) }
 
-internal val productionTerminalEtlDefinitions: Map<String, TerminalEtlDefinition<*, *>> =
-    mapOf(
-        // Campflare
-        "campflare-campgrounds" to
-            campgroundTerminal(CampflareCampgroundsEtl()),
-        "campflare-campsites" to
-            campsiteTerminal(CampflareCampsitesEtl()),
-        // Rec.gov
-        "recgov-campgrounds" to
-            campgroundTerminal(RecGovCampgroundsEtl("recgov-campgrounds")),
-        "recgov-campsites" to
-            campsiteTerminal(RecGovCampsitesEtl("recgov-campsites")),
-        // Aspira WA
-        "aspira-wa-campgrounds" to
-            campgroundTerminal(AspiraCampgroundsEtl("aspira-wa-campgrounds", DataProvider.ASPIRA, "wa")),
-        "aspira-wa-campsites" to
-            campsiteTerminal(
-                AspiraCampsitesEtl(
-                    etlSlug = "aspira-wa-campsites",
-                    mapsInputSlug = "aspira-maps-wa",
-                    inventoryInputSlug = "aspira-inventory-wa",
-                    dictionariesInputSlug = "aspira-dictionaries-wa",
-                    aspiraTenant = "wa",
-                    parentDataProvider = DataProvider.ASPIRA,
-                ),
-            ),
-        // Aspira BC
-        "aspira-bc-campgrounds" to
-            campgroundTerminal(BcParksCampgroundsEtl()),
-        "aspira-bc-campsites" to
-            campsiteTerminal(
-                AspiraCampsitesEtl(
-                    etlSlug = "aspira-bc-campsites",
-                    mapsInputSlug = "aspira-maps-bc",
-                    inventoryInputSlug = "aspira-inventory-bc",
-                    dictionariesInputSlug = "aspira-dictionaries-bc",
-                    aspiraTenant = "bc",
-                    parentDataProvider = DataProvider.STRAPI,
-                ),
-            ),
-        // Aspira PC
-        "aspira-pc-campgrounds" to
-            campgroundTerminal(AspiraCampgroundsEtl("aspira-pc-campgrounds", DataProvider.ASPIRA, "pc")),
-        "aspira-pc-campsites" to
-            campsiteTerminal(
-                AspiraCampsitesEtl(
-                    etlSlug = "aspira-pc-campsites",
-                    mapsInputSlug = "aspira-maps-pc",
-                    inventoryInputSlug = "aspira-inventory-pc",
-                    dictionariesInputSlug = "aspira-dictionaries-pc",
-                    aspiraTenant = "pc",
-                    parentDataProvider = DataProvider.ASPIRA,
-                ),
-            ),
-        // ReserveAmerica AB
-        "reserveamerica-ab-campgrounds" to
-            campgroundTerminal(ReserveAmericaCampgroundsEtl("reserveamerica-ab-campgrounds")),
-        "reserveamerica-ab-campsites" to
-            campsiteTerminal(ReserveAmericaSitesEtl("reserveamerica-ab-campsites", "ABPP")),
-        // ReserveAmerica NY
-        "reserveamerica-ny-campgrounds" to
-            campgroundTerminal(ReserveAmericaCampgroundsEtl("reserveamerica-ny-campgrounds")),
-        "reserveamerica-ny-campsites" to
-            campsiteTerminal(ReserveAmericaSitesEtl("reserveamerica-ny-campsites", "NY")),
-        // ReserveCalifornia
-        "reservecalifornia-campgrounds" to
-            campgroundTerminal(ReserveCaliforniaCampgroundsEtl("reservecalifornia-campgrounds")),
-        "reservecalifornia-campsites" to
-            campsiteTerminal(ReserveCaliforniaSitesEtl("reservecalifornia-campsites")),
-        // Planet Fitness
-        "planet-fitness" to
-            planetFitnessTerminal(PlanetFitnessEtl()),
-        // Tesla
-        "tesla-superchargers" to
-            teslaSuperchargerTerminal(TeslaIndexEtl()),
-    )
+internal val productionTerminalEtlDefinitions: Map<String, TerminalEtlDefinition<*, *>> by lazy {
+    val registry = PoiRegistry.loadResource("poi-registry.yaml")
+    val out = mutableMapOf<String, TerminalEtlDefinition<*, *>>()
+    for (row in registry.enabledPoiData()) {
+        val terminal = row.etls.last()
+        out[terminal.slug] = createPoiTerminal(terminal)
+    }
+    for (row in registry.enabledCampsiteData()) {
+        val terminal = row.etls.last()
+        out[terminal.slug] = createCampsiteTerminal(terminal)
+    }
+    out
+}
 
-private fun <DTO> campgroundTerminal(
-    etl: SourceEtl<DTO, CampgroundUpsertCandidate>,
-): TerminalEtlDefinition<DTO, CampgroundUpsertCandidate> =
+@Suppress("UNCHECKED_CAST")
+private fun createPoiTerminal(entry: EtlEntry): TerminalEtlDefinition<*, *> =
+    when (entry.adapter) {
+        "CampflareCampgroundsEtl" -> campgroundSink(CampflareCampgroundsEtl())
+        "RecGovCampgroundsEtl" -> campgroundSink(RecGovCampgroundsEtl(entry.slug))
+        "AspiraCampgroundsEtl" ->
+            campgroundSink(
+                AspiraCampgroundsEtl(
+                    etlSlug = entry.slug,
+                    dataProviderValue = DataProvider.ASPIRA,
+                    aspiraTenant = entry.args.require("tenant"),
+                ),
+            )
+        "BcParksCampgroundsEtl" -> campgroundSink(BcParksCampgroundsEtl(etlSlug = entry.slug))
+        "ReserveAmericaCampgroundsEtl" -> campgroundSink(ReserveAmericaCampgroundsEtl(entry.slug))
+        "ReserveCaliforniaCampgroundsEtl" -> campgroundSink(ReserveCaliforniaCampgroundsEtl(entry.slug))
+        "PlanetFitnessEtl" -> planetFitnessSink(PlanetFitnessEtl())
+        "TeslaIndexEtl" -> teslaSuperchargerSink(TeslaIndexEtl())
+        else -> error("Unknown poi_data adapter: ${entry.adapter} (slug=${entry.slug})")
+    }
+
+@Suppress("UNCHECKED_CAST")
+private fun createCampsiteTerminal(entry: EtlEntry): TerminalEtlDefinition<*, *> =
+    when (entry.adapter) {
+        "CampflareCampsitesEtl" -> campsiteSink(CampflareCampsitesEtl())
+        "RecGovCampsitesEtl" -> campsiteSink(RecGovCampsitesEtl(entry.slug))
+        "AspiraCampsitesEtl" ->
+            campsiteSink(
+                AspiraCampsitesEtl(
+                    etlSlug = entry.slug,
+                    mapsInputSlug = entry.args.require("maps_input"),
+                    inventoryInputSlug = entry.args.require("inventory_input"),
+                    dictionariesInputSlug = entry.args["dictionaries_input"],
+                    aspiraTenant = entry.args.require("tenant"),
+                    parentDataProvider =
+                        entry.args["parent_data_provider"]
+                            ?.let { DataProvider.fromId(it) } ?: DataProvider.ASPIRA,
+                ),
+            )
+        "ReserveAmericaSitesEtl" ->
+            campsiteSink(
+                ReserveAmericaSitesEtl(
+                    etlSlug = entry.slug,
+                    contractCode = entry.args.require("contract"),
+                ),
+            )
+        "ReserveCaliforniaSitesEtl" -> campsiteSink(ReserveCaliforniaSitesEtl(entry.slug))
+        else -> error("Unknown campsite_data adapter: ${entry.adapter} (slug=${entry.slug})")
+    }
+
+private fun Map<String, String>.require(key: String): String = this[key] ?: error("Missing required ETL arg '$key'")
+
+private fun <DTO> campgroundSink(etl: SourceEtl<DTO, CampgroundUpsertCandidate>): TerminalEtlDefinition<DTO, CampgroundUpsertCandidate> =
     TerminalEtlDefinition(etl) { ctx ->
         val repo = CampgroundRepo(ctx)
         terminalSink { records -> FlushCounts(upserted = repo.upsertCampgroundBatch(records)) }
     }
 
-private fun <DTO> campsiteTerminal(etl: SourceEtl<DTO, CampsiteUpsertCandidate>): TerminalEtlDefinition<DTO, CampsiteUpsertCandidate> =
+private fun <DTO> campsiteSink(etl: SourceEtl<DTO, CampsiteUpsertCandidate>): TerminalEtlDefinition<DTO, CampsiteUpsertCandidate> =
     TerminalEtlDefinition(etl) { ctx ->
         val repo = CampsiteRepo(ctx)
         terminalSink { records ->
@@ -121,7 +110,7 @@ private fun <DTO> campsiteTerminal(etl: SourceEtl<DTO, CampsiteUpsertCandidate>)
         }
     }
 
-private fun <DTO> teslaSuperchargerTerminal(
+private fun <DTO> teslaSuperchargerSink(
     etl: SourceEtl<DTO, TeslaSuperchargerUpsertCandidate>,
 ): TerminalEtlDefinition<DTO, TeslaSuperchargerUpsertCandidate> =
     TerminalEtlDefinition(etl) { ctx ->
@@ -129,7 +118,7 @@ private fun <DTO> teslaSuperchargerTerminal(
         terminalSink { records -> FlushCounts(upserted = repo.upsertTeslaSuperchargerBatch(records)) }
     }
 
-private fun <DTO> planetFitnessTerminal(
+private fun <DTO> planetFitnessSink(
     etl: SourceEtl<DTO, PlanetFitnessLocationUpsertCandidate>,
 ): TerminalEtlDefinition<DTO, PlanetFitnessLocationUpsertCandidate> =
     TerminalEtlDefinition(etl) { ctx ->
