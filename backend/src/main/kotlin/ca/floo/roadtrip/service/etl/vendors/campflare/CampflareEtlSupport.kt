@@ -1,8 +1,5 @@
-@file:Suppress("MatchingDeclarationName")
-
 package ca.floo.roadtrip.service.etl.vendors.campflare
 
-import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import kotlinx.serialization.json.JsonArray
@@ -18,38 +15,13 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-internal data class BookingProviderRef(
-    val vendor: BookingProvider,
-    val vendorRefId: String,
-)
+internal fun extractRecgovCampgroundRef(raw: JsonObject): String? =
+    raw
+        .objectField("connections")
+        ?.stringField("ridb_facility_id")
+        ?: recgovCampgroundIdFromUrl(raw.stringField("reservation_url"))
 
-internal fun recgovCampgroundVendorRef(
-    raw: JsonObject,
-    campflareId: String,
-): BookingProviderRef? {
-    val recgovId =
-        raw
-            .objectField("connections")
-            ?.stringField("ridb_facility_id")
-            ?: recgovCampgroundIdFromUrl(raw.stringField("reservation_url"))
-            ?: return null
-    return BookingProviderRef(
-        vendor = BookingProvider.RECGOV,
-        vendorRefId = recgovId,
-    )
-}
-
-internal fun recgovCampsiteVendorRef(
-    raw: JsonObject,
-    campflareId: String,
-    reservationUrl: String?,
-): BookingProviderRef? {
-    val recgovId = recgovCampsiteIdFromUrl(reservationUrl) ?: return null
-    return BookingProviderRef(
-        vendor = BookingProvider.RECGOV,
-        vendorRefId = recgovId,
-    )
-}
+internal fun extractRecgovCampsiteRef(reservationUrl: String?): String? = recgovCampsiteIdFromUrl(reservationUrl)
 
 internal fun jsonObjectResults(
     envelopes: List<Envelope>,

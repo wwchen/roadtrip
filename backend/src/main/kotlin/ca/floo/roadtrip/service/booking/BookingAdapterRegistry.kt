@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.booking
 
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
@@ -24,11 +23,12 @@ internal class BookingAdapterRegistry(
     fun targetFor(
         action: BookingAction,
         parentRef: BookingProviderRef,
-        campsiteRef: CatalogCampsiteRef,
+        campsiteId: Long,
+        vendorSiteId: String,
     ): BookingTarget? =
         byId.values
             .asSequence()
-            .mapNotNull { it.targetFor(parentRef, campsiteRef) }
+            .mapNotNull { it.targetFor(parentRef, campsiteId, vendorSiteId) }
             .firstOrNull { can(action, it) }
 
     fun can(

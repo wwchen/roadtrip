@@ -7,7 +7,6 @@ import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import ca.floo.roadtrip.support.AspiraException
@@ -345,18 +344,11 @@ class AspiraAvailabilityProviderTest {
                 campsite = reservable,
                 parentRef = parentRef,
                 date = LocalDate.parse("2026-07-10"),
-                catalogRef =
-                    CatalogCampsiteRef(
-                        campsiteId = reservable.id,
-                        vendorId = reservable.dataProviderRef.serialize(),
-                        mapId = -2147483615,
-                        resourceLocationId = -2147483624,
-                    ),
             )!!
 
         assertTrue(url.startsWith("https://washington.goingtocamp.com/create-booking/results?"), url)
         assertTrue(url.contains("transactionLocationId=-2147483630"), url)
-        assertTrue(url.contains("mapId=-2147483615"), url)
+        assertTrue(url.contains("mapId=-2147483388"), url)
         assertTrue(url.contains("resourceLocationId=-2147483624"), url)
         assertTrue(url.contains("startDate=2026-07-10"), url)
         assertTrue(url.contains("endDate=2026-07-11"), url)

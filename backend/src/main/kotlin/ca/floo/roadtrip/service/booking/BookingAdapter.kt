@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.booking
 
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
@@ -14,14 +13,10 @@ internal interface BookingAdapter : Dispatchable<BookingProvider> {
 
     override fun canHandle(key: BookingProvider): Boolean = key == id
 
-    /**
-     * Translates provider-specific catalog identity into a booking target this
-     * adapter understands. Availability code should not maintain a central
-     * BookingProviderRef -> BookingAdapter map; each booking adapter owns that shape.
-     */
     fun targetFor(
         parentRef: BookingProviderRef,
-        campsiteRef: CatalogCampsiteRef,
+        campsiteId: Long,
+        vendorSiteId: String,
     ): BookingTarget?
 
     /**

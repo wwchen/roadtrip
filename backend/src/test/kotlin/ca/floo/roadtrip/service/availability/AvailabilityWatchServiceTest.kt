@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
@@ -89,9 +88,6 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                refResolver =
-                    ca.floo.roadtrip.service.ref
-                        .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 campgroundRepo = CampgroundRepo(ctx),
@@ -122,9 +118,6 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                refResolver =
-                    ca.floo.roadtrip.service.ref
-                        .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 campgroundRepo = CampgroundRepo(ctx),
@@ -174,9 +167,6 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                refResolver =
-                    ca.floo.roadtrip.service.ref
-                        .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 campgroundRepo = CampgroundRepo(ctx),
@@ -779,13 +769,15 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
 
         override fun targetFor(
             parentRef: BookingProviderRef,
-            campsiteRef: CatalogCampsiteRef,
+            campsiteId: Long,
+            vendorSiteId: String,
         ): BookingTarget? {
             if (parentRef !is BookingProviderRef.RecGov) return null
             return BookingTarget(
                 providerId = id,
                 parentRef = parentRef,
-                campsiteRef = campsiteRef,
+                campsiteId = campsiteId,
+                vendorSiteId = vendorSiteId,
             )
         }
 
@@ -796,7 +788,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
             action == BookingAction.ADD_TO_CART &&
                 target.providerId == BookingProvider.RECGOV &&
                 target.parentRef is BookingProviderRef.RecGov &&
-                target.campsiteRef.vendorId.isNotBlank()
+                target.vendorSiteId.isNotBlank()
 
         override suspend fun addToCart(request: AddToCartRequest): AddToCartResult = AddToCartResult.Unsupported
     }

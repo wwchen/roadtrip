@@ -3,7 +3,6 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -60,7 +59,6 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                refResolver = refResolver,
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 campgroundRepo = CampgroundRepo(ctx),
@@ -143,7 +141,6 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                refResolver = refResolver,
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 campgroundRepo = CampgroundRepo(ctx),
@@ -184,10 +181,9 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
         override fun reservationUrlTemplate(
             campsite: Campsite,
             parentRef: BookingProviderRef,
-            catalogRef: CatalogCampsiteRef,
         ): String? {
             val parentId = (parentRef as BookingProviderRef.RecGov).facilityId
-            return "provider-template://$parentId/${campsite.dataProviderRef.provider.id}/${catalogRef.vendorId}"
+            return "provider-template://$parentId/${campsite.dataProviderRef.provider.id}/${vendorSiteIdFor(campsite)}"
         }
 
         override suspend fun availability(

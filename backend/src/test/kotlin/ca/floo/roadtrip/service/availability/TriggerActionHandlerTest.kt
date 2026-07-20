@@ -3,7 +3,6 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
@@ -235,8 +234,8 @@ class TriggerActionHandlerTest {
             val request = bookingProvider.requests.single()
             assertEquals(42L, request.watchId)
             assertEquals(BookingProvider.RECGOV, request.target.providerId)
-            assertEquals(7L, request.target.campsiteRef.campsiteId)
-            assertEquals("site-7", request.target.campsiteRef.vendorId)
+            assertEquals(7L, request.target.campsiteId)
+            assertEquals("site-7", request.target.vendorSiteId)
             assertEquals(LocalDate.parse("2026-07-04"), request.arrivalDate)
             assertEquals(LocalDate.parse("2026-07-06"), request.checkoutDate)
             assertEquals("Site 12", request.campsiteLabel)
@@ -491,13 +490,15 @@ class TriggerActionHandlerTest {
 
         override fun targetFor(
             parentRef: BookingProviderRef,
-            campsiteRef: CatalogCampsiteRef,
+            campsiteId: Long,
+            vendorSiteId: String,
         ): BookingTarget? {
             if (parentRef !is BookingProviderRef.RecGov) return null
             return BookingTarget(
                 providerId = id,
                 parentRef = parentRef,
-                campsiteRef = campsiteRef,
+                campsiteId = campsiteId,
+                vendorSiteId = vendorSiteId,
             )
         }
 
@@ -563,7 +564,6 @@ class TriggerActionHandlerTest {
                 kind = "Tent",
                 sourcePayload = null,
             )
-        val catalogRef = CatalogCampsiteRef(campsiteId = 7L, vendorId = "site-7")
         return TriggerOpening(
             campsite = campsite,
             date = LocalDate.parse("2026-07-04"),
@@ -572,7 +572,6 @@ class TriggerActionHandlerTest {
                     campsite = campsite,
                     provider = FakeAvailabilityProvider(providerId),
                     campground = campground,
-                    catalogRef = catalogRef,
                     parentPoiId = 100L,
                     dateContext = PoiDateContext(ZoneId.of("UTC"), LocalDate.parse("2026-07-01")),
                 ),

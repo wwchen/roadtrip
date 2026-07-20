@@ -39,12 +39,15 @@ class CampflareCampgroundsEtl : CampgroundEtl<JsonObject> {
 
         val campgroundId = id!!
         val sourceUrl = campflareCampgroundSourceUrl(id)
-        val recgovRef = recgovCampgroundVendorRef(raw, campgroundId)
+        val recgovRef = extractRecgovCampgroundRef(raw)
         return TransformResult.Ok(
             CampgroundUpsertCandidate(
                 dataProviderRef = DataProviderRef.Campflare(id = campgroundId),
-                bookingProvider = recgovRef?.vendor ?: BookingProvider.CAMPFLARE,
-                bookingProviderRef = recgovRef?.vendorRefId ?: campgroundId,
+                bookingProvider =
+                    recgovRef
+                        ?.let { BookingProvider.RECGOV }
+                        ?: BookingProvider.CAMPFLARE,
+                bookingProviderRef = recgovRef ?: campgroundId,
                 name = name!!,
                 latitude = latitude!!,
                 longitude = longitude!!,

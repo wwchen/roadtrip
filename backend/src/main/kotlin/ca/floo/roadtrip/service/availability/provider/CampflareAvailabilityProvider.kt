@@ -7,7 +7,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
@@ -45,7 +44,6 @@ class CampflareAvailabilityProvider(
     override fun reservationUrlTemplate(
         campsite: Campsite,
         parentRef: BookingProviderRef,
-        catalogRef: CatalogCampsiteRef,
     ): String? = RecGovBookingUrl.templateFromUrl(campsite.reservationUrl)
 
     override suspend fun availability(

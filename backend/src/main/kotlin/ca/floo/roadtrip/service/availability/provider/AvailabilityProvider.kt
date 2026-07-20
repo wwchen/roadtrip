@@ -3,7 +3,6 @@ package ca.floo.roadtrip.service.availability.provider
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -83,43 +82,29 @@ interface AvailabilityProvider : Dispatchable<BookingProvider> {
         endDate: LocalDate,
     ): AvailabilityObservationBatch = availability(campground, startDate, endDate)
 
+    fun vendorSiteIdFor(campsite: Campsite): String =
+        campsite.bookingProviderRef
+            ?.takeIf { campsite.bookingProvider == id.id }
+            ?: campsite.dataProviderRef.serialize()
+
     /**
-     * User-facing reservation URL *template* for [catalogRef] under a campground
+     * User-facing reservation URL *template* for [campsite] under a campground
      * whose parent scope is [parentRef], or null when this provider exposes no
-     * stable deep link. [campsite] carries normalized display/link metadata from
-     * the catalog row. The template may embed the
-     * [ReservationUrlTemplate] placeholders (filled by the caller for a chosen
-     * window) or be a static URL. Pure and cheap — no upstream call, no throw.
-     *
-     * The URL scheme is vendor-specific, so it lives in the adapter — the one
-     * place that knows the vendor's reservation-site shape. Both the campsites
-     * API (which ships the template to the web app) and provider-neutral
-     * callers (alert notifications, via [reservationUrl]) read it from here rather
-     * than hardcoding vendor URLs. Default null keeps deep links opt-in per
-     * adapter — a provider without one is not a gap to fill.
-     *
-     * [catalogRef] carries the campsite-specific upstream ids needed by
-     * provider-specific deep links.
+     * stable deep link. The template may embed the [ReservationUrlTemplate]
+     * placeholders (filled by the caller for a chosen window) or be a static URL.
+     * Pure and cheap — no upstream call, no throw.
      */
     fun reservationUrlTemplate(
         campsite: Campsite,
         parentRef: BookingProviderRef,
-        catalogRef: CatalogCampsiteRef,
     ): String? = null
 
-    /**
-     * Concrete reservation deep link for [campsite] on the single night beginning
-     * [date] (check-out the next day), or null when the provider exposes none.
-     * Derived from [reservationUrlTemplate] by filling its window placeholders, so
-     * an adapter only implements the template once.
-     */
     fun reservationUrl(
         campsite: Campsite,
         parentRef: BookingProviderRef,
         date: LocalDate,
-        catalogRef: CatalogCampsiteRef,
     ): String? =
-        reservationUrlTemplate(campsite, parentRef, catalogRef)?.let {
+        reservationUrlTemplate(campsite, parentRef)?.let {
             ReservationUrlTemplate.fill(it, date, date.plusDays(1))
         }
 }

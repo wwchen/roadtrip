@@ -210,7 +210,7 @@ internal class WatchAlertDispatcher(
                         // ref supplies vendor ids the per-site ref may omit (e.g. Aspira).
                         bookingUrl =
                             target?.let { tgt ->
-                                tgt.parentRef?.let { ref -> tgt.provider.reservationUrl(r, ref, t.targetDate, tgt.catalogRef) }
+                                tgt.parentRef?.let { ref -> tgt.provider.reservationUrl(r, ref, t.targetDate) }
                             },
                         vendor =
                             target

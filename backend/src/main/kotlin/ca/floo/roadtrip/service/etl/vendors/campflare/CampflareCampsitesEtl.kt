@@ -38,12 +38,15 @@ class CampflareCampsitesEtl : CampsiteEtl<JsonObject> {
         val parentId = campgroundId!!
         val kind = raw.stringField("kind") ?: DEFAULT_CAMPSITE_KIND
         val reservationUrl = raw.stringField("reservation_url")
-        val recgovRef = recgovCampsiteVendorRef(raw, campsiteId, reservationUrl)
+        val recgovRef = extractRecgovCampsiteRef(reservationUrl)
         return TransformResult.Ok(
             CampsiteUpsertCandidate(
                 dataProviderRef = DataProviderRef.Campflare(id = campsiteId),
-                bookingProvider = recgovRef?.vendor ?: BookingProvider.CAMPFLARE,
-                bookingProviderRef = recgovRef?.vendorRefId ?: campsiteId,
+                bookingProvider =
+                    recgovRef
+                        ?.let { BookingProvider.RECGOV }
+                        ?: BookingProvider.CAMPFLARE,
+                bookingProviderRef = recgovRef ?: campsiteId,
                 parentDataProviderRef = DataProviderRef.Campflare(id = parentId),
                 name = name!!,
                 kind = kind,

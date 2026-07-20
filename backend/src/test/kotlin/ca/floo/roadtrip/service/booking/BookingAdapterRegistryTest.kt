@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.booking
 
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
@@ -42,11 +41,12 @@ class BookingAdapterRegistryTest {
     fun `target for asks providers to translate provider refs`() {
         val registry = BookingAdapterRegistry(listOf(FakeBookingProvider(canAddToCart = true)))
 
-        val target = registry.targetFor(BookingAction.ADD_TO_CART, BookingProviderRef.RecGov("100"), campsiteRef())
+        val target = registry.targetFor(BookingAction.ADD_TO_CART, BookingProviderRef.RecGov("100"), TEST_CAMPSITE_ID, TEST_VENDOR_ID)
 
         assertEquals(BookingProvider.RECGOV, target?.providerId)
         assertEquals(BookingProviderRef.RecGov("100"), target?.parentRef)
-        assertEquals(campsiteRef(), target?.campsiteRef)
+        assertEquals(TEST_CAMPSITE_ID, target?.campsiteId)
+        assertEquals(TEST_VENDOR_ID, target?.vendorSiteId)
     }
 
     @Test
@@ -96,13 +96,15 @@ class BookingAdapterRegistryTest {
 
         override fun targetFor(
             parentRef: BookingProviderRef,
-            campsiteRef: CatalogCampsiteRef,
+            campsiteId: Long,
+            vendorSiteId: String,
         ): BookingTarget? {
             if (parentRef !is BookingProviderRef.RecGov) return null
             return BookingTarget(
                 providerId = id,
                 parentRef = parentRef,
-                campsiteRef = campsiteRef,
+                campsiteId = campsiteId,
+                vendorSiteId = vendorSiteId,
             )
         }
 
@@ -135,8 +137,7 @@ class BookingAdapterRegistryTest {
         BookingTarget(
             providerId = BookingProvider.RECGOV,
             parentRef = BookingProviderRef.RecGov("100"),
-            campsiteRef = campsiteRef(),
+            campsiteId = TEST_CAMPSITE_ID,
+            vendorSiteId = TEST_VENDOR_ID,
         )
-
-    private fun campsiteRef(): CatalogCampsiteRef = CatalogCampsiteRef(campsiteId = TEST_CAMPSITE_ID, vendorId = TEST_VENDOR_ID)
 }

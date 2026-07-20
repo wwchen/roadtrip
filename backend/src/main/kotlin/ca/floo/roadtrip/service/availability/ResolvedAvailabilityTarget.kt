@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
@@ -11,7 +10,6 @@ internal data class ResolvedAvailabilityTarget(
     val campsite: Campsite,
     val provider: AvailabilityProvider,
     val campground: Campground,
-    val catalogRef: CatalogCampsiteRef,
     val parentPoiId: Long,
     val dateContext: PoiDateContext,
     val candidates: List<AvailabilityProvider> = listOf(provider),

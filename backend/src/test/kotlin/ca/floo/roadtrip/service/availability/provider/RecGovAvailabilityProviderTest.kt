@@ -3,7 +3,6 @@ package ca.floo.roadtrip.service.availability.provider
 import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import kotlinx.coroutines.runBlocking
@@ -172,7 +171,6 @@ class RecGovAvailabilityProviderTest {
                 campsite,
                 BookingProviderRef.RecGov("232447"),
                 LocalDate.parse("2026-07-01"),
-                CatalogCampsiteRef(campsiteId = campsite.id, vendorId = "330257"),
             )
 
         assertEquals(

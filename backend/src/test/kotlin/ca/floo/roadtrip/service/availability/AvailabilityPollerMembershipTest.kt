@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
@@ -171,11 +170,6 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
                     campsite = campsite,
                     provider = FakeProvider(provider, supportsInternalPolling),
                     campground = campground,
-                    catalogRef =
-                        CatalogCampsiteRef(
-                            campsiteId = campsite.id,
-                            vendorId = campsite.dataProviderRef.serialize(),
-                        ),
                     parentPoiId = parentPoiId,
                     dateContext = dateContext,
                 )
