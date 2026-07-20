@@ -11,6 +11,7 @@ import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampgroundsEtl
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampsitesEtl
+import ca.floo.roadtrip.service.etl.vendors.bcparks.BcParksCampgroundsEtl
 import ca.floo.roadtrip.service.etl.vendors.campflare.CampflareCampgroundsEtl
 import ca.floo.roadtrip.service.etl.vendors.campflare.CampflareCampsitesEtl
 import ca.floo.roadtrip.service.etl.vendors.osmpf.PlanetFitnessEtl
@@ -54,7 +55,7 @@ internal val productionTerminalEtlDefinitions: Map<String, TerminalEtlDefinition
             ),
         // Aspira BC
         "aspira-bc-campgrounds" to
-            campgroundTerminal(AspiraCampgroundsEtl("aspira-bc-campgrounds", DataProvider.ASPIRA, "bc")),
+            campgroundTerminal(BcParksCampgroundsEtl()),
         "aspira-bc-campsites" to
             campsiteTerminal(
                 AspiraCampsitesEtl(
@@ -63,7 +64,7 @@ internal val productionTerminalEtlDefinitions: Map<String, TerminalEtlDefinition
                     inventoryInputSlug = "aspira-inventory-bc",
                     dictionariesInputSlug = "aspira-dictionaries-bc",
                     aspiraTenant = "bc",
-                    parentDataProvider = DataProvider.ASPIRA,
+                    parentDataProvider = DataProvider.STRAPI,
                 ),
             ),
         // Aspira PC
