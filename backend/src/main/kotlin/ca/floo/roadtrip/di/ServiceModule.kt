@@ -39,6 +39,7 @@ import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
+import ca.floo.roadtrip.service.availability.provider.AspiraTenants
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
@@ -327,7 +328,7 @@ private fun canonicalCampgroundSourceKeys(registry: PoiRegistry): Set<String> =
     buildSet {
         if (registry.campflareSources().isNotEmpty()) add(DataProvider.CAMPFLARE.id)
         if (registry.recgovSources().isNotEmpty()) add(DataProvider.RECGOV.id)
-        if (registry.aspiraHostBySource().isNotEmpty()) add(DataProvider.ASPIRA.id)
+        if (registry.hostBySource().any { (_, host) -> AspiraTenants.byHost(host) != null }) add(DataProvider.ASPIRA.id)
         if (registry.bcParksSources().isNotEmpty()) add(DataProvider.STRAPI.id)
         if (registry.reserveAmericaSources().isNotEmpty()) add(DataProvider.RESERVEAMERICA.id)
         if (registry.reserveCaliforniaSources().isNotEmpty()) add(DataProvider.RESERVECALIFORNIA.id)
