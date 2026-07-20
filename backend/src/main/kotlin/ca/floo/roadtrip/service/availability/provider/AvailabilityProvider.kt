@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
@@ -40,13 +41,11 @@ interface AvailabilityProvider : Dispatchable<BookingProvider> {
     /** Whether this provider is configured for this process. */
     fun isEnabled(): Boolean
 
-    /**
-     * Whether this adapter can serve the typed provider reference for this
-     * process. The registry calls this before dispatching so unconfigured
-     * providers can decline and the availability resolver can try linked
-     * fallback refs without hardcoded provider branching.
-     */
-    fun supportsRef(ref: BookingProviderRef): Boolean = isEnabled() && id == ref.provider
+    fun supportsCampground(campground: Campground): Boolean {
+        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return false
+        val ref = campground.bookingProviderRef?.let { BookingProviderRef.parse(provider, it) } ?: return false
+        return isEnabled() && id == ref.provider
+    }
 
     /**
      * Per-day availability for the half-open window `[startDate, endDate)`.

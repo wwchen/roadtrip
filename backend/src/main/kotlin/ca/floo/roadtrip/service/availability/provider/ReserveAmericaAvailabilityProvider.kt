@@ -9,6 +9,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.ReserveAmericaException
@@ -36,8 +37,11 @@ class ReserveAmericaAvailabilityProvider(
 
     override fun isEnabled(): Boolean = enabled
 
-    override fun supportsRef(ref: BookingProviderRef): Boolean =
-        isEnabled() && ref is BookingProviderRef.ReserveAmerica && ref.contractCode in tenants
+    override fun supportsCampground(campground: Campground): Boolean {
+        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return false
+        val ref = campground.bookingProviderRef?.let { BookingProviderRef.parse(provider, it) } ?: return false
+        return isEnabled() && ref is BookingProviderRef.ReserveAmerica && ref.contractCode in tenants
+    }
 
     override suspend fun availability(
         ref: BookingProviderRef,

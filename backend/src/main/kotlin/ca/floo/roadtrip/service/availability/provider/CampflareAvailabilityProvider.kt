@@ -9,9 +9,11 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.support.CampflareException
 import kotlinx.coroutines.CancellationException
 import java.time.LocalDate
@@ -32,7 +34,8 @@ class CampflareAvailabilityProvider(
 
     override fun isEnabled(): Boolean = enabled
 
-    override fun supportsRef(ref: BookingProviderRef): Boolean = isEnabled() && ref is BookingProviderRef.Campflare
+    override fun supportsCampground(campground: Campground): Boolean =
+        isEnabled() && campground.dataProviderRef is DataProviderRef.Campflare
 
     override fun reservationUrlTemplate(
         campsite: Campsite,
