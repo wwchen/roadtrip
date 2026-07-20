@@ -11,10 +11,25 @@ private const val SAMPLE_GRID_DIM: Int = 10
 
 private const val MIN_PER_CATEGORY_ALLOCATION: Int = 50
 
+private class CampgroundProviderFilter(
+    enabledDataProviders: Set<String>,
+) {
+    val clause: String =
+        if (enabledDataProviders.isEmpty()) {
+            "AND p.poi_type <> 'campground'"
+        } else {
+            "AND (p.poi_type <> 'campground' OR cg.data_provider IN (${enabledDataProviders.joinToString(",") { "?" }}))"
+        }
+
+    val params: List<String> = enabledDataProviders.toList()
+}
+
 internal class PoiServingRepo(
     private val ctx: DSLContext,
-    private val enabledDataProviders: Set<String>,
+    enabledDataProviders: Set<String>,
 ) {
+    private val providerFilter = CampgroundProviderFilter(enabledDataProviders)
+
     fun fetchPois(
         bbox: Bbox,
         categories: List<String>?,
@@ -87,6 +102,7 @@ internal class PoiServingRepo(
                 LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
                 LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id AND pf.deleted_at IS NULL
                 WHERE p.deleted_at IS NULL
+                  ${providerFilter.clause}
               ) catalog, corridor
               WHERE category IN ($placeholders)
                 AND ST_Within(ST_Centroid(geom), corridor.poly)
@@ -103,6 +119,7 @@ internal class PoiServingRepo(
             """.trimIndent()
         val args = mutableListOf<Any>()
         args.add(polygonGeoJson)
+        args.addAll(providerFilter.params)
         args.addAll(categories)
         return ctx.fetch(sql, *args.toTypedArray()).map { r ->
             PoiRow(
@@ -178,6 +195,7 @@ internal class PoiServingRepo(
         val args =
             buildList<Any> {
                 addAll(patterns)
+                addAll(providerFilter.params)
                 addAll(distinctCategories)
                 add(prefix)
                 add(limit)
@@ -202,6 +220,7 @@ internal class PoiServingRepo(
                     LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
                     LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id
                     WHERE p.deleted_at IS NULL
+                      ${providerFilter.clause}
                 ) catalog
                 WHERE $termPredicate
                   $categoryPredicate
@@ -227,12 +246,6 @@ internal class PoiServingRepo(
     ): Map<String, Int> {
         if (cats.isEmpty()) return emptyMap()
         val placeholders = cats.joinToString(",") { "?" }
-        val providerFilter =
-            if (enabledDataProviders.isEmpty()) {
-                "FALSE"
-            } else {
-                "cg.data_provider IN (${enabledDataProviders.joinToString(",") { "?" }})"
-            }
         val sql =
             """
             SELECT p.poi_type AS category, COUNT(*) AS n
@@ -242,10 +255,7 @@ internal class PoiServingRepo(
             WHERE p.deleted_at IS NULL
               AND p.poi_type IN ($placeholders)
               AND p.geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
-              AND (
-                p.poi_type <> 'campground'
-                OR $providerFilter
-              )
+              ${providerFilter.clause}
             GROUP BY p.poi_type
             """.trimIndent()
         val args = mutableListOf<Any>()
@@ -254,7 +264,7 @@ internal class PoiServingRepo(
         args.add(bbox.south)
         args.add(bbox.east)
         args.add(bbox.north)
-        args.addAll(enabledDataProviders)
+        args.addAll(providerFilter.params)
         val out = mutableMapOf<String, Int>()
         for (r in ctx.fetch(sql, *args.toTypedArray())) {
             out[r.get("category") as String] = (r.get("n") as Number).toInt()
@@ -289,12 +299,6 @@ internal class PoiServingRepo(
 
         val dx = (bbox.east - bbox.west) / SAMPLE_GRID_DIM
         val dy = (bbox.north - bbox.south) / SAMPLE_GRID_DIM
-        val providerFilter =
-            if (enabledDataProviders.isEmpty()) {
-                "FALSE"
-            } else {
-                "cg.data_provider IN (${enabledDataProviders.joinToString(",") { "?" }})"
-            }
         val sql =
             buildString {
                 cats.forEachIndexed { idx, _ ->
@@ -320,10 +324,7 @@ internal class PoiServingRepo(
                         WHERE p.deleted_at IS NULL
                           AND p.poi_type = ?
                           AND p.geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
-                          AND (
-                            ? <> 'campground'
-                            OR $providerFilter
-                          )
+                          ${providerFilter.clause}
                         """.trimIndent(),
                     )
                     append("\n) sub ORDER BY rn ASC, id ASC LIMIT ?)")
@@ -341,8 +342,7 @@ internal class PoiServingRepo(
             args.add(bbox.south)
             args.add(bbox.east)
             args.add(bbox.north)
-            args.add(cat)
-            args.addAll(enabledDataProviders)
+            args.addAll(providerFilter.params)
             args.add(allocation.getValue(cat).coerceAtLeast(1))
         }
 
