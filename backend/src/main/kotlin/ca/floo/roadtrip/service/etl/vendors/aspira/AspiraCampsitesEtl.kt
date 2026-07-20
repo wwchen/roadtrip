@@ -184,7 +184,11 @@ class AspiraCampsitesEtl(
                     yield(
                         TransformResult.Ok(
                             CampsiteUpsertCandidate(
-                                dataProviderRef = DataProviderRef.AspiraCampsite(resourceLocationId = resourceIdLong),
+                                dataProviderRef =
+                                    DataProviderRef.AspiraCampsite(
+                                        tenant = aspiraTenant,
+                                        resourceLocationId = resourceIdLong,
+                                    ),
                                 bookingProvider = BookingProvider.ASPIRA,
                                 bookingProviderRef = campsiteBookingRef(inv, leaf, parentLeaf),
                                 parentDataProviderRef = parentDataProviderRefTyped(leaf, parentLeaf, inv),

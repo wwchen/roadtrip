@@ -31,11 +31,12 @@ sealed interface DataProviderRef {
     }
 
     data class AspiraCampsite(
+        val tenant: String,
         val resourceLocationId: Long,
     ) : DataProviderRef {
         override val provider = DataProvider.ASPIRA
 
-        override fun serialize() = resourceLocationId.toString()
+        override fun serialize() = "$tenant:$resourceLocationId"
     }
 
     data class BcParks(
@@ -48,11 +49,12 @@ sealed interface DataProviderRef {
     }
 
     data class BcParksCampsite(
+        val tenant: String = "bc",
         val resourceLocationId: Long,
     ) : DataProviderRef {
         override val provider = DataProvider.STRAPI
 
-        override fun serialize() = resourceLocationId.toString()
+        override fun serialize() = "$tenant:$resourceLocationId"
     }
 
     data class ReserveAmerica(
@@ -107,13 +109,18 @@ sealed interface DataProviderRef {
             val parts = ref.split(":")
             return when (parts.size) {
                 2 -> {
-                    val tLID = parts[0].toLongOrNull() ?: return null
-                    val mapId = parts[1].toLongOrNull() ?: return null
-                    Aspira(transactionLocationId = tLID, mapId = mapId)
+                    val first = parts[0].toLongOrNull()
+                    if (first != null) {
+                        val mapId = parts[1].toLongOrNull() ?: return null
+                        Aspira(transactionLocationId = first, mapId = mapId)
+                    } else {
+                        val resLocId = parts[1].toLongOrNull() ?: return null
+                        AspiraCampsite(tenant = parts[0], resourceLocationId = resLocId)
+                    }
                 }
                 1 -> {
                     val resLocId = parts[0].toLongOrNull() ?: return null
-                    AspiraCampsite(resourceLocationId = resLocId)
+                    AspiraCampsite(tenant = "", resourceLocationId = resLocId)
                 }
                 else -> null
             }
@@ -123,13 +130,18 @@ sealed interface DataProviderRef {
             val parts = ref.split(":")
             return when (parts.size) {
                 2 -> {
-                    val tLID = parts[0].toLongOrNull() ?: return null
-                    val mapId = parts[1].toLongOrNull() ?: return null
-                    BcParks(transactionLocationId = tLID, mapId = mapId)
+                    val first = parts[0].toLongOrNull()
+                    if (first != null) {
+                        val mapId = parts[1].toLongOrNull() ?: return null
+                        BcParks(transactionLocationId = first, mapId = mapId)
+                    } else {
+                        val resLocId = parts[1].toLongOrNull() ?: return null
+                        BcParksCampsite(tenant = parts[0], resourceLocationId = resLocId)
+                    }
                 }
                 1 -> {
                     val resLocId = parts[0].toLongOrNull() ?: return null
-                    BcParksCampsite(resourceLocationId = resLocId)
+                    BcParksCampsite(tenant = "", resourceLocationId = resLocId)
                 }
                 else -> null
             }

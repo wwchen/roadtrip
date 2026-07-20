@@ -88,6 +88,7 @@ class AspiraCampsitesEtlTest {
         val campsite = records(etl.transform(dto, ctx)).single()
         val sourcePayload = campsite.sourcePayload!!.jsonObject
 
+        assertEquals("wa:-2147481558", campsite.dataProviderRef.serialize())
         assertEquals(DataProvider.ASPIRA, campsite.parentDataProviderRef!!.provider)
         assertEquals("-2147483630:-2147483388", campsite.parentDataProviderRef!!.serialize())
         assertEquals("Deception Pass", campsite.loopName)
@@ -115,6 +116,7 @@ class AspiraCampsitesEtlTest {
 
         val campsite = records(etl.transform(dto, ctx)).single()
 
+        assertEquals("bc:-2147481558", campsite.dataProviderRef.serialize())
         assertEquals(DataProvider.STRAPI, campsite.parentDataProviderRef!!.provider)
         assertEquals("-2147483630:-2147483388", campsite.parentDataProviderRef!!.serialize())
     }
