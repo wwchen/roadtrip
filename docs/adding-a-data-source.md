@@ -7,13 +7,12 @@ The pipeline is config-driven. `backend/src/main/resources/poi-registry.yaml` is
 ```mermaid
 flowchart TB
     YAML[("backend/src/main/resources/poi-registry.yaml")]
-    Registry["PoiRegistry<br/>(boot-time)<br/>· validates YAML<br/>· topo-sorts the DAG"]
+    Registry["PoiRegistry<br/>(boot-time)<br/>· validates YAML<br/>· checks data_source DAG"]
     FetchCtl["host fetch command<br/>(make data-fetch / scripts/poll_raw.py)"]
     Ingest["IngestController<br/>(import only)"]
     Fetcher["fetcher script<br/>(subprocess via fetcher.executor)"]
     Raw[("data/raw/&lt;data_source-slug&gt;/<br/>envelope-wrapped<br/>raw upstream")]
-    Inter["intermediate ETL(s)<br/>(parse → validate → transform)<br/>output handed to next stage in memory"]
-    Emit["terminal ETL<br/>(parse → validate → transform → upsert)"]
+    Emit["terminal ETL<br/>(parse → transform → batched upsert)"]
     Pois[("pois table<br/>source=&lt;terminal etl-slug&gt;")]
     PoisAPI["/api/pois<br/>(bbox query)"]
     FE["Map UI<br/>(pins)"]
@@ -25,9 +24,8 @@ flowchart TB
     Trigger --> FetchCtl
     Trigger --> Ingest
     FetchCtl -- fetch phase --> Fetcher --> Raw
-    Ingest -- import phase --> Inter
-    Raw --> Inter --> Emit
     Raw --> Emit
+    Ingest -- import phase --> Emit
     Emit --> Pois
     Pois --> PoisAPI --> FE
 
@@ -38,16 +36,16 @@ flowchart TB
     classDef ui fill:#dcf0d6,stroke:#2e7d32,color:#000
     class YAML cfg
     class Raw,Pois store
-    class Registry,Ingest,Fetcher,Inter,Emit,PoisAPI code
+    class Registry,Ingest,Fetcher,Emit,PoisAPI code
     class Trigger trig
     class FE ui
 ```
 
 What flows where:
 
-1. **YAML** has four sections. `data_sources:` declares fetchers (one row per upstream feed). `poi_data:` declares user-facing POI datasets. `campsite_data:` declares campsite catalogs. `campsite_parent_joiner:` declares post-import campsite parent reconciliation passes. ETL rows carry an ordered `etls:` list; earlier entries are intermediates and the last entry emits the canonical output for that section. Backend reads the YAML at boot, topo-sorts the DAG, and refuses to start if anything is wrong (duplicate slug, dangling `inputs:`, cycle, forward reference within `etls:`, cross-row etl ref, or an unwired terminal adapter).
+1. **YAML** has three sections. `data_sources:` declares fetchers (one row per upstream feed). `poi_data:` declares user-facing POI datasets. `campsite_data:` declares campsite catalogs. Each import row carries exactly one terminal `etls:` entry whose `inputs:` reference only `data_sources:` slugs. Backend reads the YAML at boot and refuses to start if anything is wrong (duplicate slug, dangling `inputs:`, cycle, multi-entry ETL row, or an unwired terminal adapter).
 2. **Fetch phase** — `make data-fetch` / `scripts/poll_raw.py` spawns a subprocess per `data_sources:` row on the host: `<fetcher.executor> <fetcher.filename> --<arg> <value> …`. The script writes envelope-wrapped raw bytes into the YAML's `output_dir_prefix:` (typically `data/raw/<data_source-slug>/<UTC-ts>.json`, possibly a directory of pages). No DB writes and no backend container runtime dependency.
-3. **Import phase** — for each `poi_data:` or `campsite_data:` row, the orchestrator runs the chain in declared order: each non-terminal `etls:` entry parses its `inputs:` (data_sources → `data/raw/`, prior siblings → typed payload from this same run) and produces a typed `JsonElement` that's handed to the next stage **in memory**. Re-running the import recomputes; intermediates don't persist. The terminal ETL writes/sweeps canonical rows scoped to `source=<last etl-slug>`. `campsite_parent_joiner:` rows run their adapter against the canonical catalog after the relevant campsite data is imported.
+3. **Import phase** — for each `poi_data:` or `campsite_data:` row, the orchestrator runs the single terminal ETL. `parse()` consumes the newest raw envelopes and yields `ParseResult.Ok/Bad`; `transform()` yields `TransformResult.Ok/Bad` upsert candidates. The orchestrator counts bad rows, buffers successful candidates, and flushes bounded batches through the owning repo. One import run wraps the whole ETL job.
 4. **Frontend** — `/api/pois` does a bbox PostGIS query against `pois`. No knowledge of sources, fetchers, or ETLs; it just renders whatever's in the table for the visible map area.
 
 How runs are triggered:
@@ -59,22 +57,20 @@ How runs are triggered:
 
 ## Conventions
 
-- `<data_source-slug>` and `<etl-slug>` — kebab-case identifiers you pick. Each must be unique across the whole YAML; data_sources and ETLs share a single namespace because `inputs:` resolves a slug into either kind.
+- `<data_source-slug>` and `<etl-slug>` — kebab-case identifiers you pick. Each must be unique across the whole YAML; data_sources and ETLs share a single namespace.
 - `<Vendor>` — PascalCase, used for the Kotlin package and class.
 - `<category>` — match an existing FE-recognized category. New categories require a separate change.
 - `<subcategory>` — drives the FE legend toggles + circle-color expression for that category. Required when the category has multiple sub-buckets (e.g. `campground` ⇒ `federal | state | local | provincial | private`); omitted when a category has no sub-bucket (`planet-fitness`, `supercharger`).
-- `inputs:` are dependency edges. Within a row's `etls:` list, list order is dependency order — entry N may only reference data_source slugs OR earlier siblings (index < N). The last entry is the emitter. There is no separate `depends_on:` field.
+- `inputs:` are dependency edges from one terminal ETL to raw data. They may only reference `data_sources:` slugs. There is no separate `depends_on:` field for ETLs.
 - Commands assume cwd = repo root. Import commands also assume the backend is running on `127.0.0.1:8765`.
 
 ## When to add what
 
 The shape of your data dictates how many YAML rows you write:
 
-- **One upstream → one POI dataset.** Add one `data_sources:` row + one `poi_data:` row whose `etls:` list contains a single entry that reads that fetcher and emits `Poi.*`.
-- **Multiple upstreams join into one POI dataset.** Add one `data_sources:` row per upstream + one `poi_data:` row whose single `etls:` entry reads them all and emits `Poi.*`.
-- **Same upstream, multiple stages of transform before emit.** Add the fetcher + a `poi_data:` row with an `etls:` list of length ≥ 2: earlier entries materialize intermediates, the last entry emits.
+- **One upstream → one POI dataset.** Add one `data_sources:` row + one `poi_data:` row whose `etls:` list contains a single entry that reads that fetcher and emits catalog upsert candidates.
+- **Multiple upstreams join into one POI dataset.** Add one `data_sources:` row per upstream + one `poi_data:` row whose single `etls:` entry reads them all and emits catalog upsert candidates.
 - **Same fetcher used by multiple POI datasets** (same script, different tenants). Add one `data_sources:` row per tenant (each with different `args:` and `output_dir_prefix:`); the same Kotlin ETL class can be referenced from multiple `poi_data:` rows.
-- **Same intermediate consumed by multiple POI datasets.** Today: duplicate the entry in each row's `etls:` list. If sharing becomes routine, we'll promote intermediates to a top-level section.
 
 ## Step 1 — Add the YAML rows
 
@@ -93,7 +89,7 @@ data_sources:
       output_dir_prefix: <path>     # repo-relative dir for raw envelopes; convention: data/raw/<data_source-slug>
 ```
 
-Then append a `poi_data:` row for the dataset that consumes those fetchers. The `etls:` list is ordered: each entry depends only on data_sources or earlier siblings. The **last entry is the emitter** — its adapter's output type must be `Poi.*`.
+Then append a `poi_data:` row for the dataset that consumes those fetchers. The `etls:` list must contain exactly one terminal entry. Its `inputs:` must be data_source slugs.
 
 ```yaml
 poi_data:
@@ -102,27 +98,10 @@ poi_data:
     category: <category>
     subcategory: <subcategory>      # required for categories with sub-buckets
     etls:
-      # First entry: intermediate (only present if you need staging).
-      # Output is handed to the next stage in memory — no on-disk file.
-      - slug: <intermediate-etl-slug>
-        adapter: <Vendor>StageEtl
-        inputs: [<data_source-slug>, <other-data_source-slug>]
-      # Last entry: emitter (must produce Poi.*)
       - slug: <terminal-etl-slug>
         adapter: <Vendor>Etl
-        inputs: [<intermediate-etl-slug>, <data_source-slug>]
+        inputs: [<data_source-slug>, <other-data_source-slug>]
         args: {}                    # optional; transformer-specific (e.g. host, state_filter)
-```
-
-Single-stage row (no intermediates):
-
-```yaml
-- name: <Simple Dataset>
-  category: <category>
-  etls:
-    - slug: <terminal-etl-slug>
-      adapter: <Vendor>Etl
-      inputs: [<data_source-slug>]
 ```
 
 The other steps just create the things these rows reference — fetcher scripts, Kotlin classes, env vars.
@@ -133,7 +112,7 @@ The other steps just create the things these rows reference — fetcher scripts,
 docker compose logs -f backend | grep -E "PoiRegistry|registry"
 ```
 
-The backend will refuse to boot if the YAML has duplicate slugs, dangling `inputs:`, an `etls:` entry that depends on a later sibling, a cycle, or a row's last `etls:` adapter whose declared output type isn't `Poi.*`. At this point you'll see one of two things:
+The backend will refuse to boot if the YAML has duplicate slugs, dangling `inputs:`, a row with zero or multiple ETLs, or a cycle. At this point you'll see one of two things:
 
 - Clean boot, but `no adapter registered for slug=<…>` warnings the moment you try to import. That's expected — the Kotlin registry doesn't have the entry yet.
 - Boot fails with a validation error → fix the YAML before continuing.
@@ -186,14 +165,13 @@ If status isn't right, fix the fetcher before continuing.
 
 ## Step 3 — Kotlin ETL adapter(s)
 
-For each `etls:` entry in your `poi_data:` row, create what its `adapter:` field points at: `backend/src/main/kotlin/ca/floo/roadtrip/etl/<vendor>/<Vendor>Etl.kt`. Implement `SourceEtl<INPUTS, OUT>`:
+For the `etls:` entry in your `poi_data:` row, create what its `adapter:` field points at: `backend/src/main/kotlin/ca/floo/roadtrip/service/etl/vendors/<vendor>/<Vendor>Etl.kt`. Implement `SourceEtl<DTO, OUT>`:
 
 - `etlSlug` returns the YAML slug — must match exactly.
-- `inputs` returns the list of `data_source-slug` and `etl-slug` strings the YAML declared (the framework reads these for you; you implement `parse()` against an `InputBundle` it hands you).
-- `multiPart = true` if any of the input data_sources writes a directory of `page-NNN.json` files. Default `false` is one envelope per run.
-- `parse(bundle) → INPUTS` (or `parseMulti(...)` for multipart). `bundle` exposes one accessor per declared input slug, returning either `List<Envelope>` (data_source) or the typed payload from a prior etl.
-- `validate(inputs) → ValidationResult` for required-field/well-formedness checks.
-- `transform(inputs, ctx) → OUT`. For an intermediate, `OUT` is whatever `@Serializable` payload you want to hand to the next stage (the orchestrator passes it through `kotlinx.serialization` so siblings can read it as a `JsonElement`); nothing persists to disk. For the terminal (last) `etls:` entry, `OUT` is `List<Poi.*>`.
+- `multiPart = true` if any input data_source writes a directory of `page-NNN.json` files. Default `false` is one envelope per run.
+- `parse(bundle) → Sequence<ParseResult<DTO>>`. `bundle` exposes one accessor per declared data_source slug. Yield `ParseResult.Bad` for recoverable page/row parse failures.
+- `transform(dto, ctx) → Sequence<TransformResult<OUT>>`. Yield `TransformResult.Ok(candidate)` for each upsert candidate and `TransformResult.Bad` for recoverable row-level failures.
+- Terminal `OUT` is one of the catalog candidate types: `CampgroundUpsertCandidate`, `CampsiteUpsertCandidate`, `TeslaSuperchargerUpsertCandidate`, or `PlanetFitnessLocationUpsertCandidate`.
 
 For terminal ETLs that need reservation-provider context (Aspira, RecGov,
 etc.), construct the right `ProviderRef.<Vendor>(...)` payload directly from
@@ -203,7 +181,7 @@ dispatch uses `pois.source` plus the `provider_ref` JSON payload.
 
 For terminal ETLs that need the FE bucket, use `ctx.subcategoryFor(etlSlug)` to read the value the YAML declared on the owning `poi_data:` row.
 
-Read existing ETLs under `backend/src/main/kotlin/ca/floo/roadtrip/etl/` for the closest pattern.
+Read existing ETLs under `backend/src/main/kotlin/ca/floo/roadtrip/service/etl/vendors/` for the closest pattern.
 
 Test fixtures live at `backend/src/test/resources/etl-fixtures/<slug>/`. Add a parse + transform test at `backend/src/test/kotlin/ca/floo/roadtrip/etl/<vendor>/<Vendor>EtlTest.kt`.
 
@@ -216,22 +194,21 @@ Test fixtures live at `backend/src/test/resources/etl-fixtures/<slug>/`. Add a p
 
 ## Step 4 — Register the adapter(s)
 
-**Edit** `backend/src/main/kotlin/ca/floo/roadtrip/etl/EtlOrchestrator.kt`. Add one line per `etls:` entry to the `registry` map. Map keys MUST equal the YAML `slug` of the corresponding ETL.
+**Edit** `backend/src/main/kotlin/ca/floo/roadtrip/service/etl/framework/EtlOrchestrator.kt`. Add one line for the terminal `etls:` entry to the `registry` map. Map keys MUST equal the YAML `slug`.
 
 ```kotlin
 val registry: Map<String, SourceEtl<*, *>> =
     mapOf(
         ...,
-        "<intermediate-etl-slug>" to ca.floo.roadtrip.etl.<vendor>.<Vendor>StageEtl(),
-        "<terminal-etl-slug>"     to ca.floo.roadtrip.etl.<vendor>.<Vendor>Etl(),
+        "<terminal-etl-slug>" to ca.floo.roadtrip.service.etl.vendors.<vendor>.<Vendor>Etl(),
     )
 ```
 
 For ETL classes that take a slug as a constructor arg (one class instantiated per tenant), pass it explicitly:
 
 ```kotlin
-"aspira-leaves-wa" to AspiraLeavesEtl("aspira-leaves-wa"),
-"aspira-leaves-bc" to AspiraLeavesEtl("aspira-leaves-bc"),
+"reserveamerica-ny-campgrounds" to ReserveAmericaCampgroundsEtl("reserveamerica-ny-campgrounds"),
+"reserveamerica-ab-campgrounds" to ReserveAmericaCampgroundsEtl("reserveamerica-ab-campgrounds"),
 ```
 
 **Verify** the registry compiles and the backend boots clean:
@@ -252,8 +229,7 @@ No warning about a missing adapter for any of your slugs.
 # Fetch raw data — one host-side command per data_source
 make data-fetch TARGET=<data_source-slug>
 
-# Import: walks the row's etls: list in order, materializes each intermediate,
-# then the terminal etl runs and upserts.
+# Import: runs the row's single terminal ETL and batched upserts.
 curl -X POST "http://127.0.0.1:8765/api/admin/data/import/$(echo '<Poi Data Name>' | jq -sRr @uri)"
 ```
 
@@ -309,7 +285,7 @@ Many upstreams are a single platform with multiple tenants. Don't write one fetc
 
 1. Append a `data_sources:` row in `backend/src/main/resources/poi-registry.yaml` with new `slug`, `args:`, and `output_dir_prefix:`.
 2. Append a `poi_data:` row that consumes it. The terminal `etls:` slug is the new tenant identifier; `args:` carries per-tenant config (e.g. `host`).
-3. Add one line to `EtlOrchestrator.registry` mapping the new terminal etl slug (and any new intermediates) to fresh ETL instances: `"<new-slug>" to <Existing>Etl("<new-slug>")`.
+3. Add one line to `EtlOrchestrator.registry` mapping the new terminal etl slug to a fresh ETL instance: `"<new-slug>" to <ExistingEtl>("<new-slug>")`.
 
 No new fetcher script. No new Kotlin class. No DB migration.
 
@@ -339,24 +315,15 @@ docker exec roadtrip-postgres-1 psql -U roadtrip -d roadtrip -c \
 
 You should see two rows, each with its own count. **Existing tenants must not lose rows when the new tenant imports** — `Upsert`'s sweep is scoped to `WHERE source = '<importing terminal-etl slug>'`, so cross-source bleed is impossible if the slugs are set correctly.
 
-## Multi-stage pipelines: when to add an intermediate
+## Joining Multiple Inputs
 
-Use a non-terminal `etls:` entry when one of these is true:
+Do multi-input joins inside the terminal ETL. The import run reads one raw
+snapshot for each declared `data_source`, then the ETL decides how those raw
+records join into upsert candidates. This is important because one upstream
+record may need many pages, dictionaries, geometry sources, or parent maps
+before it can produce one catalog record.
 
-- **The fetched payload needs heavy normalization before it can be joined.** E.g. Aspira's `/api/maps` returns a tree of pixel-coord image maps; an intermediate walks the tree to produce a flat list of `(name, transactionLocationId, mapId, resourceLocationId)` leaves. Downstream ETLs read the flat list, not the tree.
-- **Two upstreams need to be unified into one logical input** before the terminal join. E.g. Parks Canada geometry comes from two ArcGIS layers (per-campground points + per-park polygon centroids); an intermediate unifies them into `(name → lat/lng)` so the terminal join is single-source for geometry.
-- **The transform is expensive enough that you want to inspect the result on disk** without re-running the whole chain.
-
-Don't add an intermediate when:
-
-- **The whole transform fits in one `transform()` method.** Inlining is simpler.
-- **You want it just for testing.** ETL test fixtures handle that without a YAML row.
-
-### Verify intermediates work
-
-The orchestrator hands intermediate output between sibling stages **in
-memory** — nothing persists to disk. To verify the chain end-to-end, run
-the import and check:
+To verify the terminal ETL end-to-end, run the import and check:
 
 ```bash
 curl -X POST "http://127.0.0.1:8765/api/admin/data/import/<poi_data-name>"
@@ -365,29 +332,29 @@ docker exec roadtrip-postgres-1 psql -U roadtrip -d roadtrip -c \
    WHERE target = '<poi_data-name>' ORDER BY id DESC LIMIT 1;"
 ```
 
-`counts.seen` should be the number of `Poi.*` rows the terminal etl
-emitted. If it's lower than expected, the intermediate's `transform()`
-likely dropped rows; add a unit test for the intermediate against a
-fixture envelope to pin down the regression.
+`counts.seen` should be the number of rows the terminal ETL considered:
+successful transform records plus parse/transform bad rows. If it is lower
+than expected, add a unit test against captured raw envelopes under
+`backend/src/test/resources/etl-fixtures/<slug>/` to pin down where parsing or
+transforming dropped rows.
 
 ## Quick reference
 
 | What                                | Where                                                                                                   |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | Register fetcher                    | `backend/src/main/resources/poi-registry.yaml` `data_sources:`                                                              |
-| Register POI dataset                | `backend/src/main/resources/poi-registry.yaml` `poi_data:` (`name`, `category`, `subcategory`, `etls:` ordered list)        |
+| Register POI dataset                | `backend/src/main/resources/poi-registry.yaml` `poi_data:` (`name`, `category`, `subcategory`, single `etls:` entry)        |
 | New fetcher script                  | `scripts/<fetcher>` (any runtime — `fetcher.executor` decides)                                          |
 | New ETL                             | `backend/src/main/kotlin/ca/floo/roadtrip/etl/<vendor>/<Vendor>Etl.kt`                                  |
 | ETL test                            | `backend/src/test/kotlin/.../<vendor>/<Vendor>EtlTest.kt`                                               |
 | Test fixtures                       | `backend/src/test/resources/etl-fixtures/<slug>/`                                                       |
-| Register adapter                    | `EtlOrchestrator.kt` `registry` map (one line per ETL slug, intermediates included)                    |
+| Register adapter                    | `EtlOrchestrator.kt` `registry` map (one line per terminal ETL slug)                                  |
 | Trigger fetch                       | `make data-fetch TARGET=<data_source-slug>`                                                             |
 | Trigger import                      | `POST /api/admin/data/import/<row-name>`                                                                |
 | Run history                         | `GET /api/admin/data/runs?target=<row-name>`                                                            |
 | Data status snapshot                | `GET /api/admin/data/status`                                                                            |
 | Add an env var                      | `.env.example` + `.env` + Tilt `serve_env` + compose `environment:`                                     |
 | Same fetcher, new tenant            | New `data_sources:` + new `poi_data:` row + new `EtlOrchestrator.registry` line. No new fetcher.        |
-| New intermediate stage              | Append a non-terminal entry to `etls:` (in dependency order) + register the adapter.                    |
 
 ## Troubleshooting
 
@@ -395,13 +362,11 @@ fixture envelope to pin down the regression.
 | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POI registry resource 'poi-registry.yaml' not found` at backend boot | Confirm `backend/src/main/resources/poi-registry.yaml` is packaged with the backend resources. Use `roadtrip.poi-registry.path` only for an explicit external-file override. |
 | `validation error: slug='…' duplicated` at boot              | Same slug used twice across `data_sources:` and any row's `etls:`. Slugs share one namespace — pick distinct names.                                                                                       |
-| `validation error: forward reference in etls` at boot        | An entry in a row's `etls:` list declares an `inputs:` slug from a later sibling. Reorder so dependencies come first.                                                                                     |
-| `validation error: cross-row refs not supported` at boot     | A row's `etls:` `inputs:` references an etl slug from a different `poi_data:` row. Intermediates are handed in memory within a row only; copy the upstream chain into this row, or promote it to a shared data_source. |
-| `validation error: cycle detected in DAG` at boot            | Two ETLs reference each other through `inputs:`. Break the cycle.                                                                                                                                         |
-| `validation error: last etls entry must emit Poi.*`          | The last entry's adapter must declare `OUT = List<Poi.*>`. Earlier entries can be any type.                                                                                                               |
+| `validation error: must declare exactly one etl` at boot     | A `poi_data:` or `campsite_data:` row has zero or multiple ETL entries. Keep one terminal entry and move joins inside that ETL.                                                                            |
+| `validation error: inputs '…' which is not a data_source` at boot | An ETL input references another ETL slug or an unknown slug. ETL inputs must be raw `data_sources:` slugs.                                                                                               |
+| `validation error: cycle detected in DAG` at boot            | `data_sources.depends_on` creates a cycle, or an invalid ETL input was part of a cycle. Break the cycle.                                                                                                  |
 | `no adapter registered for slug=<…>` on import               | `EtlOrchestrator.registry` doesn't have the slug. Map key must match the YAML slug exactly.                                                                                                               |
-| Import returns `status: completed` but `counts.seen=0`       | An ETL's `parse()` or `validate()` is dropping rows. Add a unit test against a captured raw envelope under `backend/src/test/resources/etl-fixtures/<slug>/` to bisect which stage zeroes out.            |
-| Intermediate ran but the terminal can't read it              | Mismatched payload type. The downstream `parse(bundle)` must match the upstream's emitted shape — keep the intermediate's `OUT` type and the terminal's expected input in sync.                           |
+| Import returns `status: completed` but `counts.seen=0`       | The ETL's `parse()` yielded no DTOs or `transform()` yielded no records. Add a unit test against a captured raw envelope under `backend/src/test/resources/etl-fixtures/<slug>/` to bisect the stage.     |
 | Pins missing despite `pois` rows present                     | Wrong `category`/`subcategory` for the FE legend toggle, or `geom` is null.                                                                                                                               |
 | Fetch returns 403 / WAF challenge                            | Add browser-shaped UA + `Referer`; some upstreams need a primed cookie jar.                                                                                                                               |
 | `concurrent same-target` error                               | Another run is already in flight. `GET /api/admin/data/runs?target=<slug>` to see it.                                                                                                                     |

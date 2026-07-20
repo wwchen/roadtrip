@@ -5,9 +5,9 @@ import ca.floo.roadtrip.model.domain.CellSignal
 import ca.floo.roadtrip.model.domain.RatingSummary
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
-import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.model.metadata.ParseResult
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.model.metadata.registry.AgencyConfig
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
@@ -46,68 +46,73 @@ class RecGovCampgroundsEtl(
 ) : CampgroundEtl<RecGovDto> {
     override val multiPart: Boolean = true
 
-    override fun parse(inputs: InputBundle): RecGovDto {
-        val envelopes = inputs.envelopes(RIDB_INPUT)
-        require(envelopes.isNotEmpty()) { "$etlSlug: no pages" }
-        // Two passes per envelope: typed parse for the hot fields
-        // (FacilityID, lat/lng, name) and raw JsonObject for the full
-        // payload. The raw payload is preserved as sourcePayload so the
-        // drawer sees every field RIDB ships, even ones the ETL didn't
-        // explicitly promote.
-        val typed = mutableListOf<Facility>()
-        val rawById = mutableMapOf<Long, JsonObject>()
-        for (env in envelopes) {
-            val page = json.decodeFromJsonElement(RidbPageDto.serializer(), env.payload)
-            typed += page.RECDATA
-            val rawArr = env.payload.jsonObject["RECDATA"]?.jsonArray ?: continue
-            for (entry in rawArr) {
-                val obj = entry.jsonObject
-                val id =
-                    obj["FacilityID"]?.let { v ->
-                        kotlin.runCatching { v.toString().trim('"').toLong() }.getOrNull()
-                    } ?: continue
-                rawById[id] = obj
+    override fun parse(inputs: InputBundle): Sequence<ParseResult<RecGovDto>> =
+        sequence {
+            val envelopes = inputs.envelopes(RIDB_INPUT)
+            require(envelopes.isNotEmpty()) { "$etlSlug: no pages" }
+            // Two passes per envelope: typed parse for the hot fields
+            // (FacilityID, lat/lng, name) and raw JsonObject for the full
+            // payload. The raw payload is preserved as sourcePayload so the
+            // drawer sees every field RIDB ships, even ones the ETL didn't
+            // explicitly promote.
+            val typed = mutableListOf<Facility>()
+            val rawById = mutableMapOf<Long, JsonObject>()
+            for (env in envelopes) {
+                val page = json.decodeFromJsonElement(RidbPageDto.serializer(), env.payload)
+                typed += page.RECDATA
+                val rawArr = env.payload.jsonObject["RECDATA"]?.jsonArray ?: continue
+                for (entry in rawArr) {
+                    val obj = entry.jsonObject
+                    val id =
+                        obj["FacilityID"]?.let { v ->
+                            kotlin.runCatching { v.toString().trim('"').toLong() }.getOrNull()
+                        } ?: continue
+                    rawById[id] = obj
+                }
+            }
+            val enrichmentById =
+                if (ENRICHMENT_INPUT in inputs.dataSourceSlugs()) {
+                    parseEnrichment(inputs.envelopes(ENRICHMENT_INPUT))
+                } else {
+                    emptyMap()
+                }
+            val dto =
+                RecGovDto(
+                    rows = typed,
+                    rawById = rawById,
+                    enrichmentById = enrichmentById,
+                    fetchedAt = parseFetchedAt(envelopes.first()),
+                )
+            if (dto.rows.isEmpty()) {
+                yield(ParseResult.Bad(null, listOf("$etlSlug: no rows in payload")))
+            } else {
+                yield(ParseResult.Ok(dto))
             }
         }
-        val enrichmentById =
-            if (ENRICHMENT_INPUT in inputs.dataSourceSlugs()) {
-                parseEnrichment(inputs.envelopes(ENRICHMENT_INPUT))
-            } else {
-                emptyMap()
-            }
-        return RecGovDto(
-            rows = typed,
-            rawById = rawById,
-            enrichmentById = enrichmentById,
-            fetchedAt = parseFetchedAt(envelopes.first()),
-        )
-    }
-
-    override fun validate(dto: RecGovDto): ValidationResult<RecGovDto> {
-        val errors = mutableListOf<String>()
-        if (dto.rows.isEmpty()) errors += "no rows in payload"
-        return if (errors.isEmpty()) ValidationResult.Ok(dto) else ValidationResult.Bad(null, errors)
-    }
 
     override fun transform(
         dto: RecGovDto,
         ctx: TransformCtx,
-    ): CampgroundEtlOutput {
-        val bucket = ctx.subcategoryFor(etlSlug)
-        val agencyConfig = ctx.agencyFor(etlSlug)
-        return CampgroundEtlOutput(
-            campgrounds =
-                dto.rows.mapNotNull {
+    ): Sequence<TransformResult<CampgroundUpsertCandidate>> =
+        sequence {
+            val bucket = ctx.subcategoryFor(etlSlug)
+            val agencyConfig = ctx.agencyFor(etlSlug)
+            for (row in dto.rows) {
+                val record =
                     transformRow(
-                        row = it,
-                        raw = dto.rawById[it.FacilityID],
-                        enrichment = dto.enrichmentById[it.FacilityID],
+                        row = row,
+                        raw = dto.rawById[row.FacilityID],
+                        enrichment = dto.enrichmentById[row.FacilityID],
                         bucket = bucket,
                         agencyConfig = agencyConfig,
                     )
-                },
-        )
-    }
+                if (record == null) {
+                    yield(TransformResult.Bad(row.FacilityID.toString(), listOf("missing name or valid geometry")))
+                } else {
+                    yield(TransformResult.Ok(record))
+                }
+            }
+        }
 
     private fun transformRow(
         row: Facility,

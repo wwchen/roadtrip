@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.records
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -84,7 +85,7 @@ class AspiraCampsitesEtlTest {
                 dictionaries = AspiraCampsitesEtl.AspiraDictionaries.empty,
             )
 
-        val campsite = etl.transform(dto, ctx).campsites.single()
+        val campsite = records(etl.transform(dto, ctx)).single()
         val sourcePayload = campsite.sourcePayload!!.jsonObject
 
         assertEquals(DataProvider.ASPIRA, campsite.parentDataProviderRef!!.provider)
@@ -112,7 +113,7 @@ class AspiraCampsitesEtlTest {
                 dictionaries = AspiraCampsitesEtl.AspiraDictionaries.empty,
             )
 
-        val campsite = etl.transform(dto, ctx).campsites.single()
+        val campsite = records(etl.transform(dto, ctx)).single()
 
         assertEquals(DataProvider.STRAPI, campsite.parentDataProviderRef!!.provider)
         assertEquals("-2147483630:-2147483388", campsite.parentDataProviderRef!!.serialize())

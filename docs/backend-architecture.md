@@ -77,10 +77,9 @@ Model names must tell callers what kind of shape they are holding:
   (`PoiDetailRow`, `PoiSearchHit`). Put a
   projection in `models/` only when it crosses a repo boundary; otherwise keep
   it private to the repo.
-- **ETL outputs** are not table rows. Vendor ETLs emit output envelopes such as
-  `CampgroundEtlOutput` and candidate values such as
-  `CampgroundUpsertCandidate` / `CampsiteUpsertCandidate`. Repos convert those
-  candidates into persisted rows.
+- **ETL upsert candidates** are not table rows. Vendor ETLs emit candidate
+  values such as `CampgroundUpsertCandidate` / `CampsiteUpsertCandidate`.
+  Repos convert those candidates into persisted rows.
 
 A model named after a table must not silently include provider-specific helper
 fields, selected vendor refs, API response convenience fields, or partially
@@ -233,11 +232,12 @@ When adding an ETL source, add transform code under
 `service/etl/vendors/<vendor>/` and pure DTOs under `models/` when they are
 large, shared, or reused by tests.
 
-Campground and campsite ETLs should stay pure: parse captured vendor payloads,
-validate them, and emit `CampgroundEtlOutput` / `CampsiteEtlOutput`. The ETL
-orchestrator persists terminal outputs through repo methods such as
-`CampgroundRepo.upsertCampgrounds` and `CampsiteRepo.upsertCampsites`.
-Those output envelopes contain `*UpsertCandidate` values, not persisted
+Campground and campsite ETLs should stay pure: parse captured vendor payloads
+into `ParseResult`, transform them into `TransformResult` records, and emit
+`CampgroundUpsertCandidate` / `CampsiteUpsertCandidate` values directly. The
+ETL orchestrator owns import-run lifecycle and batching; repos persist one
+bounded batch through methods such as `CampgroundRepo.upsertCampgroundBatch`
+and `CampsiteRepo.upsertCampsiteBatch`. Candidate values are not persisted
 `Campground` or `Campsite` table rows; ids and timestamps are assigned by
 persistence.
 If an ETL flow needs to read existing campground/campsite rows or mutate their
@@ -245,9 +245,9 @@ relationships, add that read/write path to a repo instead of passing
 `DSLContext` into vendor ETLs or embedding SQL in ETL adapters.
 
 The same rule applies to other catalog entities. Tesla and Planet Fitness ETLs
-persist through `TeslaSuperchargerRepo.upsertTeslaSuperchargers` and
-`PlanetFitnessLocationRepo.upsertPlanetFitnessLocations`, not through a generic
-ETL-owned catalog writer.
+emit `TeslaSuperchargerUpsertCandidate` and
+`PlanetFitnessLocationUpsertCandidate`; persistence still goes through the
+owning entity repo, not through a generic ETL-owned catalog writer.
 
 When adding data access, put SQL and jOOQ in `repo/`. Routes and services call
 repo methods rather than embedding persistence details.

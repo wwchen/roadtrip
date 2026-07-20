@@ -2,9 +2,9 @@ package ca.floo.roadtrip.service.etl.vendors.osmpf
 
 import ca.floo.roadtrip.model.domain.Address
 import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
-import ca.floo.roadtrip.model.etl.PlanetFitnessLocationEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
-import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.model.metadata.ParseResult
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -31,39 +31,38 @@ import java.time.Instant
 // node: lat/lon at the element. way: lat/lon under `center` (Overpass `out
 // center` directive). Some entries have neither — those get dropped at
 // validate.
-class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, PlanetFitnessLocationEtlOutput> {
+class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, PlanetFitnessLocationUpsertCandidate> {
     override val etlSlug = "planet-fitness"
 
-    override fun parse(inputs: InputBundle): PlanetFitnessRawDto {
-        val envelope = inputs.soleEnvelopes().single()
-        val payload =
-            json.decodeFromJsonElement(
-                PlanetFitnessRawDto.serializer(),
-                envelope.payload,
-            )
-        return payload.copy(fetchedAt = parseFetchedAt(envelope))
-    }
-
-    override fun validate(dto: PlanetFitnessRawDto): ValidationResult<PlanetFitnessRawDto> {
-        // The DTO can hold a 200-elements payload; we validate per-element
-        // at transform time and drop invalid elements there. This stage
-        // only checks the outer shape.
-        val errors = mutableListOf<String>()
-        if (dto.elements.isEmpty()) errors += "no elements in payload"
-        return if (errors.isEmpty()) {
-            ValidationResult.Ok(dto)
-        } else {
-            ValidationResult.Bad(sourceId = null, errors = errors)
+    override fun parse(inputs: InputBundle): Sequence<ParseResult<PlanetFitnessRawDto>> =
+        sequence {
+            val envelope = inputs.soleEnvelopes().single()
+            val payload =
+                json.decodeFromJsonElement(
+                    PlanetFitnessRawDto.serializer(),
+                    envelope.payload,
+                )
+            val dto = payload.copy(fetchedAt = parseFetchedAt(envelope))
+            // The DTO can hold a 200-elements payload; we validate per-element
+            // at transform time and drop invalid elements there. This stage
+            // only checks the outer shape.
+            val errors = mutableListOf<String>()
+            if (dto.elements.isEmpty()) errors += "no elements in payload"
+            if (errors.isEmpty()) {
+                yield(ParseResult.Ok(dto))
+            } else {
+                yield(ParseResult.Bad(sourceId = null, errors = errors))
+            }
         }
-    }
 
     override fun transform(
         dto: PlanetFitnessRawDto,
         ctx: TransformCtx,
-    ): PlanetFitnessLocationEtlOutput =
-        PlanetFitnessLocationEtlOutput(
-            locations = dto.elements.mapNotNull { el -> transformElement(el) },
-        )
+    ): Sequence<TransformResult<PlanetFitnessLocationUpsertCandidate>> =
+        dto.elements.asSequence().map { el ->
+            transformElement(el)?.let { TransformResult.Ok(it) }
+                ?: TransformResult.Bad("${el.type}-${el.id}", listOf("missing latitude/longitude"))
+        }
 
     private fun transformElement(el: OverpassElement): PlanetFitnessLocationUpsertCandidate? {
         // Resolve lat/lon: nodes have it directly, ways/relations have it

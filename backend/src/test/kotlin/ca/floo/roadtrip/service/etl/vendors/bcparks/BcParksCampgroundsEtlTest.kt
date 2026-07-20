@@ -8,6 +8,7 @@ import ca.floo.roadtrip.model.metadata.ResponseMeta
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.terminalRecords
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -34,10 +35,10 @@ class BcParksCampgroundsEtlTest {
 
     @Test
     fun `merge produces campground with Strapi metadata and Aspira booking ref`() {
-        val output = etl.transform(etl.parse(bundle()), ctx)
+        val output = terminalRecords(etl, bundle(), ctx)
 
-        assertEquals(1, output.campgrounds.size)
-        val cg = output.campgrounds.single()
+        assertEquals(1, output.size)
+        val cg = output.single()
         assertEquals(DataProvider.STRAPI, cg.dataProviderRef.provider)
         assertEquals("4189:-2147483548", cg.dataProviderRef.serialize())
         assertEquals(BookingProvider.ASPIRA, cg.bookingProvider)
@@ -72,9 +73,9 @@ class BcParksCampgroundsEtlTest {
 
     @Test
     fun `skips park container leaves with no resourceLocationId`() {
-        val output = etl.transform(etl.parse(bundleWithContainer()), ctx)
-        assertEquals(1, output.campgrounds.size)
-        assertEquals("Rathtrevor Beach", output.campgrounds.single().name)
+        val output = terminalRecords(etl, bundleWithContainer(), ctx)
+        assertEquals(1, output.size)
+        assertEquals("Rathtrevor Beach", output.single().name)
     }
 
     private fun bundle(): InputBundle =
@@ -86,7 +87,6 @@ class BcParksCampgroundsEtlTest {
                     "aspira-inventory-bc" to listOf(inventoryEnvelope()),
                     "aspira-dictionaries-bc" to listOf(dictionaryEnvelope()),
                 ),
-            etlOutputs = linkedMapOf(),
         )
 
     private fun bundleWithContainer(): InputBundle =
@@ -98,7 +98,6 @@ class BcParksCampgroundsEtlTest {
                     "aspira-inventory-bc" to listOf(inventoryEnvelope()),
                     "aspira-dictionaries-bc" to listOf(dictionaryEnvelope()),
                 ),
-            etlOutputs = linkedMapOf(),
         )
 
     private fun mapsEnvelope(): Envelope =

@@ -4,9 +4,9 @@ import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
-import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.model.metadata.ParseResult
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -39,50 +39,53 @@ class BcParksCampgroundsEtl(
     private val log = LoggerFactory.getLogger(javaClass)
     override val multiPart: Boolean = true
 
-    override fun parse(inputs: InputBundle): BcParksCampgroundsDto {
-        val slugs = inputs.dataSourceSlugs()
-        val mapsSlug = slugs.first { it.contains("maps") }
-        val strapiSlug = slugs.first { it.contains("bcparks") || it.contains("strapi") }
-        val inventorySlug = slugs.first { it.contains("inventory") }
-        val dictionarySlug = slugs.firstOrNull { it.contains("dictionaries") }
+    override fun parse(inputs: InputBundle): Sequence<ParseResult<BcParksCampgroundsDto>> =
+        sequence {
+            val slugs = inputs.dataSourceSlugs()
+            val mapsSlug = slugs.first { it.contains("maps") }
+            val strapiSlug = slugs.first { it.contains("bcparks") || it.contains("strapi") }
+            val inventorySlug = slugs.first { it.contains("inventory") }
+            val dictionarySlug = slugs.firstOrNull { it.contains("dictionaries") }
 
-        val mapsArray = inputs.envelope(mapsSlug).payload.jsonArray
-        val leaves = AspiraLeavesWalk.walk(mapsArray)
-        val strapiEnvelopes = inputs.envelopes(strapiSlug)
-        val inventoryEnvelopes = inputs.envelopes(inventorySlug)
-        val dictionaryPayload = dictionarySlug?.let { inputs.envelope(it).payload as? JsonObject }
+            val mapsArray = inputs.envelope(mapsSlug).payload.jsonArray
+            val leaves = AspiraLeavesWalk.walk(mapsArray)
+            val strapiEnvelopes = inputs.envelopes(strapiSlug)
+            val inventoryEnvelopes = inputs.envelopes(inventorySlug)
+            val dictionaryPayload = dictionarySlug?.let { inputs.envelope(it).payload as? JsonObject }
 
-        val strapiRows = parseStrapiRows(strapiEnvelopes)
+            val strapiRows = parseStrapiRows(strapiEnvelopes)
 
-        return BcParksCampgroundsDto(
-            leaves = leaves,
-            strapiRows = strapiRows,
-            strapiEnvelopes = strapiEnvelopes,
-            inventoryEnvelopes = inventoryEnvelopes,
-            dictionaryPayload = dictionaryPayload,
-            mapsArray = mapsArray,
-        )
-    }
-
-    override fun validate(dto: BcParksCampgroundsDto): ValidationResult<BcParksCampgroundsDto> {
-        val errs = mutableListOf<String>()
-        if (dto.leaves.isEmpty()) errs += "no Aspira leaves from /api/maps"
-        if (dto.strapiRows.isEmpty()) errs += "no BC Parks Strapi rows parsed"
-        if (dto.inventoryEnvelopes.isEmpty()) errs += "no inventory envelopes"
-        return if (errs.isEmpty()) ValidationResult.Ok(dto) else ValidationResult.Bad(null, errs)
-    }
+            val dto =
+                BcParksCampgroundsDto(
+                    leaves = leaves,
+                    strapiRows = strapiRows,
+                    strapiEnvelopes = strapiEnvelopes,
+                    inventoryEnvelopes = inventoryEnvelopes,
+                    dictionaryPayload = dictionaryPayload,
+                    mapsArray = mapsArray,
+                )
+            val errs = mutableListOf<String>()
+            if (dto.leaves.isEmpty()) errs += "no Aspira leaves from /api/maps"
+            if (dto.strapiRows.isEmpty()) errs += "no BC Parks Strapi rows parsed"
+            if (dto.inventoryEnvelopes.isEmpty()) errs += "no inventory envelopes"
+            if (errs.isEmpty()) {
+                yield(ParseResult.Ok(dto))
+            } else {
+                yield(ParseResult.Bad(null, errs))
+            }
+        }
 
     override fun transform(
         dto: BcParksCampgroundsDto,
         ctx: TransformCtx,
-    ): CampgroundEtlOutput {
+    ): Sequence<TransformResult<CampgroundUpsertCandidate>> {
         val host = ctx.argFor(etlSlug, "host") ?: error("$etlSlug: missing args.host")
         val subcategory = ctx.subcategoryFor(etlSlug)
         val agency = ctx.requiredConstantAgency(etlSlug)
 
-        val campgrounds = transformCampgrounds(dto, host, subcategory, agency)
-
-        return CampgroundEtlOutput(campgrounds = campgrounds)
+        return transformCampgrounds(dto, host, subcategory, agency)
+            .asSequence()
+            .map { TransformResult.Ok(it) }
     }
 
     private fun transformCampgrounds(

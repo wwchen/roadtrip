@@ -9,6 +9,7 @@ import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 
 class CatalogEntityRepoTest : SharedDbTest() {
@@ -478,7 +479,7 @@ class CatalogEntityRepoTest : SharedDbTest() {
     fun `bulk upsert handles a batch spanning multiple chunks in a single pass`() {
         val campgrounds = CampgroundRepo(ctx)
         val campsites = CampsiteRepo(ctx)
-        val batchSize = 1_500
+        val batchSize = MAX_CATALOG_UPSERT_BATCH_SIZE
 
         val campgroundRecords =
             (0 until batchSize).map { i ->
@@ -530,6 +531,59 @@ class CatalogEntityRepoTest : SharedDbTest() {
                 .get("n", Number::class.java)
                 .toInt()
         assertEquals(batchSize, renamed)
+    }
+
+    @Test
+    fun `entity repos reject oversized upsert batches`() {
+        val batchSize = MAX_CATALOG_UPSERT_BATCH_SIZE + 1
+
+        assertFailsWith<IllegalArgumentException> {
+            CampgroundRepo(ctx).upsertCampgroundBatch(
+                (0 until batchSize).map { i ->
+                    CampgroundUpsertCandidate(
+                        dataProviderRef = DataProviderRef.Campflare(id = "too-many-cg-$i"),
+                        name = "Too Many Campground $i",
+                        latitude = 40.0,
+                        longitude = -120.0,
+                    )
+                },
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            CampsiteRepo(ctx).upsertCampsiteBatch(
+                (0 until batchSize).map { i ->
+                    CampsiteUpsertCandidate(
+                        dataProviderRef = DataProviderRef.Campflare(id = "too-many-cs-$i"),
+                        parentDataProviderRef = null,
+                        name = "Too Many Campsite $i",
+                    )
+                },
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            TeslaSuperchargerRepo(ctx).upsertTeslaSuperchargerBatch(
+                (0 until batchSize).map { i ->
+                    TeslaSuperchargerUpsertCandidate(
+                        locationSlug = "too-many-tesla-$i",
+                        commonSiteName = "Too Many Tesla $i",
+                        latitude = 40.0,
+                        longitude = -120.0,
+                    )
+                },
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            PlanetFitnessLocationRepo(ctx).upsertPlanetFitnessLocationBatch(
+                (0 until batchSize).map { i ->
+                    PlanetFitnessLocationUpsertCandidate(
+                        locationId = "too-many-pf-$i",
+                        name = "Too Many Planet Fitness $i",
+                        latitude = 40.0,
+                        longitude = -120.0,
+                    )
+                },
+            )
+        }
     }
 
     private fun tableCount(table: String): Int =

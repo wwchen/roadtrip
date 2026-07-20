@@ -4,6 +4,8 @@ package ca.floo.roadtrip.service.etl.vendors.campflare
 
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.metadata.Envelope
+import ca.floo.roadtrip.model.metadata.ParseResult
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
@@ -49,9 +51,31 @@ internal fun recgovCampsiteVendorRef(
     )
 }
 
-internal fun jsonObjects(envelopes: List<Envelope>): List<JsonObject> =
-    envelopes.flatMap { envelope ->
-        envelope.payload.jsonArray.mapNotNull { it as? JsonObject }
+internal fun jsonObjectResults(
+    envelopes: List<Envelope>,
+    etlSlug: String,
+): Sequence<ParseResult<JsonObject>> =
+    sequence {
+        if (envelopes.isEmpty()) {
+            yield(ParseResult.Bad(null, listOf("$etlSlug: no envelopes captured")))
+            return@sequence
+        }
+        for (envelope in envelopes) {
+            val sourceId = envelope.part ?: envelope.request.url
+            val rows = envelope.payload as? JsonArray
+            if (rows == null) {
+                yield(ParseResult.Bad(sourceId, listOf("$etlSlug: expected JSON array payload")))
+                continue
+            }
+            for ((index, element) in rows.withIndex()) {
+                val row = element as? JsonObject
+                if (row == null) {
+                    yield(ParseResult.Bad("$sourceId[$index]", listOf("$etlSlug: expected JSON object row")))
+                } else {
+                    yield(ParseResult.Ok(row))
+                }
+            }
+        }
     }
 
 internal fun JsonObject.stringField(name: String): String? =

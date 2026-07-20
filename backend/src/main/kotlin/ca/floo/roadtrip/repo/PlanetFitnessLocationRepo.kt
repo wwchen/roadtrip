@@ -27,16 +27,20 @@ class PlanetFitnessLocationRepo(
     ): CatalogUpsertResult {
         val runId = importRunRepo.start(source)
         try {
-            val upserted =
-                ctx.transactionResult { cfg ->
-                    val tx = PlanetFitnessLocationRepo(DSL.using(cfg))
-                    records.sumOf { record -> if (tx.upsertPlanetFitnessLocation(record)) 1 else 0 }
-                }
+            val upserted = upsertPlanetFitnessLocationBatch(records)
             importRunRepo.complete(runId, records.size)
             return CatalogUpsertResult(runId = runId, seenCount = records.size, upsertedCount = upserted)
         } catch (e: Throwable) {
             importRunRepo.fail(runId, e.message ?: e.javaClass.simpleName)
             throw e
+        }
+    }
+
+    fun upsertPlanetFitnessLocationBatch(records: List<PlanetFitnessLocationUpsertCandidate>): Int {
+        requireCatalogBatchWithinLimit("planet fitness location upsert", records.size)
+        return ctx.transactionResult { cfg ->
+            val tx = PlanetFitnessLocationRepo(DSL.using(cfg))
+            records.sumOf { record -> if (tx.upsertPlanetFitnessLocation(record)) 1 else 0 }
         }
     }
 

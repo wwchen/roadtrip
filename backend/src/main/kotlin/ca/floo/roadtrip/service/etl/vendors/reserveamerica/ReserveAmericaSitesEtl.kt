@@ -5,8 +5,8 @@ import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
-import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.model.metadata.ParseResult
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -35,28 +35,30 @@ class ReserveAmericaSitesEtl(
         val sites: List<ReserveAmericaCatalogParser.CatalogSite>,
     )
 
-    override fun parse(inputs: InputBundle): Parsed =
-        Parsed(
-            inputs
-                .soleEnvelopes()
-                .flatMap { ReserveAmericaCatalogParser.parse(it.payload.jsonPrimitive.content) },
-        )
-
-    override fun validate(dto: Parsed): ValidationResult<Parsed> =
-        if (dto.sites.isEmpty()) {
-            ValidationResult.Bad(null, listOf("$etlSlug: no ReserveAmerica campsite rows parsed"))
-        } else {
-            ValidationResult.Ok(dto)
+    override fun parse(inputs: InputBundle): Sequence<ParseResult<Parsed>> =
+        sequence {
+            val parsed =
+                Parsed(
+                    inputs
+                        .soleEnvelopes()
+                        .flatMap { ReserveAmericaCatalogParser.parse(it.payload.jsonPrimitive.content) },
+                )
+            if (parsed.sites.isEmpty()) {
+                yield(ParseResult.Bad(null, listOf("$etlSlug: no ReserveAmerica campsite rows parsed")))
+            } else {
+                yield(ParseResult.Ok(parsed))
+            }
         }
 
     override fun transform(
         dto: Parsed,
         ctx: TransformCtx,
-    ): CampsiteEtlOutput {
-        val campsites =
-            dto.sites
-                .distinctBy { it.siteId }
-                .map { site ->
+    ): Sequence<TransformResult<CampsiteUpsertCandidate>> =
+        dto.sites
+            .distinctBy { it.siteId }
+            .asSequence()
+            .map { site ->
+                TransformResult.Ok(
                     CampsiteUpsertCandidate(
                         dataProviderRef = DataProviderRef.ReserveAmerica(id = site.siteId),
                         bookingProvider = BookingProvider.RESERVEAMERICA,
@@ -73,10 +75,9 @@ class ReserveAmericaSitesEtl(
                                 put(PARENT_CONTRACT_KEY, contractCode)
                                 put(PARENT_PARK_KEY, site.parkId)
                             },
-                    )
-                }
-        return CampsiteEtlOutput(campsites = campsites)
-    }
+                    ),
+                )
+            }
 
     companion object {
         const val PARENT_CONTRACT_KEY = "_parent_contract_code"

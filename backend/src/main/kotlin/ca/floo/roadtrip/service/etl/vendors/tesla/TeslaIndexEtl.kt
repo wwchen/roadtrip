@@ -2,9 +2,9 @@ package ca.floo.roadtrip.service.etl.vendors.tesla
 
 import ca.floo.roadtrip.model.domain.DEFAULT_TESLA_SITE_STATUS
 import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
-import ca.floo.roadtrip.model.etl.TeslaSuperchargerEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
-import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.model.metadata.ParseResult
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -35,43 +35,45 @@ import java.time.Instant
 // render with placeholder fields — the index alone is enough to put a
 // pin on the map. The cache lifetime is governed by the offline
 // fetch worker; rows go stale gracefully.
-class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerEtlOutput> {
+class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerUpsertCandidate> {
     override val etlSlug = "tesla-superchargers"
 
-    override fun parse(inputs: InputBundle): TeslaIndexDto {
-        val envelope = inputs.soleEnvelopes().single()
-        val raw = json.decodeFromJsonElement(TeslaIndexEnvelope.serializer(), envelope.payload)
-        // Two passes: typed for the hot fields + raw JsonObject by slug
-        // for the full payload. Drives tesla_superchargers.index_payload so
-        // the drawer's "Upstream data" accordion has every Tesla index field.
-        val rawBySlug = mutableMapOf<String, JsonObject>()
-        val rawArr =
-            envelope.payload.jsonObject["data"]
-                ?.jsonObject
-                ?.get("data")
-                ?.jsonArray
-        if (rawArr != null) {
-            for (entry in rawArr) {
-                val obj = entry.jsonObject
-                val slug =
-                    obj["location_url_slug"]?.let { kotlin.runCatching { it.jsonPrimitive.content }.getOrNull() }
-                        ?: continue
-                if (slug.isNotBlank()) rawBySlug[slug] = obj
+    override fun parse(inputs: InputBundle): Sequence<ParseResult<TeslaIndexDto>> =
+        sequence {
+            val envelope = inputs.soleEnvelopes().single()
+            val raw = json.decodeFromJsonElement(TeslaIndexEnvelope.serializer(), envelope.payload)
+            // Two passes: typed for the hot fields + raw JsonObject by slug
+            // for the full payload. Drives tesla_superchargers.index_payload so
+            // the drawer's "Upstream data" accordion has every Tesla index field.
+            val rawBySlug = mutableMapOf<String, JsonObject>()
+            val rawArr =
+                envelope.payload.jsonObject["data"]
+                    ?.jsonObject
+                    ?.get("data")
+                    ?.jsonArray
+            if (rawArr != null) {
+                for (entry in rawArr) {
+                    val obj = entry.jsonObject
+                    val slug =
+                        obj["location_url_slug"]?.let { kotlin.runCatching { it.jsonPrimitive.content }.getOrNull() }
+                            ?: continue
+                    if (slug.isNotBlank()) rawBySlug[slug] = obj
+                }
+            }
+            val dto = TeslaIndexDto(rows = raw.data.data, rawBySlug = rawBySlug, fetchedAt = parseFetchedAt(envelope))
+            val errors = mutableListOf<String>()
+            if (dto.rows.isEmpty()) errors += "no rows in payload"
+            if (errors.isEmpty()) {
+                yield(ParseResult.Ok(dto))
+            } else {
+                yield(ParseResult.Bad(null, errors))
             }
         }
-        return TeslaIndexDto(rows = raw.data.data, rawBySlug = rawBySlug, fetchedAt = parseFetchedAt(envelope))
-    }
-
-    override fun validate(dto: TeslaIndexDto): ValidationResult<TeslaIndexDto> {
-        val errors = mutableListOf<String>()
-        if (dto.rows.isEmpty()) errors += "no rows in payload"
-        return if (errors.isEmpty()) ValidationResult.Ok(dto) else ValidationResult.Bad(null, errors)
-    }
 
     override fun transform(
         dto: TeslaIndexDto,
         ctx: TransformCtx,
-    ): TeslaSuperchargerEtlOutput {
+    ): Sequence<TransformResult<TeslaSuperchargerUpsertCandidate>> {
         // tesla-locations is laid out as data/raw/tesla-locations/
         // <slug>/<UTC-ts>.json (one subdir per supercharger), which doesn't
         // fit the InputBundle's flat list-of-envelopes contract. Side-load
@@ -98,7 +100,7 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerEtlOutput> {
                     "distinct upstream slugs collapsing to the same key. Sample: $sample",
             )
         }
-        return TeslaSuperchargerEtlOutput(superchargers = superchargers)
+        return superchargers.asSequence().map { TransformResult.Ok(it) }
     }
 
     private fun transformRow(

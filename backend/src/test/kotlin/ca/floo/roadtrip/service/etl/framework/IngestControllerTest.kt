@@ -2,8 +2,9 @@ package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
-import ca.floo.roadtrip.model.etl.PlanetFitnessLocationEtlOutput
-import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
+import ca.floo.roadtrip.model.metadata.ParseResult
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.model.metadata.ingest.Phase
 import ca.floo.roadtrip.model.metadata.ingest.RunKind
 import ca.floo.roadtrip.model.metadata.ingest.Target
@@ -277,17 +278,17 @@ class IngestControllerTest : SharedDbTest() {
         override val etlSlug: String,
         private val gate: CountDownLatch,
         private val release: CountDownLatch,
-    ) : SourceEtl<Unit, PlanetFitnessLocationEtlOutput> {
-        override fun parse(inputs: InputBundle) {
-            gate.countDown()
-            check(release.await(5, TimeUnit.SECONDS)) { "release gate timed out" }
-        }
-
-        override fun validate(dto: Unit): ValidationResult<Unit> = ValidationResult.Ok(dto)
+    ) : SourceEtl<Unit, PlanetFitnessLocationUpsertCandidate> {
+        override fun parse(inputs: InputBundle): Sequence<ParseResult<Unit>> =
+            sequence {
+                gate.countDown()
+                check(release.await(5, TimeUnit.SECONDS)) { "release gate timed out" }
+                yield(ParseResult.Ok(Unit))
+            }
 
         override fun transform(
             dto: Unit,
             ctx: TransformCtx,
-        ): PlanetFitnessLocationEtlOutput = PlanetFitnessLocationEtlOutput(emptyList())
+        ): Sequence<TransformResult<PlanetFitnessLocationUpsertCandidate>> = emptySequence()
     }
 }

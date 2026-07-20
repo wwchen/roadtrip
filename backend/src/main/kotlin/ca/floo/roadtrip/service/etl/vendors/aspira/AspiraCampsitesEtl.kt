@@ -5,9 +5,9 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
-import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.model.metadata.ParseResult
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -95,101 +95,132 @@ class AspiraCampsitesEtl(
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    override fun parse(inputs: InputBundle): Parsed {
-        val slugs = inputs.dataSourceSlugs()
-        require(slugs.contains(mapsInputSlug)) {
-            "$etlSlug: missing required input '$mapsInputSlug' in $slugs"
-        }
-        require(slugs.contains(inventoryInputSlug)) {
-            "$etlSlug: missing required input '$inventoryInputSlug' in $slugs"
-        }
-        val inventoryEnvelopes = inputs.envelopes(inventoryInputSlug)
-        require(inventoryEnvelopes.isNotEmpty()) {
-            "$etlSlug: no envelopes in '$inventoryInputSlug' (run fetch_aspira_inventory.py first)"
-        }
-        val mapsArray = inputs.envelope(mapsInputSlug).payload.jsonArray
-        val dictionaries =
-            dictionariesInputSlug
-                ?.takeIf { slugs.contains(it) }
-                ?.let { parseDictionaries(inputs.envelope(it).payload as? JsonObject) }
-                ?: AspiraDictionaries.empty
-        return Parsed(
-            inventory = inventoryEnvelopes,
-            maps = mapsArray,
-            dictionaries = dictionaries,
-        )
-    }
+    override fun parse(inputs: InputBundle): Sequence<ParseResult<Parsed>> =
+        sequence {
+            val slugs = inputs.dataSourceSlugs()
+            require(slugs.contains(mapsInputSlug)) {
+                "$etlSlug: missing required input '$mapsInputSlug' in $slugs"
+            }
+            require(slugs.contains(inventoryInputSlug)) {
+                "$etlSlug: missing required input '$inventoryInputSlug' in $slugs"
+            }
+            val inventoryEnvelopes = inputs.envelopes(inventoryInputSlug)
+            require(inventoryEnvelopes.isNotEmpty()) {
+                "$etlSlug: no envelopes in '$inventoryInputSlug' (run fetch_aspira_inventory.py first)"
+            }
+            val mapsArray = inputs.envelope(mapsInputSlug).payload.jsonArray
+            val dictionaries =
+                dictionariesInputSlug
+                    ?.takeIf { slugs.contains(it) }
+                    ?.let { parseDictionaries(inputs.envelope(it).payload as? JsonObject) }
+                    ?: AspiraDictionaries.empty
+            val parsed =
+                Parsed(
+                    inventory = inventoryEnvelopes,
+                    maps = mapsArray,
+                    dictionaries = dictionaries,
+                )
+            when {
+                parsed.inventory.isEmpty() ->
+                    yield(ParseResult.Bad(null, listOf("$etlSlug: empty inventory input")))
 
-    override fun validate(dto: Parsed): ValidationResult<Parsed> =
-        when {
-            dto.inventory.isEmpty() ->
-                ValidationResult.Bad(null, listOf("$etlSlug: empty inventory input"))
+                parsed.maps.isEmpty() ->
+                    yield(ParseResult.Bad(null, listOf("$etlSlug: empty /api/maps payload")))
 
-            dto.maps.isEmpty() ->
-                ValidationResult.Bad(null, listOf("$etlSlug: empty /api/maps payload"))
-
-            else -> ValidationResult.Ok(dto)
+                else -> yield(ParseResult.Ok(parsed))
+            }
         }
 
     override fun transform(
         dto: Parsed,
         ctx: TransformCtx,
-    ): CampsiteEtlOutput {
-        // Maps tree → mapId-keyed leaf metadata. Each inventory record
-        // carries `mapIds[]`; we look up the first one to label the
-        // campsite's `loop`.
-        val leaves = AspiraLeavesWalk.walk(dto.maps)
-        val leavesByMapId = leaves.associateBy { it.mapId }
-        val leavesByResourceLocationId =
-            leaves
-                .mapNotNull { leaf -> leaf.resourceLocationId?.let { it to leaf } }
-                .toMap()
+    ): Sequence<TransformResult<CampsiteUpsertCandidate>> =
+        sequence {
+            // Maps tree → mapId-keyed leaf metadata. Each inventory record
+            // carries `mapIds[]`; we look up the first one to label the
+            // campsite's `loop`.
+            val leaves = AspiraLeavesWalk.walk(dto.maps)
+            val leavesByMapId = leaves.associateBy { it.mapId }
+            val leavesByResourceLocationId =
+                leaves
+                    .mapNotNull { leaf -> leaf.resourceLocationId?.let { it to leaf } }
+                    .toMap()
 
-        val out = mutableListOf<CampsiteUpsertCandidate>()
-        var unmatchedLeaf = 0
-        var totalRecords = 0
-        for (envelope in dto.inventory) {
-            val payload = envelope.payload as? JsonObject ?: continue
-            for ((resourceId, raw) in payload) {
-                if (resourceId.isEmpty()) continue
-                val obj = raw as? JsonObject ?: continue
-                val inv = parseResourceInventory(resourceId, obj) ?: continue
-                totalRecords++
-                val leafMapId = inv.firstMapId
-                val leaf = leafMapId?.let { leavesByMapId[it] }
-                val parentLeaf = leaf ?: inv.resourceLocationId?.let { leavesByResourceLocationId[it] }
-                if (leafMapId != null && leaf == null) unmatchedLeaf++
-                out +=
-                    CampsiteUpsertCandidate(
-                        dataProviderRef = DataProviderRef.AspiraCampsite(resourceLocationId = resourceId.toLong()),
-                        bookingProvider = BookingProvider.ASPIRA,
-                        bookingProviderRef = campsiteBookingRef(inv, leaf, parentLeaf),
-                        parentDataProviderRef = parentDataProviderRefTyped(leaf, parentLeaf, inv),
-                        // Short label from /api/resourcelocation/resources
-                        // (`localizedValues[0].name`) — e.g. "OFC13", "B7".
-                        name = inv.name ?: resourceId,
-                        // Loop is the parent leaf's name from /api/maps
-                        // (PC's "AREA WHITE RIVER" analogue).
-                        loopName = leaf?.name ?: parentLeaf?.name,
-                        kind = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] } ?: "site",
-                        kindListed = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] },
-                        equipment = inv.allowedEquipment?.let { enrichAllowedEquipment(it, dto.dictionaries) },
-                        maxPeople = inv.maxCapacity,
-                        sourcePayload = buildResourceRaw(inv = inv, leaf = leaf, parentLeaf = parentLeaf, dictionaries = dto.dictionaries),
+            var emitted = 0
+            var unmatchedLeaf = 0
+            var totalRecords = 0
+            for (envelope in dto.inventory) {
+                val sourceId = envelope.part ?: envelope.request.url
+                val payload = envelope.payload as? JsonObject
+                if (payload == null) {
+                    yield(TransformResult.Bad(sourceId, listOf("expected JSON object payload")))
+                    continue
+                }
+                for ((resourceId, raw) in payload) {
+                    if (resourceId.isEmpty()) {
+                        yield(TransformResult.Bad(sourceId, listOf("empty resource id")))
+                        continue
+                    }
+                    val resourceIdLong = resourceId.toLongOrNull()
+                    if (resourceIdLong == null) {
+                        yield(TransformResult.Bad(resourceId, listOf("resource id is not numeric")))
+                        continue
+                    }
+                    val obj = raw as? JsonObject
+                    if (obj == null) {
+                        yield(TransformResult.Bad(resourceId, listOf("expected resource JSON object")))
+                        continue
+                    }
+                    val inv = parseResourceInventory(resourceId, obj)
+                    if (inv == null) {
+                        yield(TransformResult.Bad(resourceId, listOf("invalid resource inventory")))
+                        continue
+                    }
+                    totalRecords++
+                    val leafMapId = inv.firstMapId
+                    val leaf = leafMapId?.let { leavesByMapId[it] }
+                    val parentLeaf = leaf ?: inv.resourceLocationId?.let { leavesByResourceLocationId[it] }
+                    if (leafMapId != null && leaf == null) unmatchedLeaf++
+                    yield(
+                        TransformResult.Ok(
+                            CampsiteUpsertCandidate(
+                                dataProviderRef = DataProviderRef.AspiraCampsite(resourceLocationId = resourceIdLong),
+                                bookingProvider = BookingProvider.ASPIRA,
+                                bookingProviderRef = campsiteBookingRef(inv, leaf, parentLeaf),
+                                parentDataProviderRef = parentDataProviderRefTyped(leaf, parentLeaf, inv),
+                                // Short label from /api/resourcelocation/resources
+                                // (`localizedValues[0].name`) — e.g. "OFC13", "B7".
+                                name = inv.name ?: resourceId,
+                                // Loop is the parent leaf's name from /api/maps
+                                // (PC's "AREA WHITE RIVER" analogue).
+                                loopName = leaf?.name ?: parentLeaf?.name,
+                                kind = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] } ?: "site",
+                                kindListed = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] },
+                                equipment = inv.allowedEquipment?.let { enrichAllowedEquipment(it, dto.dictionaries) },
+                                maxPeople = inv.maxCapacity,
+                                sourcePayload =
+                                    buildResourceRaw(
+                                        inv = inv,
+                                        leaf = leaf,
+                                        parentLeaf = parentLeaf,
+                                        dictionaries = dto.dictionaries,
+                                    ),
+                            ),
+                        ),
                     )
+                    emitted++
+                }
+            }
+            log.info(
+                "$etlSlug: emitted {} campsites from {} inventory envelopes ({} resources with no matching leaf in /api/maps)",
+                emitted,
+                dto.inventory.size,
+                unmatchedLeaf,
+            )
+            if (totalRecords != emitted) {
+                log.warn("$etlSlug: parsed {} inventory records but emitted {} campsites", totalRecords, emitted)
             }
         }
-        log.info(
-            "$etlSlug: emitted {} campsites from {} inventory envelopes ({} resources with no matching leaf in /api/maps)",
-            out.size,
-            dto.inventory.size,
-            unmatchedLeaf,
-        )
-        if (totalRecords != out.size) {
-            log.warn("$etlSlug: parsed {} inventory records but emitted {} campsites", totalRecords, out.size)
-        }
-        return CampsiteEtlOutput(campsites = out)
-    }
 
     private fun campsiteBookingRef(
         inv: ResourceInventory,

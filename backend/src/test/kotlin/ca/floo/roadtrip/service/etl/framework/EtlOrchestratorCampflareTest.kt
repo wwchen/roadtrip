@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.metadata.registry.EtlEntry
 import ca.floo.roadtrip.model.metadata.registry.Fetcher
 import ca.floo.roadtrip.model.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.repo.MAX_CATALOG_UPSERT_BATCH_SIZE
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import org.junit.jupiter.api.BeforeEach
@@ -78,6 +79,82 @@ class EtlOrchestratorCampflareTest : SharedDbTest() {
         assertEquals(1, tableCount("poi_campgrounds"))
     }
 
+    @Test
+    fun `counts parse transform and repo skipped rows without failing import`() {
+        writeRaw(
+            slug = "campflare-campgrounds-export",
+            payload =
+                """
+                [
+                  12,
+                  {"id":"missing-location","name":"Missing Location"},
+                  {"id":"cg-1","name":"Camp One","location":{"latitude":37.1,"longitude":-119.1}}
+                ]
+                """.trimIndent(),
+        )
+        writeRaw(
+            slug = "campflare-campsites-export",
+            payload =
+                """
+                [
+                  {"id":"site-1","campground_id":"cg-1","name":"Site 1"},
+                  {"id":"site-2","campground_id":"missing-parent","name":"Site 2"}
+                ]
+                """.trimIndent(),
+        )
+
+        val orchestrator =
+            EtlOrchestrator(
+                ctx = ctx,
+                rawDir = rawDir,
+                poiRegistry = registry(),
+                staticDir = staticDir,
+            )
+
+        val campgrounds = orchestrator.runPoiData("Campflare Campgrounds")
+        val campsites = orchestrator.runCampsiteData("Campflare Campsites")
+
+        assertEquals(3, campgrounds.parsed)
+        assertEquals(1, campgrounds.transformed)
+        assertEquals(1, campgrounds.upsertResult.upsertedCount)
+        assertEquals(2, campgrounds.upsertResult.skippedCount)
+        assertEquals(2, campsites.parsed)
+        assertEquals(1, campsites.upserted)
+        assertEquals(1, campsites.skipped)
+        assertEquals(1, tableCount("campgrounds"))
+        assertEquals(1, tableCount("campsites"))
+    }
+
+    @Test
+    fun `flushes terminal candidates across multiple repo batches`() {
+        val count = MAX_CATALOG_UPSERT_BATCH_SIZE + 1
+        writeRaw(
+            slug = "campflare-campgrounds-export",
+            payload = campgroundsPayload(count),
+        )
+        writeRaw(
+            slug = "campflare-campsites-export",
+            payload = campsitesPayload(count),
+        )
+
+        val orchestrator =
+            EtlOrchestrator(
+                ctx = ctx,
+                rawDir = rawDir,
+                poiRegistry = registry(),
+                staticDir = staticDir,
+            )
+
+        val campgrounds = orchestrator.runPoiData("Campflare Campgrounds")
+        val campsites = orchestrator.runCampsiteData("Campflare Campsites")
+
+        assertEquals(count, campgrounds.upsertResult.upsertedCount)
+        assertEquals(count, campsites.upserted)
+        assertEquals(0, campsites.skipped)
+        assertEquals(count, tableCount("campgrounds"))
+        assertEquals(count, tableCount("campsites"))
+    }
+
     private fun writeRaw(
         slug: String,
         payload: String,
@@ -99,6 +176,20 @@ class EtlOrchestratorCampflareTest : SharedDbTest() {
             """.trimIndent(),
         )
     }
+
+    private fun campgroundsPayload(count: Int): String =
+        (0 until count).joinToString(prefix = "[", postfix = "]") { i ->
+            """
+            {"id":"cg-$i","name":"Camp $i","location":{"latitude":37.1,"longitude":-119.1}}
+            """.trimIndent()
+        }
+
+    private fun campsitesPayload(count: Int): String =
+        (0 until count).joinToString(prefix = "[", postfix = "]") { i ->
+            """
+            {"id":"site-$i","campground_id":"cg-$i","name":"Site $i"}
+            """.trimIndent()
+        }
 
     private fun registry(): PoiRegistry =
         PoiRegistry(

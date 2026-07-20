@@ -8,6 +8,8 @@ import ca.floo.roadtrip.model.metadata.ResponseMeta
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.terminalOkRecords
+import ca.floo.roadtrip.service.etl.framework.terminalRecords
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -21,8 +23,8 @@ class CampflareCampgroundsEtlTest {
     @Test
     fun `transforms campflare campground dump rows into canonical records`() {
         val etl = CampflareCampgroundsEtl()
-        val out = etl.transform(etl.parse(bundle("campflare-campgrounds", campgroundPayload())), transformCtx())
-        val row = out.campgrounds.single()
+        val rows = terminalRecords(etl, bundle("campflare-campgrounds", campgroundPayload()), transformCtx())
+        val row = rows.single()
 
         assertEquals(DataProvider.CAMPFLARE, row.dataProviderRef.provider)
         assertEquals("upper-pines-campground-447", row.dataProviderRef.serialize())
@@ -72,46 +74,44 @@ class CampflareCampgroundsEtlTest {
     @Test
     fun `skips campground rows without id name or coordinates`() {
         val etl = CampflareCampgroundsEtl()
-        val out =
-            etl.transform(
-                etl.parse(
-                    bundle(
-                        "campflare-campgrounds",
-                        """
-                        [
-                          {"id":"missing-name","location":{"latitude":1,"longitude":2}},
-                          {"id":"missing-lat","name":"No Lat","location":{"longitude":2}},
-                          {"id":"ok","name":"Valid","location":{"latitude":1,"longitude":2}}
-                        ]
-                        """.trimIndent(),
-                    ),
+        val rows =
+            terminalOkRecords(
+                etl,
+                bundle(
+                    "campflare-campgrounds",
+                    """
+                    [
+                      {"id":"missing-name","location":{"latitude":1,"longitude":2}},
+                      {"id":"missing-lat","name":"No Lat","location":{"longitude":2}},
+                      {"id":"ok","name":"Valid","location":{"latitude":1,"longitude":2}}
+                    ]
+                    """.trimIndent(),
                 ),
                 transformCtx(),
             )
 
-        assertEquals(listOf("ok"), out.campgrounds.map { it.dataProviderRef.serialize() })
+        assertEquals(listOf("ok"), rows.map { it.dataProviderRef.serialize() })
     }
 
     @Test
     fun `adds campflare source link when campground dump has no links`() {
         val etl = CampflareCampgroundsEtl()
-        val out =
-            etl.transform(
-                etl.parse(
-                    bundle(
-                        "campflare-campgrounds",
-                        """
-                        [
-                          {"id":"no-links","name":"No Links","location":{"latitude":1,"longitude":2}}
-                        ]
-                        """.trimIndent(),
-                    ),
+        val rows =
+            terminalRecords(
+                etl,
+                bundle(
+                    "campflare-campgrounds",
+                    """
+                    [
+                      {"id":"no-links","name":"No Links","location":{"latitude":1,"longitude":2}}
+                    ]
+                    """.trimIndent(),
                 ),
                 transformCtx(),
             )
 
         val link =
-            out.campgrounds
+            rows
                 .single()
                 .links!!
                 .jsonArray
@@ -127,34 +127,33 @@ class CampflareCampgroundsEtlTest {
     @Test
     fun `does not duplicate existing campflare source href`() {
         val etl = CampflareCampgroundsEtl()
-        val out =
-            etl.transform(
-                etl.parse(
-                    bundle(
-                        "campflare-campgrounds",
-                        """
-                        [
+        val rows =
+            terminalRecords(
+                etl,
+                bundle(
+                    "campflare-campgrounds",
+                    """
+                    [
+                      {
+                        "id":"has-campflare-href",
+                        "name":"Has Campflare Href",
+                        "location":{"latitude":1,"longitude":2},
+                        "links":[
                           {
-                            "id":"has-campflare-href",
-                            "name":"Has Campflare Href",
-                            "location":{"latitude":1,"longitude":2},
-                            "links":[
-                              {
-                                "title":"Existing Campflare",
-                                "href":"https://campflare.com/campground/has-campflare-href"
-                              }
-                            ]
+                            "title":"Existing Campflare",
+                            "href":"https://campflare.com/campground/has-campflare-href"
                           }
                         ]
-                        """.trimIndent(),
-                    ),
+                      }
+                    ]
+                    """.trimIndent(),
                 ),
                 transformCtx(),
             )
 
         assertEquals(
             1,
-            out.campgrounds
+            rows
                 .single()
                 .links!!
                 .jsonArray
@@ -165,22 +164,21 @@ class CampflareCampgroundsEtlTest {
     @Test
     fun `treats JSON null string fields as absent`() {
         val etl = CampflareCampgroundsEtl()
-        val out =
-            etl.transform(
-                etl.parse(
-                    bundle(
-                        "campflare-campgrounds",
-                        """
-                        [
-                          {"id":"json-null-kind","name":"Null Kind","kind":null,"location":{"latitude":1,"longitude":2}}
-                        ]
-                        """.trimIndent(),
-                    ),
+        val rows =
+            terminalRecords(
+                etl,
+                bundle(
+                    "campflare-campgrounds",
+                    """
+                    [
+                      {"id":"json-null-kind","name":"Null Kind","kind":null,"location":{"latitude":1,"longitude":2}}
+                    ]
+                    """.trimIndent(),
                 ),
                 transformCtx(),
             )
 
-        assertNull(out.campgrounds.single().kind)
+        assertNull(rows.single().kind)
     }
 
     private fun bundle(
@@ -189,7 +187,6 @@ class CampflareCampgroundsEtlTest {
     ): InputBundle =
         InputBundle(
             rawCaptures = linkedMapOf(slug to listOf(envelope(payloadJson))),
-            etlOutputs = linkedMapOf(),
         )
 
     private fun envelope(payloadJson: String): Envelope =

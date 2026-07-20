@@ -3,9 +3,9 @@ package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
-import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.model.metadata.ParseResult
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -40,69 +40,71 @@ class ReserveAmericaCampgroundsEtl(
 ) : CampgroundEtl<ReserveAmericaDto> {
     override val multiPart: Boolean = true
 
-    override fun parse(inputs: InputBundle): ReserveAmericaDto {
-        val envelopes = inputs.soleEnvelopes()
-        require(envelopes.isNotEmpty()) { "$etlSlug: no pages" }
-        val parks = mutableListOf<ParsedPark>()
-        for (env in envelopes) {
-            val partLabel = env.part ?: continue
-            if (!partLabel.startsWith("park-")) continue
-            val parkId = partLabel.removePrefix("park-").toLongOrNull() ?: continue
-            val html = env.payload.jsonPrimitive.content
-            parsePark(parkId, html)?.let { parks += it }
+    override fun parse(inputs: InputBundle): Sequence<ParseResult<ReserveAmericaDto>> =
+        sequence {
+            val envelopes = inputs.soleEnvelopes()
+            require(envelopes.isNotEmpty()) { "$etlSlug: no pages" }
+            val parks = mutableListOf<ParsedPark>()
+            for (env in envelopes) {
+                val partLabel = env.part ?: continue
+                if (!partLabel.startsWith("park-")) continue
+                val parkId = partLabel.removePrefix("park-").toLongOrNull() ?: continue
+                val html = env.payload.jsonPrimitive.content
+                parsePark(parkId, html)?.let { parks += it }
+            }
+            val dto = ReserveAmericaDto(parks = parks, fetchedAt = parseFetchedAt(envelopes.first()))
+            if (dto.parks.isEmpty()) {
+                yield(ParseResult.Bad(null, listOf("$etlSlug: no park pages parsed")))
+            } else {
+                yield(ParseResult.Ok(dto))
+            }
         }
-        return ReserveAmericaDto(parks = parks, fetchedAt = parseFetchedAt(envelopes.first()))
-    }
-
-    override fun validate(dto: ReserveAmericaDto): ValidationResult<ReserveAmericaDto> {
-        val errors = mutableListOf<String>()
-        if (dto.parks.isEmpty()) errors += "no park pages parsed"
-        return if (errors.isEmpty()) ValidationResult.Ok(dto) else ValidationResult.Bad(null, errors)
-    }
 
     override fun transform(
         dto: ReserveAmericaDto,
         ctx: TransformCtx,
-    ): CampgroundEtlOutput {
-        val bucket = ctx.subcategoryFor(etlSlug)
-        val settings = ReserveAmericaSettings.from(ctx, etlSlug)
-        return CampgroundEtlOutput(
-            campgrounds =
-                dto.parks.map { park ->
-                    val name = displayName(park.name, settings.titleSuffix)
-                    val vendorRefId = "${settings.sourceIdPrefix}-${park.parkId}"
-                    val parkExtras = parkExtras(park, name, settings.contract)
-                    CampgroundUpsertCandidate(
-                        dataProviderRef = DataProviderRef.ReserveAmerica(id = vendorRefId),
-                        bookingProvider =
-                            if (settings.provider.lowercase() == "reserveamerica") {
-                                BookingProvider.RESERVEAMERICA
-                            } else {
-                                null
-                            },
-                        bookingProviderRef =
-                            if (settings.provider.lowercase() == "reserveamerica") {
-                                "${settings.contract}:${park.parkId}"
-                            } else {
-                                null
-                            },
-                        name = name,
-                        latitude = park.lat,
-                        longitude = park.lon,
-                        kind = bucket,
-                        mediumDescription = park.description,
-                        location = locationPayload(park, settings),
-                        reservationUrl = park.infoUrl,
-                        links = park.infoUrl?.let(::linksPayload),
-                        photos = park.photoUrl?.let(::photoPayload),
-                        management = managementPayload(settings.agency),
-                        metadata = parkExtras,
-                        sourceUrl = park.infoUrl,
-                        sourcePayload = parkExtras,
-                    )
-                },
-        )
-    }
+    ): Sequence<TransformResult<CampgroundUpsertCandidate>> =
+        sequence {
+            val bucket = ctx.subcategoryFor(etlSlug)
+            val settings = ReserveAmericaSettings.from(ctx, etlSlug)
+            for (park in dto.parks) {
+                val name = displayName(park.name, settings.titleSuffix)
+                val vendorRefId = "${settings.sourceIdPrefix}-${park.parkId}"
+                val parkExtras = parkExtras(park, name, settings.contract)
+                yield(
+                    TransformResult.Ok(
+                        CampgroundUpsertCandidate(
+                            dataProviderRef = DataProviderRef.ReserveAmerica(id = vendorRefId),
+                            bookingProvider =
+                                if (settings.provider.lowercase() == "reserveamerica") {
+                                    BookingProvider.RESERVEAMERICA
+                                } else {
+                                    null
+                                },
+                            bookingProviderRef =
+                                if (settings.provider.lowercase() == "reserveamerica") {
+                                    "${settings.contract}:${park.parkId}"
+                                } else {
+                                    null
+                                },
+                            name = name,
+                            latitude = park.lat,
+                            longitude = park.lon,
+                            kind = bucket,
+                            mediumDescription = park.description,
+                            location = locationPayload(park, settings),
+                            reservationUrl = park.infoUrl,
+                            links = park.infoUrl?.let(::linksPayload),
+                            photos = park.photoUrl?.let(::photoPayload),
+                            management = managementPayload(settings.agency),
+                            metadata = parkExtras,
+                            sourceUrl = park.infoUrl,
+                            sourcePayload = parkExtras,
+                        ),
+                    ),
+                )
+            }
+        }
 
     /**
      * Re-emit the parsed-out HTML scraps as a flat JsonObject so the

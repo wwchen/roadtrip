@@ -16,23 +16,20 @@ private const val CAMPSITE_DATA_SECTION = "campsite_data"
 // Four sections:
 //   - data_sources: fetchers (executor + filename + args + output_dir_prefix).
 //     One entry per upstream feed.
-//   - poi_data: POI datasets. Terminal etl emits Poi.* rows into `pois`.
+//   - poi_data: POI datasets. Terminal etl emits catalog upsert candidates.
 //     Each row carries name, optional enabled (default true), category,
-//     optional subcategory, and an ordered etls: list. (Existing flow.)
+//     optional subcategory, and exactly one etls entry.
 //   - campsite_data: campsite catalogs. Terminal etl emits canonical campsite
-//     rows. Same chain shape as poi_data, minus category/subcategory
+//     rows. Same shape as poi_data, minus category/subcategory
 //     (campsites aren't map pins).
-// Etl chain semantics (poi_data + campsite_data):
-//   - Terminal stage = last etls entry. Earlier entries are intermediates.
-//   - List order = dependency order. Entry N may only reference
-//     data_source slugs OR earlier siblings via inputs.
-//   - Cross-row etl refs and forward refs are rejected at boot.
+// ETL semantics (poi_data + campsite_data):
+//   - Each row has exactly one terminal ETL.
+//   - ETL inputs may only reference data_source slugs.
 //   - Cycles in the global DAG are rejected at boot.
 //
-// All sections share the slug namespace because `inputs:` resolves to
-// either a data_source or an earlier sibling etl. Etl slugs across
-// poi_data + campsite_data must not collide; data_source slugs must
-// not collide with any etl slug.
+// All sections share the slug namespace. Etl slugs across poi_data +
+// campsite_data must not collide; data_source slugs must not collide with
+// any etl slug.
 //
 // Loaded once at boot. Used by:
 //   1. EtlOrchestrator — runs etl chains in declared order, dispatching
@@ -66,11 +63,8 @@ class PoiRegistry(
      *     data_source slug (single namespace because inputs: resolves to
      *     either kind)
      *   - data_sources.depends_on references a declared data_source
-     *   - poi_data.etls is non-empty (terminal is the last entry)
-     *   - within each row's etls, every input is either a data_source slug
-     *     OR an earlier sibling in the SAME row (forward refs + cross-row
-     *     etl refs both rejected — orchestrator hands intermediates over
-     *     in memory; nothing crosses row boundaries)
+     *   - poi_data.etls/campsite_data.etls has exactly one terminal entry
+     *   - every etl input is a data_source slug
      *   - no cycles in the global DAG (data_sources → etls)
      */
     fun validate(sourceName: String = "POI registry") {
@@ -86,13 +80,8 @@ class PoiRegistry(
             }
         }
 
-        // Etl slugs share a namespace with data_source slugs because
-        // inputs: resolves to either. Detect collisions across both
-        // poi_data and campsite_data — an etl in either section can be
-        // an input to an etl in the same section's row, but not across
-        // sections (the orchestrator hands intermediates over in memory
-        // within one runPoiData / runCampsiteData invocation, not
-        // between them).
+        // Etl slugs share a namespace with data_source slugs. Detect
+        // collisions across both poi_data and campsite_data.
         val etlSlugs = mutableSetOf<String>()
         for (row in poiData) {
             try {
@@ -103,14 +92,14 @@ class PoiRegistry(
         }
         validateEtlSection(
             label = "poi_data",
-            rows = poiData.map { EtlRowRef(it.name, it.etls, it) },
+            rows = poiData.map { EtlRowRef(it.name, it.etls) },
             dsSlugs = dsSlugs,
             allEtlSlugs = etlSlugs,
             errs = errs,
         )
         validateEtlSection(
             label = CAMPSITE_DATA_SECTION,
-            rows = campsiteData.map { EtlRowRef(it.name, it.etls, it) },
+            rows = campsiteData.map { EtlRowRef(it.name, it.etls) },
             dsSlugs = dsSlugs,
             allEtlSlugs = etlSlugs,
             errs = errs,
@@ -156,17 +145,10 @@ class PoiRegistry(
     }
 
     /**
-     * Per-section etl validation. Walks one section's rows and applies
-     * the universal constraints: non-empty etl chain, slug uniqueness
-     * across all etl-bearing sections, no collision with data_source
-     * slugs, no forward references, no cross-row references within the
-     * section.
-     *
-     * Cross-section refs are caught here too: if an input slug points
-     * at an etl in a different section (or a different row in this
-     * section), it gets the "neither a data_source nor a prior sibling"
-     * error. The orchestrator hands intermediates in-memory within one
-     * runPoiData/runCampsiteData call, so cross-row state never exists.
+     * Per-section etl validation. Walks one section's rows and applies the
+     * universal constraints: exactly one etl, slug uniqueness across all
+     * etl-bearing sections, no collision with data_source slugs, and inputs
+     * that resolve directly to data_source slugs.
      */
     private fun validateEtlSection(
         label: String,
@@ -176,9 +158,8 @@ class PoiRegistry(
         errs: MutableList<String>,
     ) {
         for (row in rows) {
-            if (row.etls.isEmpty()) {
-                errs += "$label '${row.name}' has empty etls list"
-                continue
+            if (row.etls.size != 1) {
+                errs += "$label '${row.name}' must declare exactly one etl (got ${row.etls.size})"
             }
             for ((i, e) in row.etls.withIndex()) {
                 if (e.slug in dsSlugs) {
@@ -187,58 +168,19 @@ class PoiRegistry(
                 if (!allEtlSlugs.add(e.slug)) {
                     errs += "duplicate etl slug='${e.slug}' (in $label '${row.name}')"
                 }
-            }
-            val priorSiblings = mutableSetOf<String>()
-            for ((i, e) in row.etls.withIndex()) {
                 for (input in e.inputs) {
-                    val resolvesToDataSource = input in dsSlugs
-                    val resolvesToPriorSibling = input in priorSiblings
-                    if (!resolvesToDataSource && !resolvesToPriorSibling) {
-                        val laterSibling =
-                            row.etls.drop(i + 1).any { it.slug == input }
-                        val crossRowSameSection =
-                            !laterSibling &&
-                                rows.any { other ->
-                                    other.source !== row.source && other.etls.any { it.slug == input }
-                                }
-                        val crossSection =
-                            !laterSibling &&
-                                !crossRowSameSection &&
-                                otherSectionsHaveEtlSlug(label, input)
-                        errs +=
-                            when {
-                                laterSibling ->
-                                    "$label '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is a later sibling (forward reference)"
-                                crossRowSameSection ->
-                                    "$label '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is an etl in a different $label row (cross-row refs not supported)"
-                                crossSection ->
-                                    "$label '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is an etl in a different section (cross-section refs not supported)"
-                                else ->
-                                    "$label '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is neither a data_source nor a prior sibling"
-                            }
+                    if (input !in dsSlugs) {
+                        errs += "$label '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is not a data_source"
                     }
                 }
-                priorSiblings += e.slug
             }
         }
-    }
-
-    /** True iff some section *other than* [exclude] declares an etl with [slug]. */
-    private fun otherSectionsHaveEtlSlug(
-        exclude: String,
-        slug: String,
-    ): Boolean {
-        if (exclude != "poi_data" && poiData.any { row -> row.etls.any { it.slug == slug } }) return true
-        if (exclude != CAMPSITE_DATA_SECTION && campsiteData.any { row -> row.etls.any { it.slug == slug } }) return true
-        return false
     }
 
     /** Section-agnostic row pointer used by [validateEtlSection]. */
     private data class EtlRowRef(
         val name: String,
         val etls: List<EtlEntry>,
-        /** Original entry; used as identity for the cross-row check. */
-        val source: Any,
     )
 
     /** poi_data rows that should run during fan-out import. */
