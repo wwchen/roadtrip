@@ -75,9 +75,10 @@ internal class AvailabilityPollExecutor(
                     batcher.fetchByGroup(
                         targets = staleTargets,
                         windowFor = plan.windowFor,
-                        fetch = { parentRef, provider, rows, windows ->
+                        fetch = { campground, provider, rows, windows ->
                             val result = fetchWithFailover(rows, windows.fetch)
-                            attemptsByGroup[provider.id to parentRefKey(parentRef)] = result.attempts
+                            val refKey = provider.parentRefFor(campground)?.let(::parentRefKey) ?: "unknown"
+                            attemptsByGroup[provider.id to refKey] = result.attempts
                             result.batch ?: throw availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())
                         },
                     )

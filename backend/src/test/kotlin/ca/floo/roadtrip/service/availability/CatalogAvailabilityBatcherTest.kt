@@ -9,10 +9,12 @@ import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.testCampground
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -174,7 +176,7 @@ class CatalogAvailabilityBatcherTest {
             override fun isEnabled(): Boolean = true
 
             override suspend fun availability(
-                ref: BookingProviderRef,
+                campground: Campground,
                 startDate: LocalDate,
                 endDate: LocalDate,
             ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used by fetchByGroup tests")
@@ -207,15 +209,34 @@ class CatalogAvailabilityBatcherTest {
                 campsiteId = campsiteId,
                 vendorId = vendorId,
             ),
-    ): ResolvedAvailabilityTarget =
-        ResolvedAvailabilityTarget(
+    ): ResolvedAvailabilityTarget {
+        val campground = campgroundForRef(parentRef)
+        return ResolvedAvailabilityTarget(
             campsite = campsite(campsiteId, vendor, vendorId),
             provider = provider,
-            parentRef = parentRef,
+            campground = campground,
             catalogRef = catalogRef,
             parentPoiId = parentPoiId,
             dateContext = PoiDateContext(timeZone = ZoneOffset.UTC, earliestDate = window.startDate),
         )
+    }
+
+    private fun campgroundForRef(ref: BookingProviderRef): Campground {
+        val refStr =
+            when (ref) {
+                is BookingProviderRef.RecGov -> ref.facilityId
+                is BookingProviderRef.Campflare -> ref.campgroundId
+                is BookingProviderRef.Aspira ->
+                    "${ref.tenant}:${ref.transactionLocationId}:${ref.mapId}:${ref.resourceLocationId}"
+                is BookingProviderRef.ReserveAmerica -> "${ref.contractCode}:${ref.parkId}"
+                is BookingProviderRef.ReserveCalifornia ->
+                    "${ref.placeId}:${ref.facilityIds.joinToString(",")}"
+            }
+        return testCampground(
+            bookingProvider = ref.provider.id,
+            bookingProviderRef = refStr,
+        )
+    }
 
     private fun emptyBatch(w: ResolvedDateWindow): AvailabilityObservationBatch =
         AvailabilityObservationBatch(

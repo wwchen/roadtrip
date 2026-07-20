@@ -2,9 +2,10 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
@@ -78,7 +79,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: BookingProviderRef,
+            campground: Campground,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
@@ -98,7 +99,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         override fun isEnabled(): Boolean = enabled
 
         override suspend fun availability(
-            ref: BookingProviderRef,
+            campground: Campground,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
@@ -116,7 +117,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: BookingProviderRef,
+            campground: Campground,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
@@ -136,6 +137,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                     .DbRefResolver(ctx),
             ctx = ctx,
             campsitesRepo = campsitesRepo,
+            campgroundRepo = CampgroundRepo(ctx),
             availabilityProviders = providers,
             dateResolver = AvailabilityDateResolver(ctx),
             pollerRepo = AvailabilityPollerRepo(ctx),
@@ -154,7 +156,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val t = resolver.resolve(reservable)!!
 
             assertEquals(poiB, t.parentPoiId)
-            assertEquals("232447", parentRefKey(t.parentRef))
+            assertEquals("232447", parentRefKey(t.parentRef!!))
         }
 
     @Test
@@ -192,7 +194,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals("upper-pines-site-100", reservable.dataProviderRef.serialize())
             assertEquals(poi, target.parentPoiId)
             assertEquals(BookingProvider.CAMPFLARE, target.provider.id)
-            assertEquals("upper-pines-campground-447", parentRefKey(target.parentRef))
+            assertEquals("upper-pines-campground-447", parentRefKey(target.parentRef!!))
             assertEquals("upper-pines-site-100", target.catalogRef.vendorId)
         }
 
@@ -224,7 +226,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 ).resolve(reservable)!!
 
             assertEquals(BookingProvider.RECGOV, target.provider.id)
-            assertEquals("232447", parentRefKey(target.parentRef))
+            assertEquals("232447", parentRefKey(target.parentRef!!))
             assertEquals("330257", target.catalogRef.vendorId)
         }
 
@@ -339,7 +341,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals("campflare", reservable.dataProviderRef.provider.id)
             assertEquals("upper-pines-site-100", reservable.dataProviderRef.serialize())
             assertEquals(BookingProvider.RECGOV, target.provider.id)
-            assertEquals("232447", parentRefKey(target.parentRef))
+            assertEquals("232447", parentRefKey(target.parentRef!!))
         }
 
     @Test
@@ -375,8 +377,8 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals(target.candidates[0].provider, target.provider)
             assertEquals(target.candidates[0].parentRef, target.parentRef)
             assertEquals(target.candidates[0].catalogRef, target.catalogRef)
-            assertEquals("upper-pines-campground-447", parentRefKey(target.candidates[0].parentRef))
-            assertEquals("232447", parentRefKey(target.candidates[1].parentRef))
+            assertEquals("upper-pines-campground-447", parentRefKey(target.candidates[0].parentRef!!))
+            assertEquals("232447", parentRefKey(target.candidates[1].parentRef!!))
         }
 
     @Test
@@ -405,7 +407,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals(1, target.candidates.size)
             assertEquals(BookingProvider.RECGOV, target.candidates[0].provider.id)
             assertEquals(BookingProvider.RECGOV, target.provider.id)
-            assertEquals("232447", parentRefKey(target.parentRef))
+            assertEquals("232447", parentRefKey(target.parentRef!!))
         }
 
     @Test
@@ -437,7 +439,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
 
             assertEquals(1, target.candidates.size)
             assertEquals(BookingProvider.RECGOV, target.provider.id)
-            assertEquals("232447", parentRefKey(target.parentRef))
+            assertEquals("232447", parentRefKey(target.parentRef!!))
         }
 
     @Test

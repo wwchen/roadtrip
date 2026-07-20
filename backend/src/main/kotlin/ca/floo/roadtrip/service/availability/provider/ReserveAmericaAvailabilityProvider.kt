@@ -44,11 +44,11 @@ class ReserveAmericaAvailabilityProvider(
     }
 
     override suspend fun availability(
-        ref: BookingProviderRef,
+        campground: Campground,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        val reserveAmericaRef = reserveAmericaRefOrThrow(ref)
+        val reserveAmericaRef = reserveAmericaRefOrThrow(campground)
         val tenant = tenantForRef(reserveAmericaRef)
         val data = fetch(tenant, reserveAmericaRef.parkId, startDate, endDate)
         val observations =
@@ -73,12 +73,12 @@ class ReserveAmericaAvailabilityProvider(
     }
 
     override suspend fun catalogAvailability(
-        ref: BookingProviderRef,
+        campground: Campground,
         campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        val reserveAmericaRef = reserveAmericaRefOrThrow(ref)
+        val reserveAmericaRef = reserveAmericaRefOrThrow(campground)
         val tenant = tenantForRef(reserveAmericaRef)
         val data = fetch(tenant, reserveAmericaRef.parkId, startDate, endDate)
         val observations =
@@ -171,9 +171,12 @@ class ReserveAmericaAvailabilityProvider(
             campsiteId = campsiteId,
         )
 
-    private fun reserveAmericaRefOrThrow(ref: BookingProviderRef): BookingProviderRef.ReserveAmerica =
-        (ref as? BookingProviderRef.ReserveAmerica)
-            ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), ref::class.simpleName ?: "unknown")
+    private fun reserveAmericaRefOrThrow(campground: Campground): BookingProviderRef.ReserveAmerica {
+        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull)
+        val ref = provider?.let { campground.bookingProviderRef?.let { r -> BookingProviderRef.parse(it, r) } }
+        return (ref as? BookingProviderRef.ReserveAmerica)
+            ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
+    }
 
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =
         try {

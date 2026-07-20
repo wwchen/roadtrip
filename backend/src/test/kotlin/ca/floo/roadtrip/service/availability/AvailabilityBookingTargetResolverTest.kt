@@ -9,13 +9,17 @@ import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.booking.BookingAdapter
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
+import kotlinx.serialization.json.JsonNull
 import org.junit.jupiter.api.Test
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.test.assertEquals
@@ -96,7 +100,7 @@ class AvailabilityBookingTargetResolverTest {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: BookingProviderRef,
+            campground: Campground,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
@@ -107,7 +111,7 @@ class AvailabilityBookingTargetResolverTest {
         return ResolvedAvailabilityTarget(
             campsite = campsite(),
             provider = head.provider,
-            parentRef = head.parentRef,
+            campground = head.campground,
             catalogRef = head.catalogRef,
             parentPoiId = 100L,
             dateContext = PoiDateContext(ZoneId.of("UTC"), LocalDate.parse("2026-07-01")),
@@ -118,15 +122,65 @@ class AvailabilityBookingTargetResolverTest {
     private fun campflareCandidate(): ProviderCandidate =
         ProviderCandidate(
             provider = FakeAvailabilityProvider(BookingProvider.CAMPFLARE),
-            parentRef = BookingProviderRef.Campflare(TEST_CAMPFLARE_PARENT_ID),
+            campground =
+                campground(
+                    bookingProvider = "campflare",
+                    bookingProviderRef = TEST_CAMPFLARE_PARENT_ID,
+                    dataProviderRef = DataProviderRef.Campflare(id = TEST_CAMPFLARE_PARENT_ID),
+                ),
             catalogRef = CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_CAMPFLARE_PARENT_ID),
         )
 
     private fun recgovCandidate(): ProviderCandidate =
         ProviderCandidate(
             provider = FakeAvailabilityProvider(BookingProvider.RECGOV),
-            parentRef = BookingProviderRef.RecGov(facilityId = TEST_RECGOV_PARENT_ID),
+            campground =
+                campground(
+                    bookingProvider = "recgov",
+                    bookingProviderRef = TEST_RECGOV_PARENT_ID,
+                    dataProviderRef = DataProviderRef.RecGov(id = TEST_RECGOV_PARENT_ID),
+                ),
             catalogRef = CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_RECGOV_SITE_ID),
+        )
+
+    private fun campground(
+        bookingProvider: String?,
+        bookingProviderRef: String?,
+        dataProviderRef: DataProviderRef = DataProviderRef.Campflare(id = TEST_CAMPFLARE_PARENT_ID),
+    ): Campground =
+        Campground(
+            id = 1L,
+            name = "Test Campground",
+            status = null,
+            statusDescription = null,
+            kind = null,
+            shortDescription = null,
+            mediumDescription = null,
+            longDescription = null,
+            location = JsonNull,
+            defaultCampsiteSchedule = JsonNull,
+            amenities = JsonNull,
+            maxRvLength = null,
+            maxTrailerLength = null,
+            hasPullThroughSites = null,
+            bigRigFriendly = null,
+            reservationUrl = null,
+            links = JsonNull,
+            photos = JsonNull,
+            alerts = JsonNull,
+            price = JsonNull,
+            cellService = JsonNull,
+            management = JsonNull,
+            contact = JsonNull,
+            connections = JsonNull,
+            metadata = JsonNull,
+            sourcePayload = JsonNull,
+            createdAt = Instant.EPOCH,
+            updatedAt = Instant.EPOCH,
+            deletedAt = null,
+            dataProviderRef = dataProviderRef,
+            bookingProvider = bookingProvider,
+            bookingProviderRef = bookingProviderRef,
         )
 
     private fun campsite(): Campsite =

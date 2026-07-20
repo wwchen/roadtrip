@@ -9,6 +9,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.ReserveCaliforniaException
@@ -38,11 +39,11 @@ class ReserveCaliforniaAvailabilityProvider(
     override fun isEnabled(): Boolean = enabled
 
     override suspend fun availability(
-        ref: BookingProviderRef,
+        campground: Campground,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        val reserveCaliforniaRef = reserveCaliforniaRefOrThrow(ref)
+        val reserveCaliforniaRef = reserveCaliforniaRefOrThrow(campground)
         val grids = fetchFacilities(reserveCaliforniaRef, startDate, endDate)
         val dates = dates(startDate, endDate)
         val observations =
@@ -60,12 +61,12 @@ class ReserveCaliforniaAvailabilityProvider(
     }
 
     override suspend fun catalogAvailability(
-        ref: BookingProviderRef,
+        campground: Campground,
         campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        val reserveCaliforniaRef = reserveCaliforniaRefOrThrow(ref)
+        val reserveCaliforniaRef = reserveCaliforniaRefOrThrow(campground)
         val grids = fetchFacilities(reserveCaliforniaRef, startDate, endDate)
         val byUnit =
             grids
@@ -139,9 +140,12 @@ class ReserveCaliforniaAvailabilityProvider(
             mapId = ref.facilityIds.joinToString(","),
         )
 
-    private fun reserveCaliforniaRefOrThrow(ref: BookingProviderRef): BookingProviderRef.ReserveCalifornia =
-        (ref as? BookingProviderRef.ReserveCalifornia)
-            ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), ref::class.simpleName ?: "unknown")
+    private fun reserveCaliforniaRefOrThrow(campground: Campground): BookingProviderRef.ReserveCalifornia {
+        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull)
+        val ref = provider?.let { campground.bookingProviderRef?.let { r -> BookingProviderRef.parse(it, r) } }
+        return (ref as? BookingProviderRef.ReserveCalifornia)
+            ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
+    }
 
     private fun observedAt(grids: List<ReserveCaliforniaGridAvailability>): Instant = grids.firstOrNull()?.observedAt ?: Instant.now(clock)
 

@@ -7,7 +7,7 @@ import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.availability.campflare.CampflareCampgroundAvailability
 import ca.floo.roadtrip.model.availability.campflare.CampflareCampsiteAvailability
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.LocalDate
@@ -55,7 +55,12 @@ class CampflareAvailabilityProviderTest {
 
             val batch =
                 provider.catalogAvailability(
-                    ref = BookingProviderRef.Campflare("upper-pines-campground-447"),
+                    campground =
+                        testCampground(
+                            bookingProvider = "campflare",
+                            bookingProviderRef = "upper-pines-campground-447",
+                            dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-campground-447"),
+                        ),
                     campsites =
                         listOf(
                             CatalogCampsiteRef(campsiteId = 100, vendorId = "upper-pines-site-100"),
@@ -107,7 +112,12 @@ class CampflareAvailabilityProviderTest {
 
             val batch =
                 provider.catalogAvailability(
-                    ref = BookingProviderRef.Campflare("upper-pines-campground-447"),
+                    campground =
+                        testCampground(
+                            bookingProvider = "campflare",
+                            bookingProviderRef = "upper-pines-campground-447",
+                            dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-campground-447"),
+                        ),
                     campsites =
                         listOf(
                             CatalogCampsiteRef(campsiteId = 100, vendorId = "upper-pines-site-100"),

@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
@@ -33,11 +34,11 @@ class RecGovAvailabilityProvider(
     override fun isEnabled(): Boolean = enabled
 
     override suspend fun availability(
-        ref: BookingProviderRef,
+        campground: Campground,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        val recgovId = recgovIdOrThrow(ref)
+        val recgovId = recgovIdOrThrow(campground)
         return runWithErrorMapping {
             fetchRecgovAvailabilityObservations(
                 client = availabilityClient,
@@ -49,15 +50,15 @@ class RecGovAvailabilityProvider(
     }
 
     override suspend fun catalogAvailability(
-        ref: BookingProviderRef,
+        campground: Campground,
         campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
         if (campsites.isEmpty()) {
-            return availability(ref, startDate, endDate)
+            return availability(campground, startDate, endDate)
         }
-        val recgovId = recgovIdOrThrow(ref)
+        val recgovId = recgovIdOrThrow(campground)
         return runWithErrorMapping {
             fetchRecgovCatalogObservations(
                 client = availabilityClient,
@@ -78,11 +79,12 @@ class RecGovAvailabilityProvider(
         catalogRef: CatalogCampsiteRef,
     ): String = RecGovBookingUrl.template(catalogRef.vendorId)
 
-    private fun recgovIdOrThrow(ref: BookingProviderRef): String =
-        when (ref) {
-            is BookingProviderRef.RecGov -> ref.facilityId
-            else -> throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), ref::class.simpleName ?: "unknown")
-        }
+    private fun recgovIdOrThrow(campground: Campground): String {
+        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull)
+        val ref = provider?.let { campground.bookingProviderRef?.let { r -> BookingProviderRef.parse(it, r) } }
+        return (ref as? BookingProviderRef.RecGov)?.facilityId
+            ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
+    }
 
     private inline fun <T> runWithErrorMapping(block: () -> T): T =
         try {

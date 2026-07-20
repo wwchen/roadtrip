@@ -11,6 +11,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
@@ -199,6 +200,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
+                campgroundRepo =
+                    ca.floo.roadtrip.repo
+                        .CampgroundRepo(ctx),
                 availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
@@ -336,6 +340,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     .DbRefResolver(ctx),
             ctx = ctx,
             campsitesRepo = CampsiteRepo(ctx),
+            campgroundRepo =
+                ca.floo.roadtrip.repo
+                    .CampgroundRepo(ctx),
             availabilityProviders = listOf(provider),
             dateResolver = AvailabilityDateResolver(ctx),
             pollerRepo = AvailabilityPollerRepo(ctx),
@@ -356,6 +363,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                             .DbRefResolver(ctx),
                     ctx = ctx,
                     campsitesRepo = CampsiteRepo(ctx),
+                    campgroundRepo =
+                        ca.floo.roadtrip.repo
+                            .CampgroundRepo(ctx),
                     availabilityProviders = emptyList(),
                     dateResolver = AvailabilityDateResolver(ctx),
                     pollerRepo = AvailabilityPollerRepo(ctx),
@@ -404,6 +414,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
+                campgroundRepo =
+                    ca.floo.roadtrip.repo
+                        .CampgroundRepo(ctx),
                 availabilityProviders = registry,
                 dateResolver = dateResolver,
                 pollerRepo = AvailabilityPollerRepo(ctx),
@@ -454,13 +467,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: BookingProviderRef,
+            campground: Campground,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
 
         override suspend fun catalogAvailability(
-            ref: BookingProviderRef,
+            campground: Campground,
             campsites: List<CatalogCampsiteRef>,
             startDate: LocalDate,
             endDate: LocalDate,
@@ -508,13 +521,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: BookingProviderRef,
+            campground: Campground,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
 
         override suspend fun catalogAvailability(
-            ref: BookingProviderRef,
+            campground: Campground,
             campsites: List<CatalogCampsiteRef>,
             startDate: LocalDate,
             endDate: LocalDate,

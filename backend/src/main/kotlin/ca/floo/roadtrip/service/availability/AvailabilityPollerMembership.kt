@@ -48,13 +48,12 @@ internal class AvailabilityPollerMembership(
                 .mapNotNull { targets.resolve(it) }
                 .filter { it.provider.capabilities.supportsInternalPolling }
 
-        // (provider, parentRefKey) -> representative poi id. LinkedHashMap so
-        // the first target seen for a key wins deterministically.
         val keyToPoi = LinkedHashMap<Pair<String, String>, Long>()
         for (target in resolved) {
+            val ref = target.parentRef ?: continue
             val key =
                 target.provider.id.name
-                    .lowercase() to parentRefKey(target.parentRef)
+                    .lowercase() to parentRefKey(ref)
             keyToPoi.putIfAbsent(key, target.parentPoiId)
         }
 

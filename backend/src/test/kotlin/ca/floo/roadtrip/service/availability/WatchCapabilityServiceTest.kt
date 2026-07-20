@@ -9,14 +9,19 @@ import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.testCampground
 import ca.floo.roadtrip.service.booking.BookingAdapter
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
+import kotlinx.serialization.json.JsonNull
 import org.junit.jupiter.api.Test
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.test.assertEquals
@@ -150,25 +155,62 @@ class WatchCapabilityServiceTest {
         override suspend fun addToCart(request: AddToCartRequest): AddToCartResult = AddToCartResult.Unsupported
     }
 
+    private fun fakeCampground(): Campground =
+        Campground(
+            id = 1L,
+            name = "Test Campground",
+            status = null,
+            statusDescription = null,
+            kind = null,
+            shortDescription = null,
+            mediumDescription = null,
+            longDescription = null,
+            location = JsonNull,
+            defaultCampsiteSchedule = JsonNull,
+            amenities = JsonNull,
+            maxRvLength = null,
+            maxTrailerLength = null,
+            hasPullThroughSites = null,
+            bigRigFriendly = null,
+            reservationUrl = null,
+            links = JsonNull,
+            photos = JsonNull,
+            alerts = JsonNull,
+            price = JsonNull,
+            cellService = JsonNull,
+            management = JsonNull,
+            contact = JsonNull,
+            connections = JsonNull,
+            metadata = JsonNull,
+            sourcePayload = JsonNull,
+            createdAt = Instant.EPOCH,
+            updatedAt = Instant.EPOCH,
+            deletedAt = null,
+            dataProviderRef = DataProviderRef.RecGov(id = "facility-1"),
+            bookingProvider = "recgov",
+            bookingProviderRef = "facility-1",
+        )
+
     private class FakeTargetResolver(
         private val campsites: List<Campsite>,
         supportsInternalPolling: Boolean,
     ) : AvailabilityTargetResolver {
         private val byId = campsites.associateBy { it.id }
         private val provider = FakeAvailabilityProvider(supportsInternalPolling)
+        private val campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "facility-1")
 
         override fun resolve(campsite: Campsite): ResolvedAvailabilityTarget? {
             val known = byId[campsite.id] ?: return null
             val candidate =
                 ProviderCandidate(
                     provider = provider,
-                    parentRef = BookingProviderRef.RecGov(facilityId = "facility-1"),
+                    campground = campground,
                     catalogRef = CatalogCampsiteRef(campsiteId = known.id, vendorId = known.dataProviderRef.serialize()),
                 )
             return ResolvedAvailabilityTarget(
                 campsite = known,
                 provider = candidate.provider,
-                parentRef = candidate.parentRef,
+                campground = candidate.campground,
                 catalogRef = candidate.catalogRef,
                 parentPoiId = TEST_PARENT_POI_ID,
                 dateContext = PoiDateContext(ZoneId.of("UTC"), LocalDate.parse("2026-07-01")),
@@ -195,7 +237,7 @@ class WatchCapabilityServiceTest {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: BookingProviderRef,
+            campground: Campground,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")

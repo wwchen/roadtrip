@@ -5,7 +5,6 @@ import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.LocalDate
@@ -58,7 +57,7 @@ class ReserveAmericaAvailabilityProviderTest {
 
             val batch =
                 adapter.catalogAvailability(
-                    ref = BookingProviderRef.ReserveAmerica(contractCode = "NY", parkId = "489"),
+                    campground = testCampground(bookingProvider = "reserveamerica", bookingProviderRef = "NY:489"),
                     campsites =
                         listOf(
                             CatalogCampsiteRef(campsiteId = 253488, vendorId = "253488"),

@@ -56,7 +56,8 @@ internal class CampsiteAvailabilityComposer(
                         ) ?: target
                     AvailabilityWindows(target = target, fetch = fetch)
                 },
-                fetch = { parentRef, provider, rows, windows ->
+                fetch = { campground, provider, rows, windows ->
+                    val parentRef = provider.parentRefFor(campground)
                     availabilityLoader.loadOrFetch(
                         AvailabilityLoader.Request(
                             metadata = availabilityMetadata(provider.id, parentRef),
@@ -76,7 +77,7 @@ internal class CampsiteAvailabilityComposer(
             val batch = result.batch ?: return@forEach
             result.campsites.forEach { campsite ->
                 val catalogRef = catalogRefByCampsiteId[campsite.id]
-                val ref = catalogRef?.toProviderRef(result.parentRef) ?: result.parentRef
+                val ref = result.parentRef?.let { catalogRef?.toProviderRef(it) } ?: result.parentRef
                 val metadata = availabilityMetadata(result.provider.id, ref, campsiteId = campsite.id)
                 byCampsiteId[campsite.id] =
                     availabilityResponseFromObservations(
@@ -140,7 +141,7 @@ private fun ResolvedAvailabilityTarget.toAvailabilityTarget(): AvailabilityLoade
 
 private fun availabilityMetadata(
     providerId: BookingProvider,
-    ref: BookingProviderRef,
+    ref: BookingProviderRef?,
     campsiteId: Long? = null,
 ): AvailabilityLoader.Metadata =
     AvailabilityLoader.Metadata(
