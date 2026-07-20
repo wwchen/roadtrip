@@ -7,6 +7,7 @@ import ca.floo.roadtrip.model.metadata.ResponseMeta
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.terminalRecords
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -35,7 +36,7 @@ class RecGovCampgroundsEtlTest {
     @Test
     fun `transform treats nonreservable RIDB facilities as agency info pages, not RecGov booking targets`() {
         val etl = RecGovCampgroundsEtl("recgov-campgrounds")
-        val campgrounds = etl.transform(etl.parse(bundle()), transformCtx).campgrounds.associateBy { it.dataProviderRef.serialize() }
+        val campgrounds = terminalRecords(etl, bundle(), transformCtx).associateBy { it.dataProviderRef.serialize() }
 
         val reservable = campgrounds.getValue("232447")
         assertEquals(DataProvider.RECGOV, reservable.dataProviderRef.provider)
@@ -53,11 +54,7 @@ class RecGovCampgroundsEtlTest {
     fun `transform promotes RIDB description media activities and recgov rating cell enrichment`() {
         val etl = RecGovCampgroundsEtl("recgov-campgrounds")
         val campgrounds =
-            etl
-                .transform(
-                    etl.parse(bundle(withEnrichment = true)),
-                    transformCtx,
-                ).campgrounds
+            terminalRecords(etl, bundle(withEnrichment = true), transformCtx)
                 .associateBy { it.dataProviderRef.serialize() }
 
         val upperPines = campgrounds.getValue("232447")
@@ -126,7 +123,7 @@ class RecGovCampgroundsEtlTest {
                     ),
             )
 
-        val campgrounds = etl.transform(etl.parse(bundle()), ctx).campgrounds
+        val campgrounds = terminalRecords(etl, bundle(), ctx)
 
         assertNull(campgrounds.first { it.dataProviderRef.serialize() == "232447" }.management)
     }
@@ -139,7 +136,6 @@ class RecGovCampgroundsEtlTest {
                         put("recgov-campground-enrichment", listOf(enrichmentEnvelope()))
                     }
                 },
-            etlOutputs = linkedMapOf(),
         )
 
     private fun envelope(): Envelope =

@@ -7,6 +7,8 @@ import ca.floo.roadtrip.model.metadata.ResponseMeta
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.parsedDto
+import ca.floo.roadtrip.service.etl.framework.records
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -26,10 +28,10 @@ class ReserveAmericaCampgroundsEtlTest {
     @Test
     fun `new york args stamp state campground metadata with reserveamerica provider ref`() {
         val etl = ReserveAmericaCampgroundsEtl("reserveamerica-ny-campgrounds")
-        val dto = etl.parse(bundle("reserveamerica-ny", nyParkEnvelope()))
+        val dto = parsedDto(etl, bundle("reserveamerica-ny", nyParkEnvelope()))
         assertEquals("ALGER ISLAND, NY", dto.parks.single().name)
 
-        val campground = etl.transform(dto, transformCtx()).campgrounds.single()
+        val campground = records(etl.transform(dto, transformCtx())).single()
 
         assertEquals(DataProvider.RESERVEAMERICA, campground.dataProviderRef.provider)
         assertEquals("ra-695", campground.dataProviderRef.serialize())
@@ -55,27 +57,28 @@ class ReserveAmericaCampgroundsEtlTest {
 
     @Test
     fun `alberta defaults preserve existing source shape and reserveamerica provider ref`() {
-        val campground =
-            ReserveAmericaCampgroundsEtl()
-                .transform(
-                    ReserveAmericaDto(
-                        parks =
-                            listOf(
-                                ParsedPark(
-                                    parkId = 123,
-                                    name = "Writing-on-Stone Provincial Park, AB",
-                                    lat = 49.083,
-                                    lon = -111.617,
-                                    phone = null,
-                                    description = null,
-                                    photoUrl = null,
-                                    infoUrl = "https://shop.albertaparks.ca/camping/x/r/campgroundDetails.do?contractCode=ABPP&parkId=123",
-                                ),
-                            ),
-                        fetchedAt = fetchedAt,
+        val albertaInfoUrl =
+            "https://shop.albertaparks.ca/camping/x/r/campgroundDetails.do" +
+                "?contractCode=ABPP&parkId=123"
+        val dto =
+            ReserveAmericaDto(
+                parks =
+                    listOf(
+                        ParsedPark(
+                            parkId = 123,
+                            name = "Writing-on-Stone Provincial Park, AB",
+                            lat = 49.083,
+                            lon = -111.617,
+                            phone = null,
+                            description = null,
+                            photoUrl = null,
+                            infoUrl = albertaInfoUrl,
+                        ),
                     ),
-                    transformCtx(),
-                ).campgrounds
+                fetchedAt = fetchedAt,
+            )
+        val campground =
+            records(ReserveAmericaCampgroundsEtl().transform(dto, transformCtx()))
                 .single()
 
         assertEquals(DataProvider.RESERVEAMERICA, campground.dataProviderRef.provider)
@@ -132,7 +135,7 @@ class ReserveAmericaCampgroundsEtlTest {
     private fun bundle(
         slug: String,
         envelope: Envelope,
-    ): InputBundle = InputBundle(linkedMapOf(slug to listOf(envelope)), linkedMapOf())
+    ): InputBundle = InputBundle(linkedMapOf(slug to listOf(envelope)))
 
     private fun transformCtx(): TransformCtx =
         TransformCtx.load(File("build/tmp/reserveamerica-etl-test-raw"), PoiRegistry.loadResource("poi-registry.yaml"))

@@ -10,16 +10,12 @@ import kotlin.test.assertTrue
 /**
  * Validator tests for the three-section registry shape (RFC 0008 PR 2).
  * Asserts:
- *   - empty campsite_data + poi_reservable_joiner sections (the v0
- *     defaults) load fine on existing single-poi_data YAML.
- *   - campsite_data rows enforce the same etl-chain constraints as
- *     poi_data (slug uniqueness, no cross-row refs).
+ *   - empty campsite_data sections load fine on existing single-poi_data YAML.
+ *   - campsite_data rows enforce the same terminal ETL constraints as
+ *     poi_data.
  *   - etl slugs across poi_data and campsite_data share one
  *     namespace; collisions across sections fail validation.
  *   - data_source slugs colliding with etl slugs in either section fail.
- *   - poi_reservable_joiner rows reject blank adapters and duplicate
- *     names but otherwise impose no chain constraints (no inputs,
- *     no etl chain).
  */
 class PoiRegistryValidatorTest {
     private val yaml = Yaml(configuration = YamlConfiguration(strictMode = false))
@@ -125,7 +121,7 @@ class PoiRegistryValidatorTest {
     }
 
     @Test
-    fun `campsite_data row with valid etl chain loads`() {
+    fun `campsite_data row with valid terminal etl loads`() {
         val r =
             load(
                 """
@@ -147,6 +143,39 @@ class PoiRegistryValidatorTest {
             )
         assertEquals(1, r.campsiteData.size)
         assertEquals("Rec.gov Campsites", r.campsiteData[0].name)
+    }
+
+    @Test
+    fun `poi_data rows reject intermediate etl chains`() {
+        val ex =
+            assertFailsWith<IllegalArgumentException> {
+                load(
+                    """
+                    data_sources:
+                      - slug: src-a
+                        name: Source A
+                        fetcher:
+                          executor: python3
+                          filename: scripts/x.py
+                          output_dir_prefix: data/raw/src-a
+                    poi_data:
+                      - name: A
+                        category: campground
+                        etls:
+                          - slug: stage-one
+                            adapter: A
+                            inputs: [src-a]
+                          - slug: stage-two
+                            adapter: B
+                            inputs: [stage-one]
+                    """.trimIndent(),
+                )
+            }
+
+        assertTrue(
+            ex.message!!.contains("must declare exactly one etl"),
+            "expected single-etl error, got: ${ex.message}",
+        )
     }
 
     @Test
@@ -214,9 +243,7 @@ class PoiRegistryValidatorTest {
     }
 
     @Test
-    fun `cross-row refs rejected within campsite_data section`() {
-        // The same constraint poi_data already enforced — two
-        // campsite_data rows can't share intermediate etl outputs.
+    fun `etl inputs cannot reference a different row etl`() {
         val ex =
             assertFailsWith<IllegalArgumentException> {
                 load(
@@ -244,8 +271,8 @@ class PoiRegistryValidatorTest {
                 )
             }
         assertTrue(
-            ex.message!!.contains("cross-row refs not supported"),
-            "expected cross-row error, got: ${ex.message}",
+            ex.message!!.contains("inputs 'shared-intermediate' which is not a data_source"),
+            "expected non-data-source error, got: ${ex.message}",
         )
     }
 
@@ -279,8 +306,8 @@ class PoiRegistryValidatorTest {
                 )
             }
         assertTrue(
-            ex.message!!.contains("different section") || ex.message!!.contains("cross-section"),
-            "expected cross-section error, got: ${ex.message}",
+            ex.message!!.contains("inputs 'poi-etl' which is not a data_source"),
+            "expected non-data-source error, got: ${ex.message}",
         )
     }
 

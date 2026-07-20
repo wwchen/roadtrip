@@ -1,45 +1,41 @@
 package ca.floo.roadtrip.service.etl.framework
 
+import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
+import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
+import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
+import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.DataProvider
-import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
-import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
-import ca.floo.roadtrip.model.etl.PlanetFitnessLocationEtlOutput
-import ca.floo.roadtrip.model.etl.TeslaSuperchargerEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
-import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.model.metadata.ParseResult
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.model.metadata.registry.EtlEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.repo.ImportRunRepo
+import ca.floo.roadtrip.repo.MAX_CATALOG_UPSERT_BATCH_SIZE
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
 import java.io.File
 
-// Orchestrates one poi_data/campsite_data row's ETL chain end-to-end.
+// Orchestrates one poi_data/campsite_data row's terminal ETL end-to-end.
 //
-// Per-row sequence (declared etls: list, in order):
-//   1. Resolve each etls entry's `inputs:` slug into either:
-//        - data_source: newest envelope(s) under its registry output_dir_prefix
-//        - earlier sibling etl in the SAME poi_data row: typed payload
-//          handed off in-memory by the previous stage.
-//   2. Hand the InputBundle to the etl.parse → validate → transform stages.
-//   3. If the etl is intermediate (not the last in the row), keep OUT in
-//      the per-run map for later siblings to consume. No disk persistence —
-//      every ETL is f(inputs) → output, so re-running an import recomputes.
-//   4. If terminal, persist the supported catalog output:
-//        - CampgroundEtlOutput -> canonical campgrounds + campsites + lean POI wrappers
-//        - CampsiteEtlOutput   -> canonical campsites (standalone)
-//        - TeslaSuperchargerEtlOutput -> canonical Tesla locations + lean POI wrappers
-//        - PlanetFitnessLocationEtlOutput -> canonical PF locations + lean POI wrappers
+// Per-row sequence:
+//   1. Resolve the single etls entry's `inputs:` slugs to newest data_source
+//      envelope(s) under each registry output_dir_prefix.
+//   2. Consume etl.parse results, counting ParseResult.Bad without failing
+//      the import run.
+//   3. Consume etl.transform results, counting TransformResult.Bad without
+//      failing the import run.
+//   4. Buffer terminal upsert candidates by catalog entity and flush bounded
+//      batches through the owning entity repo.
 //
-// The DAG-level ordering across multiple poi_data rows is the caller's
-// problem (today: per-row imports, no cross-row composition). Within a row,
-// list order = dependency order, validated at boot.
+// Raw capture ordering across data_sources remains the caller's problem.
+// Registry validation rejects intermediate ETL chains, so one import job is
+// one terminal ETL run over one snapshot of raw input.
 open class EtlOrchestrator(
     private val ctx: DSLContext,
     private val rawDir: File,
@@ -59,12 +55,13 @@ open class EtlOrchestrator(
     private val campsiteRepo = CampsiteRepo(ctx)
     private val teslaSuperchargerRepo = TeslaSuperchargerRepo(ctx)
     private val planetFitnessLocationRepo = PlanetFitnessLocationRepo(ctx)
+    private val importRunRepo = ImportRunRepo(ctx)
     private val rawCaptureStore = RawCaptureStore(rawDir = rawDir, staticDir = staticDir)
 
     /**
      * Per-row run summary for import rows. `poi_data` and `campsite_data`
-     * both flow through the same chain runner; only terminal persistence
-     * differs by output type.
+     * both flow through the same terminal runner; candidate persistence is
+     * selected by the emitted record type.
      */
     data class Stats(
         val poiDataName: String,
@@ -85,22 +82,20 @@ open class EtlOrchestrator(
     )
 
     /**
-     * Run a poi_data row by display name. Walks the row's `etls:` chain in
-     * declared order, materializing intermediates and persisting the
-     * terminal catalog output. Throws if the row isn't registered or any
-     * stage fails.
+     * Run a poi_data row by display name. Throws if the row isn't registered
+     * or its terminal stage fails.
      */
     fun runPoiData(name: String): Stats {
         val row =
             poiRegistry.poiDataByName(name)
                 ?: error("no poi_data row with name='$name'")
-        require(row.etls.isNotEmpty()) { "poi_data '$name' has empty etls list" }
+        require(row.etls.size == 1) { "poi_data '$name' must declare exactly one etl" }
 
-        log.info("etl poi_data='{}' starting ({} stages)", name, row.etls.size)
-        return runEtlChain(
+        log.info("etl poi_data='{}' starting slug={}", name, row.etls.single().slug)
+        return runEtlJob(
             rowName = row.name,
             sectionLabel = "poi_data",
-            etls = row.etls,
+            entry = row.etls.single(),
         )
     }
 
@@ -108,14 +103,14 @@ open class EtlOrchestrator(
         val row =
             poiRegistry.campsiteDataByName(name)
                 ?: error("no campsite_data row with name='$name'")
-        require(row.etls.isNotEmpty()) { "campsite_data '$name' has empty etls list" }
+        require(row.etls.size == 1) { "campsite_data '$name' must declare exactly one etl" }
 
-        log.info("etl campsite_data='{}' starting ({} stages)", name, row.etls.size)
+        log.info("etl campsite_data='{}' starting slug={}", name, row.etls.single().slug)
         val stats =
-            runEtlChain(
+            runEtlJob(
                 rowName = row.name,
                 sectionLabel = "campsite_data",
-                etls = row.etls,
+                entry = row.etls.single(),
             )
         return CampsiteStats(
             campsiteDataName = row.name,
@@ -128,43 +123,21 @@ open class EtlOrchestrator(
         )
     }
 
-    private fun runEtlChain(
+    private fun runEtlJob(
         rowName: String,
         sectionLabel: String,
-        etls: List<EtlEntry>,
+        entry: EtlEntry,
     ): Stats {
         val transformCtx = TransformCtx.load(rawDir, poiRegistry)
-
-        // Per-run cache of intermediate outputs keyed by etl slug. Lets a
-        // later sibling read a just-written intermediate without going back
-        // through the filesystem.
-        val intermediateOutputs = mutableMapOf<String, JsonElement>()
-
-        var terminalStats: Stats? = null
-
-        for ((index, entry) in etls.withIndex()) {
-            val isTerminal = index == etls.lastIndex
-            val etl =
-                etlRegistry[entry.slug]
-                    ?: error("no adapter registered for etl slug='${entry.slug}'")
-            log.info(
-                "  stage {}/{} slug={} adapter={} terminal={}",
-                index + 1,
-                etls.size,
-                entry.slug,
-                etl::class.simpleName,
-                isTerminal,
-            )
-
-            val bundle = buildBundle(entry.inputs, intermediateOutputs)
-            if (isTerminal) {
-                terminalStats = runTerminal(rowName, sectionLabel, etl, bundle, transformCtx)
-            } else {
-                intermediateOutputs[entry.slug] = runIntermediate(etl, bundle, transformCtx)
-            }
-        }
-
-        return terminalStats!!
+        val etl =
+            etlRegistry[entry.slug]
+                ?: error("no adapter registered for etl slug='${entry.slug}'")
+        log.info(
+            "  terminal slug={} adapter={}",
+            entry.slug,
+            etl::class.simpleName,
+        )
+        return runTerminal(rowName, sectionLabel, etl, buildBundle(entry.inputs), transformCtx)
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -176,117 +149,221 @@ open class EtlOrchestrator(
         transformCtx: TransformCtx,
     ): Stats {
         val concrete = etl as SourceEtl<Any, Any>
-        val dto = concrete.parse(bundle)
-        val validated =
-            when (val v = concrete.validate(dto)) {
-                is ValidationResult.Ok -> v.dto
-                is ValidationResult.Bad ->
-                    error("$sectionLabel '$rowName' terminal '${concrete.etlSlug}' validation failed: ${v.errors}")
+        val runId = importRunRepo.start(concrete.etlSlug)
+        val buffers = UpsertBuffers()
+        var parseOk = 0
+        var parseBad = 0
+        var transformOk = 0
+        var transformBad = 0
+        var upserted = 0
+        var repoSkipped = 0
+
+        try {
+            for (parseResult in concrete.parse(bundle)) {
+                when (parseResult) {
+                    is ParseResult.Ok -> {
+                        parseOk++
+                        for (transformResult in concrete.transform(parseResult.dto, transformCtx)) {
+                            when (transformResult) {
+                                is TransformResult.Ok -> {
+                                    transformOk++
+                                    val counts = buffers.add(transformResult.record)
+                                    upserted += counts.upserted
+                                    repoSkipped += counts.skipped
+                                }
+                                is TransformResult.Bad -> {
+                                    transformBad++
+                                    logRowError(
+                                        sectionLabel = sectionLabel,
+                                        rowName = rowName,
+                                        etlSlug = concrete.etlSlug,
+                                        stage = "transform",
+                                        sourceId = transformResult.sourceId,
+                                        errors = transformResult.errors,
+                                        count = transformBad,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    is ParseResult.Bad -> {
+                        parseBad++
+                        logRowError(
+                            sectionLabel = sectionLabel,
+                            rowName = rowName,
+                            etlSlug = concrete.etlSlug,
+                            stage = "parse",
+                            sourceId = parseResult.sourceId,
+                            errors = parseResult.errors,
+                            count = parseBad,
+                        )
+                    }
+                }
             }
-        val output = concrete.transform(validated, transformCtx)
-        val ups =
-            when (output) {
-                is CampgroundEtlOutput ->
-                    persistCampgroundOutput(output, concrete.etlSlug)
-                is CampsiteEtlOutput ->
-                    campsiteRepo.upsertCampsites(output.campsites, source = concrete.etlSlug)
-                is TeslaSuperchargerEtlOutput ->
-                    teslaSuperchargerRepo.upsertTeslaSuperchargers(output.superchargers, source = concrete.etlSlug)
-                is PlanetFitnessLocationEtlOutput ->
-                    planetFitnessLocationRepo.upsertPlanetFitnessLocations(output.locations, source = concrete.etlSlug)
-                else -> error("terminal '${concrete.etlSlug}' returned unsupported output ${output::class.qualifiedName}")
-            }
-        val transformedCount = outputCount(output)
-        log.info(
-            "{} '{}' terminal slug={} transformed={} upserted={} skipped={} swept={}",
-            sectionLabel,
-            rowName,
-            concrete.etlSlug,
-            transformedCount,
-            ups.upsertedCount,
-            ups.skippedCount,
-            ups.sweptCount,
-        )
-        if (ups.skippedCount > 0) {
-            log.warn(
-                "{} '{}' terminal slug={} skipped {} records (missing parent vendor ref or other row-level guard)",
+
+            val finalCounts = buffers.flushAll()
+            upserted += finalCounts.upserted
+            repoSkipped += finalCounts.skipped
+
+            val seen = transformOk + parseBad + transformBad
+            val skipped = parseBad + transformBad + repoSkipped
+            importRunRepo.complete(runId, seen)
+            val ups =
+                CatalogUpsertResult(
+                    runId = runId,
+                    seenCount = seen,
+                    upsertedCount = upserted,
+                    skippedCount = skipped,
+                )
+
+            log.info(
+                "{} '{}' terminal slug={} parseOk={} parseBad={} transformOk={} transformBad={} upserted={} repoSkipped={}",
                 sectionLabel,
                 rowName,
                 concrete.etlSlug,
-                ups.skippedCount,
+                parseOk,
+                parseBad,
+                transformOk,
+                transformBad,
+                upserted,
+                repoSkipped,
+            )
+            if (skipped > 0) {
+                log.warn(
+                    "{} '{}' terminal slug={} skipped {} records (parseBad={} transformBad={} repoSkipped={})",
+                    sectionLabel,
+                    rowName,
+                    concrete.etlSlug,
+                    skipped,
+                    parseBad,
+                    transformBad,
+                    repoSkipped,
+                )
+            }
+            return Stats(
+                poiDataName = rowName,
+                terminalEtlSlug = concrete.etlSlug,
+                parsed = seen,
+                transformed = transformOk,
+                upsertResult = ups,
+            )
+        } catch (e: Throwable) {
+            importRunRepo.fail(runId, e.message ?: e.javaClass.simpleName)
+            throw e
+        }
+    }
+
+    private fun logRowError(
+        sectionLabel: String,
+        rowName: String,
+        etlSlug: String,
+        stage: String,
+        sourceId: String?,
+        errors: List<String>,
+        count: Int,
+    ) {
+        if (count <= ROW_ERROR_LOG_SAMPLE_LIMIT) {
+            log.warn(
+                "{} '{}' terminal slug={} {} bad sourceId={} errors={}",
+                sectionLabel,
+                rowName,
+                etlSlug,
+                stage,
+                sourceId,
+                errors,
             )
         }
-        return Stats(
-            poiDataName = rowName,
-            terminalEtlSlug = concrete.etlSlug,
-            parsed = transformedCount,
-            transformed = transformedCount,
-            upsertResult = ups,
-        )
     }
 
-    private fun persistCampgroundOutput(
-        output: CampgroundEtlOutput,
-        source: String,
-    ): CatalogUpsertResult = campgroundRepo.upsertCampgrounds(output.campgrounds, source = source)
+    private inner class UpsertBuffers {
+        private val campgrounds = mutableListOf<CampgroundUpsertCandidate>()
+        private val campsites = mutableListOf<CampsiteUpsertCandidate>()
+        private val teslaSuperchargers = mutableListOf<TeslaSuperchargerUpsertCandidate>()
+        private val planetFitnessLocations = mutableListOf<PlanetFitnessLocationUpsertCandidate>()
 
-    private fun outputCount(output: Any): Int =
-        when (output) {
-            is CampgroundEtlOutput -> output.campgrounds.size
-            is CampsiteEtlOutput -> output.campsites.size
-            is TeslaSuperchargerEtlOutput -> output.superchargers.size
-            is PlanetFitnessLocationEtlOutput -> output.locations.size
-            else -> 0
+        fun add(record: Any): FlushCounts {
+            when (record) {
+                is CampgroundUpsertCandidate -> {
+                    campgrounds += record
+                    if (campgrounds.size >= MAX_CATALOG_UPSERT_BATCH_SIZE) return flushCampgrounds()
+                }
+                is CampsiteUpsertCandidate -> {
+                    campsites += record
+                    if (campsites.size >= MAX_CATALOG_UPSERT_BATCH_SIZE) return flushCampsites()
+                }
+                is TeslaSuperchargerUpsertCandidate -> {
+                    teslaSuperchargers += record
+                    if (teslaSuperchargers.size >= MAX_CATALOG_UPSERT_BATCH_SIZE) return flushTeslaSuperchargers()
+                }
+                is PlanetFitnessLocationUpsertCandidate -> {
+                    planetFitnessLocations += record
+                    if (planetFitnessLocations.size >= MAX_CATALOG_UPSERT_BATCH_SIZE) return flushPlanetFitnessLocations()
+                }
+                else -> error("unsupported terminal output record ${record::class.qualifiedName}")
+            }
+            return FlushCounts()
         }
 
-    @Suppress("UNCHECKED_CAST")
-    private fun runIntermediate(
-        etl: SourceEtl<*, *>,
-        bundle: InputBundle,
-        transformCtx: TransformCtx,
-    ): JsonElement {
-        val concrete = etl as SourceEtl<Any, Any>
-        val dto = concrete.parse(bundle)
-        val validated =
-            when (val v = concrete.validate(dto)) {
-                is ValidationResult.Ok -> v.dto
-                is ValidationResult.Bad -> error("intermediate '${concrete.etlSlug}' validation failed: ${v.errors}")
-            }
-        val out = concrete.transform(validated, transformCtx)
-        // The orchestrator doesn't know the OUT type at compile time —
-        // Json.encodeToJsonElement requires a serializer. We rely on the
-        // adapter implementing Json-friendly types (kotlinx.serialization
-        // @Serializable). Use kotlinx-json's polymorphic-by-reflection
-        // path: encode via the runtime serializer of the value's class.
-        return Json.Default.encodeToJsonElement(serializerForValue(out), out)
+        fun flushAll(): FlushCounts = flushCampgrounds() + flushCampsites() + flushTeslaSuperchargers() + flushPlanetFitnessLocations()
+
+        private fun flushCampgrounds(): FlushCounts {
+            if (campgrounds.isEmpty()) return FlushCounts()
+            val batch = campgrounds.toList()
+            campgrounds.clear()
+            return FlushCounts(upserted = campgroundRepo.upsertCampgroundBatch(batch))
+        }
+
+        private fun flushCampsites(): FlushCounts {
+            if (campsites.isEmpty()) return FlushCounts()
+            val batch = campsites.toList()
+            campsites.clear()
+            val (upserted, skipped) = campsiteRepo.upsertCampsiteBatch(batch)
+            return FlushCounts(upserted = upserted, skipped = skipped)
+        }
+
+        private fun flushTeslaSuperchargers(): FlushCounts {
+            if (teslaSuperchargers.isEmpty()) return FlushCounts()
+            val batch = teslaSuperchargers.toList()
+            teslaSuperchargers.clear()
+            return FlushCounts(upserted = teslaSuperchargerRepo.upsertTeslaSuperchargerBatch(batch))
+        }
+
+        private fun flushPlanetFitnessLocations(): FlushCounts {
+            if (planetFitnessLocations.isEmpty()) return FlushCounts()
+            val batch = planetFitnessLocations.toList()
+            planetFitnessLocations.clear()
+            return FlushCounts(upserted = planetFitnessLocationRepo.upsertPlanetFitnessLocationBatch(batch))
+        }
     }
 
-    private fun buildBundle(
-        inputSlugs: List<String>,
-        intermediateOutputs: Map<String, JsonElement>,
-    ): InputBundle {
+    private data class FlushCounts(
+        val upserted: Int = 0,
+        val skipped: Int = 0,
+    )
+
+    private operator fun FlushCounts.plus(other: FlushCounts): FlushCounts =
+        FlushCounts(
+            upserted = upserted + other.upserted,
+            skipped = skipped + other.skipped,
+        )
+
+    private fun buildBundle(inputSlugs: List<String>): InputBundle {
         val raw = LinkedHashMap<String, List<Envelope>>()
-        val etls = LinkedHashMap<String, JsonElement>()
         for (slug in inputSlugs) {
             val ds = poiRegistry.dataSource(slug)
             if (ds != null) {
                 // data_source input: load envelope(s) from its registry output_dir_prefix.
                 raw[slug] = rawCaptureStore.loadNewestEnvelopes(ds)
-            } else if (slug in intermediateOutputs) {
-                // sibling intermediate from earlier in this same row's
-                // etls: chain. PoiRegistry's validator rejects cross-row
-                // refs, so anything not here-or-data_source is unreachable.
-                etls[slug] = intermediateOutputs[slug]!!
             } else {
-                error(
-                    "input '$slug' is neither a data_source nor a prior sibling etl in this row — should have been caught by PoiRegistry.validate()",
-                )
+                error("input '$slug' is not a data_source — should have been caught by PoiRegistry.validate()")
             }
         }
-        return InputBundle(raw, etls)
+        return InputBundle(raw)
     }
 
     companion object {
+        private const val ROW_ERROR_LOG_SAMPLE_LIMIT = 10
+
         // Runnable ETLs. Admin import targets use this map to decide what can
         // run; every configured campground/campsite vendor row exposed here
         // writes through the canonical catalog repo.
@@ -378,21 +455,3 @@ open class EtlOrchestrator(
             )
     }
 }
-
-/**
- * Reflection-based runtime serializer lookup. Falls back to a synthetic
- * "wrap-as-JsonObject" serializer if the value's class isn't @Serializable
- * — which would only happen for an intermediate ETL whose author didn't
- * tag the output type. We'd want to fail loud in that case.
- */
-@Suppress("UNCHECKED_CAST")
-private fun serializerForValue(value: Any): kotlinx.serialization.KSerializer<Any> =
-    runCatching {
-        kotlinx.serialization.serializer(value::class.java) as kotlinx.serialization.KSerializer<Any>
-    }.getOrElse { cause ->
-        throw IllegalStateException(
-            "intermediate ETL output type ${value::class.qualifiedName} has no kotlinx.serialization serializer; " +
-                "add @Serializable to the OUT class or provide an explicit serializer",
-            cause,
-        )
-    }

@@ -7,6 +7,7 @@ import ca.floo.roadtrip.model.metadata.ResponseMeta
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.terminalRecords
 import kotlinx.serialization.json.Json
 import java.io.File
 import kotlin.test.Test
@@ -17,7 +18,7 @@ class RecGovCampsitesEtlTest {
     @Test
     fun `transform falls back to campsite id when recgov site fields are blank`() {
         val etl = RecGovCampsitesEtl("recgov-campsites")
-        val campsite = etl.transform(etl.parse(bundle()), transformCtx()).campsites.single()
+        val campsite = terminalRecords(etl, bundle(), transformCtx()).single()
 
         assertEquals("123456", campsite.dataProviderRef.serialize())
         assertEquals("123456", campsite.name)
@@ -31,7 +32,6 @@ class RecGovCampsitesEtlTest {
     private fun bundle(): InputBundle =
         InputBundle(
             rawCaptures = linkedMapOf("recgov-campsites" to listOf(envelope())),
-            etlOutputs = linkedMapOf(),
         )
 
     private fun envelope(): Envelope =

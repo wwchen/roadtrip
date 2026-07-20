@@ -1,5 +1,5 @@
 package ca.floo.roadtrip.service.etl.framework
 
-import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
+import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 
-interface CampgroundEtl<DTO> : SourceEtl<DTO, CampgroundEtlOutput>
+interface CampgroundEtl<DTO> : SourceEtl<DTO, CampgroundUpsertCandidate>

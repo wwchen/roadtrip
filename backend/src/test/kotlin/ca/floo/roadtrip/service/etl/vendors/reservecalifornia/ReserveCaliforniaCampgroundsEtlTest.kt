@@ -3,6 +3,8 @@ package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.okRecords
+import ca.floo.roadtrip.service.etl.framework.records
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -11,15 +13,16 @@ import java.io.File
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 class ReserveCaliforniaCampgroundsEtlTest {
     @Test
     fun `campground transform emits canonical provider ref with place and facility ids`() {
         val campground =
-            ReserveCaliforniaCampgroundsEtl("reservecalifornia-campgrounds")
-                .transform(catalog(), transformCtx())
-                .campgrounds
-                .single()
+            records(
+                ReserveCaliforniaCampgroundsEtl("reservecalifornia-campgrounds")
+                    .transform(catalog(), transformCtx()),
+            ).single()
 
         assertEquals(DataProvider.RESERVECALIFORNIA, campground.dataProviderRef.provider)
         assertEquals("690", campground.dataProviderRef.serialize())
@@ -48,15 +51,17 @@ class ReserveCaliforniaCampgroundsEtlTest {
     @Test
     fun `site transform emits canonical campsites linked to california campgrounds`() {
         val campsites =
-            ReserveCaliforniaSitesEtl("reservecalifornia-campsites")
-                .transform(catalog(), transformCtx())
-                .campsites
+            okRecords(
+                ReserveCaliforniaSitesEtl("reservecalifornia-campsites")
+                    .transform(catalog(), transformCtx()),
+            )
 
         val campsite = campsites.single()
         assertEquals(DataProvider.RESERVECALIFORNIA, campsite.dataProviderRef.provider)
         assertEquals("9001", campsite.dataProviderRef.serialize())
-        assertEquals(DataProvider.RESERVECALIFORNIA, campsite.parentDataProviderRef!!.provider)
-        assertEquals("690", campsite.parentDataProviderRef!!.serialize())
+        val parentDataProviderRef = assertNotNull(campsite.parentDataProviderRef)
+        assertEquals(DataProvider.RESERVECALIFORNIA, parentDataProviderRef.provider)
+        assertEquals("690", parentDataProviderRef.serialize())
         assertEquals("PINE 001", campsite.name)
         assertEquals("Tent Site", campsite.kind)
         assertEquals("Tent Site", campsite.kindListed)

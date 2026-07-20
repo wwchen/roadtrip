@@ -5,8 +5,8 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
-import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.model.metadata.ParseResult
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -61,40 +61,43 @@ class AspiraCampgroundsEtl(
     private val log = LoggerFactory.getLogger(javaClass)
     override val multiPart: Boolean = true
 
-    override fun parse(inputs: InputBundle): AspiraJoinDto {
-        val mapsSlug = inputs.dataSourceSlugs().first { it.contains("maps") }
-        val inventorySlug = inputs.dataSourceSlugs().firstOrNull { it.contains("inventory") }
-        val dictionarySlug = inputs.dataSourceSlugs().firstOrNull { it.contains("dictionaries") }
+    override fun parse(inputs: InputBundle): Sequence<ParseResult<AspiraJoinDto>> =
+        sequence {
+            val mapsSlug = inputs.dataSourceSlugs().first { it.contains("maps") }
+            val inventorySlug = inputs.dataSourceSlugs().firstOrNull { it.contains("inventory") }
+            val dictionarySlug = inputs.dataSourceSlugs().firstOrNull { it.contains("dictionaries") }
 
-        val mapsArray = inputs.envelope(mapsSlug).payload.jsonArray
-        val leaves = AspiraLeavesWalk.walk(mapsArray)
+            val mapsArray = inputs.envelope(mapsSlug).payload.jsonArray
+            val leaves = AspiraLeavesWalk.walk(mapsArray)
 
-        val geomEntries =
-            inputs
-                .dataSourceSlugs()
-                .filter { it != mapsSlug && it != inventorySlug && it != dictionarySlug }
-                .map { slug -> slug to detectGeometrySource(slug, inputs.envelopes(slug)) }
+            val geomEntries =
+                inputs
+                    .dataSourceSlugs()
+                    .filter { it != mapsSlug && it != inventorySlug && it != dictionarySlug }
+                    .map { slug -> slug to detectGeometrySource(slug, inputs.envelopes(slug)) }
 
-        return AspiraJoinDto(
-            leaves = leaves,
-            geomSources = geomEntries,
-            inventoryEnvelopes = inventorySlug?.let { inputs.envelopes(it) } ?: emptyList(),
-            dictionaryPayload = dictionarySlug?.let { inputs.envelope(it).payload as? JsonObject },
-            fetchedAt = Instant.now(),
-        )
-    }
-
-    override fun validate(dto: AspiraJoinDto): ValidationResult<AspiraJoinDto> {
-        val errs = mutableListOf<String>()
-        if (dto.leaves.isEmpty()) errs += "no leaves from /api/maps"
-        if (dto.geomSources.isEmpty()) errs += "no geometry sources declared"
-        return if (errs.isEmpty()) ValidationResult.Ok(dto) else ValidationResult.Bad(null, errs)
-    }
+            val dto =
+                AspiraJoinDto(
+                    leaves = leaves,
+                    geomSources = geomEntries,
+                    inventoryEnvelopes = inventorySlug?.let { inputs.envelopes(it) } ?: emptyList(),
+                    dictionaryPayload = dictionarySlug?.let { inputs.envelope(it).payload as? JsonObject },
+                    fetchedAt = Instant.now(),
+                )
+            val errs = mutableListOf<String>()
+            if (dto.leaves.isEmpty()) errs += "no leaves from /api/maps"
+            if (dto.geomSources.isEmpty()) errs += "no geometry sources declared"
+            if (errs.isEmpty()) {
+                yield(ParseResult.Ok(dto))
+            } else {
+                yield(ParseResult.Bad(null, errs))
+            }
+        }
 
     override fun transform(
         dto: AspiraJoinDto,
         ctx: TransformCtx,
-    ): CampgroundEtlOutput {
+    ): Sequence<TransformResult<CampgroundUpsertCandidate>> {
         val host = ctx.argFor(etlSlug, "host") ?: error("$etlSlug: missing args.host")
         val subcategory = ctx.subcategoryFor(etlSlug)
         val agency = ctx.requiredConstantAgency(etlSlug)
@@ -247,7 +250,7 @@ class AspiraCampgroundsEtl(
             skippedNonBookable,
             missSamples.take(5),
         )
-        return CampgroundEtlOutput(campgrounds = campgrounds)
+        return campgrounds.asSequence().map { TransformResult.Ok(it) }
     }
 
     private fun campgroundBookingProviderRef(

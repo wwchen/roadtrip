@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.records
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -139,9 +140,10 @@ class AspiraCampgroundsEtlTest {
         )
 
     private fun campgrounds(dto: AspiraJoinDto): List<CampgroundUpsertCandidate> =
-        AspiraCampgroundsEtl(slug, DataProvider.ASPIRA, "pc")
-            .transform(dto, ctx)
-            .campgrounds
+        records(
+            AspiraCampgroundsEtl(slug, DataProvider.ASPIRA, "pc")
+                .transform(dto, ctx),
+        )
 
     /** DTO variant carrying an inventory envelope + category dictionary for the non-bookable filter. */
     private fun dtoWith(

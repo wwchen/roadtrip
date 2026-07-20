@@ -31,11 +31,7 @@ class CampsiteRepo(
     ): CatalogUpsertResult {
         val runId = importRunRepo.start(source)
         try {
-            val (upserted, skipped) =
-                ctx.transactionResult { cfg ->
-                    val tx = CampsiteRepo(DSL.using(cfg))
-                    tx.bulkUpsertCampsitesTx(records)
-                }
+            val (upserted, skipped) = upsertCampsiteBatch(records)
             importRunRepo.complete(runId, records.size)
             return CatalogUpsertResult(
                 runId = runId,
@@ -46,6 +42,14 @@ class CampsiteRepo(
         } catch (e: Throwable) {
             importRunRepo.fail(runId, e.message ?: e.javaClass.simpleName)
             throw e
+        }
+    }
+
+    fun upsertCampsiteBatch(records: List<CampsiteUpsertCandidate>): Pair<Int, Int> {
+        requireCatalogBatchWithinLimit("campsite upsert", records.size)
+        return ctx.transactionResult { cfg ->
+            val tx = CampsiteRepo(DSL.using(cfg))
+            tx.bulkUpsertCampsitesTx(records)
         }
     }
 

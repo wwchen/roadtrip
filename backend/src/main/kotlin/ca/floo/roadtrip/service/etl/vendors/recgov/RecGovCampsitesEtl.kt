@@ -4,9 +4,9 @@ import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.DEFAULT_CAMPSITE_KIND
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
-import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.model.metadata.ParseResult
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -41,59 +41,76 @@ class RecGovCampsitesEtl(
 ) : CampsiteEtl<List<Envelope>> {
     override val multiPart: Boolean = true
 
-    override fun parse(inputs: InputBundle): List<Envelope> {
-        val envelopes = inputs.soleEnvelopes()
-        require(envelopes.isNotEmpty()) {
-            "$etlSlug: no envelopes captured (run fetch_recgov_campsites.py first)"
+    override fun parse(inputs: InputBundle): Sequence<ParseResult<List<Envelope>>> =
+        sequence {
+            val envelopes = inputs.soleEnvelopes()
+            require(envelopes.isNotEmpty()) {
+                "$etlSlug: no envelopes captured (run fetch_recgov_campsites.py first)"
+            }
+            yield(ParseResult.Ok(envelopes))
         }
-        return envelopes
-    }
-
-    override fun validate(dto: List<Envelope>): ValidationResult<List<Envelope>> =
-        if (dto.isEmpty()) ValidationResult.Bad(null, listOf("$etlSlug: empty input")) else ValidationResult.Ok(dto)
 
     override fun transform(
         dto: List<Envelope>,
         ctx: TransformCtx,
-    ): CampsiteEtlOutput {
-        val campsites = mutableListOf<CampsiteUpsertCandidate>()
-        for (envelope in dto) {
-            // FacilityID lives in the captured request URL path. The
-            // upstream campsite blob doesn't carry it, but parent resolution
-            // needs it to link each site to its campground row.
-            val facilityId = parseFacilityIdFromUrl(envelope.request.url) ?: continue
-            val payload = envelope.payload as? JsonObject ?: continue
-            val rawCampsites = payload["campsites"] as? JsonObject ?: continue
-            for ((campsiteId, element) in rawCampsites) {
-                val raw = element as? JsonObject ?: continue
-                val tags = buildCampsiteTags(raw)
-                val siteName = raw.stringField("site") ?: campsiteId
-                val campsiteType = raw.stringField("campsite_type")
-                campsites +=
-                    CampsiteUpsertCandidate(
-                        dataProviderRef = DataProviderRef.RecGov(id = campsiteId),
-                        bookingProvider = BookingProvider.RECGOV,
-                        bookingProviderRef = campsiteId,
-                        parentDataProviderRef = DataProviderRef.RecGov(id = facilityId),
-                        name = siteName,
-                        loopName = raw.stringField("loop"),
-                        kind = campsiteType ?: DEFAULT_CAMPSITE_KIND,
-                        kindListed = campsiteType,
-                        equipment = raw["equipment_types"] as? JsonArray,
-                        maxPeople = raw["max_num_people"]?.jsonPrimitive?.intOrNull,
-                        sourcePayload =
-                            withSynthetic(
-                                raw,
-                                mapOf(
-                                    "_parent_facility_id" to JsonPrimitive(facilityId),
-                                    "_roadtrip_tags" to tags,
-                                ),
+    ): Sequence<TransformResult<CampsiteUpsertCandidate>> =
+        sequence {
+            for (envelope in dto) {
+                // FacilityID lives in the captured request URL path. The
+                // upstream campsite blob doesn't carry it, but parent resolution
+                // needs it to link each site to its campground row.
+                val sourceId = envelope.part ?: envelope.request.url
+                val facilityId = parseFacilityIdFromUrl(envelope.request.url)
+                if (facilityId == null) {
+                    yield(TransformResult.Bad(sourceId, listOf("missing facility id in request URL")))
+                    continue
+                }
+                val payload = envelope.payload as? JsonObject
+                if (payload == null) {
+                    yield(TransformResult.Bad(sourceId, listOf("expected JSON object payload")))
+                    continue
+                }
+                val rawCampsites = payload["campsites"] as? JsonObject
+                if (rawCampsites == null) {
+                    yield(TransformResult.Bad(sourceId, listOf("missing campsites object")))
+                    continue
+                }
+                for ((campsiteId, element) in rawCampsites) {
+                    val raw = element as? JsonObject
+                    if (raw == null) {
+                        yield(TransformResult.Bad(campsiteId, listOf("expected campsite JSON object")))
+                        continue
+                    }
+                    val tags = buildCampsiteTags(raw)
+                    val siteName = raw.stringField("site") ?: campsiteId
+                    val campsiteType = raw.stringField("campsite_type")
+                    yield(
+                        TransformResult.Ok(
+                            CampsiteUpsertCandidate(
+                                dataProviderRef = DataProviderRef.RecGov(id = campsiteId),
+                                bookingProvider = BookingProvider.RECGOV,
+                                bookingProviderRef = campsiteId,
+                                parentDataProviderRef = DataProviderRef.RecGov(id = facilityId),
+                                name = siteName,
+                                loopName = raw.stringField("loop"),
+                                kind = campsiteType ?: DEFAULT_CAMPSITE_KIND,
+                                kindListed = campsiteType,
+                                equipment = raw["equipment_types"] as? JsonArray,
+                                maxPeople = raw["max_num_people"]?.jsonPrimitive?.intOrNull,
+                                sourcePayload =
+                                    withSynthetic(
+                                        raw,
+                                        mapOf(
+                                            "_parent_facility_id" to JsonPrimitive(facilityId),
+                                            "_roadtrip_tags" to tags,
+                                        ),
+                                    ),
                             ),
+                        ),
                     )
+                }
             }
         }
-        return CampsiteEtlOutput(campsites = campsites)
-    }
 
     private fun JsonObject.stringField(key: String): String? =
         (this[key] as? JsonPrimitive)

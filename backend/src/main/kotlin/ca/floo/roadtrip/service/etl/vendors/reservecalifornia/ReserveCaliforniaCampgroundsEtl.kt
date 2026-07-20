@@ -3,9 +3,9 @@ package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import ca.floo.roadtrip.model.etl.CampgroundEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
-import ca.floo.roadtrip.model.metadata.ValidationResult
+import ca.floo.roadtrip.model.metadata.ParseResult
+import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -27,27 +27,31 @@ class ReserveCaliforniaCampgroundsEtl(
 ) : CampgroundEtl<ReserveCaliforniaCatalog> {
     override val multiPart: Boolean = true
 
-    override fun parse(inputs: InputBundle): ReserveCaliforniaCatalog = parseCatalog(inputs.soleEnvelopes(), etlSlug)
-
-    override fun validate(dto: ReserveCaliforniaCatalog): ValidationResult<ReserveCaliforniaCatalog> =
-        if (dto.places.values.none { it.facilityIds.isNotEmpty() }) {
-            ValidationResult.Bad(null, listOf("$etlSlug: no ReserveCalifornia place payloads with facilities parsed"))
-        } else {
-            ValidationResult.Ok(dto)
+    override fun parse(inputs: InputBundle): Sequence<ParseResult<ReserveCaliforniaCatalog>> =
+        sequence {
+            val catalog = parseCatalog(inputs.soleEnvelopes(), etlSlug)
+            if (catalog.places.values.none { it.facilityIds.isNotEmpty() }) {
+                yield(ParseResult.Bad(null, listOf("$etlSlug: no ReserveCalifornia place payloads with facilities parsed")))
+            } else {
+                yield(ParseResult.Ok(catalog))
+            }
         }
 
     override fun transform(
         dto: ReserveCaliforniaCatalog,
         ctx: TransformCtx,
-    ): CampgroundEtlOutput {
-        val bucket = ctx.subcategoryFor(etlSlug)
-        val agency = ctx.requiredConstantAgency(etlSlug)
-        return CampgroundEtlOutput(
-            campgrounds =
-                dto.places.values
-                    .filter { it.facilityIds.isNotEmpty() }
-                    .map { place ->
-                        val parkUrl = reserveCaliforniaParkUrl(place.placeId)
+    ): Sequence<TransformResult<CampgroundUpsertCandidate>> =
+        sequence {
+            val bucket = ctx.subcategoryFor(etlSlug)
+            val agency = ctx.requiredConstantAgency(etlSlug)
+            for (place in dto.places.values) {
+                if (place.facilityIds.isEmpty()) {
+                    yield(TransformResult.Bad(place.placeId.toString(), listOf("place has no facility ids")))
+                    continue
+                }
+                val parkUrl = reserveCaliforniaParkUrl(place.placeId)
+                yield(
+                    TransformResult.Ok(
                         CampgroundUpsertCandidate(
                             dataProviderRef = DataProviderRef.ReserveCalifornia(id = place.placeId.toString()),
                             bookingProvider = BookingProvider.RESERVECALIFORNIA,
@@ -66,10 +70,11 @@ class ReserveCaliforniaCampgroundsEtl(
                             metadata = metadataPayload(place),
                             sourceUrl = parkUrl,
                             sourcePayload = place.raw,
-                        )
-                    },
-        )
-    }
+                        ),
+                    ),
+                )
+            }
+        }
 }
 
 internal fun locationPayload(

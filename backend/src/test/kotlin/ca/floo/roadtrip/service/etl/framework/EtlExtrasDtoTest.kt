@@ -38,27 +38,28 @@ class EtlExtrasDtoTest {
     @Test
     fun `reserve america extras serialize through dto with sparse optional fields`() {
         val campground =
-            ReserveAmericaCampgroundsEtl()
-                .transform(
-                    ReserveAmericaDto(
-                        parks =
-                            listOf(
-                                ParsedPark(
-                                    parkId = 123,
-                                    name = "Writing-on-Stone Provincial Park",
-                                    lat = 49.083,
-                                    lon = -111.617,
-                                    phone = null,
-                                    description = "Hoodoo country camping.",
-                                    photoUrl = "https://example.test/photo.jpg",
-                                    infoUrl = "https://example.test/park",
+            records(
+                ReserveAmericaCampgroundsEtl()
+                    .transform(
+                        ReserveAmericaDto(
+                            parks =
+                                listOf(
+                                    ParsedPark(
+                                        parkId = 123,
+                                        name = "Writing-on-Stone Provincial Park",
+                                        lat = 49.083,
+                                        lon = -111.617,
+                                        phone = null,
+                                        description = "Hoodoo country camping.",
+                                        photoUrl = "https://example.test/photo.jpg",
+                                        infoUrl = "https://example.test/park",
+                                    ),
                                 ),
-                            ),
-                        fetchedAt = fetchedAt,
+                            fetchedAt = fetchedAt,
+                        ),
+                        transformCtx(),
                     ),
-                    transformCtx(),
-                ).campgrounds
-                .single()
+            ).single()
 
         val extras = campground.metadata!!.jsonObject
         assertEquals(123, extras["park_id"]!!.jsonPrimitive.int)
@@ -75,25 +76,26 @@ class EtlExtrasDtoTest {
     fun `tesla canonical output preserves index and nullable detail payloads`() {
         val rawIndex = Json.parseToJsonElement("""{"location_url_slug":"test-slug","title":"locations"}""").jsonObject
         val record =
-            TeslaIndexEtl()
-                .transform(
-                    TeslaIndexDto(
-                        rows =
-                            listOf(
-                                TeslaIndexRow(
-                                    latitude = 49.0,
-                                    longitude = -123.0,
-                                    title = "locations",
-                                    locationUrlSlug = "test-slug",
-                                    superchargerFunction = TeslaSuperchargerFunction(showOnFindUs = "1"),
+            records(
+                TeslaIndexEtl()
+                    .transform(
+                        TeslaIndexDto(
+                            rows =
+                                listOf(
+                                    TeslaIndexRow(
+                                        latitude = 49.0,
+                                        longitude = -123.0,
+                                        title = "locations",
+                                        locationUrlSlug = "test-slug",
+                                        superchargerFunction = TeslaSuperchargerFunction(showOnFindUs = "1"),
+                                    ),
                                 ),
-                            ),
-                        rawBySlug = mapOf("test-slug" to rawIndex),
-                        fetchedAt = fetchedAt,
+                            rawBySlug = mapOf("test-slug" to rawIndex),
+                            fetchedAt = fetchedAt,
+                        ),
+                        transformCtx(),
                     ),
-                    transformCtx(),
-                ).superchargers
-                .single()
+            ).single()
 
         assertEquals("test-slug", record.locationSlug)
         assertEquals(
@@ -141,25 +143,26 @@ class EtlExtrasDtoTest {
         )
         val rawIndex = Json.parseToJsonElement("""{"location_url_slug":"$slug","title":"locations"}""").jsonObject
         val record =
-            TeslaIndexEtl()
-                .transform(
-                    TeslaIndexDto(
-                        rows =
-                            listOf(
-                                TeslaIndexRow(
-                                    latitude = 49.0,
-                                    longitude = -123.0,
-                                    title = "locations",
-                                    locationUrlSlug = slug,
-                                    superchargerFunction = TeslaSuperchargerFunction(showOnFindUs = "1"),
+            records(
+                TeslaIndexEtl()
+                    .transform(
+                        TeslaIndexDto(
+                            rows =
+                                listOf(
+                                    TeslaIndexRow(
+                                        latitude = 49.0,
+                                        longitude = -123.0,
+                                        title = "locations",
+                                        locationUrlSlug = slug,
+                                        superchargerFunction = TeslaSuperchargerFunction(showOnFindUs = "1"),
+                                    ),
                                 ),
-                            ),
-                        rawBySlug = mapOf(slug to rawIndex),
-                        fetchedAt = fetchedAt,
+                            rawBySlug = mapOf(slug to rawIndex),
+                            fetchedAt = fetchedAt,
+                        ),
+                        transformCtx(rawDir),
                     ),
-                    transformCtx(rawDir),
-                ).superchargers
-                .single()
+            ).single()
 
         assertNull(record.amenities)
         assertNull(record.availabilityProfile)
@@ -231,25 +234,26 @@ class EtlExtrasDtoTest {
 
         val rawIndex = Json.parseToJsonElement("""{"location_url_slug":"$slug","title":"locations"}""").jsonObject
         val record =
-            TeslaIndexEtl()
-                .transform(
-                    TeslaIndexDto(
-                        rows =
-                            listOf(
-                                TeslaIndexRow(
-                                    latitude = 49.0,
-                                    longitude = -123.0,
-                                    title = "locations",
-                                    locationUrlSlug = slug,
-                                    superchargerFunction = TeslaSuperchargerFunction(showOnFindUs = "1"),
+            records(
+                TeslaIndexEtl()
+                    .transform(
+                        TeslaIndexDto(
+                            rows =
+                                listOf(
+                                    TeslaIndexRow(
+                                        latitude = 49.0,
+                                        longitude = -123.0,
+                                        title = "locations",
+                                        locationUrlSlug = slug,
+                                        superchargerFunction = TeslaSuperchargerFunction(showOnFindUs = "1"),
+                                    ),
                                 ),
-                            ),
-                        rawBySlug = mapOf(slug to rawIndex),
-                        fetchedAt = fetchedAt,
+                            rawBySlug = mapOf(slug to rawIndex),
+                            fetchedAt = fetchedAt,
+                        ),
+                        transformCtx(rawDir),
                     ),
-                    transformCtx(rawDir),
-                ).superchargers
-                .single()
+            ).single()
 
         assertEquals("guid-123", record.locationGuid)
         assertEquals("Test Supercharger", record.commonSiteName)
@@ -300,27 +304,28 @@ class EtlExtrasDtoTest {
     @Test
     fun `planet fitness extras serialize center and tags through sparse dto`() {
         val record =
-            PlanetFitnessEtl()
-                .transform(
-                    PlanetFitnessRawDto(
-                        elements =
-                            listOf(
-                                OverpassElement(
-                                    type = "way",
-                                    id = 456,
-                                    center = OverpassCenter(lat = 47.61, lon = -122.33),
-                                    tags =
-                                        mapOf(
-                                            "name" to "Planet Fitness",
-                                            "opening_hours" to "Mo-Fr 05:00-22:00",
-                                        ),
+            records(
+                PlanetFitnessEtl()
+                    .transform(
+                        PlanetFitnessRawDto(
+                            elements =
+                                listOf(
+                                    OverpassElement(
+                                        type = "way",
+                                        id = 456,
+                                        center = OverpassCenter(lat = 47.61, lon = -122.33),
+                                        tags =
+                                            mapOf(
+                                                "name" to "Planet Fitness",
+                                                "opening_hours" to "Mo-Fr 05:00-22:00",
+                                            ),
+                                    ),
                                 ),
-                            ),
-                        fetchedAt = fetchedAt,
+                            fetchedAt = fetchedAt,
+                        ),
+                        transformCtx(),
                     ),
-                    transformCtx(),
-                ).locations
-                .single()
+            ).single()
 
         val extras = record.payload!!.jsonObject
         assertEquals("way", extras["type"]!!.jsonPrimitive.content)
@@ -339,25 +344,26 @@ class EtlExtrasDtoTest {
         // AspiraCampgroundsEtl before emission). parent_name stays nullable, so
         // it is the field that exercises explicitNulls serialization here.
         val campground =
-            AspiraCampgroundsEtl("aspira-wa-campgrounds", DataProvider.ASPIRA, "wa")
-                .transform(
-                    AspiraJoinDto(
-                        leaves =
-                            listOf(
-                                AspiraLeaf(
-                                    name = "Lakeside Campground",
-                                    transactionLocationId = 11,
-                                    mapId = 22,
-                                    resourceLocationId = 33,
-                                    parentName = null,
+            records(
+                AspiraCampgroundsEtl("aspira-wa-campgrounds", DataProvider.ASPIRA, "wa")
+                    .transform(
+                        AspiraJoinDto(
+                            leaves =
+                                listOf(
+                                    AspiraLeaf(
+                                        name = "Lakeside Campground",
+                                        transactionLocationId = 11,
+                                        mapId = 22,
+                                        resourceLocationId = 33,
+                                        parentName = null,
+                                    ),
                                 ),
-                            ),
-                        geomSources = listOf("fixture" to GeoJsonFeaturesSource(listOf(geoJsonEnvelope()), "fixture")),
-                        fetchedAt = fetchedAt,
+                            geomSources = listOf("fixture" to GeoJsonFeaturesSource(listOf(geoJsonEnvelope()), "fixture")),
+                            fetchedAt = fetchedAt,
+                        ),
+                        transformCtx(),
                     ),
-                    transformCtx(),
-                ).campgrounds
-                .single()
+            ).single()
 
         val extras = campground.metadata!!.jsonObject
         assertEquals("washington.goingtocamp.com", extras["host"]!!.jsonPrimitive.content)

@@ -8,6 +8,8 @@ import ca.floo.roadtrip.model.metadata.ResponseMeta
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.terminalOkRecords
+import ca.floo.roadtrip.service.etl.framework.terminalRecords
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -15,18 +17,20 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 import java.io.File
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 class CampflareCampsitesEtlTest {
     @Test
     fun `transforms campflare campsite dump rows into canonical records`() {
         val etl = CampflareCampsitesEtl()
-        val out = etl.transform(etl.parse(bundle(campsitePayload())), transformCtx())
-        val row = out.campsites.single()
+        val rows = terminalRecords(etl, bundle(campsitePayload()), transformCtx())
+        val row = rows.single()
 
         assertEquals(DataProvider.CAMPFLARE, row.dataProviderRef.provider)
         assertEquals("upper-pines-site-001", row.dataProviderRef.serialize())
-        assertEquals(DataProvider.CAMPFLARE, row.parentDataProviderRef!!.provider)
-        assertEquals("upper-pines-campground-447", row.parentDataProviderRef!!.serialize())
+        val parentDataProviderRef = assertNotNull(row.parentDataProviderRef)
+        assertEquals(DataProvider.CAMPFLARE, parentDataProviderRef.provider)
+        assertEquals("upper-pines-campground-447", parentDataProviderRef.serialize())
         assertEquals("Site 001", row.name)
         assertEquals("tent-only", row.kind)
         assertEquals("A", row.loopName)
@@ -54,67 +58,64 @@ class CampflareCampsitesEtlTest {
     @Test
     fun `skips campsite rows without id parent or name and defaults missing kind`() {
         val etl = CampflareCampsitesEtl()
-        val out =
-            etl.transform(
-                etl.parse(
-                    bundle(
-                        """
-                        [
-                          {"id":"missing-parent","name":"No Parent","kind":"standard"},
-                          {"id":"missing-name","campground_id":"cg","kind":"standard"},
-                          {"id":"missing-kind","campground_id":"cg","name":"No Kind"},
-                          {"id":"ok","campground_id":"cg","name":"Valid","kind":"standard"}
-                        ]
-                        """.trimIndent(),
-                    ),
+        val rows =
+            terminalOkRecords(
+                etl,
+                bundle(
+                    """
+                    [
+                      {"id":"missing-parent","name":"No Parent","kind":"standard"},
+                      {"id":"missing-name","campground_id":"cg","kind":"standard"},
+                      {"id":"missing-kind","campground_id":"cg","name":"No Kind"},
+                      {"id":"ok","campground_id":"cg","name":"Valid","kind":"standard"}
+                    ]
+                    """.trimIndent(),
                 ),
                 transformCtx(),
             )
 
-        assertEquals(listOf("missing-kind", "ok"), out.campsites.map { it.dataProviderRef.serialize() })
-        assertEquals("site", out.campsites.single { it.dataProviderRef.serialize() == "missing-kind" }.kind)
+        assertEquals(listOf("missing-kind", "ok"), rows.map { it.dataProviderRef.serialize() })
+        assertEquals("site", rows.single { it.dataProviderRef.serialize() == "missing-kind" }.kind)
     }
 
     @Test
     fun `normalizes E6 campsite coordinates when dump mixes coordinate scales`() {
         val etl = CampflareCampsitesEtl()
-        val out =
-            etl.transform(
-                etl.parse(
-                    bundle(
-                        """
-                        [
-                          {
-                            "id":"scaled-lon",
-                            "campground_id":"cg",
-                            "name":"Cabin 5",
-                            "kind":"cabin",
-                            "latitude":29.740556,
-                            "longitude":-91853611
-                          },
-                          {
-                            "id":"scaled-lat",
-                            "campground_id":"cg",
-                            "name":"Site 25",
-                            "kind":"standard",
-                            "latitude":31957925,
-                            "longitude":-91.20201
-                          }
-                        ]
-                        """.trimIndent(),
-                    ),
+        val rows =
+            terminalRecords(
+                etl,
+                bundle(
+                    """
+                    [
+                      {
+                        "id":"scaled-lon",
+                        "campground_id":"cg",
+                        "name":"Cabin 5",
+                        "kind":"cabin",
+                        "latitude":29.740556,
+                        "longitude":-91853611
+                      },
+                      {
+                        "id":"scaled-lat",
+                        "campground_id":"cg",
+                        "name":"Site 25",
+                        "kind":"standard",
+                        "latitude":31957925,
+                        "longitude":-91.20201
+                      }
+                    ]
+                    """.trimIndent(),
                 ),
                 transformCtx(),
             )
 
-        assertEquals(-91.853611, out.campsites.single { it.dataProviderRef.serialize() == "scaled-lon" }.longitude)
-        assertEquals(31.957925, out.campsites.single { it.dataProviderRef.serialize() == "scaled-lat" }.latitude)
+        assertEquals(-91.853611, rows.single { it.dataProviderRef.serialize() == "scaled-lon" }.longitude)
+        assertEquals(31.957925, rows.single { it.dataProviderRef.serialize() == "scaled-lat" }.latitude)
     }
 
     private fun bundle(payloadJson: String): InputBundle =
         InputBundle(
             rawCaptures = linkedMapOf("campflare-campsites" to listOf(envelope(payloadJson))),
-            etlOutputs = linkedMapOf(),
         )
 
     private fun envelope(payloadJson: String): Envelope =

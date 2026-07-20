@@ -27,16 +27,20 @@ class TeslaSuperchargerRepo(
     ): CatalogUpsertResult {
         val runId = importRunRepo.start(source)
         try {
-            val upserted =
-                ctx.transactionResult { cfg ->
-                    val tx = TeslaSuperchargerRepo(DSL.using(cfg))
-                    records.sumOf { record -> if (tx.upsertTeslaSupercharger(record)) 1 else 0 }
-                }
+            val upserted = upsertTeslaSuperchargerBatch(records)
             importRunRepo.complete(runId, records.size)
             return CatalogUpsertResult(runId = runId, seenCount = records.size, upsertedCount = upserted)
         } catch (e: Throwable) {
             importRunRepo.fail(runId, e.message ?: e.javaClass.simpleName)
             throw e
+        }
+    }
+
+    fun upsertTeslaSuperchargerBatch(records: List<TeslaSuperchargerUpsertCandidate>): Int {
+        requireCatalogBatchWithinLimit("tesla supercharger upsert", records.size)
+        return ctx.transactionResult { cfg ->
+            val tx = TeslaSuperchargerRepo(DSL.using(cfg))
+            records.sumOf { record -> if (tx.upsertTeslaSupercharger(record)) 1 else 0 }
         }
     }
 

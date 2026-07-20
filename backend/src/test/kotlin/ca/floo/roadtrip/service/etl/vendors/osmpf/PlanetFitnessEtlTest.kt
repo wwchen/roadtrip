@@ -1,11 +1,12 @@
 package ca.floo.roadtrip.service.etl.vendors.osmpf
 
 import ca.floo.roadtrip.model.metadata.Envelope
-import ca.floo.roadtrip.model.metadata.ValidationResult
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.RawCaptureStore
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
+import ca.floo.roadtrip.service.etl.framework.parsedDto
+import ca.floo.roadtrip.service.etl.framework.records
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
@@ -34,7 +35,6 @@ class PlanetFitnessEtlTest {
     private fun bundle(envelope: Envelope): InputBundle =
         InputBundle(
             rawCaptures = linkedMapOf("osm-pf" to listOf(envelope)),
-            etlOutputs = linkedMapOf(),
         )
 
     @Test
@@ -42,27 +42,22 @@ class PlanetFitnessEtlTest {
         val envelope = RawCaptureStore.parseEnvelope(fixtureFile())
         assertEquals("fetch_planet_fitness", envelope.fetcher)
         assertEquals(200, envelope.response.status)
-        val dto = PlanetFitnessEtl().parse(bundle(envelope))
+        val dto = parsedDto(PlanetFitnessEtl(), bundle(envelope))
         assertEquals(5, dto.elements.size)
     }
 
     @Test
-    fun `validate rejects empty payload but accepts valid one`() {
+    fun `parse returns ok for valid payload`() {
         val envelope = RawCaptureStore.parseEnvelope(fixtureFile())
-        val dto = PlanetFitnessEtl().parse(bundle(envelope))
-        when (val r = PlanetFitnessEtl().validate(dto)) {
-            is ValidationResult.Ok -> {} // expected
-            is ValidationResult.Bad ->
-                throw AssertionError("validate should accept the fixture: ${r.errors}")
-        }
+        parsedDto(PlanetFitnessEtl(), bundle(envelope))
     }
 
     @Test
     fun `transform produces canonical Planet Fitness locations with stable location ids`() {
         val envelope = RawCaptureStore.parseEnvelope(fixtureFile())
         val etl = PlanetFitnessEtl()
-        val dto = etl.parse(bundle(envelope))
-        val locations = etl.transform(dto, transformCtx).locations
+        val dto = parsedDto(etl, bundle(envelope))
+        val locations = records(etl.transform(dto, transformCtx))
 
         assertEquals(5, locations.size, "fixture has 5 elements, all valid")
         for (p in locations) {
@@ -80,8 +75,8 @@ class PlanetFitnessEtlTest {
     fun `transform handles missing optional fields gracefully`() {
         val envelope = RawCaptureStore.parseEnvelope(fixtureFile())
         val etl = PlanetFitnessEtl()
-        val dto = etl.parse(bundle(envelope))
-        val locations = etl.transform(dto, transformCtx).locations
+        val dto = parsedDto(etl, bundle(envelope))
+        val locations = records(etl.transform(dto, transformCtx))
 
         val withoutPhone = locations.filter { it.phone == null }
         assertTrue(

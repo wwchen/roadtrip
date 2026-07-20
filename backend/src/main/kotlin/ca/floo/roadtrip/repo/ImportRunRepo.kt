@@ -6,10 +6,10 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset
 
 /**
- * Sole writer of the `import_runs` table. The ETL upsert repos ([PoiRepo],
- * [CampsiteRepo]) open a run at the start of a source snapshot and terminate it
- * (completed/failed) at the end; this repo owns those three mutations so the run
- * lifecycle has a single owner rather than being duplicated per upsert repo.
+ * Sole writer of the `import_runs` table. The ETL orchestrator opens a run at
+ * the start of a terminal source snapshot and terminates it (completed/failed)
+ * at the end; legacy repo convenience methods still use this repo for the same
+ * three mutations.
  */
 class ImportRunRepo(
     private val ctx: DSLContext,
