@@ -124,7 +124,6 @@ val serviceModule =
         single { WatchScopeResolver(get<CampsiteRepo>()) }
         single {
             DbAvailabilityTargetResolver(
-                refResolver = get<ca.floo.roadtrip.service.ref.RefResolver>(),
                 ctx = get<DSLContext>(),
                 campsitesRepo = get<CampsiteRepo>(),
                 campgroundRepo = get<ca.floo.roadtrip.repo.CampgroundRepo>(),

@@ -3,7 +3,6 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
@@ -26,7 +25,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 private const val TEST_CAMPSITE_ID = 7L
-private const val TEST_RECGOV_SITE_ID = "recgov-site-7"
 private const val TEST_RECGOV_PARENT_ID = "recgov-parent-1"
 private const val TEST_CAMPFLARE_PARENT_ID = "campflare-parent-1"
 
@@ -47,7 +45,8 @@ class AvailabilityBookingTargetResolverTest {
 
         assertEquals(BookingProvider.RECGOV, target?.providerId)
         assertEquals(BookingProviderRef.RecGov(TEST_RECGOV_PARENT_ID), target?.parentRef)
-        assertEquals(CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_RECGOV_SITE_ID), target?.campsiteRef)
+        assertEquals(TEST_CAMPSITE_ID, target?.campsiteId)
+        assertEquals(TEST_CAMPFLARE_PARENT_ID, target?.vendorSiteId)
     }
 
     @Test
@@ -65,13 +64,15 @@ class AvailabilityBookingTargetResolverTest {
 
         override fun targetFor(
             parentRef: BookingProviderRef,
-            campsiteRef: CatalogCampsiteRef,
+            campsiteId: Long,
+            vendorSiteId: String,
         ): BookingTarget? {
             if (parentRef !is BookingProviderRef.RecGov) return null
             return BookingTarget(
                 providerId = id,
                 parentRef = parentRef,
-                campsiteRef = campsiteRef,
+                campsiteId = campsiteId,
+                vendorSiteId = vendorSiteId,
             )
         }
 
@@ -116,7 +117,6 @@ class AvailabilityBookingTargetResolverTest {
             campsite = campsite(),
             provider = candidates.first(),
             campground = cg,
-            catalogRef = CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_RECGOV_SITE_ID),
             parentPoiId = 100L,
             dateContext = PoiDateContext(ZoneId.of("UTC"), LocalDate.parse("2026-07-01")),
             candidates = candidates,

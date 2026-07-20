@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.booking
 
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
@@ -32,12 +31,14 @@ class RecGovBookingAdapterTest {
         val target =
             provider.targetFor(
                 BookingProviderRef.RecGov(TEST_RECGOV_CAMPGROUND_ID),
-                CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_VENDOR_ID),
+                TEST_CAMPSITE_ID,
+                TEST_VENDOR_ID,
             )
 
         assertEquals(BookingProvider.RECGOV, target?.providerId)
         assertEquals(BookingProviderRef.RecGov(TEST_RECGOV_CAMPGROUND_ID), target?.parentRef)
-        assertEquals(CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_VENDOR_ID), target?.campsiteRef)
+        assertEquals(TEST_CAMPSITE_ID, target?.campsiteId)
+        assertEquals(TEST_VENDOR_ID, target?.vendorSiteId)
     }
 
     @Test
@@ -47,7 +48,8 @@ class RecGovBookingAdapterTest {
         val target =
             provider.targetFor(
                 BookingProviderRef.Aspira("bc", 1L, 2L, null),
-                CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_VENDOR_ID),
+                TEST_CAMPSITE_ID,
+                TEST_VENDOR_ID,
             )
 
         assertNull(target)
@@ -179,6 +181,7 @@ class RecGovBookingAdapterTest {
         BookingTarget(
             providerId = providerId,
             parentRef = parentRef,
-            campsiteRef = CatalogCampsiteRef(campsiteId = TEST_CAMPSITE_ID, vendorId = vendorId),
+            campsiteId = TEST_CAMPSITE_ID,
+            vendorSiteId = vendorId,
         )
 }

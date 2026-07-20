@@ -58,7 +58,6 @@ internal fun Route.campsiteRoutes(
     val refResolver = DbRefResolver(ctx)
     val targets =
         DbAvailabilityTargetResolver(
-            refResolver = refResolver,
             ctx = ctx,
             campsitesRepo = campsitesRepo,
             campgroundRepo = campgroundRepo,

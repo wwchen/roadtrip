@@ -9,7 +9,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
@@ -194,9 +193,6 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         val registry = listOf(provider)
         val targets =
             DbAvailabilityTargetResolver(
-                refResolver =
-                    ca.floo.roadtrip.service.ref
-                        .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 campgroundRepo =
@@ -334,9 +330,6 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
     private fun targetsFor(provider: AvailabilityProvider): DbAvailabilityTargetResolver =
         DbAvailabilityTargetResolver(
-            refResolver =
-                ca.floo.roadtrip.service.ref
-                    .DbRefResolver(ctx),
             ctx = ctx,
             campsitesRepo = CampsiteRepo(ctx),
             campgroundRepo =
@@ -357,9 +350,6 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             watchRepo = AvailabilityWatchRepo(ctx),
             targets =
                 DbAvailabilityTargetResolver(
-                    refResolver =
-                        ca.floo.roadtrip.service.ref
-                            .DbRefResolver(ctx),
                     ctx = ctx,
                     campsitesRepo = CampsiteRepo(ctx),
                     campgroundRepo =
@@ -408,9 +398,6 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         val dateResolver = AvailabilityDateResolver(ctx = ctx, clock = testClock)
         val targets =
             DbAvailabilityTargetResolver(
-                refResolver =
-                    ca.floo.roadtrip.service.ref
-                        .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 campgroundRepo =
@@ -504,8 +491,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         override fun reservationUrlTemplate(
             campsite: Campsite,
             parentRef: BookingProviderRef,
-            catalogRef: CatalogCampsiteRef,
-        ): String = "https://example.test/book/${catalogRef.vendorId}?d=${ReservationUrlTemplate.START_DATE}"
+        ): String = "https://example.test/book/${vendorSiteIdFor(campsite)}?d=${ReservationUrlTemplate.START_DATE}"
     }
 
     private class RateLimitedProvider : AvailabilityProvider {

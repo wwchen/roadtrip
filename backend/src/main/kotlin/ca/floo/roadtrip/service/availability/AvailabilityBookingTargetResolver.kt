@@ -20,7 +20,13 @@ internal class AvailabilityBookingTargetResolver(
     ): BookingTarget? {
         for (provider in resolved.candidates) {
             val ref = provider.parentRefFor(resolved.campground) ?: continue
-            val target = bookings.targetFor(action, ref, resolved.catalogRef)
+            val target =
+                bookings.targetFor(
+                    action,
+                    ref,
+                    resolved.campsite.id,
+                    provider.vendorSiteIdFor(resolved.campsite),
+                )
             if (target != null) return target
         }
         return null

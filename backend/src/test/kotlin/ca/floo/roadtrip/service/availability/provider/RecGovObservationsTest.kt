@@ -2,33 +2,28 @@ package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.recgov.Campsite
 import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
+import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/**
- * Unit tests for the rec.gov classification + render pipeline. The HTTP
- * surface (path validation, rate limiting, dispatch by provider_ref) lives
- * in AvailabilityRoutes.kt and is covered by route-level tests
- * against a real Postgres testcontainer.
- *
- * Asserts:
- *   - state classification (success / zero_available / closed_for_season / empty)
- *   - JSON contract shape (provider field, top-level date window, availability array)
- *   - upstream errors propagate so the route layer can map to 503
- */
 class RecGovObservationsTest {
     private val today: LocalDate = LocalDate.now(ZoneOffset.UTC)
+    private val provider = RecGovAvailabilityProvider(clientReturning(emptyMap()), enabled = true)
 
     private fun campsiteWith(availabilities: Map<String, String>): Campsite =
         Campsite(
@@ -41,7 +36,6 @@ class RecGovObservationsTest {
             availabilities = availabilities,
         )
 
-    /** today + offset → "2026-MM-DDT00:00:00Z" — rec.gov's keying shape. */
     private fun futureKey(offsetDays: Long): String = today.plusDays(offsetDays).toString() + "T00:00:00Z"
 
     private fun clientReturning(map: Map<String, Campsite>): RecGovAvailabilityClient =
@@ -56,21 +50,19 @@ class RecGovObservationsTest {
 
     private fun classify(
         client: RecGovAvailabilityClient,
-        recgovId: String = "232447",
         days: Int = 7,
         catalogSiteIds: List<String> = listOf("100"),
     ): JsonObject {
+        val p = RecGovAvailabilityProvider(client, enabled = true)
+        val campsites =
+            catalogSiteIds.map { siteId ->
+                campsiteFixture(id = siteId.toLong(), vendor = "recgov", vendorId = siteId)
+            }
         val body =
             encodeAvailabilityJson(
                 availabilityResponseFromObservations(
                     runBlocking {
-                        fetchRecgovCatalogObservations(
-                            client = client,
-                            recgovId = recgovId,
-                            campsites = catalogSiteIds.map { CatalogCampsiteRef(campsiteId = it.toLong(), vendorId = it) },
-                            startDate = today,
-                            endDate = today.plusDays(days.toLong()),
-                        )
+                        p.catalogAvailability(testCampground(), campsites, today, today.plusDays(days.toLong()))
                     },
                 ),
             )
@@ -79,17 +71,53 @@ class RecGovObservationsTest {
 
     private fun classifyRaw(
         client: RecGovAvailabilityClient,
-        recgovId: String = "232447",
         days: Int = 7,
     ): JsonObject {
+        val p = RecGovAvailabilityProvider(client, enabled = true)
         val body =
             encodeAvailabilityJson(
                 availabilityResponseFromObservations(
-                    runBlocking { fetchRecgovAvailabilityObservations(client, recgovId, today, today.plusDays(days.toLong())) },
+                    runBlocking { p.availability(testCampground(), today, today.plusDays(days.toLong())) },
                 ),
             )
         return parseJson(body)
     }
+
+    private fun testCampground(): Campground =
+        Campground(
+            id = 1L,
+            name = "Test",
+            status = null,
+            statusDescription = null,
+            kind = null,
+            shortDescription = null,
+            mediumDescription = null,
+            longDescription = null,
+            location = JsonNull,
+            defaultCampsiteSchedule = JsonNull,
+            amenities = JsonNull,
+            maxRvLength = null,
+            maxTrailerLength = null,
+            hasPullThroughSites = null,
+            bigRigFriendly = null,
+            reservationUrl = null,
+            links = JsonNull,
+            photos = JsonNull,
+            alerts = JsonNull,
+            price = JsonNull,
+            cellService = JsonNull,
+            management = JsonNull,
+            contact = JsonNull,
+            connections = JsonNull,
+            metadata = JsonNull,
+            sourcePayload = JsonNull,
+            createdAt = Instant.EPOCH,
+            updatedAt = Instant.EPOCH,
+            deletedAt = null,
+            dataProviderRef = DataProviderRef.RecGov(id = "232447"),
+            bookingProvider = "recgov",
+            bookingProviderRef = "232447",
+        )
 
     @Test
     fun `success state with availability returns success JSON shape`() {
@@ -190,21 +218,17 @@ class RecGovObservationsTest {
 
     @Test
     fun `catalog availability keeps requested sites omitted by upstream as unknown`() {
+        val campsites =
+            listOf(
+                campsiteFixture(id = 100L, vendor = "recgov", vendorId = "100"),
+                campsiteFixture(id = 200L, vendor = "recgov", vendorId = "200"),
+            )
+        val p = RecGovAvailabilityProvider(clientReturning(emptyMap()), enabled = true)
         val body =
             encodeAvailabilityJson(
                 availabilityResponseFromObservations(
                     runBlocking {
-                        fetchRecgovCatalogObservations(
-                            client = clientReturning(emptyMap()),
-                            recgovId = "232447",
-                            campsites =
-                                listOf(
-                                    CatalogCampsiteRef(campsiteId = 100, vendorId = "100"),
-                                    CatalogCampsiteRef(campsiteId = 200, vendorId = "200"),
-                                ),
-                            startDate = today,
-                            endDate = today.plusDays(1),
-                        )
+                        p.catalogAvailability(testCampground(), campsites, today, today.plusDays(1))
                     },
                 ),
             )
@@ -240,7 +264,7 @@ class RecGovObservationsTest {
             runCatching {
                 classify(client, days = 1)
             }.exceptionOrNull()
-        require(ex != null) { "expected an upstream error to surface" }
+        require(ex is AvailabilityProviderError.RateLimited) { "expected RateLimited, got $ex" }
         val (status, error) = mapRecgovUpstreamError(ex)
         assertEquals(503, status.value)
         assertEquals("rate_limited", error.error)
@@ -261,7 +285,7 @@ class RecGovObservationsTest {
                     campsiteWith(
                         mapOf(
                             futureKey(0) to "Available",
-                            futureKey(1) to "Reserved", // booked the next night, irrelevant
+                            futureKey(1) to "Reserved",
                         ),
                     ),
             )
@@ -353,7 +377,6 @@ class RecGovObservationsTest {
     fun `per-day classification does not reject available day for later weekend gaps`() {
         val byDay =
             (0..6).associate { i ->
-                // Booked Sat (day 5) and Sun (day 6); open the rest.
                 val s = if (i == 5 || i == 6) "Reserved" else "Available"
                 futureKey(i.toLong()) to s
             }

@@ -3,7 +3,6 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
@@ -133,13 +132,15 @@ class WatchCapabilityServiceTest {
 
         override fun targetFor(
             parentRef: BookingProviderRef,
-            campsiteRef: CatalogCampsiteRef,
+            campsiteId: Long,
+            vendorSiteId: String,
         ): BookingTarget? {
             if (parentRef !is BookingProviderRef.RecGov) return null
             return BookingTarget(
                 providerId = id,
                 parentRef = parentRef,
-                campsiteRef = campsiteRef,
+                campsiteId = campsiteId,
+                vendorSiteId = vendorSiteId,
             )
         }
 
@@ -150,7 +151,7 @@ class WatchCapabilityServiceTest {
             action == BookingAction.ADD_TO_CART &&
                 target.providerId == BookingProvider.RECGOV &&
                 target.parentRef is BookingProviderRef.RecGov &&
-                target.campsiteRef.vendorId.isNotBlank()
+                target.vendorSiteId.isNotBlank()
 
         override suspend fun addToCart(request: AddToCartRequest): AddToCartResult = AddToCartResult.Unsupported
     }
@@ -205,7 +206,6 @@ class WatchCapabilityServiceTest {
                 campsite = known,
                 provider = provider,
                 campground = campground,
-                catalogRef = CatalogCampsiteRef(campsiteId = known.id, vendorId = known.dataProviderRef.serialize()),
                 parentPoiId = TEST_PARENT_POI_ID,
                 dateContext = PoiDateContext(ZoneId.of("UTC"), LocalDate.parse("2026-07-01")),
             )

@@ -27,8 +27,6 @@ private const val ASPIRA_TEST_MAX_POLL_WINDOW_DAYS = 30
 private const val BC_PARKS_TEST_PARENT_BOOKING_REF = "bc:-2147483534:-2147483460:-2147483560"
 private const val BC_PARKS_TEST_CAMPSITE_DATA_REF = "bc:-2147477118"
 private const val BC_PARKS_TEST_RESOURCE_ID = "-2147477118"
-private const val BC_PARKS_TEST_MAP_ID = -2147483460L
-private const val BC_PARKS_TEST_RESOURCE_LOCATION_ID = -2147483560L
 
 class DbAvailabilityTargetResolverTest : SharedDbTest() {
     @BeforeEach
@@ -132,9 +130,6 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             ),
     ): DbAvailabilityTargetResolver =
         DbAvailabilityTargetResolver(
-            refResolver =
-                ca.floo.roadtrip.service.ref
-                    .DbRefResolver(ctx),
             ctx = ctx,
             campsitesRepo = campsitesRepo,
             campgroundRepo = CampgroundRepo(ctx),
@@ -195,7 +190,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals(poi, target.parentPoiId)
             assertEquals(BookingProvider.CAMPFLARE, target.provider.id)
             assertEquals("upper-pines-campground-447", parentRefKey(target.parentRef!!))
-            assertEquals("upper-pines-site-100", target.catalogRef.vendorId)
+            assertEquals("upper-pines-site-100", target.provider.vendorSiteIdFor(target.campsite))
         }
 
     @Test
@@ -227,7 +222,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
 
             assertEquals(BookingProvider.RECGOV, target.provider.id)
             assertEquals("232447", parentRefKey(target.parentRef!!))
-            assertEquals("330257", target.catalogRef.vendorId)
+            assertEquals("330257", target.provider.vendorSiteIdFor(target.campsite))
         }
 
     @Test
@@ -263,9 +258,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 ).resolve(reservable)!!
 
             assertEquals(BookingProvider.ASPIRA, target.provider.id)
-            assertEquals(BC_PARKS_TEST_RESOURCE_ID, target.catalogRef.vendorId)
-            assertEquals(BC_PARKS_TEST_MAP_ID, target.catalogRef.mapId)
-            assertEquals(BC_PARKS_TEST_RESOURCE_LOCATION_ID, target.catalogRef.resourceLocationId)
+            assertEquals(BC_PARKS_TEST_RESOURCE_ID, target.provider.vendorSiteIdFor(target.campsite))
         }
 
     @Test

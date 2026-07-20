@@ -4,7 +4,6 @@ import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
@@ -123,13 +122,15 @@ class AspiraAvailabilityProvider(
         }
     }
 
+    override fun vendorSiteIdFor(campsite: Campsite): String = campsite.aspiraResourceId()
+
     override fun reservationUrlTemplate(
         campsite: Campsite,
         parentRef: BookingProviderRef,
-        catalogRef: CatalogCampsiteRef,
     ): String? {
-        val tenant = (parentRef as? BookingProviderRef.Aspira)?.tenant?.let { tenants[it] } ?: return null
-        return AspiraBookingUrl.templateFor(tenant.host, catalogRef.mapId, catalogRef.resourceLocationId, parentRef)
+        val aspiraRef = parentRef as? BookingProviderRef.Aspira ?: return null
+        val tenant = tenants[aspiraRef.tenant] ?: return null
+        return AspiraBookingUrl.templateFor(tenant.host, aspiraRef.mapId, aspiraRef.resourceLocationId, parentRef)
     }
 
     private fun tenantForRef(ref: BookingProviderRef.Aspira): AspiraTenant =

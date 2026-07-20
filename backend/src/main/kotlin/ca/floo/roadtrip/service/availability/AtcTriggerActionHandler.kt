@@ -42,7 +42,7 @@ internal class AtcTriggerActionHandler(
                     log.error(
                         "failed to execute ATC booking action for watch_id={} campsite_id={} date={}",
                         watch.id,
-                        next.request.target.campsiteRef.campsiteId,
+                        next.request.target.campsiteId,
                         next.request.arrivalDate,
                         it,
                     )
@@ -54,7 +54,7 @@ internal class AtcTriggerActionHandler(
                     "ATC completed: watch_id={} provider={} campsite_id={} date={}",
                     watch.id,
                     result.providerId,
-                    next.request.target.campsiteRef.campsiteId,
+                    next.request.target.campsiteId,
                     next.request.arrivalDate,
                 )
                 notifications.sendAtcResult(
@@ -72,7 +72,7 @@ internal class AtcTriggerActionHandler(
                     "ATC failed: watch_id={} provider={} campsite_id={} date={} error={} detail={}",
                     watch.id,
                     result.providerId,
-                    next.request.target.campsiteRef.campsiteId,
+                    next.request.target.campsiteId,
                     next.request.arrivalDate,
                     result.error,
                     result.detail,
@@ -92,7 +92,7 @@ internal class AtcTriggerActionHandler(
                     "ATC booking action unsupported for watch_id={} provider={} campsite_id={}",
                     watch.id,
                     next.request.target.providerId,
-                    next.request.target.campsiteRef.campsiteId,
+                    next.request.target.campsiteId,
                 )
                 false
             }

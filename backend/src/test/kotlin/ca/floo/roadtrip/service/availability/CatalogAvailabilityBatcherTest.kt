@@ -6,7 +6,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.Campground
@@ -129,14 +128,9 @@ class CatalogAvailabilityBatcherTest {
         }
 
     @Test
-    fun `passes provider-specific catalog refs to grouped fetch`() =
+    fun `passes provider-specific targets to grouped fetch`() =
         runBlocking {
             val provider = fakeProvider()
-            val catalogRef =
-                CatalogCampsiteRef(
-                    campsiteId = 1L,
-                    vendorId = "100",
-                )
             val targets =
                 listOf(
                     resolvedTarget(
@@ -145,7 +139,6 @@ class CatalogAvailabilityBatcherTest {
                         vendorId = "upper-pines-site-100",
                         provider = provider,
                         parentRef = BookingProviderRef.RecGov("232447"),
-                        catalogRef = catalogRef,
                     ),
                 )
 
@@ -154,7 +147,7 @@ class CatalogAvailabilityBatcherTest {
                     targets = targets,
                     windowFor = { _, _ -> windows },
                     fetch = { _, _, targets, ws ->
-                        assertEquals(listOf(catalogRef), targets.map { it.catalogRef })
+                        assertEquals(listOf(1L), targets.map { it.campsite.id })
                         emptyBatch(ws.fetch)
                     },
                 )
@@ -204,18 +197,12 @@ class CatalogAvailabilityBatcherTest {
         parentPoiId: Long = 1L,
         vendor: String = "recgov",
         vendorId: String = campsiteId.toString(),
-        catalogRef: CatalogCampsiteRef =
-            CatalogCampsiteRef(
-                campsiteId = campsiteId,
-                vendorId = vendorId,
-            ),
     ): ResolvedAvailabilityTarget {
         val campground = campgroundForRef(parentRef)
         return ResolvedAvailabilityTarget(
             campsite = campsite(campsiteId, vendor, vendorId),
             provider = provider,
             campground = campground,
-            catalogRef = catalogRef,
             parentPoiId = parentPoiId,
             dateContext = PoiDateContext(timeZone = ZoneOffset.UTC, earliestDate = window.startDate),
         )

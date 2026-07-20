@@ -76,9 +76,6 @@ class PollerBackfillTest : SharedDbTest() {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                refResolver =
-                    ca.floo.roadtrip.service.ref
-                        .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
                 campgroundRepo = CampgroundRepo(ctx),
