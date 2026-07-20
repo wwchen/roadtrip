@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.api.AvailabilityWatchCapabilitiesDto
 import ca.floo.roadtrip.model.api.PoiCampsitesAvailabilityResponseDto
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.repo.CampsiteRepo
 import java.time.LocalDate
 
@@ -22,7 +22,7 @@ internal class CampsiteAvailabilityService(
         endDate: LocalDate?,
         siteTypes: List<String>,
     ): PoiCampsitesAvailabilityResponseDto {
-        val watchScopeCampsites = campsitesRepo.findAvailabilityTargetsByPoi(poiId)
+        val watchScopeCampsites = campsitesRepo.findByPoi(poiId)
         val watchCapabilities = watchCapabilitiesFor(watchScopeCampsites, watchCapabilityService)
         val campsites = watchScopeCampsites.filterBySiteTypes(siteTypes)
         if (campsites.isEmpty()) {
@@ -73,7 +73,7 @@ private fun emptyPoiAvailability(
     )
 
 private fun watchCapabilitiesFor(
-    campsites: List<CampsiteAvailabilityTarget>,
+    campsites: List<Campsite>,
     capabilities: WatchCapabilityService,
 ): AvailabilityWatchCapabilitiesDto = capabilities.capabilitiesFor(campsites)
 

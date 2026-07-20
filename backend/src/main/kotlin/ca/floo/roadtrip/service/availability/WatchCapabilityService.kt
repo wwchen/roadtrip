@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.api.AvailabilityWatchCapabilitiesDto
 import ca.floo.roadtrip.model.booking.BookingAction
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.Campsite
 
 internal data class WatchCapabilitySupport(
     val scopedCount: Int,
@@ -20,7 +20,7 @@ internal class WatchCapabilityService(
             AvailabilityTriggerKinds.EMAIL_NOTIFY,
         ),
 ) {
-    fun internalPollingSupportFor(campsites: List<CampsiteAvailabilityTarget>): WatchCapabilitySupport {
+    fun internalPollingSupportFor(campsites: List<Campsite>): WatchCapabilitySupport {
         val unsupported =
             campsites.count { campsite ->
                 val resolved = availabilityTargets.resolve(campsite) ?: return@count true
@@ -31,7 +31,7 @@ internal class WatchCapabilityService(
 
     fun bookingSupportFor(
         action: BookingAction,
-        campsites: List<CampsiteAvailabilityTarget>,
+        campsites: List<Campsite>,
     ): WatchCapabilitySupport {
         val unsupported =
             campsites.count { campsite ->
@@ -41,12 +41,12 @@ internal class WatchCapabilityService(
         return WatchCapabilitySupport(scopedCount = campsites.size, unsupportedCount = unsupported)
     }
 
-    fun supportedBookingActions(campsites: List<CampsiteAvailabilityTarget>): Set<BookingAction> =
+    fun supportedBookingActions(campsites: List<Campsite>): Set<BookingAction> =
         BookingAction.entries
             .filter { bookingSupportFor(it, campsites).supported }
             .toSet()
 
-    fun supportedTriggerKinds(campsites: List<CampsiteAvailabilityTarget>): List<String> {
+    fun supportedTriggerKinds(campsites: List<Campsite>): List<String> {
         if (!internalPollingSupportFor(campsites).supported) return emptyList()
         val bookingActions = supportedBookingActions(campsites)
         return buildList {
@@ -55,7 +55,7 @@ internal class WatchCapabilityService(
         }
     }
 
-    fun capabilitiesFor(campsites: List<CampsiteAvailabilityTarget>): AvailabilityWatchCapabilitiesDto {
+    fun capabilitiesFor(campsites: List<Campsite>): AvailabilityWatchCapabilitiesDto {
         val bookingActions = supportedBookingActions(campsites)
         return AvailabilityWatchCapabilitiesDto(
             triggerKinds = supportedTriggerKinds(campsites),

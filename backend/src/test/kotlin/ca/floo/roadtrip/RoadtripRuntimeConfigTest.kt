@@ -23,6 +23,7 @@ class RoadtripRuntimeConfigTest {
                             "recgov",
                             "campflare",
                             "aspira",
+                            "bcparks-strapi",
                             "reserveamerica",
                             "reservecalifornia",
                             "tesla_supercharger",
@@ -34,6 +35,7 @@ class RoadtripRuntimeConfigTest {
                 registryWith(
                     "recgov-campgrounds",
                     "campflare-campgrounds",
+                    "aspira-pc-campgrounds",
                     "aspira-bc-campgrounds",
                     "reserveamerica-ny-campgrounds",
                     "reservecalifornia-campgrounds",
@@ -98,7 +100,8 @@ class RoadtripRuntimeConfigTest {
         when (source) {
             "recgov-campgrounds" -> "RecGovCampgroundsEtl"
             "campflare-campgrounds" -> "CampflareCampgroundsEtl"
-            "aspira-bc-campgrounds" -> "AspiraCampgroundsEtl"
+            "aspira-pc-campgrounds" -> "AspiraCampgroundsEtl"
+            "aspira-bc-campgrounds" -> "BcParksCampgroundsEtl"
             "reserveamerica-ny-campgrounds" -> "ReserveAmericaCampgroundsEtl"
             "reservecalifornia-campgrounds" -> "ReserveCaliforniaCampgroundsEtl"
             else -> "TestEtl"
@@ -106,6 +109,7 @@ class RoadtripRuntimeConfigTest {
 
     private fun argsFor(source: String): Map<String, String> =
         when (source) {
+            "aspira-pc-campgrounds" -> mapOf("host" to "reservation.pc.gc.ca")
             "aspira-bc-campgrounds" -> mapOf("host" to "camping.bcparks.ca")
             "reserveamerica-ny-campgrounds" ->
                 mapOf(

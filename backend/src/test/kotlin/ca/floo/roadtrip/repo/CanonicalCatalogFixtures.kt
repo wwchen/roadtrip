@@ -197,6 +197,7 @@ fun DSLContext.seedCampsite(
     name: String = "Site $vendorId",
     kind: String = "site",
     loopName: String? = null,
+    reservationUrl: String? = null,
     providerRefJson: String? = null,
     sourcePayloadJson: String = "{}",
     bookingProvider: String? = null,
@@ -207,9 +208,9 @@ fun DSLContext.seedCampsite(
         """
         INSERT INTO campsites (
           campground_id, name, kind, data_provider, data_provider_ref,
-          booking_provider, booking_provider_ref, loop_name, source_payload
+          booking_provider, booking_provider_ref, loop_name, reservation_url, source_payload
         ) VALUES (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb
         )
         RETURNING id
         """.trimIndent(),
@@ -221,6 +222,7 @@ fun DSLContext.seedCampsite(
         bookingProvider,
         bookingProviderRef,
         loopName,
+        reservationUrl,
         providerRefJson ?: sourcePayloadJson,
     )!!
         .get("id", Long::class.java)

@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
+import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import kotlinx.coroutines.runBlocking
@@ -163,17 +163,23 @@ class RecGovAvailabilityProviderTest {
     fun `booking url points at the rec_gov campsite page for the single night`() {
         val adapter = RecGovAvailabilityProvider(fakeRecgovClient { _, _ -> emptyMap() }, enabled = true)
         val campsite =
-            CampsiteAvailabilityTarget(
+            campsiteFixture(
                 id = 1,
                 vendor = "recgov",
                 vendorId = "330257",
-                name = null,
-                loop = null,
-                siteType = null,
-                raw = null,
+                name = "",
+                loopName = null,
+                kind = null,
+                sourcePayload = null,
             )
 
-        val url = adapter.reservationUrl(campsite, BookingProviderRef.RecGov("232447"), LocalDate.parse("2026-07-01"))
+        val url =
+            adapter.reservationUrl(
+                campsite,
+                BookingProviderRef.RecGov("232447"),
+                LocalDate.parse("2026-07-01"),
+                CatalogCampsiteRef(campsiteId = campsite.id, vendorId = "330257"),
+            )
 
         assertEquals(
             "https://www.recreation.gov/camping/campsites/330257?startDate=2026-07-01&endDate=2026-07-02",

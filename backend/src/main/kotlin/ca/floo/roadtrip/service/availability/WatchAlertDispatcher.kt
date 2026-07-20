@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.CellTransition
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
@@ -165,7 +165,7 @@ internal class WatchAlertDispatcher(
     private suspend fun postOpenings(
         watch: AvailabilityWatchRepo.Watch,
         covered: List<CellTransition>,
-        campsitesById: Map<Long, CampsiteAvailabilityTarget>,
+        campsitesById: Map<Long, Campsite>,
         handlers: List<TriggerActionHandler>,
     ) {
         if (handlers.isEmpty()) return
@@ -186,7 +186,7 @@ internal class WatchAlertDispatcher(
      *  booking inputs from one hydration pass. */
     private fun hydrateOpenings(
         covered: List<CellTransition>,
-        campsitesById: Map<Long, CampsiteAvailabilityTarget>,
+        campsitesById: Map<Long, Campsite>,
     ): List<TriggerOpening> {
         val poiNames = HashMap<Long, String?>()
         return covered.map { t ->
@@ -199,23 +199,23 @@ internal class WatchAlertDispatcher(
                 resolvedTarget = target,
                 watchOpening =
                     WatchOpening(
-                        label = r.name ?: "Site #${r.vendorId}",
-                        loop = r.loop,
-                        siteType = r.siteType,
+                        label = r.displayName(),
+                        loop = r.loopName,
+                        siteType = r.kind,
                         date = t.targetDate,
                         campgroundId = target?.parentPoiId,
                         campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { poiRepo.fetchPoiName(it) } },
                         // Booking link, if the campsite's provider exposes one — the URL
                         // scheme is the adapter's, never this dispatcher's. The parent
                         // ref supplies vendor ids the per-site ref may omit (e.g. Aspira).
-                        bookingUrl = target?.let { it.provider.reservationUrl(r, it.parentRef, t.targetDate) },
+                        bookingUrl = target?.let { it.provider.reservationUrl(r, it.parentRef, t.targetDate, it.catalogRef) },
                         vendor =
                             target
                                 ?.provider
                                 ?.id
                                 ?.name
                                 ?.lowercase()
-                                ?: r.vendor.lowercase(),
+                                ?: r.catalogVendor().lowercase(),
                     ),
             )
         }
@@ -231,7 +231,7 @@ internal class WatchAlertDispatcher(
      *  no POI). */
     private fun statusNotice(
         watch: AvailabilityWatchRepo.Watch,
-        campsites: List<CampsiteAvailabilityTarget>,
+        campsites: List<Campsite>,
         state: WatchStatusNotice.State,
     ): WatchStatusNotice {
         val poiIds = watch.targets.mapNotNull { it.poiId }.toSet()
@@ -244,8 +244,8 @@ internal class WatchAlertDispatcher(
             watchId = watch.id,
             state = state,
             siteCount = campsites.size,
-            siteName = single?.let { it.name ?: "Site #${it.vendorId}" },
-            siteLoop = single?.loop,
+            siteName = single?.displayName(),
+            siteLoop = single?.loopName,
             campgroundName = poiIds.singleOrNull()?.let { poiRepo.fetchPoiName(it) },
             startDate = watch.startDate,
             endDate = watch.endDate,

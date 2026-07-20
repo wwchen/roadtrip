@@ -331,6 +331,7 @@ open class EtlOrchestrator(
                             inventoryInputSlug = "aspira-inventory-bc",
                             dictionariesInputSlug = "aspira-dictionaries-bc",
                             aspiraTenant = "bc",
+                            parentDataProvider = ca.floo.roadtrip.model.domain.provider.DataProvider.STRAPI,
                         ),
                 // Aspira PC
                 "aspira-pc-campgrounds" to

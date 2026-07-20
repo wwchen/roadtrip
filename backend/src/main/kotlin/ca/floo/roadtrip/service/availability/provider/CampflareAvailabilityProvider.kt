@@ -9,14 +9,11 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.CampflareException
 import kotlinx.coroutines.CancellationException
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
@@ -38,11 +35,10 @@ class CampflareAvailabilityProvider(
     override fun supportsRef(ref: BookingProviderRef): Boolean = isEnabled() && ref is BookingProviderRef.Campflare
 
     override fun reservationUrlTemplate(
-        campsite: CampsiteAvailabilityTarget,
+        campsite: Campsite,
         parentRef: BookingProviderRef,
-        catalogMapId: Long?,
-        catalogResourceLocationId: Long?,
-    ): String? = RecGovBookingUrl.templateFromUrl(campsite.rawField(RESERVATION_URL_FIELD))
+        catalogRef: CatalogCampsiteRef,
+    ): String? = RecGovBookingUrl.templateFromUrl(campsite.reservationUrl)
 
     override suspend fun availability(
         ref: BookingProviderRef,
@@ -176,16 +172,8 @@ class CampflareAvailabilityProvider(
         private const val CAMPFLARE_PROVIDER = "campflare"
         private const val CAMPFLARE_BOOKING_HORIZON_DAYS = 365
         private const val CAMPFLARE_MAX_POLL_WINDOW_DAYS = 60
-        private const val RESERVATION_URL_FIELD = "reservation_url"
     }
 }
-
-private fun CampsiteAvailabilityTarget.rawField(name: String): String? =
-    ((raw as? JsonObject)?.get(name))
-        ?.jsonPrimitive
-        ?.contentOrNull
-        ?.trim()
-        ?.takeIf { it.isNotEmpty() }
 
 private fun dates(
     startDate: LocalDate,

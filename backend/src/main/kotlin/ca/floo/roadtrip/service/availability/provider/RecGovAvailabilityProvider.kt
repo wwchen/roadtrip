@@ -5,7 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import java.time.LocalDate
@@ -73,11 +73,10 @@ class RecGovAvailabilityProvider(
      *  the window placeholders. [parentRef] is unused — the site id alone
      *  addresses the page. */
     override fun reservationUrlTemplate(
-        campsite: CampsiteAvailabilityTarget,
+        campsite: Campsite,
         parentRef: BookingProviderRef,
-        catalogMapId: Long?,
-        catalogResourceLocationId: Long?,
-    ): String = RecGovBookingUrl.template(campsite.vendorId)
+        catalogRef: CatalogCampsiteRef,
+    ): String = RecGovBookingUrl.template(catalogRef.vendorId)
 
     private fun recgovIdOrThrow(ref: BookingProviderRef): String =
         when (ref) {

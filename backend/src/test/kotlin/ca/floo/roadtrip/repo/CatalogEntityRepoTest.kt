@@ -295,11 +295,11 @@ class CatalogEntityRepoTest : SharedDbTest() {
         assertEquals(json("""{"id":"upper-pines-site-001","campground_id":"upper-pines-campground-447"}"""), persisted.sourcePayload)
         assertEquals(campsiteId, campsites.findByPoi(poiIdForCampground("upper-pines-campground-447")).single().id)
 
-        val availabilityTarget = campsites.findAvailabilityTargetById(campsiteId)
+        val availabilityTarget = campsites.findById(campsiteId)
         assertNotNull(availabilityTarget)
         assertEquals(campsiteId, availabilityTarget.id)
-        assertEquals("campflare", availabilityTarget.vendor)
-        assertEquals("upper-pines-site-001", availabilityTarget.vendorId)
+        assertEquals("campflare", availabilityTarget.dataProviderRef.provider.id)
+        assertEquals("upper-pines-site-001", availabilityTarget.dataProviderRef.serialize())
         assertEquals("Site 001", availabilityTarget.name)
     }
 

@@ -6,7 +6,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -27,7 +27,7 @@ internal class CampsiteAvailabilityComposer(
     private val availabilityLoader = AvailabilityLoader(availabilityRepo)
 
     suspend fun availabilityFor(
-        campsites: List<CampsiteAvailabilityTarget>,
+        campsites: List<Campsite>,
         startDate: LocalDate?,
         endDate: LocalDate?,
     ): List<AvailabilityResponseDto> {

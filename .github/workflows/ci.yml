@@ -162,46 +162,28 @@ jobs:
       # FE a Banff/Parks-Canada-shaped Aspira pin which matches what the
       # smoke clicks on. Fetch + import remain exercisable locally via Tilt.
       #
-      # Post-V39 shape: `campgrounds.data_source` is NOT NULL, `is_primary` is
-      # gone from `campground_vendor_refs`, and read paths (PoiServingRepo)
-      # serve through `campground_canonical` — so the matview needs a refresh
-      # after the insert or the FE gets an empty bbox.
+      # Post-V44 shape: campground rows carry provider identity directly; the
+      # old vendor_ref tables and canonical materialized views no longer exist.
       - name: Seed canonical catalog with smoke fixture
         run: |
           PGPASSWORD=roadtrip psql -h localhost -U roadtrip -d roadtrip <<'SQL'
-          WITH vendor_ref AS (
-              INSERT INTO vendor_refs (
-                  vendor, entity_type, external_id, external_name, source_url, payload
-              ) VALUES (
-                  'aspira-pc-pins',
-                  'campground',
-                  'aspira-fixture-tunnel-mountain',
-                  'Tunnel Mountain - Village 1',
-                  'https://reservation.pc.gc.ca/',
-                  '{"transactionLocationId":-2147483648,"mapId":-2147483622,"resourceLocationId":-2147483646}'::jsonb
-              )
-              RETURNING id
-          ),
-          campground AS (
+          WITH campground AS (
               INSERT INTO campgrounds (
-                  name, kind, data_source, primary_vendor_ref_id, location, management, reservation_url, source_payload
-              )
-              SELECT
+                  name, kind, data_provider, data_provider_ref, booking_provider, booking_provider_ref,
+                  location, management, reservation_url, source_payload
+              ) VALUES (
                   'Tunnel Mountain - Village 1',
                   'federal',
-                  'aspira-pc-pins',
-                  vendor_ref.id,
+                  'aspira',
+                  '-2147483648:-2147483622',
+                  'aspira',
+                  'pc:-2147483648:-2147483622:-2147483646',
                   '{"region":"AB","country":"CA"}'::jsonb,
                   '{"agency":"Parks Canada"}'::jsonb,
                   'https://reservation.pc.gc.ca/',
-                  '{"upstream":{"host":"reservation.pc.gc.ca","match_kind":"fixture"}}'::jsonb
-              FROM vendor_ref
+                  '{"transactionLocationId":-2147483648,"mapId":-2147483622,"resourceLocationId":-2147483646,"upstream":{"host":"reservation.pc.gc.ca","match_kind":"fixture"}}'::jsonb
+              )
               RETURNING id
-          ),
-          linked_vendor_ref AS (
-              INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id)
-              SELECT campground.id, vendor_ref.id
-              FROM campground, vendor_ref
           ),
           poi AS (
               INSERT INTO pois (poi_type, geom)
@@ -216,8 +198,6 @@ jobs:
           INSERT INTO poi_campgrounds (poi_id, campground_id)
           SELECT poi.id, campground.id
           FROM poi, campground;
-          REFRESH MATERIALIZED VIEW campground_canonical;
-          REFRESH MATERIALIZED VIEW campsite_canonical;
           SQL
 
       # Chromium is a fixed-version (~150MB) download the install task otherwise

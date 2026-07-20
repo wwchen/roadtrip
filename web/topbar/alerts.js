@@ -180,7 +180,7 @@ function watchName(w) {
   if (w.poi_id != null) return poiNameCache.get(w.poi_id) || `POI ${w.poi_id}`;
   // Campsite-targeted watches (no POI scope) carry a campsite object.
   const r = w.campsite;
-  if (r?.name) return r.loop ? `${r.loop} / ${r.name}` : r.name;
+  if (r?.name) return r.loop_name ? `${r.loop_name} / ${r.name}` : r.name;
   return `Watch #${w.id}`;
 }
 

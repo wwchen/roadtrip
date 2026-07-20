@@ -4,9 +4,9 @@ import ca.floo.roadtrip.client.aspira.AspiraAvailability
 import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.aspira.AspiraOccupancy
 import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
+import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import kotlinx.coroutines.runBlocking
@@ -299,14 +299,14 @@ class AspiraAvailabilityProviderTest {
                 enabled = true,
             )
         val reservable =
-            CampsiteAvailabilityTarget(
+            campsiteFixture(
                 id = 1,
-                vendor = "aspira_wa",
+                vendor = "aspira",
                 vendorId = "-100",
                 name = "A",
-                loop = null,
-                siteType = null,
-                raw = null,
+                loopName = null,
+                kind = null,
+                sourcePayload = null,
             )
         val parentRef =
             BookingProviderRef.Aspira(
@@ -321,8 +321,13 @@ class AspiraAvailabilityProviderTest {
                 campsite = reservable,
                 parentRef = parentRef,
                 date = LocalDate.parse("2026-07-10"),
-                catalogMapId = -2147483615,
-                catalogResourceLocationId = -2147483624,
+                catalogRef =
+                    CatalogCampsiteRef(
+                        campsiteId = reservable.id,
+                        vendorId = reservable.dataProviderRef.serialize(),
+                        mapId = -2147483615,
+                        resourceLocationId = -2147483624,
+                    ),
             )!!
 
         assertTrue(url.startsWith("https://washington.goingtocamp.com/create-booking/results?"), url)

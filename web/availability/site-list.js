@@ -16,7 +16,7 @@ import { hasReservationUrlTemplate, reservationUrlFromTemplate } from './booking
  *
  * @param {object} args
  * @param {'loading'|'success'|'error'} args.state
- * @param {Array<object>}        args.campsites  Rows from BE (id/name/loop/site_type/reservation_url_template).
+ * @param {Array<object>}        args.campsites  Canonical campsite rows from the backend.
  * @param {string|null}          args.error
  * @param {boolean}               args.expanded
  * @param {object|null}           args.selectedDay  Per-day availability row.
@@ -25,6 +25,7 @@ import { hasReservationUrlTemplate, reservationUrlFromTemplate } from './booking
 export function renderSiteList({
   state,
   campsites,
+  reservationUrlTemplates = {},
   error,
   expanded,
   selectedDay = null,
@@ -51,7 +52,7 @@ export function renderSiteList({
   // success
   const rows = campsitesForIds(campsites, availableIds);
   const body = expanded
-    ? renderRows(rows, { selectedDate: selectedDay?.date || null, selectedEndDate })
+    ? renderRows(rows, { selectedDate: selectedDay?.date || null, selectedEndDate, reservationUrlTemplates })
     : '';
   return renderSection({
     header: renderHeader({ count, total, expanded, disabled: false }),
@@ -103,22 +104,25 @@ function campsitesForIds(campsites, ids) {
 }
 
 function fallbackCampsite(id) {
-  return { id, vendor_id: String(id) };
+  return { id, data_provider_ref: String(id) };
 }
 
 function renderRow(r, dateWindow) {
   const name = r.name || formatFallbackName(r);
   const safeName = escapeHtml(name);
-  const loopLine = r.loop ? `<div class="cg-sites-row-loop">${escapeHtml(r.loop)}</div>` : '';
+  const loopLine = r.loop_name ? `<div class="cg-sites-row-loop">${escapeHtml(r.loop_name)}</div>` : '';
   const details = renderSiteDetails(r);
-  const typeTag = r.site_type
-    ? `<span class="cg-sites-row-type">${escapeHtml(r.site_type)}</span>`
+  const typeTag = r.kind
+    ? `<span class="cg-sites-row-type">${escapeHtml(r.kind)}</span>`
     : '';
   const url = reservationUrlFromTemplate(r, {
     startDate: dateWindow?.selectedDate,
     endDate: dateWindow?.selectedEndDate,
+    reservationUrlTemplates: dateWindow?.reservationUrlTemplates,
   });
-  const bookTag = (url || hasReservationUrlTemplate(r)) ? '<span class="cg-sites-row-book">Book</span>' : '';
+  const bookTag = url || hasReservationUrlTemplate(r, dateWindow?.reservationUrlTemplates)
+    ? '<span class="cg-sites-row-book">Book</span>'
+    : '';
   const side = typeTag || bookTag ? `<div class="cg-sites-row-side">${typeTag}${bookTag}</div>` : '';
   const inner = `
     <div class="cg-sites-row-main">
@@ -140,23 +144,29 @@ function renderRow(r, dateWindow) {
 
 /**
  * Aspira `/api/availability/map` doesn't ship per-resource names — only
- * resource ids. Show "Site #<vendor_id>" rather than "(unnamed)".
+ * resource ids. Show "Site #<data_provider_ref>" rather than "(unnamed)".
  */
 function formatFallbackName(r) {
-  if (r.vendor_id) return `Site #${r.vendor_id}`;
+  if (r.data_provider_ref) return `Site #${r.data_provider_ref}`;
   return r.id != null ? `Site #${r.id}` : '(unknown)';
 }
 
 function renderSiteDetails(r) {
-  const raw = r.raw && typeof r.raw === 'object' ? r.raw : {};
-  const details = [capacityLabel(raw), descriptionSummary(raw.description)].filter(Boolean);
+  const raw = r.source_payload && typeof r.source_payload === 'object' ? r.source_payload : {};
+  const details = [capacityLabel(r, raw), descriptionSummary(raw.description)].filter(Boolean);
   if (details.length === 0) return '';
   return `<div class="cg-sites-row-details">${details.map(escapeHtml).join(' · ')}</div>`;
 }
 
-function capacityLabel(raw) {
+function capacityLabel(row, raw) {
   const min = numberValue(raw.min_capacity ?? raw.minCapacity ?? raw.min_num_people ?? raw.minNumPeople);
-  const max = numberValue(raw.max_capacity ?? raw.maxCapacity ?? raw.max_num_people ?? raw.maxNumPeople);
+  const max = numberValue(
+    row.max_people ??
+      raw.max_capacity ??
+      raw.maxCapacity ??
+      raw.max_num_people ??
+      raw.maxNumPeople,
+  );
   if (min != null && max != null && min !== max) return `Sleeps ${min}-${max}`;
   if (max != null) return `Sleeps up to ${max}`;
   if (min != null) return `Sleeps ${min}+`;
@@ -183,10 +193,10 @@ function descriptionSummary(value) {
 }
 
 function compareCampsite(a, b) {
-  const al = a.loop || '￿';
-  const bl = b.loop || '￿';
+  const al = a.loop_name || '￿';
+  const bl = b.loop_name || '￿';
   if (al !== bl) return al.localeCompare(bl);
-  const an = a.name || a.vendor_id || '';
-  const bn = b.name || b.vendor_id || '';
+  const an = a.name || a.data_provider_ref || '';
+  const bn = b.name || b.data_provider_ref || '';
   return an.localeCompare(bn, undefined, { numeric: true });
 }

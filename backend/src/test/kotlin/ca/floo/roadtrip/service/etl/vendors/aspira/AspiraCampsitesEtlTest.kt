@@ -94,6 +94,30 @@ class AspiraCampsitesEtlTest {
         assertEquals(-2147483615, sourcePayload["_aspira_resource_map_id"]!!.jsonPrimitive.long)
     }
 
+    @Test
+    fun `bc tenant uses STRAPI parent provider ref to match BcParksCampgroundsEtl output`() {
+        val etl =
+            AspiraCampsitesEtl(
+                etlSlug = "aspira-bc-campsites",
+                mapsInputSlug = "aspira-maps-bc",
+                inventoryInputSlug = "aspira-inventory-bc",
+                aspiraTenant = "bc",
+                parentDataProvider = DataProvider.STRAPI,
+            )
+
+        val dto =
+            AspiraCampsitesEtl.Parsed(
+                inventory = listOf(envelopeOf(inventoryPayload)),
+                maps = Json.parseToJsonElement(mapsPayload).jsonObject["payload"] as kotlinx.serialization.json.JsonArray,
+                dictionaries = AspiraCampsitesEtl.AspiraDictionaries.empty,
+            )
+
+        val campsite = etl.transform(dto, ctx).campsites.single()
+
+        assertEquals(DataProvider.STRAPI, campsite.parentDataProviderRef!!.provider)
+        assertEquals("-2147483630:-2147483388", campsite.parentDataProviderRef!!.serialize())
+    }
+
     private fun envelopeOf(payloadJson: String): Envelope =
         Json.decodeFromString(
             Envelope.serializer(),

@@ -1,11 +1,8 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.model.domain.Campsite
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
-import ca.floo.roadtrip.model.domain.provider.DataProvider
-import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
@@ -26,7 +23,6 @@ class CampsiteRepo(
         val loops: List<String> = emptyList(),
         val siteTypes: List<String> = emptyList(),
         val rawContainsJson: List<String> = emptyList(),
-        val tagsContainsJson: List<String> = emptyList(),
     )
 
     fun upsertCampsites(
@@ -251,30 +247,6 @@ class CampsiteRepo(
                 poiId,
             ).map(::campsiteFromRecord)
 
-    fun findAvailabilityTargetById(id: Long): CampsiteAvailabilityTarget? =
-        ctx
-            .fetchOne(
-                "$availabilityTargetSelect WHERE c.id = ? AND c.deleted_at IS NULL",
-                id,
-            )?.let(::availabilityTargetFromRecord)
-
-    fun findAvailabilityTargetsByPoi(poiId: Long): List<CampsiteAvailabilityTarget> =
-        ctx
-            .fetch(
-                """
-                $availabilityTargetSelect
-                JOIN poi_campgrounds pc
-                  ON pc.campground_id = c.campground_id
-                JOIN pois p
-                  ON p.id = pc.poi_id
-                WHERE pc.poi_id = ?
-                  AND c.deleted_at IS NULL
-                  AND p.deleted_at IS NULL
-                ORDER BY c.loop_name NULLS LAST, c.name, c.id
-                """.trimIndent(),
-                poiId,
-            ).map(::availabilityTargetFromRecord)
-
     fun countSearch(filters: SearchFilters): Int {
         val where = searchWhere(filters)
         return ctx
@@ -332,10 +304,6 @@ class CampsiteRepo(
             clauses += "c.source_payload @> ?::jsonb"
             params += rawJson
         }
-        for (tagsJson in filters.tagsContainsJson) {
-            clauses += "($campsiteTagsJsonSql) @> ?::jsonb"
-            params += tagsJson
-        }
         return SearchWhere(clauses, params)
     }
 
@@ -381,11 +349,8 @@ class CampsiteRepo(
     }
 
     private fun campsiteFromRecord(record: Record): Campsite {
-        val dataProvider = DataProvider.fromId(record.get("data_provider", String::class.java))
+        val dataProvider = record.get("data_provider", String::class.java)
         val dataProviderRefStr = record.get("data_provider_ref", String::class.java)
-        val dataProviderRef =
-            DataProviderRef.parse(dataProvider, dataProviderRefStr)
-                ?: error("Failed to parse DataProviderRef for provider=$dataProvider ref=$dataProviderRefStr")
 
         return Campsite(
             id = record.get("id", Long::class.java),
@@ -417,24 +382,10 @@ class CampsiteRepo(
             createdAt = record.instant("created_at"),
             updatedAt = record.instant("updated_at"),
             deletedAt = record.nullableInstant("deleted_at"),
-            dataProviderRef = dataProviderRef,
+            dataProvider = dataProvider,
+            dataProviderRefValue = dataProviderRefStr,
             bookingProvider = record.get("booking_provider", String::class.java),
             bookingProviderRef = record.get("booking_provider_ref", String::class.java),
-        )
-    }
-
-    internal fun availabilityTargetFromRecord(r: Record): CampsiteAvailabilityTarget {
-        val vendor = r.get("data_provider", String::class.java) ?: CANONICAL_VENDOR
-        val externalId = r.get("data_provider_ref", String::class.java) ?: r.get("id", Long::class.java).toString()
-        return CampsiteAvailabilityTarget(
-            id = r.get("id", Long::class.java),
-            vendor = vendor,
-            vendorId = externalId,
-            name = r.get("name", String::class.java),
-            loop = r.get("loop_name", String::class.java),
-            siteType = r.get("kind", String::class.java),
-            raw = parseJsonElement(r.get("source_payload_text", String::class.java)),
-            tags = parseJsonElement(r.get("tags_text", String::class.java)),
         )
     }
 
@@ -476,7 +427,6 @@ class CampsiteRepo(
     }
 
     private companion object {
-        private const val CANONICAL_VENDOR = "canonical"
         private const val MIN_SEARCH_LIMIT = 1
         private const val MAX_SEARCH_LIMIT = 500
 
@@ -517,57 +467,6 @@ class CampsiteRepo(
               c.booking_provider,
               c.booking_provider_ref
             FROM campsites c
-            """.trimIndent()
-
-        private val availabilityTargetSelect =
-            """
-            SELECT
-              c.id,
-              c.name,
-              c.loop_name,
-              c.kind,
-              c.data_provider,
-              c.data_provider_ref,
-              c.booking_provider,
-              c.booking_provider_ref,
-              c.source_payload::text AS source_payload_text,
-              jsonb_build_object(
-                'kind_listed', c.kind_listed,
-                'equipment', c.equipment,
-                'max_people', c.max_people,
-                'max_cars', c.max_cars,
-                'driveway_length', c.driveway_length,
-                'max_rv_length', c.max_rv_length,
-                'max_trailer_length', c.max_trailer_length,
-                'water_hookups', c.water_hookups,
-                'electric_hookups', c.electric_hookups,
-                'sewer_hookups', c.sewer_hookups,
-                'firepit', c.firepit,
-                'picnic_table', c.picnic_table,
-                'ada_accessible', c.ada_accessible,
-                'pull_through', c.pull_through
-              )::text AS tags_text
-            FROM campsites c
-            """.trimIndent()
-
-        private val campsiteTagsJsonSql =
-            """
-            jsonb_build_object(
-              'kind_listed', c.kind_listed,
-              'equipment', c.equipment,
-              'max_people', c.max_people,
-              'max_cars', c.max_cars,
-              'driveway_length', c.driveway_length,
-              'max_rv_length', c.max_rv_length,
-              'max_trailer_length', c.max_trailer_length,
-              'water_hookups', c.water_hookups,
-              'electric_hookups', c.electric_hookups,
-              'sewer_hookups', c.sewer_hookups,
-              'firepit', c.firepit,
-              'picnic_table', c.picnic_table,
-              'ada_accessible', c.ada_accessible,
-              'pull_through', c.pull_through
-            )
             """.trimIndent()
     }
 }

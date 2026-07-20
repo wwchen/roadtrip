@@ -5,7 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.AspiraException
@@ -124,11 +124,10 @@ class AspiraAvailabilityProvider(
      *  neither the campsite's typed catalog ids nor [parentRef] carries the ids
      *  the link needs. */
     override fun reservationUrlTemplate(
-        campsite: CampsiteAvailabilityTarget,
+        campsite: Campsite,
         parentRef: BookingProviderRef,
-        catalogMapId: Long?,
-        catalogResourceLocationId: Long?,
-    ): String? = AspiraBookingUrl.templateFor(tenant.host, catalogMapId, catalogResourceLocationId, parentRef)
+        catalogRef: CatalogCampsiteRef,
+    ): String? = AspiraBookingUrl.templateFor(tenant.host, catalogRef.mapId, catalogRef.resourceLocationId, parentRef)
 
     /**
      * Pull the map id and narrow Long → Int. Real Aspira ids fit comfortably
