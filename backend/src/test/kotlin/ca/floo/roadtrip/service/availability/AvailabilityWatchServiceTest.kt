@@ -7,12 +7,14 @@ import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
+import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
@@ -92,6 +94,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
+                campgroundRepo = CampgroundRepo(ctx),
                 availabilityProviders = listOf(availabilityProvider),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
@@ -124,6 +127,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
+                campgroundRepo = CampgroundRepo(ctx),
                 availabilityProviders = listOf(availabilityProvider),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
@@ -175,6 +179,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
+                campgroundRepo = CampgroundRepo(ctx),
                 availabilityProviders = listOf(FakeProvider),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
@@ -745,7 +750,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: BookingProviderRef,
+            campground: Campground,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
@@ -763,7 +768,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: BookingProviderRef,
+            campground: Campground,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")

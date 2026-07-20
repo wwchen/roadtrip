@@ -47,6 +47,9 @@ internal fun Route.campsiteRoutes(
     watchCapabilities: WatchCapabilityService,
 ) {
     val campsitesRepo = CampsiteRepo(ctx)
+    val campgroundRepo =
+        ca.floo.roadtrip.repo
+            .CampgroundRepo(ctx)
     val refResolver =
         ca.floo.roadtrip.service.ref
             .DbRefResolver(ctx)
@@ -55,6 +58,7 @@ internal fun Route.campsiteRoutes(
             refResolver = refResolver,
             ctx = ctx,
             campsitesRepo = campsitesRepo,
+            campgroundRepo = campgroundRepo,
             availabilityProviders = availabilityProviders,
             dateResolver = dateResolver,
             pollerRepo = AvailabilityPollerRepo(ctx),

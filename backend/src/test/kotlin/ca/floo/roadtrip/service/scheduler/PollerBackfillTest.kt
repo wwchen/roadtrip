@@ -2,9 +2,10 @@ package ca.floo.roadtrip.service.scheduler
 
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
@@ -80,6 +81,7 @@ class PollerBackfillTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
+                campgroundRepo = CampgroundRepo(ctx),
                 availabilityProviders = listOf(FakeProvider),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
@@ -123,7 +125,7 @@ class PollerBackfillTest : SharedDbTest() {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: BookingProviderRef,
+            campground: Campground,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")

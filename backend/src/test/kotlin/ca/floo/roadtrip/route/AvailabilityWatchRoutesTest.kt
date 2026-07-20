@@ -1,8 +1,10 @@
 package ca.floo.roadtrip.route
 
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
+import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
@@ -79,6 +81,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
+                campgroundRepo = CampgroundRepo(ctx),
                 availabilityProviders = emptyList(),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
@@ -106,6 +109,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
+                campgroundRepo = CampgroundRepo(ctx),
                 availabilityProviders = listOf(FakeRecgovProvider),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
@@ -127,6 +131,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
+                campgroundRepo = CampgroundRepo(ctx),
                 availabilityProviders = listOf(FakeRecgovProvider),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
@@ -146,6 +151,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
+                campgroundRepo = CampgroundRepo(ctx),
                 availabilityProviders = emptyList(),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
@@ -1067,7 +1073,7 @@ private object FakeRecgovProvider : ca.floo.roadtrip.service.availability.provid
     override fun isEnabled(): Boolean = true
 
     override suspend fun availability(
-        ref: ca.floo.roadtrip.model.domain.provider.BookingProviderRef,
+        campground: Campground,
         startDate: java.time.LocalDate,
         endDate: java.time.LocalDate,
     ): ca.floo.roadtrip.model.availability.AvailabilityObservationBatch = throw UnsupportedOperationException("not used")

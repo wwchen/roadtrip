@@ -50,11 +50,11 @@ class AspiraAvailabilityProvider(
     }
 
     override suspend fun availability(
-        ref: BookingProviderRef,
+        campground: Campground,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        val aspiraRef = aspiraRefOrThrow(ref)
+        val aspiraRef = aspiraRefOrThrow(campground)
         val tenant = tenantForRef(aspiraRef)
         val mapId = mapIdOrThrow(aspiraRef.mapId)
         return runWithErrorMapping {
@@ -71,12 +71,12 @@ class AspiraAvailabilityProvider(
     }
 
     override suspend fun catalogAvailability(
-        ref: BookingProviderRef,
+        campground: Campground,
         campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        val aspiraRef = aspiraRefOrThrow(ref)
+        val aspiraRef = aspiraRefOrThrow(campground)
         val tenant = tenantForRef(aspiraRef)
         val parentMapId = mapIdOrThrow(aspiraRef.mapId)
         val targets =
@@ -133,9 +133,12 @@ class AspiraAvailabilityProvider(
 
     private fun mapIdOrThrow(mapId: Long): Int = intOrThrow("mapId", mapId)
 
-    private fun aspiraRefOrThrow(ref: BookingProviderRef): BookingProviderRef.Aspira =
-        (ref as? BookingProviderRef.Aspira)
-            ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), ref::class.simpleName ?: "unknown")
+    private fun aspiraRefOrThrow(campground: Campground): BookingProviderRef.Aspira {
+        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull)
+        val ref = provider?.let { campground.bookingProviderRef?.let { r -> BookingProviderRef.parse(it, r) } }
+        return (ref as? BookingProviderRef.Aspira)
+            ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
+    }
 
     private fun intOrThrow(
         label: String,

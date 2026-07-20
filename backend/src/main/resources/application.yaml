@@ -46,6 +46,6 @@ roadtrip:
     enabled-availability-providers:
       - aspira
       - campflare
-      - recgov
+#      - recgov
       - reserveamerica
       - reservecalifornia

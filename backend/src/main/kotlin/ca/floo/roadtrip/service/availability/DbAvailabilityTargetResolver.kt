@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.ref.RefResolver
@@ -17,6 +18,7 @@ internal class DbAvailabilityTargetResolver(
     private val refResolver: RefResolver,
     private val ctx: DSLContext,
     private val campsitesRepo: CampsiteRepo,
+    private val campgroundRepo: CampgroundRepo,
     private val availabilityProviders: List<AvailabilityProvider>,
     private val dateResolver: AvailabilityDateResolver,
     private val pollerRepo: AvailabilityPollerRepo,
@@ -27,32 +29,30 @@ internal class DbAvailabilityTargetResolver(
 
         val candidates =
             poiIds.flatMap { poiId ->
-                val bookingRefs = refResolver.resolve<RefValue.CampgroundBookingRef>(RefValue.PoiId(poiId))
-                bookingRefs.mapNotNull { bookingRefValue ->
-                    val provider =
-                        availabilityProviders.firstOrNull { it.isEnabled() && it.id == bookingRefValue.ref.provider }
-                            ?: return@mapNotNull null
-                    Triple(poiId, bookingRefValue.ref, provider)
-                }
+                val campground = campgroundRepo.findByPoi(poiId) ?: return@flatMap emptyList()
+                availabilityProviders
+                    .filter { it.supportsCampground(campground) }
+                    .map { provider -> Triple(poiId, campground, provider) }
             }
 
-        val (poiId, parentRef, provider) = candidates.firstOrNull() ?: return null
+        val (poiId, campground, provider) = candidates.firstOrNull() ?: return null
+        val parentRef = provider.parentRefFor(campground)
         val catalogRef = buildCatalogRef(campsite, parentRef)
         val poiLatLng = getPoiLatLng(poiId)
 
         return ResolvedAvailabilityTarget(
             campsite = campsite,
             provider = provider,
-            parentRef = parentRef,
+            campground = campground,
             catalogRef = catalogRef,
             parentPoiId = poiId,
             dateContext = dateResolver.context(lat = poiLatLng?.first, lng = poiLatLng?.second),
             candidates =
-                candidates.map { (_, ref, prov) ->
+                candidates.map { (_, cg, prov) ->
                     ProviderCandidate(
                         provider = prov,
-                        parentRef = ref,
-                        catalogRef = buildCatalogRef(campsite, ref),
+                        campground = cg,
+                        catalogRef = buildCatalogRef(campsite, prov.parentRefFor(cg)),
                     )
                 },
         )
@@ -70,7 +70,9 @@ internal class DbAvailabilityTargetResolver(
                 .findByPoi(poller.poiId)
                 .mapNotNull { resolve(it) }
                 .filter {
-                    parentRefKey(it.parentRef) == poller.parentRef &&
+                    val ref = it.parentRef
+                    ref != null &&
+                        parentRefKey(ref) == poller.parentRef &&
                         it.provider.id.name
                             .lowercase() == poller.provider
                 }.distinctBy { it.campsite.id }
@@ -100,8 +102,14 @@ internal class DbAvailabilityTargetResolver(
 
     private fun buildCatalogRef(
         campsite: Campsite,
-        parentRef: BookingProviderRef,
+        parentRef: BookingProviderRef?,
     ): CatalogCampsiteRef {
+        if (parentRef == null) {
+            return CatalogCampsiteRef(
+                campsiteId = campsite.id,
+                vendorId = campsite.dataProviderRef.serialize(),
+            )
+        }
         val campsiteRef =
             refResolver
                 .resolve<RefValue.CampsiteBookingRef>(RefValue.CampsiteId(campsite.id))

@@ -4,9 +4,11 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.PoiDateContext
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -15,9 +17,11 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import kotlinx.serialization.json.JsonNull
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -139,7 +143,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: BookingProviderRef,
+            campground: Campground,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used by AvailabilityPollerMembershipTest")
@@ -161,11 +165,12 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
             dateContext: PoiDateContext,
             supportsInternalPolling: Boolean = true,
         ) {
+            val campground = fakeCampground(provider, parentRef)
             byCampsiteId[campsite.id] =
                 ResolvedAvailabilityTarget(
                     campsite = campsite,
                     provider = FakeProvider(provider, supportsInternalPolling),
-                    parentRef = parentRef,
+                    campground = campground,
                     catalogRef =
                         CatalogCampsiteRef(
                             campsiteId = campsite.id,
@@ -175,6 +180,45 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
                     dateContext = dateContext,
                 )
         }
+
+        private fun fakeCampground(
+            provider: BookingProvider,
+            parentRef: BookingProviderRef,
+        ): Campground =
+            Campground(
+                id = 1L,
+                name = "Fake Campground",
+                status = null,
+                statusDescription = null,
+                kind = null,
+                shortDescription = null,
+                mediumDescription = null,
+                longDescription = null,
+                location = JsonNull,
+                defaultCampsiteSchedule = JsonNull,
+                amenities = JsonNull,
+                maxRvLength = null,
+                maxTrailerLength = null,
+                hasPullThroughSites = null,
+                bigRigFriendly = null,
+                reservationUrl = null,
+                links = JsonNull,
+                photos = JsonNull,
+                alerts = JsonNull,
+                price = JsonNull,
+                cellService = JsonNull,
+                management = JsonNull,
+                contact = JsonNull,
+                connections = JsonNull,
+                metadata = JsonNull,
+                sourcePayload = JsonNull,
+                createdAt = Instant.EPOCH,
+                updatedAt = Instant.EPOCH,
+                deletedAt = null,
+                dataProviderRef = DataProviderRef.RecGov(id = parentRef.serialize()),
+                bookingProvider = provider.id,
+                bookingProviderRef = parentRef.serialize(),
+            )
 
         override fun resolve(campsite: Campsite): ResolvedAvailabilityTarget? = byCampsiteId[campsite.id]
 

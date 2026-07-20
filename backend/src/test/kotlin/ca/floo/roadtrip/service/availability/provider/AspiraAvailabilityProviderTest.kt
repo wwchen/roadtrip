@@ -73,13 +73,7 @@ class AspiraAvailabilityProviderTest {
 
             val batch =
                 adapter.catalogAvailability(
-                    ref =
-                        BookingProviderRef.Aspira(
-                            tenant = "pc",
-                            transactionLocationId = -2147483630,
-                            mapId = -2147483388,
-                            resourceLocationId = -2147483624,
-                        ),
+                    campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483388:-2147483624"),
                     campsites =
                         listOf(
                             CatalogCampsiteRef(
@@ -143,13 +137,7 @@ class AspiraAvailabilityProviderTest {
 
             val batch =
                 adapter.catalogAvailability(
-                    ref =
-                        BookingProviderRef.Aspira(
-                            tenant = "pc",
-                            transactionLocationId = -2147483630,
-                            mapId = -2147483388,
-                            resourceLocationId = -2147483624,
-                        ),
+                    campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483388:-2147483624"),
                     campsites =
                         listOf(
                             CatalogCampsiteRef(
@@ -205,13 +193,7 @@ class AspiraAvailabilityProviderTest {
 
             val batch =
                 adapter.catalogAvailability(
-                    ref =
-                        BookingProviderRef.Aspira(
-                            tenant = "pc",
-                            transactionLocationId = -2147483630,
-                            mapId = -2147483388,
-                            resourceLocationId = null,
-                        ),
+                    campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483388:null"),
                     campsites =
                         listOf(
                             CatalogCampsiteRef(
@@ -251,13 +233,7 @@ class AspiraAvailabilityProviderTest {
 
             assertFailsWith<AvailabilityProviderError.UpstreamBlocked> {
                 adapter.catalogAvailability(
-                    ref =
-                        BookingProviderRef.Aspira(
-                            tenant = "bc",
-                            transactionLocationId = -2147483505,
-                            mapId = -2147483418,
-                            resourceLocationId = -2147483539,
-                        ),
+                    campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "bc:-2147483505:-2147483418:-2147483539"),
                     campsites =
                         listOf(
                             CatalogCampsiteRef(
@@ -303,13 +279,7 @@ class AspiraAvailabilityProviderTest {
 
             val batch =
                 adapter.catalogAvailability(
-                    ref =
-                        BookingProviderRef.Aspira(
-                            tenant = "pc",
-                            transactionLocationId = -2147483630,
-                            mapId = -2147483388,
-                            resourceLocationId = null,
-                        ),
+                    campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483388:null"),
                     campsites =
                         listOf(
                             CatalogCampsiteRef(campsiteId = 100, vendorId = "100", mapId = -2147483388),

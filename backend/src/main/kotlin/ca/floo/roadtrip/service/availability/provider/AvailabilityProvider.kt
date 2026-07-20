@@ -48,13 +48,24 @@ interface AvailabilityProvider : Dispatchable<BookingProvider> {
     }
 
     /**
+     * Derives the provider-specific [BookingProviderRef] from [campground],
+     * used by surrounding infrastructure for grouping, tracing, and metadata.
+     * Returns null when this provider cannot derive a ref (should not happen
+     * if [supportsCampground] returned true).
+     */
+    fun parentRefFor(campground: Campground): BookingProviderRef? {
+        val provider = campground.bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return null
+        return campground.bookingProviderRef?.let { BookingProviderRef.parse(provider, it) }
+    }
+
+    /**
      * Per-day availability for the half-open window `[startDate, endDate)`.
      *
      * @throws AvailabilityProviderError on upstream failure (rate limit, WAF block,
      *   5xx, parse error, or unsupported capability).
      */
     suspend fun availability(
-        ref: BookingProviderRef,
+        campground: Campground,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch
@@ -66,11 +77,11 @@ interface AvailabilityProvider : Dispatchable<BookingProvider> {
      * split can override this to classify the actual linked resources.
      */
     suspend fun catalogAvailability(
-        ref: BookingProviderRef,
+        campground: Campground,
         campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
-    ): AvailabilityObservationBatch = availability(ref, startDate, endDate)
+    ): AvailabilityObservationBatch = availability(campground, startDate, endDate)
 
     /**
      * User-facing reservation URL *template* for [catalogRef] under a campground

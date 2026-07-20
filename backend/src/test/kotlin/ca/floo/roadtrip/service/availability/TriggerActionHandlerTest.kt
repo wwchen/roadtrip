@@ -9,11 +9,13 @@ import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.testCampground
 import ca.floo.roadtrip.service.booking.BookingAdapter
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.notification.common.NotificationSender
@@ -535,7 +537,7 @@ class TriggerActionHandlerTest {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: BookingProviderRef,
+            campground: Campground,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
@@ -550,6 +552,7 @@ class TriggerActionHandlerTest {
                 is BookingProviderRef.ReserveAmerica -> BookingProvider.RESERVEAMERICA
                 is BookingProviderRef.ReserveCalifornia -> BookingProvider.RESERVECALIFORNIA
             }
+        val campground = campgroundForRef(parentRef)
         val campsite =
             campsiteFixture(
                 id = 7L,
@@ -568,7 +571,7 @@ class TriggerActionHandlerTest {
                 ResolvedAvailabilityTarget(
                     campsite = campsite,
                     provider = FakeAvailabilityProvider(providerId),
-                    parentRef = parentRef,
+                    campground = campground,
                     catalogRef = catalogRef,
                     parentPoiId = 100L,
                     dateContext = PoiDateContext(ZoneId.of("UTC"), LocalDate.parse("2026-07-01")),
@@ -584,6 +587,23 @@ class TriggerActionHandlerTest {
                     bookingUrl = "https://example.test/book",
                     vendor = "recgov",
                 ),
+        )
+    }
+
+    private fun campgroundForRef(ref: BookingProviderRef): Campground {
+        val refStr =
+            when (ref) {
+                is BookingProviderRef.RecGov -> ref.facilityId
+                is BookingProviderRef.Campflare -> ref.campgroundId
+                is BookingProviderRef.Aspira ->
+                    "${ref.tenant}:${ref.transactionLocationId}:${ref.mapId}:${ref.resourceLocationId}"
+                is BookingProviderRef.ReserveAmerica -> "${ref.contractCode}:${ref.parkId}"
+                is BookingProviderRef.ReserveCalifornia ->
+                    "${ref.placeId}:${ref.facilityIds.joinToString(",")}"
+            }
+        return testCampground(
+            bookingProvider = ref.provider.id,
+            bookingProviderRef = refStr,
         )
     }
 }

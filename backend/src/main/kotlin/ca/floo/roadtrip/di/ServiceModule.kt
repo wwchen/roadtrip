@@ -139,6 +139,7 @@ val serviceModule =
                 refResolver = get<ca.floo.roadtrip.service.ref.RefResolver>(),
                 ctx = get<DSLContext>(),
                 campsitesRepo = get<CampsiteRepo>(),
+                campgroundRepo = get<ca.floo.roadtrip.repo.CampgroundRepo>(),
                 availabilityProviders = get(named("availabilityProviders")),
                 dateResolver = get<AvailabilityDateResolver>(),
                 pollerRepo = get<AvailabilityPollerRepo>(),

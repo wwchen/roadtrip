@@ -36,11 +36,13 @@ internal class CampsiteCatalogService(
 
     private fun reservationUrlTemplate(campsite: Campsite): String? =
         targets.resolve(campsite)?.let { resolved ->
-            resolved.provider.reservationUrlTemplate(
-                campsite,
-                resolved.parentRef,
-                catalogRef = resolved.catalogRef,
-            )
+            resolved.parentRef?.let { ref ->
+                resolved.provider.reservationUrlTemplate(
+                    campsite,
+                    ref,
+                    catalogRef = resolved.catalogRef,
+                )
+            }
         }
 }
 

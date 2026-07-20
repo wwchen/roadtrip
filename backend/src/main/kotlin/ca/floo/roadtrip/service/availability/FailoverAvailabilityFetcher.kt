@@ -31,7 +31,7 @@ internal open class FailoverAvailabilityFetcher(
 ) {
     data class AttemptRecord(
         val provider: BookingProvider,
-        val parentRef: BookingProviderRef,
+        val parentRef: BookingProviderRef?,
         val outcome: FetchOutcome,
         val durationMs: Int,
         val error: String?,
@@ -59,12 +59,13 @@ internal open class FailoverAvailabilityFetcher(
         val attempts = mutableListOf<AttemptRecord>()
         for (candidate in sorted) {
             val providerId = candidate.provider.id
+            val parentRef = candidate.parentRef
             val refs = translateRefs(candidate)
             if (refs.isEmpty()) {
                 attempts +=
                     AttemptRecord(
                         provider = providerId,
-                        parentRef = candidate.parentRef,
+                        parentRef = parentRef,
                         outcome = FetchOutcome.OTHER,
                         durationMs = 0,
                         error = NO_REFS_ERROR,
@@ -81,7 +82,7 @@ internal open class FailoverAvailabilityFetcher(
             attempts +=
                 AttemptRecord(
                     provider = providerId,
-                    parentRef = candidate.parentRef,
+                    parentRef = parentRef,
                     outcome = attempt.outcome,
                     durationMs = durationMs,
                     error = attempt.error,
@@ -124,7 +125,7 @@ internal open class FailoverAvailabilityFetcher(
         try {
             val batch =
                 candidate.provider.catalogAvailability(
-                    ref = candidate.parentRef,
+                    campground = candidate.campground,
                     campsites = refs,
                     startDate = window.startDate,
                     endDate = window.endDate,

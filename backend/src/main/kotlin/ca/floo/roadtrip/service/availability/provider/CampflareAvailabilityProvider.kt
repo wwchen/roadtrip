@@ -37,6 +37,11 @@ class CampflareAvailabilityProvider(
     override fun supportsCampground(campground: Campground): Boolean =
         isEnabled() && campground.dataProviderRef is DataProviderRef.Campflare
 
+    override fun parentRefFor(campground: Campground): BookingProviderRef? {
+        val cfRef = campground.dataProviderRef as? DataProviderRef.Campflare ?: return null
+        return BookingProviderRef.Campflare(campgroundId = cfRef.id)
+    }
+
     override fun reservationUrlTemplate(
         campsite: Campsite,
         parentRef: BookingProviderRef,
@@ -44,15 +49,15 @@ class CampflareAvailabilityProvider(
     ): String? = RecGovBookingUrl.templateFromUrl(campsite.reservationUrl)
 
     override suspend fun availability(
-        ref: BookingProviderRef,
+        campground: Campground,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        val campflareRef = campflareRefOrThrow(ref)
-        val data = fetch(campflareRef.campgroundId, startDate, endDate)
-        val campground = data.campgrounds[campflareRef.campgroundId]
+        val campgroundId = campflareIdOrThrow(campground)
+        val data = fetch(campgroundId, startDate, endDate)
+        val cg = data.campgrounds[campgroundId]
         val observations =
-            campground
+            cg
                 ?.campsiteAvailability
                 .orEmpty()
                 .flatMap { campsite ->
@@ -64,7 +69,7 @@ class CampflareAvailabilityProvider(
                     )
                 }
         return batch(
-            campgroundId = campflareRef.campgroundId,
+            campgroundId = campgroundId,
             startDate = startDate,
             endDate = endDate,
             observations = observations,
@@ -72,19 +77,19 @@ class CampflareAvailabilityProvider(
     }
 
     override suspend fun catalogAvailability(
-        ref: BookingProviderRef,
+        campground: Campground,
         campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
         if (campsites.isEmpty()) {
-            return availability(ref, startDate, endDate)
+            return availability(campground, startDate, endDate)
         }
-        val campflareRef = campflareRefOrThrow(ref)
-        val data = fetch(campflareRef.campgroundId, startDate, endDate)
+        val campgroundId = campflareIdOrThrow(campground)
+        val data = fetch(campgroundId, startDate, endDate)
         val byCampsiteId =
             data
-                .campgrounds[campflareRef.campgroundId]
+                .campgrounds[campgroundId]
                 ?.campsiteAvailability
                 .orEmpty()
                 .associateBy { it.campsiteId }
@@ -99,7 +104,7 @@ class CampflareAvailabilityProvider(
                 )
             }
         return batch(
-            campgroundId = campflareRef.campgroundId,
+            campgroundId = campgroundId,
             startDate = startDate,
             endDate = endDate,
             observations = observations,
@@ -149,9 +154,9 @@ class CampflareAvailabilityProvider(
             campgroundId = campgroundId,
         )
 
-    private fun campflareRefOrThrow(ref: BookingProviderRef): BookingProviderRef.Campflare =
-        (ref as? BookingProviderRef.Campflare)
-            ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), ref::class.simpleName ?: "unknown")
+    private fun campflareIdOrThrow(campground: Campground): String =
+        (campground.dataProviderRef as? DataProviderRef.Campflare)?.id
+            ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.dataProviderRef::class.simpleName ?: "unknown")
 
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =
         try {

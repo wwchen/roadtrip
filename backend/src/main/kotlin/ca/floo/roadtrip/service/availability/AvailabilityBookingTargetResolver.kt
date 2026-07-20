@@ -20,6 +20,6 @@ internal class AvailabilityBookingTargetResolver(
     ): BookingTarget? =
         resolved.candidates
             .asSequence()
-            .mapNotNull { bookings.targetFor(action, it.parentRef, it.catalogRef) }
+            .mapNotNull { candidate -> candidate.parentRef?.let { bookings.targetFor(action, it, candidate.catalogRef) } }
             .firstOrNull()
 }

@@ -7,11 +7,13 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.JsonNull
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
@@ -69,13 +71,13 @@ class FailoverAvailabilityFetcherTest {
         override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
-            ref: BookingProviderRef,
+            campground: Campground,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
 
         override suspend fun catalogAvailability(
-            ref: BookingProviderRef,
+            campground: Campground,
             campsites: List<CatalogCampsiteRef>,
             startDate: LocalDate,
             endDate: LocalDate,
@@ -129,8 +131,44 @@ class FailoverAvailabilityFetcherTest {
     ): ProviderCandidate =
         ProviderCandidate(
             provider = provider,
-            parentRef = BookingProviderRef.RecGov(facilityId = parentId),
+            campground = fakeCampground(parentId),
             catalogRef = CatalogCampsiteRef(campsiteId = catalogRefId, vendorId = catalogRefId.toString()),
+        )
+
+    private fun fakeCampground(parentId: String): Campground =
+        Campground(
+            id = 1L,
+            name = "Test Campground",
+            status = null,
+            statusDescription = null,
+            kind = null,
+            shortDescription = null,
+            mediumDescription = null,
+            longDescription = null,
+            location = JsonNull,
+            defaultCampsiteSchedule = JsonNull,
+            amenities = JsonNull,
+            maxRvLength = null,
+            maxTrailerLength = null,
+            hasPullThroughSites = null,
+            bigRigFriendly = null,
+            reservationUrl = null,
+            links = JsonNull,
+            photos = JsonNull,
+            alerts = JsonNull,
+            price = JsonNull,
+            cellService = JsonNull,
+            management = JsonNull,
+            contact = JsonNull,
+            connections = JsonNull,
+            metadata = JsonNull,
+            sourcePayload = JsonNull,
+            createdAt = Instant.EPOCH,
+            updatedAt = Instant.EPOCH,
+            deletedAt = null,
+            dataProviderRef = DataProviderRef.RecGov(id = parentId),
+            bookingProvider = "recgov",
+            bookingProviderRef = parentId,
         )
 
     private fun trackerWith(
@@ -379,13 +417,13 @@ class FailoverAvailabilityFetcherTest {
                     }
 
                     override suspend fun catalogAvailability(
-                        ref: BookingProviderRef,
+                        campground: Campground,
                         campsites: List<CatalogCampsiteRef>,
                         startDate: LocalDate,
                         endDate: LocalDate,
                     ): AvailabilityObservationBatch {
                         clock.advance(125)
-                        return super.catalogAvailability(ref, campsites, startDate, endDate)
+                        return super.catalogAvailability(campground, campsites, startDate, endDate)
                     }
                 }
 
