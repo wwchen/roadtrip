@@ -36,6 +36,7 @@ internal suspend fun fetchAspiraAvailabilityObservations(
     startDate: LocalDate,
     endDate: LocalDate,
     campsiteVendor: String? = null,
+    mapResourceCodeFamily: AspiraMapResourceCodeFamily = AspiraMapResourceCodeFamily.RESOURCE,
 ): AvailabilityObservationBatch {
     val days = daysBetween(startDate, endDate)
     val observedAt = Instant.now()
@@ -44,7 +45,7 @@ internal suspend fun fetchAspiraAvailabilityObservations(
         provider = "aspira",
         startDate = startDate,
         endDate = endDate,
-        observations = observationsFromAspiraAvailability(data, startDate, days, observedAt, campsiteVendor),
+        observations = observationsFromAspiraAvailability(data, startDate, days, observedAt, campsiteVendor, mapResourceCodeFamily),
         cacheBlock = directFetchCacheBlock(),
         host = host,
         mapId = mapId.toString(),
@@ -64,6 +65,7 @@ internal suspend fun fetchAspiraCatalogObservations(
     campsites: List<AspiraCatalogCampsite>,
     startDate: LocalDate,
     endDate: LocalDate,
+    mapResourceCodeFamily: AspiraMapResourceCodeFamily = AspiraMapResourceCodeFamily.RESOURCE,
 ): AvailabilityObservationBatch {
     val days = daysBetween(startDate, endDate)
     val targets =
@@ -98,7 +100,7 @@ internal suspend fun fetchAspiraCatalogObservations(
         provider = "aspira",
         startDate = startDate,
         endDate = endDate,
-        observations = observationsFromLinkedResourceCatalog(resourceRows, startDate, days),
+        observations = observationsFromLinkedResourceCatalog(resourceRows, startDate, days, mapResourceCodeFamily),
         cacheBlock = directFetchCacheBlock(),
         host = host,
         mapId = parentMapId.toString(),
@@ -163,9 +165,10 @@ private fun observationsFromAspiraAvailability(
     days: Int,
     observedAt: Instant,
     campsiteVendor: String? = null,
+    mapResourceCodeFamily: AspiraMapResourceCodeFamily = AspiraMapResourceCodeFamily.RESOURCE,
 ): List<CampsiteDayObservation> {
     if (campsiteVendor != null && avail.byResource.isNotEmpty()) {
-        return observationsFromResourceCatalog(avail.byResource, start, days, campsiteVendor, observedAt)
+        return observationsFromResourceCatalog(avail.byResource, start, days, campsiteVendor, observedAt, mapResourceCodeFamily)
     }
     val sub = avail.byMapLink.values.toList()
     val rollup = avail.parkRollup
@@ -189,13 +192,14 @@ private fun observationsFromResourceDays(
     days: Int,
     campsiteId: Long?,
     observedAt: Instant,
+    mapResourceCodeFamily: AspiraMapResourceCodeFamily,
 ): List<CampsiteDayObservation> =
     (0 until days).map { d ->
         CampsiteDayObservation(
             campsiteId = campsiteId,
             date = start.plusDays(d.toLong()),
             observedAt = observedAt,
-            status = resourceStatusAt(resourceDays, d),
+            status = resourceStatusAt(resourceDays, d, mapResourceCodeFamily),
         )
     }
 
@@ -205,6 +209,7 @@ private fun observationsFromResourceCatalog(
     days: Int,
     campsiteVendor: String,
     observedAt: Instant,
+    mapResourceCodeFamily: AspiraMapResourceCodeFamily,
 ): List<CampsiteDayObservation> =
     byResource.flatMap { (resourceId, resourceDays) ->
         observationsFromResourceDays(
@@ -213,6 +218,7 @@ private fun observationsFromResourceCatalog(
             days = days,
             campsiteId = null,
             observedAt = observedAt,
+            mapResourceCodeFamily = mapResourceCodeFamily,
         )
     }
 
@@ -220,6 +226,7 @@ private fun observationsFromLinkedResourceCatalog(
     resources: List<CatalogResourceDays>,
     start: LocalDate,
     days: Int,
+    mapResourceCodeFamily: AspiraMapResourceCodeFamily,
 ): List<CampsiteDayObservation> =
     resources.flatMap { resource ->
         (0 until days).map { d ->
@@ -227,7 +234,7 @@ private fun observationsFromLinkedResourceCatalog(
                 campsiteId = resource.campsiteId,
                 date = start.plusDays(d.toLong()),
                 observedAt = resource.observedAt,
-                status = resource.days?.let { resourceStatusAt(it, d) } ?: AvailabilityStatus.UNKNOWN,
+                status = resource.days?.let { resourceStatusAt(it, d, mapResourceCodeFamily) } ?: AvailabilityStatus.UNKNOWN,
             )
         }
     }
@@ -294,9 +301,13 @@ private fun statusAt(
 private fun resourceStatusAt(
     statuses: List<Int>,
     offset: Int,
+    mapResourceCodeFamily: AspiraMapResourceCodeFamily,
 ): AvailabilityStatus =
     if (offset < statuses.size) {
-        AspiraResourceAvailability.classify(statuses[offset])
+        when (mapResourceCodeFamily) {
+            AspiraMapResourceCodeFamily.RESOURCE -> AspiraResourceAvailability.classify(statuses[offset])
+            AspiraMapResourceCodeFamily.MAP -> AspiraStatus.classify(statuses[offset])
+        }
     } else {
         AvailabilityStatus.UNKNOWN
     }

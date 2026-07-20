@@ -17,6 +17,11 @@ import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
+private const val BC_PARKS_HOST = "camping.bcparks.ca"
+private const val BC_PARKS_TEST_MAP_ID = -2147483460
+private const val BC_PARKS_TEST_CAMPSITE_ID = 415777L
+private const val BC_PARKS_TEST_RESOURCE_ID = "-2147477118"
+
 class AspiraObservationsTest {
     @Test
     fun `aspira upstream mapper uses availability error dto renderer`() {
@@ -176,6 +181,45 @@ class AspiraObservationsTest {
                 ),
                 dto.availability.single().campsiteStatuses,
             )
+        }
+
+    @Test
+    fun `bc parks catalog availability uses map code family for resource rows`() =
+        runBlocking {
+            val client =
+                fakeAspiraClient(
+                    onFetch = { _, mapId, _, _ ->
+                        AspiraAvailability(
+                            mapId = mapId,
+                            parkRollup = emptyList(),
+                            byMapLink = emptyMap(),
+                            byResource =
+                                mapOf(
+                                    BC_PARKS_TEST_RESOURCE_ID to listOf(3, 5, 0),
+                                ),
+                        )
+                    },
+                )
+
+            val dto =
+                availabilityResponseFromObservations(
+                    fetchAspiraCatalogObservations(
+                        client = client,
+                        host = BC_PARKS_HOST,
+                        parentMapId = BC_PARKS_TEST_MAP_ID,
+                        campsites =
+                            listOf(
+                                AspiraCatalogCampsite(BC_PARKS_TEST_CAMPSITE_ID, BC_PARKS_TEST_RESOURCE_ID, BC_PARKS_TEST_MAP_ID),
+                            ),
+                        startDate = LocalDate.parse("2026-07-20"),
+                        endDate = LocalDate.parse("2026-07-23"),
+                        mapResourceCodeFamily = AspiraMapResourceCodeFamily.MAP,
+                    ),
+                )
+
+            assertEquals(listOf(BC_PARKS_TEST_CAMPSITE_ID), dto.availability[0].availableCampsiteIds)
+            assertEquals(AvailabilityStatus.CLOSED, dto.availability[1].status)
+            assertEquals(AvailabilityStatus.UNKNOWN, dto.availability[2].status)
         }
 
     @Test
