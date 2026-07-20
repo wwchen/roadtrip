@@ -23,22 +23,22 @@ class AvailabilityProviderContractTest {
             listOf(
                 RecGovAvailabilityProvider(availabilityClient = stubRecgovClient(), enabled = true),
                 AspiraAvailabilityProvider(
-                    tenant =
-                        AspiraTenant(
-                            host = "reservation.pc.gc.ca",
-                            vendorCode = "aspira_pc",
-                            bookingHorizonDays = 365,
+                    tenants =
+                        mapOf(
+                            "pc" to AspiraTenant(host = "reservation.pc.gc.ca", vendorCode = "aspira_pc", bookingHorizonDays = 365),
                         ),
                     availabilityClient = stubAspiraClient(),
                     enabled = true,
                 ),
                 ReserveAmericaAvailabilityProvider(
-                    tenant =
-                        ReserveAmericaTenant(
-                            source = "reserveamerica-ny-campgrounds",
-                            host = "newyorkstateparks.reserveamerica.com",
-                            contractCode = "NY",
-                            bookingHorizonDays = 270,
+                    tenants =
+                        mapOf(
+                            "NY" to
+                                ReserveAmericaTenant(
+                                    host = "newyorkstateparks.reserveamerica.com",
+                                    contractCode = "NY",
+                                    bookingHorizonDays = 270,
+                                ),
                         ),
                     availabilityClient = stubReserveAmericaClient(),
                     enabled = true,

@@ -4,15 +4,6 @@ object AspiraTenants {
     /** Aspira NextGen typical horizon. */
     private const val DEFAULT_HORIZON_DAYS: Int = 365
 
-    /**
-     * The tenant table. Order does not matter; lookup is by host.
-     *
-     * Adding a tenant: append a row. Validation at boot
-     * ([ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry])
-     * ensures every host the YAML
-     * registry declares has a row here, so a forgotten entry fails
-     * loudly instead of silently routing to a missing adapter.
-     */
     private val all: List<AspiraTenant> =
         listOf(
             AspiraTenant(
@@ -48,4 +39,6 @@ object AspiraTenants {
     fun byVendorCode(vendorCode: String): AspiraTenant? = byVendorCode[vendorCode]
 
     fun knownHosts(): Set<String> = byHost.keys
+
+    fun all(): List<AspiraTenant> = all
 }

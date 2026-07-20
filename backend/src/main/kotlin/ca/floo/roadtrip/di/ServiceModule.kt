@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.companion.HttpRecGovAtcExecutor
 import ca.floo.roadtrip.client.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.config.ReadPathProviderConfig
+import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
@@ -39,9 +40,14 @@ import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
+import ca.floo.roadtrip.service.availability.provider.AspiraAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AspiraTenants
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.availability.provider.CampflareAvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.RecGovAvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.ReserveAmericaAvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.ReserveCaliforniaAvailabilityProvider
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.booking.RecGovBookingAdapter
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
@@ -94,13 +100,33 @@ val serviceModule =
             )
         }
 
-        single {
+        single<List<AvailabilityProvider>>(named("availabilityProviders")) {
             val config: AppConfig = get()
             validateReadPathDataProviders(config.readPathProviders, get())
-            AvailabilityProviderRegistry.fromPoiRegistry(
-                registry = get(),
-                clients = get(),
-                isProviderEnabled = { id -> config.isProviderEnabled(id) },
+            val clients: AvailabilityProviderClients = get()
+            listOf(
+                RecGovAvailabilityProvider(
+                    availabilityClient = clients.recgovClient,
+                    enabled = config.isProviderEnabled(BookingProvider.RECGOV),
+                ),
+                CampflareAvailabilityProvider(
+                    availabilityClient = clients.campflareClient,
+                    enabled = config.isProviderEnabled(BookingProvider.CAMPFLARE),
+                ),
+                ReserveCaliforniaAvailabilityProvider(
+                    availabilityClient = clients.reserveCaliforniaClient,
+                    enabled = config.isProviderEnabled(BookingProvider.RESERVECALIFORNIA),
+                ),
+                AspiraAvailabilityProvider(
+                    tenants = AspiraTenants.all().associateBy { it.vendorCode.removePrefix("aspira_") },
+                    availabilityClient = clients.aspiraClient,
+                    enabled = config.isProviderEnabled(BookingProvider.ASPIRA),
+                ),
+                ReserveAmericaAvailabilityProvider(
+                    tenants = ReserveAmericaAvailabilityProvider.tenants,
+                    availabilityClient = clients.reserveAmericaClient,
+                    enabled = config.isProviderEnabled(BookingProvider.RESERVEAMERICA),
+                ),
             )
         }
 
@@ -114,7 +140,7 @@ val serviceModule =
                 refResolver = get<ca.floo.roadtrip.service.ref.RefResolver>(),
                 ctx = get<DSLContext>(),
                 campsitesRepo = get<CampsiteRepo>(),
-                availabilityProviders = get<AvailabilityProviderRegistry>(),
+                availabilityProviders = get(named("availabilityProviders")),
                 dateResolver = get<AvailabilityDateResolver>(),
                 pollerRepo = get<AvailabilityPollerRepo>(),
             )
@@ -202,7 +228,7 @@ val serviceModule =
         single {
             CampgroundAvailabilitySupport(
                 refResolver = get<ca.floo.roadtrip.service.ref.RefResolver>(),
-                availabilityProviders = get(),
+                availabilityProviders = get(named("availabilityProviders")),
             )
         }
         single {

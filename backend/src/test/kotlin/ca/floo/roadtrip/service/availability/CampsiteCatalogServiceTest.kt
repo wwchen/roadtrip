@@ -15,7 +15,6 @@ import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.route.common.roadtripApiJson
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.CampflareAvailabilityProvider
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
@@ -62,7 +61,7 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 refResolver = refResolver,
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = AvailabilityProviderRegistry(mapOf("recgov" to TemplateProvider)),
+                availabilityProviders = listOf(TemplateProvider),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
@@ -144,10 +143,7 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
                 refResolver = refResolver,
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
-                availabilityProviders =
-                    AvailabilityProviderRegistry(
-                        mapOf("campflare" to CampflareAvailabilityProvider(unusedCampflareClient(), enabled = true)),
-                    ),
+                availabilityProviders = listOf(CampflareAvailabilityProvider(unusedCampflareClient(), enabled = true)),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
