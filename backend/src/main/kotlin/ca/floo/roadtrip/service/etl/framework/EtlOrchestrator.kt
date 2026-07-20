@@ -1,22 +1,12 @@
 package ca.floo.roadtrip.service.etl.framework
 
-import ca.floo.roadtrip.model.domain.CampgroundUpsertCandidate
-import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.CatalogUpsertResult
-import ca.floo.roadtrip.model.domain.PlanetFitnessLocationUpsertCandidate
-import ca.floo.roadtrip.model.domain.TeslaSuperchargerUpsertCandidate
-import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.Envelope
 import ca.floo.roadtrip.model.metadata.ParseResult
 import ca.floo.roadtrip.model.metadata.TransformResult
 import ca.floo.roadtrip.model.metadata.registry.EtlEntry
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
-import ca.floo.roadtrip.repo.CampgroundRepo
-import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.ImportRunRepo
-import ca.floo.roadtrip.repo.MAX_CATALOG_UPSERT_BATCH_SIZE
-import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
-import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
 import java.io.File
@@ -30,8 +20,8 @@ import java.io.File
 //      the import run.
 //   3. Consume etl.transform results, counting TransformResult.Bad without
 //      failing the import run.
-//   4. Buffer terminal upsert candidates by catalog entity and flush bounded
-//      batches through the owning entity repo.
+//   4. Buffer terminal upsert candidates and flush bounded batches through
+//      the terminal ETL binding's sink.
 //
 // Raw capture ordering across data_sources remains the caller's problem.
 // Registry validation rejects intermediate ETL chains, so one import job is
@@ -45,23 +35,19 @@ open class EtlOrchestrator(
      */
     private val staticDir: File,
     /**
-     * ETL adapter map keyed by YAML slug. Defaults to the production
-     * registry under [Companion.registry]; overridable for tests.
+     * Terminal ETL binding map keyed by YAML slug. Defaults to the
+     * production registry; overridable for tests.
      */
-    private val etlRegistry: Map<String, SourceEtl<*, *>> = registry,
+    private val etlRegistry: Map<String, TerminalEtlBinding<*, *>> = productionEtlRegistry(ctx),
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val campgroundRepo = CampgroundRepo(ctx)
-    private val campsiteRepo = CampsiteRepo(ctx)
-    private val teslaSuperchargerRepo = TeslaSuperchargerRepo(ctx)
-    private val planetFitnessLocationRepo = PlanetFitnessLocationRepo(ctx)
     private val importRunRepo = ImportRunRepo(ctx)
     private val rawCaptureStore = RawCaptureStore(rawDir = rawDir, staticDir = staticDir)
 
     /**
      * Per-row run summary for import rows. `poi_data` and `campsite_data`
      * both flow through the same terminal runner; candidate persistence is
-     * selected by the emitted record type.
+     * selected by the terminal binding.
      */
     data class Stats(
         val poiDataName: String,
@@ -129,28 +115,29 @@ open class EtlOrchestrator(
         entry: EtlEntry,
     ): Stats {
         val transformCtx = TransformCtx.load(rawDir, poiRegistry)
-        val etl =
+        val binding =
             etlRegistry[entry.slug]
                 ?: error("no adapter registered for etl slug='${entry.slug}'")
         log.info(
             "  terminal slug={} adapter={}",
             entry.slug,
-            etl::class.simpleName,
+            binding.adapterName,
         )
-        return runTerminal(rowName, sectionLabel, etl, buildBundle(entry.inputs), transformCtx)
+        return runTerminal(rowName, sectionLabel, binding, buildBundle(entry.inputs), transformCtx)
     }
 
     @Suppress("UNCHECKED_CAST")
     private fun runTerminal(
         rowName: String,
         sectionLabel: String,
-        etl: SourceEtl<*, *>,
+        binding: TerminalEtlBinding<*, *>,
         bundle: InputBundle,
         transformCtx: TransformCtx,
     ): Stats {
-        val concrete = etl as SourceEtl<Any, Any>
+        val concrete = binding as TerminalEtlBinding<Any?, Any?>
+        val etl = concrete.etl
         val runId = importRunRepo.start(concrete.etlSlug)
-        val buffers = UpsertBuffers()
+        val batcher = concrete.accumulator()
         var parseOk = 0
         var parseBad = 0
         var transformOk = 0
@@ -159,15 +146,15 @@ open class EtlOrchestrator(
         var repoSkipped = 0
 
         try {
-            for (parseResult in concrete.parse(bundle)) {
+            for (parseResult in etl.parse(bundle)) {
                 when (parseResult) {
                     is ParseResult.Ok -> {
                         parseOk++
-                        for (transformResult in concrete.transform(parseResult.dto, transformCtx)) {
+                        for (transformResult in etl.transform(parseResult.dto, transformCtx)) {
                             when (transformResult) {
                                 is TransformResult.Ok -> {
                                     transformOk++
-                                    val counts = buffers.add(transformResult.record)
+                                    val counts = batcher.add(transformResult.record)
                                     upserted += counts.upserted
                                     repoSkipped += counts.skipped
                                 }
@@ -176,7 +163,7 @@ open class EtlOrchestrator(
                                     logRowError(
                                         sectionLabel = sectionLabel,
                                         rowName = rowName,
-                                        etlSlug = concrete.etlSlug,
+                                        etlSlug = etl.etlSlug,
                                         stage = "transform",
                                         sourceId = transformResult.sourceId,
                                         errors = transformResult.errors,
@@ -191,7 +178,7 @@ open class EtlOrchestrator(
                         logRowError(
                             sectionLabel = sectionLabel,
                             rowName = rowName,
-                            etlSlug = concrete.etlSlug,
+                            etlSlug = etl.etlSlug,
                             stage = "parse",
                             sourceId = parseResult.sourceId,
                             errors = parseResult.errors,
@@ -201,7 +188,7 @@ open class EtlOrchestrator(
                 }
             }
 
-            val finalCounts = buffers.flushAll()
+            val finalCounts = batcher.flush()
             upserted += finalCounts.upserted
             repoSkipped += finalCounts.skipped
 
@@ -220,7 +207,7 @@ open class EtlOrchestrator(
                 "{} '{}' terminal slug={} parseOk={} parseBad={} transformOk={} transformBad={} upserted={} repoSkipped={}",
                 sectionLabel,
                 rowName,
-                concrete.etlSlug,
+                etl.etlSlug,
                 parseOk,
                 parseBad,
                 transformOk,
@@ -233,7 +220,7 @@ open class EtlOrchestrator(
                     "{} '{}' terminal slug={} skipped {} records (parseBad={} transformBad={} repoSkipped={})",
                     sectionLabel,
                     rowName,
-                    concrete.etlSlug,
+                    etl.etlSlug,
                     skipped,
                     parseBad,
                     transformBad,
@@ -242,7 +229,7 @@ open class EtlOrchestrator(
             }
             return Stats(
                 poiDataName = rowName,
-                terminalEtlSlug = concrete.etlSlug,
+                terminalEtlSlug = etl.etlSlug,
                 parsed = seen,
                 transformed = transformOk,
                 upsertResult = ups,
@@ -275,78 +262,6 @@ open class EtlOrchestrator(
         }
     }
 
-    private inner class UpsertBuffers {
-        private val campgrounds = mutableListOf<CampgroundUpsertCandidate>()
-        private val campsites = mutableListOf<CampsiteUpsertCandidate>()
-        private val teslaSuperchargers = mutableListOf<TeslaSuperchargerUpsertCandidate>()
-        private val planetFitnessLocations = mutableListOf<PlanetFitnessLocationUpsertCandidate>()
-
-        fun add(record: Any): FlushCounts {
-            when (record) {
-                is CampgroundUpsertCandidate -> {
-                    campgrounds += record
-                    if (campgrounds.size >= MAX_CATALOG_UPSERT_BATCH_SIZE) return flushCampgrounds()
-                }
-                is CampsiteUpsertCandidate -> {
-                    campsites += record
-                    if (campsites.size >= MAX_CATALOG_UPSERT_BATCH_SIZE) return flushCampsites()
-                }
-                is TeslaSuperchargerUpsertCandidate -> {
-                    teslaSuperchargers += record
-                    if (teslaSuperchargers.size >= MAX_CATALOG_UPSERT_BATCH_SIZE) return flushTeslaSuperchargers()
-                }
-                is PlanetFitnessLocationUpsertCandidate -> {
-                    planetFitnessLocations += record
-                    if (planetFitnessLocations.size >= MAX_CATALOG_UPSERT_BATCH_SIZE) return flushPlanetFitnessLocations()
-                }
-                else -> error("unsupported terminal output record ${record::class.qualifiedName}")
-            }
-            return FlushCounts()
-        }
-
-        fun flushAll(): FlushCounts = flushCampgrounds() + flushCampsites() + flushTeslaSuperchargers() + flushPlanetFitnessLocations()
-
-        private fun flushCampgrounds(): FlushCounts {
-            if (campgrounds.isEmpty()) return FlushCounts()
-            val batch = campgrounds.toList()
-            campgrounds.clear()
-            return FlushCounts(upserted = campgroundRepo.upsertCampgroundBatch(batch))
-        }
-
-        private fun flushCampsites(): FlushCounts {
-            if (campsites.isEmpty()) return FlushCounts()
-            val batch = campsites.toList()
-            campsites.clear()
-            val (upserted, skipped) = campsiteRepo.upsertCampsiteBatch(batch)
-            return FlushCounts(upserted = upserted, skipped = skipped)
-        }
-
-        private fun flushTeslaSuperchargers(): FlushCounts {
-            if (teslaSuperchargers.isEmpty()) return FlushCounts()
-            val batch = teslaSuperchargers.toList()
-            teslaSuperchargers.clear()
-            return FlushCounts(upserted = teslaSuperchargerRepo.upsertTeslaSuperchargerBatch(batch))
-        }
-
-        private fun flushPlanetFitnessLocations(): FlushCounts {
-            if (planetFitnessLocations.isEmpty()) return FlushCounts()
-            val batch = planetFitnessLocations.toList()
-            planetFitnessLocations.clear()
-            return FlushCounts(upserted = planetFitnessLocationRepo.upsertPlanetFitnessLocationBatch(batch))
-        }
-    }
-
-    private data class FlushCounts(
-        val upserted: Int = 0,
-        val skipped: Int = 0,
-    )
-
-    private operator fun FlushCounts.plus(other: FlushCounts): FlushCounts =
-        FlushCounts(
-            upserted = upserted + other.upserted,
-            skipped = skipped + other.skipped,
-        )
-
     private fun buildBundle(inputSlugs: List<String>): InputBundle {
         val raw = LinkedHashMap<String, List<Envelope>>()
         for (slug in inputSlugs) {
@@ -364,94 +279,6 @@ open class EtlOrchestrator(
     companion object {
         private const val ROW_ERROR_LOG_SAMPLE_LIMIT = 10
 
-        // Runnable ETLs. Admin import targets use this map to decide what can
-        // run; every configured campground/campsite vendor row exposed here
-        // writes through the canonical catalog repo.
-        val registry: Map<String, SourceEtl<*, *>> =
-            mapOf(
-                // Campflare
-                "campflare-campgrounds" to
-                    ca.floo.roadtrip.service.etl.vendors.campflare
-                        .CampflareCampgroundsEtl(),
-                "campflare-campsites" to
-                    ca.floo.roadtrip.service.etl.vendors.campflare
-                        .CampflareCampsitesEtl(),
-                // Rec.gov
-                "recgov-campgrounds" to
-                    ca.floo.roadtrip.service.etl.vendors.recgov
-                        .RecGovCampgroundsEtl("recgov-campgrounds"),
-                "recgov-campsites" to
-                    ca.floo.roadtrip.service.etl.vendors.recgov
-                        .RecGovCampsitesEtl("recgov-campsites"),
-                // Aspira WA
-                "aspira-wa-campgrounds" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraCampgroundsEtl("aspira-wa-campgrounds", DataProvider.ASPIRA, "wa"),
-                "aspira-wa-campsites" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraCampsitesEtl(
-                            etlSlug = "aspira-wa-campsites",
-                            mapsInputSlug = "aspira-maps-wa",
-                            inventoryInputSlug = "aspira-inventory-wa",
-                            dictionariesInputSlug = "aspira-dictionaries-wa",
-                            aspiraTenant = "wa",
-                        ),
-                // Aspira BC
-                "aspira-bc-campgrounds" to
-                    ca.floo.roadtrip.service.etl.vendors.bcparks
-                        .BcParksCampgroundsEtl(),
-                "aspira-bc-campsites" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraCampsitesEtl(
-                            etlSlug = "aspira-bc-campsites",
-                            mapsInputSlug = "aspira-maps-bc",
-                            inventoryInputSlug = "aspira-inventory-bc",
-                            dictionariesInputSlug = "aspira-dictionaries-bc",
-                            aspiraTenant = "bc",
-                            parentDataProvider = ca.floo.roadtrip.model.domain.provider.DataProvider.STRAPI,
-                        ),
-                // Aspira PC
-                "aspira-pc-campgrounds" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraCampgroundsEtl("aspira-pc-campgrounds", DataProvider.ASPIRA, "pc"),
-                "aspira-pc-campsites" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraCampsitesEtl(
-                            etlSlug = "aspira-pc-campsites",
-                            mapsInputSlug = "aspira-maps-pc",
-                            inventoryInputSlug = "aspira-inventory-pc",
-                            dictionariesInputSlug = "aspira-dictionaries-pc",
-                            aspiraTenant = "pc",
-                        ),
-                // ReserveAmerica AB
-                "reserveamerica-ab-campgrounds" to
-                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
-                        .ReserveAmericaCampgroundsEtl("reserveamerica-ab-campgrounds"),
-                "reserveamerica-ab-campsites" to
-                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
-                        .ReserveAmericaSitesEtl("reserveamerica-ab-campsites", "ABPP"),
-                // ReserveAmerica NY
-                "reserveamerica-ny-campgrounds" to
-                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
-                        .ReserveAmericaCampgroundsEtl("reserveamerica-ny-campgrounds"),
-                "reserveamerica-ny-campsites" to
-                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
-                        .ReserveAmericaSitesEtl("reserveamerica-ny-campsites", "NY"),
-                // ReserveCalifornia
-                "reservecalifornia-campgrounds" to
-                    ca.floo.roadtrip.service.etl.vendors.reservecalifornia
-                        .ReserveCaliforniaCampgroundsEtl("reservecalifornia-campgrounds"),
-                "reservecalifornia-campsites" to
-                    ca.floo.roadtrip.service.etl.vendors.reservecalifornia
-                        .ReserveCaliforniaSitesEtl("reservecalifornia-campsites"),
-                // Planet Fitness
-                "planet-fitness" to
-                    ca.floo.roadtrip.service.etl.vendors.osmpf
-                        .PlanetFitnessEtl(),
-                // Tesla
-                "tesla-superchargers" to
-                    ca.floo.roadtrip.service.etl.vendors.tesla
-                        .TeslaIndexEtl(),
-            )
+        internal val registry: Map<String, TerminalEtlDefinition<*, *>> = productionTerminalEtlDefinitions
     }
 }

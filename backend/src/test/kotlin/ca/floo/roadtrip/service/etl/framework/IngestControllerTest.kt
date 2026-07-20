@@ -134,7 +134,7 @@ class IngestControllerTest : SharedDbTest() {
                     registry = registry,
                     etlRegistry =
                         mapOf(
-                            "blocking-etl" to BlockingPlanetFitnessEtl("blocking-etl", gate, release),
+                            "blocking-etl" to blockingPlanetFitnessBinding("blocking-etl", gate, release),
                         ),
                 )
 
@@ -180,8 +180,8 @@ class IngestControllerTest : SharedDbTest() {
                     registry = registry,
                     etlRegistry =
                         mapOf(
-                            "blocking-a" to BlockingPlanetFitnessEtl("blocking-a", gate, release),
-                            "blocking-b" to BlockingPlanetFitnessEtl("blocking-b", gate, release),
+                            "blocking-a" to blockingPlanetFitnessBinding("blocking-a", gate, release),
+                            "blocking-b" to blockingPlanetFitnessBinding("blocking-b", gate, release),
                         ),
                 )
 
@@ -240,7 +240,7 @@ class IngestControllerTest : SharedDbTest() {
         targets: Map<String, Target>,
         registry: PoiRegistry = PoiRegistry(emptyList(), emptyList()),
         dataDir: File = File("/tmp"),
-        etlRegistry: Map<String, SourceEtl<*, *>> = emptyMap(),
+        etlRegistry: Map<String, TerminalEtlBinding<*, *>> = emptyMap(),
     ): IngestController =
         IngestController(
             ctx = ctx,
@@ -272,6 +272,16 @@ class IngestControllerTest : SharedDbTest() {
                         etls = listOf(EtlEntry(slug = slug, adapter = "BlockingPlanetFitnessEtl")),
                     )
                 },
+        )
+
+    private fun blockingPlanetFitnessBinding(
+        slug: String,
+        gate: CountDownLatch,
+        release: CountDownLatch,
+    ): TerminalEtlBinding<Unit, PlanetFitnessLocationUpsertCandidate> =
+        TerminalEtlBinding(
+            etl = BlockingPlanetFitnessEtl(slug, gate, release),
+            sink = terminalSink { FlushCounts() },
         )
 
     private class BlockingPlanetFitnessEtl(
