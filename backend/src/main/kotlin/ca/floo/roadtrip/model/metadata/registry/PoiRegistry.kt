@@ -232,11 +232,10 @@ class PoiRegistry(
      * instance per host (Parks Canada / BC / WA). Routes never see this map
      * directly — they go through the availability-provider registry.
      */
-    fun aspiraHostBySource(): Map<String, String> {
+    fun hostBySource(): Map<String, String> {
         val out = mutableMapOf<String, String>()
         for (row in poiData) {
             val terminal = row.etls.lastOrNull() ?: continue
-            if (!terminal.adapter.startsWith("Aspira")) continue
             val host = terminal.args["host"] ?: continue
             out[terminal.slug] = host
         }

@@ -126,7 +126,7 @@ class AvailabilityProviderRegistry(
             // a host share an instance. Registered under both the YAML ETL slug
             // (e.g. "aspira-wa-campgrounds") and the unified DataProvider id
             // (e.g. "aspira_wa") so lookups from campgrounds.data_provider resolve.
-            val hostBySource = registry.aspiraHostBySource()
+            val hostBySource = registry.hostBySource().filter { (_, host) -> AspiraTenants.byHost(host) != null }
             validateAspiraHosts(hostBySource)
             val aspiraByHost = mutableMapOf<String, AspiraAvailabilityProvider>()
             for ((source, host) in hostBySource) {
