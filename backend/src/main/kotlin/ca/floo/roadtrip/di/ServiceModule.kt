@@ -42,7 +42,6 @@ import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AspiraAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AspiraTenants
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
 import ca.floo.roadtrip.service.availability.provider.CampflareAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.RecGovAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.ReserveAmericaAvailabilityProvider
@@ -89,41 +88,30 @@ val serviceModule =
             )
         }
 
-        single {
-            AvailabilityProviderClients(
-                recgovClient = get(),
-                aspiraClient = get(),
-                reserveAmericaClient = get(),
-                reserveCaliforniaClient = get(),
-                campflareClient = get(),
-            )
-        }
-
         single<List<AvailabilityProvider>>(named("availabilityProviders")) {
             val config: AppConfig = get()
             validateReadPathDataProviders(config.readPathProviders, get())
-            val clients: AvailabilityProviderClients = get()
             listOf(
                 RecGovAvailabilityProvider(
-                    availabilityClient = clients.recgovClient,
+                    availabilityClient = get(),
                     enabled = config.isProviderEnabled(BookingProvider.RECGOV),
                 ),
                 CampflareAvailabilityProvider(
-                    availabilityClient = clients.campflareClient,
+                    availabilityClient = get(),
                     enabled = config.isProviderEnabled(BookingProvider.CAMPFLARE),
                 ),
                 ReserveCaliforniaAvailabilityProvider(
-                    availabilityClient = clients.reserveCaliforniaClient,
+                    availabilityClient = get(),
                     enabled = config.isProviderEnabled(BookingProvider.RESERVECALIFORNIA),
                 ),
                 AspiraAvailabilityProvider(
                     tenants = AspiraTenants.all().associateBy { it.vendorCode.removePrefix("aspira_") },
-                    availabilityClient = clients.aspiraClient,
+                    availabilityClient = get(),
                     enabled = config.isProviderEnabled(BookingProvider.ASPIRA),
                 ),
                 ReserveAmericaAvailabilityProvider(
                     tenants = ReserveAmericaAvailabilityProvider.tenants,
-                    availabilityClient = clients.reserveAmericaClient,
+                    availabilityClient = get(),
                     enabled = config.isProviderEnabled(BookingProvider.RESERVEAMERICA),
                 ),
             )
