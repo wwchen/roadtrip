@@ -253,7 +253,6 @@ val serviceModule =
                 CampgroundService(
                     campgroundRepo = get<CampgroundRepo>(),
                     dateResolver = get<AvailabilityDateResolver>(),
-                    availabilityProviders = get(named("availabilityProviders")),
                 ),
                 TeslaSuperchargerService(get<TeslaSuperchargerRepo>()),
                 PlanetFitnessLocationService(get<PlanetFitnessLocationRepo>()),

@@ -234,6 +234,19 @@ class CampsiteRepo(
                 "$campsiteSelect WHERE c.deleted_at IS NULL ORDER BY c.id",
             ).map(::campsiteFromRecord)
 
+    fun findByCampground(campgroundId: Long): List<Campsite> =
+        ctx
+            .fetch(
+                """
+                $campsiteSelect
+                WHERE c.campground_id = ?
+                  AND c.deleted_at IS NULL
+                ORDER BY c.loop_name NULLS LAST, c.name, c.id
+                """.trimIndent(),
+                campgroundId,
+            ).map(::campsiteFromRecord)
+
+    @Deprecated("Use findByCampground; load campground from CampgroundRepo first")
     fun findByPoi(poiId: Long): List<Campsite> =
         ctx
             .fetch(
