@@ -51,7 +51,7 @@ class RecGovAvailabilityProvider(
 
     override suspend fun catalogAvailability(
         campground: Campground,
-        campsites: List<CatalogCampsiteRef>,
+        campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
@@ -59,11 +59,12 @@ class RecGovAvailabilityProvider(
             return availability(campground, startDate, endDate)
         }
         val recgovId = recgovIdOrThrow(campground)
+        val refs = campsites.map { CatalogCampsiteRef(campsiteId = it.id, vendorId = it.recgovSiteId()) }
         return runWithErrorMapping {
             fetchRecgovCatalogObservations(
                 client = availabilityClient,
                 recgovId = recgovId,
-                campsites = campsites,
+                campsites = refs,
                 startDate = startDate,
                 endDate = endDate,
             )
@@ -117,3 +118,8 @@ class RecGovAvailabilityProvider(
         private const val RECGOV_MAX_POLL_WINDOW_DAYS: Int = 60
     }
 }
+
+private fun Campsite.recgovSiteId(): String =
+    bookingProviderRef
+        ?.takeIf { bookingProvider == BookingProvider.RECGOV.id }
+        ?: dataProviderRef.serialize()

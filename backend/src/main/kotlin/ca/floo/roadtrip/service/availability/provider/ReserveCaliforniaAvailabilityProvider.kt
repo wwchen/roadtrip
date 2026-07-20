@@ -7,9 +7,9 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.ReserveCaliforniaException
@@ -62,7 +62,7 @@ class ReserveCaliforniaAvailabilityProvider(
 
     override suspend fun catalogAvailability(
         campground: Campground,
-        campsites: List<CatalogCampsiteRef>,
+        campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
@@ -74,10 +74,10 @@ class ReserveCaliforniaAvailabilityProvider(
                 .toMap()
         val dates = dates(startDate, endDate)
         val observations =
-            campsites.flatMap { reservable ->
-                val found = byUnit[reservable.vendorId]
+            campsites.flatMap { campsite ->
+                val found = byUnit[campsite.reserveCaliforniaVendorId()]
                 observationsForReservable(
-                    campsiteId = reservable.campsiteId,
+                    campsiteId = campsite.id,
                     byDate = found?.second.orEmpty(),
                     dates = dates,
                     observedAt = found?.first ?: observedAt(grids),
@@ -175,6 +175,11 @@ class ReserveCaliforniaAvailabilityProvider(
         const val MAX_POLL_WINDOW_DAYS = 30
     }
 }
+
+private fun Campsite.reserveCaliforniaVendorId(): String =
+    bookingProviderRef
+        ?.takeIf { bookingProvider == BookingProvider.RESERVECALIFORNIA.id }
+        ?: dataProviderRef.serialize()
 
 private fun dates(
     startDate: LocalDate,

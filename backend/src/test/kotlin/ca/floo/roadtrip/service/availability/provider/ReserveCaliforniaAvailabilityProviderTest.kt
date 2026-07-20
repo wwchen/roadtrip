@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.reservecalifornia.HttpReserveCaliforniaAvailabilityClient
+import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
@@ -64,7 +64,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
                     campground = testCampground(bookingProvider = "reservecalifornia", bookingProviderRef = "690:611,612"),
                     campsites =
                         listOf(
-                            CatalogCampsiteRef(campsiteId = 43793, vendorId = "43793"),
+                            campsiteFixture(id = 43793, vendor = "reservecalifornia", vendorId = "43793"),
                         ),
                     startDate = LocalDate.parse("2026-12-15"),
                     endDate = LocalDate.parse("2026-12-18"),
@@ -142,7 +142,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
                     campground = testCampground(bookingProvider = "reservecalifornia", bookingProviderRef = "690:"),
                     campsites =
                         listOf(
-                            CatalogCampsiteRef(campsiteId = 43793, vendorId = "43793"),
+                            campsiteFixture(id = 43793, vendor = "reservecalifornia", vendorId = "43793"),
                         ),
                     startDate = LocalDate.parse("2026-12-15"),
                     endDate = LocalDate.parse("2026-12-17"),

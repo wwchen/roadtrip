@@ -201,17 +201,11 @@ class WatchCapabilityServiceTest {
 
         override fun resolve(campsite: Campsite): ResolvedAvailabilityTarget? {
             val known = byId[campsite.id] ?: return null
-            val candidate =
-                ProviderCandidate(
-                    provider = provider,
-                    campground = campground,
-                    catalogRef = CatalogCampsiteRef(campsiteId = known.id, vendorId = known.dataProviderRef.serialize()),
-                )
             return ResolvedAvailabilityTarget(
                 campsite = known,
-                provider = candidate.provider,
-                campground = candidate.campground,
-                catalogRef = candidate.catalogRef,
+                provider = provider,
+                campground = campground,
+                catalogRef = CatalogCampsiteRef(campsiteId = known.id, vendorId = known.dataProviderRef.serialize()),
                 parentPoiId = TEST_PARENT_POI_ID,
                 dateContext = PoiDateContext(ZoneId.of("UTC"), LocalDate.parse("2026-07-01")),
             )

@@ -78,7 +78,7 @@ class CampflareAvailabilityProvider(
 
     override suspend fun catalogAvailability(
         campground: Campground,
-        campsites: List<CatalogCampsiteRef>,
+        campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
@@ -95,10 +95,10 @@ class CampflareAvailabilityProvider(
                 .associateBy { it.campsiteId }
         val days = dates(startDate, endDate)
         val observations =
-            campsites.flatMap { reservable ->
+            campsites.flatMap { campsite ->
                 observationsForReservable(
-                    campsiteId = reservable.campsiteId,
-                    byDate = byCampsiteId[reservable.vendorId]?.availability.orEmpty(),
+                    campsiteId = campsite.id,
+                    byDate = byCampsiteId[campsite.campflareVendorId()]?.availability.orEmpty(),
                     dates = days,
                     data = data,
                 )
@@ -182,6 +182,11 @@ class CampflareAvailabilityProvider(
         private const val CAMPFLARE_MAX_POLL_WINDOW_DAYS = 60
     }
 }
+
+private fun Campsite.campflareVendorId(): String =
+    bookingProviderRef
+        ?.takeIf { bookingProvider == BookingProvider.CAMPFLARE.id }
+        ?: dataProviderRef.serialize()
 
 private fun dates(
     startDate: LocalDate,

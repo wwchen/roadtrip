@@ -5,7 +5,6 @@ import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
@@ -27,6 +26,7 @@ import kotlin.test.assertTrue
 
 class FailoverAvailabilityFetcherTest {
     private val window = ResolvedDateWindow(LocalDate.parse("2026-07-17"), LocalDate.parse("2026-07-31"))
+    private val testCampground by lazy { fakeCampground("232447") }
 
     /** Mutable virtual clock (mirrors ProviderCooldownTrackerTest's FakeClock). */
     private class FakeClock(
@@ -48,7 +48,7 @@ class FailoverAvailabilityFetcherTest {
     ) : AvailabilityProvider {
         var calls: Int = 0
             private set
-        var lastRefs: List<CatalogCampsiteRef>? = null
+        var lastCampsites: List<Campsite>? = null
             private set
 
         sealed class Behaviour {
@@ -78,12 +78,12 @@ class FailoverAvailabilityFetcherTest {
 
         override suspend fun catalogAvailability(
             campground: Campground,
-            campsites: List<CatalogCampsiteRef>,
+            campsites: List<Campsite>,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch {
             calls++
-            lastRefs = campsites
+            lastCampsites = campsites
             val next = script.removeAt(0)
             return when (next) {
                 is Behaviour.ReturnBatch -> next.batch
@@ -122,17 +122,6 @@ class FailoverAvailabilityFetcherTest {
             loopName = null,
             kind = null,
             sourcePayload = null,
-        )
-
-    private fun candidate(
-        provider: AvailabilityProvider,
-        parentId: String,
-        catalogRefId: Long = 1L,
-    ): ProviderCandidate =
-        ProviderCandidate(
-            provider = provider,
-            campground = fakeCampground(parentId),
-            catalogRef = CatalogCampsiteRef(campsiteId = catalogRefId, vendorId = catalogRefId.toString()),
         )
 
     private fun fakeCampground(parentId: String): Campground =
@@ -187,14 +176,12 @@ class FailoverAvailabilityFetcherTest {
             val clock = FakeClock()
             val tracker = trackerWith(clock)
             val provider = ScriptedProvider(BookingProvider.RECGOV).apply { scriptReturns(emptyBatch()) }
-            val cand = candidate(provider, parentId = "232447")
-
             val result =
                 fetcherWith(tracker, clock).fetch(
-                    candidates = listOf(cand),
+                    providers = listOf(provider),
+                    campground = testCampground,
                     campsites = listOf(campsite(1L)),
                     window = window,
-                    translateRefs = { c -> listOf(c.catalogRef) },
                 )
 
             assertNotNull(result.batch)
@@ -215,15 +202,12 @@ class FailoverAvailabilityFetcherTest {
                 }
             val healthy =
                 ScriptedProvider(BookingProvider.CAMPFLARE).apply { scriptReturns(emptyBatch("campflare")) }
-            val candA = candidate(cooling, parentId = "232447")
-            val candB = candidate(healthy, parentId = "cf-1")
-
             val result =
                 fetcherWith(tracker, clock).fetch(
-                    candidates = listOf(candA, candB),
+                    providers = listOf(cooling, healthy),
+                    campground = testCampground,
                     campsites = listOf(campsite(1L)),
                     window = window,
-                    translateRefs = { c -> listOf(c.catalogRef) },
                 )
 
             assertNotNull(result.batch)
@@ -255,15 +239,10 @@ class FailoverAvailabilityFetcherTest {
 
             val result =
                 fetcherWith(tracker, clock).fetch(
-                    candidates =
-                        listOf(
-                            candidate(a, parentId = "1"),
-                            candidate(b, parentId = "2"),
-                            candidate(c, parentId = "3"),
-                        ),
+                    providers = listOf(a, b, c),
+                    campground = testCampground,
                     campsites = listOf(campsite(1L)),
                     window = window,
-                    translateRefs = { cand -> listOf(cand.catalogRef) },
                 )
 
             assertNull(result.batch)
@@ -291,10 +270,10 @@ class FailoverAvailabilityFetcherTest {
 
             val result =
                 fetcherWith(tracker, clock).fetch(
-                    candidates = listOf(candidate(first, "1"), candidate(second, "2")),
+                    providers = listOf(first, second),
+                    campground = testCampground,
                     campsites = listOf(campsite(1L)),
                     window = window,
-                    translateRefs = { c -> listOf(c.catalogRef) },
                 )
 
             assertNull(result.batch)
@@ -318,10 +297,10 @@ class FailoverAvailabilityFetcherTest {
 
             val result =
                 fetcherWith(tracker, clock).fetch(
-                    candidates = listOf(candidate(provider, "232447")),
+                    providers = listOf(provider),
+                    campground = testCampground,
                     campsites = listOf(campsite(1L)),
                     window = window,
-                    translateRefs = { c -> listOf(c.catalogRef) },
                 )
 
             assertEquals(1, provider.calls, "sole cooling candidate must still be tried")
@@ -338,45 +317,15 @@ class FailoverAvailabilityFetcherTest {
 
             val result =
                 fetcherWith(tracker, clock).fetch(
-                    candidates = emptyList(),
+                    providers = emptyList(),
+                    campground = testCampground,
                     campsites = emptyList(),
                     window = window,
-                    translateRefs = { _ -> emptyList() },
                 )
 
             assertNull(result.batch)
             assertNull(result.servedBy)
             assertTrue(result.attempts.isEmpty())
-        }
-
-    @Test
-    fun `translateRefs returning empty for a candidate — OTHER attempt recorded, walk STOPS`() =
-        runBlocking {
-            val clock = FakeClock()
-            val tracker = trackerWith(clock)
-            val first = ScriptedProvider(BookingProvider.RECGOV)
-            val second = ScriptedProvider(BookingProvider.CAMPFLARE).apply { scriptReturns(emptyBatch()) }
-            val candA = candidate(first, "1")
-            val candB = candidate(second, "2")
-
-            val result =
-                fetcherWith(tracker, clock).fetch(
-                    candidates = listOf(candA, candB),
-                    campsites = listOf(campsite(1L)),
-                    window = window,
-                    // Empty refs for the first candidate — data issue, not a
-                    // transient failure. The walk STOPS.
-                    translateRefs = { c -> if (c === candA) emptyList() else listOf(c.catalogRef) },
-                )
-
-            assertNull(result.batch)
-            assertNull(result.servedBy)
-            assertEquals(1, result.attempts.size)
-            assertEquals(FetchOutcome.OTHER, result.attempts.single().outcome)
-            assertEquals(FailoverAvailabilityFetcher.NO_REFS_ERROR, result.attempts.single().error)
-            assertEquals(0, first.calls, "empty refs means no upstream call")
-            assertEquals(0, second.calls, "walk stops — the sibling is never tried")
-            assertFalse(tracker.isCooling(BookingProvider.RECGOV), "not a transient failure")
         }
 
     @Test
@@ -392,10 +341,10 @@ class FailoverAvailabilityFetcherTest {
 
             val result =
                 fetcherWith(tracker, clock).fetch(
-                    candidates = listOf(candidate(provider, "1")),
+                    providers = listOf(provider),
+                    campground = testCampground,
                     campsites = listOf(campsite(1L)),
                     window = window,
-                    translateRefs = { c -> listOf(c.catalogRef) },
                 )
 
             assertEquals(1, result.attempts.size)
@@ -418,7 +367,7 @@ class FailoverAvailabilityFetcherTest {
 
                     override suspend fun catalogAvailability(
                         campground: Campground,
-                        campsites: List<CatalogCampsiteRef>,
+                        campsites: List<Campsite>,
                         startDate: LocalDate,
                         endDate: LocalDate,
                     ): AvailabilityObservationBatch {
@@ -429,10 +378,10 @@ class FailoverAvailabilityFetcherTest {
 
             val result =
                 fetcherWith(tracker, clock).fetch(
-                    candidates = listOf(candidate(provider, "1")),
+                    providers = listOf(provider),
+                    campground = testCampground,
                     campsites = listOf(campsite(1L)),
                     window = window,
-                    translateRefs = { c -> listOf(c.catalogRef) },
                 )
 
             assertEquals(125, result.attempts.single().durationMs)

@@ -36,7 +36,6 @@ import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.FetchOutcome
 import ca.floo.roadtrip.service.availability.NotifyTriggerActionHandler
-import ca.floo.roadtrip.service.availability.ProviderCandidate
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.TriggerActionHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
@@ -474,7 +473,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
         override suspend fun catalogAvailability(
             campground: Campground,
-            campsites: List<CatalogCampsiteRef>,
+            campsites: List<Campsite>,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch {
@@ -485,9 +484,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             mdcRunIdDuringCall = MDC.get("run_id")
             val observedAt = Instant.now()
             val observations =
-                campsites.map { reservable ->
+                campsites.map { campsite ->
                     CampsiteDayObservation(
-                        campsiteId = reservable.campsiteId,
+                        campsiteId = campsite.id,
                         date = observationDate ?: startDate,
                         observedAt = observedAt,
                         status = status,
@@ -528,7 +527,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
         override suspend fun catalogAvailability(
             campground: Campground,
-            campsites: List<CatalogCampsiteRef>,
+            campsites: List<Campsite>,
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw AvailabilityProviderError.RateLimited(RuntimeException("429"))
@@ -1486,10 +1485,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     ): FailoverAvailabilityFetcher =
         object : FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = testProviderCooldown)) {
             override suspend fun fetch(
-                candidates: List<ProviderCandidate>,
+                providers: List<AvailabilityProvider>,
+                campground: Campground,
                 campsites: List<Campsite>,
                 window: ResolvedDateWindow,
-                translateRefs: (ProviderCandidate) -> List<CatalogCampsiteRef>,
             ): FailoverAvailabilityFetcher.FailoverResult =
                 FailoverAvailabilityFetcher.FailoverResult(
                     batch = successBatch,

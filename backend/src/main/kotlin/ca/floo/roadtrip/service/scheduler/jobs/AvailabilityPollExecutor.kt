@@ -11,7 +11,6 @@ import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.ResolvedAvailabilityTarget
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.availabilityProviderErrorFromAttempt
-import ca.floo.roadtrip.service.availability.catalogRefsFor
 import ca.floo.roadtrip.service.availability.parentRefKey
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import kotlinx.coroutines.slf4j.MDCContext
@@ -105,19 +104,12 @@ internal class AvailabilityPollExecutor(
         rows: List<ResolvedAvailabilityTarget>,
         fetchWindow: ResolvedDateWindow,
     ): FailoverAvailabilityFetcher.FailoverResult {
-        val groupCandidates = rows.first().candidates
-        val preferredRefs = rows.map { it.catalogRef }
+        val first = rows.first()
         return failoverFetcher.fetch(
-            candidates = groupCandidates,
+            providers = first.candidates,
+            campground = first.campground,
             campsites = rows.map { it.campsite },
             window = fetchWindow,
-            translateRefs = { candidate ->
-                if (candidate === groupCandidates.first()) {
-                    preferredRefs
-                } else {
-                    rows.catalogRefsFor(candidate)
-                }
-            },
         )
     }
 }

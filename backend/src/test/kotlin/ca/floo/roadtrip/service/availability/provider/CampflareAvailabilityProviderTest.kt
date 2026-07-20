@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
+import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.availability.campflare.CampflareCampgroundAvailability
 import ca.floo.roadtrip.model.availability.campflare.CampflareCampsiteAvailability
@@ -63,7 +63,7 @@ class CampflareAvailabilityProviderTest {
                         ),
                     campsites =
                         listOf(
-                            CatalogCampsiteRef(campsiteId = 100, vendorId = "upper-pines-site-100"),
+                            campsiteFixture(id = 100, vendor = "campflare", vendorId = "upper-pines-site-100"),
                         ),
                     startDate = LocalDate.parse("2026-06-01"),
                     endDate = LocalDate.parse("2026-06-03"),
@@ -120,7 +120,7 @@ class CampflareAvailabilityProviderTest {
                         ),
                     campsites =
                         listOf(
-                            CatalogCampsiteRef(campsiteId = 100, vendorId = "upper-pines-site-100"),
+                            campsiteFixture(id = 100, vendor = "campflare", vendorId = "upper-pines-site-100"),
                         ),
                     startDate = LocalDate.parse("2026-06-01"),
                     endDate = LocalDate.parse("2026-06-03"),

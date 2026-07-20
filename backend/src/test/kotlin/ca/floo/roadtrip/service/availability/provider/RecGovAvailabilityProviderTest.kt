@@ -49,10 +49,7 @@ class RecGovAvailabilityProviderTest {
                     campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
                     campsites =
                         listOf(
-                            CatalogCampsiteRef(
-                                campsiteId = 330257,
-                                vendorId = "330257",
-                            ),
+                            campsiteFixture(id = 330257, vendor = "recgov", vendorId = "330257"),
                         ),
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-02"),
@@ -90,10 +87,7 @@ class RecGovAvailabilityProviderTest {
                     campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
                     campsites =
                         listOf(
-                            CatalogCampsiteRef(
-                                campsiteId = 1000,
-                                vendorId = "100",
-                            ),
+                            campsiteFixture(id = 1000, vendor = "recgov", vendorId = "100"),
                         ),
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-02"),
@@ -148,8 +142,8 @@ class RecGovAvailabilityProviderTest {
                     campground = testCampground(bookingProvider = "recgov", bookingProviderRef = "232447"),
                     campsites =
                         listOf(
-                            CatalogCampsiteRef(campsiteId = 330257, vendorId = "330257"),
-                            CatalogCampsiteRef(campsiteId = 330258, vendorId = "330258"),
+                            campsiteFixture(id = 330257, vendor = "recgov", vendorId = "330257"),
+                            campsiteFixture(id = 330258, vendor = "recgov", vendorId = "330258"),
                         ),
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-03"),

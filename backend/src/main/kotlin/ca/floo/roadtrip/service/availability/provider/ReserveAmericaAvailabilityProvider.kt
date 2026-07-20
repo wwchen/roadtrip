@@ -8,8 +8,8 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.ReserveAmericaException
@@ -74,7 +74,7 @@ class ReserveAmericaAvailabilityProvider(
 
     override suspend fun catalogAvailability(
         campground: Campground,
-        campsites: List<CatalogCampsiteRef>,
+        campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
@@ -82,10 +82,10 @@ class ReserveAmericaAvailabilityProvider(
         val tenant = tenantForRef(reserveAmericaRef)
         val data = fetch(tenant, reserveAmericaRef.parkId, startDate, endDate)
         val observations =
-            campsites.flatMap { reservable ->
+            campsites.flatMap { campsite ->
                 observationsForReservable(
-                    campsite = reservable,
-                    byDate = data.statuses[reservable.vendorId].orEmpty(),
+                    campsiteId = campsite.id,
+                    byDate = data.statuses[campsite.reserveAmericaVendorId()].orEmpty(),
                     dates = dates(startDate, endDate),
                     observedAt = data.observedAt,
                 )
@@ -121,19 +121,6 @@ class ReserveAmericaAvailabilityProvider(
                 endDate = endDate,
             )
         }
-
-    private fun observationsForReservable(
-        campsite: CatalogCampsiteRef,
-        byDate: Map<LocalDate, AvailabilityStatus>,
-        dates: List<LocalDate>,
-        observedAt: Instant,
-    ): List<CampsiteDayObservation> =
-        observationsForReservable(
-            campsiteId = campsite.campsiteId,
-            byDate = byDate,
-            dates = dates,
-            observedAt = observedAt,
-        )
 
     private fun observationsForReservable(
         campsiteId: Long?,
@@ -213,6 +200,11 @@ class ReserveAmericaAvailabilityProvider(
             )
     }
 }
+
+private fun Campsite.reserveAmericaVendorId(): String =
+    bookingProviderRef
+        ?.takeIf { bookingProvider == BookingProvider.RESERVEAMERICA.id }
+        ?: dataProviderRef.serialize()
 
 private fun dates(
     startDate: LocalDate,

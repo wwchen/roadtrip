@@ -9,6 +9,7 @@ import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.support.AspiraException
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -72,7 +73,7 @@ class AspiraAvailabilityProvider(
 
     override suspend fun catalogAvailability(
         campground: Campground,
-        campsites: List<CatalogCampsiteRef>,
+        campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
@@ -80,12 +81,18 @@ class AspiraAvailabilityProvider(
         val tenant = tenantForRef(aspiraRef)
         val parentMapId = mapIdOrThrow(aspiraRef.mapId)
         val targets =
-            campsites.map {
+            campsites.map { campsite ->
+                val ref = campsite.dataProviderRef
                 AspiraCatalogCampsite(
-                    campsiteId = it.campsiteId,
-                    resourceId = it.vendorId,
-                    mapId = it.mapId?.let(::mapIdOrThrow),
-                    resourceLocationId = it.resourceLocationId?.let { value -> intOrThrow("resourceLocationId", value) },
+                    campsiteId = campsite.id,
+                    resourceId = campsite.aspiraResourceId(),
+                    mapId = aspiraRef.mapId?.let(::mapIdOrThrow),
+                    resourceLocationId =
+                        when (ref) {
+                            is DataProviderRef.AspiraCampsite -> ref.resourceLocationId.toInt()
+                            is DataProviderRef.BcParksCampsite -> ref.resourceLocationId.toInt()
+                            else -> null
+                        },
                 )
             }
         val resourceLocationId =
@@ -171,3 +178,10 @@ class AspiraAvailabilityProvider(
             throw AvailabilityProviderError.UpstreamUnavailable(e)
         }
 }
+
+private fun Campsite.aspiraResourceId(): String =
+    when (val ref = dataProviderRef) {
+        is DataProviderRef.AspiraCampsite -> ref.resourceLocationId.toString()
+        is DataProviderRef.BcParksCampsite -> ref.resourceLocationId.toString()
+        else -> dataProviderRef.serialize()
+    }
