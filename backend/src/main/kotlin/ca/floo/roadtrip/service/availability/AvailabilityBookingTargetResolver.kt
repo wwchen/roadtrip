@@ -17,9 +17,12 @@ internal class AvailabilityBookingTargetResolver(
     fun targetFor(
         action: BookingAction,
         resolved: ResolvedAvailabilityTarget,
-    ): BookingTarget? =
-        resolved.candidates
-            .asSequence()
-            .mapNotNull { candidate -> candidate.parentRef?.let { bookings.targetFor(action, it, candidate.catalogRef) } }
-            .firstOrNull()
+    ): BookingTarget? {
+        for (provider in resolved.candidates) {
+            val ref = provider.parentRefFor(resolved.campground) ?: continue
+            val target = bookings.targetFor(action, ref, resolved.catalogRef)
+            if (target != null) return target
+        }
+        return null
+    }
 }

@@ -73,20 +73,22 @@ class AspiraAvailabilityProviderTest {
 
             val batch =
                 adapter.catalogAvailability(
-                    campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483388:-2147483624"),
+                    campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483615:-2147483624"),
                     campsites =
                         listOf(
-                            CatalogCampsiteRef(
-                                campsiteId = 100,
-                                vendorId = "100",
-                                mapId = -2147483615,
-                                resourceLocationId = -2147483624,
+                            campsiteFixture(
+                                id = 100,
+                                vendor = "aspira",
+                                vendorId = "pc:100",
+                                bookingProvider = "aspira",
+                                bookingProviderRef = null,
                             ),
-                            CatalogCampsiteRef(
-                                campsiteId = 200,
-                                vendorId = "200",
-                                mapId = -2147483615,
-                                resourceLocationId = -2147483624,
+                            campsiteFixture(
+                                id = 200,
+                                vendor = "aspira",
+                                vendorId = "pc:200",
+                                bookingProvider = "aspira",
+                                bookingProviderRef = null,
                             ),
                         ),
                     startDate = LocalDate.parse("2026-06-17"),
@@ -140,17 +142,19 @@ class AspiraAvailabilityProviderTest {
                     campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483388:-2147483624"),
                     campsites =
                         listOf(
-                            CatalogCampsiteRef(
-                                campsiteId = 100,
-                                vendorId = "100",
-                                mapId = -2147483615,
-                                resourceLocationId = -2147483624,
+                            campsiteFixture(
+                                id = 100,
+                                vendor = "aspira",
+                                vendorId = "pc:100",
+                                bookingProvider = "aspira",
+                                bookingProviderRef = null,
                             ),
-                            CatalogCampsiteRef(
-                                campsiteId = 200,
-                                vendorId = "200",
-                                mapId = -2147483615,
-                                resourceLocationId = -2147483624,
+                            campsiteFixture(
+                                id = 200,
+                                vendor = "aspira",
+                                vendorId = "pc:200",
+                                bookingProvider = "aspira",
+                                bookingProviderRef = null,
                             ),
                         ),
                     startDate = LocalDate.parse("2026-06-17"),
@@ -196,11 +200,12 @@ class AspiraAvailabilityProviderTest {
                     campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483388:null"),
                     campsites =
                         listOf(
-                            CatalogCampsiteRef(
-                                campsiteId = 100,
-                                vendorId = "100",
-                                mapId = -2147483615,
-                                resourceLocationId = -2147483624,
+                            campsiteFixture(
+                                id = 100,
+                                vendor = "aspira",
+                                vendorId = "pc:100",
+                                bookingProvider = "aspira",
+                                bookingProviderRef = null,
                             ),
                         ),
                     startDate = LocalDate.parse("2026-06-17"),
@@ -236,11 +241,12 @@ class AspiraAvailabilityProviderTest {
                     campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "bc:-2147483505:-2147483418:-2147483539"),
                     campsites =
                         listOf(
-                            CatalogCampsiteRef(
-                                campsiteId = 414386,
-                                vendorId = "-2147475967",
-                                mapId = -2147483418,
-                                resourceLocationId = -2147483539,
+                            campsiteFixture(
+                                id = 414386,
+                                vendor = "bcparks-strapi",
+                                vendorId = "bc:-2147475967",
+                                bookingProvider = "aspira",
+                                bookingProviderRef = null,
                             ),
                         ),
                     startDate = LocalDate.parse("2026-07-20"),
@@ -282,8 +288,20 @@ class AspiraAvailabilityProviderTest {
                     campground = testCampground(bookingProvider = "aspira", bookingProviderRef = "pc:-2147483630:-2147483388:null"),
                     campsites =
                         listOf(
-                            CatalogCampsiteRef(campsiteId = 100, vendorId = "100", mapId = -2147483388),
-                            CatalogCampsiteRef(campsiteId = 101, vendorId = "101", mapId = -2147483388),
+                            campsiteFixture(
+                                id = 100,
+                                vendor = "aspira",
+                                vendorId = "pc:100",
+                                bookingProvider = "aspira",
+                                bookingProviderRef = null,
+                            ),
+                            campsiteFixture(
+                                id = 101,
+                                vendor = "aspira",
+                                vendorId = "pc:101",
+                                bookingProvider = "aspira",
+                                bookingProviderRef = null,
+                            ),
                         ),
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-03"),

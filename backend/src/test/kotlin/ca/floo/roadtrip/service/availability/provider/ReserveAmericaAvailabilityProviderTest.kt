@@ -2,8 +2,8 @@ package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailabilityClient
+import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
@@ -60,7 +60,7 @@ class ReserveAmericaAvailabilityProviderTest {
                     campground = testCampground(bookingProvider = "reserveamerica", bookingProviderRef = "NY:489"),
                     campsites =
                         listOf(
-                            CatalogCampsiteRef(campsiteId = 253488, vendorId = "253488"),
+                            campsiteFixture(id = 253488, vendor = "reserveamerica", vendorId = "253488"),
                         ),
                     startDate = LocalDate.parse("2026-06-22"),
                     endDate = LocalDate.parse("2026-06-24"),

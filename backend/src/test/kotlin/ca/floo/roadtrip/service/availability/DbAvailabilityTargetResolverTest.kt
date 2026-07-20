@@ -372,13 +372,10 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 ).resolve(reservable)!!
 
             assertEquals(2, target.candidates.size)
-            assertEquals(BookingProvider.CAMPFLARE, target.candidates[0].provider.id)
-            assertEquals(BookingProvider.RECGOV, target.candidates[1].provider.id)
-            assertEquals(target.candidates[0].provider, target.provider)
-            assertEquals(target.candidates[0].parentRef, target.parentRef)
-            assertEquals(target.candidates[0].catalogRef, target.catalogRef)
-            assertEquals("upper-pines-campground-447", parentRefKey(target.candidates[0].parentRef!!))
-            assertEquals("232447", parentRefKey(target.candidates[1].parentRef!!))
+            assertEquals(BookingProvider.CAMPFLARE, target.candidates[0].id)
+            assertEquals(BookingProvider.RECGOV, target.candidates[1].id)
+            assertEquals(target.candidates[0], target.provider)
+            assertEquals(target.candidates[0].parentRefFor(target.campground), target.parentRef)
         }
 
     @Test
@@ -405,7 +402,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 ).resolve(reservable)!!
 
             assertEquals(1, target.candidates.size)
-            assertEquals(BookingProvider.RECGOV, target.candidates[0].provider.id)
+            assertEquals(BookingProvider.RECGOV, target.candidates[0].id)
             assertEquals(BookingProvider.RECGOV, target.provider.id)
             assertEquals("232447", parentRefKey(target.parentRef!!))
         }

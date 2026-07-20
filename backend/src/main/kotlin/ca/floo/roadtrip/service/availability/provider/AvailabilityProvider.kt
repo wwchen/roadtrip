@@ -71,14 +71,14 @@ interface AvailabilityProvider : Dispatchable<BookingProvider> {
     ): AvailabilityObservationBatch
 
     /**
-     * POI-scoped availability narrowed to the catalog rows linked to the POI.
+     * POI-scoped availability narrowed to the campsites linked to the POI.
      * Most providers can answer from the campground-level endpoint, so the
      * default delegates to [availability]. Providers with a parent/child map
      * split can override this to classify the actual linked resources.
      */
     suspend fun catalogAvailability(
         campground: Campground,
-        campsites: List<CatalogCampsiteRef>,
+        campsites: List<Campsite>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch = availability(campground, startDate, endDate)

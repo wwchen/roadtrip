@@ -47,14 +47,7 @@ internal class DbAvailabilityTargetResolver(
             catalogRef = catalogRef,
             parentPoiId = poiId,
             dateContext = dateResolver.context(lat = poiLatLng?.first, lng = poiLatLng?.second),
-            candidates =
-                candidates.map { (_, cg, prov) ->
-                    ProviderCandidate(
-                        provider = prov,
-                        campground = cg,
-                        catalogRef = buildCatalogRef(campsite, prov.parentRefFor(cg)),
-                    )
-                },
+            candidates = candidates.map { (_, _, prov) -> prov },
         )
     }
 

@@ -2,29 +2,14 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import java.time.Instant
 
-/**
- * Walks the resolver-provided candidate list until one candidate returns a
- * batch. Retryable failures (rate-limited, upstream 5xx, blocked) fail over to
- * the next candidate; anything else stops the walk immediately.
- *
- * The fetcher is deliberately I/O-shaped: it captures one [AttemptRecord] per
- * upstream call so the caller can persist a trace row for every attempt,
- * regardless of the terminal outcome. Cooldown side-effects are booked here
- * (via [ProviderCooldownTracker.recordSuccess] / [ProviderCooldownTracker.recordFailure])
- * so callers don't have to remember to.
- *
- * Ref translation is delegated: the caller supplies `translateRefs`, which
- * returns the provider-specific campsite refs for the candidate being tried.
- * This keeps observations anchored to the catalog campsite ids chosen by the
- * resolver.
- */
 internal open class FailoverAvailabilityFetcher(
     private val cooldowns: ProviderCooldownTracker,
     private val clock: () -> Instant = Instant::now,
@@ -39,50 +24,30 @@ internal open class FailoverAvailabilityFetcher(
     )
 
     data class FailoverResult(
-        /** Non-null iff some attempt returned OK. */
         val batch: AvailabilityObservationBatch?,
-        /** Null iff no attempt returned OK. */
         val servedBy: BookingProvider?,
-        /** One record per upstream call the fetcher issued, in walk order. */
         val attempts: List<AttemptRecord>,
     )
 
     open suspend fun fetch(
-        candidates: List<ProviderCandidate>,
-        @Suppress("UNUSED_PARAMETER") campsites: List<Campsite>,
+        providers: List<AvailabilityProvider>,
+        campground: Campground,
+        campsites: List<Campsite>,
         window: ResolvedDateWindow,
-        translateRefs: (ProviderCandidate) -> List<CatalogCampsiteRef>,
     ): FailoverResult {
-        val sorted = cooldowns.sortHealthyFirst(candidates) { it.provider.id }
+        val sorted = cooldowns.sortHealthyFirst(providers) { it.id }
         if (sorted.isEmpty()) return FailoverResult(batch = null, servedBy = null, attempts = emptyList())
 
         val attempts = mutableListOf<AttemptRecord>()
-        for (candidate in sorted) {
-            val providerId = candidate.provider.id
-            val parentRef = candidate.parentRef
-            val refs = translateRefs(candidate)
-            if (refs.isEmpty()) {
-                attempts +=
-                    AttemptRecord(
-                        provider = providerId,
-                        parentRef = parentRef,
-                        outcome = FetchOutcome.OTHER,
-                        durationMs = 0,
-                        error = NO_REFS_ERROR,
-                    )
-                // Data-consistency issue for this vendor row — not a transient
-                // failure. Don't cool the provider off, but stop the walk.
-                return FailoverResult(batch = null, servedBy = null, attempts = attempts)
-            }
-
+        for (provider in sorted) {
             val begin = clock()
-            val attempt = attemptFetch(candidate, refs, window)
+            val attempt = attemptFetch(provider, campground, campsites, window)
             val durationMs = elapsedMs(begin, clock())
 
             attempts +=
                 AttemptRecord(
-                    provider = providerId,
-                    parentRef = parentRef,
+                    provider = provider.id,
+                    parentRef = provider.parentRefFor(campground),
                     outcome = attempt.outcome,
                     durationMs = durationMs,
                     error = attempt.error,
@@ -91,18 +56,16 @@ internal open class FailoverAvailabilityFetcher(
 
             when (attempt.outcome) {
                 FetchOutcome.OK -> {
-                    cooldowns.recordSuccess(providerId)
-                    return FailoverResult(batch = attempt.batch, servedBy = providerId, attempts = attempts)
+                    cooldowns.recordSuccess(provider.id)
+                    return FailoverResult(batch = attempt.batch, servedBy = provider.id, attempts = attempts)
                 }
                 FetchOutcome.RATE_LIMITED,
                 FetchOutcome.UPSTREAM_5XX,
                 FetchOutcome.BLOCKED,
                 -> {
-                    cooldowns.recordFailure(providerId)
-                    // fall through to next candidate
+                    cooldowns.recordFailure(provider.id)
                 }
                 FetchOutcome.OTHER -> {
-                    // Non-retryable — stop the walk with what we have.
                     return FailoverResult(batch = null, servedBy = null, attempts = attempts)
                 }
             }
@@ -118,15 +81,16 @@ internal open class FailoverAvailabilityFetcher(
     )
 
     private suspend fun attemptFetch(
-        candidate: ProviderCandidate,
-        refs: List<CatalogCampsiteRef>,
+        provider: AvailabilityProvider,
+        campground: Campground,
+        campsites: List<Campsite>,
         window: ResolvedDateWindow,
     ): Attempt =
         try {
             val batch =
-                candidate.provider.catalogAvailability(
-                    campground = candidate.campground,
-                    campsites = refs,
+                provider.catalogAvailability(
+                    campground = campground,
+                    campsites = campsites,
                     startDate = window.startDate,
                     endDate = window.endDate,
                 )
@@ -141,10 +105,6 @@ internal open class FailoverAvailabilityFetcher(
         begin: Instant,
         end: Instant,
     ): Int = (end.toEpochMilli() - begin.toEpochMilli()).toInt().coerceAtLeast(0)
-
-    companion object {
-        internal const val NO_REFS_ERROR = "no campsite refs for candidate"
-    }
 }
 
 private const val NO_AVAILABILITY_CANDIDATES_ERROR = "no availability candidates available"

@@ -3,14 +3,11 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
-import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
-import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
@@ -61,12 +58,7 @@ internal class CampsiteAvailabilityService(
             ) ?: targetWindow
         val windows = AvailabilityWindows(target = targetWindow, fetch = fetchWindow)
 
-        val parentRef = provider.parentRefFor(campground)
-        val catalogRefs = campsites.map { it.toCatalogRef(parentRef) }
-        val candidates =
-            availabilityProviders
-                .filter { it.supportsCampground(campground) }
-                .map { ProviderCandidate(provider = it, campground = campground, catalogRef = catalogRefs.first()) }
+        val supportingProviders = availabilityProviders.filter { it.supportsCampground(campground) }
 
         val batch =
             availabilityLoader.loadOrFetch(
@@ -80,17 +72,10 @@ internal class CampsiteAvailabilityService(
             ) {
                 val result =
                     failoverFetcher.fetch(
-                        candidates = candidates,
+                        providers = supportingProviders,
+                        campground = campground,
                         campsites = campsites,
                         window = ResolvedDateWindow(windows.fetch.startDate, windows.fetch.endDate),
-                        translateRefs = { candidate ->
-                            if (candidate.provider == provider) {
-                                catalogRefs
-                            } else {
-                                val altRef = candidate.provider.parentRefFor(campground)
-                                campsites.map { it.toCatalogRef(altRef) }
-                            }
-                        },
                     )
                 result.batch ?: throw availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())
             }
@@ -106,33 +91,6 @@ internal class CampsiteAvailabilityService(
         availabilityProviders.firstOrNull { it.supportsCampground(campground) }
             ?: throw AvailabilityServiceError.UnknownCampground
 }
-
-private fun Campsite.toCatalogRef(parentRef: BookingProviderRef?): CatalogCampsiteRef {
-    if (parentRef == null) {
-        return CatalogCampsiteRef(campsiteId = id, vendorId = dataProviderRef.serialize())
-    }
-    val vendorId =
-        bookingProviderRef
-            ?.takeIf { bookingProvider == parentRef.provider.id }
-            ?: dataProviderRef.serialize()
-    return when (parentRef) {
-        is BookingProviderRef.Aspira ->
-            CatalogCampsiteRef(
-                campsiteId = id,
-                vendorId = aspiraCatalogResourceId(),
-                mapId = parentRef.mapId,
-                resourceLocationId = parentRef.resourceLocationId,
-            )
-        else -> CatalogCampsiteRef(campsiteId = id, vendorId = vendorId)
-    }
-}
-
-private fun Campsite.aspiraCatalogResourceId(): String =
-    when (val ref = dataProviderRef) {
-        is DataProviderRef.AspiraCampsite -> ref.resourceLocationId.toString()
-        is DataProviderRef.BcParksCampsite -> ref.resourceLocationId.toString()
-        else -> dataProviderRef.serialize()
-    }
 
 internal fun defaultSnapshotFreshnessTtl(providerId: BookingProvider): Duration =
     when (providerId) {
