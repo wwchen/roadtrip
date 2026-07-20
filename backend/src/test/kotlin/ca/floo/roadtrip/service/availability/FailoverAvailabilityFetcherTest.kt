@@ -20,6 +20,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class FailoverAvailabilityFetcherTest {
@@ -345,9 +346,10 @@ class FailoverAvailabilityFetcherTest {
         runBlocking {
             val clock = FakeClock()
             val tracker = trackerWith(clock)
+            val thrown = AvailabilityProviderError.RateLimited(RuntimeException("429"))
             val provider =
                 ScriptedProvider(BookingProvider.RECGOV).apply {
-                    scriptThrows(AvailabilityProviderError.RateLimited(RuntimeException("429")))
+                    scriptThrows(thrown)
                 }
 
             val result =
@@ -360,6 +362,7 @@ class FailoverAvailabilityFetcherTest {
 
             assertEquals(1, result.attempts.size)
             assertEquals(FetchOutcome.RATE_LIMITED, result.attempts.single().outcome, "RateLimited maps to RATE_LIMITED")
+            assertSame(thrown, result.attempts.single().providerError)
             assertTrue(tracker.isCooling(BookingProvider.RECGOV), "retryable failure cools the provider")
         }
 

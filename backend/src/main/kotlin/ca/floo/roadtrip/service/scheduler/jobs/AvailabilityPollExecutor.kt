@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
-import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.scheduler.HandlerResult
@@ -9,9 +8,9 @@ import ca.floo.roadtrip.service.availability.AvailabilityRunService
 import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
-import ca.floo.roadtrip.service.availability.FetchOutcome
 import ca.floo.roadtrip.service.availability.ResolvedAvailabilityTarget
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
+import ca.floo.roadtrip.service.availability.availabilityProviderErrorFromAttempt
 import ca.floo.roadtrip.service.availability.catalogRefsFor
 import ca.floo.roadtrip.service.availability.parentRefKey
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
@@ -79,7 +78,7 @@ internal class AvailabilityPollExecutor(
                         fetch = { parentRef, provider, rows, windows ->
                             val result = fetchWithFailover(rows, windows.fetch)
                             attemptsByGroup[provider.id to parentRefKey(parentRef)] = result.attempts
-                            result.batch ?: throw synthesizedError(result.attempts.lastOrNull())
+                            result.batch ?: throw availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())
                         },
                     )
                 val outcome = runService.recordResults(handle, results, attemptsByGroup)
@@ -119,18 +118,5 @@ internal class AvailabilityPollExecutor(
                 }
             },
         )
-    }
-
-    private fun synthesizedError(last: FailoverAvailabilityFetcher.AttemptRecord?): AvailabilityProviderError {
-        val message = last?.error ?: "no availability candidates available"
-        return when (last?.outcome) {
-            FetchOutcome.RATE_LIMITED -> AvailabilityProviderError.RateLimited(RuntimeException(message))
-            FetchOutcome.BLOCKED -> AvailabilityProviderError.UpstreamBlocked(RuntimeException(message))
-            FetchOutcome.UPSTREAM_5XX,
-            FetchOutcome.OK,
-            FetchOutcome.OTHER,
-            null,
-            -> AvailabilityProviderError.UpstreamUnavailable(RuntimeException(message))
-        }
     }
 }

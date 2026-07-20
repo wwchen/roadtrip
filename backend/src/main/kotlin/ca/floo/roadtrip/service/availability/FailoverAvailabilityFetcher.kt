@@ -35,6 +35,7 @@ internal open class FailoverAvailabilityFetcher(
         val outcome: FetchOutcome,
         val durationMs: Int,
         val error: String?,
+        val providerError: AvailabilityProviderError? = null,
     )
 
     data class FailoverResult(
@@ -74,22 +75,23 @@ internal open class FailoverAvailabilityFetcher(
             }
 
             val begin = clock()
-            val (outcome, batch, error) = attemptFetch(candidate, refs, window)
+            val attempt = attemptFetch(candidate, refs, window)
             val durationMs = elapsedMs(begin, clock())
 
             attempts +=
                 AttemptRecord(
                     provider = providerId,
                     parentRef = candidate.parentRef,
-                    outcome = outcome,
+                    outcome = attempt.outcome,
                     durationMs = durationMs,
-                    error = error,
+                    error = attempt.error,
+                    providerError = attempt.providerError,
                 )
 
-            when (outcome) {
+            when (attempt.outcome) {
                 FetchOutcome.OK -> {
                     cooldowns.recordSuccess(providerId)
-                    return FailoverResult(batch = batch, servedBy = providerId, attempts = attempts)
+                    return FailoverResult(batch = attempt.batch, servedBy = providerId, attempts = attempts)
                 }
                 FetchOutcome.RATE_LIMITED,
                 FetchOutcome.UPSTREAM_5XX,
@@ -111,6 +113,7 @@ internal open class FailoverAvailabilityFetcher(
         val outcome: FetchOutcome,
         val batch: AvailabilityObservationBatch?,
         val error: String?,
+        val providerError: AvailabilityProviderError? = null,
     )
 
     private suspend fun attemptFetch(
@@ -128,7 +131,7 @@ internal open class FailoverAvailabilityFetcher(
                 )
             Attempt(outcome = FetchOutcome.OK, batch = batch, error = null)
         } catch (e: AvailabilityProviderError) {
-            Attempt(outcome = e.toFetchOutcome(), batch = null, error = e.message ?: e::class.simpleName)
+            Attempt(outcome = e.toFetchOutcome(), batch = null, error = e.message ?: e::class.simpleName, providerError = e)
         } catch (e: Throwable) {
             Attempt(outcome = FetchOutcome.OTHER, batch = null, error = e.message ?: e.javaClass.simpleName)
         }
@@ -140,5 +143,22 @@ internal open class FailoverAvailabilityFetcher(
 
     companion object {
         internal const val NO_REFS_ERROR = "no campsite refs for candidate"
+    }
+}
+
+private const val NO_AVAILABILITY_CANDIDATES_ERROR = "no availability candidates available"
+
+internal fun availabilityProviderErrorFromAttempt(last: FailoverAvailabilityFetcher.AttemptRecord?): AvailabilityProviderError {
+    last?.providerError?.let { return it }
+    val message = last?.error ?: NO_AVAILABILITY_CANDIDATES_ERROR
+    val cause = RuntimeException(message)
+    return when (last?.outcome) {
+        FetchOutcome.RATE_LIMITED -> AvailabilityProviderError.RateLimited(cause)
+        FetchOutcome.BLOCKED -> AvailabilityProviderError.UpstreamBlocked(cause)
+        FetchOutcome.UPSTREAM_5XX,
+        FetchOutcome.OK,
+        FetchOutcome.OTHER,
+        null,
+        -> AvailabilityProviderError.UpstreamUnavailable(cause)
     }
 }

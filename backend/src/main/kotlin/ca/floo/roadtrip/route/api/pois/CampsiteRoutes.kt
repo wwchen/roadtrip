@@ -139,7 +139,7 @@ internal fun Route.campsiteRoutes(
                             call.respondServiceAvailabilityError(e)
                         } catch (e: AvailabilityProviderError) {
                             val (status, error) = mapProviderError(e)
-                            log.info("poi campsites availability poi={} failed: {}", poiId, e.message)
+                            log.error("poi campsites availability poi={} failed: {}", poiId, e.message, e)
                             call.respondAvailabilityJson(error, status)
                         }
                     }.describeApi(
