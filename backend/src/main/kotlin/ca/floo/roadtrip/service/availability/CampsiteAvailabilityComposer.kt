@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.model.api.AvailabilityResponseDto
-import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
@@ -121,26 +120,9 @@ internal class CampsiteAvailabilityComposer(
                     }
                 },
             )
-        return result.batch ?: throw synthesizedError(result.attempts.lastOrNull())
-    }
-
-    private fun synthesizedError(last: FailoverAvailabilityFetcher.AttemptRecord?): AvailabilityProviderError {
-        val message = last?.error ?: NO_CANDIDATES_ERROR
-        return when (last?.outcome) {
-            FetchOutcome.RATE_LIMITED -> AvailabilityProviderError.RateLimited(RuntimeException(message))
-            FetchOutcome.BLOCKED -> AvailabilityProviderError.UpstreamBlocked(RuntimeException(message))
-            FetchOutcome.UPSTREAM_5XX,
-            FetchOutcome.OK,
-            FetchOutcome.OTHER,
-            null,
-            -> AvailabilityProviderError.UpstreamUnavailable(RuntimeException(message))
-        }
+        return result.batch ?: throw availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())
     }
 }
-
-// Message used when the failover fetcher returns a null batch with no
-// attempts (e.g. empty-candidates case). Not user-facing.
-private const val NO_CANDIDATES_ERROR: String = "no availability candidates available"
 
 internal fun defaultSnapshotFreshnessTtl(providerId: BookingProvider): Duration =
     when (providerId) {

@@ -14,6 +14,10 @@ import java.time.temporal.ChronoUnit
 
 private const val ASPIRA_BOOKING_HORIZON_DAYS = 365
 private const val ASPIRA_MAX_POLL_WINDOW_DAYS = 30
+private const val HTTP_TOO_MANY_REQUESTS = 429
+private const val HTTP_UNAUTHORIZED = 401
+private const val HTTP_FORBIDDEN = 403
+private const val HTTP_SERVICE_UNAVAILABLE = 503
 
 /**
  * Aspira NextGen adapter. Single instance covers all tenants (Parks Canada,
@@ -147,8 +151,11 @@ class AspiraAvailabilityProvider(
             throw e
         } catch (e: AspiraException) {
             when {
-                e.httpStatus == 429 -> throw AvailabilityProviderError.RateLimited(e)
-                e.httpStatus == 503 || e.message?.contains("WAF") == true ->
+                e.httpStatus == HTTP_TOO_MANY_REQUESTS -> throw AvailabilityProviderError.RateLimited(e)
+                e.httpStatus == HTTP_UNAUTHORIZED ||
+                    e.httpStatus == HTTP_FORBIDDEN ||
+                    e.httpStatus == HTTP_SERVICE_UNAVAILABLE ||
+                    e.message?.contains("WAF") == true ->
                     throw AvailabilityProviderError.UpstreamBlocked(e)
                 else -> throw AvailabilityProviderError.UpstreamUnavailable(e)
             }

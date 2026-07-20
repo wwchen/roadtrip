@@ -13,6 +13,7 @@ import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.slf4j.event.Level
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -56,4 +57,11 @@ class RoadtripRoutingTest {
             assertEquals("ok", body["error"]!!.jsonPrimitive.content)
             assertEquals(null, body["detail"])
         }
+
+    @Test
+    fun `access log level follows response status class`() {
+        assertEquals(Level.INFO, accessLogLevelForStatus(HttpStatusCode.OK.value))
+        assertEquals(Level.WARN, accessLogLevelForStatus(HttpStatusCode.BadRequest.value))
+        assertEquals(Level.ERROR, accessLogLevelForStatus(HttpStatusCode.ServiceUnavailable.value))
+    }
 }

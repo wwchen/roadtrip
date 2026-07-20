@@ -5,14 +5,17 @@ import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.aspira.AspiraOccupancy
 import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
+import ca.floo.roadtrip.support.AspiraException
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class AspiraAvailabilityProviderTest {
@@ -225,6 +228,49 @@ class AspiraAvailabilityProviderTest {
             val observation = batch.observations.single()
             assertEquals(100, observation.campsiteId)
             assertEquals(AvailabilityStatus.AVAILABLE, observation.status)
+        }
+
+    @Test
+    fun `aspira maps forbidden availability responses to upstream blocked`() =
+        runBlocking {
+            val availabilityClient =
+                fakeAspiraClient(
+                    onFetch = { _, _, _, _ ->
+                        throw AspiraException("aspira HTTP 403 for mapId=-1", httpStatus = 403)
+                    },
+                )
+            val adapter =
+                AspiraAvailabilityProvider(
+                    tenants =
+                        mapOf(
+                            "bc" to AspiraTenant(host = "camping.bcparks.ca", vendorCode = "aspira_bc", bookingHorizonDays = 365),
+                        ),
+                    availabilityClient = availabilityClient,
+                    enabled = true,
+                )
+
+            assertFailsWith<AvailabilityProviderError.UpstreamBlocked> {
+                adapter.catalogAvailability(
+                    ref =
+                        BookingProviderRef.Aspira(
+                            tenant = "bc",
+                            transactionLocationId = -2147483505,
+                            mapId = -2147483418,
+                            resourceLocationId = -2147483539,
+                        ),
+                    campsites =
+                        listOf(
+                            CatalogCampsiteRef(
+                                campsiteId = 414386,
+                                vendorId = "-2147475967",
+                                mapId = -2147483418,
+                                resourceLocationId = -2147483539,
+                            ),
+                        ),
+                    startDate = LocalDate.parse("2026-07-20"),
+                    endDate = LocalDate.parse("2026-07-27"),
+                )
+            }
         }
 
     @Test
