@@ -17,15 +17,11 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-/**
- * Widest single-tick poll window for ReserveAmerica / Active Network. Latent
- * until watches turn on for this vendor (`supportsInternalPolling` is still false)
- * pending cadence/load validation; declared for capability completeness.
- */
+private const val RESERVEAMERICA_BOOKING_HORIZON_DAYS = 270
 private const val RESERVEAMERICA_MAX_POLL_WINDOW_DAYS = 30
 
 class ReserveAmericaAvailabilityProvider(
-    internal val tenant: ReserveAmericaTenant,
+    private val tenants: Map<String, ReserveAmericaTenant>,
     private val availabilityClient: ReserveAmericaAvailabilityClient,
     private val enabled: Boolean,
 ) : AvailabilityProvider {
@@ -33,14 +29,15 @@ class ReserveAmericaAvailabilityProvider(
 
     override val capabilities: AvailabilityProviderCapabilities =
         AvailabilityProviderCapabilities(
-            // The live endpoint can support polling, but watches stay off until
-            // cadence and upstream load limits are validated for Active Network.
             supportsInternalPolling = false,
-            bookingHorizonDays = tenant.bookingHorizonDays,
+            bookingHorizonDays = RESERVEAMERICA_BOOKING_HORIZON_DAYS,
             maxPollWindowDays = RESERVEAMERICA_MAX_POLL_WINDOW_DAYS,
         )
 
     override fun isEnabled(): Boolean = enabled
+
+    override fun supportsRef(ref: BookingProviderRef): Boolean =
+        isEnabled() && ref is BookingProviderRef.ReserveAmerica && ref.contractCode in tenants
 
     override suspend fun availability(
         ref: BookingProviderRef,
@@ -48,12 +45,10 @@ class ReserveAmericaAvailabilityProvider(
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
         val reserveAmericaRef = reserveAmericaRefOrThrow(ref)
-        val contractCode = contractCode(reserveAmericaRef)
-        val data = fetch(contractCode, reserveAmericaRef.parkId, startDate, endDate)
+        val tenant = tenantForRef(reserveAmericaRef)
+        val data = fetch(tenant, reserveAmericaRef.parkId, startDate, endDate)
         val observations =
-            data.statuses.flatMap { (siteId, byDate) ->
-                // Dense fill is intentional for the campground-level matrix:
-                // catalog-less callers still need every visible site/date cell.
+            data.statuses.flatMap { (_, byDate) ->
                 dates(startDate, endDate).map { date ->
                     CampsiteDayObservation(
                         campsiteId = null,
@@ -64,7 +59,8 @@ class ReserveAmericaAvailabilityProvider(
                 }
             }
         return batch(
-            contractCode = contractCode,
+            host = tenant.host,
+            contractCode = tenant.contractCode,
             parkId = reserveAmericaRef.parkId,
             startDate = startDate,
             endDate = endDate,
@@ -79,8 +75,8 @@ class ReserveAmericaAvailabilityProvider(
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
         val reserveAmericaRef = reserveAmericaRefOrThrow(ref)
-        val contractCode = contractCode(reserveAmericaRef)
-        val data = fetch(contractCode, reserveAmericaRef.parkId, startDate, endDate)
+        val tenant = tenantForRef(reserveAmericaRef)
+        val data = fetch(tenant, reserveAmericaRef.parkId, startDate, endDate)
         val observations =
             campsites.flatMap { reservable ->
                 observationsForReservable(
@@ -91,7 +87,8 @@ class ReserveAmericaAvailabilityProvider(
                 )
             }
         return batch(
-            contractCode = contractCode,
+            host = tenant.host,
+            contractCode = tenant.contractCode,
             parkId = reserveAmericaRef.parkId,
             startDate = startDate,
             endDate = endDate,
@@ -99,8 +96,14 @@ class ReserveAmericaAvailabilityProvider(
         )
     }
 
+    private fun tenantForRef(ref: BookingProviderRef.ReserveAmerica): ReserveAmericaTenant =
+        ref.contractCode?.let { tenants[it] }
+            ?: throw AvailabilityProviderError.UpstreamUnavailable(
+                IllegalArgumentException("reserveamerica contract '${ref.contractCode}' is not configured"),
+            )
+
     private suspend fun fetch(
-        contractCode: String,
+        tenant: ReserveAmericaTenant,
         parkId: String,
         startDate: LocalDate,
         endDate: LocalDate,
@@ -108,7 +111,7 @@ class ReserveAmericaAvailabilityProvider(
         runWithErrorMapping {
             availabilityClient.fetch(
                 host = tenant.host,
-                contractCode = contractCode,
+                contractCode = tenant.contractCode,
                 parkId = parkId,
                 startDate = startDate,
                 endDate = endDate,
@@ -144,6 +147,7 @@ class ReserveAmericaAvailabilityProvider(
         }
 
     private fun batch(
+        host: String,
         contractCode: String,
         parkId: String,
         startDate: LocalDate,
@@ -158,7 +162,7 @@ class ReserveAmericaAvailabilityProvider(
             observations = observations,
             cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L),
             campgroundId = parkId,
-            host = tenant.host,
+            host = host,
             mapId = contractCode,
             campsiteId = campsiteId,
         )
@@ -166,16 +170,6 @@ class ReserveAmericaAvailabilityProvider(
     private fun reserveAmericaRefOrThrow(ref: BookingProviderRef): BookingProviderRef.ReserveAmerica =
         (ref as? BookingProviderRef.ReserveAmerica)
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), ref::class.simpleName ?: "unknown")
-
-    private fun contractCode(ref: BookingProviderRef.ReserveAmerica): String {
-        val contract = ref.contractCode ?: tenant.contractCode
-        if (!contract.equals(tenant.contractCode, ignoreCase = true)) {
-            throw AvailabilityProviderError.UpstreamUnavailable(
-                IllegalArgumentException("reserveamerica contract '$contract' does not match tenant '${tenant.contractCode}'"),
-            )
-        }
-        return tenant.contractCode
-    }
 
     private suspend inline fun <T> runWithErrorMapping(crossinline block: suspend () -> T): T =
         try {
@@ -193,6 +187,24 @@ class ReserveAmericaAvailabilityProvider(
         } catch (e: Exception) {
             throw AvailabilityProviderError.UpstreamUnavailable(e)
         }
+
+    companion object {
+        val tenants: Map<String, ReserveAmericaTenant> =
+            mapOf(
+                "ABPP" to
+                    ReserveAmericaTenant(
+                        host = "shop.albertaparks.ca",
+                        contractCode = "ABPP",
+                        bookingHorizonDays = RESERVEAMERICA_BOOKING_HORIZON_DAYS,
+                    ),
+                "NY" to
+                    ReserveAmericaTenant(
+                        host = "newyorkstateparks.reserveamerica.com",
+                        contractCode = "NY",
+                        bookingHorizonDays = RESERVEAMERICA_BOOKING_HORIZON_DAYS,
+                    ),
+            )
+    }
 }
 
 private fun dates(

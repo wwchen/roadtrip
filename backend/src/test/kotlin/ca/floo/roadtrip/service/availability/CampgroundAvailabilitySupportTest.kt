@@ -9,7 +9,6 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.ref.DbRefResolver
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -36,12 +35,7 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
         val support =
             CampgroundAvailabilitySupport(
                 refResolver = DbRefResolver(ctx),
-                availabilityProviders =
-                    AvailabilityProviderRegistry(
-                        mapOf(
-                            "campflare" to NoopCampflareProvider(enabled = false),
-                        ),
-                    ),
+                availabilityProviders = listOf(NoopCampflareProvider(enabled = false)),
             )
 
         assertEquals(null, support.preferredAvailabilityProvider(campgroundId))
@@ -101,12 +95,9 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
         CampgroundAvailabilitySupport(
             refResolver = DbRefResolver(ctx),
             availabilityProviders =
-                AvailabilityProviderRegistry(
-                    adaptersBySource =
-                        mapOf(
-                            "campflare" to NoopCampflareProvider(enabled = campflareEnabled),
-                            "recgov" to NoopRecgovProvider(),
-                        ),
+                listOf(
+                    NoopCampflareProvider(enabled = campflareEnabled),
+                    NoopRecgovProvider(),
                 ),
         )
 

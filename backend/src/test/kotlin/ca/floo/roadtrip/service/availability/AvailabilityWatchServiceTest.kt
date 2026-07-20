@@ -23,7 +23,6 @@ import ca.floo.roadtrip.service.availability.alert.AlertProvider
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.booking.BookingAdapter
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.notification.common.NotificationSender
@@ -86,7 +85,6 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         lifecycleNotifications: WatchLifecycleNotifications = ignoredLifecycleNotifications(),
     ): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("recgov" to availabilityProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 refResolver =
@@ -94,7 +92,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = registry,
+                availabilityProviders = listOf(availabilityProvider),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
@@ -119,7 +117,6 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
             ),
     ): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("recgov" to availabilityProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 refResolver =
@@ -127,7 +124,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = registry,
+                availabilityProviders = listOf(availabilityProvider),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
@@ -171,7 +168,6 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
 
     private fun dispatchingLifecycleNotifications(notifications: NotificationSender): WatchLifecycleNotifications {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("recgov" to FakeProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 refResolver =
@@ -179,7 +175,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = registry,
+                availabilityProviders = listOf(FakeProvider),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )

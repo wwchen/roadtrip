@@ -28,7 +28,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
@@ -51,7 +51,7 @@ internal fun Application.registerKoinRoutes() {
     val config: AppConfig by inject()
     val watchService: AvailabilityWatchService by inject()
     val watchCapabilities: WatchCapabilityService by inject()
-    val availabilityProviders: AvailabilityProviderRegistry by inject()
+    val availabilityProviders: List<AvailabilityProvider> by inject(named("availabilityProviders"))
     val dateResolver: AvailabilityDateResolver by inject()
     val failoverFetcher: FailoverAvailabilityFetcher by inject()
     val poiService: PoiReader by inject()

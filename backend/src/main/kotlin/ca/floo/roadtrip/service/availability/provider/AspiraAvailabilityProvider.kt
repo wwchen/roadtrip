@@ -12,57 +12,42 @@ import ca.floo.roadtrip.support.AspiraException
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-/**
- * Widest single-tick poll window for Aspira. Conservative default; tune per
- * tenant if an upstream host needs a narrower window.
- */
+private const val ASPIRA_BOOKING_HORIZON_DAYS = 365
 private const val ASPIRA_MAX_POLL_WINDOW_DAYS = 30
 
 /**
- * Aspira NextGen adapter. One adapter *class* for the whole vendor; one
- * adapter *instance* per upstream host (Parks Canada, BC Parks, WA State
- * Parks). Tenant-shaped data — host, vendor code, booking horizon —
- * lives in [AspiraTenant], not in code branches.
- *
- * The downstream classifier (`fetchAspiraAvailabilityObservations`) takes `mapId: Int`;
- * the column type is `Long`. We narrow at the boundary and reject
- * out-of-range values to surface the truncation rather than silently
- * dropping the high bits.
- *
- * Deciding whether to serve stored data or call this adapter live is handled
- * above it by [ca.floo.roadtrip.service.api.AvailabilityLoader].
+ * Aspira NextGen adapter. Single instance covers all tenants (Parks Canada,
+ * BC Parks, WA State Parks). Tenant-shaped data — host, vendor code, booking
+ * horizon — lives in [AspiraTenant]; the correct one is resolved from the
+ * [BookingProviderRef.Aspira.tenant] field at call time.
  */
 class AspiraAvailabilityProvider(
-    private val tenant: AspiraTenant,
+    private val tenants: Map<String, AspiraTenant>,
     private val availabilityClient: AspiraAvailabilityClient,
     private val enabled: Boolean,
-    /**
-     * When true, catalog availability with a known `resourceLocationId` uses
-     * the per-arrival-day `/api/occupancy` search. The normal per-day catalog
-     * path uses `/api/availability/map`, because occupancy is a stay-level
-     * search result and does not return one status row per arrival date.
-     */
     private val occupancyEnabled: Boolean = false,
 ) : AvailabilityProvider {
     override val id: BookingProvider = BookingProvider.ASPIRA
 
     override val capabilities: AvailabilityProviderCapabilities =
         AvailabilityProviderCapabilities(
-            // The generic internal poller consumes catalogAvailability; Aspira's
-            // adapter provides that path via map availability or occupancy.
             supportsInternalPolling = true,
-            bookingHorizonDays = tenant.bookingHorizonDays,
+            bookingHorizonDays = ASPIRA_BOOKING_HORIZON_DAYS,
             maxPollWindowDays = ASPIRA_MAX_POLL_WINDOW_DAYS,
         )
 
     override fun isEnabled(): Boolean = enabled
+
+    override fun supportsRef(ref: BookingProviderRef): Boolean = isEnabled() && ref is BookingProviderRef.Aspira && ref.tenant in tenants
 
     override suspend fun availability(
         ref: BookingProviderRef,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        val mapId = mapIdOrThrow(ref)
+        val aspiraRef = aspiraRefOrThrow(ref)
+        val tenant = tenantForRef(aspiraRef)
+        val mapId = mapIdOrThrow(aspiraRef.mapId)
         return runWithErrorMapping {
             fetchAspiraAvailabilityObservations(
                 client = availabilityClient,
@@ -83,6 +68,7 @@ class AspiraAvailabilityProvider(
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
         val aspiraRef = aspiraRefOrThrow(ref)
+        val tenant = tenantForRef(aspiraRef)
         val parentMapId = mapIdOrThrow(aspiraRef.mapId)
         val targets =
             campsites.map {
@@ -121,25 +107,20 @@ class AspiraAvailabilityProvider(
         }
     }
 
-    /** goingtocamp `create-booking/results` deep link for this tenant's host;
-     *  the concrete-date [bookingUrl] fills the window placeholders. Null when
-     *  neither the campsite's typed catalog ids nor [parentRef] carries the ids
-     *  the link needs. */
     override fun reservationUrlTemplate(
         campsite: Campsite,
         parentRef: BookingProviderRef,
         catalogRef: CatalogCampsiteRef,
-    ): String? = AspiraBookingUrl.templateFor(tenant.host, catalogRef.mapId, catalogRef.resourceLocationId, parentRef)
-
-    /**
-     * Pull the map id and narrow Long → Int. Real Aspira ids fit comfortably
-     * in 32 bits; rejecting an out-of-range value loudly is better than
-     * silent truncation.
-     */
-    private fun mapIdOrThrow(ref: BookingProviderRef): Int {
-        val ar = aspiraRefOrThrow(ref)
-        return intOrThrow("mapId", ar.mapId)
+    ): String? {
+        val tenant = (parentRef as? BookingProviderRef.Aspira)?.tenant?.let { tenants[it] } ?: return null
+        return AspiraBookingUrl.templateFor(tenant.host, catalogRef.mapId, catalogRef.resourceLocationId, parentRef)
     }
+
+    private fun tenantForRef(ref: BookingProviderRef.Aspira): AspiraTenant =
+        tenants[ref.tenant]
+            ?: throw AvailabilityProviderError.UpstreamUnavailable(
+                IllegalArgumentException("aspira tenant '${ref.tenant}' is not configured"),
+            )
 
     private fun mapIdOrThrow(mapId: Long): Int = intOrThrow("mapId", mapId)
 

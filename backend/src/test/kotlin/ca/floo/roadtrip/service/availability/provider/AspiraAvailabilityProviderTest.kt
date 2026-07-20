@@ -20,12 +20,7 @@ class AspiraAvailabilityProviderTest {
     fun `aspira advertises internal polling through catalog availability`() {
         val adapter =
             AspiraAvailabilityProvider(
-                tenant =
-                    AspiraTenant(
-                        host = "reservation.pc.gc.ca",
-                        vendorCode = "aspira_pc",
-                        bookingHorizonDays = 365,
-                    ),
+                tenants = mapOf("pc" to AspiraTenant(host = "reservation.pc.gc.ca", vendorCode = "aspira_pc", bookingHorizonDays = 365)),
                 availabilityClient = fakeAspiraClient(),
                 enabled = true,
             )
@@ -65,11 +60,9 @@ class AspiraAvailabilityProviderTest {
                 )
             val adapter =
                 AspiraAvailabilityProvider(
-                    tenant =
-                        AspiraTenant(
-                            host = "reservation.pc.gc.ca",
-                            vendorCode = "aspira_pc",
-                            bookingHorizonDays = 365,
+                    tenants =
+                        mapOf(
+                            "pc" to AspiraTenant(host = "reservation.pc.gc.ca", vendorCode = "aspira_pc", bookingHorizonDays = 365),
                         ),
                     availabilityClient = availabilityClient,
                     enabled = true,
@@ -136,11 +129,9 @@ class AspiraAvailabilityProviderTest {
                 )
             val adapter =
                 AspiraAvailabilityProvider(
-                    tenant =
-                        AspiraTenant(
-                            host = "reservation.pc.gc.ca",
-                            vendorCode = "aspira_pc",
-                            bookingHorizonDays = 365,
+                    tenants =
+                        mapOf(
+                            "pc" to AspiraTenant(host = "reservation.pc.gc.ca", vendorCode = "aspira_pc", bookingHorizonDays = 365),
                         ),
                     availabilityClient = availabilityClient,
                     enabled = true,
@@ -200,11 +191,9 @@ class AspiraAvailabilityProviderTest {
                 )
             val adapter =
                 AspiraAvailabilityProvider(
-                    tenant =
-                        AspiraTenant(
-                            host = "reservation.pc.gc.ca",
-                            vendorCode = "aspira_pc",
-                            bookingHorizonDays = 365,
+                    tenants =
+                        mapOf(
+                            "pc" to AspiraTenant(host = "reservation.pc.gc.ca", vendorCode = "aspira_pc", bookingHorizonDays = 365),
                         ),
                     availabilityClient = availabilityClient,
                     enabled = true,
@@ -258,11 +247,9 @@ class AspiraAvailabilityProviderTest {
                 )
             val adapter =
                 AspiraAvailabilityProvider(
-                    tenant =
-                        AspiraTenant(
-                            host = "reservation.pc.gc.ca",
-                            vendorCode = "aspira_pc",
-                            bookingHorizonDays = 365,
+                    tenants =
+                        mapOf(
+                            "pc" to AspiraTenant(host = "reservation.pc.gc.ca", vendorCode = "aspira_pc", bookingHorizonDays = 365),
                         ),
                     availabilityClient = availabilityClient,
                     enabled = true,
@@ -294,7 +281,10 @@ class AspiraAvailabilityProviderTest {
     fun `booking url builds the tenant's goingtocamp deep link for the single night`() {
         val adapter =
             AspiraAvailabilityProvider(
-                tenant = AspiraTenant(host = "washington.goingtocamp.com", vendorCode = "aspira_wa", bookingHorizonDays = 365),
+                tenants =
+                    mapOf(
+                        "wa" to AspiraTenant(host = "washington.goingtocamp.com", vendorCode = "aspira_wa", bookingHorizonDays = 365),
+                    ),
                 availabilityClient = fakeAspiraClient(),
                 enabled = true,
             )
@@ -310,7 +300,7 @@ class AspiraAvailabilityProviderTest {
             )
         val parentRef =
             BookingProviderRef.Aspira(
-                tenant = "pc",
+                tenant = "wa",
                 transactionLocationId = -2147483630,
                 mapId = -2147483388,
                 resourceLocationId = -2147483624,

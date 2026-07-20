@@ -12,7 +12,6 @@ import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.ref.DbRefResolver
 import ca.floo.roadtrip.service.ref.RefValue
 import ca.floo.roadtrip.service.ref.resolve
@@ -125,11 +124,10 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
 
     private fun resolverFor(
         campsitesRepo: CampsiteRepo,
-        providers: Map<String, AvailabilityProvider> =
-            mapOf(
-                "test" to NoopRecgovProvider(),
-                "recgov" to NoopRecgovProvider(),
-                "campflare" to NoopCampflareProvider(enabled = true),
+        providers: List<AvailabilityProvider> =
+            listOf(
+                NoopRecgovProvider(),
+                NoopCampflareProvider(enabled = true),
             ),
     ): DbAvailabilityTargetResolver =
         DbAvailabilityTargetResolver(
@@ -138,7 +136,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                     .DbRefResolver(ctx),
             ctx = ctx,
             campsitesRepo = campsitesRepo,
-            availabilityProviders = AvailabilityProviderRegistry(providers),
+            availabilityProviders = providers,
             dateResolver = AvailabilityDateResolver(ctx),
             pollerRepo = AvailabilityPollerRepo(ctx),
         )
@@ -219,9 +217,9 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 resolverFor(
                     campsitesRepo = campsitesRepo,
                     providers =
-                        mapOf(
-                            "campflare" to NoopCampflareProvider(enabled = false),
-                            "recgov" to NoopRecgovProvider(),
+                        listOf(
+                            NoopCampflareProvider(enabled = false),
+                            NoopRecgovProvider(),
                         ),
                 ).resolve(reservable)!!
 
@@ -259,7 +257,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val target =
                 resolverFor(
                     campsitesRepo = campsitesRepo,
-                    providers = mapOf("aspira_bc" to NoopAspiraProvider()),
+                    providers = listOf(NoopAspiraProvider()),
                 ).resolve(reservable)!!
 
             assertEquals(BookingProvider.ASPIRA, target.provider.id)
@@ -332,9 +330,9 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 resolverFor(
                     campsitesRepo = campsitesRepo,
                     providers =
-                        mapOf(
-                            "campflare" to NoopCampflareProvider(enabled = false),
-                            "recgov" to NoopRecgovProvider(),
+                        listOf(
+                            NoopCampflareProvider(enabled = false),
+                            NoopRecgovProvider(),
                         ),
                 ).resolve(reservable)!!
 
@@ -365,9 +363,9 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 resolverFor(
                     campsitesRepo = campsitesRepo,
                     providers =
-                        mapOf(
-                            "campflare" to NoopCampflareProvider(enabled = true),
-                            "recgov" to NoopRecgovProvider(),
+                        listOf(
+                            NoopCampflareProvider(enabled = true),
+                            NoopRecgovProvider(),
                         ),
                 ).resolve(reservable)!!
 
@@ -401,10 +399,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val target =
                 resolverFor(
                     campsitesRepo = campsitesRepo,
-                    providers =
-                        mapOf(
-                            "recgov" to NoopRecgovProvider(),
-                        ),
+                    providers = listOf(NoopRecgovProvider()),
                 ).resolve(reservable)!!
 
             assertEquals(1, target.candidates.size)
@@ -434,9 +429,9 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 resolverFor(
                     campsitesRepo = campsitesRepo,
                     providers =
-                        mapOf(
-                            "campflare" to NoopCampflareProvider(enabled = false),
-                            "recgov" to NoopRecgovProvider(),
+                        listOf(
+                            NoopCampflareProvider(enabled = false),
+                            NoopRecgovProvider(),
                         ),
                 ).resolve(reservable)!!
 
@@ -472,7 +467,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val target =
                 resolverFor(
                     campsitesRepo = campsitesRepo,
-                    providers = mapOf("campflare" to NoopCampflareProvider(enabled = true)),
+                    providers = listOf(NoopCampflareProvider(enabled = true)),
                 ).resolve(reservable)
 
             assertEquals(null, target)

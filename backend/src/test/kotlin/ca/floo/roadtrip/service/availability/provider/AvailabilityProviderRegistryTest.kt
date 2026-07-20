@@ -1,138 +1,180 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.client.aspira.AspiraAvailability
+import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
+import ca.floo.roadtrip.client.aspira.AspiraOccupancy
+import ca.floo.roadtrip.client.campflare.CampflareAvailabilityClient
+import ca.floo.roadtrip.client.recgov.Campsite
+import ca.floo.roadtrip.client.recgov.RecGovAvailabilityClient
+import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailability
+import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailabilityClient
+import ca.floo.roadtrip.client.reservecalifornia.ReserveCaliforniaAvailabilityClient
+import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
+import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class AvailabilityProviderRegistryTest {
-    private class FakeProvider(
-        override val id: BookingProvider,
-        private val enabled: Boolean,
-    ) : AvailabilityProvider {
-        override val capabilities: AvailabilityProviderCapabilities = AvailabilityProviderCapabilities.unsupported
+    private val aspiraProvider =
+        AspiraAvailabilityProvider(
+            tenants = AspiraTenants.all().associateBy { it.vendorCode.removePrefix("aspira_") },
+            availabilityClient = stubAspiraClient(),
+            enabled = true,
+        )
 
-        override fun isEnabled(): Boolean = enabled
+    private val reserveAmericaProvider =
+        ReserveAmericaAvailabilityProvider(
+            tenants = ReserveAmericaAvailabilityProvider.tenants,
+            availabilityClient = stubReserveAmericaClient(),
+            enabled = true,
+        )
 
-        override suspend fun availability(
-            ref: BookingProviderRef,
-            startDate: LocalDate,
-            endDate: LocalDate,
-        ): AvailabilityObservationBatch = error("not used in this test")
+    private val recgovProvider =
+        RecGovAvailabilityProvider(
+            availabilityClient = stubRecgovClient(),
+            enabled = true,
+        )
+
+    private val campflareProvider =
+        CampflareAvailabilityProvider(
+            availabilityClient = stubCampflareClient(),
+            enabled = true,
+        )
+
+    private val reserveCaliforniaProvider =
+        ReserveCaliforniaAvailabilityProvider(
+            availabilityClient = stubReserveCaliforniaClient(),
+            enabled = true,
+        )
+
+    private val providers: List<AvailabilityProvider> =
+        listOf(recgovProvider, campflareProvider, reserveCaliforniaProvider, aspiraProvider, reserveAmericaProvider)
+
+    @Test
+    fun `aspira routes by tenant code`() {
+        val ref = BookingProviderRef.Aspira(tenant = "bc", transactionLocationId = 1, mapId = 2, resourceLocationId = null)
+        val matched = providers.firstOrNull { it.supportsRef(ref) }
+        assertNotNull(matched)
+        assertEquals(BookingProvider.ASPIRA, matched.id)
     }
 
     @Test
-    fun `forSource resolves source to its adapter instance`() {
-        val recgov = FakeProvider(BookingProvider.RECGOV, enabled = true)
-        val aspiraPc = FakeProvider(BookingProvider.ASPIRA, enabled = true)
-        val registry =
-            AvailabilityProviderRegistry(
-                adaptersBySource =
-                    mapOf(
-                        "recgov-campgrounds" to recgov,
-                        "aspira_pc" to aspiraPc,
-                    ),
+    fun `aspira returns null for unknown tenant`() {
+        val ref = BookingProviderRef.Aspira(tenant = "unknown", transactionLocationId = 1, mapId = 2, resourceLocationId = null)
+        val matched = providers.firstOrNull { it.supportsRef(ref) }
+        assertNull(matched)
+    }
+
+    @Test
+    fun `reserveamerica routes by contract code`() {
+        val ref = BookingProviderRef.ReserveAmerica(contractCode = "ABPP", parkId = "100")
+        val matched = providers.firstOrNull { it.supportsRef(ref) }
+        assertNotNull(matched)
+        assertEquals(BookingProvider.RESERVEAMERICA, matched.id)
+    }
+
+    @Test
+    fun `reserveamerica returns null for unknown contract`() {
+        val ref = BookingProviderRef.ReserveAmerica(contractCode = "UNKNOWN", parkId = "100")
+        val matched = providers.firstOrNull { it.supportsRef(ref) }
+        assertNull(matched)
+    }
+
+    @Test
+    fun `recgov routes any recgov ref`() {
+        val ref = BookingProviderRef.RecGov(facilityId = "232447")
+        val matched = providers.firstOrNull { it.supportsRef(ref) }
+        assertNotNull(matched)
+        assertEquals(BookingProvider.RECGOV, matched.id)
+    }
+
+    @Test
+    fun `campflare routes any campflare ref`() {
+        val ref = BookingProviderRef.Campflare(campgroundId = "upper-pines")
+        val matched = providers.firstOrNull { it.supportsRef(ref) }
+        assertNotNull(matched)
+        assertEquals(BookingProvider.CAMPFLARE, matched.id)
+    }
+
+    @Test
+    fun `reservecalifornia routes any rc ref`() {
+        val ref = BookingProviderRef.ReserveCalifornia(placeId = 1, facilityIds = listOf(100L))
+        val matched = providers.firstOrNull { it.supportsRef(ref) }
+        assertNotNull(matched)
+        assertEquals(BookingProvider.RESERVECALIFORNIA, matched.id)
+    }
+
+    @Test
+    fun `disabled provider is invisible to supportsRef`() {
+        val disabledCampflare =
+            CampflareAvailabilityProvider(
+                availabilityClient = stubCampflareClient(),
+                enabled = false,
             )
-
-        val resolved = registry.forSource("recgov-campgrounds")
-        assertNotNull(resolved)
-        assertEquals(BookingProvider.RECGOV, resolved.id)
-
-        val pc = registry.forSource("aspira_pc")
-        assertNotNull(pc)
-        assertEquals(BookingProvider.ASPIRA, pc.id)
+        val list = listOf(disabledCampflare, recgovProvider)
+        val ref = BookingProviderRef.Campflare(campgroundId = "test")
+        assertNull(list.firstOrNull { it.supportsRef(ref) })
+        assertTrue(disabledCampflare.id == BookingProvider.CAMPFLARE)
     }
 
-    @Test
-    fun `forSource returns null for unmapped source`() {
-        val registry = AvailabilityProviderRegistry(adaptersBySource = emptyMap())
-        assertNull(registry.forSource("never-registered"))
-    }
+    private fun stubRecgovClient(): RecGovAvailabilityClient =
+        object : RecGovAvailabilityClient {
+            override suspend fun fetchMonth(
+                campgroundId: String,
+                monthStart: String,
+            ): Map<String, Campsite> = emptyMap()
+        }
 
-    @Test
-    fun `forBooking returns null when mapped provider declines the ref`() {
-        val declining =
-            object : AvailabilityProvider {
-                override val id: BookingProvider = BookingProvider.CAMPFLARE
-                override val capabilities: AvailabilityProviderCapabilities = AvailabilityProviderCapabilities.unsupported
+    private fun stubAspiraClient(): AspiraAvailabilityClient =
+        object : AspiraAvailabilityClient {
+            override suspend fun fetch(
+                host: String,
+                mapId: Int,
+                startDate: LocalDate,
+                endDate: LocalDate,
+            ): AspiraAvailability = AspiraAvailability(mapId = mapId, parkRollup = emptyList(), byMapLink = emptyMap())
 
-                override fun isEnabled(): Boolean = true
+            override suspend fun fetchOccupancy(
+                host: String,
+                resourceLocationId: Int,
+                startDate: LocalDate,
+                endDate: LocalDate,
+            ): AspiraOccupancy = AspiraOccupancy(resourceLocationId = resourceLocationId)
+        }
 
-                override fun supportsRef(ref: BookingProviderRef): Boolean = false
-
-                override suspend fun availability(
-                    ref: BookingProviderRef,
-                    startDate: LocalDate,
-                    endDate: LocalDate,
-                ): AvailabilityObservationBatch = error("not used in this test")
-            }
-        val registry = AvailabilityProviderRegistry(adaptersBySource = mapOf("campflare" to declining))
-
-        assertSame(declining, registry.forSource("campflare"))
-        assertNull(registry.forBooking(BookingProvider.CAMPFLARE, BookingProviderRef.Campflare("upper-pines-campground-447")))
-    }
-
-    @Test
-    fun `multiple sources can share one adapter instance`() {
-        val recgov = FakeProvider(BookingProvider.RECGOV, enabled = true)
-        val registry =
-            AvailabilityProviderRegistry(
-                adaptersBySource =
-                    mapOf(
-                        "recgov-campgrounds" to recgov,
-                        "another-recgov-source" to recgov,
-                    ),
+    private fun stubReserveAmericaClient(): ReserveAmericaAvailabilityClient =
+        ReserveAmericaAvailabilityClient { _, contractCode, parkId, startDate, endDate ->
+            ReserveAmericaAvailability(
+                contractCode = contractCode,
+                parkId = parkId,
+                startDate = startDate,
+                endDate = endDate,
+                observedAt = Instant.EPOCH,
+                statuses = emptyMap(),
             )
-        assertSame(recgov, registry.forSource("recgov-campgrounds"))
-        assertSame(recgov, registry.forSource("another-recgov-source"))
-        assertEquals(1, registry.all().size)
-    }
+        }
 
-    @Test
-    fun `disabled providers are hidden from lookup helpers`() {
-        val recgov = FakeProvider(BookingProvider.RECGOV, enabled = true)
-        val campflare = FakeProvider(BookingProvider.CAMPFLARE, enabled = false)
-        val registry =
-            AvailabilityProviderRegistry(
-                adaptersBySource =
-                    mapOf(
-                        "recgov-campgrounds" to recgov,
-                        "campflare-campgrounds" to campflare,
-                        "campflare" to campflare,
-                    ),
-            )
+    private fun stubReserveCaliforniaClient(): ReserveCaliforniaAvailabilityClient =
+        object : ReserveCaliforniaAvailabilityClient {
+            override suspend fun fetchGrid(
+                facilityId: Long,
+                startDate: LocalDate,
+                endDate: LocalDate,
+                minDate: LocalDate,
+                maxDate: LocalDate,
+            ): ReserveCaliforniaGridAvailability =
+                ReserveCaliforniaGridAvailability(facilityId = facilityId, observedAt = Instant.EPOCH, statuses = emptyMap())
+        }
 
-        assertSame(recgov, registry.forSource("recgov-campgrounds"))
-        assertNull(registry.forSource("campflare-campgrounds"))
-        assertNull(registry.forBooking(BookingProvider.CAMPFLARE, BookingProviderRef.Campflare("upper-pines-campground-447")))
-        assertSame(recgov, registry.firstByVendor(BookingProvider.RECGOV))
-        assertNull(registry.firstByVendor(BookingProvider.CAMPFLARE))
-        assertEquals(listOf(BookingProvider.RECGOV), registry.all().map { it.id })
-    }
-
-    @Test
-    fun `multiple Aspira tenants share an id but have distinct instances`() {
-        val pc = FakeProvider(BookingProvider.ASPIRA, enabled = true)
-        val bc = FakeProvider(BookingProvider.ASPIRA, enabled = true)
-        val wa = FakeProvider(BookingProvider.ASPIRA, enabled = true)
-        val registry =
-            AvailabilityProviderRegistry(
-                adaptersBySource =
-                    mapOf(
-                        "aspira_pc" to pc,
-                        "aspira_bc" to bc,
-                        "aspira_wa" to wa,
-                    ),
-            )
-        assertSame(pc, registry.forSource("aspira_pc"))
-        assertSame(bc, registry.forSource("aspira_bc"))
-        assertSame(wa, registry.forSource("aspira_wa"))
-        assertEquals(3, registry.all().size)
-    }
+    private fun stubCampflareClient(): CampflareAvailabilityClient =
+        CampflareAvailabilityClient { _, _, _ ->
+            CampflareAvailability(campgrounds = emptyMap(), observedAt = Instant.EPOCH)
+        }
 }

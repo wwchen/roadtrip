@@ -43,12 +43,14 @@ class ReserveAmericaAvailabilityProviderTest {
                 }
             val adapter =
                 ReserveAmericaAvailabilityProvider(
-                    tenant =
-                        ReserveAmericaTenant(
-                            source = "reserveamerica-ny-campgrounds",
-                            host = "newyorkstateparks.reserveamerica.com",
-                            contractCode = "NY",
-                            bookingHorizonDays = 270,
+                    tenants =
+                        mapOf(
+                            "NY" to
+                                ReserveAmericaTenant(
+                                    host = "newyorkstateparks.reserveamerica.com",
+                                    contractCode = "NY",
+                                    bookingHorizonDays = 270,
+                                ),
                         ),
                     availabilityClient = availabilityClient,
                     enabled = true,

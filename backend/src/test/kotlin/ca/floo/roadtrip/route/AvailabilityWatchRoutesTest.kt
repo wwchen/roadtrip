@@ -23,7 +23,6 @@ import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -80,7 +79,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
+                availabilityProviders = emptyList(),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
@@ -100,7 +99,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
      */
     private fun watchServiceWithRecgov(): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("recgov" to FakeRecgovProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 refResolver =
@@ -108,7 +106,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = registry,
+                availabilityProviders = listOf(FakeRecgovProvider),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
@@ -129,7 +127,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = AvailabilityProviderRegistry(mapOf("recgov" to FakeRecgovProvider)),
+                availabilityProviders = listOf(FakeRecgovProvider),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
@@ -148,7 +146,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         .DbRefResolver(ctx),
                 ctx = ctx,
                 campsitesRepo = campsitesRepo,
-                availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
+                availabilityProviders = emptyList(),
                 dateResolver = AvailabilityDateResolver(ctx),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )

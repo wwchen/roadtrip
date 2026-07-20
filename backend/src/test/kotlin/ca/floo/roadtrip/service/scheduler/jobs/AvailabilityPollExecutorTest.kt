@@ -43,7 +43,6 @@ import ca.floo.roadtrip.service.availability.TriggerOpening
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
 import ca.floo.roadtrip.service.availability.resolveCadenceSec
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
@@ -192,7 +191,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
     private fun membershipFor(provider: AvailabilityProvider): AvailabilityPollerMembership {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("recgov" to provider))
+        val registry = listOf(provider)
         val targets =
             DbAvailabilityTargetResolver(
                 refResolver =
@@ -337,7 +336,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     .DbRefResolver(ctx),
             ctx = ctx,
             campsitesRepo = CampsiteRepo(ctx),
-            availabilityProviders = AvailabilityProviderRegistry(mapOf("recgov" to provider)),
+            availabilityProviders = listOf(provider),
             dateResolver = AvailabilityDateResolver(ctx),
             pollerRepo = AvailabilityPollerRepo(ctx),
         )
@@ -357,7 +356,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                             .DbRefResolver(ctx),
                     ctx = ctx,
                     campsitesRepo = CampsiteRepo(ctx),
-                    availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
+                    availabilityProviders = emptyList(),
                     dateResolver = AvailabilityDateResolver(ctx),
                     pollerRepo = AvailabilityPollerRepo(ctx),
                 ),
@@ -396,7 +395,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker(cooldown = testProviderCooldown)),
     ): AvailabilityPollExecutor {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = AvailabilityProviderRegistry(mapOf("recgov" to provider))
+        val registry = listOf(provider)
         val dateResolver = AvailabilityDateResolver(ctx = ctx, clock = testClock)
         val targets =
             DbAvailabilityTargetResolver(

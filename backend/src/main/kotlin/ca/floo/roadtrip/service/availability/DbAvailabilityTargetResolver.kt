@@ -7,7 +7,7 @@ import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.ref.RefResolver
 import ca.floo.roadtrip.service.ref.RefValue
 import ca.floo.roadtrip.service.ref.resolve
@@ -17,7 +17,7 @@ internal class DbAvailabilityTargetResolver(
     private val refResolver: RefResolver,
     private val ctx: DSLContext,
     private val campsitesRepo: CampsiteRepo,
-    private val availabilityProviders: AvailabilityProviderRegistry,
+    private val availabilityProviders: List<AvailabilityProvider>,
     private val dateResolver: AvailabilityDateResolver,
     private val pollerRepo: AvailabilityPollerRepo,
 ) : AvailabilityTargetResolver {
@@ -30,7 +30,7 @@ internal class DbAvailabilityTargetResolver(
                 val bookingRefs = refResolver.resolve<RefValue.CampgroundBookingRef>(RefValue.PoiId(poiId))
                 bookingRefs.mapNotNull { bookingRefValue ->
                     val provider =
-                        availabilityProviders.forBooking(bookingRefValue.ref.provider, bookingRefValue.ref)
+                        availabilityProviders.firstOrNull { it.supportsRef(bookingRefValue.ref) }
                             ?: return@mapNotNull null
                     Triple(poiId, bookingRefValue.ref, provider)
                 }

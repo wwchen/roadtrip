@@ -20,7 +20,7 @@ import ca.floo.roadtrip.service.availability.CampsiteCatalogService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.support.AspiraException
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -41,7 +41,7 @@ private const val IP_RATE_LIMIT_PER_MINUTE = 30
 
 internal fun Route.campsiteRoutes(
     ctx: DSLContext,
-    availabilityProviders: AvailabilityProviderRegistry,
+    availabilityProviders: List<AvailabilityProvider>,
     dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(ctx),
     failoverFetcher: FailoverAvailabilityFetcher,
     watchCapabilities: WatchCapabilityService,

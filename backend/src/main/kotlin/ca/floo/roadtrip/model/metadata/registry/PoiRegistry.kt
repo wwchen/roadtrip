@@ -223,15 +223,6 @@ class PoiRegistry(
         return out
     }
 
-    /**
-     * Aspira upstream host keyed by terminal etl slug.
-     * Returns the `host` arg from the terminal AspiraCampgroundsEtl row.
-     *
-     * Used by [ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry]
-     * to construct one [ca.floo.roadtrip.service.availability.provider.AspiraAvailabilityProvider]
-     * instance per host (Parks Canada / BC / WA). Routes never see this map
-     * directly — they go through the availability-provider registry.
-     */
     fun hostBySource(): Map<String, String> {
         val out = mutableMapOf<String, String>()
         for (row in poiData) {
