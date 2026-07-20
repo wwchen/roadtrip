@@ -5,7 +5,7 @@ import ca.floo.roadtrip.model.api.poi.PoiDetailPropertiesSchema
 import ca.floo.roadtrip.model.domain.poi.PoiIndexRow
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
-import ca.floo.roadtrip.service.availability.CampgroundAvailabilitySupport
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.poi.campground.CampgroundCta
 import ca.floo.roadtrip.service.poi.campground.UrlHosts
 import kotlinx.serialization.json.Json
@@ -26,7 +26,7 @@ private const val LONGITUDE_KEY = "longitude"
 internal class CampgroundService(
     private val campgroundRepo: CampgroundRepo,
     private val dateResolver: AvailabilityDateResolver,
-    private val availabilitySupport: CampgroundAvailabilitySupport? = null,
+    private val availabilityProviders: List<AvailabilityProvider> = emptyList(),
     private val cta: CampgroundCta = CampgroundCta.default,
 ) : PoiDetailService {
     override val poiType: String = POI_TYPE
@@ -44,7 +44,12 @@ internal class CampgroundService(
                 lat = campground.location.doubleProperty(LATITUDE_KEY),
                 lng = campground.location.doubleProperty(LONGITUDE_KEY),
             )
-        val availabilityProvider = availabilitySupport?.preferredAvailabilityProvider(campground.id)
+        val availabilityProvider =
+            availabilityProviders
+                .firstOrNull { it.supportsCampground(campground) }
+                ?.id
+                ?.name
+                ?.lowercase()
         val computedCtas =
             cta.computeCtas(
                 providerRefJson = detail.providerRefJson,

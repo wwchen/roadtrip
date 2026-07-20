@@ -25,7 +25,6 @@ import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.AvailabilityRunService
 import ca.floo.roadtrip.service.availability.AvailabilityTriggerKinds
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
-import ca.floo.roadtrip.service.availability.CampgroundAvailabilitySupport
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
@@ -226,12 +225,6 @@ val serviceModule =
         }
         single { FailoverAvailabilityFetcher(cooldowns = get<ProviderCooldownTracker>()) }
         single {
-            CampgroundAvailabilitySupport(
-                refResolver = get<ca.floo.roadtrip.service.ref.RefResolver>(),
-                availabilityProviders = get(named("availabilityProviders")),
-            )
-        }
-        single {
             VendorRateLimiter(get<AppConfig>().vendorRateLimit, get<DataSource>())
         }
 
@@ -271,7 +264,7 @@ val serviceModule =
                 CampgroundService(
                     campgroundRepo = get<CampgroundRepo>(),
                     dateResolver = get<AvailabilityDateResolver>(),
-                    availabilitySupport = get<CampgroundAvailabilitySupport>(),
+                    availabilityProviders = get(named("availabilityProviders")),
                 ),
                 TeslaSuperchargerService(get<TeslaSuperchargerRepo>()),
                 PlanetFitnessLocationService(get<PlanetFitnessLocationRepo>()),

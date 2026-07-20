@@ -11,15 +11,16 @@ import ca.floo.roadtrip.client.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.client.reservecalifornia.ReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.model.availability.campflare.CampflareAvailability
 import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
-import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
+import kotlinx.serialization.json.JsonNull
 import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 class AvailabilityProviderRegistryTest {
     private val aspiraProvider =
@@ -59,70 +60,119 @@ class AvailabilityProviderRegistryTest {
 
     @Test
     fun `aspira routes by tenant code`() {
-        val ref = BookingProviderRef.Aspira(tenant = "bc", transactionLocationId = 1, mapId = 2, resourceLocationId = null)
-        val matched = providers.firstOrNull { it.supportsRef(ref) }
+        val campground = campground(bookingProvider = "aspira", bookingProviderRef = "bc:1:2:null")
+        val matched = providers.firstOrNull { it.supportsCampground(campground) }
         assertNotNull(matched)
         assertEquals(BookingProvider.ASPIRA, matched.id)
     }
 
     @Test
     fun `aspira returns null for unknown tenant`() {
-        val ref = BookingProviderRef.Aspira(tenant = "unknown", transactionLocationId = 1, mapId = 2, resourceLocationId = null)
-        val matched = providers.firstOrNull { it.supportsRef(ref) }
+        val campground = campground(bookingProvider = "aspira", bookingProviderRef = "unknown:1:2:null")
+        val matched = providers.firstOrNull { it.supportsCampground(campground) }
         assertNull(matched)
     }
 
     @Test
     fun `reserveamerica routes by contract code`() {
-        val ref = BookingProviderRef.ReserveAmerica(contractCode = "ABPP", parkId = "100")
-        val matched = providers.firstOrNull { it.supportsRef(ref) }
+        val campground = campground(bookingProvider = "reserveamerica", bookingProviderRef = "ABPP:100")
+        val matched = providers.firstOrNull { it.supportsCampground(campground) }
         assertNotNull(matched)
         assertEquals(BookingProvider.RESERVEAMERICA, matched.id)
     }
 
     @Test
     fun `reserveamerica returns null for unknown contract`() {
-        val ref = BookingProviderRef.ReserveAmerica(contractCode = "UNKNOWN", parkId = "100")
-        val matched = providers.firstOrNull { it.supportsRef(ref) }
+        val campground = campground(bookingProvider = "reserveamerica", bookingProviderRef = "UNKNOWN:100")
+        val matched = providers.firstOrNull { it.supportsCampground(campground) }
         assertNull(matched)
     }
 
     @Test
     fun `recgov routes any recgov ref`() {
-        val ref = BookingProviderRef.RecGov(facilityId = "232447")
-        val matched = providers.firstOrNull { it.supportsRef(ref) }
+        val campground = campground(bookingProvider = "recgov", bookingProviderRef = "232447")
+        val matched = providers.firstOrNull { it.supportsCampground(campground) }
         assertNotNull(matched)
         assertEquals(BookingProvider.RECGOV, matched.id)
     }
 
     @Test
-    fun `campflare routes any campflare ref`() {
-        val ref = BookingProviderRef.Campflare(campgroundId = "upper-pines")
-        val matched = providers.firstOrNull { it.supportsRef(ref) }
+    fun `campflare routes by dataProviderRef`() {
+        val campground =
+            campground(
+                dataProviderRef = DataProviderRef.Campflare(id = "upper-pines"),
+                bookingProvider = "campflare",
+                bookingProviderRef = "upper-pines",
+            )
+        val matched = providers.firstOrNull { it.supportsCampground(campground) }
         assertNotNull(matched)
         assertEquals(BookingProvider.CAMPFLARE, matched.id)
     }
 
     @Test
     fun `reservecalifornia routes any rc ref`() {
-        val ref = BookingProviderRef.ReserveCalifornia(placeId = 1, facilityIds = listOf(100L))
-        val matched = providers.firstOrNull { it.supportsRef(ref) }
+        val campground = campground(bookingProvider = "reservecalifornia", bookingProviderRef = "1:100")
+        val matched = providers.firstOrNull { it.supportsCampground(campground) }
         assertNotNull(matched)
         assertEquals(BookingProvider.RESERVECALIFORNIA, matched.id)
     }
 
     @Test
-    fun `disabled provider is invisible to supportsRef`() {
+    fun `disabled provider is invisible to supportsCampground`() {
         val disabledCampflare =
             CampflareAvailabilityProvider(
                 availabilityClient = stubCampflareClient(),
                 enabled = false,
             )
         val list = listOf(disabledCampflare, recgovProvider)
-        val ref = BookingProviderRef.Campflare(campgroundId = "test")
-        assertNull(list.firstOrNull { it.supportsRef(ref) })
-        assertTrue(disabledCampflare.id == BookingProvider.CAMPFLARE)
+        val campground =
+            campground(
+                dataProviderRef = DataProviderRef.Campflare(id = "test"),
+                bookingProvider = "campflare",
+                bookingProviderRef = "test",
+            )
+        assertNull(list.firstOrNull { it.supportsCampground(campground) })
     }
+
+    private fun campground(
+        bookingProvider: String?,
+        bookingProviderRef: String?,
+        dataProviderRef: DataProviderRef = DataProviderRef.RecGov(id = "test"),
+    ): Campground =
+        Campground(
+            id = 1L,
+            name = "Test",
+            status = null,
+            statusDescription = null,
+            kind = null,
+            shortDescription = null,
+            mediumDescription = null,
+            longDescription = null,
+            location = JsonNull,
+            defaultCampsiteSchedule = JsonNull,
+            amenities = JsonNull,
+            maxRvLength = null,
+            maxTrailerLength = null,
+            hasPullThroughSites = null,
+            bigRigFriendly = null,
+            reservationUrl = null,
+            links = JsonNull,
+            photos = JsonNull,
+            alerts = JsonNull,
+            price = JsonNull,
+            cellService = JsonNull,
+            management = JsonNull,
+            contact = JsonNull,
+            connections = JsonNull,
+            metadata = JsonNull,
+            sourcePayload = JsonNull,
+            createdAt = Instant.EPOCH,
+            updatedAt = Instant.EPOCH,
+            deletedAt = null,
+            dataProviderRef = dataProviderRef,
+            bookingProvider = bookingProvider,
+            bookingProviderRef = bookingProviderRef,
+        )
 
     private fun stubRecgovClient(): RecGovAvailabilityClient =
         object : RecGovAvailabilityClient {

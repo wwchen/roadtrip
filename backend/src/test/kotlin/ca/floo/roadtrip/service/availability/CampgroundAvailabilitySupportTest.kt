@@ -2,103 +2,141 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
-import ca.floo.roadtrip.repo.SharedDbTest
-import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
-import ca.floo.roadtrip.repo.seedCampground
-import ca.floo.roadtrip.repo.seedCatalogPoi
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.ref.DbRefResolver
-import org.junit.jupiter.api.BeforeEach
+import kotlinx.serialization.json.JsonNull
 import org.junit.jupiter.api.Test
+import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
-class CampgroundAvailabilitySupportTest : SharedDbTest() {
-    @BeforeEach
-    fun cleanup() {
-        ctx.cleanCanonicalCatalogFixtures()
-    }
-
+class CampgroundAvailabilitySupportTest {
     @Test
-    fun `preferredAvailabilityProvider returns null when provider is disabled`() {
-        val campgroundId =
-            ctx.seedCampground(
-                name = "Upper Pines",
-                source = "campflare",
-                sourceId = "upper-pines-campground-447",
+    fun `supportsCampground returns false when provider is disabled`() {
+        val provider = NoopCampflareProvider(enabled = false)
+        val campground =
+            campground(
+                dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-447"),
                 bookingProvider = "campflare",
-                bookingProviderRef = "upper-pines-campground-447",
-                sourcePayloadJson = """{"campflare_id":"upper-pines-campground-447"}""",
-            )
-        val support =
-            CampgroundAvailabilitySupport(
-                refResolver = DbRefResolver(ctx),
-                availabilityProviders = listOf(NoopCampflareProvider(enabled = false)),
+                bookingProviderRef = "upper-pines-447",
             )
 
-        assertEquals(null, support.preferredAvailabilityProvider(campgroundId))
+        assertFalse(provider.supportsCampground(campground))
     }
 
     @Test
-    fun `preferredAvailabilityProvider returns normalized provider id for the first provider ref`() {
-        val campgroundId =
-            ctx.seedCampground(
-                name = "Upper Pines",
-                source = "campflare",
-                sourceId = "upper-pines-campground-447",
+    fun `supportsCampground returns true for matching campflare provider`() {
+        val provider = NoopCampflareProvider(enabled = true)
+        val campground =
+            campground(
+                dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-447"),
                 bookingProvider = "campflare",
-                bookingProviderRef = "upper-pines-campground-447",
-                sourcePayloadJson = """{"campflare_id":"upper-pines-campground-447"}""",
+                bookingProviderRef = "upper-pines-447",
             )
-        val support = supportFor()
 
-        assertEquals("campflare", support.preferredAvailabilityProvider(campgroundId))
+        assertTrue(provider.supportsCampground(campground))
     }
 
     @Test
-    fun `preferredAvailabilityProvider reports recgov for recgov catalog source`() {
-        val fixture =
-            ctx.seedCatalogPoi(
-                sourceId = "recgov-232447",
-                name = "Upper Pines",
-                lon = -119.56,
-                lat = 37.74,
-                source = "recgov",
-                providerRefJson = """{"recgov_id":"232447"}""",
+    fun `supportsCampground campflare matches even when bookingProvider is recgov`() {
+        val provider = NoopCampflareProvider(enabled = true)
+        val campground =
+            campground(
+                dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-447"),
                 bookingProvider = "recgov",
                 bookingProviderRef = "232447",
             )
-        val support = supportFor()
 
-        assertEquals("recgov", support.preferredAvailabilityProvider(fixture.catalogId))
+        assertTrue(provider.supportsCampground(campground))
     }
 
     @Test
-    fun `preferredAvailabilityProvider skips disabled providers`() {
-        val campgroundId =
-            ctx.seedCampground(
-                name = "Upper Pines",
-                source = "campflare",
-                sourceId = "upper-pines-campground-447",
-                bookingProvider = "campflare",
-                bookingProviderRef = "upper-pines-campground-447",
-                sourcePayloadJson = """{"campflare_id":"upper-pines-campground-447"}""",
+    fun `supportsCampground default impl uses bookingProvider and bookingProviderRef`() {
+        val provider = NoopRecgovProvider()
+        val campground =
+            campground(
+                dataProviderRef = DataProviderRef.RecGov(id = "232447"),
+                bookingProvider = "recgov",
+                bookingProviderRef = "232447",
             )
-        val support = supportFor(campflareEnabled = false)
 
-        assertEquals(null, support.preferredAvailabilityProvider(campgroundId))
+        assertTrue(provider.supportsCampground(campground))
     }
 
-    private fun supportFor(campflareEnabled: Boolean = true): CampgroundAvailabilitySupport =
-        CampgroundAvailabilitySupport(
-            refResolver = DbRefResolver(ctx),
-            availabilityProviders =
-                listOf(
-                    NoopCampflareProvider(enabled = campflareEnabled),
-                    NoopRecgovProvider(),
-                ),
+    @Test
+    fun `supportsCampground returns false when bookingProvider is null`() {
+        val provider = NoopRecgovProvider()
+        val campground =
+            campground(
+                dataProviderRef = DataProviderRef.RecGov(id = "232447"),
+                bookingProvider = null,
+                bookingProviderRef = null,
+            )
+
+        assertFalse(provider.supportsCampground(campground))
+    }
+
+    @Test
+    fun `first matching provider wins in list iteration`() {
+        val providers =
+            listOf(
+                NoopCampflareProvider(enabled = true),
+                NoopRecgovProvider(),
+            )
+        val campground =
+            campground(
+                dataProviderRef = DataProviderRef.Campflare(id = "upper-pines-447"),
+                bookingProvider = "recgov",
+                bookingProviderRef = "232447",
+            )
+
+        val match = providers.firstOrNull { it.supportsCampground(campground) }
+        assertEquals(BookingProvider.CAMPFLARE, match?.id)
+    }
+
+    private fun campground(
+        dataProviderRef: DataProviderRef,
+        bookingProvider: String?,
+        bookingProviderRef: String?,
+    ): Campground =
+        Campground(
+            id = 1L,
+            name = "Test Campground",
+            status = null,
+            statusDescription = null,
+            kind = null,
+            shortDescription = null,
+            mediumDescription = null,
+            longDescription = null,
+            location = JsonNull,
+            defaultCampsiteSchedule = JsonNull,
+            amenities = JsonNull,
+            maxRvLength = null,
+            maxTrailerLength = null,
+            hasPullThroughSites = null,
+            bigRigFriendly = null,
+            reservationUrl = null,
+            links = JsonNull,
+            photos = JsonNull,
+            alerts = JsonNull,
+            price = JsonNull,
+            cellService = JsonNull,
+            management = JsonNull,
+            contact = JsonNull,
+            connections = JsonNull,
+            metadata = JsonNull,
+            sourcePayload = JsonNull,
+            createdAt = Instant.EPOCH,
+            updatedAt = Instant.EPOCH,
+            deletedAt = null,
+            dataProviderRef = dataProviderRef,
+            bookingProvider = bookingProvider,
+            bookingProviderRef = bookingProviderRef,
         )
 
     private class NoopRecgovProvider : AvailabilityProvider {
@@ -119,26 +157,6 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
     }
 
-    private class DecliningCampflareProvider : AvailabilityProvider {
-        override val id: BookingProvider = BookingProvider.CAMPFLARE
-        override val capabilities: AvailabilityProviderCapabilities =
-            AvailabilityProviderCapabilities(
-                supportsInternalPolling = false,
-                bookingHorizonDays = 365,
-                maxPollWindowDays = 60,
-            )
-
-        override fun isEnabled(): Boolean = true
-
-        override fun supportsRef(ref: BookingProviderRef): Boolean = false
-
-        override suspend fun availability(
-            ref: BookingProviderRef,
-            startDate: LocalDate,
-            endDate: LocalDate,
-        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
-    }
-
     private class NoopCampflareProvider(
         private val enabled: Boolean,
     ) : AvailabilityProvider {
@@ -151,6 +169,9 @@ class CampgroundAvailabilitySupportTest : SharedDbTest() {
             )
 
         override fun isEnabled(): Boolean = enabled
+
+        override fun supportsCampground(campground: Campground): Boolean =
+            isEnabled() && campground.dataProviderRef is DataProviderRef.Campflare
 
         override suspend fun availability(
             ref: BookingProviderRef,

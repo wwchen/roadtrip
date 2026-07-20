@@ -30,7 +30,7 @@ internal class DbAvailabilityTargetResolver(
                 val bookingRefs = refResolver.resolve<RefValue.CampgroundBookingRef>(RefValue.PoiId(poiId))
                 bookingRefs.mapNotNull { bookingRefValue ->
                     val provider =
-                        availabilityProviders.firstOrNull { it.supportsRef(bookingRefValue.ref) }
+                        availabilityProviders.firstOrNull { it.isEnabled() && it.id == bookingRefValue.ref.provider }
                             ?: return@mapNotNull null
                     Triple(poiId, bookingRefValue.ref, provider)
                 }
