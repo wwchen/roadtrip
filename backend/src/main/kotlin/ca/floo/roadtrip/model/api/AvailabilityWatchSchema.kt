@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.model.api
 
+import ca.floo.roadtrip.model.domain.Campsite
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -10,7 +11,7 @@ data class AvailabilityWatchSchema(
     val targets: List<AvailabilityWatchTargetSchema>,
     @SerialName("poi_id") val poiId: Long? = null,
     @SerialName("campsite_id") val campsiteId: Long? = null,
-    val campsite: CampsiteSummarySchema? = null,
+    val campsite: Campsite? = null,
     @SerialName("campsite_filters") val campsiteFilters: JsonObject,
     @SerialName("start_date") val startDate: String,
     @SerialName("end_date") val endDate: String,

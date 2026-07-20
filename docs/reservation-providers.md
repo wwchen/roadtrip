@@ -104,12 +104,13 @@ service/availability/
     └── InternalPollerAlertProvider.kt   # today's poller-membership sync + orphan deactivation
 ```
 
-Availability services resolve catalog rows into `CampsiteAvailabilityTarget`
-before calling provider adapters. That type is a provider-boundary projection:
-it includes the selected vendor id, provider ref, tags, and raw payload needed
-to dispatch upstream. It is deliberately not the persisted `Campsite` table row.
-When code needs table fields, use `CampsiteRepo.findById` / query methods; when
-code needs to call a provider, use the explicit availability-target methods.
+Availability services load persisted `Campsite` rows and resolve them into
+`ResolvedAvailabilityTarget` before calling provider adapters. The provider-ready
+identity lives on `BookingProviderRef` plus `CatalogCampsiteRef`; the `Campsite`
+row only carries normalized catalog metadata such as name, loop, kind, and
+reservation URL. When code needs table fields, use `CampsiteRepo.findById` /
+query methods; when code needs to call a provider, use
+`AvailabilityTargetResolver`.
 
 ## Provider-ref resolution
 

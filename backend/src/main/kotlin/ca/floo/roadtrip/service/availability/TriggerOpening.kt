@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.service.notification.common.WatchOpening
 import java.time.LocalDate
 
@@ -12,7 +12,7 @@ import java.time.LocalDate
  * act on the same opening without reverse-parsing notification text or URLs.
  */
 internal data class TriggerOpening(
-    val campsite: CampsiteAvailabilityTarget,
+    val campsite: Campsite,
     val date: LocalDate,
     val resolvedTarget: ResolvedAvailabilityTarget?,
     val watchOpening: WatchOpening,

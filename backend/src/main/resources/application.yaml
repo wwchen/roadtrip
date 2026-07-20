@@ -37,9 +37,9 @@ roadtrip:
   read-path:
     enabled-data-providers:
       - campflare
-#      - recgov
+      - bcparks-strapi
       - aspira
-      - reserveamerica
+#      - reserveamerica
 #      - reservecalifornia
       - tesla_supercharger
       - planet_fitness_location

@@ -28,6 +28,7 @@ const WATCHABLE_KINDS = new Set(['reserved', 'first-come']);
 export function renderSiteMatrix({
   state,
   campsites,
+  reservationUrlTemplates = {},
   days,
   error,
   selectedDate,
@@ -80,8 +81,8 @@ export function renderSiteMatrix({
   });
   const tools = renderTools({
     filters: activeFilters,
-    loopOptions: filterOptions(allRows, 'loop'),
-    typeOptions: filterOptions(allRows, 'site_type'),
+    loopOptions: filterOptions(allRows, 'loop_name'),
+    typeOptions: filterOptions(allRows, 'kind'),
   });
 
   if (rows.length === 0) {
@@ -104,6 +105,7 @@ export function renderSiteMatrix({
         armedBook,
         watchedDates,
         canWatch,
+        reservationUrlTemplates,
       }),
     )
     .join('');
@@ -356,6 +358,7 @@ function rowHtml(row, context) {
         armedBook: context.armedBook,
         watchedDates: context.watchedDates,
         canWatch: context.canWatch,
+        reservationUrlTemplates: context.reservationUrlTemplates,
       }),
     )
     .join('');
@@ -363,7 +366,12 @@ function rowHtml(row, context) {
     ? `
       <tr class="cg-site-matrix-detail-row">
         <td colspan="${1 + context.visibleDays.length}">
-          ${renderSiteDetail({ site: row, selectedDate: null, selectedEndDate: null })}
+          ${renderSiteDetail({
+            site: row,
+            selectedDate: null,
+            selectedEndDate: null,
+            reservationUrlTemplates: context.reservationUrlTemplates,
+          })}
         </td>
       </tr>
     `
@@ -380,7 +388,7 @@ function rowHtml(row, context) {
 }
 
 function siteLabelHtml(row, siteLabel, siteTitle, isSelected) {
-  const loop = typeof row.loop === 'string' ? row.loop.trim() : '';
+  const loop = typeof row.loop_name === 'string' ? row.loop_name.trim() : '';
   const prefix = loop ? `<span class="cg-site-matrix-loop-prefix">${escapeHtml(loop)} / </span>` : '';
   return `
     <button
@@ -396,7 +404,17 @@ function siteLabelHtml(row, siteLabel, siteTitle, isSelected) {
   `;
 }
 
-function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook, watchedDates, canWatch }) {
+function cellHtml({
+  row,
+  day,
+  availableIds,
+  selectedDate,
+  siteLabel,
+  armedBook,
+  watchedDates,
+  canWatch,
+  reservationUrlTemplates,
+}) {
   const state = cellState(row, day, availableIds);
   const isSelected = selectedDate === day.date;
   const selectedClass = isSelected ? ' is-selected' : '';
@@ -429,7 +447,7 @@ function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook, 
     `;
   }
 
-  if (!hasReservationUrlTemplate(row)) {
+  if (!hasReservationUrlTemplate(row, reservationUrlTemplates)) {
     return `
       <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}" aria-label="${escapeHtml(aria)}">
         <span class="cg-site-matrix-cell-button">${escapeHtml(state.label)}</span>
@@ -462,7 +480,7 @@ function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook, 
 }
 
 function siteTitleText(row, siteLabel) {
-  const loop = typeof row.loop === 'string' ? row.loop.trim() : '';
+  const loop = typeof row.loop_name === 'string' ? row.loop_name.trim() : '';
   return loop ? `${loop} / ${siteLabel}` : siteLabel;
 }
 
@@ -510,7 +528,7 @@ function fallbackCampsitesFromDays(days) {
 function fallbackCampsite(id) {
   return {
     id: String(id),
-    vendor_id: String(id),
+    data_provider_ref: String(id),
   };
 }
 
@@ -527,16 +545,17 @@ function normalizeFilters(filters) {
 function filterCampsites(rows, filters) {
   const query = filters.query.trim().toLowerCase();
   return rows.filter((row) => {
-    if (filters.loop && row.loop !== filters.loop) return false;
-    if (filters.type && row.site_type !== filters.type) return false;
+    if (filters.loop && row.loop_name !== filters.loop) return false;
+    if (filters.type && row.kind !== filters.type) return false;
     if (!query) return true;
     const haystack = [
       siteTitleText(row, siteName(row)),
       siteName(row),
-      row.loop,
-      row.site_type,
-      row.vendor_id,
-      row.vendorId,
+      row.loop_name,
+      row.kind,
+      row.kind_listed,
+      row.data_provider,
+      row.data_provider_ref,
       row.id,
     ]
       .filter(Boolean)
@@ -579,7 +598,7 @@ function filterOptions(rows, key) {
 
 function siteName(row) {
   if (row.name) return row.name;
-  if (row.vendor_id) return `Site #${row.vendor_id}`;
+  if (row.data_provider_ref) return `Site #${row.data_provider_ref}`;
   return row.id != null ? `Site #${row.id}` : '(unknown)';
 }
 
@@ -588,21 +607,21 @@ function rowId(row) {
 }
 
 function compareCampsite(a, b) {
-  const al = a.loop || '\uffff';
-  const bl = b.loop || '\uffff';
+  const al = a.loop_name || '\uffff';
+  const bl = b.loop_name || '\uffff';
   if (al !== bl) return al.localeCompare(bl);
   return compareBySite(a, b);
 }
 
 function compareBySite(a, b) {
-  const an = a.name || a.vendor_id || '';
-  const bn = b.name || b.vendor_id || '';
+  const an = a.name || a.data_provider_ref || '';
+  const bn = b.name || b.data_provider_ref || '';
   return an.localeCompare(bn, undefined, { numeric: true });
 }
 
 function compareByType(a, b) {
-  const at = a.site_type || '\uffff';
-  const bt = b.site_type || '\uffff';
+  const at = a.kind || '\uffff';
+  const bt = b.kind || '\uffff';
   if (at !== bt) return at.localeCompare(bt, undefined, { numeric: true });
   return compareCampsite(a, b);
 }

@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.etl.vendors.aspira
 import ca.floo.roadtrip.model.domain.CampsiteUpsertCandidate
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.model.etl.CampsiteEtlOutput
 import ca.floo.roadtrip.model.metadata.Envelope
@@ -88,6 +89,7 @@ class AspiraCampsitesEtl(
      */
     val dictionariesInputSlug: String? = null,
     val aspiraTenant: String,
+    val parentDataProvider: DataProvider = DataProvider.ASPIRA,
 ) : CampsiteEtl<AspiraCampsitesEtl.Parsed> {
     override val multiPart: Boolean = true
 
@@ -213,16 +215,25 @@ class AspiraCampsitesEtl(
     ): DataProviderRef? {
         val parent = leaf ?: parentLeaf
         if (parent != null) {
-            return DataProviderRef.Aspira(transactionLocationId = parent.transactionLocationId, mapId = parent.mapId)
+            return makeParentRef(parent.transactionLocationId, parent.mapId)
         }
         val transactionLocationId = parentLeaf?.transactionLocationId
         val mapId = inv.firstMapId
         return if (transactionLocationId != null && mapId != null) {
-            DataProviderRef.Aspira(transactionLocationId = transactionLocationId, mapId = mapId)
+            makeParentRef(transactionLocationId, mapId)
         } else {
             null
         }
     }
+
+    private fun makeParentRef(
+        transactionLocationId: Long,
+        mapId: Long,
+    ): DataProviderRef =
+        when (parentDataProvider) {
+            DataProvider.STRAPI -> DataProviderRef.BcParks(transactionLocationId = transactionLocationId, mapId = mapId)
+            else -> DataProviderRef.Aspira(transactionLocationId = transactionLocationId, mapId = mapId)
+        }
 
     private fun parseResourceInventory(
         resourceId: String,

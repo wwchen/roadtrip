@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import kotlinx.serialization.json.JsonArray
@@ -18,11 +18,11 @@ class WatchScopeResolver(
      * first-seen order preserved — this is the entire seam
      * [AvailabilityPollerMembership.sync] depends on.
      */
-    fun resolve(watch: AvailabilityWatchRepo.Watch): List<CampsiteAvailabilityTarget> {
-        val seen = LinkedHashMap<Long, CampsiteAvailabilityTarget>()
+    fun resolve(watch: AvailabilityWatchRepo.Watch): List<Campsite> {
+        val seen = LinkedHashMap<Long, Campsite>()
         for (target in watch.targets) {
             val resolved =
-                target.campsiteId?.let { id -> campsitesRepo.findAvailabilityTargetById(id)?.let(::listOf) ?: emptyList() }
+                target.campsiteId?.let { id -> campsitesRepo.findById(id)?.let(::listOf) ?: emptyList() }
                     ?: target.poiId?.let { poiId -> resolvePoi(poiId, watch.campsiteFilters) }
                     ?: emptyList()
             for (r in resolved) seen.putIfAbsent(r.id, r)
@@ -33,13 +33,13 @@ class WatchScopeResolver(
     private fun resolvePoi(
         poiId: Long,
         filters: JsonObject,
-    ): List<CampsiteAvailabilityTarget> {
-        val all = campsitesRepo.findAvailabilityTargetsByPoi(poiId)
+    ): List<Campsite> {
+        val all = campsitesRepo.findByPoi(poiId)
         val loops = collectStringFilter(filters, "loop")
         val siteTypes = collectStringFilter(filters, "site_type")
         return all.filter { r ->
-            (loops.isEmpty() || (r.loop != null && loops.contains(r.loop))) &&
-                (siteTypes.isEmpty() || (r.siteType != null && siteTypes.contains(r.siteType)))
+            (loops.isEmpty() || (r.loopName != null && loops.contains(r.loopName))) &&
+                (siteTypes.isEmpty() || siteTypes.contains(r.kind))
         }
     }
 }

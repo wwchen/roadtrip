@@ -74,7 +74,7 @@ Model names must tell callers what kind of shape they are holding:
   schema, including database-owned fields such as ids, timestamps, source
   columns, and soft-delete columns.
 - **Repo projections** are named for their use, not the table
-  (`CampsiteAvailabilityTarget`, `PoiDetailRow`, `PoiSearchHit`). Put a
+  (`PoiDetailRow`, `PoiSearchHit`). Put a
   projection in `models/` only when it crosses a repo boundary; otherwise keep
   it private to the repo.
 - **ETL outputs** are not table rows. Vendor ETLs emit output envelopes such as

@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
@@ -8,7 +9,7 @@ import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
@@ -103,10 +104,10 @@ class WatchCapabilityServiceTest {
         )
     }
 
-    private fun service(vararg campsites: CampsiteAvailabilityTarget): WatchCapabilityService = service(campsites = campsites.toList())
+    private fun service(vararg campsites: Campsite): WatchCapabilityService = service(campsites = campsites.toList())
 
     private fun service(
-        campsites: List<CampsiteAvailabilityTarget>,
+        campsites: List<Campsite>,
         supportsInternalPolling: Boolean = true,
         notificationTriggerKinds: List<String> =
             listOf(
@@ -150,19 +151,19 @@ class WatchCapabilityServiceTest {
     }
 
     private class FakeTargetResolver(
-        private val campsites: List<CampsiteAvailabilityTarget>,
+        private val campsites: List<Campsite>,
         supportsInternalPolling: Boolean,
     ) : AvailabilityTargetResolver {
         private val byId = campsites.associateBy { it.id }
         private val provider = FakeAvailabilityProvider(supportsInternalPolling)
 
-        override fun resolve(campsite: CampsiteAvailabilityTarget): ResolvedAvailabilityTarget? {
+        override fun resolve(campsite: Campsite): ResolvedAvailabilityTarget? {
             val known = byId[campsite.id] ?: return null
             val candidate =
                 ProviderCandidate(
                     provider = provider,
                     parentRef = BookingProviderRef.RecGov(facilityId = "facility-1"),
-                    catalogRef = CatalogCampsiteRef(campsiteId = known.id, vendorId = known.vendorId),
+                    catalogRef = CatalogCampsiteRef(campsiteId = known.id, vendorId = known.dataProviderRef.serialize()),
                 )
             return ResolvedAvailabilityTarget(
                 campsite = known,
@@ -203,14 +204,14 @@ class WatchCapabilityServiceTest {
     private fun campsite(
         id: Long,
         vendorId: String,
-    ): CampsiteAvailabilityTarget =
-        CampsiteAvailabilityTarget(
+    ): Campsite =
+        campsiteFixture(
             id = id,
             vendor = "recgov",
             vendorId = vendorId,
             name = "Site $id",
-            loop = null,
-            siteType = null,
-            raw = null,
+            loopName = null,
+            kind = null,
+            sourcePayload = null,
         )
 }

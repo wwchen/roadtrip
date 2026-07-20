@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -20,7 +20,7 @@ internal class DbAvailabilityTargetResolver(
     private val dateResolver: AvailabilityDateResolver,
     private val pollerRepo: AvailabilityPollerRepo,
 ) : AvailabilityTargetResolver {
-    override fun resolve(campsite: CampsiteAvailabilityTarget): ResolvedAvailabilityTarget? {
+    override fun resolve(campsite: Campsite): ResolvedAvailabilityTarget? {
         val poiIds = campsitesRepo.poiIdsForCampsite(campsite.id)
         if (poiIds.isEmpty()) return null
 
@@ -66,7 +66,7 @@ internal class DbAvailabilityTargetResolver(
 
         val targets =
             campsitesRepo
-                .findAvailabilityTargetsByPoi(poller.poiId)
+                .findByPoi(poller.poiId)
                 .mapNotNull { resolve(it) }
                 .filter {
                     parentRefKey(it.parentRef) == poller.parentRef &&
@@ -98,7 +98,7 @@ internal class DbAvailabilityTargetResolver(
     }
 
     private fun buildCatalogRef(
-        campsite: CampsiteAvailabilityTarget,
+        campsite: Campsite,
         parentRef: BookingProviderRef,
     ): CatalogCampsiteRef {
         val campsiteRef =
@@ -110,29 +110,29 @@ internal class DbAvailabilityTargetResolver(
             is BookingProviderRef.RecGov ->
                 CatalogCampsiteRef(
                     campsiteId = campsite.id,
-                    vendorId = (campsiteRef as? BookingProviderRef.RecGov)?.facilityId ?: campsite.vendorId,
+                    vendorId = (campsiteRef as? BookingProviderRef.RecGov)?.facilityId ?: campsite.bookingVendorId(parentRef),
                 )
             is BookingProviderRef.Campflare ->
                 CatalogCampsiteRef(
                     campsiteId = campsite.id,
-                    vendorId = (campsiteRef as? BookingProviderRef.Campflare)?.campgroundId ?: campsite.vendorId,
+                    vendorId = (campsiteRef as? BookingProviderRef.Campflare)?.campgroundId ?: campsite.bookingVendorId(parentRef),
                 )
             is BookingProviderRef.Aspira ->
                 CatalogCampsiteRef(
                     campsiteId = campsite.id,
-                    vendorId = campsite.vendorId,
+                    vendorId = campsite.bookingVendorId(parentRef),
                     mapId = (campsiteRef as? BookingProviderRef.Aspira)?.mapId ?: parentRef.mapId,
                     resourceLocationId = (campsiteRef as? BookingProviderRef.Aspira)?.resourceLocationId ?: parentRef.resourceLocationId,
                 )
             is BookingProviderRef.ReserveAmerica ->
                 CatalogCampsiteRef(
                     campsiteId = campsite.id,
-                    vendorId = campsite.vendorId,
+                    vendorId = campsite.bookingVendorId(parentRef),
                 )
             is BookingProviderRef.ReserveCalifornia ->
                 CatalogCampsiteRef(
                     campsiteId = campsite.id,
-                    vendorId = campsite.vendorId,
+                    vendorId = campsite.bookingVendorId(parentRef),
                 )
         }
     }
@@ -154,3 +154,8 @@ internal class DbAvailabilityTargetResolver(
         return lat.toDouble() to lng.toDouble()
     }
 }
+
+private fun Campsite.bookingVendorId(parentRef: BookingProviderRef): String =
+    bookingProviderRef
+        ?.takeIf { bookingProvider == parentRef.provider.id }
+        ?: dataProviderRef.serialize()

@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
@@ -8,7 +9,7 @@ import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
@@ -128,14 +129,14 @@ class AvailabilityBookingTargetResolverTest {
             catalogRef = CatalogCampsiteRef(TEST_CAMPSITE_ID, TEST_RECGOV_SITE_ID),
         )
 
-    private fun campsite(): CampsiteAvailabilityTarget =
-        CampsiteAvailabilityTarget(
+    private fun campsite(): Campsite =
+        campsiteFixture(
             id = TEST_CAMPSITE_ID,
             vendor = "campflare",
             vendorId = TEST_CAMPFLARE_PARENT_ID,
             name = "Site 7",
-            loop = null,
-            siteType = null,
-            raw = null,
+            loopName = null,
+            kind = null,
+            sourcePayload = null,
         )
 }

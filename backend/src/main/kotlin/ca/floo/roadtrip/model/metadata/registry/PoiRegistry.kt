@@ -319,6 +319,13 @@ class PoiRegistry(
             .map { it.slug }
             .toSet()
 
+    fun bcParksSources(): Set<String> =
+        poiData
+            .mapNotNull { row -> row.etls.lastOrNull() }
+            .filter { it.adapter == "BcParksCampgroundsEtl" }
+            .map { it.slug }
+            .toSet()
+
     /**
      * ReserveAmerica terminal ETL sources with their Active Network tenant
      * config. Unlike Aspira, these tenants are fully config-driven because the

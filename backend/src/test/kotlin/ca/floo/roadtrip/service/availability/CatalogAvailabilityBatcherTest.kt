@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
@@ -8,7 +9,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
@@ -183,15 +184,15 @@ class CatalogAvailabilityBatcherTest {
         campsiteId: Long,
         vendor: String,
         vendorId: String,
-    ): CampsiteAvailabilityTarget =
-        CampsiteAvailabilityTarget(
+    ): Campsite =
+        campsiteFixture(
             id = campsiteId,
             vendor = vendor,
             vendorId = vendorId,
-            name = null,
-            loop = null,
-            siteType = null,
-            raw = null,
+            name = "",
+            loopName = null,
+            kind = null,
+            sourcePayload = null,
         )
 
     private fun resolvedTarget(

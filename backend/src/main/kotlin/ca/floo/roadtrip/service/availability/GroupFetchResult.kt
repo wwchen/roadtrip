@@ -4,7 +4,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 
@@ -15,7 +15,7 @@ internal data class GroupFetchResult(
     val provider: AvailabilityProvider,
     val parentRef: BookingProviderRef,
     val dateContext: PoiDateContext,
-    val campsites: List<CampsiteAvailabilityTarget>,
+    val campsites: List<Campsite>,
     val window: ResolvedDateWindow?,
     val batch: AvailabilityObservationBatch?,
     val outcome: FetchOutcome,

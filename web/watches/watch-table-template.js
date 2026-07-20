@@ -65,7 +65,7 @@ export function actionsCellHtml(watch) {
 
 function watchFallbackName(watch) {
   const r = watch.campsite;
-  if (r?.name) return r.loop ? `${r.loop} / ${r.name}` : r.name;
+  if (r?.name) return r.loop_name ? `${r.loop_name} / ${r.name}` : r.name;
   return `Watch #${watch.id}`;
 }
 
@@ -81,4 +81,3 @@ function relativeTime(iso) {
   const days = Math.round(hrs / 24);
   return `${days}d ago`;
 }
-

@@ -118,6 +118,7 @@ function makeContext(host, feature, signal) {
     skeletonTimer: null,
     sitesState: 'loading',
     sites: [],
+    reservationUrlTemplates: {},
     sitesError: null,
     sitesExpanded: false,
     sitesRequestSeq: 0,
@@ -146,6 +147,7 @@ function renderShell(ctx) {
       ${renderSiteList({
         state: ctx.sitesState,
         campsites: ctx.sites,
+        reservationUrlTemplates: ctx.reservationUrlTemplates,
         error: ctx.sitesError,
         expanded: ctx.sitesExpanded,
         selectedDay: sitesDay,
@@ -188,6 +190,7 @@ function renderAvailabilitySurface(ctx) {
   return renderSiteMatrix({
     state: ctx.sitesState,
     campsites: ctx.sites,
+    reservationUrlTemplates: ctx.reservationUrlTemplates,
     days: Array.isArray(ctx.days) ? ctx.days : [],
     error: ctx.sitesError,
     selectedDate: null,
@@ -298,7 +301,14 @@ function onRootClick(ctx, e) {
     const site = ctx.sites.find((s) => String(s.id) === String(campsiteId));
     if (armed) {
       const url = site
-        ? reservationUrlFromTemplate(site, { startDate: date, endDate: stayEndDate(ctx, date) })
+        ? reservationUrlFromTemplate(
+            site,
+            {
+              startDate: date,
+              endDate: stayEndDate(ctx, date),
+              reservationUrlTemplates: ctx.reservationUrlTemplates,
+            },
+          )
         : '';
       if (url) {
         window.open(url, '_blank', 'noreferrer');
@@ -487,7 +497,7 @@ function updateBookButtonState(button, site, date, armed) {
 function siteLabel(site) {
   if (!site) return 'Site';
   if (site.name) return site.name;
-  if (site.vendor_id) return `Site #${site.vendor_id}`;
+  if (site.data_provider_ref) return `Site #${site.data_provider_ref}`;
   return site.id != null ? `Site #${site.id}` : 'Site';
 }
 
@@ -922,6 +932,10 @@ async function fetchSites(ctx) {
     if (requestSeq !== ctx.sitesRequestSeq) return;
     ctx.sitesState = 'success';
     ctx.sites = Array.isArray(json?.campsites) ? json.campsites : [];
+    ctx.reservationUrlTemplates =
+      json?.reservation_url_templates && typeof json.reservation_url_templates === 'object'
+        ? json.reservation_url_templates
+        : {};
     rerender(ctx);
   } catch (e) {
     if (e.name === 'AbortError') return;

@@ -4,7 +4,6 @@ import ca.floo.roadtrip.model.api.AvailabilityWatchListResponse
 import ca.floo.roadtrip.model.api.AvailabilityWatchResponse
 import ca.floo.roadtrip.model.api.AvailabilityWatchSchema
 import ca.floo.roadtrip.model.api.AvailabilityWatchTargetSchema
-import ca.floo.roadtrip.model.api.CampsiteSummarySchema
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 
@@ -46,18 +45,7 @@ internal class AvailabilityWatchApiMapper(
             firstTarget
                 ?.campsiteId
                 ?.takeIf { watch.targets.size == 1 }
-                ?.let(campsiteRepo::findAvailabilityTargetById)
-                ?.let { campsite ->
-                    CampsiteSummarySchema(
-                        id = campsite.id,
-                        name = campsite.name,
-                        loop = campsite.loop,
-                        kind = campsite.siteType,
-                        poiIds = emptyList(),
-                        raw = campsite.raw,
-                        tags = campsite.tags,
-                    )
-                }
+                ?.let(campsiteRepo::findById)
         return AvailabilityWatchSchema(
             id = watch.id,
             targets =

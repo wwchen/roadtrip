@@ -4,7 +4,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.support.Dispatchable
@@ -74,9 +74,10 @@ interface AvailabilityProvider : Dispatchable<BookingProvider> {
     ): AvailabilityObservationBatch = availability(ref, startDate, endDate)
 
     /**
-     * User-facing reservation URL *template* for [campsite] under a campground
+     * User-facing reservation URL *template* for [catalogRef] under a campground
      * whose parent scope is [parentRef], or null when this provider exposes no
-     * stable deep link. The template may embed the
+     * stable deep link. [campsite] carries normalized display/link metadata from
+     * the catalog row. The template may embed the
      * [ReservationUrlTemplate] placeholders (filled by the caller for a chosen
      * window) or be a static URL. Pure and cheap — no upstream call, no throw.
      *
@@ -87,14 +88,13 @@ interface AvailabilityProvider : Dispatchable<BookingProvider> {
      * than hardcoding vendor URLs. Default null keeps deep links opt-in per
      * adapter — a provider without one is not a gap to fill.
      *
-     * For Aspira, [catalogMapId] and [catalogResourceLocationId] carry the
-     * campsite-specific upstream ids; other providers ignore them.
+     * [catalogRef] carries the campsite-specific upstream ids needed by
+     * provider-specific deep links.
      */
     fun reservationUrlTemplate(
-        campsite: CampsiteAvailabilityTarget,
+        campsite: Campsite,
         parentRef: BookingProviderRef,
-        catalogMapId: Long? = null,
-        catalogResourceLocationId: Long? = null,
+        catalogRef: CatalogCampsiteRef,
     ): String? = null
 
     /**
@@ -104,13 +104,12 @@ interface AvailabilityProvider : Dispatchable<BookingProvider> {
      * an adapter only implements the template once.
      */
     fun reservationUrl(
-        campsite: CampsiteAvailabilityTarget,
+        campsite: Campsite,
         parentRef: BookingProviderRef,
         date: LocalDate,
-        catalogMapId: Long? = null,
-        catalogResourceLocationId: Long? = null,
+        catalogRef: CatalogCampsiteRef,
     ): String? =
-        reservationUrlTemplate(campsite, parentRef, catalogMapId, catalogResourceLocationId)?.let {
+        reservationUrlTemplate(campsite, parentRef, catalogRef)?.let {
             ReservationUrlTemplate.fill(it, date, date.plusDays(1))
         }
 }

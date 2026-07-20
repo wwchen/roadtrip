@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
@@ -8,7 +9,6 @@ import ca.floo.roadtrip.model.booking.AddToCartRequest
 import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
@@ -551,14 +551,14 @@ class TriggerActionHandlerTest {
                 is BookingProviderRef.ReserveCalifornia -> BookingProvider.RESERVECALIFORNIA
             }
         val campsite =
-            CampsiteAvailabilityTarget(
+            campsiteFixture(
                 id = 7L,
                 vendor = "recgov",
                 vendorId = "site-7",
                 name = "Site 12",
-                loop = "Loop A",
-                siteType = "Tent",
-                raw = null,
+                loopName = "Loop A",
+                kind = "Tent",
+                sourcePayload = null,
             )
         val catalogRef = CatalogCampsiteRef(campsiteId = 7L, vendorId = "site-7")
         return TriggerOpening(

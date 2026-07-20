@@ -45,7 +45,7 @@ class WatchScopeResolverTest : SharedDbTest() {
     ): Long =
         ctx.seedCampsite(
             campgroundId = campgroundIdFor(poiId),
-            vendor = "test",
+            vendor = "recgov",
             vendorId = vendorId,
             name = "Site $vendorId",
         )

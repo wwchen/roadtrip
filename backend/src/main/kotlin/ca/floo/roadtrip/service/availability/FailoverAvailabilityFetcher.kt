@@ -4,7 +4,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
-import ca.floo.roadtrip.model.domain.CampsiteAvailabilityTarget
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import java.time.Instant
@@ -48,7 +48,7 @@ internal open class FailoverAvailabilityFetcher(
 
     open suspend fun fetch(
         candidates: List<ProviderCandidate>,
-        @Suppress("UNUSED_PARAMETER") campsites: List<CampsiteAvailabilityTarget>,
+        @Suppress("UNUSED_PARAMETER") campsites: List<Campsite>,
         window: ResolvedDateWindow,
         translateRefs: (ProviderCandidate) -> List<CatalogCampsiteRef>,
     ): FailoverResult {

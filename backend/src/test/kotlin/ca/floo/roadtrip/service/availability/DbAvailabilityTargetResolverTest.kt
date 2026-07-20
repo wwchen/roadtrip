@@ -124,7 +124,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val poiB = seedPoi(campgroundId = "232447")
             val campsitesRepo = CampsiteRepo(ctx)
             val campsiteId = seedCampsite("100", poiB)
-            val reservable = campsitesRepo.findAvailabilityTargetById(campsiteId)!!
+            val reservable = campsitesRepo.findById(campsiteId)!!
 
             val resolver = resolverFor(campsitesRepo)
             val t = resolver.resolve(reservable)!!
@@ -161,11 +161,11 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 )
 
             val campsitesRepo = CampsiteRepo(ctx)
-            val reservable = campsitesRepo.findAvailabilityTargetById(campsiteId)!!
+            val reservable = campsitesRepo.findById(campsiteId)!!
             val target = resolverFor(campsitesRepo).resolve(reservable)!!
 
-            assertEquals("campflare", reservable.vendor)
-            assertEquals("upper-pines-site-100", reservable.vendorId)
+            assertEquals("campflare", reservable.dataProviderRef.provider.id)
+            assertEquals("upper-pines-site-100", reservable.dataProviderRef.serialize())
             assertEquals(poi, target.parentPoiId)
             assertEquals(BookingProvider.CAMPFLARE, target.provider.id)
             assertEquals("upper-pines-campground-447", parentRefKey(target.parentRef))
@@ -188,7 +188,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 )
 
             val campsitesRepo = CampsiteRepo(ctx)
-            val reservable = campsitesRepo.findAvailabilityTargetById(campsiteId)!!
+            val reservable = campsitesRepo.findById(campsiteId)!!
             val target =
                 resolverFor(
                     campsitesRepo = campsitesRepo,
@@ -263,7 +263,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 )
 
             val campsitesRepo = CampsiteRepo(ctx)
-            val reservable = campsitesRepo.findAvailabilityTargetById(campsiteId)!!
+            val reservable = campsitesRepo.findById(campsiteId)!!
             val target =
                 resolverFor(
                     campsitesRepo = campsitesRepo,
@@ -274,8 +274,8 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                         ),
                 ).resolve(reservable)!!
 
-            assertEquals("campflare", reservable.vendor)
-            assertEquals("upper-pines-site-100", reservable.vendorId)
+            assertEquals("campflare", reservable.dataProviderRef.provider.id)
+            assertEquals("upper-pines-site-100", reservable.dataProviderRef.serialize())
             assertEquals(BookingProvider.RECGOV, target.provider.id)
             assertEquals("232447", parentRefKey(target.parentRef))
         }
@@ -296,7 +296,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 )
 
             val campsitesRepo = CampsiteRepo(ctx)
-            val reservable = campsitesRepo.findAvailabilityTargetById(campsiteId)!!
+            val reservable = campsitesRepo.findById(campsiteId)!!
             val target =
                 resolverFor(
                     campsitesRepo = campsitesRepo,
@@ -333,7 +333,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 )
 
             val campsitesRepo = CampsiteRepo(ctx)
-            val reservable = campsitesRepo.findAvailabilityTargetById(campsiteId)!!
+            val reservable = campsitesRepo.findById(campsiteId)!!
             val target =
                 resolverFor(
                     campsitesRepo = campsitesRepo,
@@ -365,7 +365,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 )
 
             val campsitesRepo = CampsiteRepo(ctx)
-            val reservable = campsitesRepo.findAvailabilityTargetById(campsiteId)!!
+            val reservable = campsitesRepo.findById(campsiteId)!!
             val target =
                 resolverFor(
                     campsitesRepo = campsitesRepo,
@@ -391,20 +391,20 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                         name = "Upper Pines",
                         lon = -119.56,
                         lat = 37.74,
-                        source = "not-a-vendor",
+                        source = "recgov",
                         providerRefJson = """{"recgov_id":"232447"}""",
                     ).poiId
 
             val campsiteId =
                 ctx.seedCampsite(
                     campgroundId = campgroundIdFor(poi),
-                    vendor = "not-a-vendor",
+                    vendor = "recgov",
                     vendorId = "site-100",
                     name = "Site 100",
                 )
 
             val campsitesRepo = CampsiteRepo(ctx)
-            val reservable = campsitesRepo.findAvailabilityTargetById(campsiteId)!!
+            val reservable = campsitesRepo.findById(campsiteId)!!
             val target =
                 resolverFor(
                     campsitesRepo = campsitesRepo,

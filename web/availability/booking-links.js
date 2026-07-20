@@ -1,7 +1,7 @@
 const TEMPLATE_PLACEHOLDERS = ['{start_date}', '{end_date}', '{nights}'];
 
-export function reservationUrlFromTemplate(row, { startDate, endDate } = {}) {
-  const template = reservationUrlTemplate(row);
+export function reservationUrlFromTemplate(row, { startDate, endDate, reservationUrlTemplates } = {}) {
+  const template = reservationUrlTemplate(row, reservationUrlTemplates);
   if (!template) return '';
   if (!hasTemplatePlaceholders(template)) return template;
   if (!startDate || !endDate) return '';
@@ -15,13 +15,24 @@ export function reservationUrlFromTemplate(row, { startDate, endDate } = {}) {
     .replaceAll('{nights}', String(nights));
 }
 
-export function hasReservationUrlTemplate(row) {
-  return !!reservationUrlTemplate(row);
+export function hasReservationUrlTemplate(row, reservationUrlTemplates) {
+  return !!reservationUrlTemplate(row, reservationUrlTemplates);
 }
 
-function reservationUrlTemplate(row) {
-  const raw = row?.reservation_url_template;
+function reservationUrlTemplate(row, reservationUrlTemplates) {
+  const raw = templateForRow(row, reservationUrlTemplates);
   return typeof raw === 'string' ? raw.trim() : '';
+}
+
+function templateForRow(row, reservationUrlTemplates) {
+  if (!row || row.id == null || !reservationUrlTemplates) return '';
+  if (reservationUrlTemplates instanceof Map) {
+    return reservationUrlTemplates.get(String(row.id)) || reservationUrlTemplates.get(row.id) || '';
+  }
+  if (typeof reservationUrlTemplates === 'object') {
+    return reservationUrlTemplates[String(row.id)] || '';
+  }
+  return '';
 }
 
 function hasTemplatePlaceholders(template) {
@@ -35,25 +46,23 @@ function nightsBetween(startDate, endDate) {
   return Math.round((end - start) / 86400000);
 }
 
-export function bookingLabel(row) {
-  const agency = agencyLabel(row);
+export function bookingLabel(row, reservationUrlTemplates) {
+  const agency = agencyLabel(row, reservationUrlTemplates);
   return agency ? `Book on ${agency}` : 'Book';
 }
 
-export function agencyLabel(row) {
-  const template = reservationUrlTemplate(row);
+export function agencyLabel(row, reservationUrlTemplates) {
+  const template = reservationUrlTemplate(row, reservationUrlTemplates);
   const host = hostFromUrl(template);
   if (host === 'recreation.gov' || host === 'www.recreation.gov') return 'Recreation.gov';
   if (host === 'reservation.pc.gc.ca') return 'Parks Canada';
   if (host === 'camping.bcparks.ca' || host === 'discovercamping.ca') return 'BC Parks';
   if (host === 'washington.goingtocamp.com') return 'Washington State Parks';
 
-  const vendor = String(row?.vendor || '').toLowerCase();
+  const vendor = String(row?.booking_provider || row?.data_provider || '').toLowerCase();
   if (vendor === 'recgov') return 'Recreation.gov';
-  if (vendor === 'aspira_pc') return 'Parks Canada';
-  if (vendor === 'aspira_bc') return 'BC Parks';
-  if (vendor === 'aspira_wa') return 'Washington State Parks';
-  if (vendor.startsWith('aspira_')) return 'Aspira';
+  if (vendor === 'campflare') return 'Campflare';
+  if (vendor === 'aspira') return 'Aspira';
   return labelFromHost(host) || humanizeAgency(vendor);
 }
 

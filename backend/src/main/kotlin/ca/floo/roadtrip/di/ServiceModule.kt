@@ -328,6 +328,7 @@ private fun canonicalCampgroundSourceKeys(registry: PoiRegistry): Set<String> =
         if (registry.campflareSources().isNotEmpty()) add(DataProvider.CAMPFLARE.id)
         if (registry.recgovSources().isNotEmpty()) add(DataProvider.RECGOV.id)
         if (registry.aspiraHostBySource().isNotEmpty()) add(DataProvider.ASPIRA.id)
+        if (registry.bcParksSources().isNotEmpty()) add(DataProvider.STRAPI.id)
         if (registry.reserveAmericaSources().isNotEmpty()) add(DataProvider.RESERVEAMERICA.id)
         if (registry.reserveCaliforniaSources().isNotEmpty()) add(DataProvider.RESERVECALIFORNIA.id)
     }

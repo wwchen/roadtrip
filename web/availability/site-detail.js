@@ -7,17 +7,25 @@ import { reservationUrlFromTemplate, bookingLabel } from './booking-links.js';
 
 const MAX_FEATURES = 12;
 
-export function renderSiteDetail({ site, selectedDate = null, selectedEndDate = null } = {}) {
+export function renderSiteDetail({
+  site,
+  selectedDate = null,
+  selectedEndDate = null,
+  reservationUrlTemplates = {},
+} = {}) {
   if (!site) return '';
-  const raw = objectValue(site.raw);
-  const tags = objectValue(site.tags);
+  const raw = objectValue(site.source_payload);
   const name = siteName(site);
   const imageUrl = findImageUrl(site);
   const description = descriptionText(site.description ?? raw.description ?? raw.campsite_description);
-  const facts = detailFacts(site, raw, tags);
-  const features = featureLabels(raw, tags);
-  const url = reservationUrlFromTemplate(site, { startDate: selectedDate, endDate: selectedEndDate });
-  const bookLabel = bookingLabel(site);
+  const facts = detailFacts(site, raw);
+  const features = featureLabels(site, raw);
+  const url = reservationUrlFromTemplate(site, {
+    startDate: selectedDate,
+    endDate: selectedEndDate,
+    reservationUrlTemplates,
+  });
+  const bookLabel = bookingLabel(site, reservationUrlTemplates);
   const subtitle = selectedDate || '';
 
   return `
@@ -41,16 +49,16 @@ export function renderSiteDetail({ site, selectedDate = null, selectedEndDate = 
   `;
 }
 
-function detailFacts(site, raw, tags) {
+function detailFacts(site, raw) {
   const facts = [];
-  addFact(facts, 'Loop', site.loop || raw.loop || raw._parent_leaf_name);
-  addFact(facts, 'Type', site.site_type || raw.site_type || raw.campsite_type);
-  addFact(facts, 'Capacity', capacityLabel(site, raw, tags));
-  addFact(facts, 'Reserve', firstString(tags.reserve_type, raw.campsite_reserve_type, raw.reserve_type, raw.reserveType));
-  addFact(facts, 'Use', firstString(tags.use, raw.type_of_use, raw.typeOfUse));
-  addFact(facts, 'Equipment', equipmentLabel(raw, tags));
-  addFact(facts, 'Provider', site.vendor);
-  addFact(facts, 'Provider ID', site.vendor_id || site.vendorId);
+  addFact(facts, 'Loop', site.loop_name || raw.loop || raw._parent_leaf_name);
+  addFact(facts, 'Type', site.kind_listed || site.kind || raw.site_type || raw.campsite_type);
+  addFact(facts, 'Capacity', capacityLabel(site, raw));
+  addFact(facts, 'Reserve', firstString(raw.campsite_reserve_type, raw.reserve_type, raw.reserveType));
+  addFact(facts, 'Use', firstString(raw.type_of_use, raw.typeOfUse));
+  addFact(facts, 'Equipment', equipmentLabel(site, raw));
+  addFact(facts, 'Provider', site.data_provider);
+  addFact(facts, 'Provider ID', site.data_provider_ref);
   return facts;
 }
 
@@ -85,25 +93,19 @@ function renderFeatures(features) {
 
 function siteName(site) {
   if (site.name) return site.name;
-  if (site.vendor_id) return `Site #${site.vendor_id}`;
+  if (site.data_provider_ref) return `Site #${site.data_provider_ref}`;
   return site.id != null ? `Site #${site.id}` : '(unknown)';
 }
 
-function capacityLabel(site, raw, tags = {}) {
-  const tagCapacity = objectValue(tags.capacity);
+function capacityLabel(site, raw) {
   const min = numberValue(
-    tagCapacity.min ??
-      site.min_capacity ??
-      site.minCapacity ??
-      raw.min_capacity ??
+    raw.min_capacity ??
       raw.minCapacity ??
       raw.min_num_people ??
       raw.minNumPeople,
   );
   const max = numberValue(
-    tagCapacity.max ??
-      site.max_capacity ??
-      site.maxCapacity ??
+    site.max_people ??
       raw.max_capacity ??
       raw.maxCapacity ??
       raw.max_num_people ??
@@ -116,15 +118,15 @@ function capacityLabel(site, raw, tags = {}) {
   return '';
 }
 
-function equipmentLabel(raw, tags = {}) {
-  return itemList(tags.equipment ?? raw.allowed_equipment ?? raw.allowedEquipment ?? raw.equipment)
+function equipmentLabel(site, raw) {
+  return itemList(site.equipment ?? raw.allowed_equipment ?? raw.allowedEquipment ?? raw.equipment)
     .slice(0, 4)
     .join(', ');
 }
 
-function featureLabels(raw, tags = {}) {
+function featureLabels(site, raw) {
   const labels = [
-    ...tagAttributeLabels(tags.attributes),
+    ...columnFeatureLabels(site),
     ...attributeLabels(raw.defined_attributes ?? raw.definedAttributes),
     ...attributeLabels(raw.attributes),
     ...attributeLabels(raw.campsite_rules ?? raw.campsiteRules),
@@ -133,14 +135,34 @@ function featureLabels(raw, tags = {}) {
   return unique(labels.map((label) => truncateText(compactText(label), 84)).filter(Boolean));
 }
 
-function tagAttributeLabels(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
-  return Object.entries(value)
-    .map(([key, entryValue]) => {
-      const formatted = formatValue(entryValue);
-      return formatted ? `${humanize(key)}: ${formatted}` : humanize(key);
-    })
-    .filter(Boolean);
+function columnFeatureLabels(site) {
+  const labels = [];
+  addBooleanFeature(labels, 'Firepit', site.firepit);
+  addBooleanFeature(labels, 'Picnic table', site.picnic_table);
+  addBooleanFeature(labels, 'ADA accessible', site.ada_accessible);
+  addBooleanFeature(labels, 'Water hookups', site.water_hookups);
+  addBooleanFeature(labels, 'Electric hookups', site.electric_hookups);
+  addBooleanFeature(labels, 'Sewer hookups', site.sewer_hookups);
+  addBooleanFeature(labels, 'Pull-through', site.pull_through);
+  addValueFeature(labels, 'Max cars', site.max_cars);
+  addValueFeature(labels, 'Driveway length', lengthLabel(site.driveway_length));
+  addValueFeature(labels, 'Max RV length', lengthLabel(site.max_rv_length));
+  addValueFeature(labels, 'Max trailer length', lengthLabel(site.max_trailer_length));
+  return labels;
+}
+
+function addBooleanFeature(labels, label, value) {
+  if (value === true) labels.push(label);
+}
+
+function addValueFeature(labels, label, value) {
+  const formatted = formatValue(value);
+  if (formatted) labels.push(`${label}: ${formatted}`);
+}
+
+function lengthLabel(value) {
+  const n = numberValue(value);
+  return n == null ? '' : `${n} ft`;
 }
 
 function attributeLabels(value) {
@@ -282,7 +304,7 @@ function unique(values) {
 
 function findImageUrl(site) {
   const urls = [];
-  collectImageUrls(site.raw, urls);
+  collectImageUrls(site.source_payload, urls);
   collectImageUrls(site, urls);
   return urls[0] || '';
 }

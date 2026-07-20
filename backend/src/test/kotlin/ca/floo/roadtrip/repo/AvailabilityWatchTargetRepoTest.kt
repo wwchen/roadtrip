@@ -20,8 +20,8 @@ class AvailabilityWatchTargetRepoTest : SharedDbTest() {
 
     private fun insertCampsite(vendorId: String): Long =
         ctx.seedCampsite(
-            campgroundId = ctx.seedCampground(source = "test", sourceId = "cg-$vendorId"),
-            vendor = "test",
+            campgroundId = ctx.seedCampground(source = "recgov", sourceId = "cg-$vendorId"),
+            vendor = "recgov",
             vendorId = vendorId,
             name = "Site $vendorId",
         )
