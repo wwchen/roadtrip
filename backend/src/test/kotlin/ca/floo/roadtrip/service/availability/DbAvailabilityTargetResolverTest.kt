@@ -22,6 +22,14 @@ import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import kotlin.test.assertEquals
 
+private const val ASPIRA_TEST_BOOKING_HORIZON_DAYS = 365
+private const val ASPIRA_TEST_MAX_POLL_WINDOW_DAYS = 30
+private const val BC_PARKS_TEST_PARENT_BOOKING_REF = "bc:-2147483534:-2147483460:-2147483560"
+private const val BC_PARKS_TEST_CAMPSITE_DATA_REF = "bc:-2147477118"
+private const val BC_PARKS_TEST_RESOURCE_ID = "-2147477118"
+private const val BC_PARKS_TEST_MAP_ID = -2147483460L
+private const val BC_PARKS_TEST_RESOURCE_LOCATION_ID = -2147483560L
+
 class DbAvailabilityTargetResolverTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
@@ -89,6 +97,24 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             )
 
         override fun isEnabled(): Boolean = enabled
+
+        override suspend fun availability(
+            ref: BookingProviderRef,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
+    }
+
+    private class NoopAspiraProvider : AvailabilityProvider {
+        override val id: BookingProvider = BookingProvider.ASPIRA
+        override val capabilities: AvailabilityProviderCapabilities =
+            AvailabilityProviderCapabilities(
+                supportsInternalPolling = true,
+                bookingHorizonDays = ASPIRA_TEST_BOOKING_HORIZON_DAYS,
+                maxPollWindowDays = ASPIRA_TEST_MAX_POLL_WINDOW_DAYS,
+            )
+
+        override fun isEnabled(): Boolean = true
 
         override suspend fun availability(
             ref: BookingProviderRef,
@@ -202,6 +228,44 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals(BookingProvider.RECGOV, target.provider.id)
             assertEquals("232447", parentRefKey(target.parentRef))
             assertEquals("330257", target.catalogRef.vendorId)
+        }
+
+    @Test
+    fun `resolve keeps aspira resource id separate from booking navigation ref`() =
+        runBlocking {
+            val poi =
+                ctx
+                    .seedCatalogPoi(
+                        sourceId = "bc-parks-oceanfront-sites",
+                        name = "Oceanfront Sites",
+                        lon = -123.8,
+                        lat = 49.1,
+                        source = "aspira",
+                        bookingProvider = "aspira",
+                        bookingProviderRef = BC_PARKS_TEST_PARENT_BOOKING_REF,
+                    ).poiId
+            val campsiteId =
+                ctx.seedCampsite(
+                    campgroundId = campgroundIdFor(poi),
+                    vendor = "aspira",
+                    vendorId = BC_PARKS_TEST_CAMPSITE_DATA_REF,
+                    name = "OFS1",
+                    bookingProvider = "aspira",
+                    bookingProviderRef = BC_PARKS_TEST_PARENT_BOOKING_REF,
+                )
+
+            val campsitesRepo = CampsiteRepo(ctx)
+            val reservable = campsitesRepo.findById(campsiteId)!!
+            val target =
+                resolverFor(
+                    campsitesRepo = campsitesRepo,
+                    providers = mapOf("aspira_bc" to NoopAspiraProvider()),
+                ).resolve(reservable)!!
+
+            assertEquals(BookingProvider.ASPIRA, target.provider.id)
+            assertEquals(BC_PARKS_TEST_RESOURCE_ID, target.catalogRef.vendorId)
+            assertEquals(BC_PARKS_TEST_MAP_ID, target.catalogRef.mapId)
+            assertEquals(BC_PARKS_TEST_RESOURCE_LOCATION_ID, target.catalogRef.resourceLocationId)
         }
 
     @Test

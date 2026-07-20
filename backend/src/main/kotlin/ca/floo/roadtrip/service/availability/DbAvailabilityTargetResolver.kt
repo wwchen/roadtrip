@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.availability.CatalogCampsiteRef
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
@@ -120,7 +121,7 @@ internal class DbAvailabilityTargetResolver(
             is BookingProviderRef.Aspira ->
                 CatalogCampsiteRef(
                     campsiteId = campsite.id,
-                    vendorId = campsite.bookingVendorId(parentRef),
+                    vendorId = campsite.aspiraCatalogResourceId(parentRef),
                     mapId = (campsiteRef as? BookingProviderRef.Aspira)?.mapId ?: parentRef.mapId,
                     resourceLocationId = (campsiteRef as? BookingProviderRef.Aspira)?.resourceLocationId ?: parentRef.resourceLocationId,
                 )
@@ -159,3 +160,10 @@ private fun Campsite.bookingVendorId(parentRef: BookingProviderRef): String =
     bookingProviderRef
         ?.takeIf { bookingProvider == parentRef.provider.id }
         ?: dataProviderRef.serialize()
+
+private fun Campsite.aspiraCatalogResourceId(parentRef: BookingProviderRef): String =
+    when (val ref = dataProviderRef) {
+        is DataProviderRef.AspiraCampsite -> ref.resourceLocationId.toString()
+        is DataProviderRef.BcParksCampsite -> ref.resourceLocationId.toString()
+        else -> bookingVendorId(parentRef)
+    }

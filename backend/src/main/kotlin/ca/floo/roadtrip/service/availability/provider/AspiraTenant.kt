@@ -23,6 +23,12 @@ data class AspiraTenant(
     val host: String,
     val vendorCode: String,
     val bookingHorizonDays: Int,
+    val mapResourceCodeFamily: AspiraMapResourceCodeFamily = AspiraMapResourceCodeFamily.RESOURCE,
     val bookingSystemLabel: String = "Aspira NextGen",
     val ctaLabel: String? = null,
 )
+
+enum class AspiraMapResourceCodeFamily {
+    RESOURCE,
+    MAP,
+}

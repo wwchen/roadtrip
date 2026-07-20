@@ -180,10 +180,11 @@ Map and map-link status codes (see `AspiraStatus.kt`):
 | 7 | available |
 | unknown | unknown |
 
-Resource rows use a different code family (see
-`AspiraResourceAvailability.kt`): `0` is bookable, nonzero codes are not
+Resource rows are tenant-specific. Parks Canada resource rows use
+`AspiraResourceAvailability.kt`: `0` is bookable, nonzero codes are not
 bookable for the requested date/equipment search, and a missing availability
-field is stored as an internal unknown sentinel.
+field is stored as an internal unknown sentinel. BC Parks resource rows use
+the same code family as map rows; this is configured on `AspiraTenant`.
 
 Used for: drawer week grid, bulk score endpoint, alert poller. Called
 at request time by `AspiraAvailabilityClient`; not captured by an

@@ -71,6 +71,7 @@ class AspiraAvailabilityProvider(
                 startDate = startDate,
                 endDate = endDate,
                 campsiteVendor = tenant.vendorCode,
+                mapResourceCodeFamily = tenant.mapResourceCodeFamily,
             )
         }
     }
@@ -114,6 +115,7 @@ class AspiraAvailabilityProvider(
                     campsites = targets,
                     startDate = startDate,
                     endDate = endDate,
+                    mapResourceCodeFamily = tenant.mapResourceCodeFamily,
                 )
             }
         }
