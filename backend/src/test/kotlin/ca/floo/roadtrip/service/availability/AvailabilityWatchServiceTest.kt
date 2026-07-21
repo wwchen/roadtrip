@@ -57,7 +57,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 name = "Upper Pines",
                 lon = -119.56,
                 lat = 37.74,
-                source = "test",
+                source = "recgov",
                 providerRefJson = """{"recgov_id": "$campgroundId"}""",
                 bookingProvider = "recgov",
                 bookingProviderRef = campgroundId,

@@ -99,6 +99,12 @@ class AvailabilityBookingTargetResolverTest {
 
         override fun isEnabled(): Boolean = true
 
+        override fun parentRefFor(campground: Campground): BookingProviderRef? =
+            when (id) {
+                BookingProvider.CAMPFLARE -> BookingProviderRef.Campflare(TEST_CAMPFLARE_PARENT_ID)
+                else -> super.parentRefFor(campground)
+            }
+
         override suspend fun availability(
             campground: Campground,
             startDate: LocalDate,

@@ -147,7 +147,11 @@ class ReserveCaliforniaAvailabilityProvider(
             ?: throw AvailabilityProviderError.WrongRefType(id.name.lowercase(), campground.bookingProvider ?: "null")
     }
 
-    private fun observedAt(grids: List<ReserveCaliforniaGridAvailability>): Instant = grids.firstOrNull()?.observedAt ?: Instant.now(clock)
+    private fun observedAt(grids: List<ReserveCaliforniaGridAvailability>): Instant =
+        grids
+            .firstOrNull { it.statuses.isNotEmpty() }
+            ?.observedAt
+            ?: Instant.now(clock)
 
     private suspend fun <T> runWithErrorMapping(block: suspend () -> T): T =
         try {

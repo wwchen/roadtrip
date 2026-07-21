@@ -1,8 +1,10 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.client.reservecalifornia.HttpReserveCaliforniaAvailabilityClient
+import ca.floo.roadtrip.client.reservecalifornia.ReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.availability.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
@@ -129,7 +131,21 @@ class ReserveCaliforniaAvailabilityProviderTest {
     fun `catalog availability uses provider clock when no facility observations exist`() =
         runBlocking {
             val fixed = Instant.parse("2026-06-22T12:00:00Z")
-            val availabilityClient = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
+            val availabilityClient =
+                object : ReserveCaliforniaAvailabilityClient {
+                    override suspend fun fetchGrid(
+                        facilityId: Long,
+                        startDate: LocalDate,
+                        endDate: LocalDate,
+                        minDate: LocalDate,
+                        maxDate: LocalDate,
+                    ): ReserveCaliforniaGridAvailability =
+                        ReserveCaliforniaGridAvailability(
+                            facilityId = facilityId,
+                            observedAt = Instant.EPOCH,
+                            statuses = emptyMap(),
+                        )
+                }
             val provider =
                 ReserveCaliforniaAvailabilityProvider(
                     availabilityClient = availabilityClient,
@@ -139,7 +155,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
 
             val batch =
                 provider.catalogAvailability(
-                    campground = testCampground(bookingProvider = "reservecalifornia", bookingProviderRef = "690:"),
+                    campground = testCampground(bookingProvider = "reservecalifornia", bookingProviderRef = "690:611"),
                     campsites =
                         listOf(
                             campsiteFixture(id = 43793, vendor = "reservecalifornia", vendorId = "43793"),

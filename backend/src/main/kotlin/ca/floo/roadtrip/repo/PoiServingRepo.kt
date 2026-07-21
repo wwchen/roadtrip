@@ -194,8 +194,8 @@ internal class PoiServingRepo(
                 .orEmpty()
         val args =
             buildList<Any> {
-                addAll(patterns)
                 addAll(providerFilter.params)
+                addAll(patterns)
                 addAll(distinctCategories)
                 add(prefix)
                 add(limit)
