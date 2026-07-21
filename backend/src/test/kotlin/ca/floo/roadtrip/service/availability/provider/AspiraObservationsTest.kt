@@ -4,25 +4,47 @@ import ca.floo.roadtrip.client.aspira.AspiraAvailability
 import ca.floo.roadtrip.client.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.aspira.AspiraOccupancy
 import ca.floo.roadtrip.client.aspira.AspiraResourceOccupancy
+import ca.floo.roadtrip.fixtures.campsiteFixture
 import ca.floo.roadtrip.model.availability.AvailabilityStatus
+import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.Campsite
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.support.AspiraException
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
 private const val BC_PARKS_HOST = "camping.bcparks.ca"
-private const val BC_PARKS_TEST_MAP_ID = -2147483460
+private const val BC_PARKS_TEST_MAP_ID = -2147483460L
 private const val BC_PARKS_TEST_CAMPSITE_ID = 415777L
 private const val BC_PARKS_TEST_RESOURCE_ID = "-2147477118"
 
+private const val PC_HOST = "reservation.pc.gc.ca"
+private const val WA_HOST = "washington.goingtocamp.com"
+
 class AspiraObservationsTest {
+    private val tenants =
+        mapOf(
+            "pc" to AspiraTenant(host = PC_HOST, vendorCode = "aspira_pc", bookingHorizonDays = 365),
+            "wa" to AspiraTenant(host = WA_HOST, vendorCode = "aspira_wa", bookingHorizonDays = 365),
+            "bc" to
+                AspiraTenant(
+                    host = BC_PARKS_HOST,
+                    vendorCode = "aspira_bc",
+                    bookingHorizonDays = 365,
+                    mapResourceCodeFamily = AspiraMapResourceCodeFamily.MAP,
+                ),
+        )
+
     @Test
     fun `aspira upstream mapper uses availability error dto renderer`() {
         val (status, error) = mapAspiraUpstreamError(AspiraException("WAF challenge", httpStatus = 503))
@@ -53,23 +75,18 @@ class AspiraObservationsTest {
                     },
                 )
 
+            val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
             val dto =
                 availabilityResponseFromObservations(
-                    fetchAspiraAvailabilityObservations(
-                        client = client,
-                        host = "camping.bcparks.ca",
-                        mapId = -2147483516,
+                    provider.availability(
+                        campground = aspiraCampground("bc", BC_PARKS_TEST_MAP_ID),
                         startDate = LocalDate.parse("2026-07-01"),
                         endDate = LocalDate.parse("2026-07-02"),
-                        campsiteVendor = "aspira_bc",
                     ),
                 )
 
             assertEquals(AvailabilityStatus.UNKNOWN, dto.availability.single().status)
-            assertEquals(
-                emptyList(),
-                dto.availability.single().availableCampsiteIds,
-            )
+            assertEquals(emptyList(), dto.availability.single().availableCampsiteIds)
         }
 
     @Test
@@ -108,29 +125,26 @@ class AspiraObservationsTest {
                     },
                 )
 
+            val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
+            val campsites =
+                listOf(
+                    aspiraCampsite(1, "a"),
+                    aspiraCampsite(2, "b"),
+                    aspiraCampsite(3, "c"),
+                    aspiraCampsite(4, "missing"),
+                )
             val dto =
                 availabilityResponseFromObservations(
-                    fetchAspiraCatalogObservations(
-                        client = client,
-                        host = "washington.goingtocamp.com",
-                        parentMapId = -999,
-                        campsites =
-                            listOf(
-                                AspiraCatalogCampsite(1, "a", -101),
-                                AspiraCatalogCampsite(2, "b", -101),
-                                AspiraCatalogCampsite(3, "c", -202),
-                                AspiraCatalogCampsite(4, "missing", -202),
-                            ),
+                    provider.catalogAvailability(
+                        campground = aspiraCampground("wa", -999),
+                        campsites = campsites,
                         startDate = LocalDate.parse("2026-07-01"),
                         endDate = LocalDate.parse("2026-07-03"),
                     ),
                 )
 
             assertEquals((-999).toString(), dto.mapId)
-            assertEquals(
-                listOf(1L, 3L),
-                dto.availability[0].availableCampsiteIds,
-            )
+            assertEquals(listOf(1L, 3L), dto.availability[0].availableCampsiteIds)
             assertEquals(4, dto.availability[0].campsiteStatuses!!.size)
             assertEquals(4, dto.availability[1].campsiteStatuses!!.size)
         }
@@ -155,18 +169,18 @@ class AspiraObservationsTest {
                     },
                 )
 
+            val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
+            val campsites =
+                listOf(
+                    aspiraCampsite(1, "available"),
+                    aspiraCampsite(2, "unavailable"),
+                    aspiraCampsite(3, "blocked"),
+                )
             val dto =
                 availabilityResponseFromObservations(
-                    fetchAspiraCatalogObservations(
-                        client = client,
-                        host = "reservation.pc.gc.ca",
-                        parentMapId = -999,
-                        campsites =
-                            listOf(
-                                AspiraCatalogCampsite(1, "available", -101),
-                                AspiraCatalogCampsite(2, "unavailable", -101),
-                                AspiraCatalogCampsite(3, "blocked", -101),
-                            ),
+                    provider.catalogAvailability(
+                        campground = aspiraCampground("pc", -999),
+                        campsites = campsites,
                         startDate = LocalDate.parse("2026-07-09"),
                         endDate = LocalDate.parse("2026-07-10"),
                     ),
@@ -201,19 +215,26 @@ class AspiraObservationsTest {
                     },
                 )
 
+            val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
+            val campsites =
+                listOf(
+                    aspiraCampsite(
+                        BC_PARKS_TEST_CAMPSITE_ID,
+                        BC_PARKS_TEST_RESOURCE_ID,
+                        dataProviderRef =
+                            DataProviderRef.BcParksCampsite(
+                                tenant = "bc",
+                                resourceLocationId = BC_PARKS_TEST_RESOURCE_ID.toLong(),
+                            ),
+                    ),
+                )
             val dto =
                 availabilityResponseFromObservations(
-                    fetchAspiraCatalogObservations(
-                        client = client,
-                        host = BC_PARKS_HOST,
-                        parentMapId = BC_PARKS_TEST_MAP_ID,
-                        campsites =
-                            listOf(
-                                AspiraCatalogCampsite(BC_PARKS_TEST_CAMPSITE_ID, BC_PARKS_TEST_RESOURCE_ID, BC_PARKS_TEST_MAP_ID),
-                            ),
+                    provider.catalogAvailability(
+                        campground = aspiraCampground("bc", BC_PARKS_TEST_MAP_ID),
+                        campsites = campsites,
                         startDate = LocalDate.parse("2026-07-20"),
                         endDate = LocalDate.parse("2026-07-23"),
-                        mapResourceCodeFamily = AspiraMapResourceCodeFamily.MAP,
                     ),
                 )
 
@@ -237,16 +258,13 @@ class AspiraObservationsTest {
                     },
                 )
 
+            val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
+            val campsites = listOf(aspiraCampsite(100, "100"))
             val dto =
                 availabilityResponseFromObservations(
-                    fetchAspiraCatalogObservations(
-                        client = client,
-                        host = "reservation.pc.gc.ca",
-                        parentMapId = -999,
-                        campsites =
-                            listOf(
-                                AspiraCatalogCampsite(100, "100", -101),
-                            ),
+                    provider.catalogAvailability(
+                        campground = aspiraCampground("pc", -999),
+                        campsites = campsites,
                         startDate = LocalDate.parse("2026-07-01"),
                         endDate = LocalDate.parse("2026-07-02"),
                     ),
@@ -264,7 +282,7 @@ class AspiraObservationsTest {
         runBlocking {
             val client =
                 fakeAspiraClient(
-                    onFetchOccupancy = { _, resourceLocationId, start, _ ->
+                    onFetchOccupancy = { _, _, start, _ ->
                         val rows =
                             when (start) {
                                 LocalDate.parse("2026-06-17") ->
@@ -281,27 +299,26 @@ class AspiraObservationsTest {
                                     )
                             }
                         AspiraOccupancy(
-                            resourceLocationId = resourceLocationId,
+                            resourceLocationId = -123,
                             resourceOccupancy = rows,
                         )
                     },
                 )
 
+            val provider = AspiraAvailabilityProvider(tenants, client, enabled = true, occupancyEnabled = true)
+            val campsites =
+                listOf(
+                    aspiraCampsite(100, "100", DataProviderRef.AspiraCampsite(tenant = "pc", resourceLocationId = 100)),
+                    aspiraCampsite(200, "200", DataProviderRef.AspiraCampsite(tenant = "pc", resourceLocationId = 200)),
+                    aspiraCampsite(300, "300", DataProviderRef.AspiraCampsite(tenant = "pc", resourceLocationId = 300)),
+                )
             val dto =
                 availabilityResponseFromObservations(
-                    fetchAspiraCatalogOccupancyObservations(
-                        client = client,
-                        host = "reservation.pc.gc.ca",
-                        parentMapId = -999,
-                        resourceLocationId = -123,
-                        campsites =
-                            listOf(
-                                AspiraCatalogCampsite(100, "100", -101),
-                                AspiraCatalogCampsite(200, "200", -101),
-                                AspiraCatalogCampsite(300, "300", -101),
-                            ),
-                        today = LocalDate.parse("2026-06-17"),
-                        days = 2,
+                    provider.catalogAvailability(
+                        campground = aspiraCampground("pc", -999, resourceLocationId = -123),
+                        campsites = campsites,
+                        startDate = LocalDate.parse("2026-06-17"),
+                        endDate = LocalDate.parse("2026-06-19"),
                     ),
                 )
 
@@ -309,6 +326,65 @@ class AspiraObservationsTest {
             assertEquals(AvailabilityStatus.RESERVED, dto.availability[1].status)
         }
 }
+
+private fun aspiraCampground(
+    tenant: String,
+    mapId: Long,
+    resourceLocationId: Long? = null,
+): Campground =
+    Campground(
+        id = 1L,
+        name = "Test Aspira Campground",
+        status = null,
+        statusDescription = null,
+        kind = null,
+        shortDescription = null,
+        mediumDescription = null,
+        longDescription = null,
+        location = JsonNull,
+        defaultCampsiteSchedule = JsonNull,
+        amenities = JsonNull,
+        maxRvLength = null,
+        maxTrailerLength = null,
+        hasPullThroughSites = null,
+        bigRigFriendly = null,
+        reservationUrl = null,
+        links = JsonNull,
+        photos = JsonNull,
+        alerts = JsonNull,
+        price = JsonNull,
+        cellService = JsonNull,
+        management = JsonNull,
+        contact = JsonNull,
+        connections = JsonNull,
+        metadata = JsonNull,
+        sourcePayload = JsonNull,
+        createdAt = Instant.EPOCH,
+        updatedAt = Instant.EPOCH,
+        deletedAt = null,
+        dataProviderRef =
+            DataProviderRef.Aspira(transactionLocationId = mapId, mapId = mapId),
+        bookingProvider = "aspira",
+        bookingProviderRef =
+            buildString {
+                append("aspira:$tenant:$mapId")
+                if (resourceLocationId != null) append(":$resourceLocationId")
+            },
+    )
+
+private fun aspiraCampsite(
+    id: Long,
+    resourceId: String,
+    dataProviderRef: DataProviderRef = DataProviderRef.AspiraCampsite(tenant = "pc", resourceLocationId = resourceId.toLongOrNull() ?: id),
+): Campsite =
+    campsiteFixture(
+        id = id,
+        vendor = "aspira",
+        vendorId = resourceId,
+        dataProviderRef = dataProviderRef,
+        bookingProvider = "aspira",
+        bookingProviderRef = resourceId,
+    )
 
 private fun fakeAspiraClient(
     onFetch: (suspend (String, Int, LocalDate, LocalDate) -> AspiraAvailability)? = null,
