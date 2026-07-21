@@ -90,48 +90,32 @@ class AspiraObservationsTest {
         }
 
     @Test
-    fun `aspira catalog availability aggregates linked resources across child maps`() =
+    fun `aspira catalog availability aggregates linked resources on the parent map`() =
         runBlocking {
             val client =
                 fakeAspiraClient(
                     onFetch = { _, mapId, _, _ ->
-                        when (mapId) {
-                            -101 ->
-                                AspiraAvailability(
-                                    mapId = mapId,
-                                    parkRollup = emptyList(),
-                                    byMapLink = emptyMap(),
-                                    byResource =
-                                        mapOf(
-                                            "a" to listOf(0, 0),
-                                            "b" to listOf(1, 0),
-                                        ),
-                                )
-                            -202 ->
-                                AspiraAvailability(
-                                    mapId = mapId,
-                                    parkRollup = emptyList(),
-                                    byMapLink = emptyMap(),
-                                    byResource = mapOf("c" to listOf(0, 1)),
-                                )
-                            else ->
-                                AspiraAvailability(
-                                    mapId = mapId,
-                                    parkRollup = emptyList(),
-                                    byMapLink = emptyMap(),
-                                    byResource = emptyMap(),
-                                )
-                        }
+                        AspiraAvailability(
+                            mapId = mapId,
+                            parkRollup = emptyList(),
+                            byMapLink = emptyMap(),
+                            byResource =
+                                mapOf(
+                                    "1" to listOf(0, 0),
+                                    "2" to listOf(1, 0),
+                                    "3" to listOf(0, 1),
+                                ),
+                        )
                     },
                 )
 
             val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
             val campsites =
                 listOf(
-                    aspiraCampsite(1, "a"),
-                    aspiraCampsite(2, "b"),
-                    aspiraCampsite(3, "c"),
-                    aspiraCampsite(4, "missing"),
+                    aspiraCampsite(1, "1"),
+                    aspiraCampsite(2, "2"),
+                    aspiraCampsite(3, "3"),
+                    aspiraCampsite(4, "4"),
                 )
             val dto =
                 availabilityResponseFromObservations(
@@ -161,9 +145,9 @@ class AspiraObservationsTest {
                             byMapLink = emptyMap(),
                             byResource =
                                 mapOf(
-                                    "available" to listOf(0),
-                                    "unavailable" to listOf(1),
-                                    "blocked" to listOf(4),
+                                    "1" to listOf(0),
+                                    "2" to listOf(1),
+                                    "3" to listOf(4),
                                 ),
                         )
                     },
@@ -172,9 +156,9 @@ class AspiraObservationsTest {
             val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
             val campsites =
                 listOf(
-                    aspiraCampsite(1, "available"),
-                    aspiraCampsite(2, "unavailable"),
-                    aspiraCampsite(3, "blocked"),
+                    aspiraCampsite(1, "1"),
+                    aspiraCampsite(2, "2"),
+                    aspiraCampsite(3, "3"),
                 )
             val dto =
                 availabilityResponseFromObservations(
@@ -367,7 +351,7 @@ private fun aspiraCampground(
         bookingProvider = "aspira",
         bookingProviderRef =
             buildString {
-                append("aspira:$tenant:$mapId")
+                append("$tenant:$mapId:$mapId")
                 if (resourceLocationId != null) append(":$resourceLocationId")
             },
     )

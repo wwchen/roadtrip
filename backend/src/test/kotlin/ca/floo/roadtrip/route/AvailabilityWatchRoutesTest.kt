@@ -1003,7 +1003,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 name = name,
                 lon = -119.56,
                 lat = 37.74,
-                source = "test",
+                source = "recgov",
                 providerRefJson = providerRefJson,
                 bookingProvider = bookingProvider,
                 bookingProviderRef = bookingProviderRef,
@@ -1016,7 +1016,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         siteType: String? = null,
     ): Long =
         ctx.seedCampsite(
-            campgroundId = ctx.seedCampground(name = "Route Watch Campground", source = "test", sourceId = "route-watch-$vendorId"),
+            campgroundId = ctx.seedCampground(name = "Route Watch Campground", source = "recgov", sourceId = "route-watch-$vendorId"),
             vendor = "recgov",
             vendorId = vendorId,
             name = name ?: "Site $vendorId",

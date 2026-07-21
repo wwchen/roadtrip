@@ -216,7 +216,7 @@ class PoiServiceTest : SharedDbTest() {
 
     private fun poiService(): PoiService =
         PoiService(
-            poiRepo = PoiServingRepo(ctx, enabledDataProviders = setOf(SOURCE, "campflare", "recgov", "test")),
+            poiRepo = PoiServingRepo(ctx, enabledDataProviders = setOf(SOURCE, "campflare", "recgov")),
             detailServices =
                 listOf(
                     CampgroundService(

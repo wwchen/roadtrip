@@ -56,7 +56,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
 
     private fun poiService(): PoiService =
         PoiService(
-            poiRepo = PoiServingRepo(ctx, enabledDataProviders = emptySet()),
+            poiRepo = PoiServingRepo(ctx, enabledDataProviders = setOf("recgov")),
             detailServices =
                 listOf(
                     CampgroundService(
@@ -173,7 +173,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
                         lon = -122.4,
                         lat = 47.7,
                         category = "campground",
-                        source = "alternate-campgrounds",
+                        source = "recgov",
                         providerRefJson = """{"recgov_id":"12345"}""",
                     ),
                     row(
@@ -374,7 +374,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
         lon: Double,
         lat: Double,
         category: String,
-        source: String = "test",
+        source: String = "recgov",
         providerRefJson: String? = null,
         agency: String? = null,
     ): TestRow =

@@ -3,13 +3,15 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
-import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
@@ -24,6 +26,7 @@ import kotlin.test.assertEquals
 
 private const val ASPIRA_TEST_BOOKING_HORIZON_DAYS = 365
 private const val ASPIRA_TEST_MAX_POLL_WINDOW_DAYS = 30
+private const val BC_PARKS_TEST_CAMPGROUND_DATA_REF = "-2147483534:-2147483460"
 private const val BC_PARKS_TEST_PARENT_BOOKING_REF = "bc:-2147483534:-2147483460:-2147483560"
 private const val BC_PARKS_TEST_CAMPSITE_DATA_REF = "bc:-2147477118"
 private const val BC_PARKS_TEST_RESOURCE_ID = "-2147477118"
@@ -41,7 +44,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 name = "Upper Pines",
                 lon = -119.56,
                 lat = 37.74,
-                source = "test",
+                source = "recgov",
                 providerRefJson = campgroundId?.let { """{"recgov_id": "$it"}""" },
                 bookingProvider = campgroundId?.let { "recgov" },
                 bookingProviderRef = campgroundId,
@@ -96,6 +99,14 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
 
         override fun isEnabled(): Boolean = enabled
 
+        override fun supportsCampground(campground: Campground): Boolean =
+            enabled && campground.dataProviderRef is DataProviderRef.Campflare
+
+        override fun parentRefFor(campground: Campground): BookingProviderRef? {
+            val ref = campground.dataProviderRef as? DataProviderRef.Campflare ?: return null
+            return BookingProviderRef.Campflare(ref.id)
+        }
+
         override suspend fun availability(
             campground: Campground,
             startDate: LocalDate,
@@ -119,6 +130,13 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
+
+        override fun vendorSiteIdFor(campsite: Campsite): String =
+            when (val ref = campsite.dataProviderRef) {
+                is DataProviderRef.AspiraCampsite -> ref.resourceLocationId.toString()
+                is DataProviderRef.BcParksCampsite -> ref.resourceLocationId.toString()
+                else -> campsite.dataProviderRef.serialize()
+            }
     }
 
     private fun resolverFor(
@@ -160,7 +178,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val poi =
                 ctx
                     .seedCatalogPoi(
-                        sourceId = "upper-pines-campflare",
+                        sourceId = "upper-pines-campground-447",
                         name = "Upper Pines",
                         lon = -119.56,
                         lat = 37.74,
@@ -196,8 +214,8 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
     @Test
     fun `resolve translates catalog ref through matching campsite booking ref`() =
         runBlocking {
-            val poiId = seedDualVendorPoi()
-            val campflareId = campgroundIdFor(poiId, "campflare")
+            val poiId = seedCampflarePoiWithRecgovBooking()
+            val campflareId = campgroundIdFor(poiId)
             val campsiteId =
                 ctx.seedCampsite(
                     campgroundId = campflareId,
@@ -231,7 +249,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val poi =
                 ctx
                     .seedCatalogPoi(
-                        sourceId = "bc-parks-oceanfront-sites",
+                        sourceId = BC_PARKS_TEST_CAMPGROUND_DATA_REF,
                         name = "Oceanfront Sites",
                         lon = -123.8,
                         lat = 49.1,
@@ -262,52 +280,22 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         }
 
     @Test
-    fun `findProviderRefCandidates enumerates every campground linked to a POI`() {
-        val poiId =
-            ctx
-                .fetchOne(
-                    """
-                    INSERT INTO pois (poi_type, geom)
-                    VALUES ('campground', ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326))
-                    RETURNING id
-                    """.trimIndent(),
-                )!!
-                .get("id", Long::class.java)
-
-        val cg1 =
-            ctx.seedCampground(
-                name = "Upper Pines (campflare)",
-                source = "campflare",
-                sourceId = "upper-pines-campground-447",
-                bookingProvider = "campflare",
-                bookingProviderRef = "upper-pines-campground-447",
-                sourcePayloadJson = """{"campflare_id":"upper-pines-campground-447"}""",
-            )
-        val cg2 =
-            ctx.seedCampground(
-                name = "Upper Pines (recgov)",
-                source = "recgov",
-                sourceId = "232447",
-                bookingProvider = "recgov",
-                bookingProviderRef = "232447",
-                sourcePayloadJson = """{"recgov_id":"232447"}""",
-            )
-        ctx.execute("INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (?, ?)", poiId, cg1)
-        ctx.execute("INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (?, ?)", poiId, cg2)
+    fun `findProviderRefCandidates resolves the campground booking ref linked to a POI`() {
+        val poiId = seedCampflarePoiWithRecgovBooking()
 
         val resolver = DbRefResolver(ctx)
         val candidates = resolver.resolve<RefValue.CampgroundBookingRef>(RefValue.PoiId(poiId))
         assertEquals(
-            listOf("campflare", "recgov"),
-            candidates.map { it.ref.provider.id }.sorted(),
+            listOf("recgov"),
+            candidates.map { it.ref.provider.id },
         )
     }
 
     @Test
     fun `resolve falls back to recgov when campflare provider is disabled`() =
         runBlocking {
-            val poiId = seedDualVendorPoi()
-            val campflareId = campgroundIdFor(poiId, "campflare")
+            val poiId = seedCampflarePoiWithRecgovBooking()
+            val campflareId = campgroundIdFor(poiId)
             val campsiteId =
                 ctx.seedCampsite(
                     campgroundId = campflareId,
@@ -338,10 +326,10 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         }
 
     @Test
-    fun `resolve returns ordered candidate list for a dual-vendor POI`() =
+    fun `resolve returns ordered candidate list for a campground with catalog and booking refs`() =
         runBlocking {
-            val poiId = seedDualVendorPoi()
-            val campflareId = campgroundIdFor(poiId, "campflare")
+            val poiId = seedCampflarePoiWithRecgovBooking()
+            val campflareId = campgroundIdFor(poiId)
             val campsiteId =
                 ctx.seedCampsite(
                     campgroundId = campflareId,
@@ -374,8 +362,8 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
     @Test
     fun `resolve skips candidates whose provider is not registered`() =
         runBlocking {
-            val poiId = seedDualVendorPoi()
-            val campflareId = campgroundIdFor(poiId, "campflare")
+            val poiId = seedCampflarePoiWithRecgovBooking()
+            val campflareId = campgroundIdFor(poiId)
             val campsiteId =
                 ctx.seedCampsite(
                     campgroundId = campflareId,
@@ -403,8 +391,8 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
     @Test
     fun `resolve skips disabled provider candidates and falls back`() =
         runBlocking {
-            val poiId = seedDualVendorPoi()
-            val campflareId = campgroundIdFor(poiId, "campflare")
+            val poiId = seedCampflarePoiWithRecgovBooking()
+            val campflareId = campgroundIdFor(poiId)
             val campsiteId =
                 ctx.seedCampsite(
                     campgroundId = campflareId,
@@ -465,54 +453,16 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals(null, target)
         }
 
-    private fun seedDualVendorPoi(): Long {
-        val poiId =
-            ctx
-                .fetchOne(
-                    """
-                    INSERT INTO pois (poi_type, geom)
-                    VALUES ('campground', ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326))
-                    RETURNING id
-                    """.trimIndent(),
-                )!!
-                .get("id", Long::class.java)
-        val cg1 =
-            ctx.seedCampground(
-                name = "Upper Pines (campflare)",
-                source = "campflare",
+    private fun seedCampflarePoiWithRecgovBooking(): Long =
+        ctx
+            .seedCatalogPoi(
                 sourceId = "upper-pines-campground-447",
-                bookingProvider = "campflare",
-                bookingProviderRef = "upper-pines-campground-447",
-                sourcePayloadJson = """{"campflare_id":"upper-pines-campground-447"}""",
-            )
-        val cg2 =
-            ctx.seedCampground(
-                name = "Upper Pines (recgov)",
-                source = "recgov",
-                sourceId = "232447",
+                name = "Upper Pines",
+                lon = -119.56,
+                lat = 37.74,
+                source = "campflare",
+                providerRefJson = """{"campflare_id":"upper-pines-campground-447"}""",
                 bookingProvider = "recgov",
                 bookingProviderRef = "232447",
-                sourcePayloadJson = """{"recgov_id":"232447"}""",
-            )
-        ctx.execute("INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (?, ?)", poiId, cg1)
-        ctx.execute("INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (?, ?)", poiId, cg2)
-        return poiId
-    }
-
-    private fun campgroundIdFor(
-        poiId: Long,
-        source: String,
-    ): Long =
-        ctx
-            .fetchOne(
-                """
-                SELECT cg.id
-                FROM campgrounds cg
-                JOIN poi_campgrounds pc ON pc.campground_id = cg.id
-                WHERE pc.poi_id = ? AND cg.data_provider = ?
-                """.trimIndent(),
-                poiId,
-                source,
-            )!!
-            .get("id", Long::class.java)
+            ).poiId
 }

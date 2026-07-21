@@ -58,7 +58,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
                 name = "Upper Pines",
                 lon = -119.56,
                 lat = 37.74,
-                source = "test",
+                source = "recgov",
             ).poiId
 
     /** Seeds an active poller for (recgov, [parentRef]) with one attached watch. */

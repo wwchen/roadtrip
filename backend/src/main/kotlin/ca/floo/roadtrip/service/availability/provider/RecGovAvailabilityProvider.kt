@@ -157,6 +157,8 @@ class RecGovAvailabilityProvider(
 internal fun mapRecgovUpstreamError(e: Throwable): Pair<HttpStatusCode, AvailabilityErrorDto> {
     val msg = e.message.orEmpty()
     return when {
+        e is AvailabilityProviderError.RateLimited || msg == "rate_limited" ->
+            HttpStatusCode.ServiceUnavailable to availabilityErrorDto("rate_limited")
         msg.contains("429") ->
             HttpStatusCode.ServiceUnavailable to availabilityErrorDto("rate_limited")
         else ->

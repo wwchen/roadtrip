@@ -1,7 +1,10 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.fixtures.CatalogPoiFixture
+import ca.floo.roadtrip.model.domain.provider.DataProvider
 import org.jooq.DSLContext
+
+private val defaultTestDataProvider = DataProvider.RECGOV.id
 
 @Suppress("UnusedReceiverParameter")
 fun DSLContext.refreshCanonicalCatalogViews() {
@@ -38,7 +41,7 @@ fun DSLContext.seedCatalogPoi(
     lon: Double,
     lat: Double,
     poiType: String = "campground",
-    source: String = "test",
+    source: String = defaultTestDataProvider,
     subcategory: String? = null,
     agency: String? = null,
     region: String? = "BC",
@@ -152,7 +155,7 @@ fun DSLContext.seedCatalogPoi(
 
 fun DSLContext.seedCampground(
     name: String = "Upper Pines",
-    source: String = "test",
+    source: String = defaultTestDataProvider,
     sourceId: String = "campground-$name",
     kind: String = "campground",
     agency: String? = null,
