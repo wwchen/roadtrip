@@ -249,6 +249,7 @@ jooq {
                             listOf(
                                 "alerts",
                                 "api_cache",
+                                "app_user",
                                 "availability",
                                 "availability_fetch_call",
                                 "availability_poller",
@@ -276,6 +277,9 @@ jooq {
                                 "schedules",
                                 "settings",
                                 "tesla_superchargers",
+                                "user_identity",
+                                "user_role",
+                                "user_session",
                                 "vendor_refs",
                             ).joinToString("|")
                         excludes = "spatial_ref_sys|geometry_columns|geography_columns|" +
