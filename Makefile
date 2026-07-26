@@ -13,7 +13,11 @@ PROD_COMPOSE_PROFILES ?= --profile tunnel --profile pois --profile recgov-compan
 LOCAL_COMPOSE_PROFILES ?= --profile pois --profile recgov-companion
 PROD_COMPOSE := docker compose $(PROD_COMPOSE_PROFILES)
 LOCAL_COMPOSE := docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml $(LOCAL_COMPOSE_PROFILES)
-OBSERVABILITY_SERVICES := grafana alloy tempo prometheus
+# Every service here bind-mounts its config, so `up -d` alone won't reload it.
+# Loki was missing: it mounts grafana/loki/loki-config.yml the same way the other
+# four mount theirs, so a retention or limits change would deploy without ever
+# taking effect.
+OBSERVABILITY_SERVICES := grafana alloy tempo prometheus loki
 
 help:
 	@echo "Targets:"
