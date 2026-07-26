@@ -1,7 +1,9 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.CellTransition
+import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
+import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
@@ -13,10 +15,16 @@ import java.time.OffsetDateTime
 private const val BACKOFF_BASE_MULTIPLIER = 2.0
 private const val BACKOFF_CEILING_SEC = 3_600L
 
+// Mirrors the availability_run.status CHECK constraint (V16), so the metric
+// label and the column can't drift.
+private const val RUN_STATUS_COMPLETED = "completed"
+private const val RUN_STATUS_FAILED = "failed"
+
 internal class AvailabilityRunService(
     private val runRepo: AvailabilityRunRepo,
     private val availabilityRepo: AvailabilityRepo,
     private val fetchCallRepo: AvailabilityFetchCallRepo,
+    private val metrics: RoadtripMetrics = RoadtripMetrics.NoOp,
     private val clock: Clock = Clock.systemUTC(),
 ) {
     data class RunHandle(
@@ -55,9 +63,11 @@ internal class AvailabilityRunService(
         val durationMs = durationMs(handle.startedAt, completedAt)
         return if (failure != null) {
             runRepo.fail(handle.runId, error = failure.outcome.name.lowercase(), completedAt = completedAt, durationMs = durationMs)
+            metrics.availabilityRunFinished(RUN_STATUS_FAILED, durationMs)
             RunOutcome.Failed(failure.outcome.name.lowercase())
         } else {
             runRepo.complete(handle.runId, transitions.size, completedAt, durationMs)
+            metrics.availabilityRunFinished(RUN_STATUS_COMPLETED, durationMs)
             RunOutcome.Completed(transitions)
         }
     }
@@ -67,7 +77,9 @@ internal class AvailabilityRunService(
         error: String,
     ) {
         val completedAt = OffsetDateTime.now(clock)
-        runRepo.fail(handle.runId, error = error, completedAt = completedAt, durationMs = durationMs(handle.startedAt, completedAt))
+        val durationMs = durationMs(handle.startedAt, completedAt)
+        runRepo.fail(handle.runId, error = error, completedAt = completedAt, durationMs = durationMs)
+        metrics.availabilityRunFinished(RUN_STATUS_FAILED, durationMs)
     }
 
     fun computeNextRunAt(
@@ -120,40 +132,62 @@ internal class AvailabilityRunService(
             val key = r.provider.id to refKey
             val attempts = attemptsByGroup[key].orEmpty()
             if (attempts.isEmpty()) {
-                fetchCallRepo.record(
-                    AvailabilityFetchCallRepo.NewCall(
-                        runId = runId,
-                        provider =
-                            r.provider.id.name
-                                .lowercase(),
-                        parentRef = refKey,
-                        campsiteCount = r.campsites.size,
-                        windowStart = r.window!!.startDate,
-                        windowEnd = r.window.endDate,
-                        outcome = r.outcome.name.lowercase(),
-                        durationMs = r.durationMs,
-                        error = r.error,
-                    ),
+                recordFetchCall(
+                    runId = runId,
+                    provider = r.provider.id,
+                    parentRef = refKey,
+                    campsiteCount = r.campsites.size,
+                    window = r.window!!,
+                    outcome = r.outcome,
+                    durationMs = r.durationMs,
+                    error = r.error,
                 )
                 return@forEach
             }
             attempts.forEach { attempt ->
-                val attemptRefKey = attempt.parentRef?.let(::parentRefKey) ?: refKey
-                fetchCallRepo.record(
-                    AvailabilityFetchCallRepo.NewCall(
-                        runId = runId,
-                        provider = attempt.provider.id,
-                        parentRef = attemptRefKey,
-                        campsiteCount = r.campsites.size,
-                        windowStart = r.window!!.startDate,
-                        windowEnd = r.window.endDate,
-                        outcome = attempt.outcome.name.lowercase(),
-                        durationMs = attempt.durationMs,
-                        error = attempt.error,
-                    ),
+                recordFetchCall(
+                    runId = runId,
+                    provider = attempt.provider,
+                    parentRef = attempt.parentRef?.let(::parentRefKey) ?: refKey,
+                    campsiteCount = r.campsites.size,
+                    window = r.window!!,
+                    outcome = attempt.outcome,
+                    durationMs = attempt.durationMs,
+                    error = attempt.error,
                 )
             }
         }
+    }
+
+    /** Single write path for one upstream fetch, so the Postgres trace row and
+     *  the Prometheus counter can never disagree about what happened. The row
+     *  keeps `parent_ref` for drill-down; the metric deliberately drops it
+     *  (unbounded cardinality) and keeps only provider + outcome. */
+    private fun recordFetchCall(
+        runId: Long,
+        provider: BookingProvider,
+        parentRef: String,
+        campsiteCount: Int,
+        window: ResolvedDateWindow,
+        outcome: FetchOutcome,
+        durationMs: Int?,
+        error: String?,
+    ) {
+        val outcomeLabel = outcome.name.lowercase()
+        fetchCallRepo.record(
+            AvailabilityFetchCallRepo.NewCall(
+                runId = runId,
+                provider = provider.id,
+                parentRef = parentRef,
+                campsiteCount = campsiteCount,
+                windowStart = window.startDate,
+                windowEnd = window.endDate,
+                outcome = outcomeLabel,
+                durationMs = durationMs,
+                error = error,
+            ),
+        )
+        metrics.availabilityFetchCompleted(provider, outcomeLabel, durationMs)
     }
 
     fun nowUtc(): OffsetDateTime = OffsetDateTime.now(clock)

@@ -7,6 +7,7 @@ import ca.floo.roadtrip.config.ReadPathProviderConfig
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -185,6 +186,7 @@ val serviceModule =
                 triggerActions = get<TriggerActionRegistry>(),
                 grafanaRootUrl = config.grafana?.rootUrl,
                 appRootUrl = config.webApp?.rootUrl,
+                metrics = get<RoadtripMetrics>(),
             )
         }
 
@@ -221,6 +223,7 @@ val serviceModule =
                 runRepo = get<AvailabilityRunRepo>(),
                 availabilityRepo = get<AvailabilityRepo>(),
                 fetchCallRepo = get<AvailabilityFetchCallRepo>(),
+                metrics = get<RoadtripMetrics>(),
             )
         }
         single {
@@ -231,6 +234,7 @@ val serviceModule =
                 limiter = get<VendorRateLimiter>(),
                 alertDispatcher = get<WatchAlertDispatcher>(),
                 failoverFetcher = get<FailoverAvailabilityFetcher>(),
+                metrics = get<RoadtripMetrics>(),
             )
         }
         single(createdAtStart = true) {

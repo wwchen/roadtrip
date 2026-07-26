@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.CellTransition
 import ca.floo.roadtrip.model.domain.Campsite
+import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
@@ -51,6 +52,7 @@ internal class WatchAlertDispatcher(
     private val triggerActions: TriggerActionRegistry,
     private val grafanaRootUrl: String?,
     private val appRootUrl: String?,
+    private val metrics: RoadtripMetrics = RoadtripMetrics.NoOp,
 ) {
     suspend fun dispatch(
         liveWatches: List<AvailabilityWatchRepo.Watch>,
@@ -174,7 +176,15 @@ internal class WatchAlertDispatcher(
         // enough to satisfy `stopWhenTriggered`. `.any { it }` on a mapped
         // list evaluates every handler (no short-circuit), matching the
         // "each handler is invoked exactly once per trigger" contract.
-        val fired = handlers.map { it.fire(watch, openings) }.any { it }
+        val fired =
+            handlers
+                .map { handler ->
+                    handler.fire(watch, openings).also { delivered ->
+                        // The whole point of a watch: it is not enough that the
+                        // opening was found, the user has to have been told.
+                        metrics.watchTriggerFired(handler.kinds, delivered)
+                    }
+                }.any { it }
         if (fired && watch.stopWhenTriggered) {
             watchRepo.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE))
         }

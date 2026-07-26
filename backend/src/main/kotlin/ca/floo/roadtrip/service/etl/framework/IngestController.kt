@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.metadata.ingest.Phase
 import ca.floo.roadtrip.model.metadata.ingest.RunKind
 import ca.floo.roadtrip.model.metadata.ingest.RunOutcome
 import ca.floo.roadtrip.model.metadata.ingest.Target
+import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.IngestRunRepo
 import ca.floo.roadtrip.support.TargetBusyException
 import ca.floo.roadtrip.support.TargetNotFoundException
@@ -19,6 +20,10 @@ import kotlinx.serialization.json.Json
 import org.jooq.DSLContext
 import org.jooq.JSONB
 import org.slf4j.LoggerFactory
+
+// Terminal status reported to metrics when the run threw instead of resolving to
+// a RunOutcome status ('completed' | 'failed' | 'noop').
+private const val INGEST_STATUS_ERROR = "error"
 
 @OptIn(ExperimentalSerializationApi::class)
 private val ingestControllerJson =
@@ -45,6 +50,7 @@ class IngestController(
     private val ctx: DSLContext,
     val etl: EtlOrchestrator,
     private val importTargets: Map<String, Target>,
+    private val metrics: RoadtripMetrics = RoadtripMetrics.NoOp,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -90,7 +96,14 @@ class IngestController(
         )
 
         try {
-            return runPhases(target, kind, phases, parentId)
+            return runPhases(target, kind, phases, parentId).also {
+                metrics.ingestRunFinished(target = it.target, kind = kind.rowValue, status = it.status)
+            }
+        } catch (e: Throwable) {
+            // A throw here is a run that never reached a terminal ingest_runs
+            // status — the case a dashboard reading the table cannot see at all.
+            metrics.ingestRunFinished(target = target.name, kind = kind.rowValue, status = INGEST_STATUS_ERROR)
+            throw e
         } finally {
             synchronized(active) { active.remove(targetName) }
             mutex.unlock()
