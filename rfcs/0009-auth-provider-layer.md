@@ -49,7 +49,8 @@ RFC builds that identity and stops there.
 
 ## Goals
 
-- A user can sign in with Google, Apple, or email + password.
+- A user can sign in with Google or email + password. (Sign in with Apple is out
+  of scope — see Non-Goals and decision 21.)
 - The backend holds a first-party, revocable session; the vendor is not in the
   request path after callback.
 - A `Principal` domain type exists — `Anonymous`, `User`, `System` — and is
@@ -78,6 +79,12 @@ Deferred further out:
   multiuser there means a browser-profile pool.
 - **Anonymous-then-claim watches.** Sign-in will be required to create a watch.
 - **Organisations / teams / sharing.** Single-owner resources only.
+- **Sign in with Apple.** Costs $99/yr for the Apple Developer Program, an ES256
+  signing key that must be rotated at least every six months, and registering our
+  sending domain with Apple so alerts to Hide-My-Email relay addresses do not
+  bounce. `Auth0ClaimsDialect` already maps `apple|…` subjects and is tested, so
+  enabling it later is an Auth0 tenant change with no code change. See decision 21
+  for the one cost of waiting.
 
 ## Proposal
 
@@ -481,3 +488,4 @@ in the repo, reviewed under the fatigue of a large diff.
 | 18 | 2026-07-26 | Following from 17, a vendor's `email_verified` rigour becomes a selection criterion. | Verified-email matching is what reconnects password users, and it is the weakest of the three link paths. A provider that asserts verification loosely turns re-entry into an account-takeover path against accounts that already hold watches and notification settings. |
 | 19 | 2026-07-26 | Decision 6 (own the Apple Service ID, under our own team) is upgraded from prudent to **required**. | Apple's `sub` and Hide-My-Email relay addresses are both Apple-team-scoped. A different team at the new vendor changes both, so those users match on neither upstream subject nor email — they would silently land on new accounts with their watches apparently gone, and no way to reconcile. This is the one case where not migrating actually loses data. |
 | 20 | 2026-07-26 | **Auth0 is the identity provider.** `roadtrip.auth.provider` now defaults to `auth0` rather than `oidc`. | Cloudflare Access was considered and rejected: it gates paths absolutely, so it cannot express "public app, some actions signed in", it has no password option, and it is priced per seat for a workforce rather than open signup. Access stays where it fits — the edge rule on `/api/admin/*`. The default changes because the `oidc` fallback silently records no upstream identity, and that column cannot be backfilled. |
+| 21 | 2026-07-26 | **Sign in with Apple is out of scope.** Google and email + password only. Decisions 6 and 19 (own the Apple Service ID) are conditional on ever enabling it. | $99/yr, six-monthly signing-key rotation, and Apple-side sender registration to keep alerts to relay addresses from bouncing — for a camping tool where Google plus password should cover nearly everyone. The dialect already handles `apple\|` subjects, so turning it on later is tenant config, not code. The cost of waiting is that Hide-My-Email users cannot be linked to a pre-existing Google account (different subject, different address), so enabling it late creates more duplicate accounts than enabling it early. Note this removes the strongest single argument for an aggregator; password storage and hosted UI still carry the choice. |
