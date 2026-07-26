@@ -149,9 +149,10 @@ class UserRepo(
             displayName = record.get(APP_USER.DISPLAY_NAME),
             // An unparseable status means the CHECK constraint and this enum have
             // drifted; failing loudly beats silently treating it as active.
-            status = requireNotNull(UserStatus.parse(record.get(APP_USER.STATUS))) {
-                "unknown app_user.status '${record.get(APP_USER.STATUS)}'"
-            },
+            status =
+                requireNotNull(UserStatus.parse(record.get(APP_USER.STATUS))) {
+                    "unknown app_user.status '${record.get(APP_USER.STATUS)}'"
+                },
             roles = roles,
             createdAt = record.get(APP_USER.CREATED_AT)!!,
             updatedAt = record.get(APP_USER.UPDATED_AT)!!,
