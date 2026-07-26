@@ -107,3 +107,32 @@ jobs:
           done
           echo "health check failed: $health_url"
           exit 1
+
+      # `ps --status running` above passes for a wedged Alloy or a full Loki disk.
+      # Ask Prometheus instead. promtool ships inside the image, so this needs no
+      # published ports.
+      - name: Verify telemetry pipeline
+        run: |
+          ssh -o BatchMode=yes mini@mini-ca \
+            'set -e
+             cd ~/workspace/roadtrip
+             q() {
+               docker compose --profile tunnel --profile pois exec -T prometheus \
+                 promtool query instant http://localhost:9090 "$1" \
+                 | sed -n "s/.*=> \([0-9.]*\) @.*/\1/p" | head -1
+             }
+             # 60s agent export interval, so give a fresh stack time to fill in.
+             for attempt in $(seq 1 20); do
+               collectors="$(q "count(up{job=~\"alloy|loki|tempo\"} == 1) or vector(0)")"
+               backend="$(q "count(jvm_thread_count) or vector(0)")"
+               collectors="${collectors%%.*}"
+               backend="${backend%%.*}"
+               if [ "${collectors:-0}" -ge 3 ] && [ "${backend:-0}" -ge 1 ]; then
+                 echo "telemetry: 3/3 collectors up, backend metrics flowing"
+                 exit 0
+               fi
+               echo "telemetry: collectors=${collectors:-0}/3 backend_metrics=${backend:-0} (attempt $attempt)"
+               sleep 10
+             done
+             echo "telemetry pipeline check failed"
+             exit 1'

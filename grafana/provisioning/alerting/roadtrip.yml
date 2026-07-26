@@ -1,8 +1,335 @@
 apiVersion: 1
 
-deleteRules:
+# Grafana-managed rules; no Alertmanager in this stack, so they route through the
+# Slack contact point at the bottom. Each rule is a query (A) plus a threshold (C)
+# named by `condition`.
+#
+# `or vector(0)` where "no data" means zero. Where absence IS the signal
+# (up == 0, absent_over_time) the query is empty while healthy, hence
+# noDataState: OK on those rules.
+#
+# Grafana refuses to start on invalid alert provisioning — a boot failure after
+# editing this file is a schema error here.
+
+groups:
   - orgId: 1
-    uid: availability-watch-rate-limited
+    name: stack-health
+    folder: Roadtrip
+    interval: 1m
+    rules:
+      # Alloy is the single choke point for logs, traces, and metrics; Loki and
+      # Tempo are where two of the three land. Prometheus is not checked here
+      # (if it is down nothing evaluates) and neither is Grafana (if it is down
+      # it cannot notify) — both need an outside-in check, which is the deploy
+      # workflow's health gate.
+      - uid: roadtrip-collector-down
+        title: Observability collector down
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: '{{ $labels.job }} has been unreachable for 5m — telemetry is being dropped.'
+        data:
+          - refId: A
+            datasourceUid: roadtrip-prometheus
+            relativeTimeRange:
+              from: 600
+              to: 0
+            model:
+              refId: A
+              editorMode: code
+              expr: up{job=~"alloy|loki|tempo"}
+              instant: true
+              range: false
+              legendFormat: __auto
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: lt
+                    params: [1]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                    params: []
+
+      # The backend is remote-written, not scraped, so there is no up{} series
+      # for it. jvm_thread_count is the liveness proxy: the OTel agent exports it
+      # on every interval whether or not anyone is browsing the site, so its
+      # absence means the JVM, the agent, or Alloy's OTLP path is dead — unlike a
+      # request counter, which is also absent on a quiet night.
+      - uid: roadtrip-backend-telemetry-silent
+        title: Backend telemetry silent
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 'No JVM metrics from the backend for 10m — backend down, or the OTLP path to Alloy is broken.'
+        data:
+          - refId: A
+            datasourceUid: roadtrip-prometheus
+            relativeTimeRange:
+              from: 900
+              to: 0
+            model:
+              refId: A
+              editorMode: code
+              expr: absent_over_time(jvm_thread_count[10m])
+              instant: true
+              range: false
+              legendFormat: __auto
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                    params: []
+
+  - orgId: 1
+    name: backend-health
+    folder: Roadtrip
+    interval: 1m
+    rules:
+      - uid: roadtrip-backend-5xx
+        title: Backend 5xx responses elevated
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than 5 server errors in 10m. Drill in: /d/api-interactions/api-interactions'
+        data:
+          - refId: A
+            datasourceUid: roadtrip-prometheus
+            relativeTimeRange:
+              from: 900
+              to: 0
+            model:
+              refId: A
+              editorMode: code
+              expr: sum(increase(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[10m])) or vector(0)
+              instant: true
+              range: false
+              legendFormat: __auto
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [5]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                    params: []
+
+      # Per-upstream so one broken vendor names itself in Slack instead of
+      # arriving as a generic backend error. Rate limiting and blocks are 429 and
+      # 403, not 5xx — those are covered by the availability-polling rules below,
+      # which read the provider's own classified outcome.
+      - uid: roadtrip-upstream-5xx
+        title: Upstream provider returning 5xx
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: '{{ $labels.server_address }} returned more than 10 5xx in 15m.'
+        data:
+          - refId: A
+            datasourceUid: roadtrip-prometheus
+            relativeTimeRange:
+              from: 1200
+              to: 0
+            model:
+              refId: A
+              editorMode: code
+              expr: sum by (server_address) (increase(http_client_request_duration_seconds_count{http_response_status_code=~"5.."}[15m]))
+              instant: true
+              range: false
+              legendFormat: __auto
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [10]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                    params: []
+  # silently dead alert.
+  - orgId: 1
+    name: availability-polling
+    folder: Roadtrip
+    interval: 1m
+    rules:
+      # Replaces the rule the old deleteRules entry removed.
+      - uid: roadtrip-availability-rate-limited
+        title: Availability fetches being rate limited
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than 20 rate-limited upstream fetches in 30m. Per provider/target: /d/status-overview/status-overview'
+        data:
+          - refId: A
+            datasourceUid: roadtrip-prometheus
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            model:
+              refId: A
+              editorMode: code
+              expr: sum(increase(roadtrip_availability_fetch_total{outcome="rate_limited"}[30m])) or vector(0)
+              instant: true
+              range: false
+              legendFormat: __auto
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [20]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                    params: []
+
+      - uid: roadtrip-availability-run-failures
+        title: Availability poll runs failing
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: 'More than 5 failed poll runs in 30m — watches are not being refreshed.'
+        data:
+          - refId: A
+            datasourceUid: roadtrip-prometheus
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            model:
+              refId: A
+              editorMode: code
+              expr: sum(increase(roadtrip_availability_run_total{status="failed"}[30m])) or vector(0)
+              instant: true
+              range: false
+              legendFormat: __auto
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [5]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                    params: []
+
+      # An opening found but not delivered is the one failure mode a user
+      # actually notices. Any sustained occurrence is worth a message.
+      - uid: roadtrip-watch-delivery-failing
+        title: Watch alerts not being delivered
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Watch trigger handlers reported failed delivery — an opening was found but the user was not told.'
+        data:
+          - refId: A
+            datasourceUid: roadtrip-prometheus
+            relativeTimeRange:
+              from: 1800
+              to: 0
+            model:
+              refId: A
+              editorMode: code
+              expr: sum(increase(roadtrip_watch_trigger_total{delivered="false"}[30m])) or vector(0)
+              instant: true
+              range: false
+              legendFormat: __auto
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+                  operator:
+                    type: and
+                  query:
+                    params: [C]
+                  reducer:
+                    type: last
+                    params: []
 
 contactPoints:
   - orgId: 1

@@ -2,6 +2,15 @@
 # containers (`/roadtrip-*`) regardless of the checkout directory.
 name: roadtrip
 
+# json-file defaults to no rotation. These files double as Alloy's replay buffer
+# (it resumes from a stored position after an outage), so this cap is also the
+# bound on how much history a long Alloy outage can recover.
+x-log-rotation: &log-rotation
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
 services:
   # cookie-bot sidecar — kept for future use but not started by default on
   # aarch64 hosts (see memory: akamai_http2_fingerprinting.md). To enable,
@@ -13,6 +22,7 @@ services:
     profiles: [cookie-bot]
     build: ./cookie-bot
     restart: unless-stopped
+    logging: *log-rotation
     hostname: cookie-bot
     volumes:
       - ${COOKIE_BOT_DATA:-$HOME/.roadtrip-map/cookie-bot}:/var/cache/cookie-bot
@@ -34,6 +44,7 @@ services:
     # reboots even when Tilt is gone, drifting "Tilt running" away from
     # "container exists."
     restart: "no"
+    logging: *log-rotation
     hostname: postgres
     shm_size: 1g
     command: ["postgres", "-c", "max_wal_size=4GB", "-c", "checkpoint_completion_target=0.9", "-c", "shared_buffers=512MB", "-c", "work_mem=16MB", "-c", "maintenance_work_mem=256MB"]
@@ -70,6 +81,7 @@ services:
     profiles: [pois]
     image: roadtrip/backend
     restart: unless-stopped
+    logging: *log-rotation
     hostname: backend
     mem_limit: 4g
     env_file:
@@ -130,6 +142,7 @@ services:
       context: ./companion
     image: roadtrip/recgov-companion
     restart: unless-stopped
+    logging: *log-rotation
     hostname: recgov-companion
     env_file:
       - path: .env
@@ -154,6 +167,7 @@ services:
     profiles: [pois]
     image: grafana/grafana:13.1.0
     restart: unless-stopped
+    logging: *log-rotation
     hostname: grafana
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
@@ -172,10 +186,17 @@ services:
       # mode and fails provisioning at boot. Default is an obvious placeholder
       # (webhook mode → Grafana boots); set to a real webhook to deliver alerts.
       - GRAFANA_SLACK_WEBHOOK_URL=${GRAFANA_SLACK_WEBHOOK_URL:-https://hooks.slack.com/services/PLACEHOLDER-SET-GRAFANA_SLACK_WEBHOOK_URL}
+    mem_limit: 1g
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/etc/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
     depends_on:
       # Backend healthcheck fires after Flyway migrate completes, which now
       # includes R__grafana_reader_grants.sql — so grafana can safely connect
@@ -190,48 +211,75 @@ services:
     profiles: [pois]
     image: grafana/loki:3.2.1
     restart: unless-stopped
+    logging: *log-rotation
     hostname: loki
     command: -config.file=/etc/loki/loki-config.yml
+    mem_limit: 1g
     volumes:
       - ./grafana/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
       - loki-data:/loki
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3100/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
 
   tempo:
     profiles: [pois]
     image: grafana/tempo:3.0.2
     restart: unless-stopped
+    logging: *log-rotation
     hostname: tempo
     command: -config.file=/etc/tempo.yaml
+    mem_limit: 1g
     volumes:
       - ./grafana/tempo/tempo.yml:/etc/tempo.yaml:ro
       - tempo-data:/var/tempo
+    # No healthcheck: distroless image, no /bin/sh, so a CMD-SHELL probe reports a
+    # healthy container as unhealthy. Prometheus scrapes tempo:3200 instead.
 
   prometheus:
     profiles: [pois]
     image: prom/prometheus:v3.13.1
     restart: unless-stopped
+    logging: *log-rotation
     hostname: prometheus
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-14d}
       - --web.enable-remote-write-receiver
+      # Off by default; both Tempo's generator and the backend's OTLP send them.
+      - --enable-feature=exemplar-storage
+    mem_limit: 2g
     volumes:
       - ./grafana/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
+    healthcheck:
+      # /-/ready, not /-/healthy: the latter is liveness and returns 200 through a
+      # WAL replay, when Prometheus is up but cannot answer a query yet.
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:9090/-/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
 
   # Ships Docker container logs to Loki and accepts OTLP traces/metrics from
   # the backend Java agent. See grafana/alloy/config.alloy for the pipelines.
   alloy:
     profiles: [pois]
-    image: grafana/alloy:latest
+    image: grafana/alloy:v1.18.0
     restart: unless-stopped
+    logging: *log-rotation
     hostname: alloy
+    mem_limit: 1g
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./grafana/alloy/config.alloy:/etc/alloy/config.alloy:ro
       - alloy-data:/var/lib/alloy/data
     command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+    # No healthcheck: no HTTP client in the image. Prometheus scrapes alloy:12345.
     depends_on:
       - loki
       - tempo
@@ -242,8 +290,9 @@ services:
     # Public hostname routing is managed in Cloudflare Zero Trust; this
     # container only needs the tunnel token.
     profiles: [tunnel]
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2026.7.3
     restart: unless-stopped
+    logging: *log-rotation
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
     depends_on:
       - backend
