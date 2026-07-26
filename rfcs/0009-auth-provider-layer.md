@@ -198,7 +198,7 @@ method, so the work is additive rather than a rewrite.
 ### Layer placement
 
 ```
-models/domain/auth/     Principal, UserId, Role, IdentityClaims,
+model/domain/auth/      Principal, UserId, Role, UserStatus, IdentityClaims,
                         AuthorizationRequest, VerifiedIdToken
 clients/oidc/           OidcDiscoveryClient, OidcTokenClient, JwksVerifier
 service/auth/           IdentityProvider (port), OidcIdentityProvider,
@@ -240,17 +240,23 @@ allowlist, never accepted as an absolute URL.
 
 ### Schema
 
+Email is `TEXT` with a unique index on `lower(email)` rather than `CITEXT`: the
+citext extension is not installed (V1 installs only postgis), and an expression
+index keeps normalization explicit at the boundary instead of hidden in a column
+type.
+
 ```sql
 -- V47__auth.sql
 CREATE TABLE app_user (
   id             BIGSERIAL PRIMARY KEY,
-  email          CITEXT NOT NULL UNIQUE,
+  email          TEXT   NOT NULL,          -- UNIQUE via lower(email) index
   email_verified BOOLEAN NOT NULL DEFAULT FALSE,
   display_name   TEXT,
   status         TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','disabled')),
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE UNIQUE INDEX app_user_email_lower_uq ON app_user (lower(email));
 
 CREATE TABLE user_identity (
   id                BIGSERIAL PRIMARY KEY,
@@ -467,3 +473,5 @@ in the repo, reviewed under the fatigue of a large diff.
 | 8 | 2026-07-26 | **Surface labelling, authz middleware, route refactor, and admin gating are a separate follow-up pass.** | Authn fails loudly, authz fails silently; they deserve separate review. Bundling would produce one PR touching every route file. |
 | 9 | 2026-07-26 | This RFC adds surface area only — no existing route is modified. | Nothing that works today starts requiring a session, so the layer can land incrementally without a flag day. |
 | 10 | 2026-07-26 | rec.gov / ATC per-user is out of scope. | The companion's single Chromium profile is the credential; multiuser needs a profile pool. Would triple the timeline. |
+| 11 | 2026-07-26 | `app_user.email` is `TEXT` + a unique index on `lower(email)`, not `CITEXT`. | The citext extension is not installed; V1 installs only postgis. An expression index keeps normalization explicit rather than hidden in a column type. |
+| 12 | 2026-07-26 | `UserId` is a `@JvmInline value class`, the first in this codebase — every other id is a bare `Long`. | Ownership checks are the one place a wrong id is a security bug, not a correctness bug. Establishing it before the authz pass creates call sites is far cheaper than retrofitting. |
