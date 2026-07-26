@@ -18,6 +18,13 @@ fi
 
 JDK25=/usr/lib/jvm/java-25-openjdk-amd64
 
+# 0. Pin the commit identity. The web environment already sets these globally,
+#    so this is belt-and-suspenders against that default drifting: commits from
+#    a web session should always be attributable to the Claude account, and the
+#    repo's stop-hook check requires this exact address.
+git config --global user.name "Claude"
+git config --global user.email "noreply@anthropic.com"
+
 # 1. Install JDK 25 (only if missing — the container caches this after the hook).
 if [ ! -x "$JDK25/bin/javac" ]; then
   # A stale third-party PPA can make `apt-get update` exit non-zero without
