@@ -13,13 +13,16 @@ status: Draft
 ## Summary
 
 Introduce authentication and a first-party session to a codebase that has
-neither. The vendor (Auth0) is terminated at a single callback route; every
-other layer sees a `Principal` domain value and never a vendor type. Auth0 is
-wired as *configuration of a generic OIDC adapter*, not as its own adapter, so
-the vendor's name appears in YAML and never in Kotlin. This RFC covers the auth
-layer only — browsing stays anonymous, and the downstream work that consumes
-`Principal` (watch ownership, per-user notification credentials) is sketched as
-a roadmap and specified separately.
+neither. The proposal is a **generic, standards-based OIDC architecture**; the
+vendor is a configuration value. Auth0 and WorkOS are both supported targets and
+either can be selected — or replaced — without touching Kotlin outside one small,
+named seam. The vendor's token terminates at a single callback route and every
+layer downstream sees a `Principal` domain value.
+
+This RFC delivers the auth layer as **new surface area only**. It does not modify
+a single existing route. Classifying which surfaces require which principal, and
+introducing the Ktor middleware that injects and enforces that context, is a
+deliberate follow-up pass.
 
 ## Motivation
 
@@ -49,32 +52,41 @@ RFC builds that identity and stops there.
 - A user can sign in with Google, Apple, or email + password.
 - The backend holds a first-party, revocable session; the vendor is not in the
   request path after callback.
-- Every request resolves to a `Principal` — `Anonymous`, `User`, or `System`.
-- Admin routes are gated in-app by role, not only at the edge.
-- Local development and CI work with no Auth0 tenant provisioned.
-- Swapping Auth0 for another OIDC provider is a config change. Swapping for a
-  non-OIDC provider replaces one adapter class and nothing else.
+- A `Principal` domain type exists — `Anonymous`, `User`, `System` — and is
+  resolvable from a session.
+- **The vendor is selected by configuration.** Auth0 and WorkOS are both
+  first-class targets; neither is baked into the code.
+- Local development and CI work with no tenant provisioned at any vendor.
+- The layer adds routes and tables. It changes no existing behaviour.
 
 ## Non-Goals
 
-- **Watch ownership.** Needs `Principal` to exist first; specified separately.
-- **Per-user notification credentials** (Slack install, verified email). Same.
-- **Per-user rec.gov / ATC.** The companion's persistent Chromium profile *is*
-  the credential (`companion/src/recgovSession.js`); multiuser means a browser
-  profile pool. Deliberately deferred — see Roadmap.
-- **Anonymous-then-claim watches.** Sign-in is required to create a watch. An
-  anon identity plus a claim flow plus an abandoned-watch reaper is real
-  complexity for a rare path.
+Deferred to the **authz pass** (the immediate follow-up, see Roadmap):
+
+- **Labelling surfaces** as anonymous / user / admin. The table below is context
+  for reviewers, not a work item in this RFC.
+- **Ktor authentication & authorization middleware** that injects `Principal`
+  into the call context and enforces it declaratively.
+- **Refactoring existing routes** to consume that context.
+- **Admin role gating** on `/api/admin/*` and the availability dashboard.
+
+Deferred further out:
+
+- **Watch ownership**, **per-user notification credentials** (Slack install,
+  verified email), and **per-user rec.gov / ATC** — the companion's persistent
+  Chromium profile *is* the credential (`companion/src/recgovSession.js`), so
+  multiuser there means a browser-profile pool.
+- **Anonymous-then-claim watches.** Sign-in will be required to create a watch.
 - **Organisations / teams / sharing.** Single-owner resources only.
 
 ## Proposal
 
-### The seam
+### Target seam — context only, not this RFC's scope
 
-Browsing is anonymous. Creating or mutating an alert requires a user.
-Notification credentials and targets live behind user settings.
+Recorded so reviewers can see where the layer is heading. Nothing here is
+implemented by this RFC.
 
-| Surface | Access |
+| Surface | Eventual access |
 |---|---|
 | `/api/pois*`, `/api/route`, `/api/geocode`, `/api/pois/{id}/campsites*` | anonymous |
 | static site, `?poi=` / `?route=` share links | anonymous |
@@ -86,16 +98,15 @@ Notification credentials and targets live behind user settings.
 
 ### Vendor containment
 
-The load-bearing decision. Auth0 is a standards-compliant OIDC provider, so we
-build a **generic OIDC adapter driven by a discovery document** and configure it
-with Auth0's issuer. Nothing in the codebase is named `auth0` except a YAML
-value and an env var.
+The load-bearing decision. Auth0 and WorkOS are both standards-compliant OIDC
+providers, so we build **one generic, discovery-driven OIDC adapter** and select
+the vendor by issuer URL. No vendor SDK, no vendor name in Kotlin.
 
 ```
-Browser → GET /auth/login          → 302 to Auth0 (code + PKCE)
+Browser → GET /auth/login          → 302 to provider (code + PKCE)
 Browser → GET /auth/callback       → verify ID token, upsert identity,
                                       mint first-party session cookie
-everything after                   → our cookie. Auth0 is not in the path.
+everything after                   → our cookie. The vendor is not in the path.
 ```
 
 The port follows the repo's existing `Dispatchable` registry idiom
@@ -118,7 +129,38 @@ internal interface IdentityProvider : Dispatchable<IdentityProviderId> {
 }
 ```
 
-`IdentityClaims` is the abstraction boundary. It carries no vendor shape:
+### The one vendor-specific seam
+
+Roughly 95% of the flow is standards-based and genuinely shared: discovery, PKCE,
+code exchange, JWKS fetch, ID-token signature and claim validation. Exactly one
+thing differs between vendors — **how the upstream connection is spelled in the
+token.** Auth0 encodes it into `sub` as `google-oauth2|1234`, `apple|001234`,
+`auth0|abc`. WorkOS expresses it differently.
+
+Rather than let that leak, it is isolated into a named, tested, swappable seam:
+
+```
+IdentityProvider (port)
+  └── OidcIdentityProvider          generic; owns the entire flow
+        └── ClaimsDialect           the only vendor-aware code
+              ├── Auth0ClaimsDialect
+              ├── WorkOsClaimsDialect
+              └── StandardClaimsDialect     plain OIDC claims, no upstream detail
+```
+
+```kotlin
+// service/auth/ClaimsDialect.kt
+internal interface ClaimsDialect : Dispatchable<ClaimsDialectId> {
+    /** Map verified ID-token claims into the provider-neutral domain shape. */
+    fun toIdentityClaims(verified: VerifiedIdToken): IdentityClaims
+}
+```
+
+A dialect is one small class plus a fixture-driven unit test. Adding a third
+vendor is one file and one registry row — the same shape as adding an ETL vendor
+or an availability provider.
+
+`IdentityClaims` is the boundary type and carries no vendor shape:
 
 ```kotlin
 // models/domain/auth/IdentityClaims.kt
@@ -132,12 +174,8 @@ data class IdentityClaims(
 )
 ```
 
-`upstreamProvider` / `upstreamSubject` are the single genuinely Auth0-shaped
-concern: Auth0 encodes the connection into `sub` as `google-oauth2|1234`,
-`apple|001234`, `auth0|abc`. Parsing that is adapter-local — precisely where
-vendor specifics belong under the no-leaky-abstractions rule. Recording the
-upstream subject now is what makes a future migration a join on a stable key
-rather than a fuzzy email match; retrofitting it later is not possible for
+Recording the upstream subject now is what makes a future vendor migration a join
+on a stable key rather than a fuzzy email match. It cannot be retrofitted for
 users who have already stopped signing in.
 
 ### Principal
@@ -152,40 +190,43 @@ sealed interface Principal {
 }
 ```
 
-Services take `Principal`. Ktor types stay in `route/`, per the layering rules
-in `docs/backend-architecture.md`.
+This RFC defines `Principal` and ships `SessionService.resolve(token): Principal?`,
+called directly by `/api/me`. Generalising that call into a Ktor plugin installed
+across the app is the follow-up pass — the plugin will wrap this same service
+method, so the work is additive rather than a rewrite.
 
 ### Layer placement
 
 ```
-models/domain/auth/     Principal, UserId, Role, IdentityClaims, AuthorizationRequest
+models/domain/auth/     Principal, UserId, Role, IdentityClaims,
+                        AuthorizationRequest, VerifiedIdToken
 clients/oidc/           OidcDiscoveryClient, OidcTokenClient, JwksVerifier
-service/auth/           IdentityProvider (port), OidcIdentityProvider (adapter),
-                        IdentityProviderRegistry, SessionService,
-                        UserProvisioningService
+service/auth/           IdentityProvider (port), OidcIdentityProvider,
+                        ClaimsDialect + per-vendor dialects, registries,
+                        SessionService, UserProvisioningService
 repo/                   UserRepo, UserIdentityRepo, UserSessionRepo
-route/auth/             AuthRoutes, session Authentication plugin, requireRole
+route/auth/             AuthRoutes
 config/                 AuthConfig
 ```
 
 Dependency direction is unchanged: `route → service → repo, clients`.
-`clients/oidc/` speaks HTTP to the provider and knows nothing of persistence;
-`service/auth/` orchestrates and knows nothing of Ktor.
+`clients/oidc/` speaks HTTP and knows nothing of persistence; `service/auth/`
+orchestrates and knows nothing of Ktor.
 
 ### Session model
 
 DB-backed sessions in `user_session`, referenced by an opaque random token in an
 `HttpOnly; Secure; SameSite=Lax` cookie. The cookie carries a random value; the
 table stores its SHA-256. Not a JWT in `localStorage` — the frontend builds HTML
-strings by template (`docs/frontend-components.md`), so a single missed
+by string template (`docs/frontend-components.md`), so a single missed
 `escapeHtml` must not be able to exfiltrate a bearer token.
 
 This costs one indexed lookup per authenticated request and zero for anonymous
-browsing, which is the dominant traffic. If that ever matters, the escape hatch
-is a short-TTL signed cookie revalidated periodically — not worth doing now.
+browsing, which is the dominant traffic. If it ever matters, the escape hatch is
+a short-TTL signed cookie revalidated periodically — not worth doing now.
 
-DB-backed sessions also give real logout, revoke-on-credential-change, and — as
-established in the stress test — a provider swap that does not log everyone out.
+DB-backed sessions also give real logout, revoke-on-credential-change, and a
+vendor swap that does not log every user out.
 
 **CSRF.** `SameSite=Lax` plus an `Origin` check on state-changing routes. All
 mutations are already `POST` with `Content-Type: application/json`, which browsers
@@ -214,7 +255,7 @@ CREATE TABLE app_user (
 CREATE TABLE user_identity (
   id                BIGSERIAL PRIMARY KEY,
   user_id           BIGINT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
-  provider          TEXT   NOT NULL,   -- who we talked to: 'oidc'
+  provider          TEXT   NOT NULL,   -- configured provider slug
   subject           TEXT   NOT NULL,   -- their `sub`
   upstream_provider TEXT,              -- 'google' | 'apple' | 'password'
   upstream_subject  TEXT,              -- the IdP's own sub
@@ -243,6 +284,10 @@ CREATE TABLE user_role (
 );
 ```
 
+`user_role` ships here even though nothing enforces it until the authz pass — the
+table is trivial and having it in the same migration avoids a second schema
+change for one column.
+
 `user_credential` (encrypted per-user Slack / rec.gov secrets) is deferred to the
 notification-credentials work; it is not needed to sign in.
 
@@ -255,19 +300,14 @@ victim's address on an unverified connection and inherits the account.
 
 ### Configuration
 
-Two Auth0 tenants — dev and prod — because a prod client whose allowlist
-contains `http://127.0.0.1:8765/auth/callback` is a token-exfiltration path.
-Profiles `local` and `compose-local` share an origin and therefore share the dev
-tenant.
-
-The redirect URI is **derived** from the existing `web.root-url`, which already
-holds the correct per-profile origin and is trailing-slash-normalised by
-`WebAppConfig` (`WebAppConfig.kt:24`). One value, no drift, no mismatch bugs.
+The vendor is a config value. Switching between Auth0 and WorkOS is an issuer
+URL, a credential pair, and a dialect slug:
 
 ```yaml
 # application.yaml — same env-backed shape as the slack/mapbox blocks
 roadtrip:
   auth:
+    provider: "${ROADTRIP_AUTH_PROVIDER:oidc}"   # auth0 | workos | oidc
     issuer: "${ROADTRIP_AUTH_ISSUER:}"
     client-id: "${ROADTRIP_AUTH_CLIENT_ID:}"
     client-secret: "${ROADTRIP_AUTH_CLIENT_SECRET:}"
@@ -285,116 +325,145 @@ roadtrip:
 
 `AuthConfig.fromConfig` returns `null` when issuer or client-id is blank,
 following `SlackConfig.fromConfig`'s precedent — a first-class *auth disabled*
-state, not an error. With auth disabled, requests resolve to a configured dev
-principal. A fresh clone, `make data-import`, and the Tilt buttons keep working
-with no tenant provisioned.
+state, not an error. A fresh clone, `make data-import`, and the Tilt buttons keep
+working with no tenant provisioned anywhere.
 
-Own the upstream Google OAuth client and Apple Service ID; hand those
-credentials to Auth0 rather than using Auth0's shared social connections. Apple's
-`sub` and its Hide-My-Email relay addresses are scoped to the Apple developer
-team, so using someone else's app makes those users unmatchable on a future
-migration.
+**Two tenants per vendor, dev and prod.** A prod client whose allowlist contains
+`http://127.0.0.1:8765/auth/callback` is a token-exfiltration path. Profiles
+`local` and `compose-local` share an origin and therefore share the dev tenant.
 
-Note that Apple rejects `http://` and `localhost` return URLs. Auth0 absorbs
-this: Apple only ever sees Auth0's HTTPS callback, and Auth0 permits a localhost
-redirect in the dev tenant. Sign in with Apple therefore works in local dev over
-plain HTTP with no tunnel.
+The redirect URI is **derived** from the existing `web.root-url`, which already
+holds the correct per-profile origin and is trailing-slash-normalised by
+`WebAppConfig` (`WebAppConfig.kt:24`). One value, no drift, no mismatch bugs.
+
+Own the upstream Google OAuth client and Apple Service ID; hand those credentials
+to whichever vendor is selected rather than using the vendor's shared social
+connections. Apple's `sub` and its Hide-My-Email relay addresses are scoped to the
+Apple developer team, so a borrowed app makes those users unmatchable on a future
+migration — and defeats the point of supporting two vendors.
+
+Note that Apple rejects `http://` and `localhost` return URLs. Both vendors absorb
+this: Apple only ever sees the vendor's HTTPS callback, and the vendor permits a
+localhost redirect in a dev tenant. Sign in with Apple therefore works in local
+dev over plain HTTP with no tunnel.
 
 ### Testing
 
-`RouteTestApplication.kt:8` currently installs plugins and routes. Make principal
-resolution injectable there so tests construct a `Principal` directly and CI never
-touches a tenant:
+CI never touches a tenant. `OidcIdentityProvider` is tested against a fake
+discovery document and a locally-signed ID token; each `ClaimsDialect` is tested
+against captured token fixtures per vendor.
 
-```kotlin
-internal fun Application.routeTestApplication(
-    principal: Principal = Principal.User(TEST_USER_ID, emptySet()),
-    body: Route.() -> Unit,
-)
-```
-
-Existing route tests keep passing on the default. New tests pass a second user to
-assert that another user's watch returns `404`, not `403` — ids must not leak.
+`RouteTestApplication.kt:8` currently installs plugins and routes and needs no
+change in this RFC — the auth routes are additive and tested in isolation. It is
+the authz pass, when middleware becomes global, that will need principal
+injection there.
 
 ## Delivery plan
 
-Each numbered item is one PR through the RFC 0002 flow. PRs 1–4 are this RFC.
+Each numbered item is one PR through the RFC 0002 flow.
 
 | # | Scope | Ships |
 |---|---|---|
-| 1 | `models/domain/auth/*`, `V47__auth.sql`, `UserRepo` / `UserIdentityRepo` / `UserSessionRepo`, jOOQ includes | dark — no HTTP surface |
-| 2 | `AuthConfig`, `clients/oidc/*`, `IdentityProvider` port, `OidcIdentityProvider`, registry, `SessionService`, `UserProvisioningService` | dark — unit-tested against a fake IdP |
-| 3 | `route/auth/*`: `/auth/login`, `/auth/callback`, `/auth/logout`, `/api/me`; session `Authentication` plugin; auth-disabled dev principal; frontend sign-in control; `credentials: 'same-origin'` in `web/api/http.js` | sign-in works end to end |
-| 4 | `requireRole(Role.ADMIN)` on `/api/admin/*` and the availability dashboard; bootstrap admin from `ROADTRIP_BOOTSTRAP_EMAIL` | admin gated in-app |
+| 1 | `models/domain/auth/*`, `V47__auth.sql`, `UserRepo` / `UserIdentityRepo` / `UserSessionRepo`, jOOQ includes | dark |
+| 2 | `AuthConfig`, `clients/oidc/*`, `IdentityProvider` port, `OidcIdentityProvider`, `ClaimsDialect` + Auth0/WorkOS/standard dialects, registries, `SessionService`, `UserProvisioningService` | dark — unit-tested against a fake IdP |
+| 3 | `route/auth/*`: `/auth/login`, `/auth/callback`, `/auth/logout`, `/api/me`; auth-disabled dev principal; frontend sign-in control; `credentials: 'same-origin'` in `web/api/http.js` | sign-in works end to end |
 
-PR 1 and PR 2 are independently reviewable and land without changing any
-observable behaviour, which keeps the risky PR (3) small.
+**This plan adds surface area and modifies no existing route.** PRs 1 and 2 land
+with zero observable behaviour change. PR 3's only externally visible effect is
+four new endpoints and a sign-in control. Nothing that works today starts
+requiring a session.
 
 ### Roadmap beyond this RFC
 
-5. Watch ownership — `V48` owner column plus backfill, repo-level scoping,
-   controller policy, `alerts.js` correction.
-6. Email notifications from the verified `app_user.email`; drop
-   `trigger_config.email_notify.to`.
-7. Per-user Slack install in `user_credential`; ownership check on inbound
-   interactivity, which today mutates watches by id with no such check.
-8. Inbound per-IP rate limits on the cost-bearing anonymous routes
-   (`/api/geocode`, `/api/route`, availability). `VendorRateLimiter` is an
-   *outbound* governor and does not cover this.
-9. Per-user rec.gov / ATC — separate project.
+**Next: the authz pass.** Label every surface, introduce Ktor authentication and
+authorization middleware that injects `Principal` into the call context, refactor
+existing routes onto it, and gate `/api/admin/*` and the availability dashboard by
+role. Deserves its own RFC — it touches every route file, and the enforcement
+default (deny vs. allow) is the decision worth arguing about in writing.
+
+Then, in rough order:
+
+- Watch ownership — `V48` owner column plus backfill, repo-level scoping,
+  controller policy, `alerts.js` correction.
+- Email notifications from the verified `app_user.email`; drop
+  `trigger_config.email_notify.to`.
+- Per-user Slack install in `user_credential`; ownership check on inbound
+  interactivity, which today mutates watches by id with no such check.
+- Inbound per-IP rate limits on the cost-bearing anonymous routes
+  (`/api/geocode`, `/api/route`, availability). `VendorRateLimiter` is an
+  *outbound* governor and does not cover this.
+- Per-user rec.gov / ATC — separate project.
 
 ## Rationale
 
-**Why terminate the vendor at the callback rather than pass its JWT around?**
-Because it makes the session ours: revocable, swappable, and unaffected by a
-provider migration. The alternative — validating an Auth0 JWT on every request —
-puts the vendor's token format into every layer and makes a swap a rewrite.
+**Why a generic OIDC adapter instead of a vendor SDK?** The SDK gives marginally
+faster setup and permanent coupling. Both candidate vendors are
+standards-compliant, so the generic adapter costs little more and leaves the
+vendor name in config. Okta, Keycloak, and Supabase-behind-an-OIDC-shim become
+drop-in.
 
-**Why a generic OIDC adapter instead of an Auth0 SDK?** The SDK would give
-marginally faster setup and permanent coupling. Auth0 is standards-compliant, so
-the generic adapter costs little more and leaves `auth0` appearing only in
-config. It also means Okta, Keycloak, and WorkOS are drop-in.
+**Why support two vendors rather than picking one?** Because the cost of doing so
+is one `ClaimsDialect` class, and the benefit is that the choice stays reversible
+past the point where migration would otherwise be expensive. It also forces the
+abstraction to be real: an interface with one implementation is a guess, and
+maintaining two keeps the boundary honest.
+
+**Why terminate the vendor at the callback rather than pass its JWT around?** It
+makes the session ours: revocable, swappable, and unaffected by a provider
+migration. Validating a vendor JWT on every request puts the vendor's token format
+into every layer and makes a swap a rewrite.
 
 **Why one aggregator instead of integrating Google, Apple, and password
 directly?** Apple alone justifies it: an ES256 client secret requiring rotation
-roughly every six months, `form_post` response mode, a name returned only on
-first authorization, and no localhost redirect for local dev. Password storage
-would also become ours. Auth0 normalises all of it into one OIDC flow.
+roughly every six months, `form_post` response mode, a name returned only on first
+authorization, and no localhost redirect for local dev. Password storage would
+also become ours.
 
 **Why DB sessions rather than signed stateless cookies?** Revocation. A stateless
 cookie cannot be invalidated before expiry, which is unacceptable for logout and
-for credential changes. The cost is one indexed lookup on authenticated requests
-only.
+credential changes. The cost is one indexed lookup on authenticated requests only.
 
-**Why `404` rather than `403` for another user's resource?** `403` confirms the
-id exists.
+**Why split authz into a separate pass?** The two concerns fail differently.
+Getting authn wrong means nobody can sign in — loud and immediate. Getting authz
+wrong means the wrong person reads someone's data — silent. They deserve separate
+review attention, and bundling them would produce one PR touching every route file
+in the repo, reviewed under the fatigue of a large diff.
 
 ## Unresolved questions
 
-1. **Password hash export.** Confirm Auth0's export policy in writing before
-   committing. It is the only thing that makes a future migration of
-   password-connection users possible — hosted-UI auth means we never see a
-   plaintext password, so lazy re-hashing on login is unavailable. Options
-   otherwise reduce to a forced reset for that cohort.
-2. **Session TTL and idle timeout.** 30d absolute is proposed; no idle timeout.
-3. **Bootstrap admin.** `ROADTRIP_BOOTSTRAP_EMAIL` granting `admin` on first
-   sign-in is proposed. Simple, and adequate for a single-operator deployment.
-4. **Sign-in UI placement.** Topbar control versus a dedicated page. Frontend
+1. **Vendor selection.** Auth0 and WorkOS are both viable; the architecture does
+   not depend on the answer, and PRs 1–2 can land before it is made. Inputs worth
+   gathering: current pricing at expected MAU, and question 2 below.
+2. **Password hash export.** Ask both vendors, in writing, before committing. It
+   is the only thing that makes a future migration of password-connection users
+   possible — hosted-UI auth means we never see a plaintext password, so lazy
+   re-hashing on login is unavailable. Otherwise the fallback is a forced reset
+   for that cohort. This may well be the deciding factor between the two.
+3. **WorkOS claim shape.** `WorkOsClaimsDialect` needs its upstream-connection
+   mapping confirmed against a real token during PR 2. If WorkOS does not expose
+   the upstream IdP subject, that dialect populates `upstreamProvider` only and
+   the migration story for its users falls back to verified email.
+4. **Session TTL and idle timeout.** 30d absolute proposed; no idle timeout.
+5. **Bootstrap admin.** `ROADTRIP_BOOTSTRAP_EMAIL` granting `admin` on first
+   sign-in is proposed. Adequate for a single-operator deployment. Not consumed
+   until the authz pass.
+6. **Sign-in UI placement.** Topbar control versus a dedicated page. Frontend
    decision, does not block PRs 1–2.
-5. **Instrumentation.** Track the connection mix (`upstream_provider`) from day
+7. **Instrumentation.** Track the connection mix (`upstream_provider`) from day
    one. The cost of any future migration is set almost entirely by what fraction
-   of users are password-only, and that number is worth knowing before it
-   matters.
+   of users are password-only, and that number is worth knowing before it matters.
 
 ## Decision log
 
 | # | Date | Decision | Rationale |
 |---|---|---|---|
-| 1 | 2026-07-26 | Auth0 as the identity provider. | Google + Apple + password behind one OIDC flow; normalises Apple's client-secret rotation, `form_post` mode, and localhost restriction. |
-| 2 | 2026-07-26 | Auth0 is configured into a **generic OIDC adapter**, not given its own adapter class. | Keeps the vendor name in YAML and out of Kotlin; makes any OIDC provider a config change. |
-| 3 | 2026-07-26 | First-party DB-backed session cookie; the vendor token never leaves the callback. | Revocable logout, and a provider swap that does not log every user out. |
-| 4 | 2026-07-26 | Record `upstream_provider` / `upstream_subject` alongside the aggregator's `sub`. | Makes a future migration a join on a stable key. Cannot be retrofitted for lapsed users. |
-| 5 | 2026-07-26 | Separate Auth0 tenants for dev and prod; redirect URI derived from `web.root-url`. | A prod client allowing `localhost` is a token-exfiltration path. Deriving the URI removes redirect-mismatch drift. |
-| 6 | 2026-07-26 | Own the upstream Google client and Apple Service ID; do not use Auth0's shared social connections. | Apple's `sub` and relay emails are Apple-team-scoped; a borrowed app makes those users unmatchable on migration. |
+| 1 | 2026-07-26 | Architecture is **generic OIDC**; the vendor is a config value. Auth0 and WorkOS are both first-class targets. | Both are standards-compliant, so supporting either costs one small class. Keeps the choice reversible and keeps the abstraction honest. |
+| 2 | 2026-07-26 | Vendor differences are confined to a `ClaimsDialect` seam. | ~95% of the flow is standards-based. Only the upstream-connection encoding differs; isolating it keeps vendor shape out of every other layer. |
+| 3 | 2026-07-26 | First-party DB-backed session cookie; the vendor token never leaves the callback. | Revocable logout, and a vendor swap that does not log every user out. |
+| 4 | 2026-07-26 | Record `upstream_provider` / `upstream_subject` alongside the vendor's `sub`. | Makes a future migration a join on a stable key. Cannot be retrofitted for lapsed users. |
+| 5 | 2026-07-26 | Separate dev and prod tenants; redirect URI derived from `web.root-url`. | A prod client allowing `localhost` is a token-exfiltration path. Deriving the URI removes redirect-mismatch drift. |
+| 6 | 2026-07-26 | Own the upstream Google client and Apple Service ID; do not use a vendor's shared social connections. | Apple's `sub` and relay emails are Apple-team-scoped; a borrowed app makes those users unmatchable on migration, defeating multi-vendor support. |
 | 7 | 2026-07-26 | Auth disabled is a first-class state (`AuthConfig.fromConfig` returns null). | Fresh clone, CI, and Tilt work with no tenant provisioned — follows `SlackConfig`'s precedent. |
-| 8 | 2026-07-26 | rec.gov / ATC per-user is out of scope. | The companion's single Chromium profile is the credential; multiuser needs a profile pool. Would triple the timeline. |
+| 8 | 2026-07-26 | **Surface labelling, authz middleware, route refactor, and admin gating are a separate follow-up pass.** | Authn fails loudly, authz fails silently; they deserve separate review. Bundling would produce one PR touching every route file. |
+| 9 | 2026-07-26 | This RFC adds surface area only — no existing route is modified. | Nothing that works today starts requiring a session, so the layer can land incrementally without a flag day. |
+| 10 | 2026-07-26 | rec.gov / ATC per-user is out of scope. | The companion's single Chromium profile is the credential; multiuser needs a profile pool. Would triple the timeline. |
