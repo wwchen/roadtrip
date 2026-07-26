@@ -13,6 +13,7 @@ import {
   COMPANION_OPENAPI_SPEC,
 } from './openapi.js'
 import { matchCompanionRoute } from './apiContract.js'
+import { installJsonConsole } from './jsonConsole.js'
 import {
   renderLoginPage,
   renderSwaggerPage,
@@ -140,5 +141,9 @@ function installShutdownHandlers (runningServer) {
 
 const entrypointUrl = process.argv[1] ? pathToFileURL(process.argv[1]).href : null
 if (entrypointUrl && import.meta.url === entrypointUrl) {
+  // Before anything logs, so every line this process writes — including the
+  // bare console.* calls in cart.js/recgovSession.js — reaches Loki with a
+  // `level` label. No-op on a TTY; see jsonConsole.js.
+  installJsonConsole()
   installShutdownHandlers(startServer())
 }
