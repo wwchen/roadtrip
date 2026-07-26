@@ -18,6 +18,17 @@ roadtrip:
     recgov-atc:
       companion-base-url:
       companion-timeout: 180s
+  auth:
+    # Selects a claims dialect only — the flow is plain OIDC for every value.
+    # auth0 | workos | oidc. See rfcs/0009-auth-provider-layer.md.
+    provider: "${ROADTRIP_AUTH_PROVIDER:oidc}"
+    # Blank issuer or client-id = auth disabled, a first-class state: the app
+    # boots and every anonymous surface works with no tenant provisioned.
+    issuer: "${ROADTRIP_AUTH_ISSUER:}"
+    client-id: "${ROADTRIP_AUTH_CLIENT_ID:}"
+    client-secret: "${ROADTRIP_AUTH_CLIENT_SECRET:}"
+    session-ttl: 30d
+    cookie-secure: true
   mapbox:
     token: "${MAPBOX_TOKEN:}"
   campflare:

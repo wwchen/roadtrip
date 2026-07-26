@@ -1,5 +1,8 @@
 roadtrip:
   static-dir: .
+  auth:
+    # http://127.0.0.1 cannot set a Secure cookie, so local sign-in needs this off.
+    cookie-secure: false
   db:
     url: jdbc:postgresql://localhost:5432/roadtrip
     user: roadtrip

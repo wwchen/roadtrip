@@ -93,6 +93,7 @@ val testcontainersVersion = "1.21.4"
 val bucket4jVersion = "8.10.1"
 val timeshapeVersion = "2025b.26"
 val resendVersion = "4.13.0"
+val nimbusJoseVersion = "10.9.1"
 val junitVersion = "5.11.3"
 val koinVersion = "4.2.0"
 val playwrightVersion = "1.50.0"
@@ -185,6 +186,11 @@ dependencies {
     // bucket4j-postgresql 8.10.1 provides PostgreSQLSelectForUpdateBasedProxyManager.
     implementation("com.bucket4j:bucket4j-core:$bucket4jVersion")
     implementation("com.bucket4j:bucket4j-postgresql:$bucket4jVersion")
+
+    // JOSE primitives for OIDC ID-token verification (JWKS parsing, RS256
+    // signature checks). Vendor-neutral: the auth layer speaks plain OIDC, so
+    // no identity-provider SDK is on the classpath.
+    implementation("com.nimbusds:nimbus-jose-jwt:$nimbusJoseVersion")
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
