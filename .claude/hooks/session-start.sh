@@ -18,12 +18,12 @@ fi
 
 JDK25=/usr/lib/jvm/java-25-openjdk-amd64
 
-# 0. Pin the commit identity. The web environment already sets these globally,
-#    so this is belt-and-suspenders against that default drifting: commits from
-#    a web session should always be attributable to the Claude account, and the
-#    repo's stop-hook check requires this exact address.
-git config --global user.name "Claude"
-git config --global user.email "noreply@anthropic.com"
+# 0. Pin the commit identity. Web-session containers default to the Claude
+#    account; commits in this repo should be attributed to the repo owner
+#    instead, using GitHub's noreply address so no real address is published.
+#    AI involvement stays recorded via the Co-Authored-By trailer on each commit.
+git config --global user.name "William Chen"
+git config --global user.email "344958+wwchen@users.noreply.github.com"
 
 # 1. Install JDK 25 (only if missing — the container caches this after the hook).
 if [ ! -x "$JDK25/bin/javac" ]; then
