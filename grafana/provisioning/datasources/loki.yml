@@ -8,7 +8,10 @@ datasources:
     url: http://loki:3100
     jsonData:
       derivedFields:
+        # trace_id is structured metadata, not text in the line — a regex matcher
+        # here would silently stop matching and take the logs -> trace jump with it.
         - name: trace_id
-          matcherRegex: '"trace_id":"([a-f0-9]+)"'
+          matcherType: label
+          matcherRegex: trace_id
           datasourceUid: roadtrip-tempo
           url: '$${__value.raw}'

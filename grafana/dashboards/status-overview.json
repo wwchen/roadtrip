@@ -227,7 +227,7 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" [$__range])) or vector(0)",
+          "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | http_path=~\"/api/.*\" | http_path!=\"/api/health\" [$__range])) or vector(0)",
           "instant": true,
           "legendFormat": "requests",
           "queryType": "instant",
@@ -238,7 +238,7 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" | status=~\"2[0-9][0-9]\" [$__range])) or vector(0)",
+          "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | http_path=~\"/api/.*\" | http_path!=\"/api/health\" | http_status=~\"2[0-9][0-9]\" [$__range])) or vector(0)",
           "instant": true,
           "legendFormat": "2xx",
           "queryType": "instant",
@@ -249,7 +249,7 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" | status=~\"4[0-9][0-9]\" [$__range])) or vector(0)",
+          "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | http_path=~\"/api/.*\" | http_path!=\"/api/health\" | http_status=~\"4[0-9][0-9]\" [$__range])) or vector(0)",
           "instant": true,
           "legendFormat": "4xx",
           "queryType": "instant",
@@ -260,7 +260,7 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" | status=~\"5[0-9][0-9]\" [$__range])) or vector(0)",
+          "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | http_path=~\"/api/.*\" | http_path!=\"/api/health\" | http_status=~\"5[0-9][0-9]\" [$__range])) or vector(0)",
           "instant": true,
           "legendFormat": "5xx",
           "queryType": "instant",
@@ -356,7 +356,7 @@
             "uid": "roadtrip-loki"
           },
           "editorMode": "code",
-          "expr": "topk(15, sum by (method, path, status) (count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" [$__range])))",
+          "expr": "topk(15, sum by (method, path, status) (count_over_time({container=~\"roadtrip-backend.*\"} | http_path=~\"/api/.*\" | http_path!=\"/api/health\" | label_format method=http_method, path=http_path, status=http_status [$__range])))",
           "format": "table",
           "instant": true,
           "queryType": "instant",
@@ -477,7 +477,7 @@
             "uid": "roadtrip-loki"
           },
           "editorMode": "code",
-          "expr": "sum by (status) (count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" [$__interval]))",
+          "expr": "sum by (status) (count_over_time({container=~\"roadtrip-backend.*\"} | http_path=~\"/api/.*\" | http_path!=\"/api/health\" | label_format status=http_status [$__interval]))",
           "legendFormat": "{{status}}",
           "queryType": "range",
           "refId": "A"
@@ -604,7 +604,7 @@
           },
           "direction": "backward",
           "editorMode": "code",
-          "expr": "{container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\"",
+          "expr": "{container=~\"roadtrip-backend.*\"} | http_path=~\"/api/.*\" | http_path!=\"/api/health\" | label_format method=http_method, path=http_path, status=http_status, duration_ms=http_duration_ms, remote=http_remote",
           "queryType": "range",
           "refId": "A"
         }
@@ -2093,7 +2093,7 @@
                 "type": "loki",
                 "uid": "roadtrip-loki"
               },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"Slack interactivity POST:\" [$__range])) or vector(0)",
+              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} |~ \"Slack interactivity POST:\" [$__range])) or vector(0)",
               "instant": true,
               "legendFormat": "http_posts",
               "queryType": "instant",
@@ -2104,7 +2104,7 @@
                 "type": "loki",
                 "uid": "roadtrip-loki"
               },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"Slack interactivity → 200, dispatching\" [$__range])) or vector(0)",
+              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} |~ \"Slack interactivity → 200, dispatching\" [$__range])) or vector(0)",
               "instant": true,
               "legendFormat": "http_200",
               "queryType": "instant",
@@ -2115,7 +2115,7 @@
                 "type": "loki",
                 "uid": "roadtrip-loki"
               },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"Slack interactivity → 400\" [$__range])) or vector(0)",
+              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} |~ \"Slack interactivity → 400\" [$__range])) or vector(0)",
               "instant": true,
               "legendFormat": "http_400",
               "queryType": "instant",
@@ -2126,7 +2126,7 @@
                 "type": "loki",
                 "uid": "roadtrip-loki"
               },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"Slack interactivity → 401\" [$__range])) or vector(0)",
+              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} |~ \"Slack interactivity → 401\" [$__range])) or vector(0)",
               "instant": true,
               "legendFormat": "http_401",
               "queryType": "instant",
@@ -2137,7 +2137,7 @@
                 "type": "loki",
                 "uid": "roadtrip-loki"
               },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"Slack interactivity handler failed\" [$__range])) or vector(0)",
+              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} |~ \"Slack interactivity handler failed\" [$__range])) or vector(0)",
               "instant": true,
               "legendFormat": "handler_failures",
               "queryType": "instant",
@@ -2309,7 +2309,7 @@
                 "type": "loki",
                 "uid": "roadtrip-loki"
               },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"response_url update ok=true\" [$__range])) or vector(0)",
+              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} |~ \"response_url update ok=true\" [$__range])) or vector(0)",
               "instant": true,
               "legendFormat": "response_updates",
               "queryType": "instant",
@@ -2320,7 +2320,7 @@
                 "type": "loki",
                 "uid": "roadtrip-loki"
               },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"stale response_url update ok=\" [$__range])) or vector(0)",
+              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} |~ \"stale response_url update ok=\" [$__range])) or vector(0)",
               "instant": true,
               "legendFormat": "stale_cards",
               "queryType": "instant",
@@ -2331,7 +2331,7 @@
                 "type": "loki",
                 "uid": "roadtrip-loki"
               },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"response_url update ok=false|Slack response_url post failed|Slack response_url returned\" [$__range])) or vector(0)",
+              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} |~ \"response_url update ok=false|Slack response_url post failed|Slack response_url returned\" [$__range])) or vector(0)",
               "instant": true,
               "legendFormat": "response_failures",
               "queryType": "instant",
@@ -2342,7 +2342,7 @@
                 "type": "loki",
                 "uid": "roadtrip-loki"
               },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"URL button .*silent ack\" [$__range])) or vector(0)",
+              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} |~ \"URL button .*silent ack\" [$__range])) or vector(0)",
               "instant": true,
               "legendFormat": "url_button_acks",
               "queryType": "instant",
@@ -2353,7 +2353,7 @@
                 "type": "loki",
                 "uid": "roadtrip-loki"
               },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"unknown action_id\" [$__range])) or vector(0)",
+              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} |~ \"unknown action_id\" [$__range])) or vector(0)",
               "instant": true,
               "legendFormat": "unknown_actions",
               "queryType": "instant",
@@ -2513,7 +2513,7 @@
                 "type": "loki",
                 "uid": "roadtrip-loki"
               },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"response_url update ok=true\" [$__range])) or vector(0)",
+              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} |~ \"response_url update ok=true\" [$__range])) or vector(0)",
               "instant": true,
               "legendFormat": "response_url_successes",
               "queryType": "instant",
@@ -2524,7 +2524,7 @@
                 "type": "loki",
                 "uid": "roadtrip-loki"
               },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"response_url update ok=false|Slack response_url post failed|Slack response_url returned\" [$__range])) or vector(0)",
+              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} |~ \"response_url update ok=false|Slack response_url post failed|Slack response_url returned\" [$__range])) or vector(0)",
               "instant": true,
               "legendFormat": "response_url_failures",
               "queryType": "instant",
@@ -2535,7 +2535,7 @@
                 "type": "loki",
                 "uid": "roadtrip-loki"
               },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"Slack chat.postMessage .* not ok|Slack postMessage to .* failed\" [$__range])) or vector(0)",
+              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} |~ \"Slack chat.postMessage .* not ok|Slack postMessage to .* failed\" [$__range])) or vector(0)",
               "instant": true,
               "legendFormat": "chat_post_failures",
               "queryType": "instant",
@@ -2546,7 +2546,7 @@
                 "type": "loki",
                 "uid": "roadtrip-loki"
               },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"Slack disabled\" [$__range])) or vector(0)",
+              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} |~ \"Slack disabled\" [$__range])) or vector(0)",
               "instant": true,
               "legendFormat": "slack_disabled_skips",
               "queryType": "instant",
@@ -2719,7 +2719,7 @@
               },
               "direction": "backward",
               "editorMode": "code",
-              "expr": "{container=~\"roadtrip-backend.*\"} | json level=\"level\", loggerName=\"loggerName\", message=\"message\", context=\"mdc\" | __error__=\"\" | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .loggerName \"${1}.\" }}` |~ \"Slack interactivity|Slack signature verify|Slack response_url\"",
+              "expr": "{container=~\"roadtrip-backend.*\"} | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .logger_name \"${1}.\" }}`, message=`{{ __line__ }}` |~ \"Slack interactivity|Slack signature verify|Slack response_url\"",
               "queryType": "range",
               "refId": "A"
             }
@@ -2736,7 +2736,7 @@
               "id": "filterFieldsByName",
               "options": {
                 "include": {
-                  "pattern": "^(Time|level|logger|loggerName|message)$"
+                  "pattern": "^(Time|level|logger|message)$"
                 }
               }
             },
@@ -2749,7 +2749,6 @@
                   "Time": 0,
                   "level": 1,
                   "logger": 2,
-                  "loggerName": 4,
                   "message": 3
                 },
                 "renameByName": {
@@ -2814,7 +2813,7 @@
                 "type": "loki",
                 "uid": "roadtrip-loki"
               },
-              "expr": "topk(10, sum by (action) (count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"Slack interactivity → 200, dispatching\" | regexp \"actions=[[](?P<action>[^]]+)[]]\" [$__range])))",
+              "expr": "topk(10, sum by (action) (count_over_time({container=~\"roadtrip-backend.*\"} |~ \"Slack interactivity → 200, dispatching\" | regexp \"actions=[[](?P<action>[^]]+)[]]\" [$__range])))",
               "format": "table",
               "instant": true,
               "queryType": "instant",
@@ -3616,7 +3615,7 @@
               },
               "direction": "backward",
               "editorMode": "code",
-              "expr": "{container=~\"roadtrip-backend.*\"} | json level=\"level\", loggerName=\"loggerName\", message=\"message\", context=\"mdc\" | __error__=\"\" | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .loggerName \"${1}.\" }}` |~ \"$log_filter\"",
+              "expr": "{container=~\"roadtrip-backend.*\"} | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .logger_name \"${1}.\" }}`, message=`{{ __line__ }}` |~ \"$log_filter\"",
               "queryType": "range",
               "refId": "A"
             }
@@ -3633,7 +3632,7 @@
               "id": "filterFieldsByName",
               "options": {
                 "include": {
-                  "pattern": "^(Time|level|logger|loggerName|message|context)$"
+                  "pattern": "^(Time|level|logger|message|run_id|trace_id)$"
                 }
               }
             },
@@ -3644,18 +3643,19 @@
                 "includeByName": {},
                 "indexByName": {
                   "Time": 0,
-                  "context": 4,
                   "level": 1,
                   "logger": 2,
-                  "loggerName": 5,
-                  "message": 3
+                  "message": 3,
+                  "run_id": 4,
+                  "trace_id": 5
                 },
                 "renameByName": {
                   "Time": "Date",
-                  "context": "Context",
                   "level": "Level",
                   "logger": "Logger",
-                  "message": "Message"
+                  "message": "Message",
+                  "run_id": "Run",
+                  "trace_id": "Trace"
                 }
               }
             }

@@ -650,7 +650,7 @@
             "uid": "roadtrip-loki"
           },
           "editorMode": "code",
-          "expr": "sum by (action) (count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | loggerName=\"ca.floo.roadtrip.route.api.slack.SlackInteractivityRoutes\" |~ \"dispatching\" | pattern `<_> actions=<action> <_>` [$__auto]))",
+          "expr": "sum by (action) (count_over_time({container=~\"roadtrip-backend.*\"} | logger_name=\"ca.floo.roadtrip.route.api.slack.SlackInteractivityRoutes\" |~ \"dispatching\" | pattern `<_> actions=<action> <_>` [$__auto]))",
           "legendFormat": "{{action}}",
           "queryType": "range",
           "refId": "A"
@@ -1133,7 +1133,7 @@
             "uid": "roadtrip-loki"
           },
           "editorMode": "code",
-          "expr": "{container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"http_api request\" |~ \"$route\" | label_format level=\"unknown\" | line_format `{{.message}}`",
+          "expr": "{container=~\"roadtrip-backend.*\"} |~ \"http_api request\" |~ \"$route\" | label_format level=\"unknown\"",
           "queryType": "range",
           "refId": "A"
         }
@@ -1171,7 +1171,7 @@
             "uid": "roadtrip-loki"
           },
           "editorMode": "code",
-          "expr": "{container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | loggerName=~\"ca.floo.roadtrip.route.api.slack.SlackInteractivityRoutes|ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler\" | label_format level=\"unknown\" | line_format `{{.message}}`",
+          "expr": "{container=~\"roadtrip-backend.*\"} | logger_name=~\"ca.floo.roadtrip.route.api.slack.SlackInteractivityRoutes|ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler\" | label_format level=\"unknown\"",
           "queryType": "range",
           "refId": "A"
         }
