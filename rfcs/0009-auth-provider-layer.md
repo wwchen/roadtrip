@@ -438,13 +438,14 @@ in the repo, reviewed under the fatigue of a large diff.
 ## Unresolved questions
 
 1. **Vendor selection.** Auth0 and WorkOS are both viable; the architecture does
-   not depend on the answer, and PRs 1–2 can land before it is made. Inputs worth
-   gathering: current pricing at expected MAU, and question 2 below.
-2. **Password hash export.** Ask both vendors, in writing, before committing. It
-   is the only thing that makes a future migration of password-connection users
-   possible — hosted-UI auth means we never see a plaintext password, so lazy
-   re-hashing on login is unavailable. Otherwise the fallback is a forced reset
-   for that cohort. This may well be the deciding factor between the two.
+   not depend on the answer, and PRs 1–2 have landed without it. With credential
+   portability out of scope (decision 17), the remaining inputs are pricing at
+   expected MAU, developer experience, and how rigorously the vendor verifies an
+   address before asserting `email_verified` — see decision 18.
+2. ~~**Password hash export.**~~ **Resolved** — see decision 17. We do not
+   intend to migrate credentials on a provider switch, so hash export is not a
+   selection criterion. Users re-authenticate against the new provider and
+   account linking reconnects them.
 3. **WorkOS claim shape.** `WorkOsClaimsDialect` needs its upstream-connection
    mapping confirmed against a real token during PR 2. If WorkOS does not expose
    the upstream IdP subject, that dialect populates `upstreamProvider` only and
@@ -479,3 +480,6 @@ in the repo, reviewed under the fatigue of a large diff.
 | 14 | 2026-07-26 | `IdentityProvider` methods are `suspend`, and `exchange` takes the expected nonce — deviating from the sketch above. | A compliant provider is discovered at runtime, so every call is I/O. The nonce must be checked inside verification; returning an unvalidated token for the caller to check would make the check skippable. |
 | 15 | 2026-07-26 | An **unverified** identity claiming an email that already has an account is **refused**, not given a second account. | Linking would hand the existing account over. A shadow account for one address is its own support burden and invites the confusion the attack relies on. The remedy is to verify with the provider and retry. |
 | 16 | 2026-07-26 | On a vendor swap the new provider's identity is **linked alongside** the old one, rather than the old row being updated in place. | The swap then converges after one sign-in per user instead of resolving through the upstream key forever. Found by a test asserting both identities exist. |
+| 17 | 2026-07-26 | **Credentials are not migrated on a provider switch.** Users re-authenticate against the new provider and are reconnected by account linking. Password-hash export is therefore not a vendor-selection criterion. | No data is lost: `app_user` and everything it owns survive. Google/Apple relink exactly on `upstream_subject`; password users set a new password at the new provider and relink on verified email. The cost is one reset for the password cohort, not a migration project. |
+| 18 | 2026-07-26 | Following from 17, a vendor's `email_verified` rigour becomes a selection criterion. | Verified-email matching is what reconnects password users, and it is the weakest of the three link paths. A provider that asserts verification loosely turns re-entry into an account-takeover path against accounts that already hold watches and notification settings. |
+| 19 | 2026-07-26 | Decision 6 (own the Apple Service ID, under our own team) is upgraded from prudent to **required**. | Apple's `sub` and Hide-My-Email relay addresses are both Apple-team-scoped. A different team at the new vendor changes both, so those users match on neither upstream subject nor email — they would silently land on new accounts with their watches apparently gone, and no way to reconcile. This is the one case where not migrating actually loses data. |
