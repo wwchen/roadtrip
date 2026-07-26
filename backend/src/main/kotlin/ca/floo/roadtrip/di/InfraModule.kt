@@ -21,6 +21,8 @@ import ca.floo.roadtrip.db.dataSourceFor
 import ca.floo.roadtrip.db.dsl
 import ca.floo.roadtrip.db.migrate
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.observability.OtelRoadtripMetrics
+import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.ApiCacheRepo
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
@@ -49,6 +51,10 @@ fun infraModule(baseConfig: ApplicationConfig) =
     module {
         single<Map<String, String>> { ApplicationProperties.load(baseConfig = baseConfig) }
         single { AppConfig.fromProperties(get<Map<String, String>>()) }
+
+        // Binds to whatever the OTel Java agent installed as the global
+        // OpenTelemetry; a no-op when the process runs without the agent.
+        single<RoadtripMetrics> { OtelRoadtripMetrics() }
 
         single<DataSource> {
             val properties: Map<String, String> = get()
@@ -127,6 +133,7 @@ fun infraModule(baseConfig: ApplicationConfig) =
                         staticDir = staticDir,
                     ),
                 importTargets = importTargetsFromRegistry(get()),
+                metrics = get<RoadtripMetrics>(),
             )
         }
 

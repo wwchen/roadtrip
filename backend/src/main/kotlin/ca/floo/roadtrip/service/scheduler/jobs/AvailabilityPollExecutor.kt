@@ -3,6 +3,8 @@ package ca.floo.roadtrip.service.scheduler.jobs
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.scheduler.HandlerResult
+import ca.floo.roadtrip.observability.PollSkipReason
+import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.service.availability.AvailabilityRunService
 import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
@@ -28,6 +30,7 @@ internal class AvailabilityPollExecutor(
     private val limiter: VendorRateLimiter,
     private val alertDispatcher: WatchAlertDispatcher,
     private val failoverFetcher: FailoverAvailabilityFetcher,
+    private val metrics: RoadtripMetrics = RoadtripMetrics.NoOp,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -51,6 +54,7 @@ internal class AvailabilityPollExecutor(
         val staleBucketCount = batcher.countFetchGroups(staleTargets, plan.windowFor)
         if (bucketCount > 0 && staleBucketCount == 0) {
             log.info("poller {} skipped fetch: {} group(s) fresh within {}s", poller.id, bucketCount, freshnessWindow.seconds)
+            recordSkip(poller, PollSkipReason.COVERAGE_FRESH)
             return HandlerResult(nextRunAt = runService.nowUtc().plusSeconds(plan.cadenceSec.toLong()))
         }
         if (staleBucketCount > 0 && !limiter.tryAcquire(poller.provider, staleBucketCount.toLong())) {
@@ -61,6 +65,7 @@ internal class AvailabilityPollExecutor(
                 poller.provider,
                 GOVERNOR_STARVED_RETRY_SEC,
             )
+            recordSkip(poller, PollSkipReason.GOVERNOR_STARVED)
             return HandlerResult(nextRunAt = runService.nowUtc().plusSeconds(GOVERNOR_STARVED_RETRY_SEC))
         }
 
@@ -98,6 +103,18 @@ internal class AvailabilityPollExecutor(
             runService.failWithError(handle, e.message ?: e::class.simpleName ?: "unknown")
         }
         return HandlerResult(nextRunAt = runService.computeNextRunAt(poller.id, plan.cadenceSec, runFailed))
+    }
+
+    /** A skipped cycle is the difference between "nothing needed fetching" and
+     *  "the poller is wedged" — indistinguishable from fetch counts alone.
+     *  `availability_poller.provider` is the stored id string; an unknown value
+     *  would already have failed the poll itself, so telemetry declines to throw
+     *  over it. */
+    private fun recordSkip(
+        poller: AvailabilityPollerRepo.Poller,
+        reason: PollSkipReason,
+    ) {
+        BookingProvider.fromIdOrNull(poller.provider)?.let { metrics.availabilityPollSkipped(it, reason) }
     }
 
     private suspend fun fetchWithFailover(

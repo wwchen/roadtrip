@@ -161,6 +161,14 @@ dependencies {
     // logback 1.5.x / Java 11+.
     implementation("net.logstash.logback:logstash-logback-encoder:8.0")
 
+    // Domain metrics (ca.floo.roadtrip.observability). API only — the OTel Java
+    // agent owns the SDK and the OTLP pipeline, and GlobalOpenTelemetry binds to
+    // it at runtime, so nothing here configures an exporter. Pinned to the API
+    // version the agent embeds: opentelemetry-instrumentation-bom 2.29.0
+    // (OTEL_JAVAAGENT_VERSION in the Dockerfile) imports opentelemetry-bom
+    // 1.63.0. Bump both together.
+    implementation("io.opentelemetry:opentelemetry-api:1.63.0")
+
     // Self-documenting /api/docs at runtime from Ktor's routing tree.
     implementation("io.ktor:ktor-server-swagger:$ktorVersion")
     implementation("io.ktor:ktor-server-routing-openapi:$ktorVersion")
@@ -196,6 +204,10 @@ dependencies {
     jooqGenerator("org.testcontainers:postgresql:$testcontainersVersion")
 
     testImplementation(kotlin("test"))
+    // In-memory metric reader, so OtelRoadtripMetricsTest can assert the exact
+    // instrument names and attributes the dashboards and alert rules query.
+    testImplementation("io.opentelemetry:opentelemetry-sdk-metrics:1.63.0")
+    testImplementation("io.opentelemetry:opentelemetry-sdk-testing:1.63.0")
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
     testImplementation("io.ktor:ktor-client-cio:$ktorVersion")
     // MockEngine lets SlackNotifier / AvailabilityClient tests assert request
