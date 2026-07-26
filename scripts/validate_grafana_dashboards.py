@@ -16,6 +16,12 @@ from pathlib import Path
 
 from grafana_dashboard_links import has_roadtrip_tag, has_shared_dashboard_links
 
+# The single folder alert rules are allowed to create. Grafana shares folders
+# between dashboards and alerting, so each one is another entry in the
+# Dashboards nav; one is the floor, since Grafana will not provision rules
+# without a folder at all.
+ALERT_RULE_FOLDER = "Roadtrip"
+
 SELECTOR_VARIABLE_TYPES = {"custom", "query"}
 URL_OVERRIDE_SAFE_SQLSTRING_VARIABLES = {
     "access_type",
@@ -76,12 +82,30 @@ def validate_alert_provisioning(
     provisioning_file: Path,
     failures: list[str],
 ) -> None:
+    """Alert rule groups may only use the one folder Grafana forces on them.
+
+    This check originally forbade `folder:` outright, which was free when the
+    file held only a contact point and a notification policy. Grafana-managed
+    rules cannot be provisioned without a folder — it refuses to start with
+    "rule group has no folder set" — so the rule now bounds the damage instead
+    of forbidding it: exactly one folder, named once, rather than a folder per
+    rule group sprawling through the Dashboards nav.
+
+    The dashboards provider is still held to the stricter rule; dashboards stay
+    at the root. See validate_dashboard_provisioning.
+    """
     text = provisioning_file.read_text()
     for line_number, line in enumerate(text.splitlines(), start=1):
-        if line.strip().startswith("folder:"):
+        stripped = line.strip()
+        if not stripped.startswith("folder:"):
+            continue
+        folder = stripped.removeprefix("folder:").strip()
+        if folder != ALERT_RULE_FOLDER:
             failures.append(
                 f"{provisioning_file.relative_to(repo)}:{line_number}: "
-                "alert rules must not create dashboard-visible Grafana folders"
+                f"alert rule groups must use the {ALERT_RULE_FOLDER!r} folder, "
+                f"got {folder!r} — every extra folder shows up in the "
+                "Dashboards nav"
             )
 
 
