@@ -2,8 +2,35 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# The backend is absent on purpose: it remote-writes rather than being scraped,
+# so it has no `up` series. Its liveness rule uses absent_over_time() instead.
 scrape_configs:
   - job_name: prometheus
     static_configs:
       - targets:
           - prometheus:9090
+
+  # Every signal passes through Alloy, so otelcol_exporter_send_failed_* here is
+  # the only way to see a pipeline dropping data.
+  - job_name: alloy
+    static_configs:
+      - targets:
+          - alloy:12345
+
+  - job_name: loki
+    static_configs:
+      - targets:
+          - loki:3100
+
+  - job_name: tempo
+    static_configs:
+      - targets:
+          - tempo:3200
+
+  # serve_from_sub_path makes bare /metrics 301 to GF_SERVER_ROOT_URL — the public
+  # hostname in prod, 127.0.0.1 locally, neither reachable from in here.
+  - job_name: grafana
+    metrics_path: /dash/metrics
+    static_configs:
+      - targets:
+          - grafana:3000
