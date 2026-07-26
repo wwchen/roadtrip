@@ -77,18 +77,74 @@ loki.source.docker "default" {
   host             = "unix:///var/run/docker.sock"
   targets          = discovery.relabel.containers.output
   relabel_rules    = discovery.relabel.containers.rules
-  forward_to       = [loki.process.backend.receiver]
+  forward_to       = [loki.process.app.receiver]
 }
 
-loki.process "backend" {
+// Unpack the app JSON envelope into Loki's three tiers: `level` as the only
+// stream label, everything else as structured metadata, the message as the line.
+//
+// The `|~ "^[{]"` filter is load-bearing, not decoration: the JVM and the OTel
+// agent print plain-text warnings onto this same stream. Those lines have no
+// `message` field, and stage.output would replace them with nothing.
+loki.process "app" {
   stage.match {
-    selector = "{container=~\"roadtrip-backend.*\"}"
+    selector = "{container=~\"roadtrip-backend.*\"} |~ \"^[{]\""
 
     stage.json {
       expressions = {
-        level    = "level",
-        span_id  = "mdc.span_id",
-        trace_id = "mdc.trace_id",
+        level            = "level",
+        message          = "message",
+        logger_name      = "loggerName",
+        thread_name      = "threadName",
+        trace_id         = "mdc.trace_id",
+        span_id          = "mdc.span_id",
+        run_id           = "mdc.run_id",
+        http_method      = "mdc.http_method",
+        http_path        = "mdc.http_path",
+        http_status      = "mdc.http_status",
+        http_duration_ms = "mdc.http_duration_ms",
+        http_remote      = "mdc.http_remote",
+      }
+    }
+
+    // Only `level` becomes a label — trace_id/run_id are unique per request and
+    // would explode the index into one stream each.
+    stage.labels {
+      values = {
+        level = "",
+      }
+    }
+
+    stage.structured_metadata {
+      values = {
+        logger_name      = "",
+        thread_name      = "",
+        trace_id         = "",
+        span_id          = "",
+        run_id           = "",
+        http_method      = "",
+        http_path        = "",
+        http_status      = "",
+        http_duration_ms = "",
+        http_remote      = "",
+      }
+    }
+
+    stage.output {
+      source = "message"
+    }
+  }
+
+  // Same envelope from companion/src/jsonConsole.js, minus MDC — there is no
+  // trace context on the Node side yet.
+  stage.match {
+    selector = "{container=~\"roadtrip-recgov-companion.*\"} |~ \"^[{]\""
+
+    stage.json {
+      expressions = {
+        level       = "level",
+        message     = "message",
+        logger_name = "loggerName",
       }
     }
 
@@ -96,6 +152,16 @@ loki.process "backend" {
       values = {
         level = "",
       }
+    }
+
+    stage.structured_metadata {
+      values = {
+        logger_name = "",
+      }
+    }
+
+    stage.output {
+      source = "message"
     }
   }
 

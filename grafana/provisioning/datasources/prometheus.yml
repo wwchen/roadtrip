@@ -7,3 +7,8 @@ datasources:
     access: proxy
     url: http://prometheus:9090
     isDefault: false
+    jsonData:
+      # Needs --enable-feature=exemplar-storage on Prometheus (docker-compose.yml).
+      exemplarTraceIdDestinations:
+        - name: trace_id
+          datasourceUid: roadtrip-tempo

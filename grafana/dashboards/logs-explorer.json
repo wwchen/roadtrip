@@ -162,7 +162,7 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "sum by (level) (count_over_time({container=~\"$container\"} | json | __error__=\"\" | level!=\"\" | loggerName=~\"$logger\" |~ \"$search\" [$__auto]))",
+          "expr": "sum by (level) (count_over_time({container=~\"$container\"} | level!=\"\" | logger_name=~\"$logger\" |~ \"$search\" [$__auto]))",
           "legendFormat": "{{level}}",
           "queryType": "range",
           "refId": "A"
@@ -394,7 +394,7 @@
           },
           "direction": "backward",
           "editorMode": "code",
-          "expr": "{container=~\"$container\"} | json level=\"level\", loggerName=\"loggerName\", message=\"message\", context=\"mdc\" | __error__=\"\" | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .loggerName \"${1}.\" }}` | level=~\"$level\", loggerName=~\"$logger\" |~ \"$search\"",
+          "expr": "{container=~\"$container\"} | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .logger_name \"${1}.\" }}`, message=`{{ __line__ }}` | level=~\"$level\", logger_name=~\"$logger\" |~ \"$search\"",
           "queryType": "range",
           "refId": "A"
         }
@@ -411,7 +411,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "pattern": "^(Time|level|logger|loggerName|message|context)$"
+              "pattern": "^(Time|level|logger|message|run_id|trace_id)$"
             }
           }
         },
@@ -422,18 +422,19 @@
             "includeByName": {},
             "indexByName": {
               "Time": 0,
-              "context": 4,
               "level": 1,
               "logger": 2,
-              "loggerName": 5,
-              "message": 3
+              "message": 3,
+              "run_id": 4,
+              "trace_id": 5
             },
             "renameByName": {
               "Time": "Date",
-              "context": "Context",
               "level": "Level",
               "logger": "Logger",
-              "message": "Message"
+              "message": "Message",
+              "run_id": "Run",
+              "trace_id": "Trace"
             }
           }
         }
@@ -511,7 +512,7 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "topk(20, sum by (loggerName) (count_over_time({container=~\"$container\"} | json | __error__=\"\" | level=~\"$level\" |~ \"$search\" [$__range])))",
+          "expr": "topk(20, sum by (loggerName) (count_over_time({container=~\"$container\"} | level=~\"$level\" |~ \"$search\" | label_format loggerName=logger_name [$__range])))",
           "format": "table",
           "instant": true,
           "queryType": "instant",
@@ -590,7 +591,7 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "sum by (level) (count_over_time({container=~\"$container\"} | json | __error__=\"\" | level!=\"\" | loggerName=~\"$logger\" |~ \"$search\" [$__range]))",
+          "expr": "sum by (level) (count_over_time({container=~\"$container\"} | level!=\"\" | logger_name=~\"$logger\" |~ \"$search\" [$__range]))",
           "format": "table",
           "instant": true,
           "queryType": "instant",
@@ -813,7 +814,7 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "{container=~\"$container\"} | json level=\"level\", loggerName=\"loggerName\", message=\"message\", context=\"mdc\" | __error__=\"\" | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .loggerName \"${1}.\" }}` | level=~\"WARN|ERROR\", loggerName=~\"$logger\" |~ \"$search\"",
+          "expr": "{container=~\"$container\"} | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .logger_name \"${1}.\" }}`, message=`{{ __line__ }}` | level=~\"WARN|ERROR\", logger_name=~\"$logger\" |~ \"$search\"",
           "queryType": "range",
           "refId": "A"
         }
@@ -830,7 +831,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "pattern": "^(Time|level|logger|loggerName|message|context)$"
+              "pattern": "^(Time|level|logger|message|run_id|trace_id)$"
             }
           }
         },
@@ -840,18 +841,19 @@
             "excludeByName": {},
             "indexByName": {
               "Time": 0,
-              "context": 3,
               "level": 1,
               "logger": 2,
-              "loggerName": 5,
-              "message": 4
+              "message": 4,
+              "run_id": 3,
+              "trace_id": 4
             },
             "renameByName": {
               "Time": "Date",
-              "context": "Context",
               "level": "Level",
               "logger": "Logger",
-              "message": "Message"
+              "message": "Message",
+              "run_id": "Run",
+              "trace_id": "Trace"
             }
           }
         }

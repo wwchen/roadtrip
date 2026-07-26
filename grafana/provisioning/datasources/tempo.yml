@@ -11,8 +11,23 @@ datasources:
       httpMethod: GET
       nodeGraph:
         enabled: true
+      # Both read the span metrics from Tempo's metrics_generator (tempo.yml).
       serviceMap:
         datasourceUid: roadtrip-prometheus
+      tracesToMetrics:
+        datasourceUid: roadtrip-prometheus
+        spanStartTimeShift: -2m
+        spanEndTimeShift: 2m
+        queries:
+          - name: Span rate
+            query: 'sum(rate(traces_spanmetrics_calls_total{$$__tags}[$$__rate_interval]))'
+          - name: Span p95 latency
+            query: 'histogram_quantile(0.95, sum by (le) (rate(traces_spanmetrics_latency_bucket{$$__tags}[$$__rate_interval])))'
+        tags:
+          - key: service.name
+            value: service
+          - key: span.name
+            value: span_name
       tracesToLogsV2:
         datasourceUid: roadtrip-loki
         spanStartTimeShift: -1m
@@ -20,4 +35,4 @@ datasources:
         filterByTraceID: false
         filterBySpanID: false
         customQuery: true
-        query: '{container=~"roadtrip-backend.*"} | json | mdc_trace_id="$${__trace.traceId}"'
+        query: '{container=~"roadtrip-backend.*"} | trace_id="$${__trace.traceId}"'
