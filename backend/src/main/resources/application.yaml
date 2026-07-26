@@ -21,7 +21,11 @@ roadtrip:
   auth:
     # Selects a claims dialect only — the flow is plain OIDC for every value.
     # auth0 | workos | oidc. See rfcs/0009-auth-provider-layer.md.
-    provider: "${ROADTRIP_AUTH_PROVIDER:oidc}"
+    #
+    # Defaults to the vendor we actually use. The `oidc` fallback records no
+    # upstream identity, and that column cannot be backfilled for users who stop
+    # signing in — so a forgotten env var should not silently cost us it.
+    provider: "${ROADTRIP_AUTH_PROVIDER:auth0}"
     # Blank issuer or client-id = auth disabled, a first-class state: the app
     # boots and every anonymous surface works with no tenant provisioned.
     issuer: "${ROADTRIP_AUTH_ISSUER:}"

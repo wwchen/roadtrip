@@ -437,11 +437,8 @@ in the repo, reviewed under the fatigue of a large diff.
 
 ## Unresolved questions
 
-1. **Vendor selection.** Auth0 and WorkOS are both viable; the architecture does
-   not depend on the answer, and PRs 1–2 have landed without it. With credential
-   portability out of scope (decision 17), the remaining inputs are pricing at
-   expected MAU, developer experience, and how rigorously the vendor verifies an
-   address before asserting `email_verified` — see decision 18.
+1. ~~**Vendor selection.**~~ **Resolved: Auth0** — see decision 20. WorkOS
+   remains supported in code, so the choice stays reversible.
 2. ~~**Password hash export.**~~ **Resolved** — see decision 17. We do not
    intend to migrate credentials on a provider switch, so hash export is not a
    selection criterion. Users re-authenticate against the new provider and
@@ -483,3 +480,4 @@ in the repo, reviewed under the fatigue of a large diff.
 | 17 | 2026-07-26 | **Credentials are not migrated on a provider switch.** Users re-authenticate against the new provider and are reconnected by account linking. Password-hash export is therefore not a vendor-selection criterion. | No data is lost: `app_user` and everything it owns survive. Google/Apple relink exactly on `upstream_subject`; password users set a new password at the new provider and relink on verified email. The cost is one reset for the password cohort, not a migration project. |
 | 18 | 2026-07-26 | Following from 17, a vendor's `email_verified` rigour becomes a selection criterion. | Verified-email matching is what reconnects password users, and it is the weakest of the three link paths. A provider that asserts verification loosely turns re-entry into an account-takeover path against accounts that already hold watches and notification settings. |
 | 19 | 2026-07-26 | Decision 6 (own the Apple Service ID, under our own team) is upgraded from prudent to **required**. | Apple's `sub` and Hide-My-Email relay addresses are both Apple-team-scoped. A different team at the new vendor changes both, so those users match on neither upstream subject nor email — they would silently land on new accounts with their watches apparently gone, and no way to reconcile. This is the one case where not migrating actually loses data. |
+| 20 | 2026-07-26 | **Auth0 is the identity provider.** `roadtrip.auth.provider` now defaults to `auth0` rather than `oidc`. | Cloudflare Access was considered and rejected: it gates paths absolutely, so it cannot express "public app, some actions signed in", it has no password option, and it is priced per seat for a workforce rather than open signup. Access stays where it fits — the edge rule on `/api/admin/*`. The default changes because the `oidc` fallback silently records no upstream identity, and that column cannot be backfilled. |
