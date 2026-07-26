@@ -1,8 +1,15 @@
+import { isJsonConsoleInstalled } from '../jsonConsole.js'
 import { LOG_DETAIL_MAX_CHARS } from './constants.js'
 
 const COMPANION_ID = process.env.COMPANION_ID || 'recgov-companion'
 
 export function log (...items) {
+  // Under JSON output the envelope already carries `timestamp` and
+  // `loggerName`; re-prefixing them would just duplicate both inside `message`.
+  if (isJsonConsoleInstalled()) {
+    console.log(...items)
+    return
+  }
   console.log(new Date().toISOString(), `[${COMPANION_ID}]`, ...items)
 }
 
