@@ -35,3 +35,6 @@ qa/playwright-report/
 # data/pricing-cache/ if it's still around.
 data/raw/
 data/etl-out/
+
+# Brainstorming visual companion
+.superpowers/
