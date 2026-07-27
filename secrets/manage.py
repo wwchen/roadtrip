@@ -270,13 +270,23 @@ def write_vault(env_name: str, values: dict[str, str]) -> None:
 
 
 def load_merged(env_name: str) -> dict[str, str]:
-    """common + the environment's overlay. The overlay wins."""
+    """Every registered secret, with common + the environment's overlay applied.
+
+    Registered-but-unset secrets are exported as empty strings rather than
+    omitted. Compose refuses to start when an `environment:`-sourced secret's
+    variable is unset, so omitting them would make registering a secret you
+    have not filled in yet break the whole stack. Empty is also the state the
+    application already understands: ConfigSection maps "" to null and
+    SecretsBootstrap counts blank as missing, so an unset optional secret
+    disables its feature exactly as before.
+    """
     if env_name not in ENVIRONMENTS:
         raise SecretsError(
             f"unknown environment '{env_name}'. Expected one of: {', '.join(ENVIRONMENTS)}"
         )
-    merged = read_vault(COMMON_ENV)
-    merged.update(read_vault(env_name))
+    merged = {name: "" for name in load_registry()}
+    merged.update(read_vault(COMMON_ENV))
+    merged.update({k: v for k, v in read_vault(env_name).items() if v})
     return merged
 
 

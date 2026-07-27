@@ -40,6 +40,11 @@ def _read_secret(name: str) -> str:
         try:
             with open(path, encoding="utf-8") as handle:
                 return handle.read().strip()
+        except FileNotFoundError:
+            # Compose creates no file when the secret's value is empty, which
+            # is the same state as an unset token: auth disabled. Treating it
+            # as fatal would make an unset optional secret crash the sidecar.
+            return ""
         except OSError as exc:
             raise SystemExit(f"cannot read {name}_FILE={path}: {exc}") from exc
     return os.environ.get(name, "").strip()

@@ -71,6 +71,19 @@ class SecretsBootstrapTest {
     }
 
     @Test
+    fun `secrets this container never receives are not validated here`() {
+        // The registry also covers grafana-, postgres- and cloudflared-only
+        // secrets. They are required in prod but are never mounted into the
+        // backend, so demanding them would fail a correct deploy.
+        val required = SecretsBootstrap.requiredByProfile()
+
+        assertTrue("CLOUDFLARE_TUNNEL_TOKEN" !in required, "validating cloudflared's token")
+        assertTrue("GRAFANA_ADMIN_PASSWORD" !in required, "validating grafana's password")
+        assertTrue("RIDB_API_KEY" !in required, "validating a host-tools-only secret")
+        assertContains(required.keys, "MAPBOX_TOKEN")
+    }
+
+    @Test
     fun `boot fails listing every secret missing for the profile`() {
         val failure =
             assertFailsWith<MissingSecretsException> {
@@ -84,6 +97,10 @@ class SecretsBootstrapTest {
         // restart per missing secret.
         assertTrue(failure.missing.size > 1, "expected several missing, got ${failure.missing}")
         assertContains(failure.missing, "MAPBOX_TOKEN")
+        assertTrue(
+            "GRAFANA_ADMIN_PASSWORD" !in failure.missing,
+            "backend should not fail over another service's secret",
+        )
         assertContains(failure.message.orEmpty(), "manage.py set")
     }
 
