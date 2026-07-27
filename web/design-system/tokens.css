@@ -27,6 +27,7 @@
   --rt-fill-active: rgba(255,255,255,0.08);
   --rt-border:        rgba(255,255,255,0.08);
   --rt-border-strong: rgba(255,255,255,0.13);
+  --rt-scrim:         rgba(0,0,0,0.62);      /* modal / drawer backdrop */
 
   /* Text */
   --rt-text:  #e8eaed;

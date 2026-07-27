@@ -73,3 +73,51 @@ test('stub-mount: mountModal sets host.innerHTML and injects stylesheet', () => 
     }
   }
 });
+
+test('setBody appends element into the modal body host', () => {
+  const originalDocument = globalThis.document;
+
+  // Fake body host that records appendChild calls
+  let appendedEl = null;
+  const fakeBodyHost = {
+    innerHTML: '',
+    appendChild(el) { appendedEl = el; },
+  };
+
+  globalThis.document = {
+    getElementById() { return null; },
+    createElement(tagName) { return { id: '', rel: '', href: '', tagName }; },
+    head: { appendChild() {} },
+    activeElement: null,
+    // querySelector presence enables the bodyHost resolution branch in modal.js
+    querySelector() { return null; },
+    addEventListener() {},
+    removeEventListener() {},
+  };
+
+  const host = {
+    innerHTML: '',
+    addEventListener() {},
+    removeEventListener() {},
+    querySelector(sel) {
+      // Resolve the body host selector; return null for focus-trap queries.
+      if (sel === '[data-modal-body]') return fakeBodyHost;
+      return null;
+    },
+  };
+
+  try {
+    const controller = mountModal(host, { title: 'Test' });
+
+    const fakeContent = { nodeType: 1, tagName: 'DIV' };
+    controller.setBody(fakeContent);
+
+    assert.strictEqual(appendedEl, fakeContent, 'setBody should append the element into the body host');
+  } finally {
+    if (originalDocument === undefined) {
+      delete globalThis.document;
+    } else {
+      globalThis.document = originalDocument;
+    }
+  }
+});

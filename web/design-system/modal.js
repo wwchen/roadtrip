@@ -103,6 +103,7 @@ export function mountModal(container, config = {}) {
 }
 
 function injectStyles() {
+  if (typeof document === 'undefined') return;
   if (document.getElementById(STYLE_ID)) return;
   const link = document.createElement('link');
   link.id = STYLE_ID;
