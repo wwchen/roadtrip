@@ -124,6 +124,11 @@ def link_native_key_path() -> Path | None:
 # silently switch it to YAML parsing and mangle a value containing a colon.
 SOPS_FORMAT_ARGS = ["--input-type", "dotenv", "--output-type", "dotenv"]
 
+# sops exits 200 from `edit` when the editor closed without modifying anything.
+# That's an outcome, not a failure — surfacing it as one made a no-op edit look
+# like the vault was broken.
+SOPS_EXIT_NO_CHANGE = 200
+
 # Metadata keys sops appends to an encrypted dotenv. Excluded from the key
 # diffing in `check`, since they aren't application config.
 SOPS_METADATA_PREFIX = "sops_"
@@ -207,7 +212,18 @@ def require_tools(*names: str) -> None:
         )
 
 
-def run_sops(args: list[str], *, capture: bool = True) -> str:
+def run_sops(
+    args: list[str],
+    *,
+    capture: bool = True,
+    allow: tuple[int, ...] = (),
+) -> tuple[int, str]:
+    """Run sops, returning (exit code, stdout). Raises on unexpected failure.
+
+    ``allow`` lists non-zero exit codes that are a normal outcome for the
+    caller rather than an error — sops uses them to report state, not just
+    trouble (see SOPS_EXIT_NO_CHANGE).
+    """
     require_tools("sops")
     # Hand sops the pinned key path rather than letting it guess per platform.
     # This is what makes AGE_KEY_FILE authoritative everywhere; without it, sops
@@ -222,7 +238,7 @@ def run_sops(args: list[str], *, capture: bool = True) -> str:
         text=True,
         env=env,
     )
-    if proc.returncode != 0:
+    if proc.returncode != 0 and proc.returncode not in allow:
         detail = (proc.stderr or proc.stdout or "").strip() if capture else ""
         # sops' "did not find keys in locations ..." lists only the env-var
         # paths it consulted, never the per-platform default, so a key in the
@@ -236,7 +252,7 @@ def run_sops(args: list[str], *, capture: bool = True) -> str:
             else ""
         )
         raise SecretsError(f"sops failed ({' '.join(args)})\n{detail}{hint}")
-    return proc.stdout if capture else ""
+    return proc.returncode, (proc.stdout if capture else "")
 
 
 def decrypt() -> str:
@@ -245,7 +261,7 @@ def decrypt() -> str:
             f"{SECRETS_FILE.relative_to(ROOT)} does not exist.\n"
             "First-time setup: `make secrets-init`, then `make secrets-import`."
         )
-    plaintext = run_sops(["--decrypt", *SOPS_FORMAT_ARGS, str(SECRETS_FILE)])
+    _, plaintext = run_sops(["--decrypt", *SOPS_FORMAT_ARGS, str(SECRETS_FILE)])
     if not parse_dotenv(plaintext):
         raise SecretsError(
             f"{SECRETS_FILE.relative_to(ROOT)} decrypted to nothing usable — "
@@ -408,7 +424,7 @@ def cmd_import(args: argparse.Namespace) -> int:
     # sops matches creation rules against the input path, but the input here is
     # wherever the plaintext .env happens to live. Override the name so the
     # secrets/ rule (and therefore the right age recipients) is what applies.
-    ciphertext = run_sops(
+    _, ciphertext = run_sops(
         [
             "--encrypt",
             *SOPS_FORMAT_ARGS,
@@ -430,7 +446,14 @@ def cmd_edit(_args: argparse.Namespace) -> int:
             f"{SECRETS_FILE.relative_to(ROOT)} does not exist. "
             "Run `make secrets-import` to create it from your current .env."
         )
-    run_sops(["edit", str(SECRETS_FILE)], capture=False)
+    code, _ = run_sops(
+        ["edit", str(SECRETS_FILE)],
+        capture=False,
+        allow=(SOPS_EXIT_NO_CHANGE,),
+    )
+    if code == SOPS_EXIT_NO_CHANGE:
+        print("vault unchanged.")
+        return 0
     print("vault updated — commit secrets/secrets.enc.env, then `make secrets`.")
     return 0
 
@@ -515,7 +538,10 @@ def cmd_check(args: argparse.Namespace) -> int:
         if key.startswith(SOPS_METADATA_PREFIX):
             continue
         value = raw.split("=", 1)[1]
-        if not value.startswith("ENC["):
+        # An unset key is legitimate — most of .env.example is optional knobs —
+        # and there is nothing to encrypt in an empty string, so sops leaves it
+        # as-is. Only a *populated* plaintext value is a leak.
+        if value and not value.startswith("ENC["):
             errors.append(f"{key} is not encrypted in {SECRETS_FILE.relative_to(ROOT)}")
 
     for line in active_placeholders(SOPS_CONFIG.read_text()):
@@ -547,7 +573,16 @@ def cmd_check(args: argparse.Namespace) -> int:
         return 1
     for warning in warnings:
         print(f"warn: {warning}")
-    print(f"secrets check passed ({len(vault_keys)} keys, all encrypted)")
+    populated = sum(
+        1
+        for key, raw in entries
+        if not key.startswith(SOPS_METADATA_PREFIX) and raw.split("=", 1)[1]
+    )
+    unset = len(vault_keys) - populated
+    print(
+        f"secrets check passed ({len(vault_keys)} keys: "
+        f"{populated} set and encrypted, {unset} unset)"
+    )
     return 0
 
 

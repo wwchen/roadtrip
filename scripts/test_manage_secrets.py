@@ -157,6 +157,29 @@ class CheckTest(unittest.TestCase):
             self.assertEqual(0, secrets_tool.cmd_check(args(staged=False)))
             self.assertEqual(1, secrets_tool.cmd_check(args(staged=True)))
 
+    def test_unset_keys_are_not_treated_as_leaked_plaintext(self):
+        # There is nothing to encrypt in an empty string, so sops leaves the
+        # line alone. Flagging that as "not encrypted" failed the check on
+        # every optional knob in .env.example.
+        with temp_root() as root:
+            self._write_vault(
+                root,
+                "API_KEY=ENC[AES256_GCM,data:x]\n"
+                "OPTIONAL_KNOB=\n"
+                "sops_version=3.13.3\n",
+            )
+            (root / ".env.example").write_text("API_KEY=\nOPTIONAL_KNOB=\n")
+            self.assertEqual(0, secrets_tool.cmd_check(args()))
+
+    def test_a_populated_plaintext_value_still_fails(self):
+        """The exemption above must not blunt the check that matters."""
+        with temp_root() as root:
+            self._write_vault(
+                root, "API_KEY=oops-in-the-clear\nsops_version=3.13.3\n"
+            )
+            (root / ".env.example").write_text("API_KEY=\n")
+            self.assertEqual(1, secrets_tool.cmd_check(args()))
+
     def test_accepts_a_well_formed_vault(self):
         with temp_root() as root:
             self._write_vault(
@@ -166,6 +189,30 @@ class CheckTest(unittest.TestCase):
             # .env.example are optional knobs.
             (root / ".env.example").write_text("API_KEY=\nOPTIONAL_KNOB=\n")
             self.assertEqual(0, secrets_tool.cmd_check(args()))
+
+
+class EditTest(unittest.TestCase):
+    def test_closing_the_editor_unchanged_is_not_an_error(self):
+        # sops exits 200 for "File has not changed". Treating every non-zero
+        # code as failure made a no-op edit look like a broken vault.
+        with temp_root() as root:
+            (root / "secrets" / "secrets.enc.env").write_text("A=ENC[x]\n")
+            with unittest.mock.patch.object(
+                secrets_tool, "run_sops", return_value=(secrets_tool.SOPS_EXIT_NO_CHANGE, "")
+            ):
+                self.assertEqual(0, secrets_tool.cmd_edit(args()))
+
+    def test_edit_passes_the_no_change_code_as_allowed(self):
+        """Only works because run_sops is told 200 is acceptable."""
+        with temp_root() as root:
+            (root / "secrets" / "secrets.enc.env").write_text("A=ENC[x]\n")
+            with unittest.mock.patch.object(
+                secrets_tool, "run_sops", return_value=(0, "")
+            ) as run:
+                secrets_tool.cmd_edit(args())
+            self.assertIn(
+                secrets_tool.SOPS_EXIT_NO_CHANGE, run.call_args.kwargs["allow"]
+            )
 
 
 class MaterializeGuardTest(unittest.TestCase):
