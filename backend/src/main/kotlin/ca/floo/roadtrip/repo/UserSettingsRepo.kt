@@ -3,6 +3,7 @@ package ca.floo.roadtrip.repo
 import ca.floo.roadtrip.db.generated.tables.UserSettings.Companion.USER_SETTINGS
 import ca.floo.roadtrip.model.domain.auth.UserId
 import org.jooq.DSLContext
+import org.jooq.impl.DSL
 import java.time.OffsetDateTime
 
 /** Persistence for `user_settings`. Stores the Slack token only as ciphertext. */
@@ -71,6 +72,50 @@ open class UserSettingsRepo(
             .set(USER_SETTINGS.SLACK_TOKEN_HINT, hint)
             .set(USER_SETTINGS.UPDATED_AT, OffsetDateTime.now())
             .execute()
+    }
+
+    /**
+     * Atomically upserts notification preferences and — when [slackTokenCipher] and
+     * [slackTokenHint] are both non-null — the Slack token, all inside one jOOQ
+     * transaction. When the token args are null the token columns are left untouched,
+     * preserving any previously-stored token (same semantics as [upsertNotifications]).
+     */
+    open fun saveNotifications(
+        userId: UserId,
+        notificationEmail: String?,
+        slackChannel: String?,
+        slackTokenCipher: ByteArray?,
+        slackTokenHint: String?,
+    ) {
+        ctx.transaction { config ->
+            val tx = DSL.using(config)
+            val now = OffsetDateTime.now()
+
+            // Upsert notification email + channel
+            tx
+                .insertInto(USER_SETTINGS)
+                .set(USER_SETTINGS.USER_ID, userId.value)
+                .set(USER_SETTINGS.NOTIFICATION_EMAIL, notificationEmail)
+                .set(USER_SETTINGS.SLACK_CHANNEL, slackChannel)
+                .set(USER_SETTINGS.UPDATED_AT, now)
+                .onConflict(USER_SETTINGS.USER_ID)
+                .doUpdate()
+                .set(USER_SETTINGS.NOTIFICATION_EMAIL, notificationEmail)
+                .set(USER_SETTINGS.SLACK_CHANNEL, slackChannel)
+                .set(USER_SETTINGS.UPDATED_AT, now)
+                .execute()
+
+            // Optionally set the token within the same transaction
+            if (slackTokenCipher != null && slackTokenHint != null) {
+                tx
+                    .update(USER_SETTINGS)
+                    .set(USER_SETTINGS.SLACK_TOKEN_CIPHER, slackTokenCipher)
+                    .set(USER_SETTINGS.SLACK_TOKEN_HINT, slackTokenHint)
+                    .set(USER_SETTINGS.UPDATED_AT, now)
+                    .where(USER_SETTINGS.USER_ID.eq(userId.value))
+                    .execute()
+            }
+        }
     }
 
     open fun clearSlack(userId: UserId) {

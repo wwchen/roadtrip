@@ -123,8 +123,7 @@ class UserSettingsService(
             // Require cipher before calling Slack (fail fast without a network call)
             val c = cipher ?: throw SettingsError.EncryptionUnavailable()
             val client = requireNotNull(slackClient) { "Slack client not configured" }
-            val identity = client.authTest(req.slackToken) ?: throw SettingsError.SlackRejected()
-            // identity confirmed; we don't use the details here — just verifying the token is valid
+            client.authTest(req.slackToken) ?: throw SettingsError.SlackRejected()
             newTokenCipher = c.seal(req.slackToken)
             newTokenHint = req.slackToken.takeLast(4)
         } else {
@@ -132,11 +131,14 @@ class UserSettingsService(
             newTokenHint = null
         }
 
-        // All validations passed — persist
-        settingsRepo.upsertNotifications(principal.userId, req.notificationEmail, req.slackChannel)
-        if (newTokenCipher != null && newTokenHint != null) {
-            settingsRepo.setSlackToken(principal.userId, newTokenCipher, newTokenHint)
-        }
+        // All validations passed — persist atomically
+        settingsRepo.saveNotifications(
+            userId = principal.userId,
+            notificationEmail = req.notificationEmail,
+            slackChannel = req.slackChannel,
+            slackTokenCipher = newTokenCipher,
+            slackTokenHint = newTokenHint,
+        )
 
         val user = requireNotNull(userRepo.findById(principal.userId)) { "user not found: ${principal.userId}" }
         val settings = settingsRepo.find(principal.userId)

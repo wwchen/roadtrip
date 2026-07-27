@@ -30,6 +30,30 @@ class UserSettingsRepoTest : SharedDbTest() {
         assertEquals("3f9a", s.slackTokenHint)
     }
 
+    @Test fun `saveNotifications with token args persists both notifications and token atomically`() {
+        val u = newUser()
+        val cipher = byteArrayOf(0xA, 0xB, 0xC)
+        repo.saveNotifications(u, notificationEmail = "a@x.com", slackChannel = "#ch", slackTokenCipher = cipher, slackTokenHint = "hint")
+        val s = repo.find(u)!!
+        assertEquals("a@x.com", s.notificationEmail)
+        assertEquals("#ch", s.slackChannel)
+        assertContentEquals(cipher, s.slackTokenCipher)
+        assertEquals("hint", s.slackTokenHint)
+    }
+
+    @Test fun `saveNotifications with null token args preserves any pre-existing token`() {
+        val u = newUser()
+        val existingCipher = byteArrayOf(0x1, 0x2, 0x3)
+        repo.setSlackToken(u, existingCipher, "3f9a")
+        repo.saveNotifications(u, notificationEmail = "b@x.com", slackChannel = "#new", slackTokenCipher = null, slackTokenHint = null)
+        val s = repo.find(u)!!
+        assertEquals("b@x.com", s.notificationEmail)
+        assertEquals("#new", s.slackChannel)
+        // Token must be untouched
+        assertContentEquals(existingCipher, s.slackTokenCipher)
+        assertEquals("3f9a", s.slackTokenHint)
+    }
+
     @Test fun `clearSlack nulls token but keeps channel`() {
         val u = newUser()
         repo.upsertNotifications(u, null, "#c")
