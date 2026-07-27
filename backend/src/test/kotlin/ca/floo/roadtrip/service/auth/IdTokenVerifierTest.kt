@@ -32,7 +32,7 @@ private const val RSA_KEY_SIZE = 2048
 class IdTokenVerifierTest {
     private val signingKey: RSAKey = RSAKeyGenerator(RSA_KEY_SIZE).keyID(KEY_ID).generate()
     private val jwks = JWKSet(listOf(signingKey.toPublicJWK()))
-    private val verifier = IdTokenVerifier(issuer = ISSUER, clientId = CLIENT_ID)
+    private val verifier = IdTokenVerifier(clientId = CLIENT_ID)
 
     private fun claims(
         issuer: String = ISSUER,
@@ -74,7 +74,7 @@ class IdTokenVerifierTest {
 
     @Test
     fun `a well-formed token verifies and maps its claims`() {
-        val verified = verifier.verify(signRs256(claims()), jwks, NONCE)
+        val verified = verifier.verify(signRs256(claims()), jwks, ISSUER, NONCE)
 
         assertEquals("auth0|user-1", verified.subject)
         assertEquals(ISSUER, verified.issuer)
@@ -85,30 +85,47 @@ class IdTokenVerifierTest {
 
     @Test
     fun `email_verified false is carried through, not assumed`() {
-        val verified = verifier.verify(signRs256(claims(isEmailVerified = false)), jwks, NONCE)
+        val verified = verifier.verify(signRs256(claims(isEmailVerified = false)), jwks, ISSUER, NONCE)
 
         assertTrue(!verified.isEmailVerified)
+    }
+
+    /**
+     * Auth0 issues `iss` with a trailing slash while the discovery URL is built
+     * from the unslashed form, so the configured string and the token's issuer
+     * genuinely differ. Verifying against the discovery document's issuer is
+     * what makes that work; comparing against the configured value rejected
+     * every Auth0 sign-in with "JWT iss claim value rejected".
+     */
+    @Test
+    fun `the issuer is taken from discovery, so a trailing slash verifies`() {
+        val slashed = "$ISSUER/"
+        val token = signRs256(claims(issuer = slashed))
+
+        val verified = verifier.verify(token, jwks, slashed, NONCE)
+
+        assertEquals(slashed, verified.issuer)
     }
 
     @Test
     fun `a token from another issuer is rejected`() {
         val token = signRs256(claims(issuer = "https://evil.example.com"))
 
-        assertFailsWith<AuthException> { verifier.verify(token, jwks, NONCE) }
+        assertFailsWith<AuthException> { verifier.verify(token, jwks, ISSUER, NONCE) }
     }
 
     @Test
     fun `a token minted for another client is rejected`() {
         val token = signRs256(claims(audience = listOf("some-other-client")))
 
-        assertFailsWith<AuthException> { verifier.verify(token, jwks, NONCE) }
+        assertFailsWith<AuthException> { verifier.verify(token, jwks, ISSUER, NONCE) }
     }
 
     @Test
     fun `an expired token is rejected`() {
         val token = signRs256(claims(expiresInSeconds = -60))
 
-        assertFailsWith<AuthException> { verifier.verify(token, jwks, NONCE) }
+        assertFailsWith<AuthException> { verifier.verify(token, jwks, ISSUER, NONCE) }
     }
 
     @Test
@@ -116,14 +133,14 @@ class IdTokenVerifierTest {
         // Replay: a token legitimately issued for a different sign-in attempt.
         val token = signRs256(claims(nonce = "nonce-from-another-flow"))
 
-        assertFailsWith<AuthException> { verifier.verify(token, jwks, NONCE) }
+        assertFailsWith<AuthException> { verifier.verify(token, jwks, ISSUER, NONCE) }
     }
 
     @Test
     fun `a token with no nonce at all is rejected`() {
         val token = signRs256(claims(nonce = null))
 
-        assertFailsWith<AuthException> { verifier.verify(token, jwks, NONCE) }
+        assertFailsWith<AuthException> { verifier.verify(token, jwks, ISSUER, NONCE) }
     }
 
     @Test
@@ -138,14 +155,14 @@ class IdTokenVerifierTest {
                 claims(),
             ).apply { sign(MACSigner(publicKeyBytes)) }.serialize()
 
-        assertFailsWith<AuthException> { verifier.verify(forged, jwks, NONCE) }
+        assertFailsWith<AuthException> { verifier.verify(forged, jwks, ISSUER, NONCE) }
     }
 
     @Test
     fun `an unsigned token is rejected`() {
         val unsigned = PlainJWT(claims()).serialize()
 
-        assertFailsWith<AuthException> { verifier.verify(unsigned, jwks, NONCE) }
+        assertFailsWith<AuthException> { verifier.verify(unsigned, jwks, ISSUER, NONCE) }
     }
 
     @Test
@@ -157,19 +174,19 @@ class IdTokenVerifierTest {
                 claims(),
             ).apply { sign(RSASSASigner(strangerKey)) }.serialize()
 
-        assertFailsWith<AuthException> { verifier.verify(forged, jwks, NONCE) }
+        assertFailsWith<AuthException> { verifier.verify(forged, jwks, ISSUER, NONCE) }
     }
 
     @Test
     fun `multiple audiences require azp to name this client`() {
         val wrongAzp = signRs256(claims(audience = listOf(CLIENT_ID, "other"), azp = "other"))
-        assertFailsWith<AuthException> { verifier.verify(wrongAzp, jwks, NONCE) }
+        assertFailsWith<AuthException> { verifier.verify(wrongAzp, jwks, ISSUER, NONCE) }
 
         val missingAzp = signRs256(claims(audience = listOf(CLIENT_ID, "other")))
-        assertFailsWith<AuthException> { verifier.verify(missingAzp, jwks, NONCE) }
+        assertFailsWith<AuthException> { verifier.verify(missingAzp, jwks, ISSUER, NONCE) }
 
         val correctAzp = signRs256(claims(audience = listOf(CLIENT_ID, "other"), azp = CLIENT_ID))
-        assertEquals("auth0|user-1", verifier.verify(correctAzp, jwks, NONCE).subject)
+        assertEquals("auth0|user-1", verifier.verify(correctAzp, jwks, ISSUER, NONCE).subject)
     }
 
     @Test

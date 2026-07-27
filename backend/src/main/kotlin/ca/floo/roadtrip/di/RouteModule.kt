@@ -173,7 +173,7 @@ private fun authRouteWiring(
             config = authConfig,
             redirectUri = "$rootUrl/auth/callback",
             oidcClient = oidcClient,
-            idTokenVerifier = IdTokenVerifier(issuer = authConfig.issuer, clientId = authConfig.clientId),
+            idTokenVerifier = IdTokenVerifier(clientId = authConfig.clientId),
             claimsDialect = ClaimsDialectRegistry.default().forProvider(authConfig.provider),
         )
     val userRepo = UserRepo(ctx)
