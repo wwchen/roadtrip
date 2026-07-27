@@ -5,7 +5,8 @@
       "name": "app",
       "runtimeExecutable": "tilt",
       "runtimeArgs": ["up"],
-      "port": 8765
+      "port": 8765,
+      "autoPort": false
     }
   ]
 }
