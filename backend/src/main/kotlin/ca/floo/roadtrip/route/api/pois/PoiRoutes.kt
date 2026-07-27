@@ -3,8 +3,10 @@ package ca.floo.roadtrip.route.api.pois
 import ca.floo.roadtrip.model.api.poi.PoiDetailFeatureSchema
 import ca.floo.roadtrip.model.api.poi.PoiFeatureCollectionSchema
 import ca.floo.roadtrip.model.api.poi.PoisRequestSchema
+import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.model.domain.poi.Bbox
 import ca.floo.roadtrip.route.common.RouteBodyResult
+import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.boundedIntQuery
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
@@ -93,7 +95,7 @@ internal fun Route.poiRoutes(poiService: PoiReader) {
                         "categories defaults to the canonical serving set. " +
                         "zoom < ${CampgroundService.MIN_POI_ZOOM} suppresses campgrounds even when requested. " +
                         "Corridor filtering has moved to POST /api/pois/on-route.",
-            )
+            ).access(RouteAccess.Anonymous)
 
             // GET /api/pois/search?q=...&limit=10
             //
@@ -118,7 +120,7 @@ internal fun Route.poiRoutes(poiService: PoiReader) {
                         "Empty `q` (or shorter than 2 chars) returns an empty list. " +
                         "`categories` optionally filters to one or more comma-separated POI categories. " +
                         "Used by the topbar dropdown so a user can find a POI nationwide without panning to it first.",
-            )
+            ).access(RouteAccess.Anonymous)
 
             // GET /api/pois/{id}
             //
@@ -143,7 +145,7 @@ internal fun Route.poiRoutes(poiService: PoiReader) {
                 description =
                     "Returns one GeoJSON Feature with the wide property set. " +
                         "Cacheable: max-age=300, stale-while-revalidate=3600.",
-            )
+            ).access(RouteAccess.Anonymous)
         }
     }
 }

@@ -3,7 +3,9 @@ package ca.floo.roadtrip.route.auth
 import ca.floo.roadtrip.model.api.MeResponseDto
 import ca.floo.roadtrip.model.api.MeUserDto
 import ca.floo.roadtrip.model.domain.auth.Principal
+import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.repo.UserRepo
+import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.respondApiError
@@ -58,7 +60,7 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
 
             call.response.setLoginFlowCookie(start.flow.encode(auth.flowSigningKey), auth.isCookieSecure)
             call.respondRedirect(start.authorizationUrl)
-        }
+        }.access(RouteAccess.Anonymous)
 
         get("/callback") {
             val auth = wiring ?: return@get call.respondAuthDisabled()
@@ -100,7 +102,7 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
                 maxAgeSeconds = auth.sessionMaxAgeSeconds,
             )
             call.respondRedirect(result.returnTo)
-        }
+        }.access(RouteAccess.Anonymous)
 
         get("/logout") {
             val auth = wiring ?: return@get call.respondAuthDisabled()
@@ -116,7 +118,7 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
                     runCatching { auth.authController.providerLogoutUrl(root) }.getOrNull()
                 }
             call.respondRedirect(providerLogout ?: DEFAULT_RETURN_TO)
-        }
+        }.access(RouteAccess.Anonymous)
     }
 
     route("/api") {
@@ -129,6 +131,7 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
                 else -> call.respond(MeResponseDto(isAuthenticated = false))
             }
         }.describeApi("auth", "Describe the current caller")
+            .access(RouteAccess.Anonymous)
     }
 }
 

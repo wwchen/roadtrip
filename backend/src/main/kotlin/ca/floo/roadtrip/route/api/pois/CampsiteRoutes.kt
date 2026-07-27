@@ -3,10 +3,12 @@ package ca.floo.roadtrip.route.api.pois
 import ca.floo.roadtrip.model.api.AvailabilityErrorDto
 import ca.floo.roadtrip.model.api.PoiCampsitesAvailabilityResponseDto
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
+import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.optionalDateQuery
@@ -99,7 +101,7 @@ internal fun Route.campsiteRoutes(
                         description =
                             "Lists active canonical campsite rows linked to a campground POI. " +
                                 "`site_type` optionally filters exact campsite kinds.",
-                    )
+                    ).access(RouteAccess.Anonymous)
 
                     get("/availability") {
                         val poiId =
@@ -203,7 +205,7 @@ internal fun Route.campsiteRoutes(
                             "Path key is `pois.id`. Returns one availability envelope per canonical " +
                                 "campsite linked to this POI. The frontend fuses the per-campsite streams " +
                                 "into the campground week grid.",
-                    )
+                    ).access(RouteAccess.Anonymous)
                 }
             }
         }

@@ -1,7 +1,9 @@
 package ca.floo.roadtrip.route.test
 
 import ca.floo.roadtrip.model.api.ApiErrorSchema
+import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.RouteBodyResult
+import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.decodeOptionalTextJsonBody
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.respondEncodedJson
@@ -71,6 +73,7 @@ internal fun Route.testSlackRoutes(slack: SlackNotificationService) {
 
             call.respondTestSlackJson(TestSlackResponse(sent = true, channel = channel))
         }.describeApi("test", "Send a test Slack message")
+            .access(RouteAccess.Anonymous)
     }
 }
 

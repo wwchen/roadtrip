@@ -3,7 +3,9 @@ package ca.floo.roadtrip.route.api.geocode
 import ca.floo.roadtrip.client.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.model.api.GeocodeResponseDto
 import ca.floo.roadtrip.model.api.GeocodeResultDto
+import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.model.routing.GeocodeResult
+import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.boundedIntQuery
 import ca.floo.roadtrip.route.common.matchingQuery
 import ca.floo.roadtrip.route.common.queryParam
@@ -74,7 +76,7 @@ fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
                 }
 
             call.respondGeocodeJson(geocodeResponseDto(results))
-        }
+        }.access(RouteAccess.Anonymous)
     }
 }
 

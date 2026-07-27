@@ -6,8 +6,10 @@ import ca.floo.roadtrip.model.api.poi.PointGeometrySchema
 import ca.floo.roadtrip.model.api.poi.PoisOnRouteFeaturePropertiesSchema
 import ca.floo.roadtrip.model.api.poi.PoisOnRouteFeatureSchema
 import ca.floo.roadtrip.model.api.poi.PoisOnRouteResponseSchema
+import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.model.domain.poi.PoiRow
 import ca.floo.roadtrip.route.common.RouteBodyResult
+import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.mapCatching
 import ca.floo.roadtrip.route.common.receiveJsonBody
@@ -93,7 +95,7 @@ internal fun Route.poisOnRouteRoutes(
                         "radius_miles: ${routeConfig.minCorridorRadiusMiles}..${routeConfig.maxCorridorRadiusMiles}, categories? }. " +
                         "Returns every matching POI as a slim GeoJSON FeatureCollection. " +
                         "Backed by RouteCache; the FE typically primes it via /api/route just before this call.",
-            )
+            ).access(RouteAccess.Anonymous)
         }
     }
 }

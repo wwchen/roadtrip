@@ -2,6 +2,7 @@ package ca.floo.roadtrip.di
 
 import ca.floo.roadtrip.client.oidc.OidcClient
 import ca.floo.roadtrip.config.AppConfig
+import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
@@ -22,6 +23,8 @@ import ca.floo.roadtrip.route.api.route.routeRoutes
 import ca.floo.roadtrip.route.api.slack.slackInteractivityRoute
 import ca.floo.roadtrip.route.auth.AuthRouteWiring
 import ca.floo.roadtrip.route.auth.authRoutes
+import ca.floo.roadtrip.route.auth.roadtripAuthorization
+import ca.floo.roadtrip.route.common.undeclaredAccessRoutes
 import ca.floo.roadtrip.route.static.staticSiteRoutes
 import ca.floo.roadtrip.route.test.testEmailRoutes
 import ca.floo.roadtrip.route.test.testSlackRoutes
@@ -51,7 +54,9 @@ import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import io.ktor.server.application.Application
+import io.ktor.server.application.install
 import io.ktor.server.routing.routing
+import io.ktor.server.routing.routingRoot
 import kotlinx.coroutines.CoroutineScope
 import org.jooq.DSLContext
 import org.koin.core.qualifier.named
@@ -80,9 +85,17 @@ internal fun Application.registerKoinRoutes() {
     val schedulerScope: CoroutineScope by inject()
     val staticDir: File by inject(named("staticDir"))
 
+    // Resolve the session into a Principal once per request, ambient for every
+    // route including anonymous ones. Null wiring (auth not configured) resolves
+    // every request to Anonymous — the same state the routes already tolerate.
+    val authWiring = authRouteWiring(ctx, config)
+    install(roadtripAuthorization) {
+        resolvePrincipal = { token -> authWiring?.authController?.resolve(token) ?: Principal.Anonymous }
+    }
+
     routing {
         apiDocsRoutes()
-        authRoutes(authRouteWiring(ctx, config))
+        authRoutes(authWiring)
         poiRoutes(poiService)
         availabilityWatchRoutes(availabilityWatchController(ctx, watchService, watchCapabilities))
         campsiteRoutes(
@@ -106,6 +119,14 @@ internal fun Application.registerKoinRoutes() {
         testEmailRoutes(emailNotifications, config.webApp?.rootUrl)
         testSlackRoutes(slackNotifications)
         staticSiteRoutes(staticDir)
+    }
+
+    // RFC 0010 completeness guard: every route must declare an access level. An
+    // unlabelled route fails fast at boot rather than defaulting to allow or
+    // deny. RouteAccessCoverageTest asserts the same against the mounted tree.
+    val undeclared = routingRoot.undeclaredAccessRoutes()
+    check(undeclared.isEmpty()) {
+        "every route must declare an access level with .access(...); missing on: ${undeclared.joinToString()}"
     }
 }
 
