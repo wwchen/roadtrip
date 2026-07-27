@@ -13,16 +13,39 @@
 // redirect to the provider, which fetch cannot follow.
 
 import { fetchMe, signIn, signOut } from '../api/auth-api.js';
+import { mountLoginCard } from '../account/login-card.js';
+import { mountSettingsModal } from '../account/settings-modal.js';
 import { escapeHtml } from '../core.js';
 
 const ROOT_ID = 'tb-auth';
 const STYLE_ID = 'tb-auth-styles';
 const SIGN_IN_ACTION = 'sign-in';
 const SIGN_OUT_ACTION = 'sign-out';
+const OPEN_SETTINGS_ACTION = 'open-settings';
 
 let rootEl = null;
 
-export function initAuth() {
+// Resolved at init-time; may be overridden by tests via the deps argument.
+let _fetchMe = fetchMe;
+let _mountLoginCard = mountLoginCard;
+let _mountSettingsModal = mountSettingsModal;
+let _signOut = signOut;
+
+/**
+ * Initialise the auth row.
+ *
+ * @param {object} [deps] - Optional overrides for testability.
+ * @param {Function} [deps._fetchMe]            - Replaces the real fetchMe.
+ * @param {Function} [deps._mountLoginCard]     - Replaces the real mountLoginCard.
+ * @param {Function} [deps._mountSettingsModal] - Replaces the real mountSettingsModal.
+ * @param {Function} [deps._signOut]            - Replaces the real signOut.
+ */
+export function initAuth(deps = {}) {
+  if (deps._fetchMe)            _fetchMe            = deps._fetchMe;
+  if (deps._mountLoginCard)     _mountLoginCard     = deps._mountLoginCard;
+  if (deps._mountSettingsModal) _mountSettingsModal = deps._mountSettingsModal;
+  if (deps._signOut)            _signOut            = deps._signOut;
+
   rootEl = document.getElementById(ROOT_ID);
   if (!rootEl) return;
   injectAuthStyles();
@@ -37,7 +60,7 @@ export function initAuth() {
 export async function refresh() {
   if (!rootEl) return;
   try {
-    render(await fetchMe());
+    render(await _fetchMe());
   } catch {
     // A failed /api/me must not break the nav. Sign-in is optional on every
     // surface that exists today, so degrade to showing nothing.
@@ -49,8 +72,9 @@ function onClick(e) {
   const btn = e.target.closest('[data-auth-action]');
   if (!btn) return;
   e.preventDefault();
-  if (btn.dataset.authAction === SIGN_IN_ACTION) signIn();
-  if (btn.dataset.authAction === SIGN_OUT_ACTION) signOut();
+  if (btn.dataset.authAction === SIGN_IN_ACTION)      _mountLoginCard();
+  if (btn.dataset.authAction === SIGN_OUT_ACTION)     _signOut();
+  if (btn.dataset.authAction === OPEN_SETTINGS_ACTION) _mountSettingsModal();
 }
 
 function render(me) {
@@ -72,7 +96,9 @@ function signedInHtml(user) {
   // after the first authorization; the address is always present.
   const label = user?.display_name || user?.email || 'Signed in';
   return `
-    <span class="tb-auth-who" title="${escapeHtml(user?.email || '')}">${escapeHtml(label)}</span>
+    <button class="tb-auth-who tb-auth-btn" type="button"
+      title="${escapeHtml(user?.email || '')}"
+      data-auth-action="${OPEN_SETTINGS_ACTION}">${escapeHtml(label)}</button>
     <button class="tb-auth-btn" type="button" data-auth-action="${SIGN_OUT_ACTION}">Sign out</button>
   `;
 }
