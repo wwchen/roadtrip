@@ -112,6 +112,13 @@ test('secretFieldTemplate renders help text when provided', () => {
   assert.match(html, /Find this in Slack API settings/);
 });
 
+test('secretFieldTemplate escapes the help text', () => {
+  const s = initialState(null);
+  const html = secretFieldTemplate(s, { label: 'Token', help: '<script>x</script>' });
+  assert.match(html, /&lt;script&gt;/);
+  assert.doesNotMatch(html, /<script>/);
+});
+
 test('secretFieldTemplate uses monospace class on masked value', () => {
   const s = initialState('3f9a');
   const html = secretFieldTemplate(s, { label: 'Token' });

@@ -59,6 +59,7 @@ export function toCancelled(state, hint) {
  * @returns {{ mode: string, hint: string|null, value: string }}
  */
 export function withInput(state, value) {
+  if (state.mode !== 'replacing') return state;
   return { ...state, value };
 }
 
