@@ -1,0 +1,59 @@
+/* web/account/login-card.css — tokens only, no hex/rgba literals */
+
+.rt-login-card-host {
+  /* The host is invisible — the Modal inside handles all visual framing */
+}
+
+.rt-login-card-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--rt-space-4, 1rem);
+  padding: var(--rt-space-6, 1.5rem) var(--rt-space-4, 1rem) var(--rt-space-4, 1rem);
+  text-align: center;
+}
+
+.lc-brand-mark {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.lc-title {
+  margin: 0;
+  font-size: var(--rt-font-size-xl, 1.25rem);
+  font-weight: var(--rt-font-weight-semibold, 600);
+  color: var(--rt-text, inherit);
+  line-height: 1.3;
+}
+
+.lc-rationale {
+  margin: 0;
+  font-size: var(--rt-font-size-sm, 0.875rem);
+  color: var(--rt-text-muted);
+  line-height: 1.5;
+}
+
+.lc-sign-in-btn {
+  display: block;
+  width: 100%;
+  padding: var(--rt-space-3, 0.75rem) var(--rt-space-4, 1rem);
+  background: var(--rt-accent);
+  color: var(--rt-accent-text);
+  border: none;
+  border-radius: var(--rt-radius-md, 6px);
+  font: inherit;
+  font-size: var(--rt-font-size-base, 1rem);
+  font-weight: var(--rt-font-weight-medium, 500);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.lc-sign-in-btn:hover {
+  opacity: 0.88;
+}
+
+.lc-sign-in-btn:focus-visible {
+  outline: 2px solid var(--rt-accent);
+  outline-offset: 2px;
+}
