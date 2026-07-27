@@ -21,9 +21,10 @@ export function loginCardTemplate({ providerLabel } = {}) {
     <h2 class="lc-title">Sign in to Roadtrip</h2>
     <p class="lc-rationale">Save your watches and access your account from any device.</p>
     <button
-      class="lc-sign-in-btn"
+      class="rt-btn rt-btn--primary lc-sign-in-btn"
       type="button"
       data-action="sign-in"
+      style="width:100%"
     >Continue with ${escapeHtml(label)}</button>
   `;
 }

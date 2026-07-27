@@ -23,6 +23,7 @@ import { settingsErrorMessage } from './settings-errors.js';
 import { settingsModalBodyTemplate } from './settings-modal-template.js';
 
 const STYLE_ID = 'rt-settings-modal-styles';
+const BUTTONS_STYLE_ID = 'rt-buttons-styles';
 
 const TABS = [
   { id: 'profile', label: 'Profile' },
@@ -323,6 +324,13 @@ function makeHost() {
 
 function injectStyles() {
   if (typeof document === 'undefined') return;
+  if (!document.getElementById(BUTTONS_STYLE_ID)) {
+    const btnLink = document.createElement('link');
+    btnLink.id = BUTTONS_STYLE_ID;
+    btnLink.rel = 'stylesheet';
+    btnLink.href = '/web/design-system/buttons.css';
+    document.head.appendChild(btnLink);
+  }
   if (document.getElementById(STYLE_ID)) return;
   const link = document.createElement('link');
   link.id = STYLE_ID;

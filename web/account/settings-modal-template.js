@@ -18,7 +18,7 @@ export function settingsModalBodyTemplate() {
       <div class="rt-settings-modal-footer">
         <button
           type="button"
-          class="rt-settings-modal-save-btn"
+          class="rt-btn rt-btn--primary rt-settings-modal-save-btn"
           data-action="save"
           disabled
         >Save</button>

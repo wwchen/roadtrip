@@ -12,6 +12,7 @@ import { signIn as _defaultSignIn, fetchMe as _defaultFetchMe } from '../api/aut
 import { loginCardTemplate } from './login-card-template.js';
 
 const STYLE_ID = 'rt-login-card-styles';
+const BUTTONS_STYLE_ID = 'rt-buttons-styles';
 const FALLBACK_LABEL = 'single sign-on';
 
 /**
@@ -95,6 +96,13 @@ export function mountLoginCard(config = {}) {
 
 function injectStyles() {
   if (typeof document === 'undefined') return;
+  if (!document.getElementById(BUTTONS_STYLE_ID)) {
+    const btnLink = document.createElement('link');
+    btnLink.id = BUTTONS_STYLE_ID;
+    btnLink.rel = 'stylesheet';
+    btnLink.href = '/web/design-system/buttons.css';
+    document.head.appendChild(btnLink);
+  }
   if (document.getElementById(STYLE_ID)) return;
   const link = document.createElement('link');
   link.id = STYLE_ID;
