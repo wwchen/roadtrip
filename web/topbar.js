@@ -41,6 +41,7 @@ import {
 } from './topbar/state.js';
 import { clearVisibleShareUrl, decodeRouteState, replaceVisibleUrl, routeShareUrl } from './share-links.js';
 import { initAlerts } from './topbar/alerts.js';
+import { initAuth } from './topbar/auth.js';
 
 // --- module state ----------------------------------------------------------
 
@@ -201,6 +202,7 @@ export function initTopbar(map, getPinSearchIndex) {
   bindPinClicks();
   renderRows();
   initAlerts();
+  initAuth();
 
   // Drawer + popups read these to render a per-POI Directions button. We
   // expose globals (vs. an import) because the drawer module is downstream
@@ -628,6 +630,7 @@ function injectDom() {
   el.id = 'topbar';
   el.innerHTML = `
     <div id="tb-stops"></div>
+    <div id="tb-auth" hidden></div>
     <div id="tb-alerts"></div>
     <div id="tb-actions">
       <button id="tb-add" type="button" hidden>+ Add stop</button>
