@@ -308,6 +308,7 @@ jooq {
                                 "user_identity",
                                 "user_role",
                                 "user_session",
+                                "user_settings",
                                 "vendor_refs",
                             ).joinToString("|")
                         excludes = "spatial_ref_sys|geometry_columns|geography_columns|" +
