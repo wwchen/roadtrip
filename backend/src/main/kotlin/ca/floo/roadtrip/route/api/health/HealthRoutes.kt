@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.route.api.health
 
 import ca.floo.roadtrip.model.api.HealthResponseDto
+import ca.floo.roadtrip.model.domain.auth.RouteAccess
+import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import io.ktor.server.application.ApplicationCall
@@ -26,6 +28,7 @@ fun Route.healthRoutes() {
         get("/health") {
             call.respondHealthJson(healthResponseDto(Instant.now().epochSecond))
         }.describeApi("health", "Application liveness/readiness probe")
+            .access(RouteAccess.Anonymous)
     }
 }
 

@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.route.api.availability
 
+import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.OptionalQuery
+import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.boundedIntQuery
 import ca.floo.roadtrip.route.common.dateQueryValues
 import ca.floo.roadtrip.route.common.describeApi
@@ -71,12 +73,14 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                         dashboard.listPollers(active = active, limit = limit, offset = offset),
                     )
                 }.describeApi("availability", "List availability pollers (coalesced per-vendor-call-unit schedulable)")
+                    .access(RouteAccess.Anonymous)
 
                 get("/summary") {
                     call.respondJson(
                         dashboard.pollersSummary(),
                     )
                 }.describeApi("availability", "Poller counters for the dashboard header")
+                    .access(RouteAccess.Anonymous)
 
                 route("/{id}") {
                     get("/runs") {
@@ -86,6 +90,7 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                         val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)
                         call.respondJson(dashboard.listRunsForPoller(id, limit = limit))
                     }.describeApi("availability", "Runs for one poller, newest first")
+                        .access(RouteAccess.Anonymous)
 
                     post("/force") {
                         val id =
@@ -99,6 +104,7 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                                 call.respondError(result.error, HttpStatusCode.NotFound, result.detail)
                         }
                     }.describeApi("availability", "Force a poller due now ('check now'), rate-limited per poller")
+                        .access(RouteAccess.Anonymous)
                 }
             }
 
@@ -110,6 +116,7 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                     val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)
                     call.respondJson(dashboard.listRuns(status = status, pollerId = pollerId, since = since, limit = limit))
                 }.describeApi("availability", "Recent runs across all pollers")
+                    .access(RouteAccess.Anonymous)
             }
 
             route("/changes") {
@@ -135,6 +142,7 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                             call.respondJson(result.value)
                     }
                 }.describeApi("availability", "Availability change rows filtered by campsite_id or poi_id")
+                    .access(RouteAccess.Anonymous)
 
                 get("/summary") {
                     val poiId = call.optionalLongQuery("poi_id")
@@ -154,6 +162,7 @@ internal fun Route.availabilityDashboardRoutes(dashboard: AvailabilityDashboardC
                             call.respondJson(result.value)
                     }
                 }.describeApi("availability", "Per-date stats aggregated across a POI's campsites")
+                    .access(RouteAccess.Anonymous)
             }
         }
     }

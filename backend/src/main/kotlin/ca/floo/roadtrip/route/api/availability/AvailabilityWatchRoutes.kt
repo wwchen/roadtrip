@@ -2,7 +2,9 @@ package ca.floo.roadtrip.route.api.availability
 
 import ca.floo.roadtrip.model.api.AvailabilityWatchCreateRequest
 import ca.floo.roadtrip.model.api.AvailabilityWatchUpdateRequest
+import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.RouteBodyResult
+import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.boundedIntQuery
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.intQueryAtLeast
@@ -63,6 +65,7 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                     watches.list(status, poiId, campsiteId, limit, offset),
                 )
             }.describeApi("watches", "List availability watches")
+                .access(RouteAccess.Anonymous)
 
             post {
                 val req =
@@ -80,6 +83,7 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                         call.respondJson(result.value, HttpStatusCode.Created)
                 }
             }.describeApi("watches", "Create a watch")
+                .access(RouteAccess.Anonymous)
 
             route("/{id}") {
                 get {
@@ -91,6 +95,7 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                             ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
                     call.respondJson(watch)
                 }.describeApi("watches", "Get one watch")
+                    .access(RouteAccess.Anonymous)
 
                 post("/modify") {
                     val id =
@@ -111,6 +116,7 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                             call.respondJson(result.value)
                     }
                 }.describeApi("watches", "Modify a watch")
+                    .access(RouteAccess.Anonymous)
 
                 post("/delete") {
                     val id =
@@ -122,6 +128,7 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                         call.respondError("not_found", HttpStatusCode.NotFound)
                     }
                 }.describeApi("watches", "Delete a watch")
+                    .access(RouteAccess.Anonymous)
             }
         }
     }

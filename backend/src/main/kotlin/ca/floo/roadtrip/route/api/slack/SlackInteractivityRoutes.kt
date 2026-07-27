@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.route.api.slack
 
 import ca.floo.roadtrip.client.slack.SlackSignatureVerifier
+import ca.floo.roadtrip.model.domain.auth.RouteAccess
+import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
@@ -121,7 +123,7 @@ internal fun Route.slackInteractivityRoute(
                             )
                         }
                 }
-            }
+            }.access(RouteAccess.Signed)
         }
     }
 }

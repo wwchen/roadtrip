@@ -1,7 +1,9 @@
 package ca.floo.roadtrip.route.test
 
 import ca.floo.roadtrip.model.api.ApiErrorSchema
+import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.RouteBodyResult
+import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.decodeTextJsonBody
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.respondEncodedJson
@@ -60,6 +62,7 @@ internal fun Route.testEmailRoutes(
 
             call.respondTestEmailJson(TestEmailResponse(sent = true, to = to))
         }.describeApi("test", "Send a test email")
+            .access(RouteAccess.Anonymous)
     }
 }
 

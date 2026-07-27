@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.route.api.docs
 
+import ca.floo.roadtrip.model.domain.auth.RouteAccess
+import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import io.ktor.http.ContentType
 import io.ktor.openapi.OpenApiDoc
@@ -50,7 +52,7 @@ internal fun Route.apiDocsRoutes() {
         get("/openapi.json") {
             val doc = OpenApiDoc(info = roadtripOpenApiInfo) + call.application.roadtripOpenApiRoutes()
             call.respondEncodedJson(openApiJson, doc)
-        }.hide()
+        }.hide().access(RouteAccess.Anonymous)
     }
 }
 

@@ -9,8 +9,10 @@ import ca.floo.roadtrip.model.api.RouteFeatureDto
 import ca.floo.roadtrip.model.api.RouteLegDto
 import ca.floo.roadtrip.model.api.RouteLineGeometryDto
 import ca.floo.roadtrip.model.api.RoutePropertiesDto
+import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.model.routing.RouteResponse
 import ca.floo.roadtrip.route.common.OptionalQuery
+import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.optionalDoubleQuery
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.route.common.trimmedQuery
@@ -188,7 +190,7 @@ internal fun Route.routeRoutes(
                     corridorPolygonGeoJson = corridorPolygonGeoJson,
                 ),
             )
-        }
+        }.access(RouteAccess.Anonymous)
     }
 }
 

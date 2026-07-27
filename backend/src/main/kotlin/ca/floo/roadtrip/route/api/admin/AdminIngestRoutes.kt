@@ -11,6 +11,7 @@ import ca.floo.roadtrip.model.api.RunOutcomeSchema
 import ca.floo.roadtrip.model.api.RunsListSchema
 import ca.floo.roadtrip.model.api.StatusResponseSchema
 import ca.floo.roadtrip.model.api.TargetStatusSchema
+import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.model.domain.ingest.IngestRunDetailRow
 import ca.floo.roadtrip.model.domain.ingest.IngestRunListItemRow
 import ca.floo.roadtrip.model.domain.ingest.IngestRunPhaseRow
@@ -18,6 +19,7 @@ import ca.floo.roadtrip.model.domain.ingest.TargetIngestStatusRow
 import ca.floo.roadtrip.model.metadata.ingest.RunKind
 import ca.floo.roadtrip.model.metadata.ingest.RunOutcome
 import ca.floo.roadtrip.repo.AdminIngestReadRepo
+import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.pathParam
@@ -73,9 +75,11 @@ fun Route.adminIngestRoutes(
                 route("/import") {
                     post("/{target}") { runOne(controller, RunKind.IMPORT) }
                         .describeApi("admin", "Import data/ files into Postgres for one target")
+                        .access(RouteAccess.Anonymous)
 
                     post { runAll(controller, RunKind.IMPORT) }
                         .describeApi("admin", "Import data/ files for every known target (sequential fan-out)")
+                        .access(RouteAccess.Anonymous)
                 }
 
                 route("/runs") {
@@ -83,6 +87,7 @@ fun Route.adminIngestRoutes(
                         val target = call.queryParam("target")
                         call.respondAdminJson(listRecent(readRepo, target, limit = 50))
                     }.describeApi("admin", "Last 50 parent ingest runs (filter by ?target=)")
+                        .access(RouteAccess.Anonymous)
 
                     get("/{id}") {
                         val id = call.longPath("id")
@@ -97,11 +102,13 @@ fun Route.adminIngestRoutes(
                             call.respondAdminJson(body)
                         }
                     }.describeApi("admin", "One ingest run with its ordered phase rows")
+                        .access(RouteAccess.Anonymous)
                 }
 
                 get("/status") {
                     call.respondAdminJson(statusByTarget(readRepo, controller.knownTargets()))
                 }.describeApi("admin", "Per-target ingest run status + age in seconds")
+                    .access(RouteAccess.Anonymous)
             }
         }
     }
