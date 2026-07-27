@@ -39,6 +39,10 @@ function makeStubDocument() {
 }
 
 function makeStubElement(tagName = 'div') {
+  // Cache querySelector results so repeated calls with the same selector return
+  // the SAME element object the modal holds — this lets tests read its .disabled.
+  const _queryCache = new Map();
+
   const el = {
     tagName,
     innerHTML: '',
@@ -64,16 +68,17 @@ function makeStubElement(tagName = 'div') {
       if (i !== -1) { this._children.splice(i, 1); child._parent = null; }
     },
     querySelector(selector) {
-      // Return stubs keyed by data-* attributes used in settings-modal-template
-      if (selector.includes('data-host="banner"')) return makeStubElement('div');
-      if (selector.includes('data-host="tabs"')) return makeStubElement('div');
-      if (selector.includes('data-host="panel"')) return makeStubElement('div');
+      if (_queryCache.has(selector)) return _queryCache.get(selector);
+      // Create a stable stub element keyed by selector
+      let stub;
       if (selector.includes('data-action="save"')) {
-        const btn = makeStubElement('button');
-        btn.disabled = true;
-        return btn;
+        stub = makeStubElement('button');
+        stub.disabled = true;
+      } else {
+        stub = makeStubElement('div');
       }
-      return makeStubElement('div');
+      _queryCache.set(selector, stub);
+      return stub;
     },
     get parentNode() { return this._parent; },
   };
@@ -198,7 +203,14 @@ function buildHarness({
     else globalThis.document = originalDocument;
   }
 
-  return { ctrl, calls, panels, restore };
+  // Convenience: return the stable save button the modal holds, via the same
+  // querySelector path the modal used.  calls.bodyEl is set by makeFakeModal
+  // when modal.setBody(bodyHost) is called.
+  function getSaveBtn() {
+    return calls.bodyEl && calls.bodyEl.querySelector('[data-action="save"]');
+  }
+
+  return { ctrl, calls, panels, restore, getSaveBtn };
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -237,17 +249,19 @@ test('SettingsModal: fetchSettings is called on open and profile panel receives 
 });
 
 test('SettingsModal: Save is disabled on initial load (before panel is dirty)', async () => {
-  // We need to intercept the save button from the fake querySelector.
-  // We check this via the _save handler — if panel is not dirty it should not proceed.
-  // The key behavioral check: panel's onDirtyChange(false) → Save stays disabled.
-  const { panels, restore } = buildHarness();
+  const { panels, restore, getSaveBtn } = buildHarness();
   try {
     await Promise.resolve();
     await Promise.resolve();
     // Panel mounted — onDirtyChange not yet called → dirty is false.
     assert.ok(panels.profile.onDirtyChange, 'onDirtyChange should be captured');
-    // Explicitly notify dirty=false (no-op from clean state).
+    // The real Save button held by the modal must be disabled on initial mount.
+    const saveBtn = getSaveBtn();
+    assert.ok(saveBtn, 'Save button should exist on bodyEl');
+    assert.equal(saveBtn.disabled, true, 'Save button should be disabled before any dirty change');
+    // Explicitly notify dirty=false (no-op from clean state) → still disabled.
     panels.profile.onDirtyChange(false);
+    assert.equal(saveBtn.disabled, true, 'Save button should remain disabled when dirty=false');
     // isDirty() is false by default in our fake.
     assert.equal(panels.profile.isDirtyValue, false);
   } finally {
@@ -257,7 +271,7 @@ test('SettingsModal: Save is disabled on initial load (before panel is dirty)', 
 
 test('SettingsModal: calling onDirtyChange(true) enables Save (via _save precondition)', async () => {
   const updateCalls = [];
-  const { ctrl, panels, restore } = buildHarness({
+  const { ctrl, panels, restore, getSaveBtn } = buildHarness({
     updateProfileImpl: (payload) => {
       updateCalls.push(payload);
       return Promise.resolve(BASE_SETTINGS);
@@ -267,9 +281,16 @@ test('SettingsModal: calling onDirtyChange(true) enables Save (via _save precond
     await Promise.resolve();
     await Promise.resolve();
 
+    const saveBtn = getSaveBtn();
+    assert.ok(saveBtn, 'Save button should exist');
+    assert.equal(saveBtn.disabled, true, 'Save button starts disabled');
+
     // Simulate the profile panel becoming dirty.
     panels.profile.isDirtyValue = true;
     panels.profile.onDirtyChange(true);
+
+    // The Save button must now be ENABLED — this is the core save-gating behavior.
+    assert.equal(saveBtn.disabled, false, 'Save button should be enabled after onDirtyChange(true)');
 
     // Set up payload
     panels.profile.payloadValue = { display_name: 'Bob' };
@@ -406,16 +427,20 @@ test('SettingsModal: switching tabs disposes the previous panel', async () => {
 });
 
 test('SettingsModal: switching tabs re-scopes Save dirty state (notifications panel starts clean)', async () => {
-  const { calls, panels, restore } = buildHarness();
+  const { calls, panels, restore, getSaveBtn } = buildHarness();
   try {
     await Promise.resolve();
     await Promise.resolve();
 
-    // Make profile dirty, then switch tabs.
+    const saveBtn = getSaveBtn();
+    assert.ok(saveBtn, 'Save button should exist');
+
+    // Make profile dirty → Save enabled.
     panels.profile.isDirtyValue = true;
     panels.profile.onDirtyChange(true);
+    assert.equal(saveBtn.disabled, false, 'Save should be enabled when profile is dirty');
 
-    // Switch tab — new panel starts clean.
+    // Switch tab — new panel starts clean → Save must be re-disabled.
     calls.tabsConfig.onChange('notifications');
 
     await Promise.resolve();
@@ -423,6 +448,8 @@ test('SettingsModal: switching tabs re-scopes Save dirty state (notifications pa
 
     // The notifications panel is fresh and isDirtyValue = false.
     assert.equal(panels.notifications.isDirtyValue, false);
+    // Save must be disabled again for the freshly-mounted clean panel.
+    assert.equal(saveBtn.disabled, true, 'Save button should be re-disabled after switching to a clean tab');
   } finally {
     restore();
   }
@@ -482,13 +509,13 @@ test('SettingsModal: Account tab onDisconnectSlack → clearSlack called then re
 });
 
 test('SettingsModal: successful save shows success banner and re-reads settings', async () => {
-  const fetchCalls = [];
   let fetchCount = 0;
+  const UPDATED_SETTINGS = { ...BASE_SETTINGS, profile: { ...BASE_SETTINGS.profile, display_name: 'Alice Updated' } };
   const { ctrl, calls, panels, restore } = buildHarness({
-    updateProfileImpl: () => Promise.resolve(BASE_SETTINGS),
+    updateProfileImpl: () => Promise.resolve(UPDATED_SETTINGS),
     fetchSettingsImpl: () => {
       fetchCount++;
-      return Promise.resolve(BASE_SETTINGS);
+      return Promise.resolve(UPDATED_SETTINGS);
     },
   });
   try {
@@ -496,6 +523,8 @@ test('SettingsModal: successful save shows success banner and re-reads settings'
     await Promise.resolve();
 
     const fetchAfterLoad = fetchCount;
+    const mountAfterLoad = panels.profile.mounted;
+    const disposeAfterLoad = panels.profile.disposeCalls;
 
     panels.profile.payloadValue = { display_name: 'Alice Updated' };
     panels.profile.isDirtyValue = true;
@@ -503,9 +532,15 @@ test('SettingsModal: successful save shows success banner and re-reads settings'
 
     await ctrl._save();
 
+    // fetchSettings must be called again to re-read fresh settings.
     assert.ok(fetchCount > fetchAfterLoad, 'fetchSettings should be called again after save');
     // The success banner should be shown.
     assert.equal(calls.bannerType, 'success');
+    // The active panel must be disposed before the re-mount.
+    assert.ok(panels.profile.disposeCalls > disposeAfterLoad, 'Active panel should be disposed before re-mount');
+    // A new panel mount must happen with the fresh settings.
+    assert.ok(panels.profile.mounted > mountAfterLoad, 'Profile panel should be re-mounted after save');
+    assert.deepEqual(panels.profile.lastSettings, UPDATED_SETTINGS, 'Re-mounted panel should receive fresh settings');
   } finally {
     restore();
   }
