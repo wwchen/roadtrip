@@ -26,17 +26,26 @@ const targets = [
     .map((f) => path.join(accountDir, f)),
 ];
 
-test('every var(--rt-*) reference is a token defined in tokens.css', () => {
+test('every fallback-less var(--rt-*) reference is a token defined in tokens.css', () => {
+  // A `var(--x)` with NO fallback resolves to nothing when --x is undefined —
+  // that's the bug (invisible buttons, dark text). A `var(--x, fallback)` is
+  // safe: it renders the fallback. So flag only fallback-less references to
+  // tokens that aren't defined. (Component-local props like --rt-modal-width
+  // are always written with a fallback and are legitimately not in tokens.css.)
   const missing = [];
   for (const file of targets) {
     const css = readFileSync(file, 'utf8');
-    for (const m of css.matchAll(/var\(\s*(--rt-[a-z0-9-]+)/g)) {
-      if (!defined.has(m[1])) missing.push(`${path.basename(file)} → ${m[1]}`);
+    for (const m of css.matchAll(/var\(\s*(--rt-[a-z0-9-]+)\s*([,)])/g)) {
+      const token = m[1];
+      const hasFallback = m[2] === ',';
+      if (!hasFallback && !defined.has(token)) {
+        missing.push(`${path.basename(file)} → ${token}`);
+      }
     }
   }
   assert.deepEqual(
     missing,
     [],
-    `Undefined design tokens (add to tokens.css or use an existing one):\n${missing.join('\n')}`,
+    `Undefined design tokens with no fallback (add to tokens.css or use an existing one):\n${missing.join('\n')}`,
   );
 });

@@ -87,6 +87,8 @@ export function mountSettingsModal(config = {}) {
     sheetOnMobile: true,
     onClose: dispose,
     closeOnBackdrop: true,
+    // Wider than the default 480px — this is a two-column (rail + panel) modal.
+    width: '720px',
   });
 
   // Build the body shell and inject it into the modal.

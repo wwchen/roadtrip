@@ -46,7 +46,8 @@
   border-radius: var(--rt-r-xl);
   box-shadow: var(--rt-e4);
 
-  width: min(480px, calc(100vw - 32px));
+  /* Callers may widen via the --rt-modal-width custom property (mountModal { width }). */
+  width: min(var(--rt-modal-width, 480px), calc(100vw - 32px));
   max-height: min(80vh, 640px);
   display: flex;
   flex-direction: column;

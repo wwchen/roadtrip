@@ -20,11 +20,18 @@ export function mountModal(container, config = {}) {
     sheetOnMobile = false,
     onClose,
     closeOnBackdrop = true,
+    width,
   } = config;
 
   injectStyles();
 
   container.innerHTML = modalTemplate({ title, sheetOnMobile });
+
+  // Optional wider modal (e.g. the two-column settings modal). The card reads
+  // --rt-modal-width; setting it on the host cascades to the card.
+  if (width && container.style && typeof container.style.setProperty === 'function') {
+    container.style.setProperty('--rt-modal-width', width);
+  }
 
   // ── DOM refs ──────────────────────────────────────────────────────────────
   // We use attribute selectors because querySelector may be unavailable in the
