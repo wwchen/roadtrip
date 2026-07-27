@@ -48,10 +48,12 @@ class AuthConfigTest {
     }
 
     @Test
-    fun `a missing client secret is allowed for a public client`() {
-        val config = assertNotNull(AuthConfig.fromConfig(section(complete - "client-secret")))
-
-        assertEquals("", config.clientSecret)
+    fun `a missing client secret means auth disabled, not a public client`() {
+        // This is a confidential client doing a server-side code exchange, and
+        // the login-flow cookie's signing key derives from the secret. A
+        // deployment without one is misconfigured rather than public.
+        assertNull(AuthConfig.fromConfig(section(complete - "client-secret")))
+        assertNull(AuthConfig.fromConfig(section(complete + ("client-secret" to "  "))))
     }
 
     @Test
