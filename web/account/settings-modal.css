@@ -1,0 +1,57 @@
+.rt-settings-modal-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.rt-settings-modal-banner {
+  /* Banner host — hidden when empty */
+}
+
+.rt-settings-modal-tabs {
+  border-bottom: 1px solid var(--rt-color-border);
+  margin-bottom: var(--rt-space-4);
+}
+
+.rt-settings-modal-panel {
+  flex: 1;
+  padding: 0 var(--rt-space-4);
+  overflow-y: auto;
+}
+
+.rt-settings-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--rt-space-4);
+  border-top: 1px solid var(--rt-color-border);
+  gap: var(--rt-space-2);
+}
+
+.rt-settings-modal-save-btn {
+  padding: var(--rt-space-2) var(--rt-space-4);
+  background-color: var(--rt-color-action-primary);
+  color: var(--rt-color-action-primary-text);
+  border: none;
+  border-radius: var(--rt-radius-sm);
+  font-size: var(--rt-font-size-base);
+  font-weight: var(--rt-font-weight-medium);
+  cursor: pointer;
+}
+
+.rt-settings-modal-save-btn:disabled {
+  opacity: var(--rt-opacity-disabled);
+  cursor: not-allowed;
+}
+
+.rt-settings-modal-save-btn:not(:disabled):hover {
+  background-color: var(--rt-color-action-primary-hover);
+}
+
+.rt-settings-modal-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--rt-space-8);
+  color: var(--rt-color-text-secondary);
+  font-size: var(--rt-font-size-base);
+}
