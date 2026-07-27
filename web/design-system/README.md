@@ -86,3 +86,64 @@ that blocks the rest of the UI.
 **Anatomy:** scrim (`data-modal-backdrop`) + card (`.rt-modal-card`) with header
 (title + `[data-modal-close]` ✕) and body (`[data-modal-body]`). When `sheetOnMobile`
 is set, `.rt-modal-sheet` is added and a grab-handle renders above the header.
+
+## SecretField — write-only secret input convention
+
+Use `mountSecretField(container, config)` from `web/design-system/secret-field.js`
+for any credential input that must never echo the real value back to the UI (e.g. a
+Slack bot token). The component receives only a last-4 **hint** suffix, never the full
+secret.
+
+| Config | Default | Effect |
+|---|---|---|
+| `label` | `''` | Field label (escaped) |
+| `hint` | `null` | Last-4 chars of the stored secret, or `null` if none |
+| `help` | `null` | Optional help text rendered below the field |
+
+**Write-only-secret pattern (masked → replace):**
+
+The field operates in two modes:
+
+- **`stored`** — a `hint` exists. Renders `••••<hint>` in monospace + a **Replace**
+  button (`data-action="replace"`). `getValue()` returns **`null`** in this mode,
+  meaning "leave unchanged." This maps directly to the backend's `null = leave
+  unchanged` contract — the caller sends `null` and the server skips the update.
+- **`replacing`** — triggered either by clicking Replace (from `stored`) or when
+  `hint` is null/absent at mount time (no prior secret). Renders an empty `<input
+  type="password">` at 16px (iOS zoom guard) + a **Cancel** button
+  (`data-action="cancel"`, only shown when a prior hint exists). `getValue()` returns
+  the entered string.
+
+Clicking Cancel in `replacing` mode returns to `stored` (restoring the original hint).
+
+**Three-file contract:**
+- `secret-field-template.js` — pure functions: `initialState(hint)`, `toReplacing`,
+  `toCancelled`, `withInput`, `valueOf`, and `secretFieldTemplate(state, config)`. No
+  DOM access; imports only `escapeHtml` from `../core.js`.
+- `secret-field.js` — controller: injects `secret-field.css` via `<link>` with an
+  id-guard, delegates click events (`data-action="replace"` / `"cancel"`) and input
+  events on the container, tracks state via the pure reducer. Returns
+  `{ getValue(), getMode(), reset(), dispose() }`.
+- `secret-field.css` — `--rt-*` tokens only; 44px min-height touch targets on Replace
+  and Cancel buttons; 16px `font-size` on the password input.
+
+**Pure reducer API** (exported from `secret-field-template.js`, testable without DOM):
+
+```js
+import { initialState, toReplacing, toCancelled, withInput, valueOf }
+  from './secret-field-template.js';
+
+const s0 = initialState('3f9a');    // { mode: 'stored', hint: '3f9a', value: '' }
+valueOf(s0);                         // null  — "leave unchanged"
+const s1 = toReplacing(s0);         // { mode: 'replacing', ... }
+const s2 = withInput(s1, 'xoxb-…'); // { mode: 'replacing', value: 'xoxb-…' }
+valueOf(s2);                         // 'xoxb-…'
+const s3 = toCancelled(s2, '3f9a'); // back to stored
+valueOf(s3);                         // null
+```
+
+**Anatomy:** host (`.rt-secret-field`) with label (`.rt-secret-field-label`) + either
+a stored row (`.rt-secret-field-stored`: masked span `.rt-secret-field-masked` +
+Replace button `.rt-secret-field-replace-btn`) or a replacing row
+(`.rt-secret-field-replacing`: password input `.rt-secret-field-input` + optional
+Cancel button `.rt-secret-field-cancel-btn`) + optional help text (`.rt-secret-field-help`).
