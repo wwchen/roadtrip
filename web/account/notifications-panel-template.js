@@ -4,10 +4,9 @@
 import { escapeHtml } from '../core.js';
 
 /**
- * @param {object} params
  * @returns {string}
  */
-export function notificationsPanelTemplate(params) {
+export function notificationsPanelTemplate() {
   return `
     <div class="rt-notifications-panel">
       <div data-host="notification-email"></div>

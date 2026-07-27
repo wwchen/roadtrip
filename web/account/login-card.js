@@ -48,9 +48,11 @@ export function mountLoginCard(config = {}) {
   injectStyles();
 
   // Create a detached host element that we own and can remove on dispose.
-  const host = document.createElement('div');
-  host.className = 'rt-login-card-host';
-  document.body.appendChild(host);
+  const host = typeof document !== 'undefined' ? document.createElement('div') : null;
+  if (host) {
+    host.className = 'rt-login-card-host';
+    document.body.appendChild(host);
+  }
 
   const modal = mountModal(host, {
     title: '',
