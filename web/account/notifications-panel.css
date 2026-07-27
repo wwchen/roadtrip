@@ -1,7 +1,7 @@
 .rt-notifications-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--rt-space-4);
+  gap: 16px;
 }
 
 .rt-notifications-panel-test-row {
@@ -10,17 +10,17 @@
 }
 
 .rt-notifications-panel-test-btn {
-  padding: var(--rt-space-2) var(--rt-space-3);
-  background: var(--rt-color-bg-secondary);
-  border: 1px solid var(--rt-color-border);
-  border-radius: var(--rt-radius-sm);
-  color: var(--rt-color-text-primary);
-  font-size: var(--rt-font-size-sm);
+  padding: 8px 12px;
+  background: var(--rt-surface);
+  border: 1px solid var(--rt-border);
+  border-radius: var(--rt-r-sm);
+  color: var(--rt-text);
+  font-size: 12px;
   cursor: pointer;
 }
 
 .rt-notifications-panel-test-btn:hover {
-  background: var(--rt-color-bg-hover);
+  background: var(--rt-fill-hover);
 }
 
 .rt-notifications-panel-banner {
