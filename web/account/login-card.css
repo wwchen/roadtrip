@@ -46,26 +46,7 @@
   line-height: 1.5;
 }
 
+/* .lc-sign-in-btn — layout hook only; visual styles from .rt-btn--primary */
 .lc-sign-in-btn {
-  display: block;
   width: 100%;
-  padding: 12px 16px;
-  background: var(--rt-brand);
-  color: #fff;
-  border: none;
-  border-radius: var(--rt-r-md, 6px);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-
-.lc-sign-in-btn:hover {
-  opacity: 0.88;
-}
-
-.lc-sign-in-btn:focus-visible {
-  outline: 2px solid var(--rt-brand);
-  outline-offset: 2px;
 }

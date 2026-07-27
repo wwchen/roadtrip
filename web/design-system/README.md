@@ -33,6 +33,24 @@ this split fixes it.
 - Touch targets ≥ 44px; inputs at 16px font to stop iOS zoom-on-focus.
 - One primary (solid blue) per surface; everything else secondary/tertiary.
 
+## Buttons
+
+Use `.rt-btn` plus a variant modifier for every clickable action. Classes live in
+`web/design-system/buttons.css`; inject it once per component with an id-guarded
+`<link id="rt-buttons-styles">` in `injectStyles()`.
+
+| Variant | Class | When to use |
+|---|---|---|
+| Primary | `.rt-btn--primary` | The ONE solid-blue action per surface (Save, Continue with …) |
+| Secondary | `.rt-btn--secondary` | Filled surface-raised; secondary actions (Send a test email) |
+| Tertiary | `.rt-btn--tertiary` | Brand-text link; lowest emphasis (Cancel, Replace) |
+
+**Rules:**
+- Only one `.rt-btn--primary` should appear per visible surface.
+- Never use green or any other hue for interactive actions — blue only.
+- Full-width buttons: add `width: 100%` via a layout wrapper or inline style;
+  `.rt-btn` is `inline-flex` by default.
+
 ## Tabs rail / segmented control convention
 
 Use `mountTabs(container, config)` from `web/design-system/tabs.js` for section

@@ -4,25 +4,7 @@
   gap: 16px;
 }
 
-.rt-notifications-panel-test-row {
-  display: flex;
-  justify-content: flex-start;
-}
-
-.rt-notifications-panel-test-btn {
-  padding: 8px 12px;
-  background: var(--rt-surface);
-  border: 1px solid var(--rt-border);
-  border-radius: var(--rt-r-sm);
-  color: var(--rt-text);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.rt-notifications-panel-test-btn:hover {
-  background: var(--rt-fill-hover);
-}
-
-.rt-notifications-panel-banner {
-  min-height: 0;
-}
+.rt-notif-test-row { display: flex; align-items: center; gap: 12px; }
+.rt-notif-status { font-size: 12.5px; display: inline-flex; align-items: center; gap: 5px; }
+.rt-notif-status--ok { color: var(--rt-success); }
+.rt-notif-status--err { color: var(--rt-error); }

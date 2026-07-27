@@ -1,0 +1,29 @@
+/* Button convention — one primary (solid blue) per surface; secondary/tertiary
+   for everything else. Blue is the only interactive color (see README). */
+.rt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 9px 14px;
+  min-height: 36px;
+  border: 1px solid transparent;
+  border-radius: var(--rt-r-sm);
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms, color 120ms, box-shadow 120ms;
+}
+.rt-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.rt-btn:focus-visible { outline: 2px solid var(--rt-brand); outline-offset: 2px; }
+
+.rt-btn--primary { background: var(--rt-brand); color: #fff; font-weight: 600; }
+.rt-btn--primary:not(:disabled):hover { background: var(--rt-brand-hover); }
+
+.rt-btn--secondary { background: var(--rt-surface-raised); color: var(--rt-text); }
+.rt-btn--secondary:not(:disabled):hover { box-shadow: inset 0 0 0 999px var(--rt-fill-hover); }
+
+.rt-btn--tertiary { background: transparent; color: var(--rt-brand); padding-left: 4px; padding-right: 4px; }
+.rt-btn--tertiary:not(:disabled):hover { text-decoration: underline; }

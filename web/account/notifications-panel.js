@@ -1,18 +1,18 @@
 // web/account/notifications-panel.js
 //
 // Mounts the Notifications settings panel: notification email, Slack token
-// (SecretField), Slack channel, and a "Send a test message" button with Banner.
+// (SecretField), Slack channel, and test buttons with inline status feedback.
 //
 // DS mounts are injectable (via config._mount*) so tests can pass fakes
 // without real DOM interaction.
 
 import { mountFormSection as _defaultMountFormSection } from '../design-system/form-section.js';
 import { mountSecretField as _defaultMountSecretField } from '../design-system/secret-field.js';
-import { mountBanner as _defaultMountBanner } from '../design-system/banner.js';
 import { settingsErrorMessage } from './settings-errors.js';
 import { notificationsPanelTemplate } from './notifications-panel-template.js';
 
 const STYLE_ID = 'rt-notifications-panel-styles';
+const BUTTONS_STYLE_ID = 'rt-buttons-styles';
 
 // ── Pure helpers ─────────────────────────────────────────────────────────────
 
@@ -59,7 +59,6 @@ export function buildNotificationsPayload(values) {
  *   onTestEmail?: () => Promise<void>,
  *   _mountFormSection?: Function,
  *   _mountSecretField?: Function,
- *   _mountBanner?: Function,
  * }} config
  * @returns {{ getPayload(): object, isDirty(): boolean, dispose(): void }}
  */
@@ -71,7 +70,6 @@ export function mountNotificationsPanel(container, config) {
     onTestEmail,
     _mountFormSection = _defaultMountFormSection,
     _mountSecretField = _defaultMountSecretField,
-    _mountBanner = _defaultMountBanner,
   } = config;
 
   injectStyles();
@@ -80,7 +78,6 @@ export function mountNotificationsPanel(container, config) {
   const initialChannel = settings.notifications.slack_channel || '';
   const loginEmail = settings.profile.login_email || '';
   let currentDirty = false;
-  let bannerCtrl = null;
   let testPending = false;
 
   container.innerHTML = notificationsPanelTemplate({});
@@ -88,9 +85,8 @@ export function mountNotificationsPanel(container, config) {
   const emailHost = container.querySelector('[data-host="notification-email"]');
   const slackTokenHost = container.querySelector('[data-host="slack-token"]');
   const slackChannelHost = container.querySelector('[data-host="slack-channel"]');
-  const bannerHost = container.querySelector('[data-host="banner"]');
-  const testBtn = container.querySelector('[data-action="test-slack"]');
-  const testEmailBtn = container.querySelector('[data-action="test-email"]');
+  const emailStatusHost = container.querySelector('[data-host="email-status"]');
+  const slackStatusHost = container.querySelector('[data-host="slack-status"]');
 
   const emailField = _mountFormSection(emailHost, {
     label: 'Notification email',
@@ -127,24 +123,35 @@ export function mountNotificationsPanel(container, config) {
     }
   }
 
-  function showBanner(type, message) {
-    if (bannerCtrl) {
-      bannerCtrl.update({ type, message });
-    } else {
-      bannerCtrl = _mountBanner(bannerHost, { type, message, dismissable: true });
-    }
+  function setStatus(host, text, okClass) {
+    if (!host) return;
+    host.textContent = text;
+    host.className = 'rt-notif-status' + (okClass ? ' ' + okClass : '');
   }
+
+  function clearStatus(host) {
+    if (!host) return;
+    host.textContent = '';
+    host.className = 'rt-notif-status';
+  }
+
+  let successClearTimer = null;
 
   async function handleTest() {
     if (testPending) return;
     const channel = channelField.getValue();
     testPending = true;
+    clearStatus(emailStatusHost);
     try {
       await onTest?.(channel);
-      showBanner('success', 'Test message sent successfully.');
+      setStatus(slackStatusHost, '✓ Sent', 'rt-notif-status--ok');
+      if (typeof setTimeout !== 'undefined') {
+        clearTimeout(successClearTimer);
+        successClearTimer = setTimeout(() => clearStatus(slackStatusHost), 4000);
+      }
     } catch (err) {
       const msg = settingsErrorMessage(err && err.code);
-      showBanner('error', msg);
+      setStatus(slackStatusHost, '✕ ' + msg, 'rt-notif-status--err');
     } finally {
       testPending = false;
     }
@@ -153,12 +160,17 @@ export function mountNotificationsPanel(container, config) {
   async function handleTestEmail() {
     if (testPending) return;
     testPending = true;
+    clearStatus(slackStatusHost);
     try {
       await onTestEmail?.();
-      showBanner('success', 'Test email sent successfully.');
+      setStatus(emailStatusHost, '✓ Sent', 'rt-notif-status--ok');
+      if (typeof setTimeout !== 'undefined') {
+        clearTimeout(successClearTimer);
+        successClearTimer = setTimeout(() => clearStatus(emailStatusHost), 4000);
+      }
     } catch (err) {
       const msg = settingsErrorMessage(err && err.code);
-      showBanner('error', msg);
+      setStatus(emailStatusHost, '✕ ' + msg, 'rt-notif-status--err');
     } finally {
       testPending = false;
     }
@@ -195,12 +207,12 @@ export function mountNotificationsPanel(container, config) {
       return currentDirty;
     },
     dispose() {
+      if (typeof clearTimeout !== 'undefined') clearTimeout(successClearTimer);
       container.removeEventListener('input', onInput);
       container.removeEventListener('click', onClick);
       emailField.dispose();
       slackTokenField.dispose();
       channelField.dispose();
-      bannerCtrl?.dispose();
       container.innerHTML = '';
     },
   };
@@ -208,6 +220,13 @@ export function mountNotificationsPanel(container, config) {
 
 function injectStyles() {
   if (typeof document === 'undefined') return;
+  if (!document.getElementById(BUTTONS_STYLE_ID)) {
+    const btnLink = document.createElement('link');
+    btnLink.id = BUTTONS_STYLE_ID;
+    btnLink.rel = 'stylesheet';
+    btnLink.href = '/web/design-system/buttons.css';
+    document.head.appendChild(btnLink);
+  }
   if (document.getElementById(STYLE_ID)) return;
   const link = document.createElement('link');
   link.id = STYLE_ID;

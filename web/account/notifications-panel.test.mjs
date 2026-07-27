@@ -7,6 +7,8 @@ import {
   mountNotificationsPanel,
 } from './notifications-panel.js';
 
+import { settingsErrorMessage } from './settings-errors.js';
+
 // ── Pure helper tests ─────────────────────────────────────────────────────────
 
 const BASE_SETTINGS = {
@@ -100,7 +102,17 @@ function makeStubDocument() {
   };
 }
 
+/**
+ * Make a stub container whose querySelector returns observable status span stubs
+ * keyed on data-host attribute.
+ */
 function makeStubHost() {
+  // Stable status span stubs returned by querySelector for data-host selectors.
+  const statusSpans = {};
+  function makeStatusSpan() {
+    return { textContent: '', className: 'rt-notif-status' };
+  }
+
   const host = {
     innerHTML: '',
     _listeners: {},
@@ -113,7 +125,17 @@ function makeStubHost() {
         this._listeners[event] = this._listeners[event].filter(f => f !== fn);
       }
     },
-    querySelector() { return makeStubHost(); },
+    querySelector(selector) {
+      // Return stable span stubs for the inline status hosts.
+      const m = selector && selector.match(/data-host="([^"]+)"/);
+      if (m) {
+        const key = m[1];
+        if (!statusSpans[key]) statusSpans[key] = makeStatusSpan();
+        return statusSpans[key];
+      }
+      return makeStubHost();
+    },
+    _statusSpans: statusSpans,
   };
   return host;
 }
@@ -137,13 +159,6 @@ function makeFakeSecretField(hint = null) {
   };
 }
 
-function makeFakeBanner() {
-  return {
-    update() {},
-    dispose() {},
-  };
-}
-
 test('stub-mount: mountNotificationsPanel — getPayload returns initial values', () => {
   const originalDocument = globalThis.document;
   globalThis.document = makeStubDocument();
@@ -159,7 +174,6 @@ test('stub-mount: mountNotificationsPanel — getPayload returns initial values'
     return fakeChannelField;
   };
   const fakeMountSecretField = () => fakeSecretField;
-  const fakeMountBanner = () => makeFakeBanner();
 
   const container = makeStubHost();
 
@@ -169,7 +183,6 @@ test('stub-mount: mountNotificationsPanel — getPayload returns initial values'
       onDirtyChange() {},
       _mountFormSection: fakeMountFormSection,
       _mountSecretField: fakeMountSecretField,
-      _mountBanner: fakeMountBanner,
     });
 
     const payload = ctrl.getPayload();
@@ -194,7 +207,6 @@ test('stub-mount: mountNotificationsPanel — isDirty() starts false', () => {
   const fakeMountFormSection = (_host, cfg) =>
     cfg.name === 'notification_email' ? fakeEmailField : fakeChannelField;
   const fakeMountSecretField = () => fakeSecretField;
-  const fakeMountBanner = () => makeFakeBanner();
 
   const container = makeStubHost();
 
@@ -204,7 +216,6 @@ test('stub-mount: mountNotificationsPanel — isDirty() starts false', () => {
       onDirtyChange() {},
       _mountFormSection: fakeMountFormSection,
       _mountSecretField: fakeMountSecretField,
-      _mountBanner: fakeMountBanner,
     });
 
     assert.equal(ctrl.isDirty(), false);
@@ -225,7 +236,6 @@ test('stub-mount: mountNotificationsPanel — dispose clears innerHTML', () => {
   const fakeMountFormSection = (_host, cfg) =>
     cfg.name === 'notification_email' ? fakeEmailField : fakeChannelField;
   const fakeMountSecretField = () => fakeSecretField;
-  const fakeMountBanner = () => makeFakeBanner();
 
   const container = makeStubHost();
 
@@ -235,7 +245,6 @@ test('stub-mount: mountNotificationsPanel — dispose clears innerHTML', () => {
       onDirtyChange() {},
       _mountFormSection: fakeMountFormSection,
       _mountSecretField: fakeMountSecretField,
-      _mountBanner: fakeMountBanner,
     });
 
     ctrl.dispose();
@@ -257,7 +266,6 @@ test('stub-mount: mountNotificationsPanel — onTestEmail called when test-email
   const fakeMountFormSection = (_host, cfg) =>
     cfg.name === 'notification_email' ? fakeEmailField : fakeChannelField;
   const fakeMountSecretField = () => fakeSecretField;
-  const fakeMountBanner = () => makeFakeBanner();
 
   const container = makeStubHost();
 
@@ -284,7 +292,6 @@ test('stub-mount: mountNotificationsPanel — onTestEmail called when test-email
       onTestEmail: async () => { testEmailCalls.push(true); },
       _mountFormSection: fakeMountFormSection,
       _mountSecretField: fakeMountSecretField,
-      _mountBanner: fakeMountBanner,
     });
 
     fireClick('test-email');
@@ -293,6 +300,188 @@ test('stub-mount: mountNotificationsPanel — onTestEmail called when test-email
     await Promise.resolve();
 
     assert.equal(testEmailCalls.length, 1, 'onTestEmail should be called once');
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test('stub-mount: mountNotificationsPanel — onTestEmail success sets inline email-status to ok', async () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = makeStubDocument();
+
+  const fakeEmailField = makeFakeFormSection('alice@example.com');
+  const fakeChannelField = makeFakeFormSection('#alerts');
+  const fakeSecretField = makeFakeSecretField('3f9a');
+
+  const fakeMountFormSection = (_host, cfg) =>
+    cfg.name === 'notification_email' ? fakeEmailField : fakeChannelField;
+  const fakeMountSecretField = () => fakeSecretField;
+
+  const container = makeStubHost();
+
+  function fireClick(action) {
+    const listeners = container._listeners['click'] || [];
+    const fakeEvent = {
+      target: { closest(selector) { return selector === `[data-action="${action}"]` ? {} : null; } },
+    };
+    listeners.forEach(fn => fn(fakeEvent));
+  }
+
+  try {
+    mountNotificationsPanel(container, {
+      settings: BASE_SETTINGS,
+      onDirtyChange() {},
+      onTestEmail: async () => { /* success */ },
+      _mountFormSection: fakeMountFormSection,
+      _mountSecretField: fakeMountSecretField,
+    });
+
+    fireClick('test-email');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const emailStatus = container._statusSpans['email-status'];
+    assert.ok(emailStatus, 'email-status span should exist');
+    assert.match(emailStatus.textContent, /✓/);
+    assert.match(emailStatus.className, /rt-notif-status--ok/);
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test('stub-mount: mountNotificationsPanel — onTestEmail failure sets inline email-status to err', async () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = makeStubDocument();
+
+  const fakeEmailField = makeFakeFormSection('alice@example.com');
+  const fakeChannelField = makeFakeFormSection('#alerts');
+  const fakeSecretField = makeFakeSecretField('3f9a');
+
+  const fakeMountFormSection = (_host, cfg) =>
+    cfg.name === 'notification_email' ? fakeEmailField : fakeChannelField;
+  const fakeMountSecretField = () => fakeSecretField;
+
+  const container = makeStubHost();
+
+  function fireClick(action) {
+    const listeners = container._listeners['click'] || [];
+    const fakeEvent = {
+      target: { closest(selector) { return selector === `[data-action="${action}"]` ? {} : null; } },
+    };
+    listeners.forEach(fn => fn(fakeEvent));
+  }
+
+  try {
+    mountNotificationsPanel(container, {
+      settings: BASE_SETTINGS,
+      onDirtyChange() {},
+      onTestEmail: async () => { throw { code: 'email_send_failed' }; },
+      _mountFormSection: fakeMountFormSection,
+      _mountSecretField: fakeMountSecretField,
+    });
+
+    fireClick('test-email');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const emailStatus = container._statusSpans['email-status'];
+    assert.ok(emailStatus, 'email-status span should exist');
+    assert.match(emailStatus.textContent, /✕/);
+    assert.match(emailStatus.textContent, new RegExp(settingsErrorMessage('email_send_failed')));
+    assert.match(emailStatus.className, /rt-notif-status--err/);
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test('stub-mount: mountNotificationsPanel — onTest (slack) success sets inline slack-status to ok', async () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = makeStubDocument();
+
+  const fakeEmailField = makeFakeFormSection('alice@example.com');
+  const fakeChannelField = makeFakeFormSection('#alerts');
+  const fakeSecretField = makeFakeSecretField('3f9a');
+
+  const fakeMountFormSection = (_host, cfg) =>
+    cfg.name === 'notification_email' ? fakeEmailField : fakeChannelField;
+  const fakeMountSecretField = () => fakeSecretField;
+
+  const container = makeStubHost();
+
+  function fireClick(action) {
+    const listeners = container._listeners['click'] || [];
+    const fakeEvent = {
+      target: { closest(selector) { return selector === `[data-action="${action}"]` ? {} : null; } },
+    };
+    listeners.forEach(fn => fn(fakeEvent));
+  }
+
+  try {
+    mountNotificationsPanel(container, {
+      settings: BASE_SETTINGS,
+      onDirtyChange() {},
+      onTest: async () => { /* success */ },
+      _mountFormSection: fakeMountFormSection,
+      _mountSecretField: fakeMountSecretField,
+    });
+
+    fireClick('test-slack');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const slackStatus = container._statusSpans['slack-status'];
+    assert.ok(slackStatus, 'slack-status span should exist');
+    assert.match(slackStatus.textContent, /✓/);
+    assert.match(slackStatus.className, /rt-notif-status--ok/);
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test('stub-mount: mountNotificationsPanel — onTest (slack) failure sets inline slack-status to err', async () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = makeStubDocument();
+
+  const fakeEmailField = makeFakeFormSection('alice@example.com');
+  const fakeChannelField = makeFakeFormSection('#alerts');
+  const fakeSecretField = makeFakeSecretField('3f9a');
+
+  const fakeMountFormSection = (_host, cfg) =>
+    cfg.name === 'notification_email' ? fakeEmailField : fakeChannelField;
+  const fakeMountSecretField = () => fakeSecretField;
+
+  const container = makeStubHost();
+
+  function fireClick(action) {
+    const listeners = container._listeners['click'] || [];
+    const fakeEvent = {
+      target: { closest(selector) { return selector === `[data-action="${action}"]` ? {} : null; } },
+    };
+    listeners.forEach(fn => fn(fakeEvent));
+  }
+
+  try {
+    mountNotificationsPanel(container, {
+      settings: BASE_SETTINGS,
+      onDirtyChange() {},
+      onTest: async () => { throw { code: 'slack_send_failed' }; },
+      _mountFormSection: fakeMountFormSection,
+      _mountSecretField: fakeMountSecretField,
+    });
+
+    fireClick('test-slack');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const slackStatus = container._statusSpans['slack-status'];
+    assert.ok(slackStatus, 'slack-status span should exist');
+    assert.match(slackStatus.textContent, /✕/);
+    assert.match(slackStatus.textContent, new RegExp(settingsErrorMessage('slack_send_failed')));
+    assert.match(slackStatus.className, /rt-notif-status--err/);
   } finally {
     if (originalDocument === undefined) delete globalThis.document;
     else globalThis.document = originalDocument;
@@ -311,7 +500,6 @@ test('stub-mount: mountNotificationsPanel — slack_token null in stored mode', 
   const fakeMountFormSection = (_host, cfg) =>
     cfg.name === 'notification_email' ? fakeEmailField : fakeChannelField;
   const fakeMountSecretField = () => fakeSecretField;
-  const fakeMountBanner = () => makeFakeBanner();
 
   const container = makeStubHost();
 
@@ -321,7 +509,6 @@ test('stub-mount: mountNotificationsPanel — slack_token null in stored mode', 
       onDirtyChange() {},
       _mountFormSection: fakeMountFormSection,
       _mountSecretField: fakeMountSecretField,
-      _mountBanner: fakeMountBanner,
     });
 
     const payload = ctrl.getPayload();
