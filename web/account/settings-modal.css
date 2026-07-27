@@ -8,15 +8,41 @@
   /* Banner host — hidden when empty */
 }
 
+/* Desktop: a left tab rail beside the panel. */
+.rt-settings-modal-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 16px;
+}
+
 .rt-settings-modal-tabs {
-  border-bottom: 1px solid var(--rt-border);
-  margin-bottom: 16px;
+  flex: 0 0 156px;
+  border-right: 1px solid var(--rt-border);
+  padding: 4px 8px 4px 16px;
 }
 
 .rt-settings-modal-panel {
   flex: 1;
-  padding: 0 16px;
+  min-width: 0;
+  padding: 4px 16px;
   overflow-y: auto;
+}
+
+/* Mobile: stack the tabs above the panel (they become a segmented control). */
+@media (max-width: 560px) {
+  .rt-settings-modal-main {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .rt-settings-modal-tabs {
+    flex: 0 0 auto;
+    border-right: none;
+    border-bottom: 1px solid var(--rt-border);
+    padding: 0 0 12px;
+    margin-bottom: 12px;
+  }
 }
 
 .rt-settings-modal-footer {
