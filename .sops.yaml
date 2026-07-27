@@ -22,4 +22,4 @@ creation_rules:
           # wc@laptop — primary dev machine
           - age1gr7vhre9c8as5n03w4qa3gwenszx8gk6dsr4d8nj2stp55p3nqzsyu43ad
           # mini-ca — deploy host (~mini/.config/sops/age/keys.txt)
-          - age1PLACEHOLDER_REPLACE_WITH_MINI_CA_KEY
+          - age1fkpsyq9t7y9xu4f99kkgjs60hx7s9nsyntvyrqyjzzgc2ptjwdhqcvudap

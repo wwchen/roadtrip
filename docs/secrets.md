@@ -62,7 +62,10 @@ make secrets-force      # discard an unmanaged .env and regenerate
 
 ## First-time setup
 
-Requires `sops` and `age` (`brew install sops age`, or `make install`).
+Requires `sops` and `age` on every host that runs the stack — `brew install
+sops age`, or `make install` on a dev machine. See
+[installation.md](installation.md) for the full per-machine breakdown; the
+deploy host needs both but not the rest of the dev toolchain.
 
 ### 1. Create your key
 

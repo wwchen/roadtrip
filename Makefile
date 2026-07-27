@@ -21,7 +21,7 @@ OBSERVABILITY_SERVICES := grafana alloy tempo prometheus loki
 
 help:
 	@echo "Targets:"
-	@echo "  make install          One-time host setup: brew deps + companion + git hooks"
+	@echo "  make install          One-time dev-machine setup: brew deps + companion + git hooks (docs/installation.md)"
 	@echo "  make install-hooks    Point this clone's git hooks at .githooks/ (per-clone)"
 	@echo "  make run              Run backend locally + Docker Rec.gov companion"
 	@echo "  make run env=prod     Build backend/companion images + run production Compose profiles"
@@ -82,10 +82,13 @@ recgov-atc: _ensure-hooks
 	@if [ -z "$(PAYLOAD)" ]; then echo "Usage: make recgov-atc PAYLOAD=/path/to/atc.json"; exit 2; fi
 	cd companion && $(RECGOV_COMPANION_PROFILE_ENV) npm run --silent recgov:atc -- --payload-file "$(PAYLOAD)"
 
-# One-time host setup for a fresh clone. Idempotent: brew is no-op when
+# One-time DEV MACHINE setup for a fresh clone. Idempotent: brew is no-op when
 # packages are present, npm install + playwright install are no-op when the
 # lockfile and browser cache are unchanged, install-hooks just rewrites
 # .git/config.
+#
+# Deploy hosts want a smaller set — `brew install docker sops age`, no Tilt or
+# Playwright. See docs/installation.md.
 install: install-hooks
 	brew install tilt docker openjdk node sops age
 	cd companion && npm install && npx playwright install chromium

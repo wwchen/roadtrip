@@ -138,7 +138,11 @@ First time only:
 
 ```sh
 make install        # Homebrew deps + companion (npm + playwright) + git hooks
+make secrets-init   # this machine's age key; see docs/secrets.md
 ```
+
+Deploy hosts need a different, smaller set (no Tilt/Node/Playwright) —
+see **[docs/installation.md](docs/installation.md)**.
 
 Pricing is served from the on-disk cache (`data/pricing-cache/`). Tesla is
 never called from the user request path — the backend just reads cached JSON
