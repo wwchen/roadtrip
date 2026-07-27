@@ -37,6 +37,10 @@ object SecretsBootstrap {
 
     private const val REGISTRY_RESOURCE = "secrets-registry.yaml"
     private const val REQUIRED_IN_KEY = "required_in"
+    private const val CONSUMERS_KEY = "consumers"
+
+    /** This process's name in the registry's `consumers` lists. */
+    private const val SELF = "backend"
     private const val PROFILE_ENV = "ROADTRIP_PROFILE"
     private const val DEFAULT_PROFILE = "local"
 
@@ -87,7 +91,15 @@ object SecretsBootstrap {
         }
     }
 
-    /** Secret name -> environments in which it is mandatory. */
+    /**
+     * Secret name -> environments in which it is mandatory *for the backend*.
+     *
+     * Filtered by `consumers`, not just `required_in`: the registry also covers
+     * secrets only Grafana, Postgres or cloudflared receive. Those are genuinely
+     * required in production, but they are never mounted into this container, so
+     * validating them here would fail a correctly configured deploy. Each
+     * consumer answers for its own.
+     */
     fun requiredByProfile(classLoader: ClassLoader = SecretsBootstrap::class.java.classLoader): Map<String, Set<String>> {
         val registry: ApplicationConfig =
             classLoader.getResource(REGISTRY_RESOURCE)?.let {
@@ -100,12 +112,8 @@ object SecretsBootstrap {
             .toMap()
             .mapNotNull { (name, entry) ->
                 val fields = entry as? Map<*, *> ?: return@mapNotNull null
-                val required =
-                    when (val raw = fields[REQUIRED_IN_KEY]) {
-                        is List<*> -> raw.mapNotNull { it?.toString() }.toSet()
-                        else -> emptySet()
-                    }
-                name to required
+                if (SELF !in stringList(fields[CONSUMERS_KEY])) return@mapNotNull null
+                name to stringList(fields[REQUIRED_IN_KEY]).toSet()
             }.toMap()
     }
 
@@ -135,6 +143,12 @@ object SecretsBootstrap {
     ): String? = env[name] ?: System.getProperty(name)
 
     private fun profileOf(env: Map<String, String>): String = env[PROFILE_ENV]?.trim()?.takeIf { it.isNotEmpty() } ?: DEFAULT_PROFILE
+
+    private fun stringList(raw: Any?): List<String> =
+        when (raw) {
+            is List<*> -> raw.mapNotNull { it?.toString() }
+            else -> emptyList()
+        }
 
     private fun <T> withContextClassLoader(
         classLoader: ClassLoader,
