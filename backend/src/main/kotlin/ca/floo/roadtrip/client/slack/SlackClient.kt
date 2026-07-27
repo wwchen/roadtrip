@@ -116,14 +116,15 @@ open class SlackClient(
             httpClient.get(SLACK_AUTH_TEST_URL) {
                 header("Authorization", "Bearer $token")
             }
+        val rawBody = resp.bodyAsText()
         val parsed =
-            Json.parseToJsonElement(resp.bodyAsText()) as? JsonObject ?: run {
+            Json.parseToJsonElement(rawBody) as? JsonObject ?: run {
                 log.warn("Slack auth.test returned unparseable response")
                 return null
             }
         val ok = (parsed.get("ok") as? JsonPrimitive)?.content == "true"
         if (!ok) {
-            val err = (parsed.get("error") as? JsonPrimitive)?.content ?: resp.bodyAsText()
+            val err = (parsed.get("error") as? JsonPrimitive)?.content ?: rawBody
             log.warn("Slack auth.test not ok: {}", err)
             return null
         }
@@ -156,10 +157,11 @@ open class SlackClient(
                 contentType(ContentType.Application.Json)
                 setBody(body)
             }
-        val parsed = Json.parseToJsonElement(resp.bodyAsText()) as? JsonObject
+        val rawBody = resp.bodyAsText()
+        val parsed = Json.parseToJsonElement(rawBody) as? JsonObject
         val ok = (parsed?.get("ok") as? JsonPrimitive)?.content == "true"
         if (!ok) {
-            val err = (parsed?.get("error") as? JsonPrimitive)?.content ?: resp.bodyAsText()
+            val err = (parsed?.get("error") as? JsonPrimitive)?.content ?: rawBody
             log.warn("Slack chat.postMessage to {} not ok: {}", channel, err)
         }
         return ok
