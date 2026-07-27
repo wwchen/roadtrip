@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.route.api.settings
 
+import ca.floo.roadtrip.model.api.EmailTestResponseDto
 import ca.floo.roadtrip.model.api.NotificationsDto
 import ca.floo.roadtrip.model.api.ProfileDto
 import ca.floo.roadtrip.model.api.SettingsResponseDto
@@ -39,6 +40,7 @@ private const val PROFILE_PATH = "$SETTINGS_PATH/profile"
 private const val NOTIFICATIONS_PATH = "$SETTINGS_PATH/notifications"
 private const val SLACK_DISCONNECT_PATH = "$NOTIFICATIONS_PATH/slack"
 private const val SLACK_TEST_PATH = "$NOTIFICATIONS_PATH/slack/test"
+private const val EMAIL_TEST_PATH = "$NOTIFICATIONS_PATH/email/test"
 
 private const val USER_TOKEN = "user-token"
 private val testUserId = UserId(42L)
@@ -52,6 +54,8 @@ private class StubSettingsService(
     private val onDisconnectSlack: (UserId) -> SettingsResponseDto = { defaultSettingsDto(slackConfigured = false) },
     private val onSendSlackTest: suspend (UserId, String?) -> SlackTestResponseDto =
         { _, ch -> SlackTestResponseDto(sent = true, channel = ch) },
+    private val onSendEmailTest: suspend (UserId) -> EmailTestResponseDto =
+        { _ -> EmailTestResponseDto(sent = true, recipient = "user@example.com") },
 ) : UserSettingsPort {
     override fun read(principal: Principal.User): SettingsResponseDto = onRead(principal)
 
@@ -71,6 +75,8 @@ private class StubSettingsService(
         userId: UserId,
         channelOverride: String?,
     ): SlackTestResponseDto = onSendSlackTest(userId, channelOverride)
+
+    override suspend fun sendEmailTest(userId: UserId): EmailTestResponseDto = onSendEmailTest(userId)
 }
 
 private fun defaultSettingsDto(slackConfigured: Boolean = false): SettingsResponseDto =
@@ -359,6 +365,52 @@ class SettingsRoutesTest {
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(true, body["sent"]!!.jsonPrimitive.boolean)
             assertEquals("#camping", body["channel"]!!.jsonPrimitive.content)
+        }
+
+    // ── POST email test ────────────────────────────────────────────────────────
+
+    @Test
+    fun `POST email test anonymous returns 401`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolve }
+                routing { settingsRoutes(StubSettingsService()) }
+            }
+            val resp = client.post(EMAIL_TEST_PATH)
+            assertEquals(HttpStatusCode.Unauthorized, resp.status)
+        }
+
+    @Test
+    fun `POST email test authenticated returns 200 with sent and recipient`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolve }
+                routing { settingsRoutes(StubSettingsService()) }
+            }
+            val resp = client.post(EMAIL_TEST_PATH) { userSession() }
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(true, body["sent"]!!.jsonPrimitive.boolean)
+            assertEquals("user@example.com", body["recipient"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `POST email test with send failure returns 502 email_send_failed`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolve }
+                routing {
+                    settingsRoutes(
+                        StubSettingsService(
+                            onSendEmailTest = { _ -> throw SettingsError.EmailSendFailed() },
+                        ),
+                    )
+                }
+            }
+            val resp = client.post(EMAIL_TEST_PATH) { userSession() }
+            assertEquals(HttpStatusCode.BadGateway, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("email_send_failed", body["error"]!!.jsonPrimitive.content)
         }
 
     // ── DELETE slack → 200 with slack_configured: false ─────────────────────────

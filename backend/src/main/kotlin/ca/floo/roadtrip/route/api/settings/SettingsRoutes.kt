@@ -33,6 +33,7 @@ private const val SEGMENT_PROFILE = "/profile"
 private const val SEGMENT_NOTIFICATIONS = "/notifications"
 private const val SLACK_PATH = "/notifications/slack"
 private const val SLACK_TEST_PATH = "/notifications/slack/test"
+private const val EMAIL_TEST_PATH = "/notifications/email/test"
 
 // ── Error codes ──────────────────────────────────────────────────────────────
 private const val ERROR_INVALID_FIELD = "invalid_field"
@@ -40,6 +41,7 @@ private const val ERROR_SLACK_INVALID_AUTH = "slack_invalid_auth"
 private const val ERROR_ENCRYPTION_UNAVAILABLE = "encryption_unavailable"
 private const val ERROR_SLACK_NOT_CONFIGURED = "slack_not_configured"
 private const val ERROR_SLACK_SEND_FAILED = "slack_send_failed"
+private const val ERROR_EMAIL_SEND_FAILED = "email_send_failed"
 private const val ERROR_INVALID_BODY = "invalid_body"
 
 // ── OpenAPI tag ───────────────────────────────────────────────────────────────
@@ -129,6 +131,16 @@ internal fun Route.settingsRoutes(service: UserSettingsPort) {
             }
         }.describeApi(TAG_SETTINGS, "Send a Slack test message")
             .access(RouteAccess.User)
+
+        post(EMAIL_TEST_PATH) {
+            val principal = call.requireUser() ?: return@post
+            try {
+                call.respondEncodedJson(roadtripApiJson, service.sendEmailTest(principal.userId))
+            } catch (e: SettingsError) {
+                call.respondSettingsError(e)
+            }
+        }.describeApi(TAG_SETTINGS, "Send a test email")
+            .access(RouteAccess.User)
     }
 }
 
@@ -163,4 +175,5 @@ private suspend fun ApplicationCall.respondSettingsError(e: SettingsError) =
             )
         is SettingsError.SlackNotConfigured -> respondApiError(ERROR_SLACK_NOT_CONFIGURED, HttpStatusCode.ServiceUnavailable, e.message)
         is SettingsError.SlackSendFailed -> respondApiError(ERROR_SLACK_SEND_FAILED, HttpStatusCode.BadGateway, e.message)
+        is SettingsError.EmailSendFailed -> respondApiError(ERROR_EMAIL_SEND_FAILED, HttpStatusCode.BadGateway, e.message)
     }

@@ -246,6 +246,59 @@ test('stub-mount: mountNotificationsPanel — dispose clears innerHTML', () => {
   }
 });
 
+test('stub-mount: mountNotificationsPanel — onTestEmail called when test-email button clicked', async () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = makeStubDocument();
+
+  const fakeEmailField = makeFakeFormSection('alice@example.com');
+  const fakeChannelField = makeFakeFormSection('#alerts');
+  const fakeSecretField = makeFakeSecretField('3f9a');
+
+  const fakeMountFormSection = (_host, cfg) =>
+    cfg.name === 'notification_email' ? fakeEmailField : fakeChannelField;
+  const fakeMountSecretField = () => fakeSecretField;
+  const fakeMountBanner = () => makeFakeBanner();
+
+  const container = makeStubHost();
+
+  const testEmailCalls = [];
+
+  // Simulate click events on the container listeners.
+  function fireClick(action) {
+    const listeners = container._listeners['click'] || [];
+    const fakeEvent = {
+      target: {
+        closest(selector) {
+          if (selector === `[data-action="${action}"]`) return {};
+          return null;
+        },
+      },
+    };
+    listeners.forEach(fn => fn(fakeEvent));
+  }
+
+  try {
+    mountNotificationsPanel(container, {
+      settings: BASE_SETTINGS,
+      onDirtyChange() {},
+      onTestEmail: async () => { testEmailCalls.push(true); },
+      _mountFormSection: fakeMountFormSection,
+      _mountSecretField: fakeMountSecretField,
+      _mountBanner: fakeMountBanner,
+    });
+
+    fireClick('test-email');
+    // Allow async handleTestEmail to settle.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    assert.equal(testEmailCalls.length, 1, 'onTestEmail should be called once');
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
 test('stub-mount: mountNotificationsPanel — slack_token null in stored mode', () => {
   const originalDocument = globalThis.document;
   globalThis.document = makeStubDocument();

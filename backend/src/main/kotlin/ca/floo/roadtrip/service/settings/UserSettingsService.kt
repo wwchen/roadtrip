@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.settings
 
 import ca.floo.roadtrip.client.slack.SlackClient
+import ca.floo.roadtrip.model.api.EmailTestResponseDto
 import ca.floo.roadtrip.model.api.NotificationsDto
 import ca.floo.roadtrip.model.api.ProfileDto
 import ca.floo.roadtrip.model.api.SettingsResponseDto
@@ -11,6 +12,7 @@ import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
+import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.security.SecretCipher
 
 const val MAX_SLACK_CHANNEL_CHARS = 255
@@ -43,6 +45,10 @@ sealed class SettingsError(
     class SlackSendFailed(
         message: String = "Slack message delivery failed",
     ) : SettingsError(message)
+
+    class EmailSendFailed(
+        message: String = "Email delivery failed",
+    ) : SettingsError(message)
 }
 
 /**
@@ -68,6 +74,8 @@ interface UserSettingsPort {
         userId: UserId,
         channelOverride: String?,
     ): SlackTestResponseDto
+
+    suspend fun sendEmailTest(userId: UserId): EmailTestResponseDto
 }
 
 /**
@@ -85,6 +93,8 @@ class UserSettingsService(
     private val cipher: SecretCipher?,
     private val slackClient: SlackClient?,
     private val providerLabel: String?,
+    private val emailService: EmailNotificationService,
+    private val appRootUrl: String? = null,
 ) : UserSettingsPort {
     /**
      * Assembles a full [SettingsResponseDto] for the given principal. The Slack
@@ -203,6 +213,22 @@ class UserSettingsService(
         val sent = client.postMessage(token = plainToken, channel = channel ?: "", text = "Roadtrip test message")
         if (!sent) throw SettingsError.SlackSendFailed()
         return SlackTestResponseDto(sent = true, channel = channel)
+    }
+
+    /**
+     * Sends a test email to the user's notification email (falling back to login
+     * email when no override is stored).
+     *
+     * Throws [SettingsError.EmailSendFailed] when email is disabled or delivery fails.
+     */
+    override suspend fun sendEmailTest(userId: UserId): EmailTestResponseDto {
+        val settings = settingsRepo.find(userId)
+        val recipient =
+            settings?.notificationEmail
+                ?: requireNotNull(userRepo.findById(userId)) { "user not found: $userId" }.email
+        val sent = emailService.sendTestEmail(listOf(recipient), appRootUrl)
+        if (!sent) throw SettingsError.EmailSendFailed()
+        return EmailTestResponseDto(sent = true, recipient = recipient)
     }
 
     // --- private helpers ---
