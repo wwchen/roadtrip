@@ -36,6 +36,18 @@ def _load_dotenv(path):
             out[k] = v
     return out
 
+# Refresh .env from the encrypted vault before reading it, so `tilt up` can
+# never run the stack against a stale or drifted .env. Mirrors the Makefile's
+# _ensure-secrets: a missing vault is tolerated (fresh clone, pre-migration), a
+# vault that won't decrypt fails the Tiltfile load. See docs/secrets.md.
+#
+# The dedupe in _load_dotenv below is belt-and-braces now — materialize emits
+# each key exactly once, so first-wins vs last-wins no longer decides anything.
+local(
+    '[ -f secrets/secrets.enc.env ] || exit 0; ./scripts/manage_secrets.py materialize',
+    quiet=True,
+)
+
 DOTENV = _load_dotenv('.env')
 
 # Point this clone's git at .githooks/ so the committed pre-commit (ktlint) and

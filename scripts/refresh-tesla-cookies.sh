@@ -41,9 +41,16 @@ if ! [[ "$cookies" == *"_abck="* ]] || \
   [[ "$yn" == "y" || "$yn" == "Y" ]] || exit 1
 fi
 
+# Writes .env.local, not .env: .env is generated from the encrypted vault
+# (see docs/secrets.md) and would overwrite these cookies on the next
+# `make run`. .env.local is host-local, gitignored, and merged over the
+# decrypted values — the right home for a value that's bound to this
+# machine's egress IP and re-minted by hand.
 tmp=$(mktemp)
-grep -v '^TESLA_COOKIES=' .env > "$tmp" || true
+touch .env.local
+grep -v '^TESLA_COOKIES=' .env.local > "$tmp" || true
 printf 'TESLA_COOKIES=%s\n' "$cookies" >> "$tmp"
-mv "$tmp" .env
-chmod 600 .env
-echo "✓ wrote .env (TESLA_COOKIES=${#cookies} chars)"
+mv "$tmp" .env.local
+chmod 600 .env.local
+echo "✓ wrote .env.local (TESLA_COOKIES=${#cookies} chars)"
+echo "  Run \`make secrets\` (or any \`make run\`) to fold it into .env."

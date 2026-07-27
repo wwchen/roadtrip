@@ -1,4 +1,4 @@
-.PHONY: help run data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export
+.PHONY: help run data-fetch data-import reset-db qa install install-hooks _ensure-hooks _ensure-secrets recgov-companion recgov-login recgov-refresh recgov-atc grafana-export secrets secrets-init secrets-import secrets-edit secrets-check secrets-rotate secrets-recipients secrets-force
 
 PORT       ?= 8765
 BACKEND_IMAGE ?= roadtrip/backend
@@ -35,12 +35,20 @@ help:
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make grafana-export   Snapshot UI-edited dashboards and apply shared links"
 	@echo ""
+	@echo "Secrets (SOPS + age; see docs/secrets.md):"
+	@echo "  make secrets          Decrypt secrets/secrets.enc.env into .env (automatic on run/tilt)"
+	@echo "  make secrets-edit     Change a secret in \$$EDITOR, re-encrypted on save"
+	@echo "  make secrets-check    Validate the vault (also runs in CI)"
+	@echo "  make secrets-init     One-time: create this host's age key, print its public half"
+	@echo "  make secrets-import   One-time: encrypt an existing plaintext .env into the vault"
+	@echo "  make secrets-rotate   Re-encrypt for the current .sops.yaml recipients"
+	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (host backend + Rec.gov companion)."
 
 # Plain `make run` runs the backend on the host for local dev. `make run
 # env=prod` builds the container image and rolls out the production Compose
 # stack on the deploy host.
-run: _ensure-hooks
+run: _ensure-hooks _ensure-secrets
 ifeq ($(RUN_ENV),prod)
 	./gradlew :backend:buildFatJar
 	docker build -t $(BACKEND_IMAGE) --target backend .
@@ -60,7 +68,7 @@ else
 	$(error unsupported env '$(RUN_ENV)'; use env=dev or env=prod)
 endif
 
-recgov-companion: _ensure-hooks
+recgov-companion: _ensure-hooks _ensure-secrets
 	$(LOCAL_COMPOSE) up -d --build recgov-companion
 	@echo "Rec.gov companion listening on $(RECGOV_ATC_LOCAL_URL)"
 
@@ -79,8 +87,10 @@ recgov-atc: _ensure-hooks
 # lockfile and browser cache are unchanged, install-hooks just rewrites
 # .git/config.
 install: install-hooks
-	brew install tilt docker openjdk node
+	brew install tilt docker openjdk node sops age
 	cd companion && npm install && npx playwright install chromium
+	@echo
+	@echo "Secrets: run \`make secrets-init\` next if this host has no age key yet."
 
 # Two-step refresh:
 #   make data-fetch                       # all targets
@@ -96,7 +106,7 @@ ADMIN_BASE ?= http://127.0.0.1:$(PORT)
 # poi_data names like `Federal Campgrounds` contain spaces; wrap the URL
 # in single quotes and url-encode the path segment so curl gets one arg.
 # python3 is the simplest portable url-encoder.
-data-fetch:
+data-fetch: _ensure-secrets
 	python3 scripts/poll_raw.py $(if $(TARGET),$(TARGET),--all)
 
 data-import:
@@ -107,7 +117,7 @@ data-import:
 # (including R__grafana_reader_grants.sql which re-grants grafana_reader).
 POSTGRES_DATA ?= $(HOME)/.roadtrip-map/postgres
 DC := $(LOCAL_COMPOSE)
-reset-db:
+reset-db: _ensure-secrets
 	$(DC) rm -sf postgres backend
 	rm -rf $(POSTGRES_DATA)
 	$(DC) up -d --build postgres recgov-companion backend
@@ -134,6 +144,53 @@ install-hooks:
 _ensure-hooks:
 	@[ "$$(git config core.hooksPath 2>/dev/null)" = ".githooks" ] || \
 	  { git config core.hooksPath .githooks 2>/dev/null && echo "git hooks installed (.githooks/)"; } || true
+
+# Secrets live encrypted in secrets/secrets.enc.env (SOPS + age) and are
+# decrypted into the gitignored .env that Compose, Tilt, and the host fetchers
+# read. See docs/secrets.md for setup, rotation, and recovery.
+SECRETS := ./scripts/manage_secrets.py
+SECRETS_VAULT := secrets/secrets.enc.env
+
+secrets:
+	@$(SECRETS) materialize --verbose
+
+secrets-init:
+	@$(SECRETS) init
+
+secrets-import:
+	@$(SECRETS) import
+
+secrets-edit:
+	@$(SECRETS) edit
+
+secrets-check:
+	@$(SECRETS) check
+
+secrets-rotate:
+	@$(SECRETS) rotate
+
+secrets-recipients:
+	@$(SECRETS) recipients
+
+# Escape hatch for the one case materialize refuses on its own: a .env this
+# tooling didn't write. Discards it and regenerates from the vault.
+secrets-force:
+	@$(SECRETS) materialize --force
+
+# Prerequisite of every target that boots the stack or hits an upstream with a
+# credential, so .env can't be stale. Silent on the happy path.
+#
+# A missing vault is not an error here: a fresh clone that hasn't been through
+# `make secrets-import` yet should still be able to run the parts of the stack
+# that don't need credentials. A vault that exists but won't decrypt *is* an
+# error — that's a real misconfiguration, and failing fast beats booting the
+# stack against last week's secrets.
+_ensure-secrets:
+	@[ -f $(SECRETS_VAULT) ] || { \
+	  echo "note: $(SECRETS_VAULT) not found — skipping .env refresh (see docs/secrets.md)"; \
+	  exit 0; \
+	}; \
+	$(SECRETS) materialize
 
 # Snapshot Grafana dashboards from the running container into
 # grafana/dashboards/*.json, then apply shared dashboard navigation links.

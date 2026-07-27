@@ -19,7 +19,10 @@ request path. Misses on `/api/pricing/{slug}` return HTTP 404 with
 The offline refresh worker hits `tesla.com/api/findus/get-charger-details`
 through `curl-impersonate` (Akamai fingerprints TLS ClientHello + HTTP/2
 SETTINGS) and needs a valid `_abck` cookie tied to the calling IP. Cookies
-live in `.env` as `TESLA_COOKIES=…`.
+live in `.env.local` as `TESLA_COOKIES=…` — host-local rather than in the
+encrypted vault, precisely because the value only works from the IP that
+minted it. `make run` / `tilt up` merge `.env.local` into the generated
+`.env`; see [docs/secrets.md](docs/secrets.md).
 
 ## One-time setup (or refresh when expired)
 

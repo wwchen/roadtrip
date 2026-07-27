@@ -52,6 +52,21 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate Grafana dashboards
         run: python3 scripts/validate_grafana_dashboards.py
+      # Confirms the committed vault is fully encrypted, that no plaintext .env
+      # is tracked, and that .env.example still documents every key. Needs no
+      # age identity, so CI never holds a decryption key.
+      #
+      # Skipped only until the vault first lands (the repo is mid-migration off
+      # a hand-maintained .env); enforcing from the commit that adds it.
+      - name: Validate secrets vault
+        run: |
+          if [ ! -f secrets/secrets.enc.env ]; then
+            echo "::warning::secrets/secrets.enc.env not committed yet — see docs/secrets.md"
+            exit 0
+          fi
+          python3 scripts/manage_secrets.py check
+      - name: Secrets tooling tests
+        run: python3 -m unittest discover -s scripts -p 'test_manage_secrets.py' -v
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

@@ -4,6 +4,30 @@
 # `make install-hooks`.
 set -euo pipefail
 
+# Secrets guard. Runs on every commit regardless of what's staged: the failure
+# it prevents (a plaintext credential in git history) is not undoable by a
+# follow-up commit. See docs/secrets.md.
+secrets_staged=$(
+  git diff --cached --name-only --diff-filter=ACMR |
+    grep -E '^\.env$|^\.env\.local$|^secrets/' || true
+)
+
+if printf '%s\n' "$secrets_staged" | grep -qE '^\.env$|^\.env\.local$'; then
+  echo "refusing to commit a plaintext .env — it holds real credentials."
+  echo "Secrets belong in the encrypted vault: make secrets-edit"
+  exit 1
+fi
+
+# A staged vault is only safe if it's actually ciphertext. `check` verifies
+# that without needing an age identity, so it works on any machine.
+if printf '%s\n' "$secrets_staged" | grep -q '^secrets/.*\.enc\.env$'; then
+  if ! python3 scripts/manage_secrets.py check --staged; then
+    echo
+    echo "secrets check failed — see the errors above."
+    exit 1
+  fi
+fi
+
 staged=$(
   git diff --cached --name-only --diff-filter=ACMR |
     grep -E '^backend/.*\.kts?$|^detekt-rules/.*\.kts?$|^config/detekt/|(^|/)build\.gradle\.kts$|^settings\.gradle\.kts$' ||

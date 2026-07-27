@@ -258,16 +258,16 @@ before import.
    tunnel token. The tunnel's public hostname routing is managed in Cloudflare;
    Compose only starts `cloudflared` with the token.
 
-2. **`.env` on the deploy host:** Docker Compose reads runtime config from the
-   checkout's `.env` when GitHub Deploy or a manual deploy runs
-   `make run env=prod`:
-   ```
-   TESLA_COOKIES=ak_bmsc=...; _abck=...; bm_sz=...; ...
-   CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi...
-   POSTGRES_PASSWORD=<strong password>
-   GRAFANA_ADMIN_PASSWORD=<strong password>
-   GRAFANA_DB_PASSWORD=<strong password>
-   ```
+2. **Secrets on the deploy host:** Docker Compose reads runtime config from the
+   checkout's `.env`, which is *generated*, not hand-maintained. The real
+   values live encrypted in `secrets/secrets.enc.env` (SOPS + age) and are
+   decrypted by `make run env=prod`, so the same `git pull` that deploys code
+   also deploys a changed secret. The host needs an age key once
+   (`make secrets-init`, then add its public key to `.sops.yaml` and
+   `make secrets-rotate`) — after that there is nothing to sync by hand.
+
+   Change a secret with `make secrets-edit` and commit. Full setup, rotation,
+   and recovery: **[docs/secrets.md](docs/secrets.md)**.
 
    Grafana state is stored in the Compose-managed named volume
    `grafana-data` (Docker prefixes it with the Compose project name);

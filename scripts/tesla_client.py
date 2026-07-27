@@ -19,6 +19,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CACHE_DIR = ROOT / "data" / "pricing-cache"
 ENV_PATH = ROOT / ".env"
+# Read before .env: load_env() uses setdefault, so first-wins. That gives
+# .env.local precedence over the vault-generated .env — matching how
+# scripts/manage_secrets.py merges the two — and means cookies just minted by
+# refresh-tesla-cookies.sh work immediately, without waiting for a
+# `make secrets` to fold them in.
+ENV_LOCAL_PATH = ROOT / ".env.local"
 
 # When COOKIE_BOT_URL is set, we fetch cookies from the sidecar instead of
 # .env. Bot responses are cached in-process to avoid hammering it for every
@@ -28,14 +34,15 @@ BOT_CACHE_SECONDS = 10 * 60
 
 
 def load_env():
-    if not ENV_PATH.exists():
-        return
-    for line in ENV_PATH.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    for path in (ENV_LOCAL_PATH, ENV_PATH):
+        if not path.exists():
             continue
-        k, v = line.split("=", 1)
-        os.environ.setdefault(k.strip(), v.strip())
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip())
 
 
 def get_tesla_cookies() -> str:

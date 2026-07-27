@@ -1,6 +1,11 @@
+# Plaintext env files are generated (see docs/secrets.md) and never committed.
+# .env is materialized from secrets/secrets.enc.env; .env.local holds host-only
+# overrides. The encrypted vault under secrets/ is committed on purpose — it
+# doesn't match these patterns, and the negation below makes that explicit.
 .env
 .env.*
 !.env.example
+!secrets/*.enc.env
 samples/
 node_modules/
 .DS_Store

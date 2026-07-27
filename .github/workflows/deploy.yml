@@ -1,9 +1,16 @@
 name: Deploy
 
 # SSHes to mini-ca, fast-forwards the deploy checkout, then runs
-# `make run env=prod`. Runtime config is read by Docker Compose from the
-# deploy host's `.env`. Wraps a Tailscale join (mini-ca isn't on the public
+# `make run env=prod`. Wraps a Tailscale join (mini-ca isn't on the public
 # internet) around the SSH step.
+#
+# Runtime secrets need nothing from this workflow: they ride along in the
+# committed, encrypted secrets/secrets.enc.env, and `make run env=prod`
+# decrypts them into the host's `.env` using mini-ca's own age key. CI
+# deliberately holds no decryption key. See docs/secrets.md.
+#
+# The secrets below are credentials *for the pipeline* (tailnet join, SSH to
+# the host), not app config, which is why they stay in GitHub's secret store.
 #
 # Triggers only when files that affect the running service change. Doc-only
 # pushes, RFCs, and Tilt config don't burn deploy minutes. Manual override

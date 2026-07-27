@@ -1,0 +1,25 @@
+# SOPS routing. Anything under secrets/ ending in .enc.env is encrypted with
+# the age recipients below; sops picks the rule up automatically on
+# `sops edit` / `sops --encrypt`, so no key ever appears on a command line.
+#
+# `encrypted_regex` leaves the *keys* in plaintext and encrypts only the
+# values. That's deliberate: `git diff` shows which secret changed without
+# revealing what it changed to.
+#
+# Adding a host or a person:
+#   1. On that machine: `make secrets-init` — prints its age public key.
+#   2. Add the key to the list below with a comment naming the holder.
+#   3. `make secrets-rotate` — re-encrypts the data keys for the new set.
+#   4. Commit .sops.yaml and secrets/secrets.enc.env together.
+#
+# Removing a holder is the same edit in reverse, but the removed key has seen
+# the current values: rotate the underlying credentials too, not just the file.
+
+creation_rules:
+  - path_regex: secrets/.*\.enc\.env$
+    key_groups:
+      - age:
+          # wc@laptop — primary dev machine
+          - age1PLACEHOLDER_REPLACE_WITH_YOUR_DEV_KEY
+          # mini-ca — deploy host (~mini/.config/sops/age/keys.txt)
+          - age1PLACEHOLDER_REPLACE_WITH_MINI_CA_KEY
