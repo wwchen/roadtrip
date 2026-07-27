@@ -44,6 +44,7 @@ def temp_root(**overrides):
                 "ENV_LOCAL_FILE",
                 "ENV_EXAMPLE_FILE",
                 "SOPS_CONFIG",
+                "AGE_KEY_FILE",
             )
         }
         secrets_tool.ROOT = root
@@ -196,26 +197,53 @@ class PlaceholderTest(unittest.TestCase):
 
 
 class AgeKeyLocationTest(unittest.TestCase):
-    """sops resolves the identity path with Go's os.UserConfigDir()."""
+    """One pinned key path, handed to sops explicitly on every call."""
 
-    def test_macos_uses_application_support_not_dot_config(self):
-        # The bug this guards: ~/.config is the Linux answer. On macOS sops
-        # never looks there, so a key written to it is invisible and the
-        # decrypt error blames a missing key rather than a misplaced one.
-        with unittest.mock.patch.object(secrets_tool.sys, "platform", "darwin"):
-            path = secrets_tool.default_age_key_file()
+    def test_key_path_does_not_vary_by_platform(self):
+        # The bug this guards: sops' own resolution is per-OS, so a key written
+        # on one platform's convention is invisible on the other. Pinning it
+        # keeps runbooks and backup instructions copy-pasteable.
+        for platform in ("darwin", "linux", "win32"):
+            with unittest.mock.patch.object(secrets_tool.sys, "platform", platform):
+                self.assertEqual(
+                    Path.home() / ".config/sops/age/keys.txt",
+                    secrets_tool.AGE_KEY_FILE,
+                )
+
+    def test_sops_is_told_the_pinned_path(self):
+        """Pinning only works because run_sops passes it down."""
+        with unittest.mock.patch.object(secrets_tool.subprocess, "run") as run:
+            run.return_value = unittest.mock.Mock(returncode=0, stdout="", stderr="")
+            with unittest.mock.patch.object(secrets_tool.shutil, "which", return_value="/x/sops"):
+                secrets_tool.run_sops(["--decrypt", "f"])
         self.assertEqual(
-            Path.home() / "Library/Application Support/sops/age/keys.txt", path
+            str(secrets_tool.AGE_KEY_FILE),
+            run.call_args.kwargs["env"]["SOPS_AGE_KEY_FILE"],
         )
 
-    def test_linux_honours_xdg_config_home(self):
-        with unittest.mock.patch.object(secrets_tool.sys, "platform", "linux"):
-            with unittest.mock.patch.dict(
-                os.environ, {"XDG_CONFIG_HOME": "/xdg"}, clear=False
+    def test_native_lookup_is_symlinked_never_clobbered(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            pinned = Path(tmp) / "pinned/keys.txt"
+            pinned.parent.mkdir()
+            pinned.write_text("AGE-SECRET-KEY-1\n")
+            native = Path(tmp) / "native/keys.txt"
+            with unittest.mock.patch.multiple(
+                secrets_tool,
+                AGE_KEY_FILE=pinned,
+                sops_native_key_path=lambda: native,
             ):
-                self.assertEqual(
-                    Path("/xdg/sops/age/keys.txt"), secrets_tool.default_age_key_file()
-                )
+                self.assertEqual(native, secrets_tool.link_native_key_path())
+                self.assertTrue(native.is_symlink())
+                self.assertEqual("AGE-SECRET-KEY-1\n", native.read_text())
+                # Idempotent once linked.
+                self.assertIsNone(secrets_tool.link_native_key_path())
+
+                # A real identity already there is someone's deliberate setup:
+                # replacing it could lock them out of an unrelated vault.
+                native.unlink()
+                native.write_text("AGE-SECRET-KEY-OTHER\n")
+                self.assertIsNone(secrets_tool.link_native_key_path())
+                self.assertEqual("AGE-SECRET-KEY-OTHER\n", native.read_text())
 
     def test_misplaced_key_is_detected_only_when_the_real_path_is_empty(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -224,7 +252,7 @@ class AgeKeyLocationTest(unittest.TestCase):
             legacy.parent.mkdir(parents=True)
             legacy.write_text("AGE-SECRET-KEY-1\n")
             with unittest.mock.patch.multiple(
-                secrets_tool, AGE_KEY_FILE=real, LEGACY_AGE_KEY_FILES=[legacy]
+                secrets_tool, AGE_KEY_FILE=real, ADOPTABLE_AGE_KEY_FILES=[legacy]
             ):
                 self.assertEqual(legacy, secrets_tool.misplaced_age_key())
                 real.parent.mkdir(parents=True)
@@ -302,7 +330,9 @@ class RoundTripTest(unittest.TestCase):
             "      - age:\n"
             f"          - {public_key}\n"
         )
-        os.environ["SOPS_AGE_KEY_FILE"] = str(key_file)
+        # Patch the constant, not the env var: run_sops derives what it hands
+        # to sops from AGE_KEY_FILE, which is resolved at import time.
+        secrets_tool.AGE_KEY_FILE = key_file
         source = root / "plain.env"
         source.write_text(plaintext)
         return source

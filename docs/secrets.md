@@ -73,20 +73,13 @@ deploy host needs both but not the rest of the dev toolchain.
 make secrets-init
 ```
 
-This writes an age identity to the path sops actually searches on this
-platform and prints its public half:
-
-| | |
-| --- | --- |
-| macOS | `~/Library/Application Support/sops/age/keys.txt` |
-| Linux | `$XDG_CONFIG_HOME/sops/age/keys.txt`, else `~/.config/sops/age/keys.txt` |
-
-sops resolves this with Go's `os.UserConfigDir()`, so **`~/.config` is the
-Linux answer only** — a key written there on a Mac is invisible to sops, and
-the resulting error lists only the environment variables it checked, which
-reads like a missing key rather than a misplaced one. `make secrets-init`
-relocates a key it finds at the legacy path instead of generating a second
-identity, and any sops failure while one is stranded says so.
+This writes an age identity to `~/.config/sops/age/keys.txt` and prints its
+public half. Same path on every host, macOS and Linux alike — sops would
+otherwise pick a different directory per platform, which makes runbooks and
+backup instructions stop being copy-pasteable. Every sops call from this repo
+is handed that path explicitly, and `secrets-init` symlinks sops' own default
+at it so a bare `sops -d` works too. A key left in the other location gets
+adopted rather than replaced.
 
 **The private key is not in the repo and cannot be recovered.**
 Back it up somewhere you trust — a password manager entry is fine — or losing
@@ -98,17 +91,15 @@ The deploy host needs its own identity. It doesn't need this branch checked out
 to make one — `age-keygen` is enough:
 
 ```bash
-ssh mini@mini-ca 'KEYS="$HOME/Library/Application Support/sops/age/keys.txt"
+ssh mini@mini-ca 'KEYS=~/.config/sops/age/keys.txt
   mkdir -p "$(dirname "$KEYS")"
   test -f "$KEYS" || age-keygen -o "$KEYS"
   chmod 600 "$KEYS"
   grep "public key" "$KEYS"'
 ```
 
-mini-ca is a Mac, so that's the `os.UserConfigDir()` path sops searches there —
-see step 1. A key left in `~/.config/sops/age/` on that host is invisible to
-sops and the deploy fails at `_ensure-secrets`, *after* `git pull` has landed
-new code. `make secrets-init` relocates such a key once the branch is deployed.
+Same path as step 1 — nothing here is per-platform. Once the branch is deployed
+to the host, `make secrets-init` does exactly this and is idempotent.
 
 The `test -f` guard matters: `age-keygen -o` on an existing file would replace
 the identity and lock the host out of the vault.

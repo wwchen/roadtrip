@@ -40,15 +40,51 @@ ENV_LOCAL_FILE = ROOT / ".env.local"
 ENV_EXAMPLE_FILE = ROOT / ".env.example"
 SOPS_CONFIG = ROOT / ".sops.yaml"
 
-def default_age_key_file() -> Path:
-    """Where sops looks for an age identity, per platform.
+# One key path on every host, macOS and Linux alike.
+#
+# Left to itself sops resolves this with Go's os.UserConfigDir(), which differs
+# per platform (~/Library/Application Support on macOS, ~/.config on Linux).
+# That difference has no upside here and real downside: runbooks and backup
+# instructions stop being copy-pasteable, and a key written to the "other"
+# platform's path is invisible to sops with an error that names only the
+# environment variables it checked — indistinguishable from having no key.
+#
+# So we pin the location and pass it to sops explicitly on every invocation
+# (see run_sops). SOPS_AGE_KEY_FILE still wins if it's already set, which is
+# how CI supplies a key.
+AGE_KEY_FILE = Path(
+    os.environ.get(
+        "SOPS_AGE_KEY_FILE",
+        Path.home() / ".config" / "sops" / "age" / "keys.txt",
+    )
+)
 
-    sops resolves this with Go's os.UserConfigDir(), which is NOT ~/.config
-    everywhere — on macOS it's ~/Library/Application Support. Writing the key
-    to the Linux path on a Mac produces an identity sops silently never finds,
-    and the resulting decrypt failure names only the env-var locations it
-    checked, so it reads like a missing key rather than a misplaced one.
-    """
+# Where sops would have looked on its own, and where earlier versions of this
+# script put the key on macOS. A key sitting in one of these is adopted by
+# `init` rather than generating a second identity on top of it — the first one
+# is probably already a vault recipient.
+ADOPTABLE_AGE_KEY_FILES = [
+    path
+    for path in (
+        Path.home() / "Library" / "Application Support" / "sops" / "age" / "keys.txt",
+        Path.home() / ".config" / "sops" / "age" / "keys.txt",
+        Path(os.environ["XDG_CONFIG_HOME"]) / "sops" / "age" / "keys.txt"
+        if os.environ.get("XDG_CONFIG_HOME")
+        else None,
+    )
+    if path is not None and path != AGE_KEY_FILE
+]
+
+
+def misplaced_age_key() -> Path | None:
+    """An identity somewhere other than the pinned path, when that path is empty."""
+    if AGE_KEY_FILE.exists():
+        return None
+    return next((path for path in ADOPTABLE_AGE_KEY_FILES if path.exists()), None)
+
+
+def sops_native_key_path() -> Path:
+    """Where a bare `sops` invocation looks, absent SOPS_AGE_KEY_FILE."""
     if sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support"
     elif sys.platform == "win32":
@@ -58,28 +94,30 @@ def default_age_key_file() -> Path:
     return base / "sops" / "age" / "keys.txt"
 
 
-# Kept explicit so `init` and the error messages agree with where sops will
-# actually look. SOPS_AGE_KEY_FILE overrides it for both, same as for sops.
-AGE_KEY_FILE = Path(os.environ["SOPS_AGE_KEY_FILE"]) if os.environ.get(
-    "SOPS_AGE_KEY_FILE"
-) else default_age_key_file()
+def link_native_key_path() -> Path | None:
+    """Point sops' native lookup at the pinned key, so bare `sops` works too.
 
-# Paths a previous version of this script wrote to, or that someone following
-# Linux-flavoured instructions would pick. sops does not search these, so a key
-# sitting here is invisible — worth detecting rather than generating a second
-# identity on top of it.
-LEGACY_AGE_KEY_FILES = [
-    path
-    for path in (Path.home() / ".config" / "sops" / "age" / "keys.txt",)
-    if path != AGE_KEY_FILE
-]
+    Everything in this repo goes through run_sops, which passes the pinned path
+    explicitly — but people do run `sops -d` by hand. Rather than make them
+    export a variable, leave a symlink where sops would look anyway. Returns
+    the link if one was created.
 
-
-def misplaced_age_key() -> Path | None:
-    """A legacy-path identity that sops can't see, when the real path has none."""
-    if AGE_KEY_FILE.exists():
+    Never replaces a real file: an existing identity there is somebody's
+    deliberate setup, and clobbering it could lock them out of another vault.
+    """
+    native = sops_native_key_path()
+    if native == AGE_KEY_FILE or not AGE_KEY_FILE.exists():
         return None
-    return next((path for path in LEGACY_AGE_KEY_FILES if path.exists()), None)
+    if native.is_symlink():
+        if native.resolve() == AGE_KEY_FILE.resolve():
+            return None
+        return None
+    if native.exists():
+        return None
+    native.parent.mkdir(parents=True, exist_ok=True)
+    native.symlink_to(AGE_KEY_FILE)
+    return native
+
 
 # secrets.enc.env is a dotenv whose values happen to look like ENC[...]. sops
 # can infer that from the .env suffix, but being explicit means a rename can't
@@ -171,11 +209,18 @@ def require_tools(*names: str) -> None:
 
 def run_sops(args: list[str], *, capture: bool = True) -> str:
     require_tools("sops")
+    # Hand sops the pinned key path rather than letting it guess per platform.
+    # This is what makes AGE_KEY_FILE authoritative everywhere; without it, sops
+    # would look somewhere else entirely on macOS. SOPS_AGE_KEY takes priority
+    # inside sops when set (CI passes the key by value), so this doesn't
+    # override that path.
+    env = {**os.environ, "SOPS_AGE_KEY_FILE": str(AGE_KEY_FILE)}
     proc = subprocess.run(
         ["sops", *args],
         cwd=ROOT,
         capture_output=capture,
         text=True,
+        env=env,
     )
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip() if capture else ""
@@ -184,8 +229,8 @@ def run_sops(args: list[str], *, capture: bool = True) -> str:
         # wrong directory looks identical to no key at all. Name the real cause.
         stranded = misplaced_age_key()
         hint = (
-            f"\n\nhint: an age identity exists at {stranded}, but sops looks in"
-            f"\n      {AGE_KEY_FILE} on this platform. Move it with:"
+            f"\n\nhint: an age identity exists at {stranded}, but this repo keeps"
+            f"\n      it at {AGE_KEY_FILE}. Adopt it with:"
             "\n          make secrets-init"
             if stranded is not None
             else ""
@@ -232,9 +277,9 @@ def cmd_init(_args: argparse.Namespace) -> int:
         AGE_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(stranded), str(AGE_KEY_FILE))
         os.chmod(AGE_KEY_FILE, AGE_KEY_FILE_MODE)
-        print(f"moved age identity {stranded}")
-        print(f"                -> {AGE_KEY_FILE}")
-        print("(sops only searches the latter on this platform)")
+        print(f"adopted age identity {stranded}")
+        print(f"                  -> {AGE_KEY_FILE}")
+        print("(one path on every host, so runbooks and backups match)")
     elif AGE_KEY_FILE.exists():
         print(f"age identity already present at {AGE_KEY_FILE}")
     else:
@@ -259,6 +304,11 @@ def cmd_init(_args: argparse.Namespace) -> int:
     )
     if public_key is None:
         raise SecretsError(f"no public key found in {AGE_KEY_FILE}")
+
+    linked = link_native_key_path()
+    if linked is not None:
+        print(f"linked {linked} -> the same key")
+        print("(so a bare `sops -d` works too, without exporting anything)")
 
     print()
     print("Public key for this host:")
