@@ -3,6 +3,7 @@ package ca.floo.roadtrip.client.slack
 import ca.floo.roadtrip.config.SlackConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -21,6 +22,15 @@ private val slackJson =
         encodeDefaults = true
         explicitNulls = false
     }
+
+/**
+ * Provider-neutral result of a Slack `auth.test` call.
+ * Surfaced through the client interface without leaking Slack wire types.
+ */
+data class SlackIdentity(
+    val teamName: String?,
+    val botName: String?,
+)
 
 /**
  * Outbound Slack `chat.postMessage` transport — the only thing that talks to
@@ -46,19 +56,42 @@ open class SlackClient(
     private val log = LoggerFactory.getLogger(javaClass)
 
     /**
-     * Posts one message to [channel]. [text] is the notification fallback (shown
-     * in notifications and by clients that don't render blocks); either
-     * [attachments] or [blocks] carries the rich body. Prefer attachments for
-     * cards that need the color-bar accent (watch alerts do). Returns true only
-     * on Slack `ok:true`.
+     * Calls Slack `auth.test` with the given [token]. Returns a [SlackIdentity]
+     * when Slack accepts the token (`ok:true`), or null when Slack rejects it
+     * (`ok:false`, e.g. `invalid_auth`) or the request fails.
+     */
+    open suspend fun authTest(token: String): SlackIdentity? =
+        runCatching { callAuthTest(token) }
+            .onFailure { log.error("Slack auth.test failed: {}", it.message) }
+            .getOrNull()
+
+    /**
+     * Posts one message to [channel] using the global config bot token. [text] is
+     * the notification fallback (shown in notifications and by clients that don't
+     * render blocks); either [attachments] or [blocks] carries the rich body.
+     * Prefer attachments for cards that need the color-bar accent (watch alerts do).
+     * Returns true only on Slack `ok:true`.
      */
     open suspend fun postMessage(
         channel: String,
         text: String,
         blocks: List<SlackBlockDto>? = null,
         attachments: List<SlackAttachmentDto>? = null,
+    ): Boolean = postMessage(config.botToken, channel, text, blocks, attachments)
+
+    /**
+     * Posts one message to [channel] using the caller-supplied [token].
+     * Allows per-user bot tokens to be used instead of the global config token.
+     * Returns true only on Slack `ok:true`.
+     */
+    open suspend fun postMessage(
+        token: String,
+        channel: String,
+        text: String,
+        blocks: List<SlackBlockDto>? = null,
+        attachments: List<SlackAttachmentDto>? = null,
     ): Boolean =
-        runCatching { post(channel, text, blocks, attachments) }
+        runCatching { post(token, channel, text, blocks, attachments) }
             .onFailure { log.error("Slack postMessage to {} failed: {}", channel, it.message) }
             .getOrDefault(false)
 
@@ -78,7 +111,30 @@ open class SlackClient(
             .onFailure { log.error("Slack response_url post failed: {}", it.message) }
             .getOrDefault(false)
 
+    private suspend fun callAuthTest(token: String): SlackIdentity? {
+        val resp =
+            httpClient.get(SLACK_AUTH_TEST_URL) {
+                header("Authorization", "Bearer $token")
+            }
+        val parsed =
+            Json.parseToJsonElement(resp.bodyAsText()) as? JsonObject ?: run {
+                log.warn("Slack auth.test returned unparseable response")
+                return null
+            }
+        val ok = (parsed.get("ok") as? JsonPrimitive)?.content == "true"
+        if (!ok) {
+            val err = (parsed.get("error") as? JsonPrimitive)?.content ?: resp.bodyAsText()
+            log.warn("Slack auth.test not ok: {}", err)
+            return null
+        }
+        return SlackIdentity(
+            teamName = (parsed.get("team") as? JsonPrimitive)?.content,
+            botName = (parsed.get("user") as? JsonPrimitive)?.content,
+        )
+    }
+
     private suspend fun post(
+        token: String,
         channel: String,
         text: String,
         blocks: List<SlackBlockDto>?,
@@ -96,7 +152,7 @@ open class SlackClient(
             )
         val resp =
             httpClient.post(SLACK_POST_MESSAGE_URL) {
-                header("Authorization", "Bearer ${config.botToken}")
+                header("Authorization", "Bearer $token")
                 contentType(ContentType.Application.Json)
                 setBody(body)
             }
@@ -148,6 +204,7 @@ open class SlackClient(
 }
 
 private const val SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
+private const val SLACK_AUTH_TEST_URL = "https://slack.com/api/auth.test"
 private const val SLACK_REQUEST_TIMEOUT_MS = 8_000L
 
 @Serializable
