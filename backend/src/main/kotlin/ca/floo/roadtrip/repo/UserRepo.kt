@@ -20,7 +20,7 @@ import java.time.OffsetDateTime
  * expression index. Every read and write normalizes through [normalizeEmail] so
  * the index is actually used and two casings can never become two accounts.
  */
-class UserRepo(
+open class UserRepo(
     private val ctx: DSLContext,
 ) {
     data class User(
@@ -34,7 +34,7 @@ class UserRepo(
         val updatedAt: OffsetDateTime,
     )
 
-    fun findById(id: UserId): User? =
+    open fun findById(id: UserId): User? =
         ctx
             .select(APP_USER.fields().toList())
             .from(APP_USER)
@@ -83,7 +83,7 @@ class UserRepo(
             .and(APP_USER.EMAIL_VERIFIED.isFalse)
             .execute() > 0
 
-    fun updateProfile(
+    open fun updateProfile(
         id: UserId,
         displayName: String?,
     ): User? {
