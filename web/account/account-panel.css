@@ -1,38 +1,38 @@
 .rt-account-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--rt-space-4);
+  gap: 16px;
 }
 
 .rt-account-panel-identity {
   display: flex;
   flex-direction: column;
-  gap: var(--rt-space-1);
-  padding: var(--rt-space-2) 0;
+  gap: 4px;
+  padding: 8px 0;
 }
 
 .rt-account-panel-signed-in-label {
-  font-size: var(--rt-font-size-sm);
-  color: var(--rt-color-text-secondary);
+  font-size: 12px;
+  color: var(--rt-muted);
 }
 
 .rt-account-panel-email {
-  font-size: var(--rt-font-size-base);
-  color: var(--rt-color-text-primary);
-  font-weight: var(--rt-font-weight-medium);
+  font-size: 14px;
+  color: var(--rt-text);
+  font-weight: 500;
 }
 
 .rt-account-panel-danger-zone {
-  border-top: 1px solid var(--rt-color-danger-border, var(--rt-color-border));
-  padding-top: var(--rt-space-4);
-  margin-top: var(--rt-space-2);
+  border-top: 1px solid var(--rt-error, var(--rt-border));
+  padding-top: 16px;
+  margin-top: 8px;
 }
 
 .rt-account-panel-danger-title {
-  font-size: var(--rt-font-size-sm);
-  font-weight: var(--rt-font-weight-medium);
-  color: var(--rt-color-danger, var(--rt-color-text-secondary));
-  margin: 0 0 var(--rt-space-3) 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--rt-error, var(--rt-muted));
+  margin: 0 0 12px 0;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }

@@ -120,6 +120,8 @@
 /* ── Grab handle (sheet only) ───────────────────────────────── */
 
 .rt-modal-grab-handle {
+  /* Hidden on desktop; shown only for the mobile bottom-sheet (below). */
+  display: none;
   width: 36px;
   height: 4px;
   border-radius: var(--rt-r-pill);
@@ -145,6 +147,11 @@
 
     /* Slide up from bottom */
     animation: rt-modal-slide-up 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* The grab handle is a bottom-sheet affordance — only meaningful on mobile. */
+  .rt-modal-sheet .rt-modal-grab-handle {
+    display: block;
   }
 }
 

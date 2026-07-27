@@ -1,32 +1,32 @@
 .rt-profile-panel {
   display: flex;
   flex-direction: column;
-  gap: var(--rt-space-4);
+  gap: 16px;
 }
 
 .rt-profile-panel-email-row {
   display: flex;
   flex-direction: column;
-  gap: var(--rt-space-1);
-  padding: var(--rt-space-2) 0;
+  gap: 4px;
+  padding: 8px 0;
 }
 
 .rt-profile-panel-email-label {
-  font-size: var(--rt-font-size-sm);
-  font-weight: var(--rt-font-weight-medium);
-  color: var(--rt-color-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--rt-muted);
 }
 
 .rt-profile-panel-email-value {
-  font-size: var(--rt-font-size-base);
-  color: var(--rt-color-text-primary);
+  font-size: 14px;
+  color: var(--rt-text);
   display: flex;
   align-items: center;
-  gap: var(--rt-space-2);
+  gap: 8px;
 }
 
 .rt-profile-panel-verified {
-  font-size: var(--rt-font-size-sm);
-  color: var(--rt-color-success);
-  font-weight: var(--rt-font-weight-medium);
+  font-size: 12px;
+  color: var(--rt-success);
+  font-weight: 500;
 }

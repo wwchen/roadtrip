@@ -9,49 +9,49 @@
 }
 
 .rt-settings-modal-tabs {
-  border-bottom: 1px solid var(--rt-color-border);
-  margin-bottom: var(--rt-space-4);
+  border-bottom: 1px solid var(--rt-border);
+  margin-bottom: 16px;
 }
 
 .rt-settings-modal-panel {
   flex: 1;
-  padding: 0 var(--rt-space-4);
+  padding: 0 16px;
   overflow-y: auto;
 }
 
 .rt-settings-modal-footer {
   display: flex;
   justify-content: flex-end;
-  padding: var(--rt-space-4);
-  border-top: 1px solid var(--rt-color-border);
-  gap: var(--rt-space-2);
+  padding: 16px;
+  border-top: 1px solid var(--rt-border);
+  gap: 8px;
 }
 
 .rt-settings-modal-save-btn {
-  padding: var(--rt-space-2) var(--rt-space-4);
-  background-color: var(--rt-color-action-primary);
-  color: var(--rt-color-action-primary-text);
+  padding: 8px 16px;
+  background-color: var(--rt-brand);
+  color: #fff;
   border: none;
-  border-radius: var(--rt-radius-sm);
-  font-size: var(--rt-font-size-base);
-  font-weight: var(--rt-font-weight-medium);
+  border-radius: var(--rt-r-sm);
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
 }
 
 .rt-settings-modal-save-btn:disabled {
-  opacity: var(--rt-opacity-disabled);
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .rt-settings-modal-save-btn:not(:disabled):hover {
-  background-color: var(--rt-color-action-primary-hover);
+  background-color: var(--rt-brand-hover);
 }
 
 .rt-settings-modal-loading {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--rt-space-8);
-  color: var(--rt-color-text-secondary);
-  font-size: var(--rt-font-size-base);
+  padding: 32px;
+  color: var(--rt-muted);
+  font-size: 14px;
 }
