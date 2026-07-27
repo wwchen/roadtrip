@@ -42,12 +42,17 @@ data class AuthConfig(
         fun fromConfig(config: ConfigSection): AuthConfig? {
             val issuer = config.value(ISSUER_KEY) ?: return null
             val clientId = config.value(CLIENT_ID_KEY) ?: return null
+            // The secret is required, not optional: this is a confidential client
+            // doing a server-side code exchange, and the flow cookie's signing key
+            // is derived from it. A deployment without one is misconfigured, not a
+            // public client.
+            val clientSecret = config.value(CLIENT_SECRET_KEY) ?: return null
             return AuthConfig(
                 // Trailing slash stripped so discovery resolves to
                 // "$issuer/.well-known/openid-configuration" without doubling up.
                 issuer = issuer.trimEnd('/'),
                 clientId = clientId,
-                clientSecret = config.value(CLIENT_SECRET_KEY).orEmpty(),
+                clientSecret = clientSecret,
                 provider = config.valueOrDefault(PROVIDER_KEY, DEFAULT_PROVIDER),
                 sessionTtl = config.duration(SESSION_TTL_KEY, defaultSessionTtl),
                 isCookieSecure = config.valueOrDefault(COOKIE_SECURE_KEY, COOKIE_SECURE_DEFAULT).toBoolean(),
