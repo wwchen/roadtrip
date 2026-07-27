@@ -7,11 +7,11 @@
     "node": ">=22.9.0"
   },
   "scripts": {
-    "start": "node --env-file-if-exists=../.env src/server.js",
+    "start": "node src/server.js",
     "serve": "npm start",
-    "recgov:login": "node --env-file-if-exists=../.env src/checkRecgovAuth.js",
-    "recgov:refresh": "node --env-file-if-exists=../.env src/checkRecgovAuth.js --force-refresh",
-    "recgov:atc": "node --env-file-if-exists=../.env src/runAtcOnce.js",
+    "recgov:login": "node src/checkRecgovAuth.js",
+    "recgov:refresh": "node src/checkRecgovAuth.js --force-refresh",
+    "recgov:atc": "node src/runAtcOnce.js",
     "test": "node --test 'test/*.test.js'"
   },
   "dependencies": {

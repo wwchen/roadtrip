@@ -28,7 +28,10 @@ DEFAULT_CHUNK_SIZE = 5_000
 AUTH_HEADER = "Authorization"
 REDACTED = "<redacted>"
 TOKEN_ENV_NAMES = ("CAMPFLARE_API_KEY", "CAMPFLARE_TOKEN")
-DEFAULT_ENV_FILES = (Path(".env"),)
+# No .env fallback: secrets reach this script as environment variables from
+# `secrets/manage.py exec` (see `make data-fetch`), and there is no plaintext
+# dotenv on disk to fall back to.
+DEFAULT_ENV_FILES = ()
 
 
 def resolve_api_key(environ: dict[str, str] | None = None, env_files=DEFAULT_ENV_FILES) -> str:
@@ -51,7 +54,10 @@ def resolve_api_key(environ: dict[str, str] | None = None, env_files=DEFAULT_ENV
             if key.strip() in TOKEN_ENV_NAMES and value.strip():
                 return value.strip().strip("\"'")
 
-    raise RuntimeError("missing CAMPFLARE_API_KEY; set it in the environment or .env")
+    raise RuntimeError(
+        "missing CAMPFLARE_API_KEY — run via `make data-fetch`, which injects it, "
+        "or set it with ./secrets/manage.py set CAMPFLARE_API_KEY"
+    )
 
 
 def http_get_bytes(url: str, headers: dict[str, str], timeout: int = 300) -> tuple[int, dict[str, str], bytes]:

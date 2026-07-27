@@ -137,8 +137,14 @@ rows, writing the fetcher if needed, and wiring the Kotlin ETL adapter.
 First time only:
 
 ```sh
-make install        # Homebrew deps + companion (npm + playwright) + git hooks
+make install                 # Homebrew deps + companion (npm + playwright) + git hooks
+./secrets/manage.py init     # this host's age key — see docs/secrets.md
 ```
+
+Runtime secrets live encrypted in `secrets/` and are mounted into containers at
+`/run/secrets`; nothing writes a plaintext `.env`. `./secrets/manage.py ls`
+shows what exists, `set` changes a value, and committing it is the deploy.
+Full details in **[docs/secrets.md](docs/secrets.md)**.
 
 Pricing is served from the on-disk cache (`data/pricing-cache/`). Tesla is
 never called from the user request path — the backend just reads cached JSON
@@ -258,16 +264,14 @@ before import.
    tunnel token. The tunnel's public hostname routing is managed in Cloudflare;
    Compose only starts `cloudflared` with the token.
 
-2. **`.env` on the deploy host:** Docker Compose reads runtime config from the
-   checkout's `.env` when GitHub Deploy or a manual deploy runs
-   `make run env=prod`:
-   ```
-   TESLA_COOKIES=ak_bmsc=...; _abck=...; bm_sz=...; ...
-   CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi...
-   POSTGRES_PASSWORD=<strong password>
-   GRAFANA_ADMIN_PASSWORD=<strong password>
-   GRAFANA_DB_PASSWORD=<strong password>
-   ```
+2. **Secrets on the deploy host:** nothing to place by hand. They ride along
+   encrypted in `secrets/`, and `make run env=prod` decrypts them with the
+   host's own age key into `/run/secrets` mounts. The host needs an age key
+   once (`./secrets/manage.py init`, add its public key to `secrets/.sops.yaml`,
+   then `rotate` from a machine that can already decrypt). After that, changing
+   a secret is `./secrets/manage.py set NAME prod` plus a commit — the same
+   `git pull` that deploys code deploys the value. See
+   [docs/secrets.md](docs/secrets.md).
 
    Grafana state is stored in the Compose-managed named volume
    `grafana-data` (Docker prefixes it with the Compose project name);
@@ -296,7 +300,7 @@ before import.
    aarch64 Chromium build passes Akamai's TLS fingerprint gate on the mini.
 
 4. **Pricing cache** persists in `$HOME/.roadtrip-map/pricing-cache`
-   (override with `CACHE_DIR=…` in `.env`).
+   (override with `CACHE_DIR=…` in `.env.local`).
 
 ### Heads up: pricing cookies are IP-bound
 

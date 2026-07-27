@@ -338,7 +338,7 @@ contactPoints:
       - uid: slack-contact-point
         type: slack
         settings:
-          url: ${GRAFANA_SLACK_WEBHOOK_URL}
+          url: $__file{/run/secrets/grafana_slack_webhook_url}
 
 policies:
   - orgId: 1

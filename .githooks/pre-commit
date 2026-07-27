@@ -4,6 +4,27 @@
 # `make install-hooks`.
 set -euo pipefail
 
+# Secrets guard. Runs on every commit regardless of what's staged: the failure
+# it prevents (a credential in git history) cannot be undone by a later commit.
+if git diff --cached --name-only --diff-filter=ACMR |
+     grep -qE '^\.env$|^\.env\.local$'; then
+  echo "refusing to commit a plaintext .env — it holds real credentials."
+  echo "Secrets belong in the vault: ./secrets/manage.py set <NAME>"
+  exit 1
+fi
+
+# Validate whenever the secrets system itself is touched. --staged checks the
+# blob entering history rather than the worktree, and this also catches a
+# registry edit committed without regenerating docker-compose.secrets.yml.
+if git diff --cached --name-only --diff-filter=ACMR |
+     grep -qE '^secrets/|^docker-compose\.secrets\.yml$'; then
+  if ! python3 secrets/manage.py check --staged; then
+    echo
+    echo "secrets check failed — see above."
+    exit 1
+  fi
+fi
+
 staged=$(
   git diff --cached --name-only --diff-filter=ACMR |
     grep -E '^backend/.*\.kts?$|^detekt-rules/.*\.kts?$|^config/detekt/|(^|/)build\.gradle\.kts$|^settings\.gradle\.kts$' ||

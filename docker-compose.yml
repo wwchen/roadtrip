@@ -27,7 +27,8 @@ services:
     volumes:
       - ${COOKIE_BOT_DATA:-$HOME/.roadtrip-map/cookie-bot}:/var/cache/cookie-bot
     environment:
-      - COOKIE_BOT_TOKEN=${COOKIE_BOT_TOKEN:-}
+      # Token arrives as /run/secrets/cookie_bot_token (docker-compose.secrets.yml).
+      - COOKIE_BOT_TOKEN_FILE=/run/secrets/cookie_bot_token
       - HEADLESS=true
       - LOG_LEVEL=INFO
 
@@ -51,14 +52,18 @@ services:
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
       - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
+      # The official image's file_env() reads *_FILE, so the password is a
+      # mounted file rather than an environment value. It still only seeds the
+      # cluster on first init — changing it later needs ALTER USER.
+      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
       # Read by postgres-init/10-grafana-reader.sh on first init to create the
-      # grafana_reader role. Grafana's datasource provisioning uses the same
-      # env vars with the same defaults; keep both in sync. Grants against
-      # this role are owned by Flyway (R__grafana_reader_grants.sql), so this
-      # only handles the one thing schema migrations can't: the password.
+      # grafana_reader role. Grafana's datasource provisioning reads the same
+      # secret, so the role's password and the connection using it come from
+      # one definition (secrets/registry.yaml) and cannot drift. Grants are
+      # owned by Flyway (R__grafana_reader_grants.sql); this handles the one
+      # thing a schema migration can't carry: the password.
       - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
-      - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
+      - GRAFANA_DB_PASSWORD_FILE=/run/secrets/grafana_db_password
     volumes:
       - ${POSTGRES_DATA:-$HOME/.roadtrip-map/postgres}:/var/lib/postgresql/data
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
@@ -84,9 +89,6 @@ services:
     logging: *log-rotation
     hostname: backend
     mem_limit: 4g
-    env_file:
-      - path: .env
-        required: false
     environment:
       # Profile selection is a process env control that chooses
       # application-<profile>.yaml before backend config is parsed.
@@ -106,18 +108,11 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
       - POSTGRES_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-roadtrip}
       - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
-      # Mapbox is server-side only. /api/route (Directions) and /api/geocode
-      # (forward geocoding) read this; the FE never sees the token. Both
-      # endpoints return 503 when unset, so the trip planner just doesn't
-      # work, instead of leaking the token by accident.
-      - MAPBOX_TOKEN=${MAPBOX_TOKEN:-}
-      # Availability alert secrets consumed by roadtrip.slack.* placeholders.
-      # Unset SLACK_* => alerts disabled (no-op).
-      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
-      - SLACK_ALERT_CHANNEL=${SLACK_ALERT_CHANNEL:-}
-      # https://docs.slack.dev/interactivity/implementing-shortcuts/#scope_permissions
-      - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET:-}
+      # Every backend secret (Mapbox, Slack, Campflare, Resend, auth, the DB
+      # password) is mounted under /run/secrets by docker-compose.secrets.yml
+      # and read by SecretsBootstrap before Ktor parses config. Nothing secret
+      # is an environment variable here, so `docker inspect` shows none of it.
+      # Which secrets this service receives is declared in secrets/registry.yaml.
     volumes:
       - ./index.html:/app/static/index.html:ro
       - ./availability.html:/app/static/availability.html:ro
@@ -144,9 +139,6 @@ services:
     restart: unless-stopped
     logging: *log-rotation
     hostname: recgov-companion
-    env_file:
-      - path: .env
-        required: false
     environment:
       - COMPANION_ID=${COMPANION_ID:-recgov-companion}
       - COMPANION_HOST=0.0.0.0
@@ -171,7 +163,8 @@ services:
     hostname: grafana
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      # Grafana's file-backed setting convention is a __FILE suffix.
+      - GF_SECURITY_ADMIN_PASSWORD__FILE=/run/secrets/grafana_admin_password
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - GF_AUTH_DISABLE_LOGIN_FORM=false
@@ -180,12 +173,12 @@ services:
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
       - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
-      - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
+      # Datasource provisioning reads this with Grafana's $__file{} syntax;
+      # see grafana/provisioning/datasources/roadtrip-postgres.yml.
       - GRAFANA_DASHBOARD_ALLOW_UI_UPDATES=${GRAFANA_DASHBOARD_ALLOW_UI_UPDATES:-false}
       # Must be non-empty or Grafana treats the Slack contact point as chat-API
-      # mode and fails provisioning at boot. Default is an obvious placeholder
-      # (webhook mode → Grafana boots); set to a real webhook to deliver alerts.
-      - GRAFANA_SLACK_WEBHOOK_URL=${GRAFANA_SLACK_WEBHOOK_URL:-https://hooks.slack.com/services/PLACEHOLDER-SET-GRAFANA_SLACK_WEBHOOK_URL}
+      # mode and fails provisioning at boot, so the alerting config reads it via
+      # $__file{} with a placeholder value in the vault rather than a blank.
     mem_limit: 1g
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -293,7 +286,11 @@ services:
     image: cloudflare/cloudflared:2026.7.3
     restart: unless-stopped
     logging: *log-rotation
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    # TUNNEL_TOKEN_FILE, not --token: a flag would put the token in the
+    # container's command line, where `ps` and `docker inspect` both show it.
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN_FILE=/run/secrets/cloudflare_tunnel_token
     depends_on:
       - backend
 

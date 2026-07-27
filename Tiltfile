@@ -7,7 +7,7 @@
 
 PORT = '8765'
 COMPOSE_PROJECT = 'roadtrip'
-COMPOSE = 'docker compose -p ' + COMPOSE_PROJECT + ' --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois --profile recgov-companion'
+COMPOSE = 'docker compose -p ' + COMPOSE_PROJECT + ' --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml -f docker-compose.secrets.yml --profile pois --profile recgov-companion'
 COMPOSE_INFRA_SERVICES = ['postgres', 'loki', 'tempo', 'prometheus', 'alloy']
 COMPOSE_APP_SERVICES = ['backend', 'recgov-companion', 'grafana']
 COMPOSE_DEV_SERVICES = ' '.join(COMPOSE_INFRA_SERVICES + COMPOSE_APP_SERVICES)
@@ -19,24 +19,30 @@ DETACHED_COMPOSE_DOWN = (
     COMPOSE_DOWN
 )
 
-# Keep .env values available for local manual resources and future host-side
-# commands. read_file with default='' returns empty when the file is missing,
-# and the dotenv parser ignores blank/comment lines.
-def _load_dotenv(path):
-    out = {}
-    raw = str(read_file(path, default=''))
+# Load secrets into Tilt's own environment.
+#
+# Tilt invokes `docker compose` itself, so it can't be wrapped in
+# `manage.py exec` the way the Makefile targets are. os.putenv does propagate
+# to the subprocesses Tilt spawns, which is enough: Compose reads these to
+# resolve docker-compose.secrets.yml's `environment:` sources and mounts them
+# into containers as /run/secrets files.
+#
+# quiet=True matters — without it Tilt would echo the decrypted values into its
+# log. The values cross a pipe in memory and are never written to disk.
+def _load_secrets():
+    raw = str(local('./secrets/manage.py export local', quiet=True, echo_off=True))
+    names = []
     for line in raw.splitlines():
         line = line.strip()
-        if not line or line.startswith('#') or '=' not in line:
+        if not line or '=' not in line:
             continue
         k, _, v = line.partition('=')
-        k = k.strip()
-        v = v.strip().strip('"').strip("'")
-        if k and k not in out:
-            out[k] = v
-    return out
+        os.putenv(k, v)
+        names.append(k)
+    return names
 
-DOTENV = _load_dotenv('.env')
+SECRET_NAMES = _load_secrets()
+print('secrets: loaded %d for the local environment' % len(SECRET_NAMES))
 
 # Point this clone's git at .githooks/ so the committed pre-commit (ktlint) and
 # pre-push (backend tests) hooks fire. core.hooksPath isn't tracked in the repo,
@@ -89,7 +95,7 @@ local_resource(
 )
 
 docker_compose(
-    ['docker-compose.yml', 'docker-compose.local.yml'],
+    ['docker-compose.yml', 'docker-compose.local.yml', 'docker-compose.secrets.yml'],
     project_name=COMPOSE_PROJECT,
     profiles=['pois', 'recgov-companion'],
 )

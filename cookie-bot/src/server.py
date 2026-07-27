@@ -29,7 +29,23 @@ logger = logging.getLogger("cookie-bot")
 PROFILES_DIR = Path(os.environ.get("PROFILES_DIR", "profiles"))
 CACHE_DIR = Path(os.environ.get("CACHE_DIR", "/var/cache/cookie-bot"))
 BROWSER_PROFILE_DIR = Path(os.environ.get("BROWSER_PROFILE_DIR", CACHE_DIR / "chromium-profile"))
-AUTH_TOKEN = os.environ.get("COOKIE_BOT_TOKEN", "").strip()
+def _read_secret(name: str) -> str:
+    """Prefer the mounted secret file; fall back to the plain env var.
+
+    Compose mounts secrets at /run/secrets and passes the path as <NAME>_FILE.
+    The env fallback keeps ad-hoc `docker run` and local invocations working.
+    """
+    path = os.environ.get(f"{name}_FILE", "").strip()
+    if path:
+        try:
+            with open(path, encoding="utf-8") as handle:
+                return handle.read().strip()
+        except OSError as exc:
+            raise SystemExit(f"cannot read {name}_FILE={path}: {exc}") from exc
+    return os.environ.get(name, "").strip()
+
+
+AUTH_TOKEN = _read_secret("COOKIE_BOT_TOKEN")
 
 _pool: BrowserPool | None = None
 

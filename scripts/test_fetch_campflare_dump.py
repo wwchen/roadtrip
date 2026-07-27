@@ -62,9 +62,12 @@ class FetchCampflareDumpTest(unittest.TestCase):
             token = fetcher.resolve_api_key({"CAMPFLARE_API_KEY": "from-env"}, [env_file])
             self.assertEqual("from-env", token)
 
-    def test_default_token_files_are_limited_to_dotenv(self):
+    def test_no_dotenv_fallback_remains(self):
+        # Secrets now arrive as environment variables from
+        # secrets/manage.py exec; there is no plaintext .env to fall back to,
+        # and a stale fallback would silently read a file that shouldn't exist.
         fetcher = load_fetcher()
-        self.assertEqual((Path(".env"),), fetcher.DEFAULT_ENV_FILES)
+        self.assertEqual((), fetcher.DEFAULT_ENV_FILES)
 
     def test_dump_download_uses_public_url_without_authorization_header(self):
         fetcher = load_fetcher()
