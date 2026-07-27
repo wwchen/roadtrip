@@ -73,23 +73,20 @@
     width: 100%;
     padding: 4px;
     gap: 2px;
-    overflow-x: auto;
-    /* Prevent scroll bar from taking up space */
-    scrollbar-width: none;
-  }
-
-  .rt-tabs-rail::-webkit-scrollbar {
-    display: none;
+    /* No horizontal drag-scroll: the tabs share the width and shrink to fit. */
   }
 
   .rt-tabs-tab {
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 0;
     justify-content: center;
     text-align: center;
-    min-width: 60px;
     /* Ensure minimum 44px touch target height */
     min-height: 44px;
-    padding: 10px 12px;
+    padding: 10px 8px;
     border-radius: var(--rt-r-md);
+    /* Truncate rather than overflow on very narrow screens. */
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
