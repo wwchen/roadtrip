@@ -15,7 +15,8 @@
 - The Slack bot token is **write-only**: the UI never receives it — only `slack_configured` + `slack_token_hint` (last 4). `SecretField` can set or clear, never read back.
 - Auth is optional: when `/api/me` returns `auth_enabled: false`, render nothing (preserve current `web/topbar/auth.js` behavior).
 - Mobile: login card → bottom sheet; settings modal → full-height sheet (`Modal` handles this via a `sheetOnMobile` option).
-- Test run: `node --test <path-to>.test.mjs`.
+- **Testing (READ — governs every task's test step).** Tests run `node --test <path>.test.mjs`. This repo has **no DOM library** (no `package.json`, no jsdom). The pattern (see `web/watch-editor.test.mjs`) temporarily assigns `globalThis.document` a MINIMAL stub (`getElementById`, `createElement`, `head.appendChild`) and passes a fake `host` `{ innerHTML: '', addEventListener() {}, removeEventListener() {} }`, then asserts on `host.innerHTML` strings and injected `<style>`/`<link>` content. It does **NOT** support `querySelector`, real event dispatch, `.click()`, `KeyboardEvent`, or focus. Therefore, put interaction/state LOGIC in **pure functions** and unit-test those: the pure `*-template.js` functions (assert on the returned HTML string, including `escapeHtml`), a pure `SecretField` mode reducer, a pure error-code→message map, and dirty-state comparison helpers. Controller DOM/event glue stays thin and is exercised only as far as the stub allows (mount renders expected markup + injects styles; `dispose()` clears). **Any richer-DOM test snippet shown in a task step below (e.g. `.click()`, dispatching an event, `querySelector`) is ILLUSTRATIVE INTENT ONLY — implement the equivalent as a pure-function test.** Do NOT add jsdom or any dependency.
+- **Backend error contract (surface via `Banner`).** The `/api/settings/*` endpoints (shipped in PR #501) return typed error codes; map each to a user-facing message: `invalid_field` (bad email/channel), `slack_invalid_auth` (Slack rejected the token), `slack_not_configured` (no Slack token set), `slack_send_failed` (Slack post failed), `encryption_unavailable` (server has no encryption key configured). Implement this mapping as a pure function (e.g. `web/account/settings-errors.js`) and unit-test it.
 
 ---
 
@@ -29,31 +30,31 @@
 **Interfaces:**
 - Produces `mountModal(container, config) → { close(), setBody(el), dispose() }` where `config = { title?, sheetOnMobile?: boolean, onClose?: () => void, closeOnBackdrop?: boolean }`. Emits close on Escape, backdrop click (if enabled), and the header ✕. Traps focus while open.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing test** (pure template + stub-mount — NO jsdom; see the Testing constraint)
 
 ```js
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { JSDOM } from 'jsdom'; // if jsdom is unavailable, use the repo's existing DOM test shim — check another *.test.mjs
-import { mountModal } from './modal.js';
+import { modalTemplate } from './modal-template.js';
 
-test('Escape triggers onClose', () => {
-  const { window } = new JSDOM('<div id="host"></div>');
-  global.document = window.document;
-  let closed = false;
-  const m = mountModal(document.getElementById('host'), { title: 'X', onClose: () => { closed = true; } });
-  document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape' }));
-  assert.equal(closed, true);
-  m.dispose();
+test('modalTemplate renders title, close affordance, scrim, and a body host', () => {
+  const html = modalTemplate({ title: 'Sign in', sheetOnMobile: true });
+  assert.match(html, /data-modal-close/);   // header ✕
+  assert.match(html, /data-modal-body/);     // host for setBody()
+  assert.match(html, /Sign in/);
+});
+
+test('modalTemplate escapes the title', () => {
+  assert.match(modalTemplate({ title: '<script>x</script>' }), /&lt;script&gt;/);
 });
 ```
 
-> Check an existing `*.test.mjs` first for how the repo drives the DOM (jsdom vs a shim) and match it — do not introduce a new test dependency if one is already used.
+Then a mount test following `web/watch-editor.test.mjs`: assign a minimal `globalThis.document` stub + a fake `host`, call `mountModal(host, { title: 'X' })`, assert `host.innerHTML` contains the modal markup and injected style, and that `dispose()` clears listeners/DOM. The Escape / backdrop-click close paths are thin DOM-event glue verified at integration (the stub can't dispatch events) — do not unit-test them here.
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `node --test web/design-system/modal.test.mjs`
-Expected: FAIL — `mountModal` not defined.
+Expected: FAIL — `modalTemplate` (and `mountModal`) not defined.
 
 - [ ] **Step 3: Write the template** (`modal-template.js`) — pure function returning scrim + centered card (or bottom sheet) with a header (`title` + ✕ button `data-modal-close`) and a `[data-modal-body]` host. Use `escapeHtml` on `title`.
 
