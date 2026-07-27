@@ -50,7 +50,7 @@ function fireAction(action) {
 
 // ── Helper: set up a fresh module environment per test ────────────────────────
 async function setup(meObject) {
-  capturedClickHandler = null;
+  capturedClickHandler = null; // Reset shared test state
   const rootEl = makeRootEl();
 
   const originalDocument = globalThis.document;
@@ -159,5 +159,46 @@ test('authenticated → sign-out action calls signOut (not the modal mounts)', a
     assert.equal(mountSettingsModalCalls.length, 0);
   } finally {
     restore();
+  }
+});
+
+test('failed /api/me → row is hidden and empty (auth optional degrades gracefully)', async () => {
+  capturedClickHandler = null; // Reset shared test state
+  const rootEl = makeRootEl();
+
+  const originalDocument = globalThis.document;
+  globalThis.document = makeStubDocument(rootEl);
+
+  const { initAuth, refresh } = await import('./auth.js');
+
+  let rejectFetchMe;
+  const fetchMePromise = new Promise((resolve, reject) => { rejectFetchMe = reject; });
+
+  initAuth({
+    _fetchMe: () => fetchMePromise,
+    _mountLoginCard:    () => {},
+    _mountSettingsModal: () => {},
+    _signOut:           () => {},
+  });
+
+  // Reject the async refresh
+  rejectFetchMe(new Error('Network error'));
+  try {
+    await fetchMePromise;
+  } catch {
+    // Expected rejection; continue
+  }
+  // Give the microtask queue a tick to let render(null) run
+  await new Promise((r) => setTimeout(r, 0));
+
+  try {
+    assert.equal(rootEl.hidden, true, 'row should be hidden when fetchMe rejects');
+    assert.equal(rootEl.innerHTML, '', 'row should be empty when fetchMe rejects');
+  } finally {
+    if (originalDocument === undefined) {
+      delete globalThis.document;
+    } else {
+      globalThis.document = originalDocument;
+    }
   }
 });
