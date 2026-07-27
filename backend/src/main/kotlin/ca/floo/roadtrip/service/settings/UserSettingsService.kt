@@ -46,6 +46,31 @@ sealed class SettingsError(
 }
 
 /**
+ * Port: the contract the settings routes depend on. [UserSettingsService]
+ * implements it; tests supply lightweight fakes.
+ */
+interface UserSettingsPort {
+    fun read(principal: Principal.User): SettingsResponseDto
+
+    fun updateProfile(
+        userId: UserId,
+        req: UpdateProfileRequest,
+    ): SettingsResponseDto
+
+    suspend fun updateNotifications(
+        principal: Principal.User,
+        req: UpdateNotificationsRequest,
+    ): SettingsResponseDto
+
+    fun disconnectSlack(userId: UserId): SettingsResponseDto
+
+    suspend fun sendSlackTest(
+        userId: UserId,
+        channelOverride: String?,
+    ): SlackTestResponseDto
+}
+
+/**
  * Orchestration layer for account settings.
  *
  * Reads and writes [UserRepo] (profile) and [UserSettingsRepo] (notification
@@ -60,7 +85,7 @@ class UserSettingsService(
     private val cipher: SecretCipher?,
     private val slackClient: SlackClient?,
     private val providerLabel: String?,
-) {
+) : UserSettingsPort {
     /**
      * Assembles a full [SettingsResponseDto] for the given principal. The Slack
      * token is NEVER included — only [NotificationsDto.slackConfigured] and
@@ -69,7 +94,7 @@ class UserSettingsService(
      * [NotificationsDto.notificationEmail] falls back to the user's login email
      * when no override is stored.
      */
-    fun read(principal: Principal.User): SettingsResponseDto {
+    override fun read(principal: Principal.User): SettingsResponseDto {
         val user = requireNotNull(userRepo.findById(principal.userId)) { "user not found: ${principal.userId}" }
         val settings = settingsRepo.find(principal.userId)
         return assembleDto(user, settings, principal)
@@ -81,7 +106,7 @@ class UserSettingsService(
      * Throws [SettingsError.InvalidField] when [req.displayName] is blank (but
      * non-null) — a blank name would silently erase the user's chosen name.
      */
-    fun updateProfile(
+    override fun updateProfile(
         userId: UserId,
         req: UpdateProfileRequest,
     ): SettingsResponseDto {
@@ -104,7 +129,7 @@ class UserSettingsService(
      * Validation and Slack calls happen BEFORE any persistence so that a failure
      * leaves the stored state unchanged.
      */
-    suspend fun updateNotifications(
+    override suspend fun updateNotifications(
         principal: Principal.User,
         req: UpdateNotificationsRequest,
     ): SettingsResponseDto {
@@ -148,7 +173,7 @@ class UserSettingsService(
     /**
      * Clears stored Slack credentials and returns the refreshed settings.
      */
-    fun disconnectSlack(userId: UserId): SettingsResponseDto {
+    override fun disconnectSlack(userId: UserId): SettingsResponseDto {
         settingsRepo.clearSlack(userId)
         val user = requireNotNull(userRepo.findById(userId)) { "user not found: $userId" }
         val settings = settingsRepo.find(userId)
@@ -163,7 +188,7 @@ class UserSettingsService(
      * Throws [SettingsError.SlackNotConfigured] when no token is stored.
      * Throws [SettingsError.SlackSendFailed] when the message delivery fails.
      */
-    suspend fun sendSlackTest(
+    override suspend fun sendSlackTest(
         userId: UserId,
         channelOverride: String?,
     ): SlackTestResponseDto {

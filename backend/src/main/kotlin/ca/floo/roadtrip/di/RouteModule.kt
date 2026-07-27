@@ -20,6 +20,7 @@ import ca.floo.roadtrip.route.api.pois.campsiteRoutes
 import ca.floo.roadtrip.route.api.pois.poiRoutes
 import ca.floo.roadtrip.route.api.pois.poisOnRouteRoutes
 import ca.floo.roadtrip.route.api.route.routeRoutes
+import ca.floo.roadtrip.route.api.settings.settingsRoutes
 import ca.floo.roadtrip.route.api.slack.slackInteractivityRoute
 import ca.floo.roadtrip.route.auth.AuthRouteWiring
 import ca.floo.roadtrip.route.auth.authRoutes
@@ -53,6 +54,7 @@ import ca.floo.roadtrip.service.poi.PoiReader
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
+import ca.floo.roadtrip.service.settings.UserSettingsService
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.routing.routing
@@ -79,6 +81,7 @@ internal fun Application.registerKoinRoutes() {
     val routeCorridorService: RouteCorridorService by inject()
     val mapboxGeocoder: ca.floo.roadtrip.client.mapbox.MapboxGeocoder by inject()
     val ingestController: IngestController by inject()
+    val userSettings: UserSettingsService by inject()
     val slackInteractivity: SlackInteractivityWiring? = getKoin().getOrNull()
     val slackNotifications: SlackNotificationService by inject()
     val emailNotifications: EmailNotificationService by inject()
@@ -96,6 +99,7 @@ internal fun Application.registerKoinRoutes() {
     routing {
         apiDocsRoutes()
         authRoutes(authWiring)
+        settingsRoutes(userSettings)
         poiRoutes(poiService)
         availabilityWatchRoutes(availabilityWatchController(ctx, watchService, watchCapabilities))
         campsiteRoutes(
