@@ -51,40 +51,38 @@ private class FakeUserRepo : UserRepo(ctx = detachedCtx) {
 /** Fake in-memory implementation of [UserSettingsRepo]. */
 private class FakeUserSettingsRepo : UserSettingsRepo(ctx = detachedCtx) {
     var settings: UserSettingsRepo.Settings? = null
-    var upsertCalls = 0
-    var setSlackTokenCalls = 0
+    var saveNotificationsCalls = 0
     var clearSlackCalls = 0
     var lastCipher: ByteArray? = null
     var lastHint: String? = null
 
     override fun find(userId: UserId): UserSettingsRepo.Settings? = settings
 
-    override fun upsertNotifications(
+    override fun saveNotifications(
         userId: UserId,
         notificationEmail: String?,
         slackChannel: String?,
+        slackTokenCipher: ByteArray?,
+        slackTokenHint: String?,
     ) {
-        upsertCalls++
+        saveNotificationsCalls++
+        val base = settings ?: UserSettingsRepo.Settings(null, null, null, null)
         settings =
-            (settings ?: UserSettingsRepo.Settings(null, null, null, null)).copy(
-                notificationEmail = notificationEmail,
-                slackChannel = slackChannel,
-            )
-    }
-
-    override fun setSlackToken(
-        userId: UserId,
-        cipher: ByteArray,
-        hint: String,
-    ) {
-        setSlackTokenCalls++
-        lastCipher = cipher
-        lastHint = hint
-        settings =
-            (settings ?: UserSettingsRepo.Settings(null, null, null, null)).copy(
-                slackTokenCipher = cipher,
-                slackTokenHint = hint,
-            )
+            if (slackTokenCipher != null && slackTokenHint != null) {
+                lastCipher = slackTokenCipher
+                lastHint = slackTokenHint
+                base.copy(
+                    notificationEmail = notificationEmail,
+                    slackChannel = slackChannel,
+                    slackTokenCipher = slackTokenCipher,
+                    slackTokenHint = slackTokenHint,
+                )
+            } else {
+                base.copy(
+                    notificationEmail = notificationEmail,
+                    slackChannel = slackChannel,
+                )
+            }
     }
 
     override fun clearSlack(userId: UserId) {
@@ -260,7 +258,7 @@ class UserSettingsServiceTest {
 
             assertEquals(1, slackClient.authTestCalls)
             assertEquals(token, slackClient.lastAuthTestToken)
-            assertEquals(1, settingsRepo.setSlackTokenCalls)
+            assertEquals(1, settingsRepo.saveNotificationsCalls)
             assertEquals("1234", settingsRepo.lastHint)
             assertTrue(dto.notifications.slackConfigured)
             assertEquals("1234", dto.notifications.slackTokenHint)
@@ -278,7 +276,7 @@ class UserSettingsServiceTest {
                 ),
             )
 
-            assertEquals(1, settingsRepo.upsertCalls)
+            assertEquals(1, settingsRepo.saveNotificationsCalls)
             assertEquals("notif@example.com", settingsRepo.settings?.notificationEmail)
             assertEquals("#team", settingsRepo.settings?.slackChannel)
         }
@@ -302,8 +300,7 @@ class UserSettingsServiceTest {
             }
 
             // Nothing persisted on failure
-            assertEquals(0, settingsRepo.upsertCalls)
-            assertEquals(0, settingsRepo.setSlackTokenCalls)
+            assertEquals(0, settingsRepo.saveNotificationsCalls)
         }
 
     // 5. updateNotifications() with no encryption key (cipher null) + token present: throws EncryptionUnavailable.
@@ -325,7 +322,7 @@ class UserSettingsServiceTest {
 
             // authTest must not have been called (cipher check comes first)
             assertEquals(0, slackClient.authTestCalls)
-            assertEquals(0, settingsRepo.setSlackTokenCalls)
+            assertEquals(0, settingsRepo.saveNotificationsCalls)
         }
 
     // 6. updateNotifications() with invalid email: throws InvalidField.
@@ -343,7 +340,7 @@ class UserSettingsServiceTest {
                 )
             }
 
-            assertEquals(0, settingsRepo.upsertCalls)
+            assertEquals(0, settingsRepo.saveNotificationsCalls)
         }
 
     @Test
@@ -362,7 +359,7 @@ class UserSettingsServiceTest {
                 )
             }
 
-            assertEquals(0, settingsRepo.upsertCalls)
+            assertEquals(0, settingsRepo.saveNotificationsCalls)
         }
 
     // 7. disconnectSlack(): repo.clearSlack called; DTO shows slackConfigured=false.
@@ -433,6 +430,27 @@ class UserSettingsServiceTest {
             assertFailsWith<SettingsError.SlackNotConfigured> {
                 settingsService.sendSlackTest(testUserId, channelOverride = null)
             }
+            Unit
+        }
+
+    @Test
+    fun `sendSlackTest throws SlackNotConfigured when service cipher is null even with stored token`() =
+        runBlocking {
+            // Seed a stored token so the "no token" branch is not the one that fires
+            settingsRepo.settings =
+                UserSettingsRepo.Settings(
+                    notificationEmail = null,
+                    slackChannel = "#ch",
+                    slackTokenCipher = byteArrayOf(1, 2, 3),
+                    slackTokenHint = "hint",
+                )
+            // Construct service with cipher = null
+            val serviceNoCipher = makeService(userRepo, settingsRepo, cipher = null, slackClient = slackClient)
+
+            assertFailsWith<SettingsError.SlackNotConfigured> {
+                serviceNoCipher.sendSlackTest(testUserId, channelOverride = null)
+            }
+            Unit
         }
 
     @Test
@@ -452,5 +470,6 @@ class UserSettingsServiceTest {
             assertFailsWith<SettingsError.SlackSendFailed> {
                 settingsService.sendSlackTest(testUserId, channelOverride = null)
             }
+            Unit
         }
 }
