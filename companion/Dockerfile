@@ -15,4 +15,6 @@ ENV COMPANION_BROWSER_PROFILE=/var/lib/campsite-companion/browser-session
 
 EXPOSE 8770
 
-CMD ["node", "--env-file-if-exists=../.env", "src/server.js"]
+# No --env-file: the companion needs no secrets (its Rec.gov session lives in
+# the browser-profile volume), and there is no plaintext dotenv to read.
+CMD ["node", "src/server.js"]

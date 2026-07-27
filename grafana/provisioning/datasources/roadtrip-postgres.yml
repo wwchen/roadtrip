@@ -8,7 +8,10 @@ datasources:
     url: postgres:5432
     user: ${GRAFANA_DB_USER}
     secureJsonData:
-      password: $GRAFANA_DB_PASSWORD
+      # $__file{} is Grafana's file provider: read the mounted secret rather
+      # than an environment value. Same secret postgres-init creates the role
+      # with, so the two cannot disagree.
+      password: $__file{/run/secrets/grafana_db_password}
     jsonData:
       database: ${POSTGRES_DB}
       sslmode: disable

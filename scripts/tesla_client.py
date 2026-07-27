@@ -18,7 +18,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CACHE_DIR = ROOT / "data" / "pricing-cache"
-ENV_PATH = ROOT / ".env"
+# TESLA_COOKIES is deliberately not in the vault: Akamai binds _abck to the
+# egress IP that minted it, so one shared copy would give every host a cookie
+# only one of them can use. refresh-tesla-cookies.sh mints it here per machine.
+# Everything else arrives as an environment variable from `manage.py exec`.
+ENV_LOCAL_PATH = ROOT / ".env.local"
 
 # When COOKIE_BOT_URL is set, we fetch cookies from the sidecar instead of
 # .env. Bot responses are cached in-process to avoid hammering it for every
@@ -28,9 +32,9 @@ BOT_CACHE_SECONDS = 10 * 60
 
 
 def load_env():
-    if not ENV_PATH.exists():
+    if not ENV_LOCAL_PATH.exists():
         return
-    for line in ENV_PATH.read_text().splitlines():
+    for line in ENV_LOCAL_PATH.read_text().splitlines():
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue

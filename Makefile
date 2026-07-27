@@ -11,8 +11,17 @@ RECGOV_COMPANION_BROWSER_PROFILE ?= $(HOME)/.campsite-companion/browser-session
 RECGOV_COMPANION_PROFILE_ENV := COMPANION_BROWSER_PROFILE="$${COMPANION_BROWSER_PROFILE:-$${RECGOV_COMPANION_BROWSER_PROFILE:-$(RECGOV_COMPANION_BROWSER_PROFILE)}}"
 PROD_COMPOSE_PROFILES ?= --profile tunnel --profile pois --profile recgov-companion
 LOCAL_COMPOSE_PROFILES ?= --profile pois --profile recgov-companion
-PROD_COMPOSE := docker compose $(PROD_COMPOSE_PROFILES)
-LOCAL_COMPOSE := docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml $(LOCAL_COMPOSE_PROFILES)
+# Every stack command runs under `manage.py exec`, which decrypts the vault in
+# memory and execs the command with the values in its environment. Compose then
+# turns them into /run/secrets file mounts (docker-compose.secrets.yml, itself
+# generated from secrets/registry.yaml). No plaintext .env is ever written.
+#
+# All secrets tooling lives in ./secrets/manage.py; this file deliberately adds
+# no secrets targets of its own.
+SECRETS := ./secrets/manage.py
+SECRETS_FILE := -f docker-compose.secrets.yml
+PROD_COMPOSE := $(SECRETS) exec prod -- docker compose -f docker-compose.yml $(SECRETS_FILE) $(PROD_COMPOSE_PROFILES)
+LOCAL_COMPOSE := $(SECRETS) exec local -- docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml $(SECRETS_FILE) $(LOCAL_COMPOSE_PROFILES)
 # Every service here bind-mounts its config, so `up -d` alone won't reload it.
 # Loki was missing: it mounts grafana/loki/loki-config.yml the same way the other
 # four mount theirs, so a retention or limits change would deploy without ever
@@ -55,7 +64,7 @@ ifeq ($(RUN_ENV),prod)
 	$(PROD_COMPOSE) restart $(OBSERVABILITY_SERVICES)
 else ifeq ($(RUN_ENV),dev)
 	$(LOCAL_COMPOSE) up -d --build postgres recgov-companion
-	ROADTRIP_PROFILE=local ./gradlew :backend:run
+	ROADTRIP_PROFILE=local $(SECRETS) exec local -- ./gradlew :backend:run
 else
 	$(error unsupported env '$(RUN_ENV)'; use env=dev or env=prod)
 endif
@@ -97,7 +106,7 @@ ADMIN_BASE ?= http://127.0.0.1:$(PORT)
 # in single quotes and url-encode the path segment so curl gets one arg.
 # python3 is the simplest portable url-encoder.
 data-fetch:
-	python3 scripts/poll_raw.py $(if $(TARGET),$(TARGET),--all)
+	$(SECRETS) exec local -- python3 scripts/poll_raw.py $(if $(TARGET),$(TARGET),--all)
 
 data-import:
 	curl --fail-with-body -sS --max-time 1800 -X POST '$(ADMIN_BASE)/api/admin/data/import$(if $(TARGET),/$(shell python3 -c "import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=''))" "$(TARGET)"))'

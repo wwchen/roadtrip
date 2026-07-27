@@ -6,13 +6,23 @@
 # `DROP SCHEMA public CASCADE` (make reset-db), so this script never needs to
 # re-run — subsequent Flyway migrations own the grants against this role.
 #
-# If GRAFANA_DB_PASSWORD is unset, use a stable dev default so grafana's
-# datasource provisioning (which reads the same env var with the same default)
-# lines up. Prod overrides via .env like every other secret.
+# The password comes from the mounted secret named in secrets/registry.yaml,
+# the same one grafana's datasource reads with $__file{} — one definition, so
+# the role and the connection that uses it cannot drift apart. The image's own
+# file_env() helper only covers POSTGRES_*, so read the file here.
+#
+# Required rather than defaulted: a fallback would silently create the role
+# with a password grafana never uses, and the failure would surface much later
+# as an opaque datasource auth error.
 set -euo pipefail
 
 : "${GRAFANA_DB_USER:=grafana_reader}"
-: "${GRAFANA_DB_PASSWORD:=roadtrip}"
+: "${GRAFANA_DB_PASSWORD_FILE:?must be set by docker-compose.yml}"
+[ -r "$GRAFANA_DB_PASSWORD_FILE" ] || {
+  echo "grafana-reader: cannot read $GRAFANA_DB_PASSWORD_FILE" >&2
+  exit 1
+}
+GRAFANA_DB_PASSWORD="$(cat "$GRAFANA_DB_PASSWORD_FILE")"
 
 psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" \
      --set=ON_ERROR_STOP=1 \

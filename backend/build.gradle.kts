@@ -81,6 +81,16 @@ tasks.register<JavaExec>("installPlaywrightBrowsers") {
     args = listOf("install", "chromium")
 }
 
+// The secret registry is authored once at secrets/registry.yaml and copied into
+// the jar so SecretsBootstrap can enforce `required_in` at boot. Copied rather
+// than duplicated: a second checked-in copy is exactly the drift this whole
+// mechanism exists to remove.
+tasks.named<ProcessResources>("processResources") {
+    from(rootProject.file("secrets/registry.yaml")) {
+        rename { "secrets-registry.yaml" }
+    }
+}
+
 repositories {
     mavenCentral()
 }

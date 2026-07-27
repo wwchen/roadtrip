@@ -2,6 +2,7 @@ package ca.floo.roadtrip
 
 import ca.floo.roadtrip.config.ApplicationProperties
 import ca.floo.roadtrip.config.ConfigSection
+import ca.floo.roadtrip.config.SecretsBootstrap
 import ca.floo.roadtrip.di.infraModule
 import ca.floo.roadtrip.di.registerKoinRoutes
 import ca.floo.roadtrip.di.repoModule
@@ -17,7 +18,14 @@ private val mainLog = org.slf4j.LoggerFactory.getLogger("ca.floo.roadtrip.Main")
 private const val LOG_SHUTDOWN_THREADS_KEY = "log-shutdown-threads"
 private const val ENV_FLAG_TRUE = "true"
 
-fun main(args: Array<String>): Unit = EngineMain.main(args)
+fun main(args: Array<String>) {
+    // Before EngineMain, which is the last moment the config has not been
+    // parsed: mounted secrets become system properties that application.yaml's
+    // ${'$'}{...} placeholders resolve against, and anything required_in this
+    // profile but absent fails the boot with every missing name at once.
+    SecretsBootstrap.run()
+    EngineMain.main(args)
+}
 
 private fun installOptionalShutdownThreadDump(properties: Map<String, String>) {
     val diagnosticsConfig = ConfigSection(properties).section("roadtrip.diagnostics")

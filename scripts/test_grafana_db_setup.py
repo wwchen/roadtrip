@@ -40,10 +40,25 @@ class GrafanaDbSetupTest(unittest.TestCase):
         script = POSTGRES_INIT.read_text(encoding="utf-8")
 
         self.assertIn(": \"${GRAFANA_DB_USER:=grafana_reader}\"", script)
-        self.assertIn(": \"${GRAFANA_DB_PASSWORD:=roadtrip}\"", script)
+        # The password comes from the mounted secret, not an env default: a
+        # fallback would create the role with a password Grafana never uses and
+        # surface much later as an opaque datasource auth error.
+        self.assertIn(": \"${GRAFANA_DB_PASSWORD_FILE:?", script)
+        self.assertNotIn("GRAFANA_DB_PASSWORD:=", script)
+        self.assertIn('GRAFANA_DB_PASSWORD="$(cat "$GRAFANA_DB_PASSWORD_FILE")"', script)
         self.assertIn("--variable=grafana_user=\"$GRAFANA_DB_USER\"", script)
         self.assertIn("--variable=grafana_password=\"$GRAFANA_DB_PASSWORD\"", script)
         self.assertIn("PASSWORD %L", script)
+
+    def test_grafana_datasource_reads_the_same_mounted_secret(self) -> None:
+        # The role's password and the connection using it must come from one
+        # definition, or the datasource authenticates with the wrong value.
+        datasource = (
+            POSTGRES_INIT.parents[1]
+            / "grafana/provisioning/datasources/roadtrip-postgres.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("$__file{/run/secrets/grafana_db_password}", datasource)
+        self.assertNotIn("$GRAFANA_DB_PASSWORD", datasource)
 
 
 if __name__ == "__main__":

@@ -52,6 +52,18 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate Grafana dashboards
         run: python3 scripts/validate_grafana_dashboards.py
+
+      # The registry is the source of truth; docker-compose.secrets.yml is
+      # generated from it. `generate --check` fails if the committed file is
+      # stale, so `consumers` cannot drift from what Compose actually runs.
+      # Needs no age key — CI never decrypts anything.
+      - name: Validate secrets registry
+        run: |
+          python3 secrets/manage.py generate --check
+          python3 secrets/manage.py check
+
+      - name: Secrets tooling tests
+        run: python3 -m unittest discover -s scripts -p 'test_secrets.py' -v
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
