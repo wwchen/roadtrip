@@ -11,6 +11,30 @@ x-log-rotation: &log-rotation
     max-size: "50m"
     max-file: "5"
 
+# Postgres credentials, defined once and merged into the services that need
+# them. Split three ways on purpose rather than one blob: grafana connects as
+# grafana_reader and has no business holding the superuser password, so it
+# merges the database name and reader credentials only.
+#
+# Defaults are dev conveniences. Real deployments override them from the
+# environment; see docs/secrets.md.
+x-postgres-database: &postgres-database
+  POSTGRES_DB: ${POSTGRES_DB:-roadtrip}
+
+x-postgres-superuser: &postgres-superuser
+  POSTGRES_USER: ${POSTGRES_USER:-roadtrip}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-roadtrip}
+
+# Consumed twice: postgres-init/10-grafana-reader.sh creates the role with this
+# password on first init, and grafana's datasource provisioning connects with
+# it on every start. Both sides now read the same anchor, so they cannot drift.
+# Grants against the role are owned by Flyway (R__grafana_reader_grants.sql),
+# which deliberately sets no password — this is the one piece a schema
+# migration can't carry.
+x-grafana-reader-credentials: &grafana-reader-credentials
+  GRAFANA_DB_USER: ${GRAFANA_DB_USER:-grafana_reader}
+  GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:-roadtrip}
+
 services:
   # cookie-bot sidecar — kept for future use but not started by default on
   # aarch64 hosts (see memory: akamai_http2_fingerprinting.md). To enable,
@@ -49,16 +73,10 @@ services:
     shm_size: 1g
     command: ["postgres", "-c", "max_wal_size=4GB", "-c", "checkpoint_completion_target=0.9", "-c", "shared_buffers=512MB", "-c", "work_mem=16MB", "-c", "maintenance_work_mem=256MB"]
     environment:
-      - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
-      - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
-      # Read by postgres-init/10-grafana-reader.sh on first init to create the
-      # grafana_reader role. Grafana's datasource provisioning uses the same
-      # env vars with the same defaults; keep both in sync. Grants against
-      # this role are owned by Flyway (R__grafana_reader_grants.sql), so this
-      # only handles the one thing schema migrations can't: the password.
-      - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
-      - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
+      # POSTGRES_* seed the cluster on first init only — the image's
+      # docker-entrypoint ignores them once PGDATA is populated. Changing them
+      # later does not rotate anything; that needs ALTER USER.
+      <<: [*postgres-database, *postgres-superuser, *grafana-reader-credentials]
     volumes:
       - ${POSTGRES_DATA:-$HOME/.roadtrip-map/postgres}:/var/lib/postgresql/data
       - ./postgres-init:/docker-entrypoint-initdb.d:ro
@@ -88,36 +106,37 @@ services:
       - path: .env
         required: false
     environment:
+      <<: [*postgres-database, *postgres-superuser]
       # Profile selection is a process env control that chooses
       # application-<profile>.yaml before backend config is parsed.
-      - ROADTRIP_PROFILE=${ROADTRIP_PROFILE:-prod}
+      ROADTRIP_PROFILE: ${ROADTRIP_PROFILE:-prod}
       # OpenTelemetry Java agent exports Ktor/JDBC/JVM telemetry to Alloy.
       # Logs still go through stdout -> Alloy -> Loki; trace/span ids are
       # injected into Logback MDC and emitted by logback.xml's JSON encoder.
-      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-roadtrip-backend}
-      - OTEL_RESOURCE_ATTRIBUTES=service.namespace=roadtrip,deployment.environment=${ROADTRIP_PROFILE:-prod},service.version=${ROADTRIP_BACKEND_VERSION:-0.1.0}
-      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://alloy:4317}
-      - OTEL_EXPORTER_OTLP_PROTOCOL=${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}
-      - OTEL_TRACES_EXPORTER=${OTEL_TRACES_EXPORTER:-otlp}
-      - OTEL_METRICS_EXPORTER=${OTEL_METRICS_EXPORTER:-otlp}
-      - OTEL_LOGS_EXPORTER=${OTEL_LOGS_EXPORTER:-none}
-      - OTEL_TRACES_SAMPLER=${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
-      - OTEL_TRACES_SAMPLER_ARG=${OTEL_TRACES_SAMPLER_ARG:-1.0}
-      - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
-      - POSTGRES_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-roadtrip}
-      - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-roadtrip-backend}
+      OTEL_RESOURCE_ATTRIBUTES: service.namespace=roadtrip,deployment.environment=${ROADTRIP_PROFILE:-prod},service.version=${ROADTRIP_BACKEND_VERSION:-0.1.0}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://alloy:4317}
+      OTEL_EXPORTER_OTLP_PROTOCOL: ${OTEL_EXPORTER_OTLP_PROTOCOL:-grpc}
+      OTEL_TRACES_EXPORTER: ${OTEL_TRACES_EXPORTER:-otlp}
+      OTEL_METRICS_EXPORTER: ${OTEL_METRICS_EXPORTER:-otlp}
+      OTEL_LOGS_EXPORTER: ${OTEL_LOGS_EXPORTER:-none}
+      OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-parentbased_traceidratio}
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
+      # Unlike postgres above, the backend reads these on every connect.
+      # POSTGRES_URL repeats the database name because compose interpolation
+      # can't reference another key in the same map.
+      POSTGRES_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-roadtrip}
       # Mapbox is server-side only. /api/route (Directions) and /api/geocode
       # (forward geocoding) read this; the FE never sees the token. Both
       # endpoints return 503 when unset, so the trip planner just doesn't
       # work, instead of leaking the token by accident.
-      - MAPBOX_TOKEN=${MAPBOX_TOKEN:-}
+      MAPBOX_TOKEN: ${MAPBOX_TOKEN:-}
       # Availability alert secrets consumed by roadtrip.slack.* placeholders.
       # Unset SLACK_* => alerts disabled (no-op).
-      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
-      - SLACK_ALERT_CHANNEL=${SLACK_ALERT_CHANNEL:-}
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_ALERT_CHANNEL: ${SLACK_ALERT_CHANNEL:-}
       # https://docs.slack.dev/interactivity/implementing-shortcuts/#scope_permissions
-      - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET:-}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
     volumes:
       - ./index.html:/app/static/index.html:ro
       - ./availability.html:/app/static/availability.html:ro
@@ -170,22 +189,20 @@ services:
     logging: *log-rotation
     hostname: grafana
     environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-      - GF_AUTH_DISABLE_LOGIN_FORM=false
-      - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-https://roadtrip.floo.ca/dash/}
-      - GF_SERVER_SERVE_FROM_SUB_PATH=true
-      - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
-      - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
-      - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
-      - GRAFANA_DASHBOARD_ALLOW_UI_UPDATES=${GRAFANA_DASHBOARD_ALLOW_UI_UPDATES:-false}
+      <<: [*postgres-database, *grafana-reader-credentials]
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-https://roadtrip.floo.ca/dash/}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GRAFANA_DASHBOARD_ALLOW_UI_UPDATES: ${GRAFANA_DASHBOARD_ALLOW_UI_UPDATES:-false}
       # Must be non-empty or Grafana treats the Slack contact point as chat-API
       # mode and fails provisioning at boot. Default is an obvious placeholder
       # (webhook mode → Grafana boots); set to a real webhook to deliver alerts.
-      - GRAFANA_SLACK_WEBHOOK_URL=${GRAFANA_SLACK_WEBHOOK_URL:-https://hooks.slack.com/services/PLACEHOLDER-SET-GRAFANA_SLACK_WEBHOOK_URL}
+      GRAFANA_SLACK_WEBHOOK_URL: ${GRAFANA_SLACK_WEBHOOK_URL:-https://hooks.slack.com/services/PLACEHOLDER-SET-GRAFANA_SLACK_WEBHOOK_URL}
     mem_limit: 1g
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro

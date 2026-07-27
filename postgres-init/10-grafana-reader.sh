@@ -6,13 +6,16 @@
 # `DROP SCHEMA public CASCADE` (make reset-db), so this script never needs to
 # re-run — subsequent Flyway migrations own the grants against this role.
 #
-# If GRAFANA_DB_PASSWORD is unset, use a stable dev default so grafana's
-# datasource provisioning (which reads the same env var with the same default)
-# lines up. Prod overrides via .env like every other secret.
+# Both variables come from docker-compose.yml's x-grafana-reader-credentials
+# anchor, which grafana's datasource provisioning reads from too — one
+# definition, so the role's password and the connection that uses it cannot
+# drift apart. Requiring them here rather than defaulting again keeps that
+# single definition honest: a second copy of the default would silently paper
+# over a compose change and hand grafana a password postgres never set.
 set -euo pipefail
 
-: "${GRAFANA_DB_USER:=grafana_reader}"
-: "${GRAFANA_DB_PASSWORD:=roadtrip}"
+: "${GRAFANA_DB_USER:?must be set by docker-compose.yml (x-grafana-reader-credentials)}"
+: "${GRAFANA_DB_PASSWORD:?must be set by docker-compose.yml (x-grafana-reader-credentials)}"
 
 psql --username="$POSTGRES_USER" --dbname="$POSTGRES_DB" \
      --set=ON_ERROR_STOP=1 \
