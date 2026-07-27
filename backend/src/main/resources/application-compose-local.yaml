@@ -1,5 +1,10 @@
 roadtrip:
   static-dir: /app/static
+  auth:
+    # Same reason as application-local.yaml: web.root-url below is plain http
+    # on 127.0.0.1, and a browser drops a Secure cookie on an insecure origin,
+    # so sign-in would complete upstream and then land with no session.
+    cookie-secure: false
   db:
     url: "${POSTGRES_URL:jdbc:postgresql://postgres:5432/roadtrip}"
     user: ${POSTGRES_USER}
