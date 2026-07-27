@@ -11,8 +11,10 @@ export function settingsModalBodyTemplate() {
   return `
     <div class="rt-settings-modal-body">
       <div class="rt-settings-modal-banner" data-host="banner"></div>
-      <div class="rt-settings-modal-tabs" data-host="tabs"></div>
-      <div class="rt-settings-modal-panel" data-host="panel"></div>
+      <div class="rt-settings-modal-main">
+        <div class="rt-settings-modal-tabs" data-host="tabs"></div>
+        <div class="rt-settings-modal-panel" data-host="panel"></div>
+      </div>
       <div class="rt-settings-modal-footer">
         <button
           type="button"
