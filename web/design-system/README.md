@@ -33,6 +33,36 @@ this split fixes it.
 - Touch targets ≥ 44px; inputs at 16px font to stop iOS zoom-on-focus.
 - One primary (solid blue) per surface; everything else secondary/tertiary.
 
+## Tabs rail / segmented control convention
+
+Use `mountTabs(container, config)` from `web/design-system/tabs.js` for section
+navigation within a page (e.g., account settings pages).
+
+| Config | Default | Effect |
+|---|---|---|
+| `tabs` | `[]` | Array of `{ id, label }` descriptors |
+| `active` | first tab id | Initially selected tab |
+| `onChange` | `undefined` | Called with the new tab id whenever selection changes |
+
+**Rail → segmented control breakpoint:** on viewports ≤560px the vertical left rail
+collapses to a full-width horizontal segmented control at the top. Each button flexes
+equally, text-centered, with a 44px min-height touch target.
+
+**Three-file contract:**
+- `tabs-template.js` — pure function, no DOM, imports only `escapeHtml` from `../core.js`
+- `tabs.js` — controller: injects `tabs.css` via `<link>` with an id-guard, delegates
+  click events on the container, sets active via `setActive(id)`. Returns
+  `{ getActive(), setActive(id), dispose() }`.
+- `tabs.css` — `--rt-*` tokens only; vertical rail default, `@media (max-width:560px)`
+  segmented control variant.
+
+**Active styling:** active tab uses `--rt-brand-tint` background and `--rt-text` color;
+inactive tabs use transparent background and `--rt-muted` color.
+
+**Anatomy:** container (`.rt-tabs-rail`, `role="tablist"`) with buttons
+(`.rt-tabs-tab`, `[data-tab=<id>]`, `role="tab"`, `aria-selected`). Active button also
+gets `.rt-tabs-tab--active`.
+
 ## Modal overlay / bottom-sheet convention
 
 Use `mountModal(container, config)` from `web/design-system/modal.js` for any overlay
