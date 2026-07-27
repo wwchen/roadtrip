@@ -16,10 +16,11 @@
   gap: 16px;
 }
 
+/* The Tabs component supplies the rail's own divider (border-right on desktop,
+   border-bottom on mobile) and its own width — this is just a sizing wrapper.
+   Adding a border here is what produced the double divider. */
 .rt-settings-modal-tabs {
-  flex: 0 0 156px;
-  border-right: 1px solid var(--rt-border);
-  padding: 4px 8px 4px 16px;
+  flex: 0 0 auto;
 }
 
 .rt-settings-modal-panel {
@@ -29,19 +30,11 @@
   overflow-y: auto;
 }
 
-/* Mobile: stack the tabs above the panel (they become a segmented control). */
+/* Mobile: stack the tabs (segmented control) above the panel. */
 @media (max-width: 560px) {
   .rt-settings-modal-main {
     flex-direction: column;
-    gap: 0;
-  }
-
-  .rt-settings-modal-tabs {
-    flex: 0 0 auto;
-    border-right: none;
-    border-bottom: 1px solid var(--rt-border);
-    padding: 0 0 12px;
-    margin-bottom: 12px;
+    gap: 12px;
   }
 }
 
