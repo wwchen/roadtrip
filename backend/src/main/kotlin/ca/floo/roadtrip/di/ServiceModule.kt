@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.di
 
 import ca.floo.roadtrip.client.companion.HttpRecGovAtcExecutor
+import ca.floo.roadtrip.client.slack.SlackClient
 import ca.floo.roadtrip.client.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.config.ReadPathProviderConfig
@@ -19,6 +20,8 @@ import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
+import ca.floo.roadtrip.repo.UserRepo
+import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
@@ -67,6 +70,8 @@ import ca.floo.roadtrip.service.scheduler.PollerBackfill
 import ca.floo.roadtrip.service.scheduler.WatchReaper
 import ca.floo.roadtrip.service.scheduler.framework.Scheduler
 import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutor
+import ca.floo.roadtrip.service.security.SecretCipher
+import ca.floo.roadtrip.service.settings.UserSettingsService
 import kotlinx.coroutines.CoroutineScope
 import org.jooq.DSLContext
 import org.koin.core.qualifier.named
@@ -86,6 +91,29 @@ val serviceModule =
         single {
             NotificationFanout(
                 listOf(get<SlackNotificationService>(), get<EmailNotificationService>()),
+            )
+        }
+
+        // Nullable singleton: null when no encryption key is configured.
+        single<SecretCipher?> {
+            get<AppConfig>().secrets?.let { SecretCipher(it.encryptionKey) }
+        }
+
+        // Per-user Slack client used by UserSettingsService (distinct from the
+        // global bot-token client used for watch alerts). Null when Slack is not configured.
+        single<SlackClient?> {
+            get<AppConfig>().slack?.let { SlackClient(it) }
+        }
+
+        single {
+            val config: AppConfig = get()
+            val providerLabel: String? = config.auth?.provider
+            UserSettingsService(
+                userRepo = get<UserRepo>(),
+                settingsRepo = get<UserSettingsRepo>(),
+                cipher = getOrNull<SecretCipher>(),
+                slackClient = getOrNull<SlackClient>(),
+                providerLabel = providerLabel,
             )
         }
 

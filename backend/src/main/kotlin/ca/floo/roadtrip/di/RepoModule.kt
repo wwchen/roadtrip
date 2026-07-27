@@ -13,6 +13,7 @@ import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
+import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.ref.DbRefResolver
 import ca.floo.roadtrip.service.ref.RefResolver
@@ -34,5 +35,6 @@ val repoModule =
         single { PlanetFitnessLocationRepo(get()) }
         single { RouteCorridorRepo(get()) }
         single { AdminIngestReadRepo(get()) }
+        single { UserRepo(get()) }
         single { UserSettingsRepo(get()) }
     }

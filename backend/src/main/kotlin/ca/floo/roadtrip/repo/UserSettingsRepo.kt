@@ -6,7 +6,7 @@ import org.jooq.DSLContext
 import java.time.OffsetDateTime
 
 /** Persistence for `user_settings`. Stores the Slack token only as ciphertext. */
-class UserSettingsRepo(
+open class UserSettingsRepo(
     private val ctx: DSLContext,
 ) {
     data class Settings(
@@ -16,7 +16,7 @@ class UserSettingsRepo(
         val slackTokenHint: String?,
     )
 
-    fun find(userId: UserId): Settings? =
+    open fun find(userId: UserId): Settings? =
         ctx
             .select(
                 USER_SETTINGS.NOTIFICATION_EMAIL,
@@ -35,7 +35,7 @@ class UserSettingsRepo(
                 )
             }
 
-    fun upsertNotifications(
+    open fun upsertNotifications(
         userId: UserId,
         notificationEmail: String?,
         slackChannel: String?,
@@ -54,7 +54,7 @@ class UserSettingsRepo(
             .execute()
     }
 
-    fun setSlackToken(
+    open fun setSlackToken(
         userId: UserId,
         cipher: ByteArray,
         hint: String,
@@ -73,7 +73,7 @@ class UserSettingsRepo(
             .execute()
     }
 
-    fun clearSlack(userId: UserId) {
+    open fun clearSlack(userId: UserId) {
         ctx
             .update(USER_SETTINGS)
             .setNull(USER_SETTINGS.SLACK_TOKEN_CIPHER)
