@@ -13,6 +13,10 @@ private const val ENCRYPTION_KEY = "encryption-key"
 data class SecretsConfig(
     val encryptionKey: ByteArray,
 ) {
+    override fun equals(other: Any?): Boolean = other is SecretsConfig && encryptionKey.contentEquals(other.encryptionKey)
+
+    override fun hashCode(): Int = encryptionKey.contentHashCode()
+
     companion object {
         fun fromConfig(config: ConfigSection): SecretsConfig? {
             val raw = config.value(ENCRYPTION_KEY) ?: return null
