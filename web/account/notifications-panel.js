@@ -33,7 +33,9 @@ export function computeNotificationsDirty(settings, values) {
 
 /**
  * Build the payload to send when saving notification settings.
- * slack_token is included only when it has a value (not null = unchanged).
+ * Returns { notification_email, slack_channel, slack_token }. slack_token is the
+ * SecretField value: a string when the user entered a new token, or null meaning
+ * 'leave unchanged' (the api client omits a null slack_token before sending).
  *
  * @param {{ notification_email: string, slack_channel: string, slack_token: string|null }} values
  * @returns {{ notification_email: string, slack_channel: string, slack_token: string|null }}
@@ -79,9 +81,7 @@ export function mountNotificationsPanel(container, config) {
   let bannerCtrl = null;
   let testPending = false;
 
-  container.innerHTML = notificationsPanelTemplate({
-    loginEmailPlaceholder: loginEmail,
-  });
+  container.innerHTML = notificationsPanelTemplate({});
 
   const emailHost = container.querySelector('[data-host="notification-email"]');
   const slackTokenHost = container.querySelector('[data-host="slack-token"]');

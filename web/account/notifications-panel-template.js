@@ -4,10 +4,10 @@
 import { escapeHtml } from '../core.js';
 
 /**
- * @param {{ loginEmailPlaceholder: string }} params
+ * @param {object} params
  * @returns {string}
  */
-export function notificationsPanelTemplate({ loginEmailPlaceholder }) {
+export function notificationsPanelTemplate(params) {
   return `
     <div class="rt-notifications-panel">
       <div data-host="notification-email"></div>
