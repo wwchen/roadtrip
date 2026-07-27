@@ -34,13 +34,19 @@ private const val EXPIRY_CLAIM = "exp"
  * read, so no unverified attacker-controlled value ever reaches a decision.
  */
 class IdTokenVerifier(
-    private val issuer: String,
     private val clientId: String,
 ) {
     /** Key id named by the token header, or null when unsigned/unparseable. */
     fun keyIdOf(idToken: String): String? = runCatching { SignedJWT.parse(idToken).header.keyID }.getOrNull()
 
     /**
+     * @param issuer the `issuer` from the provider's discovery document, not the
+     *        configured issuer string. OIDC requires the two to match byte for
+     *        byte, and the configured value cannot: it is normalized for URL
+     *        construction, and providers differ on the trailing slash — Auth0
+     *        issues `https://tenant.auth0.com/` while the discovery URL is built
+     *        from the unslashed form. Comparing against the configured string
+     *        rejected every Auth0 token.
      * @param expectedNonce the nonce issued with the authorization request; the
      *        token must echo it exactly, which is what stops a token minted for
      *        a different sign-in attempt from being replayed into this one.
@@ -48,6 +54,7 @@ class IdTokenVerifier(
     fun verify(
         idToken: String,
         jwks: JWKSet,
+        issuer: String,
         expectedNonce: String,
     ): VerifiedIdToken {
         val processor = DefaultJWTProcessor<SecurityContext>()

@@ -82,7 +82,13 @@ internal class OidcIdentityProvider(
                 cached
             }
 
-        val verified = idTokenVerifier.verify(tokens.idToken, jwks, expectedNonce)
+        val verified =
+            idTokenVerifier.verify(
+                idToken = tokens.idToken,
+                jwks = jwks,
+                issuer = oidcClient.discovery().issuer,
+                expectedNonce = expectedNonce,
+            )
         return claimsDialect.toIdentityClaims(verified)
     }
 
