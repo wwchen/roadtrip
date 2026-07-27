@@ -40,14 +40,46 @@ ENV_LOCAL_FILE = ROOT / ".env.local"
 ENV_EXAMPLE_FILE = ROOT / ".env.example"
 SOPS_CONFIG = ROOT / ".sops.yaml"
 
-# sops' own default identity path. Kept explicit so `init` and the error
-# messages agree with where sops will actually look.
-AGE_KEY_FILE = Path(
-    os.environ.get(
-        "SOPS_AGE_KEY_FILE",
-        Path.home() / ".config" / "sops" / "age" / "keys.txt",
-    )
-)
+def default_age_key_file() -> Path:
+    """Where sops looks for an age identity, per platform.
+
+    sops resolves this with Go's os.UserConfigDir(), which is NOT ~/.config
+    everywhere — on macOS it's ~/Library/Application Support. Writing the key
+    to the Linux path on a Mac produces an identity sops silently never finds,
+    and the resulting decrypt failure names only the env-var locations it
+    checked, so it reads like a missing key rather than a misplaced one.
+    """
+    if sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    elif sys.platform == "win32":
+        base = Path(os.environ.get("AppData", Path.home() / "AppData" / "Roaming"))
+    else:
+        base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return base / "sops" / "age" / "keys.txt"
+
+
+# Kept explicit so `init` and the error messages agree with where sops will
+# actually look. SOPS_AGE_KEY_FILE overrides it for both, same as for sops.
+AGE_KEY_FILE = Path(os.environ["SOPS_AGE_KEY_FILE"]) if os.environ.get(
+    "SOPS_AGE_KEY_FILE"
+) else default_age_key_file()
+
+# Paths a previous version of this script wrote to, or that someone following
+# Linux-flavoured instructions would pick. sops does not search these, so a key
+# sitting here is invisible — worth detecting rather than generating a second
+# identity on top of it.
+LEGACY_AGE_KEY_FILES = [
+    path
+    for path in (Path.home() / ".config" / "sops" / "age" / "keys.txt",)
+    if path != AGE_KEY_FILE
+]
+
+
+def misplaced_age_key() -> Path | None:
+    """A legacy-path identity that sops can't see, when the real path has none."""
+    if AGE_KEY_FILE.exists():
+        return None
+    return next((path for path in LEGACY_AGE_KEY_FILES if path.exists()), None)
 
 # secrets.enc.env is a dotenv whose values happen to look like ENC[...]. sops
 # can infer that from the .env suffix, but being explicit means a rename can't
@@ -147,7 +179,18 @@ def run_sops(args: list[str], *, capture: bool = True) -> str:
     )
     if proc.returncode != 0:
         detail = (proc.stderr or proc.stdout or "").strip() if capture else ""
-        raise SecretsError(f"sops failed ({' '.join(args)})\n{detail}")
+        # sops' "did not find keys in locations ..." lists only the env-var
+        # paths it consulted, never the per-platform default, so a key in the
+        # wrong directory looks identical to no key at all. Name the real cause.
+        stranded = misplaced_age_key()
+        hint = (
+            f"\n\nhint: an age identity exists at {stranded}, but sops looks in"
+            f"\n      {AGE_KEY_FILE} on this platform. Move it with:"
+            "\n          make secrets-init"
+            if stranded is not None
+            else ""
+        )
+        raise SecretsError(f"sops failed ({' '.join(args)})\n{detail}{hint}")
     return proc.stdout if capture else ""
 
 
@@ -181,7 +224,18 @@ def write_atomic(path: Path, content: str, mode: int) -> None:
 def cmd_init(_args: argparse.Namespace) -> int:
     """Create this host's age identity if it has none, and print its public key."""
     require_tools("age-keygen")
-    if AGE_KEY_FILE.exists():
+    stranded = misplaced_age_key()
+    if stranded is not None:
+        # Relocate rather than generate. A second identity here would leave the
+        # first one — the one already listed as a vault recipient — orphaned,
+        # and the symptom (decrypt fails, key "exists") is thoroughly confusing.
+        AGE_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(stranded), str(AGE_KEY_FILE))
+        os.chmod(AGE_KEY_FILE, AGE_KEY_FILE_MODE)
+        print(f"moved age identity {stranded}")
+        print(f"                -> {AGE_KEY_FILE}")
+        print("(sops only searches the latter on this platform)")
+    elif AGE_KEY_FILE.exists():
         print(f"age identity already present at {AGE_KEY_FILE}")
     else:
         AGE_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)

@@ -2,9 +2,10 @@
 # the age recipients below; sops picks the rule up automatically on
 # `sops edit` / `sops --encrypt`, so no key ever appears on a command line.
 #
-# `encrypted_regex` leaves the *keys* in plaintext and encrypts only the
-# values. That's deliberate: `git diff` shows which secret changed without
-# revealing what it changed to.
+# For dotenv files sops encrypts values and leaves keys in plaintext, which is
+# exactly what we want: `git diff` shows which secret changed without revealing
+# what it changed to. Empty values stay empty — there's nothing to encrypt — so
+# an unset key is visible as unset, by design.
 #
 # Adding a host or a person:
 #   1. On that machine: `make secrets-init` — prints its age public key.

@@ -164,7 +164,7 @@ secrets-init:
 # back to the main clone's .env when run from a git worktree (which doesn't
 # carry gitignored files).
 secrets-import:
-	@$(SECRETS) import $(if $(SOURCE),--source "$(SOURCE)")
+	@$(SECRETS) import $(if $(SOURCE),--source "$(SOURCE)") $(if $(FORCE),--force)
 
 secrets-edit:
 	@$(SECRETS) edit

@@ -53,11 +53,17 @@ fails at `_ensure-secrets`, after `git pull` has already landed new code.
 Then mint the host's identity:
 
 ```sh
-mkdir -p ~/.config/sops/age
-test -f ~/.config/sops/age/keys.txt || age-keygen -o ~/.config/sops/age/keys.txt
-chmod 600 ~/.config/sops/age/keys.txt
-grep "public key" ~/.config/sops/age/keys.txt
+KEYS="$HOME/Library/Application Support/sops/age/keys.txt"   # macOS host
+mkdir -p "$(dirname "$KEYS")"
+test -f "$KEYS" || age-keygen -o "$KEYS"
+chmod 600 "$KEYS"
+grep "public key" "$KEYS"
 ```
+
+That path is macOS-specific — sops uses Go's `os.UserConfigDir()`, which is
+`~/Library/Application Support` on Darwin and `~/.config` on Linux. On a Linux
+deploy host, substitute accordingly, or just run `make secrets-init` once the
+branch is checked out and let it pick.
 
 The `test -f` guard is not optional. A bare `age-keygen -o` on an existing file
 **replaces** the identity, and a deploy host that loses its key can no longer

@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -192,6 +193,45 @@ class PlaceholderTest(unittest.TestCase):
         self.assertEqual(
             ["- age1PLACEHOLDER_REPLACE_ME"], secrets_tool.active_placeholders(text)
         )
+
+
+class AgeKeyLocationTest(unittest.TestCase):
+    """sops resolves the identity path with Go's os.UserConfigDir()."""
+
+    def test_macos_uses_application_support_not_dot_config(self):
+        # The bug this guards: ~/.config is the Linux answer. On macOS sops
+        # never looks there, so a key written to it is invisible and the
+        # decrypt error blames a missing key rather than a misplaced one.
+        with unittest.mock.patch.object(secrets_tool.sys, "platform", "darwin"):
+            path = secrets_tool.default_age_key_file()
+        self.assertEqual(
+            Path.home() / "Library/Application Support/sops/age/keys.txt", path
+        )
+
+    def test_linux_honours_xdg_config_home(self):
+        with unittest.mock.patch.object(secrets_tool.sys, "platform", "linux"):
+            with unittest.mock.patch.dict(
+                os.environ, {"XDG_CONFIG_HOME": "/xdg"}, clear=False
+            ):
+                self.assertEqual(
+                    Path("/xdg/sops/age/keys.txt"), secrets_tool.default_age_key_file()
+                )
+
+    def test_misplaced_key_is_detected_only_when_the_real_path_is_empty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            real = Path(tmp) / "real/keys.txt"
+            legacy = Path(tmp) / "legacy/keys.txt"
+            legacy.parent.mkdir(parents=True)
+            legacy.write_text("AGE-SECRET-KEY-1\n")
+            with unittest.mock.patch.multiple(
+                secrets_tool, AGE_KEY_FILE=real, LEGACY_AGE_KEY_FILES=[legacy]
+            ):
+                self.assertEqual(legacy, secrets_tool.misplaced_age_key())
+                real.parent.mkdir(parents=True)
+                real.write_text("AGE-SECRET-KEY-2\n")
+                # Real path populated: nothing is stranded, so init must not
+                # start moving files around underneath a working setup.
+                self.assertIsNone(secrets_tool.misplaced_age_key())
 
 
 class ImportSourceTest(unittest.TestCase):
