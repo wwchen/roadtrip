@@ -9,9 +9,7 @@ data class CampflareConfig(
 
         fun fromConfig(config: ConfigSection): CampflareConfig =
             CampflareConfig(
-                apiKey =
-                    config.value("api-key")
-                        ?: config.value("token"),
+                apiKey = config.value("api-key"),
                 apiBaseUrl = config.valueOrDefault("api-base-url", DEFAULT_API_BASE_URL),
             )
     }
