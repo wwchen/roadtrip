@@ -14,6 +14,7 @@ const PROFILE_URL = '/api/settings/profile';
 const NOTIFICATIONS_URL = '/api/settings/notifications';
 const SLACK_URL = '/api/settings/notifications/slack';
 const SLACK_TEST_URL = '/api/settings/notifications/slack/test';
+const EMAIL_TEST_URL = '/api/settings/notifications/email/test';
 
 /**
  * Fetch the current account settings.
@@ -80,4 +81,14 @@ export function clearSlack(options = {}) {
 export function sendSlackTest(channel, options = {}) {
   const body = channel != null ? { channel } : {};
   return jsonPostOk(SLACK_TEST_URL, body, options);
+}
+
+/**
+ * Send a test email to the user's notification email address.
+ *
+ * @param {{signal?: AbortSignal}} [options]
+ * @returns {Promise<object>}
+ */
+export function sendEmailTest(options = {}) {
+  return jsonPostOk(EMAIL_TEST_URL, {}, options);
 }

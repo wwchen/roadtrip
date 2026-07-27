@@ -1,7 +1,10 @@
 package ca.floo.roadtrip.service.settings
 
+import ca.floo.roadtrip.client.resend.EmailDeliveryClient
+import ca.floo.roadtrip.client.resend.EmailDeliveryMessage
 import ca.floo.roadtrip.client.slack.SlackClient
 import ca.floo.roadtrip.client.slack.SlackIdentity
+import ca.floo.roadtrip.config.EmailConfig
 import ca.floo.roadtrip.model.api.UpdateNotificationsRequest
 import ca.floo.roadtrip.model.api.UpdateProfileRequest
 import ca.floo.roadtrip.model.domain.auth.Principal
@@ -10,6 +13,7 @@ import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.auth.UserStatus
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
+import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.security.SecretCipher
 import kotlinx.coroutines.runBlocking
 import org.jooq.SQLDialect
@@ -126,6 +130,23 @@ private class FakeSlackClient(
     }
 }
 
+/** Fake [EmailDeliveryClient]. [sendResult] controls whether send() succeeds. */
+private class FakeEmailDeliveryClient(
+    private val sendResult: Boolean = true,
+) : EmailDeliveryClient {
+    val sentMessages = mutableListOf<EmailDeliveryMessage>()
+
+    override suspend fun send(message: EmailDeliveryMessage): Boolean {
+        sentMessages += message
+        return sendResult
+    }
+}
+
+private val fakeEmailConfig = EmailConfig(resendApiKey = "fake-key", from = "no-reply@example.com")
+
+private fun makeEmailService(deliveryClient: EmailDeliveryClient? = FakeEmailDeliveryClient()): EmailNotificationService =
+    EmailNotificationService(config = fakeEmailConfig, emailDeliveryClient = deliveryClient)
+
 private fun testUser(
     userId: UserId = testUserId,
     email: String = "user@example.com",
@@ -149,6 +170,8 @@ private fun makeService(
     cipher: SecretCipher? = SecretCipher(testKey),
     slackClient: FakeSlackClient? = FakeSlackClient(),
     providerLabel: String? = "Auth0",
+    emailService: EmailNotificationService = makeEmailService(),
+    appRootUrl: String? = null,
 ): UserSettingsService =
     UserSettingsService(
         userRepo = userRepo,
@@ -156,6 +179,8 @@ private fun makeService(
         cipher = cipher,
         slackClient = slackClient,
         providerLabel = providerLabel,
+        emailService = emailService,
+        appRootUrl = appRootUrl,
     )
 
 class UserSettingsServiceTest {
@@ -469,6 +494,73 @@ class UserSettingsServiceTest {
 
             assertFailsWith<SettingsError.SlackSendFailed> {
                 settingsService.sendSlackTest(testUserId, channelOverride = null)
+            }
+            Unit
+        }
+
+    // 9. sendEmailTest(): sends to notification email when set.
+    @Test
+    fun `sendEmailTest sends to notificationEmail when set`() =
+        runBlocking {
+            val deliveryClient = FakeEmailDeliveryClient(sendResult = true)
+            settingsRepo.settings =
+                UserSettingsRepo.Settings(
+                    notificationEmail = "notif@example.com",
+                    slackChannel = null,
+                    slackTokenCipher = null,
+                    slackTokenHint = null,
+                )
+            val emailService = makeEmailService(deliveryClient)
+            settingsService = makeService(userRepo, settingsRepo, emailService = emailService)
+
+            val result = settingsService.sendEmailTest(testUserId)
+
+            assertTrue(result.sent)
+            assertEquals("notif@example.com", result.recipient)
+            assertEquals(1, deliveryClient.sentMessages.size)
+            assertEquals("notif@example.com", deliveryClient.sentMessages[0].to)
+        }
+
+    @Test
+    fun `sendEmailTest falls back to login email when no notificationEmail set`() =
+        runBlocking {
+            val deliveryClient = FakeEmailDeliveryClient(sendResult = true)
+            settingsRepo.settings = null
+            val emailService = makeEmailService(deliveryClient)
+            settingsService = makeService(userRepo, settingsRepo, emailService = emailService)
+
+            val result = settingsService.sendEmailTest(testUserId)
+
+            assertTrue(result.sent)
+            // Falls back to testUser's email
+            assertEquals("user@example.com", result.recipient)
+            assertEquals(1, deliveryClient.sentMessages.size)
+            assertEquals("user@example.com", deliveryClient.sentMessages[0].to)
+        }
+
+    @Test
+    fun `sendEmailTest throws EmailSendFailed when email is disabled`() =
+        runBlocking {
+            // null config + null delivery client → email disabled → sendTestEmail returns false
+            val emailService = EmailNotificationService(config = null, emailDeliveryClient = null)
+            settingsService = makeService(userRepo, settingsRepo, emailService = emailService)
+
+            assertFailsWith<SettingsError.EmailSendFailed> {
+                settingsService.sendEmailTest(testUserId)
+            }
+            Unit
+        }
+
+    @Test
+    fun `sendEmailTest throws EmailSendFailed when delivery fails`() =
+        runBlocking {
+            val deliveryClient = FakeEmailDeliveryClient(sendResult = false)
+            settingsRepo.settings = null
+            val emailService = makeEmailService(deliveryClient)
+            settingsService = makeService(userRepo, settingsRepo, emailService = emailService)
+
+            assertFailsWith<SettingsError.EmailSendFailed> {
+                settingsService.sendEmailTest(testUserId)
             }
             Unit
         }

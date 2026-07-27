@@ -148,7 +148,10 @@ function makeFakePanel(capturedPanelCalls, panelId) {
     record.mounted++;
     record.onDirtyChange = cfg.onDirtyChange;
     record.lastSettings = cfg.settings;
-    if (panelId === 'notifications') record.onTest = cfg.onTest;
+    if (panelId === 'notifications') {
+      record.onTest = cfg.onTest;
+      record.onTestEmail = cfg.onTestEmail;
+    }
     if (panelId === 'account') {
       record.onSignOut = cfg.onSignOut;
       record.onDisconnectSlack = cfg.onDisconnectSlack;
@@ -175,6 +178,7 @@ function buildHarness({
   updateNotificationsImpl = () => Promise.resolve(BASE_SETTINGS),
   clearSlackImpl = () => Promise.resolve(null),
   sendSlackTestImpl = () => Promise.resolve({}),
+  sendEmailTestImpl = () => Promise.resolve({}),
   signOutImpl = () => {},
 } = {}) {
   const originalDocument = globalThis.document;
@@ -195,6 +199,7 @@ function buildHarness({
     _updateNotifications: updateNotificationsImpl,
     _clearSlack: clearSlackImpl,
     _sendSlackTest: sendSlackTestImpl,
+    _sendEmailTest: sendEmailTestImpl,
     _signOut: signOutImpl,
   });
 
@@ -624,6 +629,32 @@ test('SettingsModal: notifications panel receives onTest wired to sendSlackTest'
 
     assert.equal(testCalls.length, 1);
     assert.equal(testCalls[0], '#general');
+  } finally {
+    restore();
+  }
+});
+
+test('SettingsModal: notifications panel receives onTestEmail wired to sendEmailTest', async () => {
+  const emailTestCalls = [];
+  const { calls, panels, restore } = buildHarness({
+    sendEmailTestImpl: () => {
+      emailTestCalls.push(true);
+      return Promise.resolve({});
+    },
+  });
+  try {
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Switch to notifications tab.
+    calls.tabsConfig.onChange('notifications');
+    await Promise.resolve();
+    await Promise.resolve();
+
+    assert.ok(panels.notifications.onTestEmail, 'onTestEmail should be captured');
+    await panels.notifications.onTestEmail();
+
+    assert.equal(emailTestCalls.length, 1);
   } finally {
     restore();
   }

@@ -111,6 +111,8 @@ val serviceModule =
                 cipher = cipher,
                 slackClient = slackClient,
                 providerLabel = providerLabel,
+                emailService = get<EmailNotificationService>(),
+                appRootUrl = config.webApp?.rootUrl,
             )
         }
 

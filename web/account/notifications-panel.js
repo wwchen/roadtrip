@@ -56,6 +56,7 @@ export function buildNotificationsPayload(values) {
  *   settings: object,
  *   onDirtyChange?: (dirty: boolean) => void,
  *   onTest?: (channel: string) => Promise<void>,
+ *   onTestEmail?: () => Promise<void>,
  *   _mountFormSection?: Function,
  *   _mountSecretField?: Function,
  *   _mountBanner?: Function,
@@ -67,6 +68,7 @@ export function mountNotificationsPanel(container, config) {
     settings,
     onDirtyChange,
     onTest,
+    onTestEmail,
     _mountFormSection = _defaultMountFormSection,
     _mountSecretField = _defaultMountSecretField,
     _mountBanner = _defaultMountBanner,
@@ -88,6 +90,7 @@ export function mountNotificationsPanel(container, config) {
   const slackChannelHost = container.querySelector('[data-host="slack-channel"]');
   const bannerHost = container.querySelector('[data-host="banner"]');
   const testBtn = container.querySelector('[data-action="test-slack"]');
+  const testEmailBtn = container.querySelector('[data-action="test-email"]');
 
   const emailField = _mountFormSection(emailHost, {
     label: 'Notification email',
@@ -147,6 +150,20 @@ export function mountNotificationsPanel(container, config) {
     }
   }
 
+  async function handleTestEmail() {
+    if (testPending) return;
+    testPending = true;
+    try {
+      await onTestEmail?.();
+      showBanner('success', 'Test email sent successfully.');
+    } catch (err) {
+      const msg = settingsErrorMessage(err && err.code);
+      showBanner('error', msg);
+    } finally {
+      testPending = false;
+    }
+  }
+
   function onInput() {
     checkDirty();
   }
@@ -155,6 +172,8 @@ export function mountNotificationsPanel(container, config) {
     if (e.target && typeof e.target.closest === 'function') {
       if (e.target.closest('[data-action="test-slack"]')) {
         handleTest();
+      } else if (e.target.closest('[data-action="test-email"]')) {
+        handleTestEmail();
       }
     }
     // Also recheck dirty when secret-field toggle buttons are clicked.

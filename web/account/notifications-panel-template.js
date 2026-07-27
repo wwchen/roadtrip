@@ -10,6 +10,13 @@ export function notificationsPanelTemplate() {
   return `
     <div class="rt-notifications-panel">
       <div data-host="notification-email"></div>
+      <div class="rt-notifications-panel-test-row">
+        <button
+          type="button"
+          class="rt-notifications-panel-test-btn"
+          data-action="test-email"
+        >Send a test email</button>
+      </div>
       <div data-host="slack-token"></div>
       <div data-host="slack-channel"></div>
       <div class="rt-notifications-panel-test-row">

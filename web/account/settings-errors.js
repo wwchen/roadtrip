@@ -9,6 +9,7 @@ const MESSAGES = {
   slack_not_configured: 'No Slack token is set.',
   slack_send_failed: "Couldn't send to Slack.",
   encryption_unavailable: "Secret storage isn't configured on the server.",
+  email_send_failed: "Couldn't send the test email.",
 };
 
 const DEFAULT_MESSAGE = 'Something went wrong. Please try again.';

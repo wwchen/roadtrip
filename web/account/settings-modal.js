@@ -17,6 +17,7 @@ import { updateProfile as _defaultUpdateProfile } from '../api/account-api.js';
 import { updateNotifications as _defaultUpdateNotifications } from '../api/account-api.js';
 import { clearSlack as _defaultClearSlack } from '../api/account-api.js';
 import { sendSlackTest as _defaultSendSlackTest } from '../api/account-api.js';
+import { sendEmailTest as _defaultSendEmailTest } from '../api/account-api.js';
 import { signOut as _defaultSignOut } from '../api/auth-api.js';
 import { settingsErrorMessage } from './settings-errors.js';
 import { settingsModalBodyTemplate } from './settings-modal-template.js';
@@ -44,6 +45,7 @@ const TABS = [
  *   _updateNotifications?: Function,
  *   _clearSlack?: Function,
  *   _sendSlackTest?: Function,
+ *   _sendEmailTest?: Function,
  *   _signOut?: Function,
  * }} [config]
  * @returns {{ dispose(): void }}
@@ -61,6 +63,7 @@ export function mountSettingsModal(config = {}) {
     _updateNotifications = _defaultUpdateNotifications,
     _clearSlack = _defaultClearSlack,
     _sendSlackTest = _defaultSendSlackTest,
+    _sendEmailTest = _defaultSendEmailTest,
     _signOut = _defaultSignOut,
   } = config;
 
@@ -164,6 +167,7 @@ export function mountSettingsModal(config = {}) {
         settings: loadedSettings,
         onDirtyChange,
         onTest: (channel) => _sendSlackTest(channel),
+        onTestEmail: () => _sendEmailTest(),
       });
     } else if (tabId === 'account') {
       activePanelCtrl = _mountAccountPanel(panelHost, {
