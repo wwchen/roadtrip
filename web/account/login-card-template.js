@@ -13,9 +13,9 @@ export function loginCardTemplate({ providerLabel } = {}) {
 
   return `
     <div class="lc-brand-mark" aria-hidden="true">
-      <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="40" height="40" rx="8" fill="var(--rt-accent, #1a73e8)"/>
-        <path d="M20 8 L30 28 H10 Z" fill="#fff"/>
+      <svg class="lc-brand-mark-svg" width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect class="lc-brand-mark-bg" width="40" height="40" rx="8"/>
+        <path class="lc-brand-mark-glyph" d="M20 8 L30 28 H10 Z"/>
       </svg>
     </div>
     <h2 class="lc-title">Sign in to Roadtrip</h2>

@@ -19,6 +19,18 @@
   align-items: center;
 }
 
+.lc-brand-mark-svg {
+  color: var(--rt-text);
+}
+
+.lc-brand-mark-bg {
+  fill: var(--rt-brand);
+}
+
+.lc-brand-mark-glyph {
+  fill: currentColor;
+}
+
 .lc-title {
   margin: 0;
   font-size: var(--rt-font-size-xl, 1.25rem);
