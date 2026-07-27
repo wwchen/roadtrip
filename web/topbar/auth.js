@@ -9,8 +9,9 @@
 // configured. A fresh clone with no Auth0 tenant should look exactly as it did
 // before auth existed, not show a control that cannot work.
 //
-// Sign-in and sign-out are full-page navigations. They end in a cross-site
-// redirect to the provider, which fetch cannot follow.
+// The topbar "Sign in" button opens the in-app LoginCard (modal). The card's
+// "Sign in" button and the topbar "Sign out" button trigger full-page
+// navigations (cross-site redirects to the provider, which fetch cannot follow).
 
 import { fetchMe, signIn, signOut } from '../api/auth-api.js';
 import { mountLoginCard } from '../account/login-card.js';
