@@ -180,6 +180,67 @@ class MaterializeGuardTest(unittest.TestCase):
             self.assertEqual("HANDWRITTEN=1\n", (root / ".env").read_text())
 
 
+class PlaceholderTest(unittest.TestCase):
+    def test_commented_out_placeholder_is_inert(self):
+        # sops ignores comments, so a commented placeholder must not block the
+        # migration — that's how you defer a host you don't have a key for yet.
+        text = "      - age1real\n      # - age1PLACEHOLDER_FOR_LATER\n"
+        self.assertEqual([], secrets_tool.active_placeholders(text))
+
+    def test_live_placeholder_is_reported(self):
+        text = "      - age1real\n      - age1PLACEHOLDER_REPLACE_ME\n"
+        self.assertEqual(
+            ["- age1PLACEHOLDER_REPLACE_ME"], secrets_tool.active_placeholders(text)
+        )
+
+
+class ImportSourceTest(unittest.TestCase):
+    def test_explicit_source_wins(self):
+        with temp_root() as root:
+            source = root / "elsewhere.env"
+            source.write_text("A=1\n")
+            self.assertEqual(
+                source, secrets_tool.resolve_import_source(str(source))
+            )
+
+    def test_local_env_is_the_default(self):
+        with temp_root() as root:
+            (root / ".env").write_text("A=1\n")
+            self.assertEqual(root / ".env", secrets_tool.resolve_import_source(None))
+
+    def test_missing_source_names_what_it_tried(self):
+        with temp_root():
+            with self.assertRaises(secrets_tool.SecretsError) as caught:
+                secrets_tool.resolve_import_source(None)
+            self.assertIn("SOURCE=", str(caught.exception))
+
+    def test_falls_back_to_the_main_clone_from_a_worktree(self):
+        """A worktree has no gitignored .env; the real one is in the main clone."""
+        with temp_root() as root:
+            main = root / "main"
+            main.mkdir()
+            subprocess.run(["git", "init", "-q"], cwd=main, check=True)
+            for key, value in (("user.email", "t@example.com"), ("user.name", "t")):
+                subprocess.run(["git", "config", key, value], cwd=main, check=True)
+            (main / "f").write_text("x")
+            subprocess.run(["git", "add", "f"], cwd=main, check=True)
+            subprocess.run(["git", "commit", "-qm", "init"], cwd=main, check=True)
+            (main / ".env").write_text("A=1\n")
+
+            tree = root / "wt"
+            subprocess.run(
+                ["git", "worktree", "add", "-q", "-b", "wt", str(tree)],
+                cwd=main,
+                check=True,
+            )
+            secrets_tool.ROOT = tree
+            secrets_tool.ENV_FILE = tree / ".env"
+
+            self.assertEqual(
+                (main / ".env").resolve(), secrets_tool.resolve_import_source(None)
+            )
+
+
 @unittest.skipUnless(HAS_SOPS, "requires sops and age-keygen")
 class RoundTripTest(unittest.TestCase):
     """End-to-end through real sops: import -> materialize -> check."""

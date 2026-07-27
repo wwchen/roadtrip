@@ -77,14 +77,31 @@ this machine locks you out of every secret.
 
 ### 2. Do the same on `mini-ca`
 
+The deploy host needs its own identity. It doesn't need this branch checked out
+to make one — `age-keygen` is enough:
+
 ```bash
-ssh mini@mini-ca 'cd ~/workspace/roadtrip && make secrets-init'
+ssh mini@mini-ca 'mkdir -p ~/.config/sops/age && \
+  test -f ~/.config/sops/age/keys.txt || age-keygen -o ~/.config/sops/age/keys.txt; \
+  chmod 600 ~/.config/sops/age/keys.txt; \
+  grep "public key" ~/.config/sops/age/keys.txt'
 ```
+
+The `test -f` guard matters: `age-keygen -o` on an existing file would replace
+the identity and lock the host out of the vault. Once the branch *is* deployed
+there, `make secrets-init` does the same thing and is idempotent.
+
+If `age` isn't installed on the host yet: `brew install sops age`.
 
 ### 3. Record both public keys
 
 Replace the two placeholders in [`.sops.yaml`](../.sops.yaml) with the public
 keys from steps 1 and 2, keeping the comment that names each holder.
+
+**Every placeholder must go before you can import.** sops hands each entry to
+age as a real recipient, and a placeholder isn't a valid public key — the
+encryption fails outright. If you don't have a host's key yet, delete or
+comment out its line and add the host later (step 2, then `make secrets-rotate`).
 
 ### 4. Encrypt the existing `.env`
 
@@ -93,6 +110,10 @@ From the machine that has the real, current `.env`:
 ```bash
 make secrets-import
 ```
+
+Run from a git worktree, this finds the main clone's `.env` automatically —
+worktrees don't carry gitignored files. Point at any other file with
+`make secrets-import SOURCE=/path/to/.env`.
 
 Then verify the round trip before you trust it:
 

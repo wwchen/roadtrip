@@ -210,8 +210,17 @@ def cmd_init(_args: argparse.Namespace) -> int:
     print("Public key for this host:")
     print(f"  {public_key}")
     print()
-    print(f"Add it to the age recipients in {SOPS_CONFIG.relative_to(ROOT)},")
-    print("then run `make secrets-rotate` from a host that can already decrypt.")
+    print(f"Next: add it to the age recipients in {SOPS_CONFIG.relative_to(ROOT)},")
+    print("removing any placeholder line you don't have a key for yet — sops")
+    print("cannot encrypt to a recipient that isn't a real public key. Then:")
+    print()
+    if SECRETS_FILE.exists():
+        # A vault already exists, so this is a host being added to an existing
+        # set: an existing holder re-wraps the data key for the new recipient.
+        print("  make secrets-rotate   (from a host that can already decrypt)")
+    else:
+        # First-ever setup. rotate would fail here — there's no vault to re-wrap.
+        print("  make secrets-import   (creates the vault from your current .env)")
     print()
     print("This identity is the private half — it is not in the repo and cannot")
     print("be recovered. Back up the file above if losing this host would lock")
@@ -219,20 +228,76 @@ def cmd_init(_args: argparse.Namespace) -> int:
     return 0
 
 
+def main_checkout_env() -> Path | None:
+    """The main clone's .env, when ROOT is a linked git worktree.
+
+    Worktrees don't carry gitignored files, so running the migration from one
+    finds no .env even though the real one is sitting in the main checkout.
+    """
+    proc = subprocess.run(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return None
+    # Resolved to match ROOT, which is resolved — otherwise a symlinked path
+    # (macOS /var -> /private/var) makes the "same file?" check below miss.
+    candidate = (Path(proc.stdout.strip()).parent / ".env").resolve()
+    return candidate if candidate != ENV_FILE.resolve() and candidate.exists() else None
+
+
+def resolve_import_source(explicit: str | None) -> Path:
+    if explicit:
+        source = Path(explicit).expanduser()
+        if not source.exists():
+            raise SecretsError(f"{source} does not exist — nothing to import.")
+        return source
+    if ENV_FILE.exists():
+        return ENV_FILE
+    from_main = main_checkout_env()
+    if from_main is not None:
+        print(f"note: no .env here (this is a git worktree); using {from_main}")
+        return from_main
+    raise SecretsError(
+        f"no plaintext .env found to import.\n"
+        f"Looked in: {ENV_FILE}\n"
+        "Point at one explicitly with: make secrets-import SOURCE=/path/to/.env"
+    )
+
+
+def active_placeholders(text: str) -> list[str]:
+    """Placeholder recipient lines that aren't commented out.
+
+    A commented-out placeholder is inert — sops ignores it — so it shouldn't
+    block the migration. Only a live one would be handed to age as a recipient,
+    where it fails as an invalid public key.
+    """
+    return [
+        line.strip()
+        for line in text.splitlines()
+        if "PLACEHOLDER" in line and not line.strip().startswith("#")
+    ]
+
+
 def cmd_import(args: argparse.Namespace) -> int:
     """One-time migration: encrypt an existing plaintext .env into the vault."""
-    source = Path(args.source) if args.source else ENV_FILE
-    if not source.exists():
-        raise SecretsError(f"{source} does not exist — nothing to import.")
+    source = resolve_import_source(args.source)
     if SECRETS_FILE.exists() and not args.force:
         raise SecretsError(
             f"{SECRETS_FILE.relative_to(ROOT)} already exists. Use `make secrets-edit` "
             "to change values, or pass --force to replace the whole vault."
         )
-    if "PLACEHOLDER" in SOPS_CONFIG.read_text():
+    stale = active_placeholders(SOPS_CONFIG.read_text())
+    if stale:
         raise SecretsError(
-            f"{SOPS_CONFIG.relative_to(ROOT)} still has placeholder age recipients.\n"
-            "Run `make secrets-init` and replace them with real public keys first."
+            f"{SOPS_CONFIG.relative_to(ROOT)} still has placeholder age recipients:\n"
+            + "\n".join(f"    {line}" for line in stale)
+            + "\nsops cannot encrypt to a recipient that isn't a real public key.\n"
+            "Delete or comment out any host you don't have a key for yet — you can\n"
+            "add it later with `make secrets-init` on that host, then "
+            "`make secrets-rotate`."
         )
 
     SECRETS_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -349,9 +414,9 @@ def cmd_check(args: argparse.Namespace) -> int:
         if not value.startswith("ENC["):
             errors.append(f"{key} is not encrypted in {SECRETS_FILE.relative_to(ROOT)}")
 
-    if "PLACEHOLDER" in SOPS_CONFIG.read_text():
+    for line in active_placeholders(SOPS_CONFIG.read_text()):
         errors.append(
-            f"{SOPS_CONFIG.relative_to(ROOT)} still contains placeholder age recipients."
+            f"{SOPS_CONFIG.relative_to(ROOT)} still has a placeholder recipient: {line}"
         )
 
     tracked = subprocess.run(
@@ -405,7 +470,13 @@ def cmd_recipients(_args: argparse.Namespace) -> int:
 def cmd_rotate(_args: argparse.Namespace) -> int:
     """Re-encrypt the vault's data key for the current .sops.yaml recipients."""
     if not SECRETS_FILE.exists():
-        raise SecretsError(f"{SECRETS_FILE.relative_to(ROOT)} is missing.")
+        # Distinct from "something went wrong": rotate re-wraps an existing
+        # vault, so on first-ever setup the command you want is import.
+        raise SecretsError(
+            f"{SECRETS_FILE.relative_to(ROOT)} does not exist yet, so there is "
+            "nothing to re-encrypt.\nFirst-time setup creates the vault instead:"
+            "\n    make secrets-import"
+        )
     run_sops(["updatekeys", "--yes", str(SECRETS_FILE)], capture=False)
     print("recipients updated — commit secrets/secrets.enc.env.")
     print()

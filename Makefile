@@ -157,8 +157,11 @@ secrets:
 secrets-init:
 	@$(SECRETS) init
 
+# SOURCE= points at the plaintext .env to encrypt. Defaults to ./.env, falling
+# back to the main clone's .env when run from a git worktree (which doesn't
+# carry gitignored files).
 secrets-import:
-	@$(SECRETS) import
+	@$(SECRETS) import $(if $(SOURCE),--source "$(SOURCE)")
 
 secrets-edit:
 	@$(SECRETS) edit
