@@ -1,0 +1,191 @@
+/* ============================================================
+   Modal overlay — Roadtrip Design System
+   Tokens: --rt-* only (no inline hex).
+   Variants:
+     Default  — centered card on all viewports
+     Sheet    — bottom-sheet on mobile when .rt-modal-sheet is present
+   ============================================================ */
+
+/* ── Host container ─────────────────────────────────────────── */
+
+/* The host element that receives the modal markup should be positioned
+   so it covers the viewport. Typically the caller sets this, but we
+   provide sensible defaults for a fixed full-screen overlay. */
+.rt-modal-host {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Scrim ──────────────────────────────────────────────────── */
+
+.rt-modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.62);
+  z-index: 900;
+  /* Subtle fade-in */
+  animation: rt-modal-fade-in 160ms ease;
+}
+
+/* ── Card (default: centered) ───────────────────────────────── */
+
+.rt-modal-card {
+  position: fixed;
+  z-index: 901;
+  /* Center on screen */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+
+  background: var(--rt-surface);
+  border: 1px solid var(--rt-border-strong);
+  border-radius: var(--rt-r-xl);
+  box-shadow: var(--rt-e4);
+
+  width: min(480px, calc(100vw - 32px));
+  max-height: min(80vh, 640px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  animation: rt-modal-slide-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ── Header ─────────────────────────────────────────────────── */
+
+.rt-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px 14px;
+  border-bottom: 1px solid var(--rt-border);
+  flex: 0 0 auto;
+}
+
+.rt-modal-title {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--rt-text);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rt-modal-close-btn {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  /* Ensure ≥44px tap target via padding on surrounding context — the button
+     itself is small to stay visually quiet, but sits inside a 44px tall header. */
+  border: none;
+  background: var(--rt-fill-subtle);
+  border-radius: var(--rt-r-md);
+  color: var(--rt-muted);
+  font-size: 18px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+
+.rt-modal-close-btn:hover {
+  background: var(--rt-fill-hover);
+  color: var(--rt-text);
+}
+
+.rt-modal-close-btn:active {
+  background: var(--rt-fill-active);
+}
+
+/* ── Body ───────────────────────────────────────────────────── */
+
+.rt-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px;
+}
+
+/* ── Grab handle (sheet only) ───────────────────────────────── */
+
+.rt-modal-grab-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: var(--rt-r-pill);
+  background: var(--rt-border-strong);
+  margin: 10px auto 0;
+  flex: 0 0 auto;
+}
+
+/* ── Mobile bottom-sheet variant ────────────────────────────── */
+
+@media (max-width: 560px) {
+  .rt-modal-sheet {
+    /* Override centered positioning */
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: none;
+
+    width: 100%;
+    max-height: 88vh;
+    border-radius: var(--rt-r-2xl) var(--rt-r-2xl) 0 0;
+
+    /* Slide up from bottom */
+    animation: rt-modal-slide-up 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+/* On wider screens the sheet behaves like a normal centered card
+   (the .rt-modal-sheet rules above only apply inside the breakpoint). */
+
+/* ── Animations ─────────────────────────────────────────────── */
+
+@keyframes rt-modal-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes rt-modal-slide-in {
+  from { opacity: 0; transform: translate(-50%, calc(-50% + 12px)); }
+  to   { opacity: 1; transform: translate(-50%, -50%); }
+}
+
+@keyframes rt-modal-slide-up {
+  from { opacity: 0; transform: translateY(32px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Touch targets on mobile ────────────────────────────────── */
+
+@media (max-width: 560px) {
+  .rt-modal-header {
+    padding: 12px 16px 12px;
+    min-height: 44px;
+  }
+
+  .rt-modal-close-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 22px;
+    border-radius: var(--rt-r-lg);
+  }
+
+  .rt-modal-body {
+    padding: 16px;
+  }
+}
