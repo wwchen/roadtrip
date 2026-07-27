@@ -94,25 +94,22 @@ val serviceModule =
             )
         }
 
-        // Nullable singleton: null when no encryption key is configured.
-        single<SecretCipher?> {
-            get<AppConfig>().secrets?.let { SecretCipher(it.encryptionKey) }
-        }
-
-        // Per-user Slack client used by UserSettingsService (distinct from the
-        // global bot-token client used for watch alerts). Null when Slack is not configured.
-        single<SlackClient?> {
-            get<AppConfig>().slack?.let { SlackClient(it) }
-        }
-
         single {
             val config: AppConfig = get()
             val providerLabel: String? = config.auth?.provider
+            // Optional deps are built inline here, NOT registered as `single<T?>`.
+            // A Koin `single { }` that produces null throws at resolution
+            // ("Single instance created couldn't return value") — which crashed
+            // boot on any install without an encryption key / Slack configured.
+            // cipher == null  => token storage disabled (encryption key absent).
+            // slackClient == null => Slack not configured (per-user test/validate disabled).
+            val cipher: SecretCipher? = config.secrets?.let { SecretCipher(it.encryptionKey) }
+            val slackClient: SlackClient? = config.slack?.let { SlackClient(it) }
             UserSettingsService(
                 userRepo = get<UserRepo>(),
                 settingsRepo = get<UserSettingsRepo>(),
-                cipher = getOrNull<SecretCipher>(),
-                slackClient = getOrNull<SlackClient>(),
+                cipher = cipher,
+                slackClient = slackClient,
                 providerLabel = providerLabel,
             )
         }
