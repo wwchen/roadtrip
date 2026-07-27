@@ -32,3 +32,27 @@ this split fixes it.
 - `tabular-nums` on every price, date, distance, count and coordinate.
 - Touch targets ≥ 44px; inputs at 16px font to stop iOS zoom-on-focus.
 - One primary (solid blue) per surface; everything else secondary/tertiary.
+
+## Modal overlay / bottom-sheet convention
+
+Use `mountModal(container, config)` from `web/design-system/modal.js` for any overlay
+that blocks the rest of the UI.
+
+| Config | Default | Effect |
+|---|---|---|
+| `title` | `''` | Header title text (escaped) |
+| `sheetOnMobile` | `false` | Renders as bottom-sheet on `≤560px` viewports |
+| `onClose` | `undefined` | Called on Escape, scrim click, and header ✕ |
+| `closeOnBackdrop` | `true` | Toggle scrim-click-to-close |
+
+**Three-file contract:**
+- `modal-template.js` — pure function, no DOM, imports only `escapeHtml` from `../core.js`
+- `modal.js` — controller: injects `modal.css` via `<link>` with an id-guard, delegates
+  click events on the container, adds `keydown` Escape on `document`. Returns
+  `{ close(), setBody(el), dispose() }`.
+- `modal.css` — `--rt-*` tokens only; scrim, centered card, `@media (max-width:560px)`
+  bottom-sheet variant with grab handle.
+
+**Anatomy:** scrim (`data-modal-backdrop`) + card (`.rt-modal-card`) with header
+(title + `[data-modal-close]` ✕) and body (`[data-modal-body]`). When `sheetOnMobile`
+is set, `.rt-modal-sheet` is added and a grab-handle renders above the header.
