@@ -101,10 +101,14 @@ val serviceModule =
             // A Koin `single { }` that produces null throws at resolution
             // ("Single instance created couldn't return value") — which crashed
             // boot on any install without an encryption key / Slack configured.
-            // cipher == null  => token storage disabled (encryption key absent).
-            // slackClient == null => Slack not configured (per-user test/validate disabled).
+            // cipher == null => token storage disabled (encryption key absent).
             val cipher: SecretCipher? = config.secrets?.let { SecretCipher(it.encryptionKey) }
-            val slackClient: SlackClient? = config.slack?.let { SlackClient(it) }
+            // Per-user Slack transport is ALWAYS available and is independent of the
+            // global watch-alert Slack config: authTest(token) and the token-
+            // parameterized postMessage carry their own token. Gating this on
+            // config.slack made saving a user token 500 on installs with an
+            // encryption key but no global bot-token/channel.
+            val slackClient = SlackClient(config.slack)
             UserSettingsService(
                 userRepo = get<UserRepo>(),
                 settingsRepo = get<UserSettingsRepo>(),
