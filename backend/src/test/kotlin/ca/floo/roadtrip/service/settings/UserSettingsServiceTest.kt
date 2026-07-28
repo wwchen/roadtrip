@@ -99,11 +99,10 @@ private class FakeUserSettingsRepo : UserSettingsRepo(ctx = detachedCtx) {
 private class FakeSlackClient(
     private var authTestResult: SlackIdentity? = SlackIdentity("TestTeam", "TestBot"),
     private var postResult: Boolean = true,
-) : SlackClient(
-        config =
-            ca.floo.roadtrip.config
-                .SlackConfig(botToken = "fake-token", defaultChannel = "#fake"),
-    ) {
+    // config = null: a per-user-only transport with NO global Slack configured.
+    // The whole suite therefore proves per-user Slack works without global config
+    // (the P1 the reviewer flagged).
+) : SlackClient(config = null) {
     var authTestCalls = 0
     var lastAuthTestToken: String? = null
     var postCalls = 0
@@ -168,7 +167,7 @@ private fun makeService(
     userRepo: FakeUserRepo,
     settingsRepo: FakeUserSettingsRepo,
     cipher: SecretCipher? = SecretCipher(testKey),
-    slackClient: FakeSlackClient? = FakeSlackClient(),
+    slackClient: FakeSlackClient = FakeSlackClient(),
     providerLabel: String? = "Auth0",
     emailService: EmailNotificationService = makeEmailService(),
     appRootUrl: String? = null,

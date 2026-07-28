@@ -12,6 +12,7 @@ import io.ktor.http.headersOf
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -101,5 +102,35 @@ class PerUserSlackTest {
             val client = SlackClient(config, HttpClient(engine))
             val result = client.authTest("some-token")
             assertNull(result, "authTest must return null on network failure")
+        }
+
+    @Test
+    fun `per-user methods work with no global config (config null)`() =
+        runBlocking {
+            val capture = mutableMapOf<String, String?>()
+            val engine =
+                MockEngine { req ->
+                    capture["auth"] = req.headers[HttpHeaders.Authorization]
+                    respond(
+                        content = """{"ok":true,"team":"T","user":"bot"}""",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+            // No global Slack configured — a valid per-user-only transport.
+            val client = SlackClient(config = null, httpClient = HttpClient(engine))
+
+            assertNotNull(client.authTest("xoxb-user"), "authTest must work without global config")
+            assertEquals("Bearer xoxb-user", capture["auth"], "authTest uses the caller's token")
+            assertTrue(
+                client.postMessage(token = "xoxb-user", channel = "#c", text = "hi"),
+                "token postMessage must work without global config",
+            )
+
+            // The global-token overload has no bot token → returns false, never throws.
+            assertFalse(
+                client.postMessage("#c", "global message"),
+                "global postMessage returns false when no global config is present",
+            )
         }
 }

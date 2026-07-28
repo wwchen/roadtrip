@@ -50,7 +50,11 @@ data class SlackIdentity(
  * [ca.floo.roadtrip.service.ratelimit.VendorRateLimiter]).
  */
 open class SlackClient(
-    private val config: SlackConfig,
+    // Optional: only the global-token [postMessage] overload needs it. The
+    // per-user methods ([authTest], the token-parameterized [postMessage]) carry
+    // their own token, so a SlackClient constructed with a null config is a
+    // valid per-user transport even when no global Slack is configured.
+    private val config: SlackConfig? = null,
     private val httpClient: HttpClient = HttpClient(CIO) { engine { requestTimeout = SLACK_REQUEST_TIMEOUT_MS } },
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -77,7 +81,17 @@ open class SlackClient(
         text: String,
         blocks: List<SlackBlockDto>? = null,
         attachments: List<SlackAttachmentDto>? = null,
-    ): Boolean = postMessage(config.botToken, channel, text, blocks, attachments)
+    ): Boolean {
+        val botToken = config?.botToken
+        if (botToken.isNullOrBlank()) {
+            // No global bot token — this transport was built per-user only. Never
+            // throw (mirrors the rest of postMessage); the global alert path has
+            // its own configured client.
+            log.warn("Slack global config absent; global message not sent")
+            return false
+        }
+        return postMessage(botToken, channel, text, blocks, attachments)
+    }
 
     /**
      * Posts one message to [channel] using the caller-supplied [token].

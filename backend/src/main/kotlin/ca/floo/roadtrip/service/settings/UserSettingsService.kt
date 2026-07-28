@@ -91,7 +91,9 @@ class UserSettingsService(
     private val userRepo: UserRepo,
     private val settingsRepo: UserSettingsRepo,
     private val cipher: SecretCipher?,
-    private val slackClient: SlackClient?,
+    // Always available and independent of the global Slack config — the per-user
+    // methods carry their own token (see [ServiceModule]).
+    private val slackClient: SlackClient,
     private val providerLabel: String?,
     private val emailService: EmailNotificationService,
     private val appRootUrl: String? = null,
@@ -157,8 +159,7 @@ class UserSettingsService(
         if (!req.slackToken.isNullOrBlank()) {
             // Require cipher before calling Slack (fail fast without a network call)
             val c = cipher ?: throw SettingsError.EncryptionUnavailable()
-            val client = requireNotNull(slackClient) { "Slack client not configured" }
-            client.authTest(req.slackToken) ?: throw SettingsError.SlackRejected()
+            slackClient.authTest(req.slackToken) ?: throw SettingsError.SlackRejected()
             newTokenCipher = c.seal(req.slackToken)
             newTokenHint = req.slackToken.takeLast(4)
         } else {
@@ -205,12 +206,11 @@ class UserSettingsService(
         val c = cipher ?: throw SettingsError.SlackNotConfigured("Encryption not configured")
         val settings = settingsRepo.find(userId)
         val tokenCipher = settings?.slackTokenCipher ?: throw SettingsError.SlackNotConfigured()
-        val client = requireNotNull(slackClient) { "Slack client not configured" }
 
         val plainToken = c.open(tokenCipher)
         val channel = channelOverride ?: settings.slackChannel
 
-        val sent = client.postMessage(token = plainToken, channel = channel ?: "", text = "Roadtrip test message")
+        val sent = slackClient.postMessage(token = plainToken, channel = channel ?: "", text = "Roadtrip test message")
         if (!sent) throw SettingsError.SlackSendFailed()
         return SlackTestResponseDto(sent = true, channel = channel)
     }
