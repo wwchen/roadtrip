@@ -15,14 +15,24 @@ fi
 
 # Dead-branch guard. Committing onto a branch whose PR is already merged or
 # closed produces work that cannot land: the PR will never pick it up, and the
-# branch is usually deleted shortly after. Nothing errors at the time, so it is
-# discovered hours later, which is exactly how work gets lost — most often by an
-# agent that resumed an old worktree without checking what happened to its PR.
+# branch is deleted on merge. Nothing errors at the time, so it is discovered
+# hours later, which is exactly how work gets lost — most often by an agent that
+# resumed an old worktree without checking what happened to its PR.
 #
-# Deliberately fails *open*. No gh, not authenticated, offline, rate-limited,
-# no remote, or simply no PR for this branch all look the same from here (an
-# empty result), and none of them justify blocking a commit. Only an
-# unambiguous "every PR for this head is merged or closed" blocks.
+# Matching the branch *name* is not enough, because names get reused. Deleting a
+# merged branch and starting fresh work under the same name is normal, and those
+# commits land fine under a new PR. What condemns a branch is still carrying the
+# finished PR's commits. This repo squash- and rebase-merges only (merge commits
+# are disabled), so a merged PR's head SHA never appears on master and a branch
+# recreated from master cannot reach it — reachability separates the two cases
+# exactly. The base-branch test below covers the dozen legacy merge commits in
+# this repo's early history, where the head SHA *did* land on master and
+# reachability alone would condemn every branch later cut from it.
+#
+# Deliberately fails *open*. No gh, not authenticated, offline, rate-limited, no
+# remote, no PR for this branch, or a head SHA no longer in the local object
+# database all look the same from here, and none of them justify blocking a
+# commit. Only an unambiguous "a finished PR's commits are still under us" blocks.
 #
 # Costs one API call per commit on a named non-default branch. That is the
 # price of catching the transition — a cached "alive" verdict would miss the
@@ -38,27 +48,47 @@ if [ "${ALLOW_DEAD_BRANCH:-}" != "1" ] &&
    command -v gh >/dev/null 2>&1; then
   gh_timeout=""
   command -v timeout >/dev/null 2>&1 && gh_timeout="timeout 10"
-  pr_json=$(
+  # TSV keeps each PR's state paired with its head SHA. gh's --jq is built in,
+  # so this needs no system jq.
+  pr_rows=$(
     $gh_timeout gh pr list --head "$branch" --state all --limit 10 \
-      --json state,number 2>/dev/null || true
+      --json number,state,headRefOid,baseRefName \
+      --jq '.[] | [.number, .state, .headRefOid, .baseRefName] | @tsv' 2>/dev/null || true
   )
   # An OPEN PR means the branch is live even if an earlier PR from the same head
   # was closed — #497/#500 style supersession leaves both on record.
-  if [ -n "$pr_json" ] &&
-     ! printf '%s' "$pr_json" | grep -q '"state":"OPEN"' &&
-     printf '%s' "$pr_json" | grep -qE '"state":"(MERGED|CLOSED)"'; then
-    echo "refusing to commit on '$branch' — its pull request is already finished."
-    printf '%s' "$pr_json" |
-      grep -oE '"number":[0-9]+,"state":"[A-Z]+"|"state":"[A-Z]+","number":[0-9]+' |
-      sed -E 's/"number":([0-9]+),"state":"([A-Z]+)"/  PR #\1 is \2/; s/"state":"([A-Z]+)","number":([0-9]+)/  PR #\2 is \1/'
-    echo
-    echo "Commits here cannot land. Move the work to a fresh branch:"
-    echo "    git switch -c <new-branch> origin/master"
-    echo "    git cherry-pick <sha>          # if you already committed here"
-    echo
-    echo "If the PR is being reopened, or you are amending before the branch is"
-    echo "deleted:  ALLOW_DEAD_BRANCH=1 git commit ..."
-    exit 1
+  if [ -n "$pr_rows" ] && ! printf '%s\n' "$pr_rows" | cut -f2 | grep -qx OPEN; then
+    dead_prs=""
+    while IFS=$'\t' read -r pr_number pr_state pr_head pr_base; do
+      [ -n "${pr_head:-}" ] || continue
+      # Not in our history: either a branch reusing the name, or a SHA we no
+      # longer have locally. Committing on top of neither loses anything.
+      git merge-base --is-ancestor "$pr_head" HEAD 2>/dev/null || continue
+      # Reachable only because it already landed on the base branch, which every
+      # branch cut from that base inherits. Says nothing about this branch.
+      if git rev-parse --verify --quiet "origin/$pr_base" >/dev/null 2>&1 &&
+         git merge-base --is-ancestor "$pr_head" "origin/$pr_base" 2>/dev/null; then
+        continue
+      fi
+      dead_prs="${dead_prs}  PR #${pr_number} is ${pr_state} — its commit ${pr_head:0:7} is still in this branch"$'\n'
+    done <<EOF
+$pr_rows
+EOF
+    if [ -n "$dead_prs" ]; then
+      echo "refusing to commit on '$branch' — its pull request is already finished."
+      printf '%s' "$dead_prs"
+      echo
+      echo "Commits here cannot land. Move the work to a fresh branch:"
+      echo "    git switch -c <new-branch> origin/master"
+      echo "    git cherry-pick <sha>          # if you already committed here"
+      echo
+      echo "To keep using this name for new work, put it back on master first:"
+      echo "    git switch -C $branch origin/master   # drops the commits listed above"
+      echo
+      echo "If the PR is being reopened, or you are amending before the branch is"
+      echo "deleted:  ALLOW_DEAD_BRANCH=1 git commit ..."
+      exit 1
+    fi
   fi
 fi
 
