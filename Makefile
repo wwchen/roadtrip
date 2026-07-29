@@ -88,7 +88,7 @@ recgov-atc: _ensure-hooks
 # lockfile and browser cache are unchanged, install-hooks just rewrites
 # .git/config.
 install: install-hooks
-	brew install tilt docker openjdk node
+	brew install tilt docker openjdk node sops age
 	cd companion && npm install && npx playwright install chromium
 
 # Two-step refresh:

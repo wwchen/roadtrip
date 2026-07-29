@@ -137,9 +137,13 @@ rows, writing the fetcher if needed, and wiring the Kotlin ETL adapter.
 First time only:
 
 ```sh
-make install                 # Homebrew deps + companion (npm + playwright) + git hooks
+make install                 # Homebrew deps (incl. sops + age) + companion (npm + playwright) + git hooks
 ./secrets/manage.py init     # this host's age key — see docs/secrets.md
 ```
+
+A deploy host needs neither Tilt nor Node and should skip `make install`;
+**[docs/installation.md](docs/installation.md)** splits the two setups and
+lists version requirements.
 
 Runtime secrets live encrypted in `secrets/` and are mounted into containers at
 `/run/secrets`; nothing writes a plaintext `.env`. `./secrets/manage.py ls`
