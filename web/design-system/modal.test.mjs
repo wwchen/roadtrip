@@ -11,6 +11,14 @@ test('modalTemplate renders title, close affordance, scrim, and a body host', ()
   assert.match(html, /Sign in/);
 });
 
+test('modalTemplate marks the handle and header as drag regions, but not the body', () => {
+  const html = modalTemplate({ title: 'Sign in', sheetOnMobile: true });
+  // A drag may only start where the content does not scroll.
+  assert.match(html, /class="rt-modal-grab-handle" data-modal-drag/);
+  assert.match(html, /class="rt-modal-header" data-modal-drag/);
+  assert.doesNotMatch(html, /rt-modal-body" data-modal-drag/);
+});
+
 test('modalTemplate escapes the title', () => {
   assert.match(modalTemplate({ title: '<script>x</script>' }), /&lt;script&gt;/);
 });
@@ -119,5 +127,86 @@ test('setBody appends element into the modal body host', () => {
     } else {
       globalThis.document = originalDocument;
     }
+  }
+});
+
+/**
+ * The ✕, the backdrop and Escape all funnel through close(), which only invokes
+ * onClose. A caller that omits it gets a modal whose every dismissal affordance
+ * is inert — which is exactly what shipped in the login card. These pin the
+ * wiring so the next caller cannot repeat it silently.
+ */
+test('the close button, the backdrop and Escape each invoke onClose', () => {
+  const originalDocument = globalThis.document;
+  let keydownHandler = null;
+  globalThis.document = {
+    getElementById() { return null; },
+    createElement(tagName) { return { id: '', rel: '', href: '', tagName }; },
+    head: { appendChild() {} },
+    addEventListener(type, fn) { if (type === 'keydown') keydownHandler = fn; },
+    removeEventListener() {},
+  };
+
+  let clickHandler = null;
+  const host = {
+    innerHTML: '',
+    addEventListener(type, fn) { if (type === 'click') clickHandler = fn; },
+    removeEventListener() {},
+  };
+
+  try {
+    let closes = 0;
+    mountModal(host, { title: 'X', onClose: () => { closes += 1; } });
+
+    // Header ✕
+    clickHandler({ target: { closest: (sel) => (sel === '[data-modal-close]' ? {} : null) } });
+    assert.equal(closes, 1, 'the ✕ should close');
+
+    // Scrim
+    clickHandler({ target: { closest: () => null, dataset: { modalBackdrop: '' } } });
+    assert.equal(closes, 2, 'a tap outside the card should close');
+
+    // Escape
+    keydownHandler({ key: 'Escape' });
+    assert.equal(closes, 3, 'Escape should close');
+
+    // Anything else must not.
+    clickHandler({ target: { closest: () => null, dataset: {} } });
+    assert.equal(closes, 3, 'a tap on the card itself should not close');
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test('closeOnBackdrop false keeps a backdrop tap from closing, but not the ✕', () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = {
+    getElementById() { return null; },
+    createElement(tagName) { return { id: '', rel: '', href: '', tagName }; },
+    head: { appendChild() {} },
+    addEventListener() {},
+    removeEventListener() {},
+  };
+
+  let clickHandler = null;
+  const host = {
+    innerHTML: '',
+    addEventListener(type, fn) { if (type === 'click') clickHandler = fn; },
+    removeEventListener() {},
+  };
+
+  try {
+    let closes = 0;
+    mountModal(host, { title: 'X', closeOnBackdrop: false, onClose: () => { closes += 1; } });
+
+    clickHandler({ target: { closest: () => null, dataset: { modalBackdrop: '' } } });
+    assert.equal(closes, 0, 'backdrop is opt-out');
+
+    clickHandler({ target: { closest: (sel) => (sel === '[data-modal-close]' ? {} : null) } });
+    assert.equal(closes, 1, 'the ✕ always closes');
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
   }
 });

@@ -7,7 +7,7 @@
 // signIn and fetchMe are injectable so tests can pass fakes without real
 // navigation or network calls.
 
-import { mountModal } from '../design-system/modal.js';
+import { mountModal as _defaultMountModal } from '../design-system/modal.js';
 import { signIn as _defaultSignIn, fetchMe as _defaultFetchMe } from '../api/auth-api.js';
 import { loginCardTemplate } from './login-card-template.js';
 
@@ -36,6 +36,7 @@ export function _handleSignInClick(e, signInFn, returnTo) {
  *   returnTo?: string,
  *   _fetchMe?: () => Promise<object>,
  *   _signIn?: (returnTo?: string) => void,
+ *   _mountModal?: Function,
  * }} [config]
  * @returns {{ dispose(): void }}
  */
@@ -44,6 +45,7 @@ export function mountLoginCard(config = {}) {
     returnTo,
     _fetchMe = _defaultFetchMe,
     _signIn = _defaultSignIn,
+    _mountModal = _defaultMountModal,
   } = config;
 
   injectStyles();
@@ -55,10 +57,24 @@ export function mountLoginCard(config = {}) {
     document.body.appendChild(host);
   }
 
-  const modal = mountModal(host, {
+  let isDisposed = false;
+
+  /** Idempotent — the ✕, the backdrop, Escape and a drag-dismiss can all land here. */
+  function dispose() {
+    if (isDisposed) return;
+    isDisposed = true;
+    modal.dispose();
+    if (host && host.parentNode) host.parentNode.removeChild(host);
+  }
+
+  // onClose is what actually makes the ✕, the backdrop and Escape do anything:
+  // Modal's close() only invokes this callback, so omitting it leaves every
+  // dismissal affordance inert. settings-modal.js wires it the same way.
+  const modal = _mountModal(host, {
     title: '',
     sheetOnMobile: true,
     closeOnBackdrop: true,
+    onClose: dispose,
   });
 
   // Render with fallback label immediately, then update when fetchMe resolves.
@@ -86,12 +102,7 @@ export function mountLoginCard(config = {}) {
       // fetchMe failed — keep the fallback already rendered.
     });
 
-  return {
-    dispose() {
-      modal.dispose();
-      if (host.parentNode) host.parentNode.removeChild(host);
-    },
-  };
+  return { dispose };
 }
 
 function injectStyles() {

@@ -123,12 +123,27 @@
 .rt-modal-grab-handle {
   /* Hidden on desktop; shown only for the mobile bottom-sheet (below). */
   display: none;
+  /* The visible bar is 4px, but a 4px drag target is unusable with a thumb.
+     The element itself is a 24px band and the bar is drawn inside it via
+     ::after, so the affordance stays visually quiet while staying grabbable. */
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  flex: 0 0 auto;
+  position: relative;
+  cursor: grab;
+}
+
+.rt-modal-grab-handle::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
   width: 36px;
   height: 4px;
   border-radius: var(--rt-r-pill);
   background: var(--rt-border-strong);
-  margin: 10px auto 0;
-  flex: 0 0 auto;
 }
 
 /* ── Mobile bottom-sheet variant ────────────────────────────── */
@@ -153,6 +168,28 @@
   /* The grab handle is a bottom-sheet affordance — only meaningful on mobile. */
   .rt-modal-sheet .rt-modal-grab-handle {
     display: block;
+  }
+
+  /* Claim the vertical gesture on the drag region so the browser does not
+     scroll the page while the sheet is following the finger. Confined to the
+     handle and header — the body must keep its own scrolling. */
+  .rt-modal-sheet .rt-modal-grab-handle,
+  .rt-modal-sheet .rt-modal-header {
+    touch-action: none;
+  }
+
+  /* Snap back when a drag is released short of the dismiss threshold. */
+  .rt-modal-sheet {
+    transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* While dragging the sheet must track the finger exactly — a transition here
+     would make it lag behind, and the slide-up entrance animation would fight
+     the inline transform. */
+  .rt-modal-sheet.rt-modal-sheet-dragging {
+    transition: none;
+    animation: none;
+    cursor: grabbing;
   }
 }
 
