@@ -148,6 +148,10 @@
 
 /* ── Mobile bottom-sheet variant ────────────────────────────── */
 
+/* This breakpoint is mirrored in modal.js as SHEET_MEDIA_QUERY, which gates
+   drag-to-dismiss on the sheet actually being laid out as a sheet. Change one
+   and you must change the other, or the sheet will render here while the drag
+   stays inert (or vice versa). */
 @media (max-width: 560px) {
   .rt-modal-sheet {
     /* Override centered positioning */

@@ -190,7 +190,7 @@
   </div>
 
   <h2 id="modal">Modal <span class="api">mountModal(el, {title, sheetOnMobile, onClose})</span></h2>
-  <p class="note">Blocking overlay. Closes on Escape, scrim click, or the header ✕. With <code>sheetOnMobile</code> it becomes a bottom sheet at &le;560px.</p>
+  <p class="note">Blocking overlay. Closes on Escape, scrim click, or the header ✕ — all of which route through <code>onClose</code>, so a caller that omits it gets a modal that cannot be dismissed. With <code>sheetOnMobile</code> it becomes a bottom sheet at &le;560px that also drags down to dismiss, from the grab handle or the header.</p>
   <div class="panel row">
     <button class="rt-btn rt-btn--secondary" id="open-modal">Open centered modal</button>
     <button class="rt-btn rt-btn--secondary" id="open-sheet">Open sheet-on-mobile</button>
@@ -282,7 +282,7 @@ function openModal(sheetOnMobile) {
   body.style.color = 'var(--rt-muted)';
   body.style.fontSize = '13px';
   body.textContent = sheetOnMobile
-    ? 'Narrow the window below 560px and reopen — this becomes a bottom sheet with a grab handle.'
+    ? 'Narrow the window below 560px and reopen — this becomes a bottom sheet. Drag the grab handle or the header down to dismiss it; a short drag snaps back.'
     : 'Escape, scrim click, and the header ✕ all close this.';
   modal.setBody(body);
 }
