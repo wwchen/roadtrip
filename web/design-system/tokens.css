@@ -42,8 +42,11 @@
   /* Brand blue legible as TEXT on a dark surface. --rt-brand is tuned for solid
      fills (white-on-blue) and reaches only 4.05:1 as text on --rt-surface, under
      the 4.5:1 AA floor. Use this for links and text-only buttons instead.
-     Contrast: --rt-bg 6.4:1 · --rt-surface 5.4:1 · --rt-surface-raised 4.7:1. */
-  --rt-brand-text:  #5b9cf8;
+     Aims past AA: these panels float over a bright map, so the eye is
+     light-adapted and a merely-AA blue still reads as murky in situ.
+     Contrast: --rt-bg 8.8:1 AAA · --rt-surface 7.3:1 AAA (the topbar case) ·
+     --rt-surface-raised 6.5:1 AA. */
+  --rt-brand-text:  #8bb8fa;
 
   /* Map data layers */
   --rt-layer-supercharger: #e82127;
