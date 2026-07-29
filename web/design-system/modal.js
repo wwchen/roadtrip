@@ -2,6 +2,15 @@ import { modalTemplate } from './modal-template.js';
 
 const STYLE_ID = 'rt-modal-styles';
 
+/** Matches the breakpoint in modal.css that turns the card into a bottom sheet. */
+const SHEET_MEDIA_QUERY = '(max-width: 560px)';
+const DRAGGING_CLASS = 'rt-modal-sheet-dragging';
+/** Drag far enough and it dismisses regardless of speed. */
+const DRAG_DISMISS_DISTANCE_PX = 96;
+/** A short fast flick also dismisses, provided it moved at all. */
+const DRAG_DISMISS_VELOCITY_PX_PER_MS = 0.5;
+const DRAG_MIN_FLICK_PX = 24;
+
 /**
  * Mount a modal overlay into `container`.
  *
@@ -78,6 +87,8 @@ export function mountModal(container, config = {}) {
     document.addEventListener('keydown', onKeyDown);
   }
 
+  const disposeSheetDrag = setupSheetDrag(container, sheetOnMobile, close);
+
   // ── Public API ────────────────────────────────────────────────────────────
   return {
     /** Call onClose without removing the modal (caller decides lifecycle). */
@@ -97,6 +108,7 @@ export function mountModal(container, config = {}) {
     /** Remove event listeners and clear the DOM. */
     dispose() {
       container.removeEventListener('click', onClick);
+      if (disposeSheetDrag) disposeSheetDrag();
       if (typeof document !== 'undefined') {
         document.removeEventListener('keydown', onKeyDown);
       }
@@ -106,6 +118,94 @@ export function mountModal(container, config = {}) {
       }
       container.innerHTML = '';
     },
+  };
+}
+
+/**
+ * Drag-to-dismiss for the mobile bottom sheet.
+ *
+ * The grab handle is a promise: a bottom sheet that shows one is expected to
+ * follow the finger and dismiss when flung down. Without this it is decoration,
+ * and the affordance actively misleads.
+ *
+ * A drag may only start on `[data-modal-drag]` — the handle and the header. The
+ * body scrolls, and starting a drag there would fight the scroller, which is the
+ * failure mode `docs/touch-scroll-interactions.md` warns about.
+ *
+ * Returns a teardown function, or null when there is nothing to wire (not a
+ * sheet, or no real DOM — the stub environment used by the tests).
+ */
+function setupSheetDrag(container, sheetOnMobile, close) {
+  if (!sheetOnMobile) return null;
+  if (typeof window === 'undefined') return null;
+  if (!container || typeof container.querySelector !== 'function') return null;
+
+  const card = container.querySelector('.rt-modal-sheet');
+  if (!card || typeof card.addEventListener !== 'function') return null;
+
+  let isDragging = false;
+  let startY = 0;
+  let startedAt = 0;
+  let offsetY = 0;
+
+  // Only drag while the CSS is actually rendering a sheet. Above the
+  // breakpoint the card is centred and dragging it down means nothing.
+  function isSheetLayout() {
+    return typeof window.matchMedia === 'function' && window.matchMedia(SHEET_MEDIA_QUERY).matches;
+  }
+
+  function onPointerDown(e) {
+    if (!isSheetLayout()) return;
+    if (!e.target || typeof e.target.closest !== 'function') return;
+    // The ✕ is a button; a press on it is a tap, not the start of a drag.
+    if (e.target.closest('[data-modal-close]')) return;
+    if (!e.target.closest('[data-modal-drag]')) return;
+
+    isDragging = true;
+    startY = e.clientY;
+    startedAt = Date.now();
+    offsetY = 0;
+    card.classList.add(DRAGGING_CLASS);
+    if (typeof card.setPointerCapture === 'function' && e.pointerId != null) {
+      card.setPointerCapture(e.pointerId);
+    }
+  }
+
+  function onPointerMove(e) {
+    if (!isDragging) return;
+    // Downward only. Dragging a bottom sheet up should not detach it from the
+    // bottom edge.
+    offsetY = Math.max(0, e.clientY - startY);
+    card.style.transform = `translateY(${offsetY}px)`;
+  }
+
+  function onPointerUp() {
+    if (!isDragging) return;
+    isDragging = false;
+    card.classList.remove(DRAGGING_CLASS);
+
+    const elapsedMs = Math.max(1, Date.now() - startedAt);
+    const velocity = offsetY / elapsedMs;
+    const dismissed =
+      offsetY > DRAG_DISMISS_DISTANCE_PX ||
+      (offsetY > DRAG_MIN_FLICK_PX && velocity > DRAG_DISMISS_VELOCITY_PX_PER_MS);
+
+    // Clear the inline transform either way: on dismissal the host is about to
+    // be torn down, and on release the CSS transition animates the snap back.
+    card.style.transform = '';
+    if (dismissed) close();
+  }
+
+  card.addEventListener('pointerdown', onPointerDown);
+  card.addEventListener('pointermove', onPointerMove);
+  card.addEventListener('pointerup', onPointerUp);
+  card.addEventListener('pointercancel', onPointerUp);
+
+  return function disposeSheetDrag() {
+    card.removeEventListener('pointerdown', onPointerDown);
+    card.removeEventListener('pointermove', onPointerMove);
+    card.removeEventListener('pointerup', onPointerUp);
+    card.removeEventListener('pointercancel', onPointerUp);
   };
 }
 

@@ -110,3 +110,63 @@ test('stub-mount: handleSignIn calls injected signIn with returnTo', async () =>
   assert.equal(calls.length, 1);
   assert.equal(calls[0], '/plans');
 });
+
+// ── Dismissal wiring ─────────────────────────────────────────────────────────
+
+/**
+ * The card shipped without an onClose, so Modal's close() had nothing to call
+ * and the ✕, the backdrop and Escape were all inert. This asserts the card
+ * actually hands Modal a dismissal path, and that taking it tears the host down.
+ */
+test('mountLoginCard gives the modal an onClose that removes the host', async () => {
+  const originalDocument = globalThis.document;
+  const appended = [];
+  globalThis.document = {
+    getElementById() { return null; },
+    createElement(tagName) {
+      return { tagName, className: '', innerHTML: '', id: '', rel: '', href: '', addEventListener() {} };
+    },
+    head: { appendChild() {} },
+    body: {
+      appendChild(el) { appended.push(el); el.parentNode = globalThis.document.body; },
+      removeChild(el) {
+        const i = appended.indexOf(el);
+        if (i >= 0) appended.splice(i, 1);
+        el.parentNode = null;
+      },
+    },
+    addEventListener() {},
+    removeEventListener() {},
+  };
+
+  const { mountLoginCard } = await import('./login-card.js');
+
+  let capturedOnClose = null;
+  let modalDisposed = false;
+  const fakeMountModal = (_host, config) => {
+    capturedOnClose = config.onClose;
+    return { setBody() {}, close() {}, dispose() { modalDisposed = true; } };
+  };
+
+  try {
+    mountLoginCard({
+      _fetchMe: () => Promise.resolve({ provider_label: 'Google' }),
+      _signIn: () => {},
+      _mountModal: fakeMountModal,
+    });
+
+    assert.equal(typeof capturedOnClose, 'function', 'the card must pass an onClose');
+    assert.equal(appended.length, 1, 'the host should be in the document while open');
+
+    capturedOnClose();
+    assert.ok(modalDisposed, 'closing should dispose the modal');
+    assert.equal(appended.length, 0, 'closing should remove the host from the document');
+
+    // Idempotent: the ✕ and a drag-dismiss can both land here.
+    capturedOnClose();
+    assert.equal(appended.length, 0);
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
