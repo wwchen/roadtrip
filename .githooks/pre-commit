@@ -13,6 +13,55 @@ if git diff --cached --name-only --diff-filter=ACMR |
   exit 1
 fi
 
+# Dead-branch guard. Committing onto a branch whose PR is already merged or
+# closed produces work that cannot land: the PR will never pick it up, and the
+# branch is usually deleted shortly after. Nothing errors at the time, so it is
+# discovered hours later, which is exactly how work gets lost — most often by an
+# agent that resumed an old worktree without checking what happened to its PR.
+#
+# Deliberately fails *open*. No gh, not authenticated, offline, rate-limited,
+# no remote, or simply no PR for this branch all look the same from here (an
+# empty result), and none of them justify blocking a commit. Only an
+# unambiguous "every PR for this head is merged or closed" blocks.
+#
+# Costs one API call per commit on a named non-default branch. That is the
+# price of catching the transition — a cached "alive" verdict would miss the
+# merge it exists to notice, and a cached "dead" one would wrongly block a
+# reopened PR.
+#
+# Detached HEAD (rebase, bisect, cherry-pick) yields an empty $branch and is
+# skipped: there is no branch to have a PR.
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+if [ "${ALLOW_DEAD_BRANCH:-}" != "1" ] &&
+   [ -n "$branch" ] &&
+   [ "$branch" != "master" ] && [ "$branch" != "main" ] &&
+   command -v gh >/dev/null 2>&1; then
+  gh_timeout=""
+  command -v timeout >/dev/null 2>&1 && gh_timeout="timeout 10"
+  pr_json=$(
+    $gh_timeout gh pr list --head "$branch" --state all --limit 10 \
+      --json state,number 2>/dev/null || true
+  )
+  # An OPEN PR means the branch is live even if an earlier PR from the same head
+  # was closed — #497/#500 style supersession leaves both on record.
+  if [ -n "$pr_json" ] &&
+     ! printf '%s' "$pr_json" | grep -q '"state":"OPEN"' &&
+     printf '%s' "$pr_json" | grep -qE '"state":"(MERGED|CLOSED)"'; then
+    echo "refusing to commit on '$branch' — its pull request is already finished."
+    printf '%s' "$pr_json" |
+      grep -oE '"number":[0-9]+,"state":"[A-Z]+"|"state":"[A-Z]+","number":[0-9]+' |
+      sed -E 's/"number":([0-9]+),"state":"([A-Z]+)"/  PR #\1 is \2/; s/"state":"([A-Z]+)","number":([0-9]+)/  PR #\2 is \1/'
+    echo
+    echo "Commits here cannot land. Move the work to a fresh branch:"
+    echo "    git switch -c <new-branch> origin/master"
+    echo "    git cherry-pick <sha>          # if you already committed here"
+    echo
+    echo "If the PR is being reopened, or you are amending before the branch is"
+    echo "deleted:  ALLOW_DEAD_BRANCH=1 git commit ..."
+    exit 1
+  fi
+fi
+
 # Validate whenever the secrets system itself is touched. --staged checks the
 # blob entering history rather than the worktree, and this also catches a
 # registry edit committed without regenerating docker-compose.secrets.yml.
