@@ -1,5 +1,21 @@
 # Frontend Component Architecture
 
+## Before you build: open the gallery
+
+`web/design-system/gallery.html` is the living catalog. **Check it first** — if a
+primitive covers what you need, compose it rather than writing page-specific
+markup or CSS.
+
+```bash
+# .claude/launch.json → "static"
+python3 -m http.server 8766
+open http://localhost:8766/web/design-system/gallery.html
+```
+
+Every component there is mounted from its real module and styled by its real
+stylesheet, so the page always reflects what ships. Adding a primitive means
+adding its live section to the gallery — see `web/design-system/README.md`.
+
 ## Component pattern
 
 All frontend UI is vanilla JS — no framework. Components follow this contract:
@@ -128,6 +144,19 @@ Page controllers are self-initializing (`init()` runs at module load) and have n
 |-----------|--------|---------|
 | Banner | `web/design-system/banner.js` | Dismissible success/error/info message |
 | ToggleSwitch | `web/design-system/toggle-switch.js` | On/off toggle with label + help text |
-| DoubleConfirmButton | `web/design-system/double-confirm-button.js` | Two-click destructive action |
+| DoubleConfirmButton | `web/design-system/double-confirm-button.js` | Two-click destructive action (≥44px; `size: 'compact'` for dense rows) |
 | DataTable | `web/design-system/data-table.js` | Table from column defs + row data |
 | FormSection | `web/design-system/form-section.js` | Label + input + help text group |
+| Modal | `web/design-system/modal.js` | Blocking overlay; bottom-sheet on ≤560px |
+| Tabs | `web/design-system/tabs.js` | Section nav; left rail, segmented control on ≤560px |
+| SecretField | `web/design-system/secret-field.js` | Write-only credential input (masked → replace) |
+
+Shared styles that are not components:
+
+| Sheet | Purpose |
+|-------|---------|
+| `web/design-system/tokens.css` | All `--rt-*` design tokens — the source of truth |
+| `web/design-system/buttons.css` | `.rt-btn` + `--primary` / `--secondary` / `--tertiary` variants |
+
+See `web/design-system/README.md` for each component's config contract and
+anatomy.

@@ -51,6 +51,8 @@ export function mountWatchTable(container, config) {
       const ctrl = mountDoubleConfirmButton(host, {
         label: '🗑',
         confirmLabel: 'Delete?',
+        // Sits in .rt-watch-table-actions, a fixed 28px icon grid.
+        size: 'compact',
         onConfirm: () => config.onDelete?.(id),
       });
       deleteButtons.push(ctrl);

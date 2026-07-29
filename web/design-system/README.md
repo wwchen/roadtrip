@@ -3,11 +3,35 @@
 A quiet, data-dense system for planning road trips and camping on the map.
 Utilitarian and precise, in the spirit of Google Maps and Linear.
 
+## Start here: the living gallery
+
+**`gallery.html` is the catalog. Open it before building any UI** — if a
+primitive already covers what you need, compose it instead of writing something
+ad hoc. That is how this stays cohesive.
+
+```bash
+# .claude/launch.json → "static"
+python3 -m http.server 8766
+open http://localhost:8766/web/design-system/gallery.html
+```
+
+It is plain HTML that `<link>`s the real stylesheets and `import`s the real
+component modules — every component on the page is a live mount, so the gallery
+renders exactly what ships and cannot go stale. Keep it that way: **never
+replace it with a design-tool export.** The previous gallery was a bundled
+export, and the first hand-edit silently destroyed it (see `HANDOFF.md`).
+Frozen exports live in `docs/design-references/`.
+
+A new primitive is not done until: the three files (`*.js` / `*-template.js` /
+`*.css`) land here, it has a live section in `gallery.html`, and any new
+convention is documented below.
+
 ## Files
 
 - **`tokens.css`** — the source of truth. Linked from `index.html` and
   `availability.html`. Replaces the ad-hoc `--cg-*` variables that used to live
   in an inline `:root` block.
+- **`gallery.html`** — the living catalog of every primitive and token.
 
 ## The one rule
 
@@ -22,6 +46,7 @@ this split fixes it.
 |---|---|---|
 | Neutral | `--rt-bg*`, `--rt-surface*` | every surface |
 | Interactive | `--rt-brand*` | the only clickable color |
+| Interactive text | `--rt-brand-text` | brand blue used **as text** (links, text-only buttons) |
 | Layer | `--rt-layer-*` | map pin + legend identity |
 | Availability / status | `--rt-avail`, `--rt-first-come`, `--rt-warn`, `--rt-error`… | meaning only |
 
@@ -50,6 +75,22 @@ Use `.rt-btn` plus a variant modifier for every clickable action. Classes live i
 - Never use green or any other hue for interactive actions — blue only.
 - Full-width buttons: add `width: 100%` via a layout wrapper or inline style;
   `.rt-btn` is `inline-flex` by default.
+- Blue **as text** uses `--rt-brand-text`, not `--rt-brand`. `--rt-brand` is
+  tuned for solid fills (white-on-blue) and only reaches 4.05:1 as text on
+  `--rt-surface`, under the 4.5:1 AA floor. `.rt-btn--tertiary` is the one
+  exception — it is large enough to carry `--rt-brand`.
+
+### DoubleConfirmButton sizing
+
+`mountDoubleConfirmButton(container, config)` renders at ≥44px by default,
+because it fires destructive actions (Sign out, Disconnect Slack). Pass
+`size: 'compact'` only where the button sits in a dense, fixed-width row —
+today just `web/watches/watch-table.js`, whose action grid is 28px columns.
+
+| `size` | Height | When |
+|---|---|---|
+| *(omitted)* | `min-height: 44px` | Default. Anything a finger touches. |
+| `'compact'` | `28px` | Dense table rows with fixed-width siblings. |
 
 ## Tabs rail / segmented control convention
 

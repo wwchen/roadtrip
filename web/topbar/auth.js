@@ -115,11 +115,11 @@ function injectAuthStyles() {
       justify-content: flex-end;
       gap: 8px;
       padding: 4px 2px 0;
-      font-size: 12px;
+      font-size: 13px;
     }
     #${ROOT_ID}[hidden] { display: none; }
     .tb-auth-who {
-      color: var(--rt-text-muted, #5f6368);
+      color: var(--rt-muted);
       max-width: 180px;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -129,11 +129,12 @@ function injectAuthStyles() {
       background: none;
       border: none;
       padding: 2px 4px;
-      color: var(--rt-accent, #1a73e8);
+      color: var(--rt-brand-text);
       cursor: pointer;
       font: inherit;
     }
     .tb-auth-btn:hover { text-decoration: underline; }
+    .tb-auth-btn:focus-visible { outline: 2px solid var(--rt-brand); outline-offset: 2px; }
   `;
   document.head.appendChild(tag);
 }

@@ -11,17 +11,42 @@ those with a single canonical token sheet and align components to the system.
 Suggested location for the token sheet: `web/design-system/tokens.css`
 (or inline the `:root` block into the existing `<style>` in `index.html`).
 
+> **Historical document.** This describes the original v1.0 hand-off. The live
+> catalog is now `gallery.html` — see "The living gallery" below before using
+> anything here.
+
 ## About the Design Files
-The files in this bundle are **design references**, not drop-in production code:
+The files in this bundle were **design references**, not drop-in production code:
 
 - `tokens.css` — this one IS meant to ship verbatim. It is the source of truth.
-- `roadtrip-design-system.html` — a self-contained visual reference page
-  (open in any browser, works offline). It documents every color, type ramp,
-  spacing value, component, and the availability system. Use it to see intended
-  appearance; do **not** copy its inline styles into the app wholesale.
+- `roadtrip-design-system.html` — **deleted.** It was a bundled export whose
+  content lived JSON-encoded inside `<script type="__bundler/template">`. It was
+  valid on import, but the first hand-edit truncated the payload from 88,358
+  characters to 185 and it rendered nothing from then on. Four commits kept
+  appending sections to a dead file. Superseded by `gallery.html`.
 - The task is to wire `tokens.css` into the existing app and migrate components
   to reference the new variables, using the app's existing vanilla-JS + template
   patterns (no framework change).
+
+## The living gallery
+
+`gallery.html` is the catalog now. It is **hand-written plain HTML** that
+`<link>`s the real stylesheets and `import`s the real component modules, so it
+renders what actually ships and cannot drift.
+
+```bash
+# .claude/launch.json → "static"
+python3 -m http.server 8766
+open http://localhost:8766/web/design-system/gallery.html
+```
+
+**Consult it before building UI**, so new work composes existing primitives
+instead of reinventing them. A new primitive is not done until it has a live
+section there and any new convention is in `README.md`.
+
+**Never replace it with a design-tool export.** A generated bundle cannot be
+hand-maintained — that is exactly how the previous gallery died, silently.
+Frozen exports belong in `docs/design-references/`.
 
 ## Fidelity
 **High-fidelity.** Colors, type, spacing, radii, and elevation are final. Match
@@ -174,7 +199,8 @@ Slack interactivity handler. `reserve_site` is a URL button — no handler neede
 
 ## Files in this bundle
 - `tokens.css` — ship verbatim (source of truth)
-- `roadtrip-design-system.html` — offline visual reference
-- `roadtrip-slack-notifications.html` — offline Slack notification reference
+- `gallery.html` — the living catalog (replaced `roadtrip-design-system.html`)
+- `roadtrip-slack-notifications.html` — moved to
+  `docs/design-references/`; a frozen export, do not hand-edit
 - `slack-blockkit-payloads.js` — ready-to-send `chat.postMessage` payloads (5 states)
 - `design-system-README.md` — short in-repo readme to include alongside the tokens

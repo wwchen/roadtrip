@@ -13,6 +13,7 @@ export function mountDoubleConfirmButton(container, config) {
       label: config.label,
       armed,
       confirmLabel: config.confirmLabel,
+      size: config.size,
     });
   }
 

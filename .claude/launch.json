@@ -7,6 +7,13 @@
       "runtimeArgs": ["up"],
       "port": 8765,
       "autoPort": false
+    },
+    {
+      "name": "static",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8766"],
+      "port": 8766,
+      "autoPort": false
     }
   ]
 }

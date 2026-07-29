@@ -39,6 +39,11 @@
   --rt-brand-hover: #2b6dd1;
   --rt-brand-press: #245bb0;
   --rt-brand-tint:  rgba(59,130,246,0.15);
+  /* Brand blue legible as TEXT on a dark surface. --rt-brand is tuned for solid
+     fills (white-on-blue) and reaches only 4.05:1 as text on --rt-surface, under
+     the 4.5:1 AA floor. Use this for links and text-only buttons instead.
+     Contrast: --rt-bg 6.4:1 · --rt-surface 5.4:1 · --rt-surface-raised 4.7:1. */
+  --rt-brand-text:  #5b9cf8;
 
   /* Map data layers */
   --rt-layer-supercharger: #e82127;
