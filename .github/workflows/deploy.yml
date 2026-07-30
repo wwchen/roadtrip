@@ -13,30 +13,14 @@ name: Deploy
 # pushes, RFCs, and Tilt config don't burn deploy minutes. Manual override
 # via workflow_dispatch for "redeploy without a code change" needs.
 
+# Runs only after CI succeeds on master. Previously both workflows fired
+# independently on push, and deploy — which just SSHes — usually won the race,
+# so a commit that failed lint or tests shipped anyway.
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [master]
-    paths:
-      - 'backend/**'
-      - 'gradle/**'
-      - 'gradle.properties'
-      - 'gradlew'
-      - 'gradlew.bat'
-      - 'settings.gradle.kts'
-      - 'Dockerfile'
-      - '.dockerignore'
-      - 'Makefile'
-      - 'grafana/**'
-      - 'data/**'
-      - 'docker-compose*.yml'
-      - 'index.html'
-      - 'availability.html'
-      - 'web/**'
-      # A vault change is a runtime config change: the host decrypts these on
-      # deploy, so a new client id or rotated token has to reach it the same way
-      # code does. Without this, `manage.py set` lands on master and never ships.
-      - 'secrets/**'
-      - '.github/workflows/deploy.yml'
   workflow_dispatch: {}
 
 # Don't queue concurrent deploys — if a second push lands while the first
@@ -46,15 +30,127 @@ concurrency:
   group: deploy
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  # `changes` reads previous Deploy runs to find the last SHA that shipped.
+  actions: read
+
+env:
+  # workflow_run runs against the default branch by default, so every ref here
+  # has to be pinned to the commit CI actually validated.
+  DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
 jobs:
+  # workflow_run triggers carry no `paths:` filter, so the path gating that
+  # kept doc-only pushes from burning deploy minutes has to be redone in-job.
+  #
+  # The comparison point is the last *successfully deployed* commit, not this
+  # push's parent. Diffing against the parent would drop changes on the floor:
+  # a backend commit whose CI failed, followed by a doc-only commit whose CI
+  # passed, would look doc-only and skip — leaving the backend change on master
+  # and never deployed. Anything unexpected (no prior deploy, a force-push, an
+  # unreachable SHA) deploys rather than skips.
+  changes:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      deploy: ${{ steps.decide.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          fetch-depth: 0
+
+      - name: Find last deployed commit
+        id: last
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          sha="$(gh api \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/deploy.yml/runs?status=success&branch=master&per_page=1" \
+            --jq '.workflow_runs[0].head_sha // empty' || true)"
+          # A run that deployed a commit no longer reachable (force-push, or a
+          # branch that was rebuilt) can't anchor a diff.
+          if [ -n "$sha" ] && ! git cat-file -e "$sha^{commit}" 2>/dev/null; then
+            echo "last deployed $sha is unreachable; treating as unknown"
+            sha=""
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "last deployed: ${sha:-<none>}"
+
+      - name: Check for deploy-relevant changes
+        id: filter
+        if: github.event_name != 'workflow_dispatch' && steps.last.outputs.sha != ''
+        uses: dorny/paths-filter@v3
+        with:
+          base: ${{ steps.last.outputs.sha }}
+          ref: ${{ env.DEPLOY_SHA }}
+          filters: |
+            deploy:
+              - 'backend/**'
+              - 'gradle/**'
+              - 'gradle.properties'
+              - 'gradlew'
+              - 'gradlew.bat'
+              - 'settings.gradle.kts'
+              - 'Dockerfile'
+              - '.dockerignore'
+              - 'Makefile'
+              - 'grafana/**'
+              - 'data/**'
+              - 'docker-compose*.yml'
+              - 'index.html'
+              - 'availability.html'
+              - 'web/**'
+              # A vault change is a runtime config change: the host decrypts
+              # these on deploy, so a new client id or rotated token has to
+              # reach it the same way code does. Without this, `manage.py set`
+              # lands on master and never ships.
+              - 'secrets/**'
+              - '.github/workflows/deploy.yml'
+
+      - name: Decide
+        id: decide
+        env:
+          # Manual runs are the escape hatch for "redeploy without a code
+          # change", so they must never be path-gated.
+          DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
+          NO_BASELINE: ${{ steps.last.outputs.sha == '' }}
+          MATCHED: ${{ steps.filter.outputs.deploy }}
+        run: |
+          set -euo pipefail
+          if [ "$DISPATCH" = "true" ]; then
+            reason="manual dispatch"; deploy=true
+          elif [ "$NO_BASELINE" = "true" ]; then
+            reason="no known previous deploy"; deploy=true
+          elif [ "$MATCHED" = "true" ]; then
+            reason="deploy-relevant paths changed"; deploy=true
+          else
+            reason="no deploy-relevant paths changed"; deploy=false
+          fi
+          echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
+          echo "deploy=$deploy ($reason)"
+
   deploy:
+    needs: changes
+    if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     # Optional: bind to a GitHub Environment if you want approval gates or
     # per-env secrets. Leaving unset for now keeps things simple.
     # environment: production
     timeout-minutes: 30
     steps:
+      # Pinned to the validated commit so the URLs this job resolves come from
+      # the same tree the host is about to check out.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
 
       # Join the tailnet so we can ssh mini-ca over Tailscale. OAuth client
       # is preferred over a static auth key: scoped to the `ci` tag, the
@@ -81,19 +177,34 @@ jobs:
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      # Single ssh invocation so any failure (git pull, Gradle build, image
+      # Single ssh invocation so any failure (checkout, Gradle build, image
       # build, or Compose recreate) returns non-zero and fails the workflow.
+      #
+      # The SHA is passed as an argument to `bash -s` and the script body is a
+      # quoted heredoc, so only the SHA is interpolated by the runner — every
+      # other `$` is evaluated on the host.
       - name: Deploy on mini-ca
         run: |
-          ssh -o BatchMode=yes mini@mini-ca \
-            'set -e
-             cd ~/workspace/roadtrip
-             git pull --ff-only
-             make run env=prod
-             running="$(docker compose --profile tunnel --profile pois ps --services --status running)"
-             for service in backend grafana loki alloy tempo prometheus; do
-               echo "$running" | grep -qx "$service"
-             done'
+          ssh -o BatchMode=yes mini@mini-ca "bash -s -- '$DEPLOY_SHA'" <<'REMOTE'
+          set -e
+          sha="$1"
+          cd ~/workspace/roadtrip
+          # Was `git pull --ff-only`, which deployed whatever master pointed at
+          # when the SSH landed — not necessarily the commit CI validated and
+          # this job resolved its URLs from. Detaching at an explicit SHA makes
+          # the deployed tree exactly the tested one, and makes a later push
+          # racing this deploy a no-op here rather than a surprise rollout.
+          git fetch --prune origin
+          git checkout --detach "$sha"
+          make run env=prod
+          running="$(docker compose --profile tunnel --profile pois ps --services --status running)"
+          for service in backend grafana loki alloy tempo prometheus; do
+            echo "$running" | grep -qx "$service"
+          done
+          REMOTE
+
+      - name: Report deployed commit
+        run: echo "deployed $DEPLOY_SHA"
 
       # The app's own prod config is the single source for its origin — the same
       # value AuthConfig derives the OIDC redirect URI from, for the same reason:
