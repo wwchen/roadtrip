@@ -13,12 +13,22 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Every job here only reads the repo: nothing comments on PRs, pushes tags, or
+# publishes packages. Codecov authenticates with its own token rather than the
+# workflow's, so read-only `contents` covers the whole file.
+permissions:
+  contents: read
+
 jobs:
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       backend_tests: ${{ steps.filter.outputs.backend_tests }}
       smoke: ${{ steps.filter.outputs.smoke }}
+      web: ${{ steps.filter.outputs.web }}
+      companion: ${{ steps.filter.outputs.companion }}
+      docker: ${{ steps.filter.outputs.docker }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -45,9 +55,27 @@ jobs:
               - 'web/**/*.js'
               - 'web/**/*.css'
               - '.github/workflows/ci.yml'
+            web:
+              - 'web/**'
+              - '.github/workflows/ci.yml'
+            companion:
+              - 'companion/**'
+              - '.github/workflows/ci.yml'
+            # The image is a thin runtime wrapper around the fat jar, so a
+            # backend change is as much an image change as the Dockerfile is.
+            docker:
+              - 'Dockerfile'
+              - '.dockerignore'
+              - 'backend/**'
+              - 'gradle/**'
+              - 'gradle.properties'
+              - 'gradlew'
+              - 'settings.gradle.kts'
+              - '.github/workflows/ci.yml'
 
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Validate Grafana dashboards
@@ -62,8 +90,25 @@ jobs:
           python3 secrets/manage.py generate --check
           python3 secrets/manage.py check
 
-      - name: Secrets tooling tests
-        run: python3 -m unittest discover -s scripts -p 'test_secrets.py' -v
+      # The backend has ktlint and detekt; the repo's Python had nothing, which
+      # left the vault tooling in secrets/manage.py unlinted. Rules are passed
+      # here rather than in a ruff.toml deliberately: this is the correctness
+      # core (pyflakes, syntax/import errors, bugbear) that the tree is already
+      # clean against. Ruff's built-in default additionally enables a broad
+      # pylint/style surface with ~65 pre-existing hits — adopting that is its
+      # own cleanup. py39 is a real floor, not caution: macOS Command Line
+      # Tools ships 3.9, and these fetchers run on dev machines, so UP must not
+      # rewrite `dt.timezone.utc` into the 3.11-only `dt.UTC`.
+      - name: ruff
+        run: |
+          pipx install ruff
+          ruff check --isolated --target-version py39 \
+            --select E4,E7,E9,F,B,UP secrets/ scripts/
+
+      # Was `-p 'test_secrets.py'`, which ran 1 of the 10 script test modules
+      # and let the other 9 rot — two of them were red on master for months.
+      - name: Script + secrets tooling tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -78,12 +123,73 @@ jobs:
       - name: detekt rule tests
         run: ./gradlew :detekt-rules:test
 
+  # web/ has no package.json: the suites are dependency-free node:test modules
+  # importing the browser sources directly, so there is nothing to install.
+  web-tests:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run web unit tests
+        run: node --test 'web/**/*.test.mjs'
+
+  companion-tests:
+    needs: changes
+    if: needs.changes.outputs.companion == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: companion/package-lock.json
+      # --ignore-scripts skips Playwright's browser download (~100MB+). The
+      # suites stub the browser and only need `playwright` to resolve as a
+      # module — src/browser.js imports it at load time, so omitting the
+      # install entirely fails every suite that reaches it.
+      - name: Install companion dependencies
+        working-directory: companion
+        run: npm ci --ignore-scripts
+      - name: Run companion tests
+        working-directory: companion
+        run: npm test
+
+  # A broken Dockerfile used to surface for the first time on the prod host,
+  # mid-deploy. The image only wraps the fat jar, so the jar has to exist first
+  # — same order as `make run env=prod`.
+  docker-build:
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/master' }}
+      - name: Build backend fat-jar
+        run: ./gradlew :backend:buildFatJar
+      - name: Build backend image
+        run: docker build -t roadtrip/backend --target backend .
+
   backend-tests:
     needs: changes
     if: needs.changes.outputs.backend_tests == 'true'
     # gradle test runs Testcontainers (Postgis-flavored Postgres in Docker).
     # ubuntu runners ship Docker, so this Just Works without service containers.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -96,12 +202,14 @@ jobs:
       - name: Run backend tests + coverage
         run: ./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify
 
+      # fail_ci_if_error was false, so a Codecov outage (or a revoked token)
+      # silently removed the coverage gate instead of failing the run.
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: backend/build/reports/kover/report.xml
           flags: backend
-          fail_ci_if_error: false
+          fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload coverage report artifact
@@ -122,6 +230,7 @@ jobs:
     # static site + /api/*, Playwright-JVM drives Chromium against it.
     # Mirrors the local `make qa` flow.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgis/postgis:16-3.4
