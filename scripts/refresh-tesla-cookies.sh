@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 #
-# Mint Tesla cookies into this repo's .env. Use before any Tesla-touching
+# Mint Tesla cookies into this repo's .env.local — the file
+# tesla_client.load_env() reads. Use before any Tesla-touching
 # refresh (fetch_tesla_index.py / fetch_tesla_locations.py).
 #
 # Akamai binds _abck to the egress IP that minted it, so cookies captured
@@ -41,8 +42,8 @@ if ! [[ "$cookies" == *"_abck="* ]] || \
 fi
 
 tmp=$(mktemp)
-grep -v '^TESLA_COOKIES=' .env > "$tmp" || true
+grep -v '^TESLA_COOKIES=' .env.local 2>/dev/null > "$tmp" || true
 printf 'TESLA_COOKIES=%s\n' "$cookies" >> "$tmp"
-mv "$tmp" .env
-chmod 600 .env
-echo "✓ wrote .env (TESLA_COOKIES=${#cookies} chars)"
+mv "$tmp" .env.local
+chmod 600 .env.local
+echo "✓ wrote .env.local (TESLA_COOKIES=${#cookies} chars)"
