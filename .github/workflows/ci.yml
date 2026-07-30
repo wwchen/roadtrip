@@ -28,6 +28,7 @@ jobs:
       smoke: ${{ steps.filter.outputs.smoke }}
       web: ${{ steps.filter.outputs.web }}
       companion: ${{ steps.filter.outputs.companion }}
+      companion_image: ${{ steps.filter.outputs.companion_image }}
       docker: ${{ steps.filter.outputs.docker }}
     steps:
       - uses: actions/checkout@v4
@@ -60,6 +61,14 @@ jobs:
               - '.github/workflows/ci.yml'
             companion:
               - 'companion/**'
+              - '.github/workflows/ci.yml'
+            # Wider than `companion`: Compose owns the build (context, image
+            # name), so a compose edit can break the image without touching
+            # companion/. Kept separate from `docker` so a JS-only change
+            # doesn't drag in a fat-jar build, and vice versa.
+            companion_image:
+              - 'companion/**'
+              - 'docker-compose*.yml'
               - '.github/workflows/ci.yml'
             # The image is a thin runtime wrapper around the fat jar, so a
             # backend change is as much an image change as the Dockerfile is.
@@ -176,6 +185,26 @@ jobs:
       - name: Run companion tests
         working-directory: companion
         run: npm test
+
+  # The other half of what `make run env=prod` builds. Production builds this
+  # one through Compose (`$(PROD_COMPOSE) build recgov-companion`), not `docker
+  # build`, so CI drives the same Compose service rather than a hand-written
+  # equivalent — otherwise a broken companion/Dockerfile, a failing `npm ci`
+  # layer, or a build-context change still reaches mini-ca unbuilt and fails
+  # mid-deploy. scripts/test_ci_image_builds.py asserts CI keeps building
+  # everything the prod recipe does.
+  companion-image:
+    needs: changes
+    if: needs.changes.outputs.companion_image == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      # docker-compose.yml alone: docker-compose.secrets.yml only adds runtime
+      # `secrets:` entries sourced from environment values CI deliberately
+      # doesn't hold, and contributes nothing to the build.
+      - name: Build companion image
+        run: docker compose -f docker-compose.yml --profile recgov-companion build recgov-companion
 
   # A broken Dockerfile used to surface for the first time on the prod host,
   # mid-deploy. The image only wraps the fat jar, so the jar has to exist first
