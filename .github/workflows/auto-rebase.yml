@@ -36,6 +36,7 @@ jobs:
        github.event.comment.user.login == github.repository_owner &&
        startsWith(github.event.comment.body, '/rebase'))
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       # Use a GitHub App token (same one self-approve.yml uses) so force-pushes
       # to PR branches re-trigger ci.yml. Pushes from the default GITHUB_TOKEN
