@@ -4,13 +4,18 @@ on:
   issue_comment:
     types: [created]
 
+# The approval is posted with the GitHub App token minted below, not the
+# workflow's own token, so this needs no permissions of its own.
+permissions: {}
+
 jobs:
   self-approve:
     if: >
       github.event.issue.pull_request != null &&
-      github.event.comment.user.login == 'wwchen' &&
+      github.event.comment.user.login == github.repository_owner &&
       github.event.comment.body == 'lgtm'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/create-github-app-token@v1
         id: app-token

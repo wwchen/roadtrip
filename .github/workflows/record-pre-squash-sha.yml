@@ -17,6 +17,7 @@ jobs:
   record:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Comment with pre-squash SHA
         env:
