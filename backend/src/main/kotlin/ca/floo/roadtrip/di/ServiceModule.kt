@@ -52,6 +52,8 @@ import ca.floo.roadtrip.service.availability.provider.ReserveAmericaAvailability
 import ca.floo.roadtrip.service.availability.provider.ReserveCaliforniaAvailabilityProvider
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
 import ca.floo.roadtrip.service.booking.RecGovBookingAdapter
+import ca.floo.roadtrip.service.health.ReadinessService
+import ca.floo.roadtrip.service.health.ReadinessServiceImpl
 import ca.floo.roadtrip.service.notification.common.NotificationFanout
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler
@@ -307,6 +309,7 @@ val serviceModule =
             )
         }
         single<PoiReader> { get<PoiService>() }
+        single<ReadinessService> { ReadinessServiceImpl(databaseHealthRepo = get()) }
         single {
             PoisOnRouteService(
                 routeCache = get<RouteCache>(),

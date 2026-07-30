@@ -10,6 +10,7 @@ import ca.floo.roadtrip.route.auth.authRoutes
 import ca.floo.roadtrip.route.static.staticSiteRoutes
 import ca.floo.roadtrip.route.test.testEmailRoutes
 import ca.floo.roadtrip.route.test.testSlackRoutes
+import ca.floo.roadtrip.service.health.ReadinessService
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
 import io.ktor.client.request.get
@@ -43,7 +44,7 @@ class RouteAccessCoverageTest {
             undeclaredRoutes {
                 // Swagger UI (framework-generated, exempt) + our labelled openapi.json.
                 apiDocsRoutes()
-                healthRoutes()
+                healthRoutes { ReadinessService.Report(databaseReachable = true) }
                 geocodeRoutes(MapboxGeocoder(token = null))
                 authRoutes(wiring = null)
                 testEmailRoutes(EmailNotificationService(config = null), appRootUrl = null)

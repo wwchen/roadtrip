@@ -10,6 +10,7 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.repo.DatabaseHealthRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
@@ -37,4 +38,5 @@ val repoModule =
         single { AdminIngestReadRepo(get()) }
         single { UserRepo(get()) }
         single { UserSettingsRepo(get()) }
+        single { DatabaseHealthRepo(get()) }
     }
