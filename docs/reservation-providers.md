@@ -40,62 +40,63 @@ service/ref/
 ├── DbRefResolver.kt            # DB-backed resolution matrix
 └── RefValue.kt                 # typed ref wrapper values
 
+support/
+└── Dispatchable.kt              # generic `List<T>.firstHandlerFor(key)` / `allHandlersFor(key)` dispatch
+
 service/availability/provider/
-├── AvailabilityProviderClients.kt   # boot-time vendor client set + lifecycle
 ├── AvailabilityProvider.kt          # normalized availability + provider metadata port
-├── AvailabilityProviderRegistry.kt  # BookingProviderRef → adapter that can handle it
 ├── RecGovAvailabilityProvider.kt
 ├── CampflareAvailabilityProvider.kt
 ├── AspiraAvailabilityProvider.kt
 ├── ReserveAmericaAvailabilityProvider.kt
-└── ReserveCaliforniaAvailabilityProvider.kt
+├── ReserveCaliforniaAvailabilityProvider.kt
+└── (per-vendor booking-URL / booking-display helpers beside each adapter,
+    e.g. AspiraBookingUrl.kt, RecGovBookingDisplay.kt)
 ```
 
-`models/availability/AvailabilityProviderCapabilities.kt`,
-`models/availability/CatalogCampsiteRef.kt`, and
+`models/availability/AvailabilityProviderCapabilities.kt` and
 `models/availability/AvailabilityProviderError.kt` are shared provider-contract
 types, not adapter implementation, because schedulers, API services, routes,
 and provider adapters all read them.
 
 `BookingProviderRef` (sealed interface with `RecGov` / `Campflare` / `Aspira` /
 `ReserveAmerica` / `ReserveCalifornia` variants) is the availability/booking
-identity. Adapters take a `BookingProviderRef` of their matching variant and
-the registry guarantees the dispatch is correct. `DataProviderRef` is separate
-and identifies the catalog row's source of truth.
+identity. `DataProviderRef` is separate and identifies the catalog row's
+source of truth.
 
-Every vendor adapter class implements `AvailabilityProvider`: the shared
-normalized availability contract plus identity, capabilities, ref handling,
-and booking-link metadata. Raw HTTP clients under `clients/` stay
-vendor-specific because their upstream request and response shapes are
-genuinely different. The adapter boundary is where those shapes become
-provider-neutral `AvailabilityObservationBatch` values.
+Every vendor adapter class implements `AvailabilityProvider`, which extends
+the generic `Dispatchable<BookingProvider>` from `support/Dispatchable.kt`:
+the shared normalized availability contract plus identity, capabilities, ref
+handling, and booking-link metadata. There is no separate registry class —
+dispatch is `List<AvailabilityProvider>.firstHandlerFor(bookingProvider)` (or
+`allHandlersFor` where every enabled match matters), and
+`AvailabilityProvider.canHandle(key)` defaults to `isEnabled() && key == id`.
+Boot wiring assembles that list as one Koin singleton
+(`single<List<AvailabilityProvider>>(named("availabilityProviders"))` in
+`ServiceModule.kt`), injecting each vendor's HTTP client individually. Raw
+HTTP clients under `clients/` stay vendor-specific because their upstream
+request and response shapes are genuinely different; each client interface is
+its own `AutoCloseable` (e.g. `RecGovAvailabilityClient`,
+`CampflareAvailabilityClient`). The adapter boundary is where those shapes
+become provider-neutral `AvailabilityObservationBatch` values.
 
-The registry does not hardcode fallback modes. Availability services enumerate
-candidate provider refs from the catalog/registry, and the registry asks the
-mapped provider whether it `supportsRef(ref)`. If one provider declines a ref
-because it is unconfigured in this process, the resolver continues to the next
-linked candidate ref. This is how a Campflare catalog row can naturally fall
-through to a linked rec.gov alias without a Campflare-specific service branch.
-
-Boot wiring passes those vendor-specific HTTP clients as one
-`AvailabilityProviderClients` set. Every vendor client interface is an
-`AutoCloseable` with a default no-op `close()`. Implementations that actually
-own closeable resources, such as RecGov's Ktor client, override `close()`.
-Provider enablement belongs on `AvailabilityProvider.isEnabled()`, not on raw
-HTTP clients. `Main` closes the set, not an individual vendor, so transport
-lifecycle does not leak through the availability-provider abstraction.
+There is no runtime fallback-mode registry either. Availability services
+enumerate candidate providers from the catalog row via
+`AvailabilityTargetResolver`, and `FailoverAvailabilityFetcher` walks that
+ordered candidate list on retryable failure. This is how a Campflare catalog
+row can naturally fall through to a linked rec.gov alias without a
+Campflare-specific service branch.
 
 The availability orchestration that consumes this port lives one layer above:
 
 ```
 service/availability/
-├── AvailabilityService.kt               # POI availability contract used by routes
-├── CampsiteAvailabilityComposer.kt      # grouping, window policy, per-collection availability load
-├── AvailabilityTargetResolver.kt        # campsite → ordered provider candidates + date context
+├── DbAvailabilityTargetResolver.kt      # campsite → ordered provider candidates + date context
 ├── AvailabilityDateResolver.kt          # target-local earliest date/window policy
-├── ProviderCandidate.kt                 # (provider, parentRef, catalogRef) one availability candidate
+├── ResolvedAvailabilityTarget.kt        # (campsite, provider, campground, dateContext, candidates)
 ├── FailoverAvailabilityFetcher.kt       # walks candidates on retryable failure; records per-attempt outcomes
 ├── ProviderCooldownTracker.kt           # in-process demote-on-failure for BookingProvider
+├── CatalogAvailabilityBatcher.kt        # groups resolved targets by (provider, parentRef, dateContext)
 ├── TriggerActionHandler.kt              # fire-side registry (notification/ATC kinds; unknown kinds inert)
 ├── NotifyTriggerActionHandler.kt        # `slack_notify` / `email_notify` → notification targets
 └── alert/
@@ -104,13 +105,18 @@ service/availability/
     └── InternalPollerAlertProvider.kt   # today's poller-membership sync + orphan deactivation
 ```
 
+`CampsiteAvailabilityService.kt` and `CampsiteCatalogService.kt` (POI →
+linked campsites) live beside the resolver in `service/availability/` and are
+what `CampsiteRoutes` actually calls — there is no separate top-level
+`AvailabilityService.kt` file.
+
 Availability services load persisted `Campsite` rows and resolve them into
-`ResolvedAvailabilityTarget` before calling provider adapters. The provider-ready
-identity lives on `BookingProviderRef` plus `CatalogCampsiteRef`; the `Campsite`
-row only carries normalized catalog metadata such as name, loop, kind, and
-reservation URL. When code needs table fields, use `CampsiteRepo.findById` /
-query methods; when code needs to call a provider, use
-`AvailabilityTargetResolver`.
+`ResolvedAvailabilityTarget` before calling provider adapters. The
+provider-ready identity lives on `BookingProviderRef` plus the campsite's own
+vendor ref fields; the `Campsite` row only carries normalized catalog
+metadata such as name, loop, kind, and reservation URL. When code needs table
+fields, use `CampsiteRepo.findById` / query methods; when code needs to call
+a provider, use `DbAvailabilityTargetResolver`.
 
 ## Provider-ref resolution
 
@@ -126,10 +132,11 @@ product model.
 3. Deterministic ordering from the resolver's DB query and the provider
    registry.
 
-`ResolvedAvailabilityTarget.candidates: List<ProviderCandidate>` carries the
-full ordered list. The batcher `GroupKey` still keys on the first (preferred)
-candidate, so grouping semantics are unchanged; failover happens **inside**
-the group fetch.
+`ResolvedAvailabilityTarget.candidates: List<AvailabilityProvider>` carries
+the full ordered list (defaulting to just the primary `provider` when there's
+only one). The batcher's private `GroupKey` still keys on the first
+(preferred) candidate, so grouping semantics are unchanged; failover happens
+**inside** the group fetch.
 
 **Failover walk** (`FailoverAvailabilityFetcher`):
 
@@ -155,8 +162,9 @@ walks show up in the Grafana call-trace panels without extra plumbing.
 `5m`). In-process only; expires lazily on the next `isCooling` check.
 
 **Preference wiring:** `GET /api/pois/{id}` reads its `availability_provider`
-field from `PoiAvailabilitySupport.preferredAvailabilityProvider(poiId)`,
-which returns the first candidate using the ordering above.
+field straight from the campground row's own `booking_provider` column
+(`CampgroundService`) — there is no separate candidate-ordering lookup for
+this field.
 
 ## Alert seam
 
@@ -200,22 +208,30 @@ leaves the watch active for the next poll.
 
 ## Booking provider seam
 
-Availability providers answer "can we observe openings?" Booking providers
+Availability providers answer "can we observe openings?" Booking adapters
 answer "can Roadtrip act on this concrete opening?" The first booking action
 is `ADD_TO_CART`, exposed to users as the `atc` trigger.
 
 ```
 availability signal
   -> concrete campsite/date opening
-  -> BookingProviderRegistry.targetFor(parent ref + campsite ref)
+  -> AvailabilityBookingTargetResolver.targetFor(action, resolved target)
+  -> BookingAdapterRegistry.targetFor(parent ref + campsite ref)
   -> BookingTarget
-  -> BookingProvider.can(ADD_TO_CART, target)
-  -> BookingProvider.addToCart(request)
+  -> BookingAdapter.can(ADD_TO_CART, target)
+  -> BookingAdapter.addToCart(request)
 ```
 
-The provider object is the capability source of truth: registration only finds
-candidate providers; each `BookingProvider` translates the provider-specific
-catalog identity it understands, and `BookingProvider.can(action, target)`
+(`service/booking/BookingAdapter.kt`, `BookingAdapterRegistry.kt`,
+`RecGovBookingAdapter.kt`. Unlike the availability side, booking dispatch is
+a real small registry class — `BookingAdapterRegistry` keyed by adapter
+`id` — not a bare `List<BookingAdapter>`; `BookingAdapter` still implements
+the same `Dispatchable<BookingProvider>` interface as `AvailabilityProvider`
+for its `canHandle` check.)
+
+The adapter object is the capability source of truth: dispatch only finds
+candidate adapters; each `BookingAdapter` translates the provider-specific
+catalog identity it understands, and `BookingAdapter.can(action, target)`
 decides target-level support. This keeps add-to-cart support out of
 `AvailabilityProviderCapabilities`, because availability source and booking
 system can differ. For example, Campflare may provide availability for inventory
@@ -233,7 +249,7 @@ implementation may call a backend HTTP API instead. Companion configuration is
 runtime readiness for companion-backed providers, not durable booking
 capability.
 
-Watch create/update validates `atc` trigger support against the booking-provider
+Watch create/update validates `atc` trigger support against the booking-adapter
 registry after resolving the watch scope to concrete campsites. Unsupported
 targets fail the mutation instead of creating an active watch that can never
 fulfill its trigger.
@@ -284,13 +300,17 @@ availability history only.
 
 ## Today's adapter matrix
 
-| Provider | Availability | Watches | Notes |
+| Provider | Availability | Watches (`supportsInternalPolling`) | Notes |
 |---|---|---|---|
 | RecGov (rec.gov) | ✓ | ✓ | Availability and generic watch polling. |
-| Campflare | ✓ | ✗ | Availability uses v2 bulk campground availability for Campflare-owned US catalog rows. Hosted alerts planned via the `AlertProvider` seam (see "Alert seam" above); until that lands, alerts stay off. |
-| Aspira NextGen (BC Parks, Washington, Pennsylvania) | ✓ | planned | Availability ships now; watch dispatch still needs work. |
-| ReserveAmerica / Active Network (Alberta Parks, New York State Parks) | ✓ | ✗ | Availability reads the live campsite-calendar matrix; sites are cataloged from that same calendar roster (see `reserveamerica.md`). Alerts stay off until upstream cadence/load limits are validated. |
-| ReserveCalifornia / Tyler | ✓ | ✗ | Availability reads standard facility grids. Catalog import uses the public Search All Parks `search/place` flow. |
+| Campflare | ✓ | ✓ | Availability uses v2 bulk campground availability for Campflare-owned US catalog rows. `CampflareAvailabilityProvider` sets `supportsInternalPolling = true`; the internal poller can watch it today. A hosted-alert `AlertProvider` (see "Alert seam" above) is a separate, not-yet-built seam for vendor-pushed openings instead of internal polling. |
+| Aspira NextGen (BC Parks, Washington, Pennsylvania) | ✓ | ✓ | `AspiraAvailabilityProvider` sets `supportsInternalPolling = true`. |
+| ReserveAmerica / Active Network (Alberta Parks, New York State Parks) | ✓ | ✗ | Availability reads the live campsite-calendar matrix; sites are cataloged from that same calendar roster (see `reserveamerica.md`). `supportsInternalPolling = false` until upstream cadence/load limits are validated. |
+| ReserveCalifornia / Tyler | ✓ | ✗ | Availability reads standard facility grids. Catalog import uses the public Search All Parks `search/place` flow. `supportsInternalPolling = false`. |
+
+Source of truth for the Watches column is each adapter's
+`capabilities.supportsInternalPolling` (`AvailabilityProviderCapabilities`),
+not this table — if they disagree, fix the table.
 
 When a row is added here, it should match a real file in
 `service/availability/provider/`. If the table promises a
