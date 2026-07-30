@@ -1,7 +1,7 @@
 name: Deploy
 
-# SSHes to mini-ca, fast-forwards the deploy checkout, then runs
-# `make run env=prod`. Runtime secrets pass through this workflow without being
+# SSHes to mini-ca, checks the deploy tree out at the commit CI validated, then
+# runs `make run env=prod`. Runtime secrets pass through this workflow without being
 # read by it: they ride along encrypted in secrets/, and the host decrypts them
 # with its own age key into /run/secrets mounts. CI deliberately holds no
 # decryption key — the secrets below are credentials *for* the pipeline, not app
@@ -9,9 +9,10 @@ name: Deploy
 # why that path is a trigger: the vault is where runtime config lives. Wraps a
 # Tailscale join (mini-ca isn't on the public internet) around the SSH step.
 #
-# Triggers only when files that affect the running service change. Doc-only
-# pushes, RFCs, and Tilt config don't burn deploy minutes. Manual override
-# via workflow_dispatch for "redeploy without a code change" needs.
+# Deploys only when files that affect the running service change. Doc-only
+# pushes, RFCs, and Tilt config don't burn deploy minutes — see the `changes`
+# job, which re-implements that gating since workflow_run has no `paths:`.
+# Manual override via workflow_dispatch for "redeploy without a code change".
 
 # Runs only after CI succeeds on master. Previously both workflows fired
 # independently on push, and deploy — which just SSHes — usually won the race,
