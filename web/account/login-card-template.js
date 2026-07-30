@@ -19,7 +19,7 @@ export function loginCardTemplate({ providerLabel } = {}) {
       </svg>
     </div>
     <h2 class="lc-title">Sign in to Roadtrip</h2>
-    <p class="lc-rationale">Save your watches and access your account from any device.</p>
+    <p class="lc-rationale">Save your notification settings and choose how watch alerts reach you.</p>
     <button
       class="rt-btn rt-btn--primary lc-sign-in-btn"
       type="button"
