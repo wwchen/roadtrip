@@ -180,7 +180,7 @@ class HostToolsDriftTest(unittest.TestCase):
 
 # Credentials deliberately outside the vault, with the reason.
 KNOWN_NON_VAULT = {
-    # IP-bound and re-minted per machine by refresh-tesla-cookies.sh; sharing
+    # IP-bound and minted manually per machine into .env.local; sharing
     # one encrypted copy would give every host a cookie only one can use.
     "TESLA_COOKIES",
     # Grafana's admin password is GRAFANA_ADMIN_PASSWORD in the registry; this

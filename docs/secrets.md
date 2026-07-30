@@ -113,9 +113,10 @@ Two different things, routinely confused:
 ## Not in the vault, on purpose
 
 - **`TESLA_COOKIES`** — Akamai binds `_abck` to the egress IP that minted it, so
-  one shared copy would give every host a cookie only one can use.
-  `scripts/refresh-tesla-cookies.sh` mints it into `.env.local`, which is
-  gitignored and per-machine.
+  one shared copy would give every host a cookie only one can use. Mint it
+  manually per machine: tesla.com/findus → click a Supercharger → DevTools
+  Network → `get-charger-details` → copy the `Cookie` header value into
+  `TESLA_COOKIES=` in `.env.local` (gitignored, per-machine).
 - **GitHub Actions secrets** (`TS_OAUTH_*`, `DEPLOY_SSH_KEY`, `CODECOV_TOKEN`) —
   credentials *for* the pipeline, not runtime config. Keeping them in GitHub is
   what lets CI hold no decryption key at all.
