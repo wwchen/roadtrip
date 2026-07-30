@@ -257,7 +257,7 @@ jobs:
           health="${{ vars.DEPLOY_HEALTH_URL }}"
           {
             echo "DEPLOY_BASE=$base"
-            echo "DEPLOY_HEALTH=${health:-$base/api/health}"
+            echo "DEPLOY_HEALTH=${health:-$base/api/health/ready}"
           } >> "$GITHUB_ENV"
           echo "resolved base: $base"
 
