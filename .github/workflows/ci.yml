@@ -30,9 +30,11 @@ jobs:
       companion: ${{ steps.filter.outputs.companion }}
       companion_image: ${{ steps.filter.outputs.companion_image }}
       docker: ${{ steps.filter.outputs.docker }}
+      scripts: ${{ steps.filter.outputs.scripts }}
+      gradle_lint: ${{ steps.filter.outputs.gradle_lint }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
         id: filter
         with:
           filters: |
@@ -81,12 +83,41 @@ jobs:
               - 'gradlew'
               - 'settings.gradle.kts'
               - '.github/workflows/ci.yml'
+            # Everything the fast lint half reads: Grafana dashboards, the
+            # secrets registry + vault tooling, and the Python that ruff and
+            # the unittest sweep cover.
+            scripts:
+              - 'scripts/**'
+              - 'secrets/**'
+              - 'grafana/**'
+              - '.github/workflows/ci.yml'
+            # Generous on purpose: anything that can change what ktlint or
+            # detekt see — Kotlin sources, the custom rule set, detekt config,
+            # ktlint's .editorconfig, or the Gradle build that wires them up —
+            # has to re-lint. A path missing here is a lint that silently
+            # stops running.
+            gradle_lint:
+              - 'backend/**'
+              - 'detekt-rules/**'
+              - 'config/detekt/**'
+              - 'gradle/**'
+              - 'gradle.properties'
+              - 'gradlew'
+              - 'gradlew.bat'
+              - '*.gradle.kts'
+              - '.editorconfig'
+              - '.github/workflows/ci.yml'
 
+  # The fast, JVM-free half of linting. The Gradle half (ktlint/detekt) is
+  # gradle-lint below — split so a docs-adjacent scripts/ change doesn't pay
+  # for a Gradle daemon, and a backend change doesn't pay for pipx.
   lint:
+    needs: changes
+    if: needs.changes.outputs.scripts == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Validate Grafana dashboards
         run: python3 scripts/validate_grafana_dashboards.py
 
@@ -108,9 +139,11 @@ jobs:
       # own cleanup. py39 is a real floor, not caution: macOS Command Line
       # Tools ships 3.9, and these fetchers run on dev machines, so UP must not
       # rewrite `dt.timezone.utc` into the 3.11-only `dt.UTC`.
+      # Pinned so a ruff release can't change the lint verdict mid-PR; bump
+      # deliberately.
       - name: ruff
         run: |
-          pipx install ruff
+          pipx install ruff==0.16.0
           ruff check --isolated --target-version py39 \
             --select E4,E7,E9,F,B,UP secrets/ scripts/
 
@@ -118,11 +151,19 @@ jobs:
       # and let the other 9 rot — two of them were red on master for months.
       - name: Script + secrets tooling tests
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
-      - uses: actions/setup-java@v4
+
+  gradle-lint:
+    needs: changes
+    if: needs.changes.outputs.gradle_lint == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
         with:
           distribution: temurin
           java-version: '25'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
       - name: ktlint
@@ -140,8 +181,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
       # Enumerated with find and handed to node as an explicit list rather than
@@ -169,8 +210,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
           cache: npm
@@ -199,11 +240,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # docker-compose.yml alone: docker-compose.secrets.yml only adds runtime
       # `secrets:` entries sourced from environment values CI deliberately
       # doesn't hold, and contributes nothing to the build.
+      #
+      # No GHA layer cache here, deliberately: Compose owns this build (that
+      # parity with prod is the whole point of the job), and routing buildx
+      # `--cache-to type=gha` through `docker compose build` needs either
+      # cache_from/cache_to entries in the compose file or a `buildx bake`
+      # indirection — both fork the build away from what prod actually runs.
+      # BuildKit is pinned on explicitly so within-build layer reuse still
+      # applies; cross-run caching lives on the plain-`docker build` backend
+      # job below. If compose-native GHA cache lands upstream, revisit.
       - name: Build companion image
+        env:
+          DOCKER_BUILDKIT: '1'
+          COMPOSE_DOCKER_CLI_BUILD: '1'
         run: docker compose -f docker-compose.yml --profile recgov-companion build recgov-companion
 
   # A broken Dockerfile used to surface for the first time on the prod host,
@@ -215,18 +268,43 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
         with:
           distribution: temurin
           java-version: '25'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
       - name: Build backend fat-jar
         run: ./gradlew :backend:buildFatJar
+
+      # Container-driver builder: the default docker driver can't export a
+      # cache, and `type=gha` needs an exporter.
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      # BuildKit's gha cache backend authenticates with the runner's
+      # cache-service credentials, which GitHub hands to JS actions but not to
+      # `run` steps. docker/build-push-action wires them up internally, but
+      # this job builds via the `docker build` CLI on purpose — the prod recipe
+      # does, and scripts/test_ci_image_builds.py holds CI to it — so export
+      # them for the step below instead.
+      - name: Expose cache-service credentials to buildx
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            for (const name of ['ACTIONS_CACHE_URL', 'ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+              if (process.env[name]) core.exportVariable(name, process.env[name]);
+            }
+
+      # --load lands the image in the local daemon the way plain `docker build`
+      # does; the container-driver builder otherwise keeps it to itself.
       - name: Build backend image
-        run: docker build -t roadtrip/backend --target backend .
+        run: |
+          docker build -t roadtrip/backend --target backend --load \
+            --cache-from type=gha,scope=backend-image \
+            --cache-to type=gha,scope=backend-image,mode=max \
+            .
 
   backend-tests:
     needs: changes
@@ -236,12 +314,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
         with:
           distribution: temurin
           java-version: '25'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
       - name: Run backend tests + coverage
@@ -250,7 +328,7 @@ jobs:
       # fail_ci_if_error was false, so a Codecov outage (or a revoked token)
       # silently removed the coverage gate instead of failing the run.
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
         with:
           files: backend/build/reports/kover/report.xml
           flags: backend
@@ -259,7 +337,7 @@ jobs:
 
       - name: Upload coverage report artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: kover-report
           path: backend/build/reports/kover/
@@ -291,17 +369,18 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      ROADTRIP_DB_URL: jdbc:postgresql://localhost:5432/roadtrip
-      ROADTRIP_DB_USER: roadtrip
-      ROADTRIP_DB_PASSWORD: roadtrip
-      DISPATCH_COMPANION_TOKEN: ci-dispatch-companion-token
+      # The backend takes its DB coordinates from the profile file, not env
+      # vars, so the service container above must match what
+      # application-local.yaml hardcodes: db roadtrip, user roadtrip, password
+      # roadtrip, on localhost:5432. Change one and you must change the other.
+      ROADTRIP_PROFILE: local
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
         with:
           distribution: temurin
           java-version: '25'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
 
@@ -310,10 +389,10 @@ jobs:
 
       - name: Start backend
         run: |
-          jar=$(ls backend/build/libs/roadtrip-backend-*-all.jar | head -1)
+          jar=$(find backend/build/libs -name 'roadtrip-backend-*-all.jar' | head -1)
           PORT=8765 ROADTRIP_STATIC_DIR="${{ github.workspace }}" \
             nohup java -jar "$jar" > backend.log 2>&1 &
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -sSf http://127.0.0.1:8765/api/health >/dev/null; then
               echo "backend up"; exit 0
             fi
@@ -367,14 +446,25 @@ jobs:
           SQL
 
       # Chromium is a fixed-version (~150MB) download the install task otherwise
-      # re-fetches every run (~40s). Cache it, keyed on build.gradle.kts so a
-      # Playwright version bump invalidates the cache and reinstalls. On a hit
-      # installPlaywrightBrowsers is a no-op.
+      # re-fetches every run (~40s). Cache it, keyed on the Playwright version
+      # itself so only a real version bump invalidates it — hashing all of
+      # build.gradle.kts churned the cache on every unrelated build edit. On a
+      # hit installPlaywrightBrowsers is a no-op.
+      - name: Extract Playwright version
+        id: playwright
+        run: |
+          version="$(grep -oP 'playwrightVersion = "\K[^"]+' backend/build.gradle.kts)"
+          if [ -z "$version" ]; then
+            echo "playwrightVersion not found in backend/build.gradle.kts"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "playwright version: $version"
       - name: Cache Playwright Chromium
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('backend/build.gradle.kts') }}
+          key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}
           restore-keys: ${{ runner.os }}-playwright-
 
       # -x generateJooq: the fat-jar step above already compiled main, so the
@@ -389,8 +479,44 @@ jobs:
 
       - name: Upload test reports on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: smoke-test-reports
           path: backend/build/reports/tests/test/
           retention-days: 7
+
+  # The single branch-protection check. The path-gated jobs above skip
+  # routinely, so protection can't require them individually — a required
+  # check that never reports blocks the merge forever. This aggregates:
+  # skipped counts as pass (the filter decided the job wasn't needed), while
+  # failure or cancellation of anything fails the whole run.
+  ci-passed:
+    needs:
+      - changes
+      - lint
+      - gradle-lint
+      - web-tests
+      - companion-tests
+      - companion-image
+      - docker-build
+      - backend-tests
+      - smoke
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check aggregate result
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$RESULTS"
+          bad="$(printf '%s' "$RESULTS" | jq -r '
+            to_entries[]
+            | select(.value.result == "failure" or .value.result == "cancelled")
+            | .key')"
+          if [ -n "$bad" ]; then
+            echo "failed or cancelled: $bad"
+            exit 1
+          fi
+          echo "all needed jobs succeeded or were skipped"
