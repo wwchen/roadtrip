@@ -62,7 +62,7 @@ entity tables when the write belongs to an entity repo.
 
 Cross-entity repos are allowed only when the query is genuinely a projection or
 workflow over multiple owners. Name them after the read/use case
-(`PoiServingRepo`, `CampsiteProviderRepo`, `CanonicalViewRepo`), not as a generic
+(`PoiServingRepo`, `CampsiteProviderRepo`), not as a generic
 owner of another entity's table.
 
 ### Models
@@ -196,23 +196,25 @@ admin route
   -> ETL orchestrator
   -> service.etl.vendors/<vendor>
   -> repo upsert
-  -> [after successful import] CanonicalViewRepo.refreshCanonicalViews()
 ```
 
 The ETL framework owns orchestration and run lifecycle. Vendor ETLs parse,
 validate, and transform their upstream inputs. Persistence stays in repos.
 
 Each vendor ETL writes its own per-vendor campground/campsite rows keyed on
-`data_source`; nothing merges across vendors at write time or after import.
+`data_provider`; nothing merges across vendors at write time or after import.
 Duplicate real-world campgrounds from different vendors intentionally remain
 separate catalog rows.
 
-The read path serves campgrounds and campsites through the
-`campground_canonical` and `campsite_canonical` materialized views. These
-views are singleton projections: each active row has `group_key = id`,
-`member_ids = ARRAY[id]`, and `member_sources = ARRAY[data_source]`. Imports
-refresh the views so serving queries see newly inserted rows, but refreshes
-do not re-point POIs, watches, or availability history.
+The read path serves campgrounds and campsites directly off the
+`campgrounds` and `campsites` tables (`CampgroundRepo`, `CampsiteRepo`),
+filtered on `deleted_at IS NULL`. There is no canonical/matching layer: an
+earlier design collapsed cross-vendor duplicates into
+`campground_canonical`/`campsite_canonical` materialized views, but
+`V44__provider_model_cleanup.sql` dropped both when the provider model moved
+to direct `data_provider`/`booking_provider` columns, and nothing recreates
+them. Imports write straight to the base tables; there is no refresh step
+between an import and the row becoming visible to reads.
 
 ## Adding Code
 
