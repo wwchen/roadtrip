@@ -27,6 +27,9 @@ LOCAL_COMPOSE := $(SECRETS) exec local -- docker compose --env-file /dev/null -f
 # four mount theirs, so a retention or limits change would deploy without ever
 # taking effect.
 OBSERVABILITY_SERVICES := grafana alloy tempo prometheus loki
+# The only service that reads /run/secrets, so the only one a vault-only change
+# has to bounce.
+BACKEND_SERVICE := backend
 
 help:
 	@echo "Targets:"
@@ -58,6 +61,12 @@ ifeq ($(RUN_ENV),prod)
 	# and any service whose `.env`-sourced config moved. Postgres/Loki/Alloy
 	# keep running, so a code deploy no longer bounces the database.
 	$(PROD_COMPOSE) up -d
+	# `up -d` folds image ids and `.env`-sourced config into its change detection,
+	# but not the value behind a `secrets: environment:` entry — a vault-only
+	# change leaves the old /run/secrets mount in place and the container
+	# "Running". Deps are already up from the line above, so this bounces only the
+	# service that reads them.
+	$(PROD_COMPOSE) up -d --force-recreate --no-deps $(BACKEND_SERVICE)
 	# Grafana, Alloy, Tempo, and Prometheus bind-mount config, so `up -d` won't
 	# reload those files. Provisioned dashboards poll dashboard JSON, but
 	# datasource, telemetry pipeline, trace, and metric config need restarts.

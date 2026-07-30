@@ -1,11 +1,13 @@
 name: Deploy
 
 # SSHes to mini-ca, fast-forwards the deploy checkout, then runs
-# `make run env=prod`. Runtime secrets need nothing from this workflow: they
-# ride along encrypted in secrets/, and the host decrypts them with its own age
-# key into /run/secrets mounts. CI deliberately holds no decryption key — the
-# secrets below are credentials *for* the pipeline, not app config. Wraps a Tailscale join (mini-ca isn't on the public
-# internet) around the SSH step.
+# `make run env=prod`. Runtime secrets pass through this workflow without being
+# read by it: they ride along encrypted in secrets/, and the host decrypts them
+# with its own age key into /run/secrets mounts. CI deliberately holds no
+# decryption key — the secrets below are credentials *for* the pipeline, not app
+# config. A push that changes only secrets/ still has to deploy, though, which is
+# why that path is a trigger: the vault is where runtime config lives. Wraps a
+# Tailscale join (mini-ca isn't on the public internet) around the SSH step.
 #
 # Triggers only when files that affect the running service change. Doc-only
 # pushes, RFCs, and Tilt config don't burn deploy minutes. Manual override
@@ -30,6 +32,10 @@ on:
       - 'index.html'
       - 'availability.html'
       - 'web/**'
+      # A vault change is a runtime config change: the host decrypts these on
+      # deploy, so a new client id or rotated token has to reach it the same way
+      # code does. Without this, `manage.py set` lands on master and never ships.
+      - 'secrets/**'
       - '.github/workflows/deploy.yml'
   workflow_dispatch: {}
 
@@ -109,6 +115,44 @@ jobs:
           done
           echo "health check failed: $health_url"
           exit 1
+
+      # The checks above pass with sign-in completely broken: every page returns
+      # 200 and /api/me reports auth_enabled:true whenever the three auth secrets
+      # are merely *present*. Only the provider knows whether the client id and
+      # callback URL it received are ones it recognises, so drive one real hop of
+      # the handshake and let it answer.
+      - name: Verify sign-in handshake
+        run: |
+          base="${{ vars.DEPLOY_BASE_URL || 'https://roadtrip.floo.ca' }}"
+          # Not `status`: zsh makes that read-only, so anyone pasting this to
+          # debug by hand gets a confusing failure instead of a result.
+          http_code="$(curl -s -o /dev/null -D headers.txt -w '%{http_code}' "$base/auth/login")"
+          if [ "$http_code" != "302" ]; then
+            echo "auth: $base/auth/login returned $http_code, expected 302 (sign-in disabled?)"
+            exit 1
+          fi
+          authorize="$(tr -d '\r' < headers.txt | sed -n 's/^[Ll]ocation: //p' | head -1)"
+          if [ -z "$authorize" ]; then
+            echo "auth: /auth/login redirected with no Location header"
+            exit 1
+          fi
+          # Query string carries state/nonce/PKCE — log only the endpoint.
+          echo "auth: /auth/login -> ${authorize%%\?*}"
+          http_code="$(curl -s -o authorize.html -w '%{http_code}' "$authorize")"
+          case "$http_code" in
+            200|302) echo "auth: provider accepted the callback URL (HTTP $http_code)" ;;
+            *)
+              echo "auth: provider rejected the authorize request (HTTP $http_code)"
+              # The reason is prose inside an HTML error page ("Callback URL
+              # mismatch. <uri> is not in the list of allowed callback URLs"), so
+              # strip tags rather than pattern-match a class name that will drift.
+              tr -d '\n' < authorize.html \
+                | sed -e 's#<style[^>]*>[^<]*</style>##g' -e 's#<script[^>]*>[^<]*</script>##g' \
+                      -e 's/<[^>]*>/ /g' -e 's/  */ /g' \
+                | cut -c1-400
+              exit 1
+              ;;
+          esac
 
       # `ps --status running` above passes for a wedged Alloy or a full Loki disk.
       # Ask Prometheus instead. promtool ships inside the image, so this needs no
