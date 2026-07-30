@@ -59,16 +59,6 @@ application {
     mainClass.set("ca.floo.roadtrip.MainKt")
 }
 
-// Legacy data.json → Postgres migration tool (campsite). Invoke with:
-//   ./gradlew :backend:campsiteMigrate --args="/path/to/data.json"
-tasks.register<JavaExec>("campsiteMigrate") {
-    group = "application"
-    description = "Migrate legacy campsite data.json into Postgres."
-    mainClass.set("ca.floo.campsite.recgov.booker.tools.MigrateKt")
-    classpath = sourceSets["main"].runtimeClasspath
-    standardInput = System.`in`
-}
-
 // Idempotent Chromium download for SmokeTest. The Playwright JVM driver
 // shells out to `playwright install`, which fetches into ~/Library/Caches
 // /ms-playwright (macOS) or ~/.cache/ms-playwright (Linux). Re-running is a
@@ -401,21 +391,25 @@ kover {
         filters {
             excludes {
                 packages("ca.floo.roadtrip.db.generated", "ca.floo.roadtrip.db.generated.*")
+                // Only classes that actually exist belong here. An exclude for
+                // a deleted class filters nothing while making the measured
+                // number look deliberately scoped, so the floor below ends up
+                // set against a filter set nobody has re-read in months.
                 classes(
                     "ca.floo.roadtrip.MainKt",
-                    "ca.floo.roadtrip.RoadtripBootContext",
-                    "ca.floo.roadtrip.RoadtripRuntime",
-                    "ca.floo.roadtrip.RoadtripRuntimeKt",
                     "ca.floo.roadtrip.RoadtripRoutingKt*",
-                    "ca.floo.campsite.recgov.booker.tools.*",
                 )
             }
         }
         // Keep this floor slightly below measured line coverage so it catches
         // real drift without making every small cleanup PR a coverage chore.
+        // Measured 75.87% line coverage (11146/14690) over the filter set
+        // above; 74 leaves ~2pp of headroom. The previous 45 was measured
+        // against a filter list naming classes that had since been deleted,
+        // so it had drifted 30pp below reality and gated nothing.
         verify {
             rule {
-                minBound(45)
+                minBound(74)
             }
         }
     }
