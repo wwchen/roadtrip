@@ -24,13 +24,12 @@ class SlackContentWatchStatusRendererTest {
         siteName: String? = null,
         siteLoop: String? = null,
         campgroundName: String? = null,
-        dashboardUrl: String? = "https://grafana.test/d/reservable-watch-drill?var-watch_id=42",
         poiLinks: List<WatchStatusNotice.PoiLink> =
             listOf(
                 WatchStatusNotice.PoiLink(
                     poiId = 7,
                     mapUrl = "https://app.test/?poi=7",
-                    gridUrl = "https://grafana.test/d/availability-cell-matrix?var-poi_id=7",
+                    gridUrl = "https://grafana.test/d/campground-detail?var-poi_id=7",
                 ),
             ),
     ) = WatchStatusNotice(
@@ -42,7 +41,6 @@ class SlackContentWatchStatusRendererTest {
         campgroundName = campgroundName,
         startDate = start,
         endDate = end,
-        dashboardUrl = dashboardUrl,
         poiLinks = poiLinks,
     )
 
@@ -102,7 +100,9 @@ class SlackContentWatchStatusRendererTest {
         // Deep-link buttons render as URL buttons in the actions row, not
         // mrkdwn hyperlinks embedded in a section.
         assertTrue(text.contains("Availability grid"), text)
-        assertTrue(text.contains("/d/availability-cell-matrix"), text)
+        // The grid link must name a dashboard that exists — see
+        // scripts/validate_grafana_dashboards.py for the CI-side guard.
+        assertTrue(text.contains("/d/campground-detail?var-poi_id=7"), text)
         assertTrue(text.contains("View on map"), text)
         assertTrue(text.contains("?poi=7"), text)
     }
@@ -133,7 +133,6 @@ class SlackContentWatchStatusRendererTest {
             listOf(
                 SlackWatchCard.ACTION_OPEN_GRID,
                 SlackWatchCard.ACTION_OPEN_MAP,
-                SlackWatchCard.ACTION_OPEN_DASHBOARD,
                 SlackWatchCard.ACTION_WATCH_RESUME,
                 SlackWatchCard.ACTION_WATCH_DELETE,
             ),
@@ -215,7 +214,7 @@ class SlackContentWatchStatusRendererTest {
 
     @Test
     fun `deep-link buttons follow configured hosts without dropping watch controls`() {
-        val rendered = SlackContentWatchStatusRenderer.render(notice(dashboardUrl = null, poiLinks = emptyList()))
+        val rendered = SlackContentWatchStatusRenderer.render(notice(poiLinks = emptyList()))
         val text = allText(rendered)
         assertTrue(!text.contains("/d/"), "no Grafana links when unconfigured")
         assertTrue(!text.contains("?poi="), "no map links when the web app is unconfigured")
@@ -233,7 +232,6 @@ class SlackContentWatchStatusRendererTest {
         val mapOnly =
             SlackContentWatchStatusRenderer.render(
                 notice(
-                    dashboardUrl = null,
                     poiLinks = listOf(WatchStatusNotice.PoiLink(poiId = 7, mapUrl = "https://app.test/?poi=7", gridUrl = null)),
                 ),
             )

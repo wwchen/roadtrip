@@ -8,9 +8,9 @@ import java.time.LocalDate
  * status message.
  * Unlike [WatchOpening] (a real opening), this carries no availability — it
  * tells the user the watch is live, paused, or done. Every field is plain
- * domain data, including the dashboard deep-link URLs and any per-POI links:
- * the notification layer owns turning them into Block Kit buttons and never
- * reaches back into the availability domain.
+ * domain data, including any per-POI deep links: the notification layer owns
+ * turning them into Block Kit buttons and never reaches back into the
+ * availability domain.
  *
  * [watchId] is echoed into every interactive button's `value` so the Slack
  * interactivity handler (see
@@ -34,7 +34,6 @@ data class WatchStatusNotice(
     val campgroundName: String?,
     val startDate: LocalDate,
     val endDate: LocalDate,
-    val dashboardUrl: String?,
     val poiLinks: List<PoiLink>,
     val appRootUrl: String? = null,
 ) {
