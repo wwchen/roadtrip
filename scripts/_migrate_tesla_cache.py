@@ -35,7 +35,7 @@ def migrate_index() -> int:
         return 0
     NEW_INDEX_DIR.mkdir(parents=True, exist_ok=True)
     if any(NEW_INDEX_DIR.glob("*.json")):
-        print(f"  tesla-index already has captures; skipping bulk-feed migration",
+        print("  tesla-index already has captures; skipping bulk-feed migration",
               file=sys.stderr)
         return 0
     try:
