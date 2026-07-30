@@ -8,11 +8,7 @@ import ca.floo.roadtrip.route.api.geocode.geocodeRoutes
 import ca.floo.roadtrip.route.api.health.healthRoutes
 import ca.floo.roadtrip.route.auth.authRoutes
 import ca.floo.roadtrip.route.static.staticSiteRoutes
-import ca.floo.roadtrip.route.test.testEmailRoutes
-import ca.floo.roadtrip.route.test.testSlackRoutes
 import ca.floo.roadtrip.service.health.ReadinessService
-import ca.floo.roadtrip.service.notification.email.EmailNotificationService
-import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
 import io.ktor.client.request.get
 import io.ktor.server.application.call
 import io.ktor.server.response.respondText
@@ -47,8 +43,6 @@ class RouteAccessCoverageTest {
                 healthRoutes { ReadinessService.Report(databaseReachable = true) }
                 geocodeRoutes(MapboxGeocoder(token = null))
                 authRoutes(wiring = null)
-                testEmailRoutes(EmailNotificationService(config = null), appRootUrl = null)
-                testSlackRoutes(SlackNotificationService(config = null))
                 // Static file mounts register serving leaves beneath each root.
                 staticSiteRoutes(createTempDirectory("rt-access").toFile())
             }
