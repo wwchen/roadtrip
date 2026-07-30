@@ -118,7 +118,6 @@ def write_envelope(
             raise TypeError("write_envelope: pass `source=<slug>` or `source_obj=<LoadedSource>`")
         source_obj = load_source(source)
     out_root = source_obj.output_dir_prefix
-    slug = source_obj.slug
     ts = ts or utc_ts()
     if part:
         out_dir = out_root / ts

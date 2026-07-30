@@ -43,7 +43,6 @@ flags so it stays vendor-shaped not host-shaped.
 from __future__ import annotations
 
 import argparse
-import datetime as dt
 import json
 import sys
 import time

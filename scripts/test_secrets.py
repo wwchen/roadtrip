@@ -6,7 +6,6 @@ still exercises everything that doesn't require an encryption toolchain.
 """
 
 import argparse
-import os
 import shutil
 import subprocess
 import sys
