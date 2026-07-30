@@ -1,6 +1,12 @@
 services:
   # Expose local-only service ports for host tools, browser QA, and Gradle loops.
   postgres:
+    # Locally the container's lifecycle is tied to whatever brought it up (Tilt:
+    # compose up foreground + cleanup hook on exit). `unless-stopped` — which the
+    # base file sets so prod survives a host reboot — would resurrect it on a
+    # Docker Desktop restart even with Tilt gone, drifting "Tilt running" away
+    # from "container exists."
+    restart: "no"
     ports:
       - "127.0.0.1:5432:5432"
 

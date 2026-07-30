@@ -38,13 +38,13 @@ services:
   postgres:
     profiles: [pois]
     image: postgis/postgis:16-3.4
-    # Restart `no` so the container's lifecycle is tied to whatever brought
-    # it up. In dev that's Tilt (compose up foreground + cleanup hook on
-    # exit); on the deploy host it's `make run env=prod`.
-    # `unless-stopped` would resurrect the container on Docker Desktop
-    # reboots even when Tilt is gone, drifting "Tilt running" away from
-    # "container exists."
-    restart: "no"
+    # This base file is what the deploy host runs, where the database must come
+    # back on its own after a reboot — otherwise every other service restarts
+    # and the site stays down until someone runs `make run env=prod` by hand.
+    # The Tilt/Docker-Desktop rationale for `no` (don't resurrect a container
+    # once Tilt is gone, so "Tilt running" can't drift from "container exists")
+    # is a local-dev concern, so it lives in docker-compose.local.yml instead.
+    restart: unless-stopped
     logging: *log-rotation
     hostname: postgres
     shm_size: 1g
