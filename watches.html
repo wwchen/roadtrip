@@ -82,60 +82,9 @@
   }
   .cg-btn-secondary:hover { background: var(--rt-fill-hover); }
   .cg-btn:disabled { opacity: 0.55; cursor: default; }
-  .test-notifications-details {
-    margin-top: 40px;
-    border: 1px solid var(--rt-warn);
-    border-radius: var(--rt-r-md);
-    overflow: hidden;
-  }
-  .test-notifications-summary {
-    padding: 10px 14px;
-    background: color-mix(in srgb, var(--rt-warn) 10%, transparent);
-    color: var(--rt-warn);
-    font-size: 13px;
-    font-weight: 650;
-    cursor: pointer;
-    user-select: none;
-  }
-  .test-notifications-summary:hover {
-    background: color-mix(in srgb, var(--rt-warn) 18%, transparent);
-  }
-  .test-notifications {
-    padding: 14px;
-  }
-  .test-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-  .test-label {
-    min-width: 50px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--rt-muted);
-  }
-  .test-input {
-    height: 34px;
-    padding: 0 10px;
-    border: 1px solid var(--rt-border-strong);
-    border-radius: var(--rt-r-md);
-    background: var(--rt-bg);
-    color: var(--rt-text);
-    font: inherit;
-    font-size: 13px;
-    width: 200px;
-  }
-  .test-status {
-    font-size: 12px;
-    color: var(--rt-muted);
-  }
-  .test-status.ok { color: var(--rt-brand); }
-  .test-status.err { color: var(--rt-warn); }
   @media (max-width: 640px) {
     body { padding: 12px; }
     .top { align-items: flex-start; flex-direction: column; }
-    .test-row { flex-wrap: wrap; }
   }
 </style>
 </head>
@@ -155,24 +104,6 @@
   <div id="banner-host"></div>
   <div id="form-host"></div>
   <div id="table-host"></div>
-
-  <details class="test-notifications-details">
-    <summary class="test-notifications-summary">Test notifications</summary>
-    <div class="test-notifications">
-      <div class="test-row">
-        <label class="test-label">Slack</label>
-        <input id="test-slack-channel" type="text" placeholder="#alerts" class="test-input">
-        <button id="test-slack-btn" class="cg-btn cg-btn-secondary">Send test</button>
-        <span id="test-slack-status" class="test-status"></span>
-      </div>
-      <div class="test-row">
-        <label class="test-label">Email</label>
-        <input id="test-email-to" type="text" placeholder="you@example.com, other@example.com" class="test-input">
-        <button id="test-email-btn" class="cg-btn cg-btn-secondary">Send test</button>
-        <span id="test-email-status" class="test-status"></span>
-      </div>
-    </div>
-  </details>
 </main>
 <script type="module" src="/web/watches/watches-page.js"></script>
 </body>
