@@ -71,23 +71,35 @@ class GrafanaLogPanelTest(unittest.TestCase):
 
         self.assertEqual("table", status_panel["type"])
         self.assertEqual(logs_explorer_panel["transformations"], status_panel["transformations"])
+
+        # Fields arrive as Loki structured metadata, so they are extracted from
+        # labels rather than parsed out of the line with a `json` stage.
+        self.assertEqual(
+            {"source": "labels"},
+            status_panel["transformations"][0]["options"],
+        )
+        self.assertEqual(
+            "^(Time|level|logger|message|run_id|trace_id)$",
+            status_panel["transformations"][1]["options"]["include"]["pattern"],
+        )
         self.assertEqual(
             {
                 "Time": 0,
                 "level": 1,
                 "logger": 2,
                 "message": 3,
-                "context": 4,
-                "loggerName": 5,
+                "run_id": 4,
+                "trace_id": 5,
             },
             status_panel["transformations"][2]["options"]["indexByName"],
         )
 
         expr = status_panel["targets"][0]["expr"]
         self.assertIn('{container=~"roadtrip-backend.*"}', expr)
-        self.assertIn('json level="level", loggerName="loggerName", message="message", context="mdc"', expr)
-        self.assertIn('| __error__=""', expr)
-        self.assertIn('label_format logger=', expr)
+        # `logger` is the abbreviated class name the table shows; `message` is
+        # the raw line. Both are derived in the query, not in a transformation.
+        self.assertIn("label_format logger=", expr)
+        self.assertIn("message=`{{ __line__ }}`", expr)
         self.assertIn('|~ "$log_filter"', expr)
 
         logger_override = next(
