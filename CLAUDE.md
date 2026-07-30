@@ -19,8 +19,10 @@ Key routing rules:
 
 ## Project architecture rules
 
-**`AGENTS.md` is the single source of truth for architecture, backend
-layering, and design-principle rules — read it.** Those rules apply here
-unchanged; this file does not restate or fork them. The rest of this file is
-Claude-Code-specific config (skill routing) that has no equivalent in
-`AGENTS.md`.
+`AGENTS.md` is the single source of truth for architecture, backend layering,
+and design-principle rules. It is imported below, so those rules load into
+context automatically rather than depending on an agent choosing to go read
+them — do not restate or fork them here. Everything above is
+Claude-Code-specific config that has no equivalent in `AGENTS.md`.
+
+@AGENTS.md
