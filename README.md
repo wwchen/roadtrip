@@ -4,7 +4,7 @@ Personal web map for roadtripping a Tesla. Live at [roadtrip.floo.ca](https://ro
 
 ## Layers
 
-- **Tesla Superchargers** — supercharge.info, live fetch; per-site pricing from tesla.com (US + Canada)
+- **Tesla Superchargers** — supercharge.info, live fetch (US + Canada)
 - **Planet Fitness** — OSM Overpass
 - **Campgrounds** — USCampgrounds.info (federal/state/local, US) + BC Parks (BC provincial) + hand-curated Parks Canada (BC national parks), with US federal sites enriched from recreation.gov (photos, ratings, per-carrier cell coverage, containing unit name)
 - **National & State Parks** — USGS PAD-US polygons
@@ -17,7 +17,6 @@ Personal web map for roadtripping a Tesla. Live at [roadtrip.floo.ca](https://ro
 tilt up                  # Compose stack (Postgres/backend/Grafana/observability/Rec.gov companion)
 make run                 # Kotlin/Ktor backend on http://127.0.0.1:8765 (serves static + /api)
 make run env=prod        # on the deploy host: build image + docker compose up
-make fetch-tesla-supercharger-pricing  # mint cookies + crawl Tesla Supercharger pricing into data/raw/
 ```
 
 `tilt up` is the easiest path for full-stack dev: Tilt uses Docker Compose
@@ -103,9 +102,7 @@ deploys use `make run env=prod`, which builds the backend image and recreates
 the production Compose stack.
 
 The Tilt UI also has a `data` cluster of manual-trigger background workers
-(none auto-run on `tilt up`) for POI refresh. Tesla Supercharger pricing
-isn't surfaced there — the fetch is interactive (cURL paste) and runs
-from a terminal via `make fetch-tesla-supercharger-pricing`.
+(none auto-run on `tilt up`) for POI refresh.
 
 POI data refresh is a two-step flow. Fetch runs the registry Python fetchers on
 the host; import goes through the backend admin API and writes Postgres rows.
@@ -126,13 +123,9 @@ on disk.
 
 Fetch targets are `data_sources.slug` values in
 `backend/src/main/resources/poi-registry.yaml`. Import targets are the
-display names from `poi_data:`, `campsite_data:`, and
-`campsite_parent_joiner:` rows. Adding a vendor means appending registry
-rows, writing the fetcher if needed, and wiring the Kotlin ETL adapter.
-
-> Note: `refresh-tesla-cookies` is **Tesla-only**. Recreation.gov auth is
-> owned by the companion's logged-in Chromium profile. Two unrelated systems
-> that both happen to use the word "cookies."
+display names from `poi_data:` and `campsite_data:` rows. Adding a vendor
+means appending registry rows, writing the fetcher if needed, and wiring
+the Kotlin ETL adapter.
 
 First time only:
 
@@ -149,15 +142,6 @@ Runtime secrets live encrypted in `secrets/` and are mounted into containers at
 `/run/secrets`; nothing writes a plaintext `.env`. `./secrets/manage.py ls`
 shows what exists, `set` changes a value, and committing it is the deploy.
 Full details in **[docs/secrets.md](docs/secrets.md)**.
-
-Pricing is served from the on-disk cache (`data/pricing-cache/`). Tesla is
-never called from the user request path — the backend just reads cached JSON
-and 404s with `{"error":"not_cached"}` for sites that haven't been crawled.
-To populate/refresh the cache, run `make fetch-tesla-supercharger-pricing`,
-which mints fresh cookies, smoke-tests them, and walks the bulk index +
-per-slug detail. (For a cache-aware locations-only re-fetch use
-`make data-fetch TARGET=tesla-locations`.) See `README_PRICING.md` for
-cookie details.
 
 ## Refresh POI data
 
@@ -212,9 +196,7 @@ JSON rather than a provider FK.
 **Raw cache.** `data/raw/` is gitignored — captures are append-only on
 the host running the poller. Crawling Aspira/Tesla is expensive (Azure
 WAF, curl-impersonate + cookie injection); replaying raw is free.
-Recovery on a fresh checkout: re-run the fetchers, or run
-`scripts/_migrate_tesla_cache.py` to bootstrap Tesla from the legacy
-`data/pricing-cache/` if it's still around.
+Recovery on a fresh checkout: re-run the fetchers.
 
 **Curated repo data** (no fetch step) lives at `data/curated/`:
 `parks-canada-{bc,ab}.json`, `alberta-provincial.json`. The Kotlin
@@ -303,52 +285,34 @@ before import.
    cookie-bot/README notes in the code) — currently disabled because no
    aarch64 Chromium build passes Akamai's TLS fingerprint gate on the mini.
 
-4. **Pricing cache** persists in `$HOME/.roadtrip-map/pricing-cache`
-   (override with `CACHE_DIR=…` in `.env.local`).
-
-### Heads up: pricing cookies are IP-bound
-
-Tesla's `_abck` cookie is pinned to the IP that received it. Cookies pasted
-from your laptop browser will work from the Docker host **only if the Docker
-host egresses from the same public IP** — i.e., same home network. If the
-Docker host is elsewhere, either grab cookies from a browser *on* that
-network, or have your laptop egress through the host's IP via Tailscale
-exit node before running `make fetch-tesla-supercharger-pricing`.
-Production hosts mint their own cookies out-of-band.
-
-Cookies expire every day or so. When pricing starts returning 403 or 429,
-re-run `make fetch-tesla-supercharger-pricing` — its loop will mint fresh
-ones automatically.
-
 ## Architecture notes
 
 - **Backend.** Kotlin/Ktor + Netty serves the entire site: `/` →
-  `index.html`, `/web/*` and `/data/*` → static (with `/data/pricing-cache/*`
-  excluded so it's only reachable through `/api/pricing/{slug}`), plus
-  `/api/pois`, `/api/pricing/{slug}`, `/api/health`. Postgres+PostGIS holds
-  the imported POI data; Supercharger geometry is live from
-  supercharge.info/service/supercharge/allSites.
-- **Campsite alert sub-app.** A separate recreation.gov polling/booking tool
-  is mounted at `/campsite/` (UI served from the JAR's classpath at
-  `backend/src/main/resources/static/campsite/`) with its own API surface
-  under `/api/campsite/*` (alerts, matches, settings, status, events SSE,
-  poll, companion, campgrounds/search). Shares the same Postgres instance;
-  Flyway migrates both schemas on startup.
-- **Pricing cache.** `/api/pricing/{slug}` is read-only against
-  `data/pricing-cache/{slug}.json`. Misses return 404 with
-  `{"error":"not_cached"}`. Cache is populated offline by
-  `scripts/fetch_tesla_index.py` + `scripts/fetch_tesla_locations.py` (run via `make fetch-tesla-supercharger-pricing`),
-  which shells out to `curl-impersonate` because Akamai fingerprints TLS
-  ClientHello + HTTP/2 SETTINGS — stock OpenSSL curl gets 403.
+  `index.html`, `/web/*` and `/data/*` → static (with `/data/raw/*`
+  excluded), plus `/api/pois`, `/api/health`, and the availability/watch API
+  described below. Postgres+PostGIS holds the imported POI data; Supercharger
+  geometry is live from supercharge.info/service/supercharge/allSites.
+- **Campsite availability + watches.** Reservation-provider availability and
+  watch/alert management live in the main app: the API is
+  `/api/pois/{id}/campsites`, `/api/pois/{id}/campsites/availability`, and
+  `/api/watches`, and the UI is the topbar alerts panel plus the standalone
+  `/availability` and `/watches` pages (served straight from the repo root as
+  `availability.html` / `watches.html`). See
+  [docs/reservation-providers.md](docs/reservation-providers.md) for the
+  provider abstraction.
 - **Map** — MapLibre GL, vector and raster basemaps, runtime style-swap.
   Overlay data is cached in memory and re-installed on every `style.load`
   so basemap swaps don't wipe POIs.
 
-## Campsite alert tool (`/campsite/`)
+## Campsite availability alerts and watches
 
-The campsite sub-app polls recreation.gov for matching availability against
-operator-defined alerts and (optionally) auto-claims matches by adding them
-to a real recreation.gov shopping cart. **The cart-add path requires a
+The watch poller polls reservation-provider availability (rec.gov, Aspira,
+ReserveAmerica, ...) for matching openings against operator-defined watches
+and (optionally) auto-claims rec.gov matches by adding them to a real
+recreation.gov shopping cart. This lives in the main app — see
+[docs/reservation-providers.md](docs/reservation-providers.md) for the
+provider abstraction and the `/availability` / `/watches` pages above for
+the UI. **The cart-add path requires a
 separate companion process or container** — recreation.gov sits behind Akamai, which
 flags datacenter IPs and headless Chromium, so a real Chromium running on
 the operator's machine is the only thing that lands cart adds reliably. The

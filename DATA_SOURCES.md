@@ -1,12 +1,12 @@
 # Data Sources
 
-Summary of research for each POI category, with the chosen primary/fallback and a refresh plan. See `REQUIREMENTS.md` for context.
+Summary of research for each POI category, with the chosen primary/fallback and a refresh plan.
 
 ## Summary table
 
 | Category | Primary source | Fallback | License | Refresh | Runtime access |
 |---|---|---|---|---|---|
-| Tesla Supercharger | supercharge.info `/service/supercharge/allSites` | Open Charge Map (operator=23) | Source-available, no formal license; community-consumed | Daily via GH Action (or direct browser — CORS enabled) | Live fetch from supercharge.info (CORS) + per-site pricing from `/api/pricing/{slug}` (cache-only) |
+| Tesla Supercharger | supercharge.info `/service/supercharge/allSites` | Open Charge Map (operator=23) | Source-available, no formal license; community-consumed | Daily via GH Action (or direct browser — CORS enabled) | Live fetch from supercharge.info (CORS) |
 | Planet Fitness | Overpass (`brand=Planet Fitness`) | One-time scrape of pf.com locator | OSM ODbL | Weekly | `/api/pois` bbox query (PostGIS) |
 | Campgrounds | USCampgrounds.info + BC Parks API + recreation.gov enrichment | Overpass `tourism=camp_site` | CC-BY + OGL-BC + rec.gov public domain | Weekly | `/api/pois` bbox query (PostGIS) |
 | Free chargers | NREL AFDC (filtered) | Open Charge Map (`usagetypeid=1`) | US Gov public domain + ODbL | Daily via GH Action | Prebuilt GeoJSON (not yet wired) |
@@ -204,12 +204,7 @@ This sidesteps:
 - `OCM_API_KEY` — openchargemap.org — optional fallback
 - supercharge.info, Overpass, PAD-US, USCampgrounds.info, recreation.gov ratingreview — no key needed
 
-Tesla pricing offline refresh worker (`scripts/fetch_tesla_superchargers.py`)
-requires a separately-managed session cookie in `.env`; see README_PRICING.md.
-The Kotlin backend serves the resulting cache from `data/pricing-cache/` and
-never calls Tesla on the user request path.
-
-## Open decisions (from REQUIREMENTS.md)
+## Open decisions
 
 - **Map library**: Leaflet (easier, raster tiles) vs MapLibre GL (vector, nicer). Recommend **MapLibre + Protomaps** — one `.pmtiles` file can be hosted on GH Pages, no tile-server dependency, works offline by design.
 - **Clustering**: `supercluster` or the built-in clustering in whichever library.

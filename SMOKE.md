@@ -1,8 +1,21 @@
 # Real-Device Smoke Checklist
 
-Run this on a real iPhone before each `make deploy`. Tests cover the trip-critical
-golden paths: open the map, find a Supercharger or campground, tap, decide, navigate
-out. If any item fails, the deploy waits until it passes.
+Run this on a real iPhone before a deploy (push to `master`; CI runs
+`.github/workflows/deploy.yml`). Tests cover the trip-critical golden paths:
+open the map, find a Supercharger or campground, tap, decide, navigate out.
+If any item fails, hold the push until it passes.
+
+Before the manual pass, run the automated baseline this checklist doesn't
+replace:
+
+```sh
+make qa   # Playwright JVM smoke (backend/src/smokeTest) against a running stack
+```
+
+`make qa` covers cold load + Banff campground popup, the mobile layers panel,
+the campground agency filter, POI/route share links, and route mode's
+on-route POI painting. It does not touch a real phone, so it can't catch
+touch-target or gzip/cellular regressions — that's what this checklist is for.
 
 Target device: iPhone Safari on cellular (LTE or 5G — disable Wi-Fi). Cellular is
 the regression catcher; Wi-Fi hides slow-load and gzip-not-applied bugs.
@@ -12,9 +25,7 @@ URL: <https://roadtrip.floo.ca>
 ## 0. Health (sanity check before everything else)
 
 - [ ] `curl https://roadtrip.floo.ca/api/health` returns
-      `{"status":"ok","pricing_cache_count":<N>,"now":<epoch>}` with
-      `pricing_cache_count` >1000. (Cookie freshness is *not* surfaced here —
-      the live backend never calls Tesla; cache health is the only signal.)
+      `{"status":"ok","now":<epoch>}`.
 
 ## 1. Cold load
 
@@ -50,8 +61,7 @@ URL: <https://roadtrip.floo.ca>
 ## 4. Supercharger popup → Tesla
 
 - [ ] Tap any Supercharger pin (try Banff or Canmore). Popup shows status pill,
-      stalls, kW, address, **pricing card** (loads within ~2 s — uses pre-warmed
-      cache).
+      stalls, kW, and address.
 - [ ] "Open in Tesla" button: tap. Opens tesla.com/findus in a new tab,
       **centered on the chosen Supercharger** (not zoomed out to USA).
 - [ ] No "Access Denied" Akamai page.
@@ -79,14 +89,20 @@ URL: <https://roadtrip.floo.ca>
 - [ ] Pan to the Olympic Peninsula. Tap a federal campground. Popup links
       row contains `recreation.gov ↗`, not Parks Canada/Alberta links.
 
-## 6. Offline-tolerance rough check
+## 6. Campsite availability + watches
+
+- [ ] Open a reservable campground's drawer. The availability section loads
+      per-day status for the visible window without a console error.
+- [ ] From the drawer or `/watches`, set a watch on an open date. It appears
+      in the watches list with the right campground/date.
+
+## 7. Offline-tolerance rough check
 
 - [ ] Toggle Airplane Mode after the map fully loads. Pan a region you've
       already visited — tiles + dots stay rendered (browser cache).
-- [ ] Disable Airplane Mode. Tap a Supercharger pin: pricing loads from
-      `/api/pricing/{slug}` (cache hit) within 1 s.
+- [ ] Disable Airplane Mode. Map recovers and resumes fetching `/api/pois`.
 
-## 7. Battery / heat
+## 8. Battery / heat
 
 - [ ] Map idle (open, no interaction) for 5 min: phone doesn't get hot.
       Tile rendering should pause when nothing is happening.
@@ -98,13 +114,7 @@ URL: <https://roadtrip.floo.ca>
 | Failure | Likely cause | Action |
 | --- | --- | --- |
 | `/api/pois` or state-parks.geojson served uncompressed | gzip middleware not deployed or Cloudflare stripping | Check Ktor `Compression` config in `backend/.../Main.kt`; verify `Vary: Accept-Encoding` arrives at the client |
-| Supercharger popup says "Pricing not yet cached" everywhere | offline fetch hasn't been run / cache empty | `make fetch-tesla-supercharger-pricing` (mints cookies + walks the full fetch) |
-| Supercharger popup pricing missing for one site | site not yet crawled by offline worker | wait for next fetch, or `make fetch-tesla-supercharger-pricing` to re-run |
-| Tesla button → Access Denied | Akamai bot wall (rare; cookies bound to wrong IP) | `make fetch-tesla-supercharger-pricing` |
-| No popup on tap (zooms instead) | Hit layer above visual layer was stripped by edit | `git diff index.html` for `pf-points-hit`/`sc-points-hit`/`np-pts-hit`/`sp-pts-hit` |
+| Tesla button → Access Denied | Akamai bot wall (rare) | Not user-fixable from the client; check `tesla.com/findus` directly outside the app |
+| No popup on tap (zooms instead) | Hit layer above visual layer was stripped by edit | `git diff web/layers.js` for `pf-points-hit`/`sc-points-hit`/`cg-points-hit`/`np-pts-hit`/`sp-pts-hit` |
 | Geolocate dot doesn't appear | iOS denied permission silently | iOS Settings → Safari → Location → While Using App |
-
-After a real-device pass, deploy:
-```
-make deploy
-```
+| Campsite availability section errors | provider adapter down or misconfigured | Check the `/availability` Grafana dashboard / `availability_fetch_call` rows for the target provider |
