@@ -180,8 +180,7 @@ Skip for the POC.
   ├─ scripts/fetch_recgov.py           # weekly — RIDB federal campgrounds
   ├─ scripts/fetch_recgov_campground_enrichment.py
   │                                      # weekly — rec.gov rating/cell aggregates
-  ├─ scripts/fetch_planet_fitness.py   # weekly — Overpass
-  └─ scripts/fetch_parks.py            # monthly — PAD-US FeatureServer
+  └─ scripts/fetch_planet_fitness.py   # weekly — Overpass
 captures raw envelopes under `data/raw/`, then `make data-import` replays
 those captures into Postgres.
 ```

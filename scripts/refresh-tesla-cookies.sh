@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 #
 # Mint Tesla cookies into this repo's .env. Use before any Tesla-touching
-# refresh (fetch_tesla_index.py / fetch_tesla_locations.py /
-# fetch-tesla-supercharger-pricing).
+# refresh (fetch_tesla_index.py / fetch_tesla_locations.py).
 #
 # Akamai binds _abck to the egress IP that minted it, so cookies captured
 # here only work for fetches that egress from this laptop's IP — which

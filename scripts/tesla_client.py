@@ -1,34 +1,24 @@
 """Tesla findus client — cookie loading + curl-impersonate fetch.
 
-Used by the offline refresh worker (fetch_tesla_superchargers.py). The live
-serving stack does NOT use this — pricing is served from data/pricing-cache/
-by the Kotlin backend, no Tesla calls in the user request path.
+Used by the offline refresh fetchers (fetch_tesla_index.py and
+fetch_tesla_locations.py). The live serving stack does NOT use this —
+no Tesla calls happen in the user request path.
 
 Cookies are bound to the egress IP that minted them, so this only works from
-the machine where you ran the Tesla pricing fetch script.
+the machine where you ran refresh-tesla-cookies.sh.
 """
 import json
 import os
 import subprocess
-import sys
-import time
 import urllib.parse
-import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-CACHE_DIR = ROOT / "data" / "pricing-cache"
 # TESLA_COOKIES is deliberately not in the vault: Akamai binds _abck to the
 # egress IP that minted it, so one shared copy would give every host a cookie
 # only one of them can use. refresh-tesla-cookies.sh mints it here per machine.
 # Everything else arrives as an environment variable from `manage.py exec`.
 ENV_LOCAL_PATH = ROOT / ".env.local"
-
-# When COOKIE_BOT_URL is set, we fetch cookies from the sidecar instead of
-# .env. Bot responses are cached in-process to avoid hammering it for every
-# pricing call; the bot has its own TTL but we stay under it to stay fresh.
-_bot_cache: dict = {}
-BOT_CACHE_SECONDS = 10 * 60
 
 
 def load_env():
@@ -43,29 +33,7 @@ def load_env():
 
 
 def get_tesla_cookies() -> str:
-    """Return a Cookie-header value. Prefer cookie-bot when configured; on
-    any failure fall back to TESLA_COOKIES env."""
-    bot_url = os.environ.get("COOKIE_BOT_URL", "").strip()
-    profile = os.environ.get("COOKIE_BOT_PROFILE", "tesla-findus").strip()
-    if bot_url:
-        now = time.time()
-        if _bot_cache and now - _bot_cache["fetched_at"] < BOT_CACHE_SECONDS:
-            return _bot_cache["cookies"]
-        try:
-            req = urllib.request.Request(
-                f"{bot_url.rstrip('/')}/cookies/{profile}?format=header",
-                headers={"X-Cookie-Bot-Token": os.environ.get("COOKIE_BOT_TOKEN", "")},
-            )
-            with urllib.request.urlopen(req, timeout=60) as r:
-                data = json.loads(r.read().decode())
-            cookies = data.get("cookie_header", "")
-            if cookies:
-                _bot_cache["cookies"] = cookies
-                _bot_cache["fetched_at"] = now
-                return cookies
-            print(f"cookie-bot returned empty cookie_header for {profile}", file=sys.stderr)
-        except Exception as e:
-            print(f"cookie-bot fetch failed ({e}); falling back to .env", file=sys.stderr)
+    """Return a Cookie-header value from the TESLA_COOKIES env."""
     return os.environ.get("TESLA_COOKIES", "").strip()
 
 
@@ -79,7 +47,7 @@ def fetch_tesla_pricing(slug: str) -> tuple[int, dict | str]:
     """
     cookies = get_tesla_cookies()
     if not cookies:
-        return 503, {"error": "No cookies available (cookie-bot and TESLA_COOKIES both empty)."}
+        return 503, {"error": "No cookies available (TESLA_COOKIES empty)."}
 
     qs = urllib.parse.urlencode({
         "locationSlug": slug,
@@ -125,6 +93,4 @@ def fetch_tesla_pricing(slug: str) -> tuple[int, dict | str]:
             return 200, json.loads(body)
         except json.JSONDecodeError:
             return 502, {"error": "tesla returned non-JSON on 200", "body_head": body[:300]}
-    if status in (401, 403, 429):
-        _bot_cache.clear()
     return status, {"error": f"tesla upstream HTTP {status}", "body_head": body[:300]}
