@@ -102,7 +102,16 @@ jobs:
       # rename, but the default is read, not restated.
       - name: Resolve deploy URLs
         run: |
-          root_url="$(ruby -ryaml -e 'puts YAML.safe_load(File.read("backend/src/main/resources/application-prod.yaml"))["roadtrip"]["web"]["root-url"]')"
+          # awk, not a YAML library: secrets/manage.py parses its own registry with
+          # nothing but the stdlib, and reading one scalar shouldn't add a language
+          # runtime to the deploy path. Anchored on the `web:` block because the
+          # `grafana:` block above it carries a root-url too.
+          config=backend/src/main/resources/application-prod.yaml
+          root_url="$(awk '/^  web:/ {inweb=1; next} /^  [a-z]/ {inweb=0} inweb && /^    root-url:/ {sub(/^ *root-url: *"?/,""); sub(/"? *$/,""); print; exit}' "$config")"
+          if [ -z "$root_url" ]; then
+            echo "could not read roadtrip.web.root-url from $config"
+            exit 1
+          fi
           # Trailing slash stripped the way WebAppConfig strips it, so "$base$path"
           # can't produce a doubled slash.
           base="${{ vars.DEPLOY_BASE_URL }}"
