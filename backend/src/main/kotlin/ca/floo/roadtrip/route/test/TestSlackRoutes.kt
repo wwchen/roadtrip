@@ -28,7 +28,12 @@ private val testSlackJson =
         ignoreUnknownKeys = true
     }
 
-/** Slack smoke-test endpoint for verifying the configured bot token/channel. */
+/**
+ * Slack smoke-test endpoint for verifying the configured bot token/channel.
+ *
+ * Signed-in only: it posts to a caller-supplied channel on the deployment's bot
+ * token, so an anonymous caller could spray any channel the bot can reach.
+ */
 internal fun Route.testSlackRoutes(slack: SlackNotificationService) {
     route("/test") {
         post("/slack") {
@@ -73,7 +78,7 @@ internal fun Route.testSlackRoutes(slack: SlackNotificationService) {
 
             call.respondTestSlackJson(TestSlackResponse(sent = true, channel = channel))
         }.describeApi("test", "Send a test Slack message")
-            .access(RouteAccess.Anonymous)
+            .access(RouteAccess.User)
     }
 }
 

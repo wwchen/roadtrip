@@ -29,7 +29,12 @@ private val testEmailJson =
         ignoreUnknownKeys = true
     }
 
-/** Email smoke-test endpoint for verifying the configured Resend sender. */
+/**
+ * Email smoke-test endpoint for verifying the configured Resend sender.
+ *
+ * Signed-in only: it sends mail to a caller-supplied address, so leaving it
+ * anonymous makes it an open relay on the deployment's Resend credentials.
+ */
 internal fun Route.testEmailRoutes(
     email: EmailNotificationService,
     appRootUrl: String? = null,
@@ -62,7 +67,7 @@ internal fun Route.testEmailRoutes(
 
             call.respondTestEmailJson(TestEmailResponse(sent = true, to = to))
         }.describeApi("test", "Send a test email")
-            .access(RouteAccess.Anonymous)
+            .access(RouteAccess.User)
     }
 }
 
