@@ -10,6 +10,8 @@ import ca.floo.roadtrip.model.domain.provider.DataProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.repo.PoiRepo
+import ca.floo.roadtrip.repo.RefLinkRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
@@ -148,11 +150,11 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             ),
     ): DbAvailabilityTargetResolver =
         DbAvailabilityTargetResolver(
-            ctx = ctx,
+            poiRepo = PoiRepo(ctx),
             campsitesRepo = campsitesRepo,
             campgroundRepo = CampgroundRepo(ctx),
             availabilityProviders = providers,
-            dateResolver = AvailabilityDateResolver(ctx),
+            dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
             pollerRepo = AvailabilityPollerRepo(ctx),
         )
 
@@ -169,7 +171,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val t = resolver.resolve(reservable)!!
 
             assertEquals(poiB, t.parentPoiId)
-            assertEquals("232447", parentRefKey(t.parentRef!!))
+            assertEquals("232447", t.parentRef!!.parentRefKey)
         }
 
     @Test
@@ -207,7 +209,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals("upper-pines-site-100", reservable.dataProviderRef.serialize())
             assertEquals(poi, target.parentPoiId)
             assertEquals(BookingProvider.CAMPFLARE, target.provider.id)
-            assertEquals("upper-pines-campground-447", parentRefKey(target.parentRef!!))
+            assertEquals("upper-pines-campground-447", target.parentRef!!.parentRefKey)
             assertEquals("upper-pines-site-100", target.provider.vendorSiteIdFor(target.campsite))
         }
 
@@ -239,7 +241,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 ).resolve(reservable)!!
 
             assertEquals(BookingProvider.RECGOV, target.provider.id)
-            assertEquals("232447", parentRefKey(target.parentRef!!))
+            assertEquals("232447", target.parentRef!!.parentRefKey)
             assertEquals("330257", target.provider.vendorSiteIdFor(target.campsite))
         }
 
@@ -283,7 +285,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
     fun `findProviderRefCandidates resolves the campground booking ref linked to a POI`() {
         val poiId = seedCampflarePoiWithRecgovBooking()
 
-        val resolver = DbRefResolver(ctx)
+        val resolver = DbRefResolver(RefLinkRepo(ctx))
         val candidates = resolver.resolve<RefValue.CampgroundBookingRef>(RefValue.PoiId(poiId))
         assertEquals(
             listOf("recgov"),
@@ -322,7 +324,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals("campflare", reservable.dataProviderRef.provider.id)
             assertEquals("upper-pines-site-100", reservable.dataProviderRef.serialize())
             assertEquals(BookingProvider.RECGOV, target.provider.id)
-            assertEquals("232447", parentRefKey(target.parentRef!!))
+            assertEquals("232447", target.parentRef!!.parentRefKey)
         }
 
     @Test
@@ -385,7 +387,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals(1, target.candidates.size)
             assertEquals(BookingProvider.RECGOV, target.candidates[0].id)
             assertEquals(BookingProvider.RECGOV, target.provider.id)
-            assertEquals("232447", parentRefKey(target.parentRef!!))
+            assertEquals("232447", target.parentRef!!.parentRefKey)
         }
 
     @Test
@@ -417,7 +419,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
 
             assertEquals(1, target.candidates.size)
             assertEquals(BookingProvider.RECGOV, target.provider.id)
-            assertEquals("232447", parentRefKey(target.parentRef!!))
+            assertEquals("232447", target.parentRef!!.parentRefKey)
         }
 
     @Test

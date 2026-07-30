@@ -1,13 +1,8 @@
 package ca.floo.roadtrip.route.api.pois
 
 import ca.floo.roadtrip.model.api.AvailabilityErrorDto
-import ca.floo.roadtrip.model.api.PoiCampsitesAvailabilityResponseDto
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
-import ca.floo.roadtrip.repo.AvailabilityPollerRepo
-import ca.floo.roadtrip.repo.AvailabilityRepo
-import ca.floo.roadtrip.repo.CampgroundRepo
-import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.longPath
@@ -15,18 +10,10 @@ import ca.floo.roadtrip.route.common.optionalDateQuery
 import ca.floo.roadtrip.route.common.queryValues
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.service.api.availabilityErrorDto
-import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
-import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityServiceError
-import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
-import ca.floo.roadtrip.service.availability.CampsiteCatalogService
-import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
-import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
-import ca.floo.roadtrip.service.availability.WatchCapabilityService
-import ca.floo.roadtrip.service.availability.filterBySiteTypes
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import ca.floo.roadtrip.service.ref.DbRefResolver
+import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
+import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
 import ca.floo.roadtrip.support.AspiraException
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -37,46 +24,16 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
-import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
-import java.util.concurrent.ConcurrentHashMap
 
 private val log = LoggerFactory.getLogger("CampsiteRoutes")
 
 private const val IP_RATE_LIMIT_PER_MINUTE = 30
-private const val EMPTY_WINDOW_DEFAULT_DAYS = 7
-private const val EMPTY_WINDOW_MAX_DAYS = 60
-private const val EMPTY_WINDOW_HORIZON_DAYS = 365
 
 internal fun Route.campsiteRoutes(
-    ctx: DSLContext,
-    availabilityProviders: List<AvailabilityProvider>,
-    dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(ctx),
-    failoverFetcher: FailoverAvailabilityFetcher,
-    watchCapabilities: WatchCapabilityService,
+    controller: CampsiteAvailabilityController,
+    rateLimit: IpRateLimiter = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE),
 ) {
-    val campsitesRepo = CampsiteRepo(ctx)
-    val campgroundRepo = CampgroundRepo(ctx)
-    val refResolver = DbRefResolver(ctx)
-    val targets =
-        DbAvailabilityTargetResolver(
-            ctx = ctx,
-            campsitesRepo = campsitesRepo,
-            campgroundRepo = campgroundRepo,
-            availabilityProviders = availabilityProviders,
-            dateResolver = dateResolver,
-            pollerRepo = AvailabilityPollerRepo(ctx),
-        )
-    val catalogService = CampsiteCatalogService(refResolver, campsitesRepo, targets)
-    val availabilityService =
-        CampsiteAvailabilityService(
-            availabilityProviders = availabilityProviders,
-            dateResolver = dateResolver,
-            failoverFetcher = failoverFetcher,
-            availabilityRepo = AvailabilityRepo(ctx),
-        )
-    val rateLimit = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE)
-
     route("/api") {
         route("/pois") {
             route("/{id}") {
@@ -87,7 +44,7 @@ internal fun Route.campsiteRoutes(
                                 ?: return@get call.respondCampsiteError("bad_id", HttpStatusCode.BadRequest)
                         try {
                             call.respondCampsiteJson(
-                                catalogService.campsitesForPoi(
+                                controller.campsitesForPoi(
                                     poiId = poiId,
                                     siteTypes = call.queryValues("site_type", "siteType"),
                                 ),
@@ -129,66 +86,12 @@ internal fun Route.campsiteRoutes(
                             }
 
                         try {
-                            val campground =
-                                campgroundRepo.findByPoi(poiId)
-                                    ?: throw AvailabilityServiceError.NotFound
-                            val allCampsites = campsitesRepo.findByCampground(campground.id)
-                            val siteTypes = call.queryValues("site_type", "siteType")
-                            val watchCaps = watchCapabilities.capabilitiesFor(allCampsites)
-                            val campsites = allCampsites.filterBySiteTypes(siteTypes)
-
-                            if (campsites.isEmpty()) {
-                                val dateContext = dateResolver.contextForPoi(poiId)
-                                val window =
-                                    dateResolver.resolveWindow(
-                                        startDate = startDate,
-                                        endDate = endDate,
-                                        context = dateContext,
-                                        bookingHorizonDays = EMPTY_WINDOW_HORIZON_DAYS,
-                                        maxDays = EMPTY_WINDOW_MAX_DAYS,
-                                        defaultDays = EMPTY_WINDOW_DEFAULT_DAYS,
-                                    )
-                                call.respondAvailabilityJson(
-                                    PoiCampsitesAvailabilityResponseDto(
-                                        poiId = poiId,
-                                        startDate = window.startDate.toString(),
-                                        endDate = window.endDate.toString(),
-                                        watchCapabilities = watchCaps,
-                                        campsites = emptyList(),
-                                    ),
-                                )
-                                return@get
-                            }
-
-                            val dateContext = dateResolver.contextForPoi(poiId)
-                            val result =
-                                availabilityService.fetchAvailability(
-                                    campground = campground,
-                                    campsites = campsites,
+                            call.respondAvailabilityJson(
+                                controller.availabilityForPoi(
+                                    poiId = poiId,
+                                    siteTypes = call.queryValues("site_type", "siteType"),
                                     startDate = startDate,
                                     endDate = endDate,
-                                    dateContext = dateContext,
-                                )
-
-                            val perCampsite =
-                                campsites.map { campsite ->
-                                    availabilityResponseFromObservations(
-                                        result.batch.copy(
-                                            observations = result.batch.observations.filter { it.campsiteId == campsite.id },
-                                            campsiteId = campsite.id,
-                                            startDate = result.startDate,
-                                            endDate = result.endDate,
-                                        ),
-                                    )
-                                }
-
-                            call.respondAvailabilityJson(
-                                PoiCampsitesAvailabilityResponseDto(
-                                    poiId = poiId,
-                                    startDate = result.startDate.toString(),
-                                    endDate = result.endDate.toString(),
-                                    watchCapabilities = watchCaps,
-                                    campsites = perCampsite,
                                 ),
                             )
                         } catch (e: AvailabilityServiceError) {
@@ -207,39 +110,6 @@ internal fun Route.campsiteRoutes(
                                 "into the campground week grid.",
                     ).access(RouteAccess.Anonymous)
                 }
-            }
-        }
-    }
-}
-
-private class IpRateLimiter(
-    private val perMinute: Int,
-    private val nowMs: () -> Long = { System.currentTimeMillis() },
-) {
-    private class Bucket(
-        var tokens: Double,
-        var lastRefillMs: Long,
-    )
-
-    private val buckets = ConcurrentHashMap<String, Bucket>()
-    private val refillPerMs = perMinute / 60_000.0
-
-    fun allow(ip: String): Boolean {
-        val now = nowMs()
-        val bucket =
-            buckets.compute(ip) { _, existing ->
-                val b = existing ?: Bucket(perMinute.toDouble(), now)
-                val delta = now - b.lastRefillMs
-                b.tokens = (b.tokens + delta * refillPerMs).coerceAtMost(perMinute.toDouble())
-                b.lastRefillMs = now
-                b
-            }!!
-        return synchronized(bucket) {
-            if (bucket.tokens >= 1.0) {
-                bucket.tokens -= 1.0
-                true
-            } else {
-                false
             }
         }
     }

@@ -6,6 +6,7 @@ import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
@@ -76,11 +77,11 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                ctx = ctx,
+                poiRepo = PoiRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 campgroundRepo = CampgroundRepo(ctx),
                 availabilityProviders = emptyList(),
-                dateResolver = AvailabilityDateResolver(ctx),
+                dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         return AvailabilityWatchService(
@@ -101,11 +102,11 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                ctx = ctx,
+                poiRepo = PoiRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 campgroundRepo = CampgroundRepo(ctx),
                 availabilityProviders = listOf(FakeRecgovProvider),
-                dateResolver = AvailabilityDateResolver(ctx),
+                dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         return AvailabilityWatchService(
@@ -120,11 +121,11 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                ctx = ctx,
+                poiRepo = PoiRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 campgroundRepo = CampgroundRepo(ctx),
                 availabilityProviders = listOf(FakeRecgovProvider),
-                dateResolver = AvailabilityDateResolver(ctx),
+                dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         return WatchCapabilityService(
@@ -137,11 +138,11 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                ctx = ctx,
+                poiRepo = PoiRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 campgroundRepo = CampgroundRepo(ctx),
                 availabilityProviders = emptyList(),
-                dateResolver = AvailabilityDateResolver(ctx),
+                dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         val scopeResolver = WatchScopeResolver(campsitesRepo)

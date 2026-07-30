@@ -92,21 +92,19 @@ Use stable package names for layers and generic extension points:
 ```
 ca.floo.roadtrip
 ├── config/
-├── http/
-├── models/
+├── model/
 │   ├── api/
 │   ├── availability/
 │   ├── domain/
 │   └── metadata/
 ├── repo/
-├── clients/
+├── client/
 │   └── <vendor-or-api>/
 ├── service/
 │   ├── api/
 │   ├── availability/
 │   │   ├── alert/
 │   │   └── provider/
-│   │       └── adapters/<vendor>/
 │   ├── etl/
 │   │   ├── framework/
 │   │   └── vendors/<vendor>/
@@ -114,15 +112,20 @@ ca.floo.roadtrip
 │   ├── ratelimit/
 │   ├── routing/
 │   └── scheduler/
-└── routes/
+└── route/
 ```
+
+Package names are singular (`model/`, `client/`, `route/`); the layer tables
+above name the layers in prose, not the directories.
 
 Prefer these generic forms in docs and reviews:
 
-- `clients/<vendor-or-api>/*Client.kt` for outbound HTTP clients.
-- `service/availability/provider/adapters/<vendor>/*` for availability-provider adapters.
+- `client/<vendor-or-api>/*Client.kt` for outbound HTTP clients.
+- `service/availability/provider/<Vendor>AvailabilityProvider.kt` for
+  availability-provider adapters — they sit flat in that package, one file per
+  vendor, beside the port they implement.
 - `service/etl/vendors/<vendor>/*Etl.kt` for ETL transforms.
-- `models/<area>/*Dto.kt` for API and upstream wire shapes.
+- `model/<area>/*Dto.kt` for API and upstream wire shapes.
 - `repo/*Repo.kt` for persistence boundaries.
 
 Avoid encoding a current concrete vendor, file, or class inventory in this
@@ -226,9 +229,9 @@ When adding a new upstream API call, put the transport client under
 `clients/<vendor-or-api>/`. Convert upstream-specific responses into domain
 or provider-neutral models at the adapter/service boundary.
 
-When adding a new availability provider, add an adapter under
-`service/availability/provider/adapters/<vendor>/` and wire it through the
-provider registry. No route should branch on that vendor.
+When adding a new availability provider, add an adapter in
+`service/availability/provider/` and wire it through the provider list. No
+route should branch on that vendor.
 
 When adding an ETL source, add transform code under
 `service/etl/vendors/<vendor>/` and pure DTOs under `models/` when they are

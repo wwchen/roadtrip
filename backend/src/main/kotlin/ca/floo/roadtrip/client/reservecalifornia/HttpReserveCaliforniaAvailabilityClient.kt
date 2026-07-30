@@ -80,7 +80,7 @@ class HttpReserveCaliforniaAvailabilityClient(
         val req =
             HttpRequest
                 .newBuilder(URI.create(url))
-                .timeout(Duration.ofSeconds(30))
+                .timeout(requestTimeout)
                 .header("User-Agent", USER_AGENT)
                 .header("Accept", "application/json")
                 .header("Content-Type", "application/json")
@@ -100,6 +100,8 @@ class HttpReserveCaliforniaAvailabilityClient(
     }
 
     companion object {
+        private val requestTimeout: Duration = Duration.ofSeconds(30)
+        private val connectTimeout: Duration = Duration.ofSeconds(10)
         private const val TENANT_ID = "cali"
         private const val USER_AGENT =
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
@@ -108,7 +110,7 @@ class HttpReserveCaliforniaAvailabilityClient(
         fun defaultClient(): HttpClient =
             HttpClient
                 .newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
+                .connectTimeout(connectTimeout)
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build()
     }

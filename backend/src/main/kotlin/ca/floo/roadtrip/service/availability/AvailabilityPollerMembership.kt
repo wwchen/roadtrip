@@ -53,7 +53,7 @@ internal class AvailabilityPollerMembership(
             val ref = target.parentRef ?: continue
             val key =
                 target.provider.id.name
-                    .lowercase() to parentRefKey(ref)
+                    .lowercase() to ref.parentRefKey
             keyToPoi.putIfAbsent(key, target.parentPoiId)
         }
 

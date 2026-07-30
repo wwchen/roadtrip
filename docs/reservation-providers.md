@@ -37,11 +37,14 @@ model/domain/provider/
 
 service/ref/
 ├── RefResolver.kt              # resolve one typed ref to related refs
-├── DbRefResolver.kt            # DB-backed resolution matrix
+├── DbRefResolver.kt            # the (from, to) resolution matrix; link SQL
+│                               # lives in `repo/RefLinkRepo.kt`
 └── RefValue.kt                 # typed ref wrapper values
 
 support/
 └── Dispatchable.kt              # generic `List<T>.firstHandlerFor(key)` / `allHandlersFor(key)` dispatch
+                                 # (used by the auth registries; availability
+                                 # dispatch is per-campground, see below)
 
 service/availability/provider/
 ├── AvailabilityProvider.kt          # normalized availability + provider metadata port
@@ -64,13 +67,14 @@ and provider adapters all read them.
 identity. `DataProviderRef` is separate and identifies the catalog row's
 source of truth.
 
-Every vendor adapter class implements `AvailabilityProvider`, which extends
-the generic `Dispatchable<BookingProvider>` from `support/Dispatchable.kt`:
-the shared normalized availability contract plus identity, capabilities, ref
-handling, and booking-link metadata. There is no separate registry class —
-dispatch is `List<AvailabilityProvider>.firstHandlerFor(bookingProvider)` (or
-`allHandlersFor` where every enabled match matters), and
-`AvailabilityProvider.canHandle(key)` defaults to `isEnabled() && key == id`.
+Every vendor adapter class implements `AvailabilityProvider`: the shared
+normalized availability contract plus identity, capabilities, ref handling, and
+booking-link metadata. There is no separate registry class — dispatch is
+`providers.firstOrNull { it.supportsCampground(campground) }`, which asks each
+adapter about the concrete catalog row (enabled, and the row's typed booking
+ref is one this adapter serves) rather than about a bare provider id. Aspira
+overrides it to also require a tenant it is configured for, which a
+`BookingProvider`-keyed lookup could not express.
 Boot wiring assembles that list as one Koin singleton
 (`single<List<AvailabilityProvider>>(named("availabilityProviders"))` in
 `ServiceModule.kt`), injecting each vendor's HTTP client individually. Raw
@@ -365,9 +369,16 @@ What the platform owns:
   level throttles all override the resolver. Cadence is a *target*,
   not a guarantee.
 
-What's deferred (see RFC 0007): the actual override columns and the
-admin UI to set them. v1 ships the resolver with global config only;
-overrides plug in later without changing call sites.
+The global rung is `roadtrip.availability.poller.default-cadence` (default
+`300s`), alongside the executor's two reschedule delays —
+`poller.idle-reschedule` (nothing live to poll) and
+`poller.governor-starved-retry` (the vendor governor had no tokens). All three
+default in code (`AvailabilityPollerConfig`) and are overridable in
+`application.yaml` per environment.
+
+What's deferred (see RFC 0007): the per-alert and per-campground override
+columns and the admin UI to set them. v1 ships the resolver with the global
+config rung only; overrides plug in later without changing call sites.
 
 ## How a watch becomes API calls
 

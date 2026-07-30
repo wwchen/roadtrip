@@ -7,7 +7,10 @@ import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
+import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.repo.PoiRepo
+import ca.floo.roadtrip.repo.RefLinkRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSessionRepo
 import ca.floo.roadtrip.route.api.admin.adminIngestRoutes
@@ -41,6 +44,10 @@ import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
+import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
+import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
+import ca.floo.roadtrip.service.availability.CampsiteCatalogService
+import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
@@ -49,6 +56,7 @@ import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.health.ReadinessService
 import ca.floo.roadtrip.service.poi.PoiReader
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
+import ca.floo.roadtrip.service.ref.DbRefResolver
 import ca.floo.roadtrip.service.routing.RouteCache
 import ca.floo.roadtrip.service.routing.RouteCorridorService
 import ca.floo.roadtrip.service.settings.UserSettingsService
@@ -99,11 +107,13 @@ internal fun Application.registerKoinRoutes() {
         poiRoutes(poiService)
         availabilityWatchRoutes(availabilityWatchController(ctx, watchService, watchCapabilities))
         campsiteRoutes(
-            ctx = ctx,
-            availabilityProviders = availabilityProviders,
-            dateResolver = dateResolver,
-            failoverFetcher = failoverFetcher,
-            watchCapabilities = watchCapabilities,
+            campsiteAvailabilityController(
+                ctx = ctx,
+                availabilityProviders = availabilityProviders,
+                dateResolver = dateResolver,
+                failoverFetcher = failoverFetcher,
+                watchCapabilities = watchCapabilities,
+            ),
         )
         slackInteractivity?.let { wiring ->
             slackInteractivityRoute(wiring.verifier, wiring.handler, schedulerScope)
@@ -146,6 +156,45 @@ private fun availabilityDashboardController(
         campsiteRepo = CampsiteRepo(ctx),
         forcePullCooldown = forcePullCooldown,
     )
+
+/**
+ * Assembles the campsite read-slice controller. Mirrors [availabilityWatchController]:
+ * the DSLContext stays here in composition code, so the route file remains a
+ * pure HTTP shell.
+ */
+private fun campsiteAvailabilityController(
+    ctx: DSLContext,
+    availabilityProviders: List<AvailabilityProvider>,
+    dateResolver: AvailabilityDateResolver,
+    failoverFetcher: FailoverAvailabilityFetcher,
+    watchCapabilities: WatchCapabilityService,
+): CampsiteAvailabilityController {
+    val campsitesRepo = CampsiteRepo(ctx)
+    val campgroundRepo = CampgroundRepo(ctx)
+    val targets =
+        DbAvailabilityTargetResolver(
+            poiRepo = PoiRepo(ctx),
+            campsitesRepo = campsitesRepo,
+            campgroundRepo = campgroundRepo,
+            availabilityProviders = availabilityProviders,
+            dateResolver = dateResolver,
+            pollerRepo = AvailabilityPollerRepo(ctx),
+        )
+    return CampsiteAvailabilityController(
+        campgroundRepo = campgroundRepo,
+        campsitesRepo = campsitesRepo,
+        catalogService = CampsiteCatalogService(DbRefResolver(RefLinkRepo(ctx)), campsitesRepo, targets),
+        availabilityService =
+            CampsiteAvailabilityService(
+                availabilityProviders = availabilityProviders,
+                dateResolver = dateResolver,
+                failoverFetcher = failoverFetcher,
+                availabilityRepo = AvailabilityRepo(ctx),
+            ),
+        dateResolver = dateResolver,
+        watchCapabilityService = watchCapabilities,
+    )
+}
 
 private fun availabilityWatchController(
     ctx: DSLContext,

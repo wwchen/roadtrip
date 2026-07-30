@@ -23,7 +23,7 @@ import java.time.LocalDate
 
 class HttpAspiraAvailabilityClient(
     private val httpClient: HttpClient = defaultClient(),
-    private val throttleMs: Long = 1_500,
+    private val throttleMs: Long = DEFAULT_THROTTLE_MS,
 ) : AspiraAvailabilityClient {
     private val log = LoggerFactory.getLogger(javaClass)
     private val json = Json { ignoreUnknownKeys = true }
@@ -59,7 +59,7 @@ class HttpAspiraAvailabilityClient(
             val req =
                 HttpRequest
                     .newBuilder(URI.create(url))
-                    .timeout(Duration.ofSeconds(30))
+                    .timeout(requestTimeout)
                     // Aspira's WAF rejects bare-curl UAs (returns 403). A
                     // browser-shaped UA is the difference between 200 and
                     // immediately tripping the bot challenge.
@@ -129,7 +129,7 @@ class HttpAspiraAvailabilityClient(
             val req =
                 HttpRequest
                     .newBuilder(URI.create(url))
-                    .timeout(Duration.ofSeconds(30))
+                    .timeout(requestTimeout)
                     .header("User-Agent", USER_AGENT)
                     .header("Accept", "application/json")
                     .header("Referer", "https://$host/")
@@ -194,6 +194,11 @@ class HttpAspiraAvailabilityClient(
     }
 
     companion object {
+        /** One call per 1.5s: Aspira's WAF scores burst volume from one IP,
+         *  and this is the gap a hot drawer flow survived in probing. */
+        private const val DEFAULT_THROTTLE_MS = 1_500L
+        private val requestTimeout: Duration = Duration.ofSeconds(30)
+        private val connectTimeout: Duration = Duration.ofSeconds(10)
         private const val USER_AGENT =
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
@@ -201,7 +206,7 @@ class HttpAspiraAvailabilityClient(
         fun defaultClient(): HttpClient =
             HttpClient
                 .newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
+                .connectTimeout(connectTimeout)
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build()
     }

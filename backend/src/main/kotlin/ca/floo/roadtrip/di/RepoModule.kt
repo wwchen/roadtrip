@@ -12,6 +12,8 @@ import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.DatabaseHealthRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
+import ca.floo.roadtrip.repo.PoiRepo
+import ca.floo.roadtrip.repo.RefLinkRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.UserRepo
@@ -23,6 +25,8 @@ import org.koin.dsl.module
 val repoModule =
     module {
         single { CampsiteRepo(get()) }
+        single { PoiRepo(get()) }
+        single { RefLinkRepo(get()) }
         single<RefResolver> { DbRefResolver(get()) }
         single { AvailabilityRepo(get()) }
         single { AvailabilityWatchRepo(get()) }

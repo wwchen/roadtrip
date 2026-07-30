@@ -7,7 +7,6 @@ import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
-import ca.floo.roadtrip.support.Dispatchable
 import java.time.LocalDate
 
 /**
@@ -28,14 +27,12 @@ import java.time.LocalDate
  *   - rate-limit accounting (cross-adapter; lives above the port)
  *   - HTTP response shaping (service/API layer rolls observations into DTOs)
  */
-interface AvailabilityProvider : Dispatchable<BookingProvider> {
+interface AvailabilityProvider {
     /** Stable identity. Mapped from typed booking refs by the registry. */
     val id: BookingProvider
 
     /** Static per adapter; cheap to read and safe to surface to API clients. */
     val capabilities: AvailabilityProviderCapabilities
-
-    override fun canHandle(key: BookingProvider): Boolean = isEnabled() && key == id
 
     /** Whether this provider is configured for this process. */
     fun isEnabled(): Boolean

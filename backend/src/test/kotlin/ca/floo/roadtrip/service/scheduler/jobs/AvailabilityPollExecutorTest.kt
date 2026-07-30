@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.scheduler.jobs
 
 import ca.floo.roadtrip.client.slack.SlackAttachmentDto
 import ca.floo.roadtrip.client.slack.SlackBlockDto
+import ca.floo.roadtrip.config.AvailabilityPollerConfig
 import ca.floo.roadtrip.config.VendorRateLimitConfig
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
@@ -20,6 +21,7 @@ import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
@@ -193,13 +195,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         val registry = listOf(provider)
         val targets =
             DbAvailabilityTargetResolver(
-                ctx = ctx,
+                poiRepo = PoiRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 campgroundRepo =
                     ca.floo.roadtrip.repo
                         .CampgroundRepo(ctx),
                 availabilityProviders = registry,
-                dateResolver = AvailabilityDateResolver(ctx),
+                dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         return AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets)
@@ -330,13 +332,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
     private fun targetsFor(provider: AvailabilityProvider): DbAvailabilityTargetResolver =
         DbAvailabilityTargetResolver(
-            ctx = ctx,
+            poiRepo = PoiRepo(ctx),
             campsitesRepo = CampsiteRepo(ctx),
             campgroundRepo =
                 ca.floo.roadtrip.repo
                     .CampgroundRepo(ctx),
             availabilityProviders = listOf(provider),
-            dateResolver = AvailabilityDateResolver(ctx),
+            dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
             pollerRepo = AvailabilityPollerRepo(ctx),
         )
 
@@ -350,13 +352,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             watchRepo = AvailabilityWatchRepo(ctx),
             targets =
                 DbAvailabilityTargetResolver(
-                    ctx = ctx,
+                    poiRepo = PoiRepo(ctx),
                     campsitesRepo = CampsiteRepo(ctx),
                     campgroundRepo =
                         ca.floo.roadtrip.repo
                             .CampgroundRepo(ctx),
                     availabilityProviders = emptyList(),
-                    dateResolver = AvailabilityDateResolver(ctx),
+                    dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                     pollerRepo = AvailabilityPollerRepo(ctx),
                 ),
             poiRepo = PoiServingRepo(ctx, enabledDataProviders = emptySet()),
@@ -395,10 +397,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     ): AvailabilityPollExecutor {
         val campsitesRepo = CampsiteRepo(ctx)
         val registry = listOf(provider)
-        val dateResolver = AvailabilityDateResolver(ctx = ctx, clock = testClock)
+        val dateResolver = AvailabilityDateResolver(poiRepo = PoiRepo(ctx), clock = testClock)
         val targets =
             DbAvailabilityTargetResolver(
-                ctx = ctx,
+                poiRepo = PoiRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 campgroundRepo =
                     ca.floo.roadtrip.repo
@@ -1060,7 +1062,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     // A watch's `cadenceSec` is a NULLABLE desired override (V34): NULL means
     // "no watch-level preference," which reaches the middle "poi override" rung
     // of the spec's `watch.cadence_sec ?? poi.cadence_override_sec ??
-    // GLOBAL_DEFAULT_SEC` fall-through. The pure resolver is unit-tested for
+    // globalDefaultCadenceSec` fall-through. The pure resolver is unit-tested for
     // every rung; the integration tests below prove the reachable paths (a NULL
     // watch cadence falls through to the POI override, an explicit watch cadence
     // wins) end-to-end.
@@ -1083,24 +1085,38 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
     @Test
     fun `resolver falls through to poi override when a watch has no explicit cadence`() {
-        // NULL watch cadence -> poi override (30), not GLOBAL_DEFAULT_SEC.
-        assertEquals(30, resolveCadenceSec(listOf(watchWithCadence(null)), poiCadenceOverrideSec = 30))
+        // NULL watch cadence -> poi override (30), not the configured global default.
+        assertEquals(
+            30,
+            resolveCadenceSec(listOf(watchWithCadence(null)), poiCadenceOverrideSec = 30, globalDefaultSec = globalDefaultCadenceSec),
+        )
     }
 
     @Test
     fun `resolver lets a tighter watch cadence win over a looser poi override`() {
-        assertEquals(10, resolveCadenceSec(listOf(watchWithCadence(10)), poiCadenceOverrideSec = 30))
+        assertEquals(
+            10,
+            resolveCadenceSec(listOf(watchWithCadence(10)), poiCadenceOverrideSec = 30, globalDefaultSec = globalDefaultCadenceSec),
+        )
     }
 
     @Test
-    fun `resolver falls through to GLOBAL_DEFAULT_SEC with no watch cadence and no poi override`() {
-        assertEquals(300, resolveCadenceSec(listOf(watchWithCadence(null)), poiCadenceOverrideSec = null))
+    fun `resolver falls through to the configured global default with no watch cadence and no poi override`() {
+        assertEquals(
+            globalDefaultCadenceSec,
+            resolveCadenceSec(listOf(watchWithCadence(null)), poiCadenceOverrideSec = null, globalDefaultSec = globalDefaultCadenceSec),
+        )
     }
 
     @Test
     fun `resolver takes the min across watches after each resolves its own fall-through`() {
         // watch A leans on the poi override (30); watch B has explicit 15 -> min = 15.
-        val resolved = resolveCadenceSec(listOf(watchWithCadence(null), watchWithCadence(15)), poiCadenceOverrideSec = 30)
+        val resolved =
+            resolveCadenceSec(
+                listOf(watchWithCadence(null), watchWithCadence(15)),
+                poiCadenceOverrideSec = 30,
+                globalDefaultSec = globalDefaultCadenceSec,
+            )
         assertEquals(15, resolved)
     }
 
@@ -1138,7 +1154,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val before = OffsetDateTime.now(testClock)
             val result = executorFor(provider).handle(poller)
 
-            // NULL watch cadence -> poi override (45), not GLOBAL_DEFAULT_SEC (300).
+            // NULL watch cadence -> poi override (45), not globalDefaultCadenceSec (300).
             val delaySec = Duration.between(before, result.nextRunAt).seconds
             assertEquals(45L, delaySec)
         }
@@ -1514,5 +1530,6 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         }
 }
 
+private val globalDefaultCadenceSec = AvailabilityPollerConfig.default.defaultCadenceSec
 private const val GRAFANA_ROOT_URL = "http://grafana.test/dash"
 private const val APP_ROOT_URL = "http://app.test"

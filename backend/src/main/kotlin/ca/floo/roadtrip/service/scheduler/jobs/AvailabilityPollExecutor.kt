@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
+import ca.floo.roadtrip.config.AvailabilityPollerConfig
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.scheduler.HandlerResult
@@ -13,15 +14,11 @@ import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.ResolvedAvailabilityTarget
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.availabilityProviderErrorFromAttempt
-import ca.floo.roadtrip.service.availability.parentRefKey
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import kotlinx.coroutines.slf4j.MDCContext
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import java.time.Duration
-
-private const val IDLE_RESCHEDULE_SEC = 300L
-private const val GOVERNOR_STARVED_RETRY_SEC = 15L
 
 internal class AvailabilityPollExecutor(
     private val targetResolver: AvailabilityTargetResolver,
@@ -31,13 +28,14 @@ internal class AvailabilityPollExecutor(
     private val alertDispatcher: WatchAlertDispatcher,
     private val failoverFetcher: FailoverAvailabilityFetcher,
     private val metrics: RoadtripMetrics = RoadtripMetrics.NoOp,
+    private val pollerConfig: AvailabilityPollerConfig = AvailabilityPollerConfig.default,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     suspend fun handle(poller: AvailabilityPollerRepo.Poller): HandlerResult {
         val plan =
             targetResolver.resolve(poller)
-                ?: return HandlerResult(nextRunAt = runService.nowUtc().plusSeconds(IDLE_RESCHEDULE_SEC))
+                ?: return HandlerResult(nextRunAt = runService.nowUtc().plus(pollerConfig.idleReschedule))
 
         val freshnessWindow = Duration.ofSeconds(plan.cadenceSec.toLong())
         val staleTargets =
@@ -63,10 +61,10 @@ internal class AvailabilityPollExecutor(
                 poller.id,
                 staleBucketCount,
                 poller.provider,
-                GOVERNOR_STARVED_RETRY_SEC,
+                pollerConfig.governorStarvedRetry.seconds,
             )
             recordSkip(poller, PollSkipReason.GOVERNOR_STARVED)
-            return HandlerResult(nextRunAt = runService.nowUtc().plusSeconds(GOVERNOR_STARVED_RETRY_SEC))
+            return HandlerResult(nextRunAt = runService.nowUtc().plus(pollerConfig.governorStarvedRetry))
         }
 
         val handle = runService.start(poller.id)
@@ -81,7 +79,7 @@ internal class AvailabilityPollExecutor(
                         windowFor = plan.windowFor,
                         fetch = { campground, provider, rows, windows ->
                             val result = fetchWithFailover(rows, windows.fetch)
-                            val refKey = provider.parentRefFor(campground)?.let(::parentRefKey) ?: "unknown"
+                            val refKey = provider.parentRefFor(campground)?.parentRefKey ?: "unknown"
                             attemptsByGroup[provider.id to refKey] = result.attempts
                             result.batch ?: throw availabilityProviderErrorFromAttempt(result.attempts.lastOrNull())
                         },

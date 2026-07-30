@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import org.junit.jupiter.api.Test
 import java.time.Clock
@@ -17,7 +18,7 @@ import kotlin.test.assertNull
 class AvailabilityDateResolverTest : SharedDbTest() {
     private fun resolverAt(instant: String): AvailabilityDateResolver =
         AvailabilityDateResolver(
-            ctx = ctx,
+            poiRepo = PoiRepo(ctx),
             clock = Clock.fixed(Instant.parse(instant), ZoneOffset.UTC),
         )
 

@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.mapbox.MapboxDirections
 import ca.floo.roadtrip.config.RouteConfig
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
+import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
@@ -151,7 +152,7 @@ class OpenApiSmokeTest {
                         campgroundRepo = CampgroundRepo(ctx),
                         dateResolver =
                             ca.floo.roadtrip.service.availability
-                                .AvailabilityDateResolver(ctx),
+                                .AvailabilityDateResolver(PoiRepo(ctx)),
                     ),
                     TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
                     PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),

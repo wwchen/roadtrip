@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.ref
 
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
+import ca.floo.roadtrip.repo.RefLinkRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
@@ -16,7 +17,7 @@ class DbRefResolverTest : SharedDbTest() {
     @BeforeEach
     fun setup() {
         ctx.cleanCanonicalCatalogFixtures()
-        resolver = DbRefResolver(ctx)
+        resolver = DbRefResolver(RefLinkRepo(ctx))
     }
 
     @Test

@@ -31,6 +31,28 @@ class AppConfigTest {
     }
 
     @Test
+    fun `poller timings default in code and override from config`() {
+        val defaults = appConfig().availability.poller
+        assertEquals(Duration.ofSeconds(300), defaults.defaultCadence)
+        assertEquals(300, defaults.defaultCadenceSec)
+        assertEquals(Duration.ofSeconds(300), defaults.idleReschedule)
+        assertEquals(Duration.ofSeconds(15), defaults.governorStarvedRetry)
+
+        val overridden =
+            appConfig(
+                mapOf(
+                    "roadtrip.availability.poller.default-cadence" to "90s",
+                    "roadtrip.availability.poller.idle-reschedule" to "10m",
+                    "roadtrip.availability.poller.governor-starved-retry" to "5s",
+                ),
+            ).availability.poller
+
+        assertEquals(Duration.ofSeconds(90), overridden.defaultCadence)
+        assertEquals(Duration.ofMinutes(10), overridden.idleReschedule)
+        assertEquals(Duration.ofSeconds(5), overridden.governorStarvedRetry)
+    }
+
+    @Test
     fun `availability config requires cooldown durations`() {
         val missingForcePull =
             assertFailsWith<IllegalArgumentException> {

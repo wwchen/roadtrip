@@ -10,6 +10,8 @@ import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.repo.PoiRepo
+import ca.floo.roadtrip.repo.RefLinkRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
@@ -55,15 +57,15 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
             )
         val refResolver =
             ca.floo.roadtrip.service.ref
-                .DbRefResolver(ctx)
+                .DbRefResolver(RefLinkRepo(ctx))
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                ctx = ctx,
+                poiRepo = PoiRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 campgroundRepo = CampgroundRepo(ctx),
                 availabilityProviders = listOf(TemplateProvider),
-                dateResolver = AvailabilityDateResolver(ctx),
+                dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         val service = CampsiteCatalogService(refResolver, campsitesRepo, targets)
@@ -137,15 +139,15 @@ class CampsiteCatalogServiceTest : SharedDbTest() {
             )
         val refResolver =
             ca.floo.roadtrip.service.ref
-                .DbRefResolver(ctx)
+                .DbRefResolver(RefLinkRepo(ctx))
         val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
-                ctx = ctx,
+                poiRepo = PoiRepo(ctx),
                 campsitesRepo = campsitesRepo,
                 campgroundRepo = CampgroundRepo(ctx),
                 availabilityProviders = listOf(CampflareAvailabilityProvider(unusedCampflareClient(), enabled = true)),
-                dateResolver = AvailabilityDateResolver(ctx),
+                dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
         val service = CampsiteCatalogService(refResolver, campsitesRepo, targets)

@@ -171,11 +171,9 @@ class ReserveAmericaAvailabilityProvider(
         } catch (e: AvailabilityProviderError) {
             throw e
         } catch (e: ReserveAmericaException) {
-            when {
-                e.httpStatus == 429 -> throw AvailabilityProviderError.RateLimited(e)
-                e.httpStatus != null && e.httpStatus in 500..599 -> throw AvailabilityProviderError.UpstreamUnavailable(e)
-                else -> throw AvailabilityProviderError.UpstreamUnavailable(e)
-            }
+            // No blocked statuses: ReserveAmerica has no bot challenge we can
+            // tell apart from an outage, so everything but 429 is retryable-5xx.
+            throw upstreamAvailabilityError(cause = e, httpStatus = e.httpStatus)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
