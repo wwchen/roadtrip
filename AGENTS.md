@@ -1,32 +1,20 @@
-## Skill routing
-
-When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.
-
-Key routing rules:
-- Product ideas/brainstorming → invoke /office-hours
-- Strategy/scope → invoke /plan-ceo-review
-- Architecture → invoke /plan-eng-review
-- Design system/plan review → invoke /design-consultation or /plan-design-review
-- Full review pipeline → invoke /autoplan
-- Bugs/errors → invoke /investigate
-- QA/testing site behavior → invoke /qa or /qa-only
-- Code review/diff check → invoke /review
-- Visual polish → invoke /design-review
-- Ship/deploy/PR → invoke /ship or /land-and-deploy
-- Save progress → invoke /context-save
-- Resume context → invoke /context-restore
-- Author a backlog-ready spec/issue → invoke /spec
-
 ## Project architecture rules
 
+This file is the single source of truth for project-wide engineering rules
+for any AI agent working in this repo (Claude Code, Codex, or otherwise).
+Tool-specific instructions (e.g. Claude Code skill routing) live in
+`CLAUDE.md`, which points back here for everything below.
+
 Before backend architecture, route, service, repo, or model changes, read `docs/backend-architecture.md`.
+
+Before frontend component, page, or design-system changes, read `docs/frontend-components.md`.
 
 Before changes that touch campsite availability, alerts, or any reservation-provider integration (rec.gov, Aspira, Camis, future vendors), read `docs/reservation-providers.md`.
 
 Backend layering rules:
 - Prefer typed Kotlin/Java DTOs (`@Serializable` data classes or existing schema classes) for request/response bodies. Do not hand-build JSON strings in routes when a DTO can represent the shape.
 - SQL, jOOQ DSL queries, table references, and persistence mapping belong in `repo` classes only. Routes and services call repo methods rather than embedding SQL.
-- Routes are the HTTP shell: parse inputs, call controllers/services through established boundaries, set status codes, and return DTOs. Do not add route-to-repo paths; when touching one, move it behind a controller/service.
+- Layering is `routes -> service -> repo`: routes are the HTTP shell (parse inputs, call a service/controller, set status codes, return DTOs) and do not add new route-to-repo paths. When an existing route-to-repo path is touched, move it behind a service/controller instead of expanding it.
 - Keep business logic out of routes; put orchestration in `service` and persistence in `repo`.
 
 Design principles (apply to all code, all layers):
