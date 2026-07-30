@@ -29,6 +29,18 @@ data class AvailabilityPollerConfig(
     val idleReschedule: Duration,
     val governorStarvedRetry: Duration,
 ) {
+    init {
+        // Sub-second values truncate to 0 at the `.seconds` call sites (here and
+        // in the poll executor), turning the freshness window and reschedule
+        // delays into a hot loop. Whole seconds only, and cadence must fit Int.
+        requireWholeSeconds("default-cadence", defaultCadence)
+        requireWholeSeconds("idle-reschedule", idleReschedule)
+        requireWholeSeconds("governor-starved-retry", governorStarvedRetry)
+        require(defaultCadence.seconds <= Int.MAX_VALUE) {
+            "poller default-cadence must fit in Int seconds (got $defaultCadence)"
+        }
+    }
+
     val defaultCadenceSec: Int get() = defaultCadence.seconds.toInt()
 
     companion object {
@@ -56,5 +68,14 @@ data class AvailabilityPollerConfig(
                 idleReschedule = config.duration("idle-reschedule", default.idleReschedule),
                 governorStarvedRetry = config.duration("governor-starved-retry", default.governorStarvedRetry),
             )
+
+        private fun requireWholeSeconds(
+            name: String,
+            value: Duration,
+        ) {
+            require(value.seconds >= 1 && value.nano == 0) {
+                "poller $name must be a whole number of seconds, at least 1s (got $value)"
+            }
+        }
     }
 }

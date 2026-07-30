@@ -53,6 +53,36 @@ class AppConfigTest {
     }
 
     @Test
+    fun `poller timings reject sub-second values that would truncate to zero`() {
+        val subSecondCadence =
+            assertFailsWith<IllegalArgumentException> {
+                appConfig(mapOf("roadtrip.availability.poller.default-cadence" to "500ms"))
+            }
+        assertEquals(
+            "poller default-cadence must be a whole number of seconds, at least 1s (got PT0.5S)",
+            subSecondCadence.message,
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            appConfig(mapOf("roadtrip.availability.poller.idle-reschedule" to "250ms"))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            appConfig(mapOf("roadtrip.availability.poller.governor-starved-retry" to "999ms"))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AvailabilityPollerConfig(
+                defaultCadence = Duration.ofSeconds(Int.MAX_VALUE + 1L),
+                idleReschedule = Duration.ofSeconds(300),
+                governorStarvedRetry = Duration.ofSeconds(15),
+            )
+        }
+        // A fractional value above 1s truncates silently too — also rejected.
+        assertFailsWith<IllegalArgumentException> {
+            appConfig(mapOf("roadtrip.availability.poller.default-cadence" to "1500ms"))
+        }
+    }
+
+    @Test
     fun `availability config requires cooldown durations`() {
         val missingForcePull =
             assertFailsWith<IllegalArgumentException> {
