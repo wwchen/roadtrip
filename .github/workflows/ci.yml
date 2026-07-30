@@ -293,22 +293,27 @@ jobs:
       # `run` steps. docker/build-push-action wires them up internally, but
       # this job builds via the `docker build` CLI on purpose — the prod recipe
       # does, and scripts/test_ci_image_builds.py holds CI to it — so export
-      # them for the step below instead.
+      # them for the step below instead. ACTIONS_CACHE_URL is deliberately NOT
+      # exported: it points at the retired v1 cache service, which now answers
+      # every request with an HTML "services aren't available" 400, and its
+      # presence steers BuildKit away from the v2 endpoint (ACTIONS_RESULTS_URL).
       - name: Expose cache-service credentials to buildx
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
-            for (const name of ['ACTIONS_CACHE_URL', 'ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
+            for (const name of ['ACTIONS_RESULTS_URL', 'ACTIONS_RUNTIME_TOKEN']) {
               if (process.env[name]) core.exportVariable(name, process.env[name]);
             }
 
       # --load lands the image in the local daemon the way plain `docker build`
       # does; the container-driver builder otherwise keeps it to itself.
+      # ignore-error on cache-to: a cache-service outage should cost us the
+      # cache, not the build — export failures are otherwise fatal.
       - name: Build backend image
         run: |
           docker build -t roadtrip/backend --target backend --load \
             --cache-from type=gha,scope=backend-image \
-            --cache-to type=gha,scope=backend-image,mode=max \
+            --cache-to type=gha,scope=backend-image,mode=max,ignore-error=true \
             .
 
   backend-tests:
