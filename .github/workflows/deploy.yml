@@ -102,20 +102,13 @@ jobs:
       # rename, but the default is read, not restated.
       - name: Resolve deploy URLs
         run: |
-          # awk, not a YAML library: secrets/manage.py parses its own registry with
-          # nothing but the stdlib, and reading one scalar shouldn't add a language
-          # runtime to the deploy path. Anchored on the `web:` block because the
-          # `grafana:` block above it carries a root-url too.
-          config=backend/src/main/resources/application-prod.yaml
-          root_url="$(awk '/^  web:/ {inweb=1; next} /^  [a-z]/ {inweb=0} inweb && /^    root-url:/ {sub(/^ *root-url: *"?/,""); sub(/"? *$/,""); print; exit}' "$config")"
-          if [ -z "$root_url" ]; then
-            echo "could not read roadtrip.web.root-url from $config"
-            exit 1
-          fi
-          # Trailing slash stripped the way WebAppConfig strips it, so "$base$path"
-          # can't produce a doubled slash.
+          # Reads roadtrip.web.root-url and strips the trailing slash the way
+          # WebAppConfig does, so "$base$path" can't double up. Exits non-zero if
+          # the key moves, which -e turns into a failed step rather than an empty
+          # base URL and a pile of confusing curl errors further down.
+          root_url="$(python3 scripts/prod_base_url.py)"
           base="${{ vars.DEPLOY_BASE_URL }}"
-          base="${base:-${root_url%/}}"
+          base="${base:-$root_url}"
           health="${{ vars.DEPLOY_HEALTH_URL }}"
           {
             echo "DEPLOY_BASE=$base"
