@@ -1,0 +1,57 @@
+version: 2
+
+# Weekly rather than daily: this is a single-maintainer repo, and a daily
+# cadence turns into PR noise that gets bulk-closed instead of reviewed.
+# Grouping minor+patch bumps into one PR per ecosystem keeps the common case to
+# a single review; majors stay separate because they need real attention.
+updates:
+  # Kotlin/Ktor backend. Gradle version catalogs and build.gradle.kts are both
+  # picked up from the root build.
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      gradle-minor-and-patch:
+        update-types: [minor, patch]
+
+  # Rec.gov companion sidecar — the only npm project in the tree. web/ is
+  # dependency-free ES modules with no package.json, so there is nothing to
+  # track there until one appears.
+  - package-ecosystem: npm
+    directory: /companion
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      npm-minor-and-patch:
+        update-types: [minor, patch]
+
+  # The cookie-bot sidecar holds the only Python manifest in the tree. The
+  # fetchers in scripts/ and the secrets tooling declare no dependencies (they
+  # are stdlib plus PyYAML), so there is nothing for pip to resolve at the root
+  # — point this at a requirements.txt if that changes.
+  - package-ecosystem: pip
+    directory: /cookie-bot
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      pip-minor-and-patch:
+        update-types: [minor, patch]
+
+  # Pinned action majors (checkout@v4, codecov-action@v5, …) otherwise drift
+  # until something breaks or a deprecation notice turns a run red.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-and-patch:
+        update-types: [minor, patch]
