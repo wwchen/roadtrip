@@ -160,7 +160,7 @@ dependencies {
     // placeholders interpolated). Replaces Logback's built-in JsonEncoder,
     // which logged the raw pattern + a separate arguments array. 8.x targets
     // logback 1.5.x / Java 11+.
-    implementation("net.logstash.logback:logstash-logback-encoder:8.0")
+    implementation("net.logstash.logback:logstash-logback-encoder:9.0")
 
     // Domain metrics (ca.floo.roadtrip.observability). API only — the OTel Java
     // agent owns the SDK and the OTLP pipeline, and GlobalOpenTelemetry binds to
