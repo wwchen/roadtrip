@@ -29,7 +29,7 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("io.ktor.plugin") version "3.5.1"
-    id("org.flywaydb.flyway") version "10.20.1"
+    id("org.flywaydb.flyway") version "13.1.0"
     id("nu.studer.jooq") version "9.0"
     id("org.jlleitschuh.gradle.ktlint") version "12.1.1"
     id("dev.detekt") version "2.0.0-alpha.5"
