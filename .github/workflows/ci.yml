@@ -135,8 +135,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      # Enumerated with find and handed to node as an explicit list rather than
+      # left to a `web/**/*.test.mjs` pattern. The pattern is correct today
+      # (verified: same 153 tests either way), but it only works while quoted —
+      # unquoted, a shell without globstar collapses `**` to one directory level
+      # and silently runs a subset. A job that goes green having tested a
+      # fraction of the suite is worse than no job, so discovery is asserted
+      # rather than trusted.
       - name: Run web unit tests
-        run: node --test 'web/**/*.test.mjs'
+        run: |
+          set --
+          while IFS= read -r f; do set -- "$@" "$f"; done \
+            < <(find web -name '*.test.mjs' | sort)
+          echo "discovered $# web test files"
+          if [ "$#" -eq 0 ]; then
+            echo "no web test files found - discovery is broken"
+            exit 1
+          fi
+          node --test "$@"
 
   companion-tests:
     needs: changes
