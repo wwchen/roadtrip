@@ -11,95 +11,67 @@ Personal web map for roadtripping a Tesla. Live at [roadtrip.floo.ca](https://ro
 - **Basemap picker** — OpenFreeMap (Liberty/Bright/Positron), Carto (Voyager/Positron/Dark), OSM, plus an Esri satellite overlay
 - **Geolocation** — standard geolocate control
 
-## Local dev
+## Getting started
+
+First time only:
 
 ```sh
-tilt up                  # Compose stack (Postgres/backend/Grafana/observability/Rec.gov companion)
-make run                 # Kotlin/Ktor backend on http://127.0.0.1:8765 (serves static + /api)
-make run env=prod        # on the deploy host: build image + docker compose up
+make install                 # Homebrew deps (incl. sops + age) + companion (npm + playwright) + git hooks
+./secrets/manage.py init     # mint this host's age key — see docs/secrets.md
 ```
+
+Runtime secrets live encrypted in `secrets/` and are mounted into containers
+at `/run/secrets`; nothing writes a plaintext `.env`. Until the public key
+printed by `init` is added as a vault recipient (someone who can already
+decrypt adds it to `secrets/.sops.yaml` and runs `./secrets/manage.py rotate`),
+`tilt up` and `make run` refuse to boot. `./secrets/manage.py ls` shows what
+exists, `set` changes a value, and committing it is the deploy. Full details in
+**[docs/secrets.md](docs/secrets.md)**.
+
+Then bring up the stack:
+
+```sh
+tilt up                  # full dev stack: Postgres/backend/Grafana/observability/Rec.gov companion
+make run                 # backend on the host; Postgres + Rec.gov companion in Docker
+make run env=prod        # on the deploy host: build images + docker compose up
+```
+
+Where to go next:
+
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — the full clone-to-first-PR path
+  (tests, hooks, review process, docs index).
+- **[docs/glossary.md](docs/glossary.md)** — the project vocabulary: watch,
+  poller, slot, companion, ATC, governor, …
+- **[docs/first-run.md](docs/first-run.md)** — what a healthy first `tilt up`
+  looks like, and why the map starts empty.
+- **[docs/observability.md](docs/observability.md)** — the
+  Grafana/Loki/Tempo/Prometheus/Alloy stack.
+- **[rfcs/](rfcs/)** — accepted architecture and process decisions.
+
+A deploy host needs neither Tilt nor Node and should skip `make install`;
+**[docs/installation.md](docs/installation.md)** splits the two setups and
+lists version requirements.
+
+## Local dev
 
 `tilt up` is the easiest path for full-stack dev: Tilt uses Docker Compose
 for Postgres, the backend container, Grafana, Loki, Tempo, Prometheus, Alloy,
-and the Rec.gov companion HTTP executor. The backend still serves the app on
-<http://127.0.0.1:8765>. Grafana is available at <http://127.0.0.1:3000>,
-Tempo at <http://127.0.0.1:3200>, Prometheus at
-<http://127.0.0.1:9090>, and Alloy at <http://127.0.0.1:12345>. Local
-Compose enables anonymous editor access and provisioned dashboard UI saves so
-dashboards can be adjusted in the Grafana UI; those saves live in the local
-`grafana-data` volume and are not written back to
-`grafana/dashboards/*.json`.
-The backend container runs with the OpenTelemetry Java agent. Ktor, JDBC, and
-JVM telemetry goes to Alloy over OTLP, Alloy forwards traces to Tempo and
-metrics to Prometheus, and existing JSON logs still go through Docker stdout to
-Loki. Trace/span IDs are injected into Logback MDC, so Grafana can correlate
-logs and traces.
+and the Rec.gov companion HTTP executor. The backend serves the app on
+<http://127.0.0.1:8765>; the Tilt UI is at <http://localhost:10350>.
 
-Logs use Loki's three tiers rather than storing one JSON blob per line. The
-backend and companion each print a JSON envelope to stdout; Alloy
-(`grafana/alloy/config.alloy`) unpacks it once at ingest into:
+The stack ships with full observability: the backend runs under the
+OpenTelemetry Java agent, logs flow from Docker stdout through Alloy into Loki,
+traces to Tempo, metrics to Prometheus, and Grafana
+(<http://127.0.0.1:3000>) correlates all three. Alert rules are provisioned and
+route to Slack. The pipeline's shape — Loki's three log tiers, why logs ride
+stdout instead of OTLP, the backend's domain metrics, retention, dashboards —
+is documented in **[docs/observability.md](docs/observability.md)**.
 
-- **stream label** — `level` only, since labels are indexed and must stay low
-  cardinality
-- **structured metadata** — `logger_name`, `thread_name`, `trace_id`, `span_id`,
-  `run_id`, `http_*`; filterable directly (`| trace_id="..."`) with no parser
-- **log line** — the human message
-
-So queries are `{container="roadtrip-backend-1"} | http_status="500"`, not
-`| json | __error__="" | ...`. Parsing happens once on ingest instead of on every
-query, and log viewers show a readable line instead of a JSON blob with the
-timestamp and level repeated inside it.
-
-Logs travel over stdout rather than OTLP deliberately. Docker's json-file driver
-persists them independently of Alloy and Alloy records its read position, so if
-Alloy is down Docker keeps writing and Alloy backfills on restart. The OTel
-agent's log exporter has only a bounded in-memory queue, so an outage there is
-silent data loss. Traces and metrics have no such local buffer available, which
-is why they do use OTLP. Log rotation (`x-log-rotation` in `docker-compose.yml`)
-caps disk use and therefore also bounds how much history a long Alloy outage can
-recover.
-
-Beyond the agent's auto-instrumentation, the backend emits its own domain
-metrics from `ca.floo.roadtrip.observability` (`RoadtripMetrics`): per-provider
-availability fetch outcomes and latency, poll run status, skipped poll cycles
-(`coverage_fresh` vs `governor_starved`), watch trigger deliveries, and ETL
-ingest runs. These ride the agent's existing OTLP pipeline — the process needs
-no exporter config, and without the agent (plain `make run`) they are a no-op.
-Row-level detail stays in Postgres (`availability_run`,
-`availability_fetch_call`, `ingest_runs`) for drill-down; the metrics are the
-rate/trend/alerting layer. `OtelRoadtripMetricsTest` pins the instrument names
-and label keys the dashboards and alert rules query.
-
-Alerting is provisioned in `grafana/provisioning/alerting/roadtrip.yml` and
-routes to Slack via `GRAFANA_SLACK_WEBHOOK_URL`: collector down, backend
-telemetry silent, backend/upstream 5xx, DB pool saturation, GC pressure,
-availability fetches rate-limited, poll runs failing, and watch alerts not being
-delivered. Prometheus scrapes Alloy, Loki, Tempo, and Grafana so the
-observability stack can observe itself — the backend has no `up` series (it is
-remote-written, not scraped), so its liveness rule uses
-`absent_over_time(jvm_thread_count[10m])`. Grafana refuses to start on invalid
-alert provisioning, so a boot failure after editing that file is a schema error
-in it.
-
-Correlation is wired in all three directions: Loki → Tempo (derived field on
-`trace_id`), Tempo → Loki (`tracesToLogsV2`), and Prometheus → Tempo
-(exemplars). Tempo's `metrics_generator` produces span metrics and service
-graphs into Prometheus, which is what the Service Graph and `tracesToMetrics`
-views read. Log retention (Loki) and trace retention (Tempo) are both 168h since
-the two are read together; metrics keep 14d (`PROMETHEUS_RETENTION`).
-
-Provisioned dashboards include a catalog explorer
-(`/d/roadtrip-catalog-explorer/roadtrip-catalog-explorer`) that covers POIs,
-campsites, and snapshot-backed availability, plus status overview, POI detail,
-Campground detail, Tesla Supercharger detail/stats, Campsite detail/stats, DB
-stats, Roadtrip Metrics (`/d/roadtrip-metrics/roadtrip-metrics`),
-watch/scheduler health, and API/SQL equivalence.
-Tilt UI is at <http://localhost:10350>.
-
-Plain `make run` remains the fastest backend-only loop: it starts Postgres in
-Docker and runs the Kotlin/Ktor backend on the host with Gradle. Production
-deploys use `make run env=prod`, which builds the backend image and recreates
-the production Compose stack.
+Plain `make run` remains the fastest backend-only loop: it starts Postgres and
+builds + starts the Rec.gov companion in Docker, then runs the Kotlin/Ktor
+backend on the host with Gradle. Production deploys use `make run env=prod`,
+which builds the backend and companion images and recreates the production
+Compose stack.
 
 The Tilt UI also has a `data` cluster of manual-trigger background workers
 (none auto-run on `tilt up`) for POI refresh.
@@ -126,22 +98,6 @@ Fetch targets are `data_sources.slug` values in
 display names from `poi_data:` and `campsite_data:` rows. Adding a vendor
 means appending registry rows, writing the fetcher if needed, and wiring
 the Kotlin ETL adapter.
-
-First time only:
-
-```sh
-make install                 # Homebrew deps (incl. sops + age) + companion (npm + playwright) + git hooks
-./secrets/manage.py init     # this host's age key — see docs/secrets.md
-```
-
-A deploy host needs neither Tilt nor Node and should skip `make install`;
-**[docs/installation.md](docs/installation.md)** splits the two setups and
-lists version requirements.
-
-Runtime secrets live encrypted in `secrets/` and are mounted into containers at
-`/run/secrets`; nothing writes a plaintext `.env`. `./secrets/manage.py ls`
-shows what exists, `set` changes a value, and committing it is the deploy.
-Full details in **[docs/secrets.md](docs/secrets.md)**.
 
 ## Refresh POI data
 
@@ -190,19 +146,15 @@ Run `make data-fetch TARGET=--list` for the current set; abridged:
 
 `backend/src/main/resources/poi-registry.yaml` is the source of truth for governing bodies
 (NPS, USFS, BC Parks, Alberta Parks, …), POI data sources, and tenant
-args. Reservation-provider dispatch uses `pois.source` plus `provider_ref`
-JSON rather than a provider FK.
+args. How catalog rows carry provider identity (`data_provider` /
+`booking_provider` and their refs) and how availability dispatch resolves a
+provider is documented in
+[docs/reservation-providers.md](docs/reservation-providers.md).
 
 **Raw cache.** `data/raw/` is gitignored — captures are append-only on
 the host running the poller. Crawling Aspira/Tesla is expensive (Azure
 WAF, curl-impersonate + cookie injection); replaying raw is free.
 Recovery on a fresh checkout: re-run the fetchers.
-
-**Curated repo data** (no fetch step) lives at `data/curated/`:
-`parks-canada-{bc,ab}.json`, `alberta-provincial.json`. The Kotlin
-importer reads these directly. New POIs should come from a poller, not
-from new entries here — these files are tech debt to retire as fetchers
-land for each gap (Alberta now covered by the ReserveAmerica fetcher).
 
 ### `/api/docs` — interactive API browser
 
@@ -280,10 +232,7 @@ before import.
    this by hand. The older `make deploy` SSH wrapper has been removed.
 
    The `backend` container serves the map on port 8765 (not exposed to the
-   public host — cloudflared talks to it on the compose network). A
-   `cookie-bot` service sits under a profile for future use (see
-   cookie-bot/README notes in the code) — currently disabled because no
-   aarch64 Chromium build passes Akamai's TLS fingerprint gate on the mini.
+   public host — cloudflared talks to it on the compose network).
 
 ## Architecture notes
 
@@ -389,7 +338,7 @@ then calls the companion's one-shot executor.
   ran but did not confirm a cart hold, and exit `2` means invalid input.
 - **Docker Rec.gov ATC executor** runs the companion HTTP executor as a Compose
   service. Start the service with the `recgov-companion` profile; the backend
-  companion URL and timeout live in `backend/src/main/resources/application*.yml`.
+  companion URL and timeout live in `backend/src/main/resources/application*.yaml`.
   ```sh
   RECGOV_COMPANION_BROWSER_PROFILE=$HOME/.campsite-companion/browser-session
 

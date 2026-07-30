@@ -71,7 +71,6 @@ nor the host process table.
 | grafana | `GF_SECURITY_ADMIN_PASSWORD__FILE`; provisioning uses `$__file{}` |
 | backend | `SecretsBootstrap` copies `/run/secrets/*` into system properties before Ktor parses config, so they never become environment variables |
 | cloudflared | `TUNNEL_TOKEN_FILE` — not `--token`, which would put it on the command line |
-| cookie-bot | `COOKIE_BOT_TOKEN_FILE` |
 | host scripts | environment injection from `exec`; there is nowhere to mount a file outside a container |
 
 **What this does and doesn't protect.** It removes the durable plaintext
