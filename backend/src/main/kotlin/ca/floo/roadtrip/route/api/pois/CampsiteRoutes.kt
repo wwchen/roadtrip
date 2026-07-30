@@ -97,9 +97,9 @@ internal fun Route.campsiteRoutes(
                         }
                     }.describeApi(
                         tag = "campsite",
-                        summary = "Canonical campsites linked to a campground POI",
+                        summary = "Campsites linked to a campground POI",
                         description =
-                            "Lists active canonical campsite rows linked to a campground POI. " +
+                            "Lists active campsite rows linked to a campground POI. " +
                                 "`site_type` optionally filters exact campsite kinds.",
                     ).access(RouteAccess.Anonymous)
 
@@ -202,7 +202,7 @@ internal fun Route.campsiteRoutes(
                         tag = "availability",
                         summary = "Per-campsite availability for one campground POI",
                         description =
-                            "Path key is `pois.id`. Returns one availability envelope per canonical " +
+                            "Path key is `pois.id`. Returns one availability envelope per " +
                                 "campsite linked to this POI. The frontend fuses the per-campsite streams " +
                                 "into the campground week grid.",
                     ).access(RouteAccess.Anonymous)
