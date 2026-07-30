@@ -5,6 +5,11 @@ Grafana inserts custom allValue text without datasource escaping. For
 Postgres variables used with :sqlstring, the custom All value must already be
 a SQL literal, such as "'__all'"; otherwise panels can render SQL like
 __all IN (...) and fail at runtime.
+
+This also checks the other direction: every Grafana dashboard UID the backend
+deep-links to must exist on disk. Watch alerts embed `/d/<uid>` links in Slack
+and email, so a dashboard rename (or a UID that was never provisioned at all)
+otherwise ships 404s straight to users with nothing failing in CI.
 """
 
 from __future__ import annotations
@@ -53,6 +58,21 @@ STALE_DASHBOARD_SQL_PATTERNS = {
     "availability_poller.consecutive_failures": re.compile(r"\bconsecutive_failures\b"),
     "availability_run.finished_at": re.compile(r"\bfinished_at\b"),
 }
+
+# Backend Kotlin sources that may deep-link to a dashboard.
+BACKEND_KOTLIN_SOURCE_DIR = Path("backend") / "src" / "main" / "kotlin"
+
+# A dashboard UID the backend pins as a named constant. Naming the constant
+# `GRAFANA_<something>_UID` is the contract that opts it into this check —
+# see WatchAlertDispatcher.
+BACKEND_UID_CONSTANT_PATTERN = re.compile(
+    r"\bconst\s+val\s+(GRAFANA_[A-Z0-9_]*_UID)\s*(?::\s*String\s*)?=\s*\"([^\"$]+)\""
+)
+
+# A dashboard UID spelled inline in a URL rather than pinned as a constant.
+# Interpolated segments (`/d/$SOME_UID`) are covered by the constant rule
+# above, so only fully literal path segments are matched here.
+BACKEND_INLINE_UID_PATTERN = re.compile(r"/d/([A-Za-z0-9][A-Za-z0-9._-]*)")
 
 
 def is_single_quoted_sql_literal(value: str) -> bool:
@@ -246,6 +266,61 @@ def validate_variable_filter_wiring(
                 failures.append(f"{uid}:{name} selector must include Tesla superchargers")
 
 
+def is_kotlin_comment_line(line: str) -> bool:
+    stripped = line.lstrip()
+    return stripped.startswith(("//", "*", "/*"))
+
+
+def iter_backend_uid_references(repo: Path):
+    """Yield (source_file, line_number, uid) for every dashboard UID the
+    backend deep-links to.
+
+    Two forms count: a `GRAFANA_*_UID` constant, and a literal `/d/<uid>` path
+    written inline. Comment lines are skipped so prose about a dashboard is not
+    mistaken for a live reference.
+    """
+    source_dir = repo / BACKEND_KOTLIN_SOURCE_DIR
+    for path in sorted(source_dir.rglob("*.kt")):
+        for line_number, line in enumerate(path.read_text().splitlines(), start=1):
+            if is_kotlin_comment_line(line):
+                continue
+            for match in BACKEND_UID_CONSTANT_PATTERN.finditer(line):
+                yield path, line_number, match.group(2)
+            for match in BACKEND_INLINE_UID_PATTERN.finditer(line):
+                yield path, line_number, match.group(1)
+
+
+def validate_backend_dashboard_uid_references(
+    repo: Path,
+    dashboard_uids: set[str],
+    failures: list[str],
+) -> None:
+    """Every dashboard UID referenced from backend Kotlin must exist on disk.
+
+    Watch alerts deep-link users into Grafana; a UID that no provisioned
+    dashboard claims renders as a 404 in a Slack card or alert email, which is
+    exactly the regression this guards.
+    """
+    reference_count = 0
+    for path, line_number, uid in iter_backend_uid_references(repo):
+        reference_count += 1
+        if uid not in dashboard_uids:
+            failures.append(
+                f"{path.relative_to(repo)}:{line_number}: references Grafana "
+                f"dashboard uid {uid!r}, which no dashboard in "
+                f"grafana/dashboards/ provides"
+            )
+
+    # A silently-zero result would make this check vacuous — e.g. after a
+    # package move, or if the naming convention drifts.
+    if reference_count == 0:
+        failures.append(
+            f"{BACKEND_KOTLIN_SOURCE_DIR}: found no Grafana dashboard UID "
+            "references to check — the GRAFANA_*_UID convention or the source "
+            "path has drifted, so this guard is no longer guarding anything"
+        )
+
+
 def main() -> int:
     repo = Path(__file__).resolve().parents[1]
     dashboard_dir = repo / "grafana" / "dashboards"
@@ -262,9 +337,12 @@ def main() -> int:
         failures,
     )
 
+    dashboard_uids: set[str] = set()
+
     for path in sorted(dashboard_dir.glob("*.json")):
         dashboard = json.loads(path.read_text())
         uid = dashboard.get("uid", path.name)
+        dashboard_uids.add(uid)
         validate_stale_dashboard_schema_references(uid, dashboard, failures)
         validate_url_override_safe_sqlstrings(uid, path.name, dashboard, failures)
         validate_variable_filter_wiring(uid, dashboard, failures)
@@ -310,6 +388,8 @@ def main() -> int:
                 failures.append(
                     f"{uid}:{name} allValue must be a SQL literal, got {all_value!r}"
                 )
+
+    validate_backend_dashboard_uid_references(repo, dashboard_uids, failures)
 
     if failures:
         for failure in failures:

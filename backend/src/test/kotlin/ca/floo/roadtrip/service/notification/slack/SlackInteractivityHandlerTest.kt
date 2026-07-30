@@ -55,7 +55,6 @@ class SlackInteractivityHandlerTest {
                 campgroundName = null,
                 startDate = watch.startDate,
                 endDate = watch.endDate,
-                dashboardUrl = null,
                 poiLinks = emptyList(),
             )
         }

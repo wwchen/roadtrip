@@ -24,6 +24,14 @@ internal object SlackWatchCard {
     const val ACTION_RESERVE_SITE = "reserve_site"
     const val ACTION_OPEN_GRID = "open_grid"
     const val ACTION_OPEN_MAP = "open_map"
+
+    /**
+     * Legacy: no card emits this button any more (the watch drill-down
+     * dashboard it pointed at never existed). Kept because Slack messages live
+     * forever in channel history, so a click on an old card still posts this
+     * action id and the interactivity endpoint must ack it rather than log an
+     * "unknown action" warning.
+     */
     const val ACTION_OPEN_DASHBOARD = "open_dashboard"
     const val ACTION_OPEN_WATCHES = "open_watches"
 

@@ -150,15 +150,6 @@ object SlackContentWatchStatusRenderer {
                     )
             }
         }
-        notice.dashboardUrl?.let {
-            out +=
-                SlackButtonSpec(
-                    label = "📊 Dashboard",
-                    actionId = SlackWatchCard.ACTION_OPEN_DASHBOARD,
-                    url = it,
-                    value = notice.watchId.toString(),
-                )
-        }
         // Modify button — links to the /watches page with the watch pre-loaded
         // for editing. Available on all live states (not DONE/STOPPED).
         if (notice.state != WatchStatusNotice.State.DONE) {

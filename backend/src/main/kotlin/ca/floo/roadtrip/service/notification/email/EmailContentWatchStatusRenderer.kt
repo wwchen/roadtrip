@@ -112,7 +112,6 @@ internal object EmailContentWatchStatusRenderer {
                     add(Link("Modify watch", "$root/watches?action=modify&id=${notice.watchId}"))
                 }
             }
-            notice.dashboardUrl?.let { add(Link("Watch dashboard", it)) }
             notice.poiLinks.forEach { poi ->
                 poi.mapUrl?.let { add(Link("Map ${poi.poiId}", it)) }
                 poi.gridUrl?.let { add(Link("Availability grid ${poi.poiId}", it)) }

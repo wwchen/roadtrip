@@ -11,11 +11,17 @@ import ca.floo.roadtrip.service.notification.common.WatchOpening
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import java.time.LocalDate
 
-/** Grafana dashboards the alert deep-links to. The watch drill-down takes the
- *  firing watch's id (`var-watch_id`); the cube matrix takes a POI
- *  (`var-poi_id`) for the current availability grid. */
-private const val WATCH_DASHBOARD_UID = "reservable-watch-drill"
-private const val CELL_MATRIX_UID = "availability-cell-matrix"
+/**
+ * The Grafana dashboard a watch alert deep-links to: the campground detail
+ * board, parameterised by the watched POI (`var-poi_id`), which is where the
+ * availability grid for that campground lives.
+ *
+ * The UID must match a dashboard provisioned in `grafana/dashboards/`;
+ * `scripts/validate_grafana_dashboards.py` asserts that for every
+ * `GRAFANA_*_UID` constant in this source set, so a rename on either side
+ * fails the lint job instead of shipping a 404 to users.
+ */
+private const val GRAFANA_CAMPGROUND_DETAIL_UID = "campground-detail"
 
 /**
  * Turns cube edges into watch alerts. Called once per poller run, after the
@@ -236,8 +242,8 @@ internal class WatchAlertDispatcher(
 
     /** Builds the plain-data [WatchStatusNotice] for a watch's lifecycle/status
      *  message. Carries the watch id (echoed as every interactive button's
-     *  value), scope, window, and deep-link URLs (the Grafana watch dashboard,
-     *  and per POI the web-app map page + Grafana grid); the notification
+     *  value), scope, window, and per-POI deep links (the web-app map page +
+     *  the Grafana availability grid); the notification
      *  layer owns the Block Kit rendering. A single-campsite watch reports
      *  its site name (+ loop); a broader one reports the count. POI links come
      *  from the watch's POI-scoped targets (campsite-scoped targets carry
@@ -262,7 +268,6 @@ internal class WatchAlertDispatcher(
             campgroundName = poiIds.singleOrNull()?.let { poiRepo.fetchPoiName(it) },
             startDate = watch.startDate,
             endDate = watch.endDate,
-            dashboardUrl = grafanaRootUrl?.let { "$it/d/$WATCH_DASHBOARD_UID?var-watch_id=${watch.id}" },
             poiLinks = poiLinks(poiIds),
             appRootUrl = appRootUrl,
         )
@@ -278,7 +283,7 @@ internal class WatchAlertDispatcher(
             WatchStatusNotice.PoiLink(
                 poiId = poiId,
                 mapUrl = appRootUrl?.let { "$it/?poi=$poiId" },
-                gridUrl = grafanaRootUrl?.let { "$it/d/$CELL_MATRIX_UID?var-poi_id=$poiId" },
+                gridUrl = grafanaRootUrl?.let { "$it/d/$GRAFANA_CAMPGROUND_DETAIL_UID?var-poi_id=$poiId" },
             )
         }
 

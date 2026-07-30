@@ -121,13 +121,12 @@ class NotificationServicesTest {
             campgroundName = null,
             startDate = LocalDate.of(2026, 7, 11),
             endDate = LocalDate.of(2026, 7, 12),
-            dashboardUrl = "https://grafana.test/d/reservable-watch-drill?var-watch_id=1",
             poiLinks =
                 listOf(
                     WatchStatusNotice.PoiLink(
                         poiId = 7,
                         mapUrl = "https://app.test/?poi=7",
-                        gridUrl = "https://grafana.test/d/availability-cell-matrix?var-poi_id=7",
+                        gridUrl = "https://grafana.test/d/campground-detail?var-poi_id=7",
                     ),
                 ),
         )
@@ -165,7 +164,10 @@ class NotificationServicesTest {
             assertEquals("Roadtrip Alerts <alerts@example.test>", message.from)
             assertEquals("Roadtrip watch #1: Watching for openings", message.subject)
             assertTrue(message.text.contains("Nothing open right now"), message.text)
-            assertTrue(message.html.contains("Watch dashboard"), message.html)
+            assertTrue(message.html.contains("Availability grid 7"), message.html)
+            // The grid link must point at a dashboard that exists — see
+            // scripts/validate_grafana_dashboards.py for the CI-side guard.
+            assertTrue(message.html.contains("/d/campground-detail?var-poi_id=7"), message.html)
         }
 
     @Test
