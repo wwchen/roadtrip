@@ -6,13 +6,21 @@ coverage:
   status:
     project:
       default:
-        # Codecov's denominator differs from Kover's local line metric; this
-        # keeps the project gate above the current master baseline while Kover
-        # remains the stricter local hard gate. Held ~2pp under the Kover floor
-        # (74%, measured at 75.87% line coverage) for the same reason the old
-        # pair was 43/45 — Codecov counts slightly differently, so the local
-        # gate is the one that must bite first.
-        target: 72%
+        # Calibrated against Codecov's own denominator, which is NOT Kover's.
+        # Codecov counts 14276 measurable lines and 9445 hits on master =
+        # 66.15% project coverage. Kover, over its own filter set (14690 lines,
+        # 11146 covered), reports 75.87% line coverage. The ~10pp gap is two
+        # different denominators, not two measurements of the same thing, so
+        # neither number can be shifted a couple of points and reused as the
+        # other's gate — doing exactly that is what pinned this target at 72%
+        # and made codecov/project fail on a PR that *raised* coverage to
+        # 66.22%.
+        #
+        # 66% sits just under the measured 66.15% Codecov baseline: normal
+        # rounding noise passes, a real regression does not. The Kover floor in
+        # backend/build.gradle.kts stays at 74 — correctly measured against
+        # Kover's denominator — and remains the stricter of the two gates.
+        target: 66%
         threshold: 0.5%
     patch:
       default:
