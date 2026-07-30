@@ -95,25 +95,41 @@ jobs:
                echo "$running" | grep -qx "$service"
              done'
 
+      # The app's own prod config is the single source for its origin — the same
+      # value AuthConfig derives the OIDC redirect URI from, for the same reason:
+      # two sources for one URL is how you end up probing a hostname the app
+      # stopped serving. The repo variables remain as overrides for a tunnel
+      # rename, but the default is read, not restated.
+      - name: Resolve deploy URLs
+        run: |
+          root_url="$(ruby -ryaml -e 'puts YAML.safe_load(File.read("backend/src/main/resources/application-prod.yaml"))["roadtrip"]["web"]["root-url"]')"
+          # Trailing slash stripped the way WebAppConfig strips it, so "$base$path"
+          # can't produce a doubled slash.
+          base="${{ vars.DEPLOY_BASE_URL }}"
+          base="${base:-${root_url%/}}"
+          health="${{ vars.DEPLOY_HEALTH_URL }}"
+          {
+            echo "DEPLOY_BASE=$base"
+            echo "DEPLOY_HEALTH=${health:-$base/api/health}"
+          } >> "$GITHUB_ENV"
+          echo "resolved base: $base"
+
       - name: Health check
         run: |
           # Probe via the public tunnel URL so we're verifying what users see,
-          # not the LAN-side container. Override DEPLOY_HEALTH_URL via repo
-          # variable if the tunnel hostname changes.
-          base="${{ vars.DEPLOY_BASE_URL || 'https://roadtrip.floo.ca' }}"
-          health_url="${{ vars.DEPLOY_HEALTH_URL || 'https://roadtrip.floo.ca/api/health' }}"
+          # not the LAN-side container.
           for _ in $(seq 1 30); do
-            if curl -fsS "$health_url" >/dev/null; then
+            if curl -fsS "$DEPLOY_HEALTH" >/dev/null; then
               for path in /pois /reservables /watches /availability; do
-                curl -fsS "$base$path" >/dev/null
-                echo "health: $base$path OK"
+                curl -fsS "$DEPLOY_BASE$path" >/dev/null
+                echo "health: $DEPLOY_BASE$path OK"
               done
-              echo "health: $health_url OK"
+              echo "health: $DEPLOY_HEALTH OK"
               exit 0
             fi
             sleep 2
           done
-          echo "health check failed: $health_url"
+          echo "health check failed: $DEPLOY_HEALTH"
           exit 1
 
       # The checks above pass with sign-in completely broken: every page returns
@@ -123,12 +139,11 @@ jobs:
       # the handshake and let it answer.
       - name: Verify sign-in handshake
         run: |
-          base="${{ vars.DEPLOY_BASE_URL || 'https://roadtrip.floo.ca' }}"
           # Not `status`: zsh makes that read-only, so anyone pasting this to
           # debug by hand gets a confusing failure instead of a result.
-          http_code="$(curl -s -o /dev/null -D headers.txt -w '%{http_code}' "$base/auth/login")"
+          http_code="$(curl -s -o /dev/null -D headers.txt -w '%{http_code}' "$DEPLOY_BASE/auth/login")"
           if [ "$http_code" != "302" ]; then
-            echo "auth: $base/auth/login returned $http_code, expected 302 (sign-in disabled?)"
+            echo "auth: $DEPLOY_BASE/auth/login returned $http_code, expected 302 (sign-in disabled?)"
             exit 1
           fi
           authorize="$(tr -d '\r' < headers.txt | sed -n 's/^[Ll]ocation: //p' | head -1)"
