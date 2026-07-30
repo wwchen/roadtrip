@@ -42,10 +42,11 @@ instance (see `backend/src/main/resources/poi-registry.yaml`).
   `vendor` is **per-tenant** (`reserveamerica_abpp`, `reserveamerica_ny`), not a
   flat `reserveamerica`, so `vendor_id == siteId` and catalog rows bind to
   availability observations directly.
-- The joiner (`ReserveAmericaCampsiteParentJoiner`) links campsite → POI on the
-  `(contract_code, park_id)` pair carried in `campsites.raw`
-  (`_parent_contract_code`, `_parent_park_id`). Both keys must match, so a
-  `park_id` that collides across contracts never cross-links.
+- `ReserveAmericaSitesEtl` links campsite → POI on the `(contract_code,
+  park_id)` pair carried in `campsites.raw` (`_parent_contract_code`,
+  `_parent_park_id`). Both keys must match, so a `park_id` that collides
+  across contracts never cross-links. There is no separate joiner class —
+  this happens inline in the site ETL's transform step.
 
 ## Endpoint catalog
 
@@ -97,7 +98,7 @@ per-site scrape (linked from each calendar row) — not the dead API.
 ## Catalog status
 
 Cataloged from the `campsiteCalendar.do` roster via `ReserveAmericaSitesEtl`
-(per tenant) + `ReserveAmericaCampsiteParentJoiner`. `name` = site number;
+(per tenant). `name` = site number;
 `loop`/`site_type` = null. A POI only shows availability once its catalog rows
 are linked — POIs without linked campsites report an empty window (there is
 no live render-only fallback).

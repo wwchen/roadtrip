@@ -16,7 +16,7 @@ Adding a provider should produce this shape:
 ```
 clients/<vendor>/*Client.kt
 service/availability/provider/<Vendor>AvailabilityProvider.kt
-service/poi/campground/<Vendor>PoiCtaProvider.kt  # only if POI drawer CTAs apply
+service/poi/campground/CampgroundCta.kt        # add a <Vendor>CampgroundCtaProvider entry — only if POI drawer CTAs apply
 service/etl/vendors/<vendor>/*                 # only if importing catalog data
 model/<area>/*                                 # shared DTOs/domain values only
 backend/src/main/resources/poi-registry.yaml  # source + dataset wiring
@@ -109,21 +109,22 @@ import the adapter directly from routes or availability services.
 ## Step 5 - Add Booking Links And POI CTAs
 
 If the provider can produce user-facing booking links, keep URL construction
-beside the adapter and expose drawer CTA behavior through a vendor-specific
-`service/api/<Vendor>PoiCtaProvider.kt` file.
+beside the adapter and add a vendor-specific CTA provider to the shared
+`service/poi/campground/CampgroundCta.kt` — there is one coordinator file for
+all vendors, not one file per vendor.
 
 Checklist:
 
 - Add a booking URL helper under `service/availability/provider/`.
 - Add a booking display helper under the same vendor package if labels vary by
   provider or tenant.
-- Add a vendor-specific POI CTA provider if campground-level drawer buttons
-  should link to the booking site.
+- Add a vendor-specific CTA provider to `CampgroundCta`'s `providers` list if
+  campground-level drawer buttons should link to the booking site.
 - Add or update CTA tests for precedence, labels, missing URL inputs, and dated
   links.
 
-`PoiCta` should stay a coordinator: parse the row, ask providers in order, and
-fall back to the generic info URL.
+`CampgroundCta` should stay a coordinator: parse the row, ask providers in
+order, and fall back to the generic info URL.
 
 ## Step 6 - Import Catalog Data When Needed
 
@@ -139,9 +140,10 @@ Checklist:
 - Emit `dataProviderRef` for the imported catalog row and `bookingProvider` /
   `bookingProviderRef` when the row can be booked or queried for availability.
 - Import campsites with stable vendor ids, types, names, loops, site types,
-  and provider metadata.
-- Add a campsite parent joiner (see `CampsiteParentJoiner`) when campsites need reparenting to the right campground.
-- Add ETL and joiner tests with fixtures.
+  and provider metadata, linked to the correct parent campground row as part
+  of the vendor ETL's own transform step (there is no separate
+  campsite-reparenting class shared across vendors — each ETL owns this).
+- Add ETL tests with fixtures covering the parent-linking behavior.
 
 Catalog import is provider-specific; query and persistence code still belongs
 in repos.
