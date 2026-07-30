@@ -175,7 +175,7 @@ dependencies {
     implementation("io.ktor:ktor-server-routing-openapi:$ktorVersion")
 
     implementation("org.jooq:jooq:$jooqVersion")
-    implementation("com.zaxxer:HikariCP:6.1.0")
+    implementation("com.zaxxer:HikariCP:7.1.0")
     implementation("org.postgresql:postgresql:$postgresVersion")
     implementation("org.flywaydb:flyway-core:$flywayVersion")
     implementation("org.flywaydb:flyway-database-postgresql:$flywayVersion")
