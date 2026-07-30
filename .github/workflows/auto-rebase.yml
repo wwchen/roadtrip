@@ -41,7 +41,7 @@ jobs:
       # Use a GitHub App token (same one self-approve.yml uses) so force-pushes
       # to PR branches re-trigger ci.yml. Pushes from the default GITHUB_TOKEN
       # are intentionally suppressed by GitHub and do not fire workflows.
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v3
         id: app-token
         with:
           app-id: ${{ secrets.SELF_APPROVE_APPID }}
