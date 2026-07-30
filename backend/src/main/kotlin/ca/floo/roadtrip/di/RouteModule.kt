@@ -48,6 +48,7 @@ import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.etl.framework.IngestController
+import ca.floo.roadtrip.service.health.ReadinessService
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
 import ca.floo.roadtrip.service.poi.PoiReader
@@ -85,6 +86,7 @@ internal fun Application.registerKoinRoutes() {
     val slackInteractivity: SlackInteractivityWiring? = getKoin().getOrNull()
     val slackNotifications: SlackNotificationService by inject()
     val emailNotifications: EmailNotificationService by inject()
+    val readiness: ReadinessService by inject()
     val schedulerScope: CoroutineScope by inject()
     val staticDir: File by inject(named("staticDir"))
 
@@ -118,7 +120,7 @@ internal fun Application.registerKoinRoutes() {
         poisOnRouteRoutes(poisOnRouteService, config.route)
         routeRoutes(routeCache, routeCorridorService, config.route)
         geocodeRoutes(mapboxGeocoder)
-        healthRoutes()
+        healthRoutes(readiness)
         adminIngestRoutes(ingestController, ctx)
         testEmailRoutes(emailNotifications, config.webApp?.rootUrl)
         testSlackRoutes(slackNotifications)

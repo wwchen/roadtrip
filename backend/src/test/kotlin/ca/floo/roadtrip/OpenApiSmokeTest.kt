@@ -11,6 +11,7 @@ import ca.floo.roadtrip.route.api.docs.apiDocsRoutes
 import ca.floo.roadtrip.route.api.health.healthRoutes
 import ca.floo.roadtrip.route.api.pois.poiRoutes
 import ca.floo.roadtrip.route.api.pois.poisOnRouteRoutes
+import ca.floo.roadtrip.service.health.ReadinessService
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiService
@@ -79,7 +80,7 @@ class OpenApiSmokeTest {
                     apiDocsRoutes()
                     get("/") { call.respondText("root") }
                     get("/web/{path...}") { call.respondText("static") }
-                    healthRoutes()
+                    healthRoutes { ReadinessService.Report(databaseReachable = true) }
                     poiRoutes(poiService)
                     poisOnRouteRoutes(
                         PoisOnRouteService(
@@ -101,7 +102,7 @@ class OpenApiSmokeTest {
 
             val healthGet =
                 paths["/api/health"]!!.jsonObject["get"]!!.jsonObject
-            assertEquals("Application liveness/readiness probe", healthGet["summary"]!!.jsonPrimitive.content)
+            assertEquals("Application liveness probe", healthGet["summary"]!!.jsonPrimitive.content)
             assertEquals(
                 "health",
                 healthGet["tags"]!!
@@ -110,6 +111,11 @@ class OpenApiSmokeTest {
                     .jsonPrimitive
                     .content,
             )
+
+            // Readiness is a separate documented operation, not a variant of
+            // liveness — a deploy gate has to be able to find it in the spec.
+            val readyGet = paths["/api/health/ready"]!!.jsonObject["get"]!!.jsonObject
+            assertEquals("Application readiness probe (dependency-aware)", readyGet["summary"]!!.jsonPrimitive.content)
 
             val poisPost =
                 paths["/api/pois"]!!.jsonObject["post"]!!.jsonObject
