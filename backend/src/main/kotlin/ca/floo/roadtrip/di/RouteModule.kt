@@ -27,8 +27,6 @@ import ca.floo.roadtrip.route.auth.authRoutes
 import ca.floo.roadtrip.route.auth.roadtripAuthorization
 import ca.floo.roadtrip.route.common.undeclaredAccessRoutes
 import ca.floo.roadtrip.route.static.staticSiteRoutes
-import ca.floo.roadtrip.route.test.testEmailRoutes
-import ca.floo.roadtrip.route.test.testSlackRoutes
 import ca.floo.roadtrip.service.auth.AuthController
 import ca.floo.roadtrip.service.auth.ClaimsDialectRegistry
 import ca.floo.roadtrip.service.auth.IdTokenVerifier
@@ -49,8 +47,6 @@ import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.health.ReadinessService
-import ca.floo.roadtrip.service.notification.email.EmailNotificationService
-import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
 import ca.floo.roadtrip.service.poi.PoiReader
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.routing.RouteCache
@@ -84,8 +80,6 @@ internal fun Application.registerKoinRoutes() {
     val ingestController: IngestController by inject()
     val userSettings: UserSettingsService by inject()
     val slackInteractivity: SlackInteractivityWiring? = getKoin().getOrNull()
-    val slackNotifications: SlackNotificationService by inject()
-    val emailNotifications: EmailNotificationService by inject()
     val readiness: ReadinessService by inject()
     val schedulerScope: CoroutineScope by inject()
     val staticDir: File by inject(named("staticDir"))
@@ -122,8 +116,13 @@ internal fun Application.registerKoinRoutes() {
         geocodeRoutes(mapboxGeocoder)
         healthRoutes(readiness)
         adminIngestRoutes(ingestController, ctx)
-        testEmailRoutes(emailNotifications, config.webApp?.rootUrl)
-        testSlackRoutes(slackNotifications)
+        // No /test/* notification routes: they took a caller-supplied recipient
+        // list / Slack channel and sent on the deployment's own Resend key and
+        // bot token, so any signed-in account could aim the deployment's
+        // credentials anywhere. The user-scoped
+        // /api/settings/notifications/{email,slack}/test endpoints are the
+        // supported smoke tests — they bind delivery to the caller's own stored
+        // settings and credentials.
         staticSiteRoutes(staticDir)
     }
 

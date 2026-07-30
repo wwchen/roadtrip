@@ -352,7 +352,6 @@ class NotificationServicesTest {
                     NotificationTarget.Email(listOf("one@example.test")),
                 ),
             )
-            assertFalse(slack.sendTestMessage("#camping"))
             assertFalse(
                 service.sendWatchOpenings(
                     1L,
