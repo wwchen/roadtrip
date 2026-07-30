@@ -92,22 +92,42 @@ jobs:
         with:
           base: ${{ steps.last.outputs.sha }}
           ref: ${{ env.DEPLOY_SHA }}
+          # Every production input `make run env=prod` consumes has to be in
+          # here: a path that's missing evaluates to deploy=false, and because
+          # that green run then becomes the next baseline, the change is stranded
+          # for good rather than picked up by the following push. A
+          # hand-maintained list is what produced exactly that bug (companion/,
+          # watches.html, and the root build.gradle.kts were all missing), so
+          # scripts/test_deploy_paths.py now derives the required set from
+          # docker-compose.yml's bind mounts and build contexts, the prod Compose
+          # profiles in the Makefile, and the root Gradle build files, and fails
+          # if any of them isn't matched here.
           filters: |
             deploy:
+              # `./gradlew :backend:buildFatJar`. The root build files carry the
+              # Kotlin/plugin versions the backend build resolves against, so a
+              # bump there changes the deployed jar without touching backend/.
               - 'backend/**'
               - 'gradle/**'
               - 'gradle.properties'
               - 'gradlew'
               - 'gradlew.bat'
-              - 'settings.gradle.kts'
+              - '*.gradle.kts'
+              # `docker build --target backend .`
               - 'Dockerfile'
               - '.dockerignore'
               - 'Makefile'
-              - 'grafana/**'
-              - 'data/**'
+              # `$(PROD_COMPOSE) build recgov-companion` builds this context.
+              - 'companion/**'
               - 'docker-compose*.yml'
+              # Bind-mounted by Compose, so they ship without an image rebuild —
+              # and are just as invisible to a filter that omits them.
+              - 'grafana/**'
+              - 'postgres-init/**'
+              - 'data/**'
               - 'index.html'
               - 'availability.html'
+              - 'watches.html'
               - 'web/**'
               # A vault change is a runtime config change: the host decrypts
               # these on deploy, so a new client id or rotated token has to
