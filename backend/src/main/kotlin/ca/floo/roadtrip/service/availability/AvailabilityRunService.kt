@@ -128,7 +128,7 @@ internal class AvailabilityRunService(
         runId: Long,
     ) {
         results.filter { it.window != null }.forEach { r ->
-            val refKey = r.parentRef?.let(::parentRefKey) ?: return@forEach
+            val refKey = r.parentRef?.parentRefKey ?: return@forEach
             val key = r.provider.id to refKey
             val attempts = attemptsByGroup[key].orEmpty()
             if (attempts.isEmpty()) {
@@ -148,7 +148,7 @@ internal class AvailabilityRunService(
                 recordFetchCall(
                     runId = runId,
                     provider = attempt.provider,
-                    parentRef = attempt.parentRef?.let(::parentRefKey) ?: refKey,
+                    parentRef = attempt.parentRef?.parentRefKey ?: refKey,
                     campsiteCount = r.campsites.size,
                     window = r.window!!,
                     outcome = attempt.outcome,

@@ -12,26 +12,6 @@ x-log-rotation: &log-rotation
     max-file: "5"
 
 services:
-  # cookie-bot sidecar — kept for future use but not started by default on
-  # aarch64 hosts (see memory: akamai_http2_fingerprinting.md). To enable,
-  # run with `--profile cookie-bot` on an amd64 host (or with a paid-solver
-  # backend), then set COOKIE_BOT_URL=http://cookie-bot:8080 in .env.
-  # Used only by the offline refresh worker (scripts/fetch_tesla_{index,locations}.py),
-  # not by the live serving stack.
-  cookie-bot:
-    profiles: [cookie-bot]
-    build: ./cookie-bot
-    restart: unless-stopped
-    logging: *log-rotation
-    hostname: cookie-bot
-    volumes:
-      - ${COOKIE_BOT_DATA:-$HOME/.roadtrip-map/cookie-bot}:/var/cache/cookie-bot
-    environment:
-      # Token arrives as /run/secrets/cookie_bot_token (docker-compose.secrets.yml).
-      - COOKIE_BOT_TOKEN_FILE=/run/secrets/cookie_bot_token
-      - HEADLESS=true
-      - LOG_LEVEL=INFO
-
   # Postgres + PostGIS (postgres:16 + postgis 3.4) so geom can be Geometry
   # (Polygon/MultiPolygon, not just Point) and GIST bbox queries work
   # without an extension install step.
@@ -76,9 +56,8 @@ services:
   # Kotlin/Ktor backend. Serves the entire site:
   #   - GET /                       → index.html (map)
   #   - GET /availability           → availability dashboard
-  #   - GET /web/*, /data/*         → static files (data/pricing-cache/ excluded)
+  #   - GET /web/*, /data/*         → static files
   #   - GET /api/pois               → bbox query against postgres
-  #   - GET /api/pricing/{slug}     → cache-only read of data/pricing-cache/{slug}.json
   #   - GET /api/health             → liveness/readiness probe
   # Static files come from the repo bind-mount so deploys are git-pull +
   # docker compose up — no Dockerfile rebuild needed for HTML/JS/data changes.

@@ -155,8 +155,11 @@ be config-driven.
 
 Checklist:
 
-- Add env vars for secrets, API roots, feature gates, or rate limits.
-- Document new env vars in `.env.example`.
+- Add env vars for API roots, feature gates, or rate limits; register secret
+  values in the vault instead
+  (`./secrets/manage.py add <VAR> --description "…" --consumers backend` —
+  see [secrets.md](secrets.md)). There is no `.env` workflow; the pre-commit
+  hook refuses commits touching a plaintext `.env`.
 - Add per-source or per-tenant values to the YAML registry when they are part
   of data identity.
 - Use named constants only for stable protocol defaults.

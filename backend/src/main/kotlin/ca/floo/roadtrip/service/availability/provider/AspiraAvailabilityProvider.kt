@@ -25,10 +25,12 @@ import java.time.temporal.ChronoUnit
 
 private const val ASPIRA_BOOKING_HORIZON_DAYS = 365
 private const val ASPIRA_MAX_POLL_WINDOW_DAYS = 30
-private const val HTTP_TOO_MANY_REQUESTS = 429
-private const val HTTP_UNAUTHORIZED = 401
-private const val HTTP_FORBIDDEN = 403
-private const val HTTP_SERVICE_UNAVAILABLE = 503
+
+/** Aspira's Azure WAF answers a bot challenge with 401/403/503 — or a 200
+ *  carrying a challenge page, which the client rethrows with "WAF" in the
+ *  message. Both shapes mean "blocked", not "upstream is down". */
+private val aspiraBlockedStatuses = setOf(HTTP_UNAUTHORIZED, HTTP_FORBIDDEN, HTTP_SERVICE_UNAVAILABLE)
+private const val WAF_MESSAGE_MARKER = "WAF"
 
 class AspiraAvailabilityProvider(
     private val tenants: Map<String, AspiraTenant>,
@@ -278,15 +280,12 @@ class AspiraAvailabilityProvider(
         } catch (e: AvailabilityProviderError) {
             throw e
         } catch (e: AspiraException) {
-            when {
-                e.httpStatus == HTTP_TOO_MANY_REQUESTS -> throw AvailabilityProviderError.RateLimited(e)
-                e.httpStatus == HTTP_UNAUTHORIZED ||
-                    e.httpStatus == HTTP_FORBIDDEN ||
-                    e.httpStatus == HTTP_SERVICE_UNAVAILABLE ||
-                    e.message?.contains("WAF") == true ->
-                    throw AvailabilityProviderError.UpstreamBlocked(e)
-                else -> throw AvailabilityProviderError.UpstreamUnavailable(e)
-            }
+            throw upstreamAvailabilityError(
+                cause = e,
+                httpStatus = e.httpStatus,
+                blockedStatuses = aspiraBlockedStatuses,
+                blockedMessageMarker = WAF_MESSAGE_MARKER,
+            )
         } catch (e: Exception) {
             throw AvailabilityProviderError.UpstreamUnavailable(e)
         }
@@ -295,10 +294,10 @@ class AspiraAvailabilityProvider(
 internal fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, AvailabilityErrorDto> {
     val status = e.httpStatus
     return when {
-        status == 429 ->
+        status == HTTP_TOO_MANY_REQUESTS ->
             HttpStatusCode.ServiceUnavailable to
                 availabilityErrorDto("rate_limited", upstreamStatus = status)
-        status == 503 || (e.message?.contains("WAF") == true) ->
+        status == HTTP_SERVICE_UNAVAILABLE || (e.message?.contains(WAF_MESSAGE_MARKER) == true) ->
             HttpStatusCode.ServiceUnavailable to
                 availabilityErrorDto("upstream_blocked", upstreamStatus = status)
         else ->

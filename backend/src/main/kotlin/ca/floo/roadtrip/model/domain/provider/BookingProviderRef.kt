@@ -10,6 +10,14 @@ package ca.floo.roadtrip.model.domain.provider
 sealed interface BookingProviderRef {
     val provider: BookingProvider
 
+    /**
+     * This vendor's call-unit id rendered as text: the id the upstream groups a
+     * single availability call around (rec.gov facility, Aspira map, ...). Used
+     * as the poller's `parent_ref` grouping key and in traces/metrics, so it is
+     * a *stored* value — changing a variant's rendering orphans live pollers.
+     */
+    val parentRefKey: String
+
     fun serialize(): String
 
     data class Aspira(
@@ -19,6 +27,8 @@ sealed interface BookingProviderRef {
         val resourceLocationId: Long?,
     ) : BookingProviderRef {
         override val provider: BookingProvider = BookingProvider.ASPIRA
+
+        override val parentRefKey: String get() = mapId.toString()
 
         override fun serialize(): String {
             val parts =
@@ -37,6 +47,8 @@ sealed interface BookingProviderRef {
     ) : BookingProviderRef {
         override val provider: BookingProvider = BookingProvider.RECGOV
 
+        override val parentRefKey: String get() = facilityId
+
         override fun serialize(): String = facilityId
     }
 
@@ -44,6 +56,8 @@ sealed interface BookingProviderRef {
         val campgroundId: String,
     ) : BookingProviderRef {
         override val provider: BookingProvider = BookingProvider.CAMPFLARE
+
+        override val parentRefKey: String get() = campgroundId
 
         override fun serialize(): String = campgroundId
     }
@@ -54,6 +68,8 @@ sealed interface BookingProviderRef {
     ) : BookingProviderRef {
         override val provider: BookingProvider = BookingProvider.RESERVEAMERICA
 
+        override val parentRefKey: String get() = parkId
+
         override fun serialize(): String = "${contractCode ?: "null"}:$parkId"
     }
 
@@ -62,6 +78,8 @@ sealed interface BookingProviderRef {
         val facilityIds: List<Long>,
     ) : BookingProviderRef {
         override val provider: BookingProvider = BookingProvider.RESERVECALIFORNIA
+
+        override val parentRefKey: String get() = facilityIds.joinToString(",")
 
         override fun serialize(): String = "$placeId:${facilityIds.joinToString(",")}"
     }

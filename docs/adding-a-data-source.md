@@ -131,20 +131,19 @@ Required, regardless of language: write envelope-wrapped raw bytes into `fetcher
 
 ### Auth — API keys, tokens, cookies
 
-If the upstream needs a secret, **read it from an env var inside the fetcher; never hard-code or commit it.**
+If the upstream needs a secret, **read it from an env var inside the fetcher; never hard-code or commit it.** Secrets live in the encrypted vault under `secrets/` — there is no `.env` workflow, and the pre-commit hook (`.githooks/pre-commit`) hard-refuses any commit touching a plaintext `.env`. See [secrets.md](secrets.md) for the full model.
 
-1. Pick an env-var name. Use the upstream's natural name plus a unique suffix when needed.
+1. Pick an env-var name (UPPER_SNAKE_CASE). Use the upstream's natural name plus a unique suffix when needed.
 2. **Read it in the fetcher** using whatever the runtime's env-var API is. When the variable is missing or empty, log a clear stderr error and exit non-zero — the IngestController records `exit_code != 0` as a failed fetch, which is better than running and capturing garbage.
-3. **Document it in `.env.example`** at the repo root with a one-line "where to get it" comment. Local dev copies `.env.example → .env` and fills it in. `.env` is gitignored.
-4. **Plumb it to the runtime that runs the fetcher:**
+3. **Register it in the vault** — one command registers the name, prompts for the value (no echo), and regenerates `docker-compose.secrets.yml`:
 
-  | Runtime                      | How to inject                                                                                                                              |
-  | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-  | Tilt (local dev)             | Add `'<VAR>': DOTENV.get('<VAR>', '')` to the Tilt resource's `serve_env`                                                                  |
-  | docker compose (deploy host) | Add `- <VAR>=${<VAR>}` under the `backend` service's `environment:` in `docker-compose.yml`, and set `<VAR>=…` in the deploy host's `.env` |
-  | Bare invocation              | Have the var exported in the shell or in a sourced env file before the run                                                                 |
+   ```sh
+   ./secrets/manage.py add <VAR> --description "where to get it" --consumers host-tools
+   ```
 
-5. **For rotating secrets** (cookies, short-TTL tokens) reuse the existing refresh-script pattern under `scripts/` if your upstream has the same shape.
+   `--consumers` is comma-separated: use `host-tools` for a secret only the host-side fetcher reads (that is how `RIDB_API_KEY` is registered), `backend,host-tools` when a backend client also reads it (like `CAMPFLARE_API_KEY`). See the field docs at the top of `secrets/registry.yaml`.
+4. **Commit** what `add` tells you to: `secrets/registry.yaml`, the updated `secrets/*.enc.env` vault, and the regenerated `docker-compose.secrets.yml`. That commit *is* the deploy — the deploy host decrypts with its own age key on the next `git pull`.
+5. **Plumbing is automatic.** `make data-fetch` runs the fetchers under `./secrets/manage.py exec local --`, which decrypts the vault in memory and injects `host-tools` values as env vars; the Tiltfile loads the same set for its resources; containers get `consumers`-scoped `/run/secrets` mounts from the generated compose file. Nothing to add to `docker-compose.yml` or the Tiltfile by hand. For a bare fetcher invocation outside make/Tilt, wrap it yourself: `./secrets/manage.py exec local -- python3 scripts/<fetcher>.py …`.
 
 **Never** commit a real key. **Never** log the key value. Don't include it in the envelope's `request_headers`.
 
@@ -183,33 +182,46 @@ For terminal ETLs that need the FE bucket, use `ctx.subcategoryFor(etlSlug)` to 
 
 Read existing ETLs under `backend/src/main/kotlin/ca/floo/roadtrip/service/etl/vendors/` for the closest pattern.
 
-Test fixtures live at `backend/src/test/resources/etl-fixtures/<slug>/`. Add a parse + transform test at `backend/src/test/kotlin/ca/floo/roadtrip/etl/<vendor>/<Vendor>EtlTest.kt`.
+Test fixtures live at `backend/src/test/resources/etl-fixtures/<slug>/`. Add a parse + transform test at `backend/src/test/kotlin/ca/floo/roadtrip/service/etl/vendors/<vendor>/<Vendor>EtlTest.kt`.
 
 **Verify** the adapter compiles and tests pass:
 
 ```bash
 ./gradlew :backend:compileKotlin :backend:compileTestKotlin
-./gradlew :backend:test --tests "ca.floo.roadtrip.etl.<vendor>.*"
+./gradlew :backend:test --tests "ca.floo.roadtrip.service.etl.vendors.<vendor>.*"
 ```
 
 ## Step 4 — Register the adapter(s)
 
-**Edit** `backend/src/main/kotlin/ca/floo/roadtrip/service/etl/framework/EtlOrchestrator.kt`. Add one line for the terminal `etls:` entry to the `registry` map. Map keys MUST equal the YAML `slug`.
+The registry is derived from the YAML, not hand-listed per slug. At boot,
+`backend/src/main/kotlin/ca/floo/roadtrip/service/etl/framework/ProductionTerminalEtlRegistry.kt`
+walks every enabled `poi_data:` and `campsite_data:` row in
+`poi-registry.yaml` and builds one terminal-ETL binding per row, dispatching
+on the row's `adapter:` string in `createPoiTerminal` /
+`createCampsiteTerminal`. Adding a new *tenant* of an existing adapter class
+therefore needs **no Kotlin registry change at all** — the YAML row is enough.
+
+Adding a new adapter *class* means adding one `when` branch that constructs it
+from the `EtlEntry`:
+
+**Edit** `ProductionTerminalEtlRegistry.kt`. In `createPoiTerminal` (for
+`poi_data:` rows) or `createCampsiteTerminal` (for `campsite_data:` rows),
+add a branch keyed on the exact `adapter:` string from your YAML row, wrapped
+in the sink matching your candidate type (`campgroundSink`, `campsiteSink`,
+`teslaSuperchargerSink`, `planetFitnessSink`):
 
 ```kotlin
-val registry: Map<String, SourceEtl<*, *>> =
-    mapOf(
-        ...,
-        "<terminal-etl-slug>" to ca.floo.roadtrip.service.etl.vendors.<vendor>.<Vendor>Etl(),
-    )
+"<Vendor>Etl" -> campgroundSink(<Vendor>Etl(entry.slug))
 ```
 
-For ETL classes that take a slug as a constructor arg (one class instantiated per tenant), pass it explicitly:
-
-```kotlin
-"reserveamerica-ny-campgrounds" to ReserveAmericaCampgroundsEtl("reserveamerica-ny-campgrounds"),
-"reserveamerica-ab-campgrounds" to ReserveAmericaCampgroundsEtl("reserveamerica-ab-campgrounds"),
-```
+Per-tenant configuration comes from the row's `args:` via `entry.args` — use
+`entry.args.require("<key>")` for mandatory values (Aspira reads
+`require("tenant")` and its input slugs that way; ReserveAmerica reads
+`require("contract")`) and `entry.args["<key>"]` for optional ones. Values the
+transformer needs later (e.g. `host`) come from `TransformCtx.argFor` instead
+of the constructor. Classes instantiated once per tenant
+take the slug from `entry.slug`; an unknown `adapter:` string fails boot with
+`Unknown poi_data adapter: …`.
 
 **Verify** the registry compiles and the backend boots clean:
 
@@ -279,22 +291,22 @@ Many upstreams are a single platform with multiple tenants. Don't write one fetc
 
 **One fetcher script** takes CLI flags for whatever varies per tenant. Each `data_sources:` row points at the same `executor:` + `filename:` but passes different `args:`. Each row gets its own raw directory because `output_dir_prefix:` is per-row.
 
-**One Kotlin ETL class** registered N times in `EtlOrchestrator.registry`, each entry passing the corresponding slug to the constructor. The class accepts the slug as a constructor arg and returns it from `etlSlug`. Same parser, same transformer; the slug just labels the rows.
+**One Kotlin ETL class** instantiated N times by `ProductionTerminalEtlRegistry` — its `when` branch runs once per YAML row, passing each row's `entry.slug` (and `args:`) to the constructor. The class accepts the slug as a constructor arg and returns it from `etlSlug`. Same parser, same transformer; the slug just labels the rows.
 
 ### Adding a new tenant under an existing fetcher
 
 1. Append a `data_sources:` row in `backend/src/main/resources/poi-registry.yaml` with new `slug`, `args:`, and `output_dir_prefix:`.
 2. Append a `poi_data:` row that consumes it. The terminal `etls:` slug is the new tenant identifier; `args:` carries per-tenant config (e.g. `host`).
-3. Add one line to `EtlOrchestrator.registry` mapping the new terminal etl slug to a fresh ETL instance: `"<new-slug>" to <ExistingEtl>("<new-slug>")`.
+3. There is no step 3: `ProductionTerminalEtlRegistry` derives one binding per enabled YAML row, so the existing `adapter:` branch instantiates the class again with the new row's slug and args.
 
-No new fetcher script. No new Kotlin class. No DB migration.
+No new fetcher script. No new Kotlin code. No DB migration.
 
 ### Designing a new fetcher for multi-tenant from day one
 
 1. **Make the fetcher take a CLI flag** for whatever varies. Surface it via `args:` in the YAML; the value participates in `output_dir_prefix:` so each tenant lands in its own raw dir.
 2. **Make the ETL class take the slug as a constructor arg.** Don't hard-code the slug as a constant — the same class will be instantiated multiple times with different slugs.
 3. **Use `TransformCtx` helpers** for any per-tenant metadata. `subcategoryFor(etlSlug)` reads the YAML; `argFor(etlSlug, key)` reads values such as `args.host`.
-4. **First `poi_data:` row** verifies the wiring works for one tenant. Adding the second tenant should require zero new code — only YAML + one `EtlOrchestrator.registry` line.
+4. **First `poi_data:` row** verifies the wiring works for one tenant. Adding the second tenant should require zero new code — only YAML.
 
 ### Verify
 
@@ -345,16 +357,16 @@ transforming dropped rows.
 | Register fetcher                    | `backend/src/main/resources/poi-registry.yaml` `data_sources:`                                                              |
 | Register POI dataset                | `backend/src/main/resources/poi-registry.yaml` `poi_data:` (`name`, `category`, `subcategory`, single `etls:` entry)        |
 | New fetcher script                  | `scripts/<fetcher>` (any runtime — `fetcher.executor` decides)                                          |
-| New ETL                             | `backend/src/main/kotlin/ca/floo/roadtrip/etl/<vendor>/<Vendor>Etl.kt`                                  |
-| ETL test                            | `backend/src/test/kotlin/.../<vendor>/<Vendor>EtlTest.kt`                                               |
+| New ETL                             | `backend/src/main/kotlin/ca/floo/roadtrip/service/etl/vendors/<vendor>/<Vendor>Etl.kt`                  |
+| ETL test                            | `backend/src/test/kotlin/ca/floo/roadtrip/service/etl/vendors/<vendor>/<Vendor>EtlTest.kt`              |
 | Test fixtures                       | `backend/src/test/resources/etl-fixtures/<slug>/`                                                       |
-| Register adapter                    | `EtlOrchestrator.kt` `registry` map (one line per terminal ETL slug)                                  |
+| Register adapter                    | `ProductionTerminalEtlRegistry.kt` — one `when` branch per `adapter:` class; tenants come free from YAML |
 | Trigger fetch                       | `make data-fetch TARGET=<data_source-slug>`                                                             |
 | Trigger import                      | `POST /api/admin/data/import/<row-name>`                                                                |
 | Run history                         | `GET /api/admin/data/runs?target=<row-name>`                                                            |
 | Data status snapshot                | `GET /api/admin/data/status`                                                                            |
-| Add an env var                      | `.env.example` + `.env` + Tilt `serve_env` + compose `environment:`                                     |
-| Same fetcher, new tenant            | New `data_sources:` + new `poi_data:` row + new `EtlOrchestrator.registry` line. No new fetcher.        |
+| Add a secret                        | `./secrets/manage.py add <VAR> --consumers host-tools` + commit registry/vault/generated compose        |
+| Same fetcher, new tenant            | New `data_sources:` + new `poi_data:` row. No new fetcher, no Kotlin change.                            |
 
 ## Troubleshooting
 
@@ -365,11 +377,12 @@ transforming dropped rows.
 | `validation error: must declare exactly one etl` at boot     | A `poi_data:` or `campsite_data:` row has zero or multiple ETL entries. Keep one terminal entry and move joins inside that ETL.                                                                            |
 | `validation error: inputs '…' which is not a data_source` at boot | An ETL input references another ETL slug or an unknown slug. ETL inputs must be raw `data_sources:` slugs.                                                                                               |
 | `validation error: cycle detected in DAG` at boot            | `data_sources.depends_on` creates a cycle, or an invalid ETL input was part of a cycle. Break the cycle.                                                                                                  |
-| `no adapter registered for slug=<…>` on import               | `EtlOrchestrator.registry` doesn't have the slug. Map key must match the YAML slug exactly.                                                                                                               |
+| `Unknown poi_data adapter: <…>` / `Unknown campsite_data adapter: <…>` at boot | The YAML row's `adapter:` string has no `when` branch in `ProductionTerminalEtlRegistry.kt`. Add one (Step 4); the string must match the branch exactly.                                             |
+| `no adapter registered for etl slug='…'` on import           | The import target references a terminal etl slug the derived registry didn't produce — usually a disabled row (`enabled: false`) or a slug mismatch between the YAML and the import target.                |
 | Import returns `status: completed` but `counts.seen=0`       | The ETL's `parse()` yielded no DTOs or `transform()` yielded no records. Add a unit test against a captured raw envelope under `backend/src/test/resources/etl-fixtures/<slug>/` to bisect the stage.     |
 | Pins missing despite `pois` rows present                     | Wrong `category`/`subcategory` for the FE legend toggle, or `geom` is null.                                                                                                                               |
 | Fetch returns 403 / WAF challenge                            | Add browser-shaped UA + `Referer`; some upstreams need a primed cookie jar.                                                                                                                               |
 | `concurrent same-target` error                               | Another run is already in flight. `GET /api/admin/data/runs?target=<slug>` to see it.                                                                                                                     |
-| Fetch fails with `<VAR> env var not set`                     | The runtime didn't pass the secret through. Check Tilt `serve_env` (local), `docker-compose.yml` `environment:` (deploy), and that the value is set in `.env`.                                            |
-| Two tenants of one fetcher overwrite each other's `pois`     | Each `poi_data:` row's terminal etl slug must be unique AND the registered ETL instance must pass that slug into the class constructor. The Upsert sweep is scoped to the etl slug.                       |
-| One tenant's import wipes another's POIs                     | Same fix as above — confirm the terminal etl slugs differ between rows AND the `EtlOrchestrator.registry` entries pass the right slug into each constructor.                                              |
+| Fetch fails with `<VAR> env var not set`                     | The secret isn't in the vault, or the fetcher ran outside `manage.py exec`. `./secrets/manage.py ls` shows what exists and where it's set; run via `make data-fetch` (which wraps `exec local`), not bare. |
+| Two tenants of one fetcher overwrite each other's `pois`     | Each `poi_data:` row's terminal etl slug must be unique AND the adapter's registry branch must pass `entry.slug` into the class constructor. The Upsert sweep is scoped to the etl slug.                  |
+| One tenant's import wipes another's POIs                     | Same fix as above — confirm the terminal etl slugs differ between rows AND the `ProductionTerminalEtlRegistry` branch passes `entry.slug` (not a hard-coded slug) into each constructor.                  |

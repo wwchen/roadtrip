@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.availability.PoiDateContext
 import ca.floo.roadtrip.model.availability.ResolvedDateWindow
-import org.jooq.DSLContext
+import ca.floo.roadtrip.repo.PoiRepo
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
@@ -12,7 +12,7 @@ import java.time.temporal.ChronoUnit
 private val globalEarliestDateCutoff: LocalTime = LocalTime.of(18, 0)
 
 internal class AvailabilityDateResolver(
-    private val ctx: DSLContext,
+    private val poiRepo: PoiRepo,
     private val clock: Clock = Clock.systemUTC(),
     private val cutoff: LocalTime = globalEarliestDateCutoff,
 ) {
@@ -104,19 +104,7 @@ internal class AvailabilityDateResolver(
     ): ResolvedDateWindow? = wideWindow(context.earliestDate, context, maxPollWindowDays, bookingHorizonDays)
 
     fun contextForPoi(poiId: Long): PoiDateContext {
-        val r =
-            ctx.fetchOne(
-                """
-                SELECT ST_X(ST_PointOnSurface(p.geom)) AS lng,
-                       ST_Y(ST_PointOnSurface(p.geom)) AS lat
-                FROM pois p
-                WHERE p.id = ? AND p.deleted_at IS NULL
-                """.trimIndent(),
-                poiId,
-            ) ?: throw AvailabilityServiceError.NotFound
-        return context(
-            lat = (r.get("lat") as Number?)?.toDouble(),
-            lng = (r.get("lng") as Number?)?.toDouble(),
-        )
+        val centroid = poiRepo.findCentroid(poiId) ?: throw AvailabilityServiceError.NotFound
+        return context(lat = centroid.lat, lng = centroid.lng)
     }
 }

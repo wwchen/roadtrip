@@ -62,7 +62,7 @@ jobs:
     outputs:
       deploy: ${{ steps.decide.outputs.deploy }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ env.DEPLOY_SHA }}
           fetch-depth: 0
@@ -94,7 +94,7 @@ jobs:
       - name: Check for deploy-relevant changes
         id: filter
         if: github.event_name != 'workflow_dispatch' && steps.last.outputs.sha != ''
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
         with:
           base: ${{ steps.last.outputs.sha }}
           ref: ${{ env.DEPLOY_SHA }}
@@ -168,14 +168,15 @@ jobs:
     needs: changes
     if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
-    # Optional: bind to a GitHub Environment if you want approval gates or
-    # per-env secrets. Leaving unset for now keeps things simple.
-    # environment: production
+    # Bound to a GitHub Environment so deploys show up in the environment's
+    # timeline and the door is open for approval gates / per-env secrets
+    # without another workflow change.
+    environment: production
     timeout-minutes: 30
     steps:
       # Pinned to the validated commit so the URLs this job resolves come from
       # the same tree the host is about to check out.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ env.DEPLOY_SHA }}
 
@@ -184,12 +185,14 @@ jobs:
       # node is ephemeral, and the credentials can be rotated without
       # touching the workflow.
       - name: Join tailnet
-        uses: tailscale/github-action@v4
+        uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
-          version: latest
+          # A concrete client version, not `latest`: a deploy should not change
+          # behavior because Tailscale cut a release between two pushes.
+          version: 1.98.10
 
       - name: Configure SSH
         env:
@@ -198,8 +201,11 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
+          # Create the file 0600 *before* writing the key into it — a
+          # write-then-chmod leaves a window where the default-umask file
+          # holds the private key.
+          install -m 600 /dev/null ~/.ssh/id_ed25519
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
           # Pinned host key — fail fast if mini-ca's identity ever changes.
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
@@ -213,7 +219,10 @@ jobs:
       - name: Deploy on mini-ca
         run: |
           ssh -o BatchMode=yes mini@mini-ca "bash -s -- '$DEPLOY_SHA'" <<'REMOTE'
-          set -e
+          # The remote shell is explicitly bash (`bash -s` above), so pipefail
+          # is available: any stage of a pipeline failing fails the deploy,
+          # and -u turns a typo'd variable into an error instead of "".
+          set -euo pipefail
           sha="$1"
           cd ~/workspace/roadtrip
           # Was `git pull --ff-only`, which deployed whatever master pointed at
@@ -246,7 +255,10 @@ jobs:
           # because this is the distro's python3, and PEP 668 makes `pip install`
           # into it an error on Ubuntu 24.04 — the fallback would fail exactly
           # when it were needed.
-          python3 -c "import yaml" 2>/dev/null || sudo apt-get install -y -qq python3-yaml
+          # `update` first: runner images ship with stale apt lists, and an
+          # install against them 404s exactly when the fallback is needed.
+          python3 -c "import yaml" 2>/dev/null \
+            || { sudo apt-get update -qq && sudo apt-get install -y -qq python3-yaml; }
           # Reads roadtrip.web.root-url and strips the trailing slash the way
           # WebAppConfig does, so "$base$path" can't double up. Exits non-zero if
           # the key moves, which -e turns into a failed step rather than an empty

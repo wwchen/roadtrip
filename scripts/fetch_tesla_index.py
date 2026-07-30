@@ -41,9 +41,7 @@ FETCHER_VERSION = "1"
 def fetch() -> tuple[int, str]:
     cookies = tesla_client.get_tesla_cookies()
     if not cookies:
-        raise RuntimeError(
-            "No Tesla cookies (cookie-bot and TESLA_COOKIES both empty)"
-        )
+        raise RuntimeError("No Tesla cookies (TESLA_COOKIES empty)")
     curl_bin = os.environ.get("TESLA_CURL", "curl_safari15_5")
     cmd = [
         curl_bin, "-sS", "-w", "\n__HTTP_STATUS__%{http_code}", URL,

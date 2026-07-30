@@ -30,19 +30,9 @@ updates:
       npm-minor-and-patch:
         update-types: [minor, patch]
 
-  # The cookie-bot sidecar holds the only Python manifest in the tree. The
-  # fetchers in scripts/ and the secrets tooling declare no dependencies (they
-  # are stdlib plus PyYAML), so there is nothing for pip to resolve at the root
-  # — point this at a requirements.txt if that changes.
-  - package-ecosystem: pip
-    directory: /cookie-bot
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
-    groups:
-      pip-minor-and-patch:
-        update-types: [minor, patch]
+  # No pip ecosystem: the fetchers in scripts/ and the secrets tooling declare
+  # no dependencies (they are stdlib plus PyYAML), so there is no Python
+  # manifest in the tree — point pip at a requirements.txt if that changes.
 
   # Pinned action majors (checkout@v4, codecov-action@v5, …) otherwise drift
   # until something breaks or a deprecation notice turns a run red.

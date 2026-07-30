@@ -14,6 +14,12 @@ roadtrip:
   availability:
     force-pull-cooldown: 60s
     provider-cooldown: 5m
+    poller:
+      # Last rung of the watch -> POI -> global cadence fall-through, and the
+      # two delays the executor reschedules on when it does not fetch.
+      default-cadence: 300s
+      idle-reschedule: 300s
+      governor-starved-retry: 15s
   booking:
     recgov-atc:
       companion-base-url:

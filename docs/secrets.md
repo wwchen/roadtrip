@@ -71,7 +71,6 @@ nor the host process table.
 | grafana | `GF_SECURITY_ADMIN_PASSWORD__FILE`; provisioning uses `$__file{}` |
 | backend | `SecretsBootstrap` copies `/run/secrets/*` into system properties before Ktor parses config, so they never become environment variables |
 | cloudflared | `TUNNEL_TOKEN_FILE` — not `--token`, which would put it on the command line |
-| cookie-bot | `COOKIE_BOT_TOKEN_FILE` |
 | host scripts | environment injection from `exec`; there is nowhere to mount a file outside a container |
 
 **What this does and doesn't protect.** It removes the durable plaintext
@@ -114,9 +113,10 @@ Two different things, routinely confused:
 ## Not in the vault, on purpose
 
 - **`TESLA_COOKIES`** — Akamai binds `_abck` to the egress IP that minted it, so
-  one shared copy would give every host a cookie only one can use.
-  `scripts/refresh-tesla-cookies.sh` mints it into `.env.local`, which is
-  gitignored and per-machine.
+  one shared copy would give every host a cookie only one can use. Mint it
+  manually per machine: tesla.com/findus → click a Supercharger → DevTools
+  Network → `get-charger-details` → copy the `Cookie` header value into
+  `TESLA_COOKIES=` in `.env.local` (gitignored, per-machine).
 - **GitHub Actions secrets** (`TS_OAUTH_*`, `DEPLOY_SSH_KEY`, `CODECOV_TOKEN`) —
   credentials *for* the pipeline, not runtime config. Keeping them in GitHub is
   what lets CI hold no decryption key at all.

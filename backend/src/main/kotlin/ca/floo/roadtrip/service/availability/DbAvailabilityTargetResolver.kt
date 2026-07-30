@@ -1,20 +1,22 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.config.AvailabilityPollerConfig
 import ca.floo.roadtrip.model.availability.AvailabilityWindows
 import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
-import org.jooq.DSLContext
 
 internal class DbAvailabilityTargetResolver(
-    private val ctx: DSLContext,
+    private val poiRepo: PoiRepo,
     private val campsitesRepo: CampsiteRepo,
     private val campgroundRepo: CampgroundRepo,
     private val availabilityProviders: List<AvailabilityProvider>,
     private val dateResolver: AvailabilityDateResolver,
     private val pollerRepo: AvailabilityPollerRepo,
+    private val pollerConfig: AvailabilityPollerConfig = AvailabilityPollerConfig.default,
 ) : AvailabilityTargetResolver {
     override fun resolve(campsite: Campsite): ResolvedAvailabilityTarget? {
         val poiIds = campsitesRepo.poiIdsForCampsite(campsite.id)
@@ -29,14 +31,14 @@ internal class DbAvailabilityTargetResolver(
             }
 
         val (poiId, campground, provider) = candidates.firstOrNull() ?: return null
-        val poiLatLng = getPoiLatLng(poiId)
+        val poiCentroid = poiRepo.findCentroid(poiId)
 
         return ResolvedAvailabilityTarget(
             campsite = campsite,
             provider = provider,
             campground = campground,
             parentPoiId = poiId,
-            dateContext = dateResolver.context(lat = poiLatLng?.first, lng = poiLatLng?.second),
+            dateContext = dateResolver.context(lat = poiCentroid?.lat, lng = poiCentroid?.lng),
             candidates = candidates.map { (_, _, prov) -> prov },
         )
     }
@@ -46,7 +48,7 @@ internal class DbAvailabilityTargetResolver(
         if (liveWatches.isEmpty()) return null
 
         val poiCadenceOverrideSec = pollerRepo.cadenceOverrideForPoller(poller.id)
-        val cadenceSec = resolveCadenceSec(liveWatches, poiCadenceOverrideSec)
+        val cadenceSec = resolveCadenceSec(liveWatches, poiCadenceOverrideSec, pollerConfig.defaultCadenceSec)
 
         val targets =
             campsitesRepo
@@ -55,7 +57,7 @@ internal class DbAvailabilityTargetResolver(
                 .filter {
                     val ref = it.parentRef
                     ref != null &&
-                        parentRefKey(ref) == poller.parentRef &&
+                        ref.parentRefKey == poller.parentRef &&
                         it.provider.id.name
                             .lowercase() == poller.provider
                 }.distinctBy { it.campsite.id }
@@ -81,22 +83,5 @@ internal class DbAvailabilityTargetResolver(
             cadenceSec = cadenceSec,
             liveWatches = liveWatches,
         )
-    }
-
-    private fun getPoiLatLng(poiId: Long): Pair<Double, Double>? {
-        val r =
-            ctx
-                .fetchOne(
-                    """
-                    SELECT ST_X(ST_PointOnSurface(geom)) AS lng,
-                           ST_Y(ST_PointOnSurface(geom)) AS lat
-                    FROM pois
-                    WHERE id = ?
-                    """.trimIndent(),
-                    poiId,
-                ) ?: return null
-        val lng = r.get("lng") as? Number ?: return null
-        val lat = r.get("lat") as? Number ?: return null
-        return lat.toDouble() to lng.toDouble()
     }
 }

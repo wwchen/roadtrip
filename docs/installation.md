@@ -4,8 +4,9 @@ Two kinds of machine run this stack, and they need different things:
 
 - a **dev machine** — builds the backend, runs Tilt, drives the companion
   browser, runs the smoke suite;
-- a **deploy host** (`mini-ca`) — runs the Compose stack and decrypts secrets,
-  but never builds or tests.
+- a **deploy host** (`mini-ca`) — builds the backend jar and images, runs the
+  Compose stack, and decrypts secrets, but never runs Tilt, tests, or the
+  companion browser directly.
 
 Installing the dev toolchain on the deploy host works but drags in Tilt,
 Playwright, and a Chromium download it will never use.
@@ -40,11 +41,14 @@ try to decrypt — the stack does not come up on a partial secret set, because
 
 ## Deploy host
 
-Needs Docker and the secrets toolchain. It does **not** need Tilt, Node, or
-Playwright, and it needs no JDK — the backend image carries its own:
+Needs Docker, a JDK, and the secrets toolchain. It does **not** need Tilt,
+Node, or Playwright. It *does* need a JDK: `make run env=prod` runs
+`./gradlew :backend:buildFatJar` on the deploy host before building the
+backend image (the image only wraps the jar it is handed — it does not build
+it):
 
 ```sh
-brew install docker sops age
+brew install docker openjdk sops age
 ```
 
 `sops` is the one people miss. `age` alone is enough to *mint a key*, but every
@@ -97,11 +101,19 @@ when you're not using it:
 
 - **Java 25** — `backend/build.gradle.kts` sets `jvmToolchain(25)`; the Gradle
   wrapper handles the rest.
-- **Python 3.10+** for `secrets/manage.py` and the host-side fetchers in
-  `scripts/`. Some use `X | Y` type syntax that 3.9 rejects at import. macOS
-  system `python3` is 3.9 — check with `python3 -V` if a fetcher dies on a
-  `TypeError` about `|`.
-- **Docker** with the Compose plugin (`docker compose`, not `docker-compose`).
+- **Node 22.9+** — the companion pins `"node": ">=22.9.0"` in
+  `companion/package.json`, and the `web/` unit tests run under Node 22 in CI
+  (`node --test`; no package.json — the suites import the browser sources
+  directly).
+- **Python 3.9+** for `secrets/manage.py` and the host-side fetchers in
+  `scripts/`. 3.9 is a real floor, not caution: macOS Command Line Tools ships
+  3.9, these fetchers run on dev machines, and CI's ruff lints with
+  `--target-version py39` to keep the tree 3.9-compatible.
+- **Docker** with the Compose plugin (`docker compose`, not `docker-compose`)
+  — and a **running Docker daemon** (Docker Desktop, OrbStack, or colima).
+  `brew install docker` installs only the CLI, not a daemon. Tilt, Compose,
+  the backend tests (Testcontainers spins up a PostGIS Postgres), and jOOQ
+  codegen all need the daemon up.
 - **sops** new enough to have `--filename-override`, which `manage.py import`
   uses to apply the `secrets/` creation rule to a dotenv living elsewhere.
   Anything Homebrew currently ships is fine; a distro package old enough to

@@ -2,6 +2,7 @@ package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
+import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
@@ -46,7 +47,7 @@ class PoiRoutesTest : SharedDbTest() {
                 listOf(
                     CampgroundService(
                         campgroundRepo = CampgroundRepo(ctx),
-                        dateResolver = AvailabilityDateResolver(ctx),
+                        dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                     ),
                     TeslaSuperchargerService(TeslaSuperchargerRepo(ctx)),
                     PlanetFitnessLocationService(PlanetFitnessLocationRepo(ctx)),

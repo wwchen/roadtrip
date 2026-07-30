@@ -17,6 +17,7 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PlanetFitnessLocationRepo
+import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
@@ -153,17 +154,18 @@ val serviceModule =
 
         single {
             CoordinateTimeZones.warmUp()
-            AvailabilityDateResolver(ctx = get<DSLContext>())
+            AvailabilityDateResolver(poiRepo = get<PoiRepo>())
         }
         single { WatchScopeResolver(get<CampsiteRepo>()) }
         single {
             DbAvailabilityTargetResolver(
-                ctx = get<DSLContext>(),
+                poiRepo = get<PoiRepo>(),
                 campsitesRepo = get<CampsiteRepo>(),
                 campgroundRepo = get<ca.floo.roadtrip.repo.CampgroundRepo>(),
                 availabilityProviders = get(named("availabilityProviders")),
                 dateResolver = get<AvailabilityDateResolver>(),
                 pollerRepo = get<AvailabilityPollerRepo>(),
+                pollerConfig = get<AppConfig>().availability.poller,
             )
         }
         single { AvailabilityPollerMembership(get<WatchScopeResolver>(), get<DbAvailabilityTargetResolver>()) }
@@ -268,6 +270,7 @@ val serviceModule =
                 alertDispatcher = get<WatchAlertDispatcher>(),
                 failoverFetcher = get<FailoverAvailabilityFetcher>(),
                 metrics = get<RoadtripMetrics>(),
+                pollerConfig = get<AppConfig>().availability.poller,
             )
         }
         single(createdAtStart = true) {

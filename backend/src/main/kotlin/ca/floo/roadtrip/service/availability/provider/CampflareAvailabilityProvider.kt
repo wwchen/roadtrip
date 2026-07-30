@@ -162,12 +162,7 @@ class CampflareAvailabilityProvider(
         } catch (e: AvailabilityProviderError) {
             throw e
         } catch (e: CampflareException) {
-            when {
-                e.httpStatus == 429 -> throw AvailabilityProviderError.RateLimited(e)
-                e.httpStatus == 401 || e.httpStatus == 403 -> throw AvailabilityProviderError.UpstreamBlocked(e)
-                e.httpStatus != null && e.httpStatus in 500..599 -> throw AvailabilityProviderError.UpstreamUnavailable(e)
-                else -> throw AvailabilityProviderError.UpstreamUnavailable(e)
-            }
+            throw upstreamAvailabilityError(cause = e, httpStatus = e.httpStatus, blockedStatuses = campflareBlockedStatuses)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -175,6 +170,9 @@ class CampflareAvailabilityProvider(
         }
 
     companion object {
+        /** An auth failure is a key problem, not an outage: retrying it is
+         *  pointless, so it is classified as blocked rather than 5xx. */
+        private val campflareBlockedStatuses = setOf(HTTP_UNAUTHORIZED, HTTP_FORBIDDEN)
         private const val CAMPFLARE_PROVIDER = "campflare"
         private const val CAMPFLARE_BOOKING_HORIZON_DAYS = 365
         private const val CAMPFLARE_MAX_POLL_WINDOW_DAYS = 60

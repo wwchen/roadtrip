@@ -18,8 +18,8 @@ import java.nio.charset.StandardCharsets
 
 class HttpRecgovAvailabilityClient(
     private val httpClient: HttpClient = defaultClient(),
-    private val minGapMs: Long = 1500,
-    private val retryDelaysMs: List<Long> = listOf(3_000, 6_000, 12_000),
+    private val minGapMs: Long = DEFAULT_MIN_GAP_MS,
+    private val retryDelaysMs: List<Long> = defaultRetryDelaysMs,
 ) : RecGovAvailabilityClient {
     private val log = LoggerFactory.getLogger(HttpRecgovAvailabilityClient::class.java)
     private val mutex = Mutex()
@@ -51,7 +51,9 @@ class HttpRecgovAvailabilityClient(
                 continue
             }
             if (!resp.status.isSuccess()) {
-                throw RuntimeException("rec.gov ${resp.status} on $campgroundId/$monthLabel: ${resp.bodyAsText().take(200)}")
+                throw RuntimeException(
+                    "rec.gov ${resp.status} on $campgroundId/$monthLabel: ${resp.bodyAsText().take(ERROR_BODY_EXCERPT_CHARS)}",
+                )
             }
             return parseCampsites(resp.bodyAsText())
         }
@@ -62,20 +64,34 @@ class HttpRecgovAvailabilityClient(
 
     companion object {
         const val AVAIL_BASE = "https://www.recreation.gov/api/camps/availability/campground"
+
+        /** Floor on the gap between outbound calls; rec.gov 429s on bursts. */
+        private const val DEFAULT_MIN_GAP_MS = 1500L
+
+        /** Backoff ladder for a 429; its size is also the retry budget. */
+        private val defaultRetryDelaysMs = listOf(3_000L, 6_000L, 12_000L)
+
+        /** Error bodies go in an exception message — enough to identify the
+         *  failure, not enough to dump a page of HTML into the logs. */
+        private const val ERROR_BODY_EXCERPT_CHARS = 200
+        private const val REQUEST_TIMEOUT_MS = 15_000L
+        private const val MAX_TRANSPORT_RETRIES = 2
         private val userAgent =
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
         fun defaultClient(): HttpClient =
             HttpClient(CIO) {
-                engine { requestTimeout = 15_000 }
+                engine { requestTimeout = REQUEST_TIMEOUT_MS }
                 defaultRequest {
                     header("User-Agent", userAgent)
                     header("Accept", "application/json")
                     header("Referer", "https://www.recreation.gov/")
                 }
                 install(HttpRequestRetry) {
-                    retryOnExceptionIf(maxRetries = 2) { _, cause -> cause !is io.ktor.client.plugins.HttpRequestTimeoutException }
+                    retryOnExceptionIf(maxRetries = MAX_TRANSPORT_RETRIES) { _, cause ->
+                        cause !is io.ktor.client.plugins.HttpRequestTimeoutException
+                    }
                     exponentialDelay()
                 }
                 expectSuccess = false

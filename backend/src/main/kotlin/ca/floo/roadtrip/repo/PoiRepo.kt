@@ -1,11 +1,38 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.model.domain.poi.PoiCentroid
 import ca.floo.roadtrip.model.domain.poi.PoiGeometryUpdate
 import org.jooq.DSLContext
 
 internal class PoiRepo(
     private val ctx: DSLContext,
 ) {
+    /**
+     * The POI's representative interior point, or null when the POI does not
+     * exist or is soft-deleted. `ST_PointOnSurface` (not the centroid proper)
+     * so a concave or multi-part park geometry still yields a point inside it.
+     *
+     * One method rather than one per caller: availability target resolution and
+     * date-context resolution both need this point, and a soft-deleted POI must
+     * not resolve for either.
+     */
+    fun findCentroid(poiId: Long): PoiCentroid? {
+        val record =
+            ctx.fetchOne(
+                """
+                SELECT ST_X(ST_PointOnSurface(p.geom)) AS lng,
+                       ST_Y(ST_PointOnSurface(p.geom)) AS lat
+                FROM pois p
+                WHERE p.id = ? AND p.deleted_at IS NULL
+                """.trimIndent(),
+                poiId,
+            ) ?: return null
+        return PoiCentroid(
+            lat = (record.get("lat") as? Number)?.toDouble(),
+            lng = (record.get("lng") as? Number)?.toDouble(),
+        )
+    }
+
     fun insertPoi(
         poiType: String,
         longitude: Double,

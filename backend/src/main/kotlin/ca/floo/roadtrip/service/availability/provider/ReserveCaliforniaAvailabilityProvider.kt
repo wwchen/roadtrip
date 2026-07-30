@@ -159,8 +159,7 @@ class ReserveCaliforniaAvailabilityProvider(
         } catch (e: AvailabilityProviderError) {
             throw e
         } catch (e: ReserveCaliforniaException) {
-            if (e.httpStatus == 429) throw AvailabilityProviderError.RateLimited(e)
-            throw AvailabilityProviderError.UpstreamUnavailable(e)
+            throw upstreamAvailabilityError(cause = e, httpStatus = e.httpStatus)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
