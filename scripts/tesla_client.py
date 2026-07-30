@@ -5,7 +5,7 @@ fetch_tesla_locations.py). The live serving stack does NOT use this —
 no Tesla calls happen in the user request path.
 
 Cookies are bound to the egress IP that minted them, so this only works from
-the machine where you ran refresh-tesla-cookies.sh.
+the machine whose browser session minted the TESLA_COOKIES in .env.local.
 """
 import json
 import os
@@ -16,8 +16,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 # TESLA_COOKIES is deliberately not in the vault: Akamai binds _abck to the
 # egress IP that minted it, so one shared copy would give every host a cookie
-# only one of them can use. refresh-tesla-cookies.sh mints it here per machine.
-# Everything else arrives as an environment variable from `manage.py exec`.
+# only one of them can use. Paste it here per machine (see .env.example for
+# the DevTools steps). Everything else arrives via `manage.py exec`.
 ENV_LOCAL_PATH = ROOT / ".env.local"
 
 
