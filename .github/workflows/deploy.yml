@@ -102,6 +102,13 @@ jobs:
       # rename, but the default is read, not restated.
       - name: Resolve deploy URLs
         run: |
+          # PyYAML ships with the runner's system python3 today, but nothing else
+          # in CI imports yaml, so an image that drops it would surface here as a
+          # failed deploy. A no-op when it's already present. apt rather than pip
+          # because this is the distro's python3, and PEP 668 makes `pip install`
+          # into it an error on Ubuntu 24.04 — the fallback would fail exactly
+          # when it were needed.
+          python3 -c "import yaml" 2>/dev/null || sudo apt-get install -y -qq python3-yaml
           # Reads roadtrip.web.root-url and strips the trailing slash the way
           # WebAppConfig does, so "$base$path" can't double up. Exits non-zero if
           # the key moves, which -e turns into a failed step rather than an empty
