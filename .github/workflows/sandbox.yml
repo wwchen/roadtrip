@@ -1,0 +1,258 @@
+name: Sandbox
+
+# Reacts to /sandbox (spin up) and /sandbox stop (tear down) PR comments.
+# The job gate is the entire security boundary: only OWNER or COLLABORATOR
+# comments can start the job.  An outsider's /sandbox comment is silently
+# ignored because the job-level `if:` evaluates to false before any step runs.
+#
+# The workflow SSHes to mini-ca (same host as deploy.yml) over Tailscale and
+# runs scripts/sandbox_up.sh or scripts/sandbox_down.sh on the host.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Serialize per-PR so a rapid /sandbox then /sandbox stop don't race.
+concurrency:
+  group: sandbox-pr-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  sandbox:
+    # Security gate (ALL conditions must hold):
+    #   1. The comment is on a pull request (not a plain issue).
+    #   2. The commenter is OWNER or COLLABORATOR of the repo.
+    #   3. The comment body starts with /sandbox.
+    # GitHub evaluates this before any step runs, so an unauthorized commenter
+    # gets no job execution at all — not even the checkout step.
+    if: >
+      github.event.issue.pull_request != null &&
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'COLLABORATOR') &&
+      startsWith(github.event.comment.body, '/sandbox')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # The SSH target.  Must match deploy.yml's ssh invocations.
+      SANDBOX_HOST: mini@mini-ca
+
+    steps:
+      # ── 1. Resolve PR head SHA ────────────────────────────────────────────────
+      # The issue_comment event carries no PR head SHA, so we must fetch it
+      # from the API.  We also capture the PR number for consistent naming.
+      - name: Resolve PR head SHA
+        id: pr
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+            });
+            core.setOutput('head_sha', pr.head.sha);
+            core.setOutput('pr_number', String(context.issue.number));
+            core.info(`PR #${context.issue.number} head SHA: ${pr.head.sha}`);
+
+      # ── 2. Parse the command ──────────────────────────────────────────────────
+      # Trim the comment body and branch on:
+      #   /sandbox stop  → teardown
+      #   /sandbox       → spin up (anything else after /sandbox is ignored)
+      - name: Parse command
+        id: cmd
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+        run: |
+          body="$(printf '%s' "$COMMENT_BODY" | tr -d '\r' | xargs)"
+          case "$body" in
+            "/sandbox stop"*)
+              echo "action=stop" >> "$GITHUB_OUTPUT"
+              echo "Parsed: stop"
+              ;;
+            "/sandbox"*)
+              echo "action=up" >> "$GITHUB_OUTPUT"
+              echo "Parsed: up"
+              ;;
+          esac
+
+      # ── 3. Wait for GHCR image ────────────────────────────────────────────────
+      # task-C1 pushes ghcr.io/<repo>/backend:<sha> on every branch build.
+      # Poll the GHCR API (no docker login required to check existence) until
+      # the image is present, then fail loudly with a PR comment if it never
+      # appears within the timeout.
+      #
+      # Approach: use the GHCR OCI distribution API
+      #   GET https://ghcr.io/v2/<repo>/backend/manifests/<sha>
+      # with a bearer token obtained from the GitHub token exchange endpoint.
+      # A 200 or 404/401 (after auth) is definitive; we retry on network errors.
+      #
+      # Alternative considered: `docker buildx imagetools inspect` after
+      # `docker login ghcr.io`.  That works too but requires an extra docker
+      # setup step; the HTTP approach is lighter and doesn't require daemon state.
+      - name: Wait for GHCR image
+        if: steps.cmd.outputs.action == 'up'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          image_ref="ghcr.io/${REPO}/backend:${HEAD_SHA}"
+          echo "Waiting for image: ${image_ref}"
+
+          # Exchange the GITHUB_TOKEN for a GHCR bearer token.
+          # The scope is repository:pull (read-only manifest check).
+          token_url="https://ghcr.io/token?scope=repository:${REPO}/backend:pull&service=ghcr.io"
+          bearer="$(curl -fsSL -u "${GITHUB_ACTOR}:${GH_TOKEN}" "$token_url" \
+                    | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")"
+
+          MAX_ATTEMPTS=30   # 30 × 20 s = 10 minutes max
+          ATTEMPT=0
+          while true; do
+            ATTEMPT=$(( ATTEMPT + 1 ))
+            status="$(curl -sL -o /dev/null -w '%{http_code}' \
+                       -H "Authorization: Bearer ${bearer}" \
+                       "https://ghcr.io/v2/${REPO}/backend/manifests/${HEAD_SHA}")"
+            echo "Attempt ${ATTEMPT}/${MAX_ATTEMPTS}: HTTP ${status}"
+            if [ "$status" = "200" ]; then
+              echo "Image present: ${image_ref}"
+              break
+            fi
+            if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
+              echo "::error::Image ${image_ref} not found after ${MAX_ATTEMPTS} attempts (CI build still running?)"
+              exit 1
+            fi
+            sleep 20
+          done
+
+      # ── 3b. Post "CI not done" comment if image wait fails ───────────────────
+      - name: Post build-not-ready comment
+        if: failure() && steps.cmd.outputs.action == 'up'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const sha = '${{ steps.pr.outputs.head_sha }}';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `> /sandbox\n\n` +
+                    `CI hasn't finished building \`${sha.slice(0,12)}\` yet — ` +
+                    `wait for the \`docker-build\` job to complete, then retry.`,
+            });
+
+      # ── 4. Join tailnet ───────────────────────────────────────────────────────
+      # Verbatim from deploy.yml lines 187-195: same action SHA, same secrets,
+      # same tags, same pinned version.
+      - name: Join tailnet
+        uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          # A concrete client version, not `latest`: a sandbox deploy should not
+          # change behavior because Tailscale cut a release between two pushes.
+          version: 1.98.10
+
+      # ── 5. Configure SSH ──────────────────────────────────────────────────────
+      # Verbatim from deploy.yml lines 197-211: same secret names, same
+      # file paths, same chmod sequence.
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          # Create the file 0600 *before* writing the key into it — a
+          # write-then-chmod leaves a window where the default-umask file
+          # holds the private key.
+          install -m 600 /dev/null ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          # Pinned host key — fail fast if mini-ca's identity ever changes.
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      # ── 6. Run on host ────────────────────────────────────────────────────────
+      # Host-side script availability: deploy.yml does `git fetch --prune origin`
+      # then `git checkout --detach <sha>` inside ~/workspace/roadtrip (see
+      # deploy.yml lines 227-234).  We mirror that pattern so the sandbox scripts
+      # at the PR head SHA are present before invoking them.
+      #
+      # For /sandbox stop we only need the down script; we still do a fetch so the
+      # sandbox_down.sh at the current HEAD is used (the name-based API is stable
+      # so any recent checkout is fine, but a fetch is cheap and consistent).
+      #
+      # sandbox_up.sh arg contract (scripts/sandbox_up.sh):
+      #   sandbox_up.sh <ref> [name]
+      # When <ref> is a pure integer it auto-derives the name as "pr<N>".
+      # We pass the PR NUMBER as <ref> so the name is stable across re-runs,
+      # regardless of which SHA we're deploying.
+      # SANDBOX_SHA is passed as an env var so the script uses it as the image tag.
+      - name: Run on host (up)
+        if: steps.cmd.outputs.action == 'up'
+        env:
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+        run: |
+          ssh -o BatchMode=yes "$SANDBOX_HOST" \
+            "set -euo pipefail
+             cd ~/workspace/roadtrip
+             git fetch --prune origin
+             git checkout --detach '${HEAD_SHA}'
+             SANDBOX_SHA='${HEAD_SHA}' scripts/sandbox_up.sh '${PR_NUMBER}'"
+
+      - name: Run on host (stop)
+        if: steps.cmd.outputs.action == 'stop'
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+        run: |
+          ssh -o BatchMode=yes "$SANDBOX_HOST" \
+            "set -euo pipefail
+             cd ~/workspace/roadtrip
+             git fetch --prune origin
+             scripts/sandbox_down.sh 'pr${PR_NUMBER}'"
+
+      # ── 7. Post result back ───────────────────────────────────────────────────
+      # sandbox_up.sh uses SANDBOX_TUNNEL_ZONE (default: sandbox.roadtrip.floo.ca)
+      # to form the URL.  Mirror that default here; override via repo var
+      # SANDBOX_TUNNEL_ZONE if the zone is ever renamed.
+      - name: Post sandbox URL
+        if: steps.cmd.outputs.action == 'up'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          SANDBOX_TUNNEL_ZONE: ${{ vars.SANDBOX_TUNNEL_ZONE || 'sandbox.roadtrip.floo.ca' }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        with:
+          script: |
+            const zone = process.env.SANDBOX_TUNNEL_ZONE;
+            const pr   = process.env.PR_NUMBER;
+            const sha  = process.env.HEAD_SHA;
+            const url  = `https://sb-pr${pr}.${zone}`;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Sandbox live: ${url}\n\n` +
+                    `SHA: \`${sha.slice(0,12)}\`  ·  stop with \`/sandbox stop\``,
+            });
+
+      - name: Post sandbox stopped
+        if: steps.cmd.outputs.action == 'stop'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+        with:
+          script: |
+            const pr = process.env.PR_NUMBER;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Sandbox \`pr${pr}\` has been torn down.`,
+            });
