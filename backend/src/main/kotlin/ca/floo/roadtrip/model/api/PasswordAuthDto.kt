@@ -14,3 +14,9 @@ data class PasswordBeginResponseDto(
     val nonce: String,
     @SerialName("code_challenge") val codeChallenge: String,
 )
+
+@Serializable
+data class PasswordCompleteRequestDto(
+    val code: String,
+    val state: String,
+)

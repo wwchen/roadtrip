@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.api.MeResponseDto
 import ca.floo.roadtrip.model.api.MeUserDto
 import ca.floo.roadtrip.model.api.PasswordBeginRequestDto
 import ca.floo.roadtrip.model.api.PasswordBeginResponseDto
+import ca.floo.roadtrip.model.api.PasswordCompleteRequestDto
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.repo.UserRepo
@@ -141,6 +142,34 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
                     codeChallenge = start.passwordChallenge,
                 ),
             )
+        }.access(RouteAccess.Anonymous)
+
+        post("/password/complete") {
+            val auth = wiring ?: return@post call.respondAuthDisabled()
+
+            val flowCookie = call.request.loginFlowCookie()
+            call.response.clearLoginFlowCookie(auth.isCookieSecure)
+
+            val body = runCatching { call.receive<PasswordCompleteRequestDto>() }.getOrNull()
+            val flow = flowCookie?.let { LoginFlowState.decode(it, auth.flowSigningKey) }
+            if (body == null || flow == null) {
+                log.warn("password/complete without a usable flow or body")
+                return@post call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.BadRequest)
+            }
+
+            val result =
+                runCatching { auth.authController.completeLogin(body.code, body.state, flow) }
+                    .getOrElse { failure ->
+                        log.warn("password login could not be completed: {}", failure.message)
+                        return@post call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.Unauthorized)
+                    }
+
+            call.response.setSessionCookie(
+                token = result.session.token,
+                isSecure = auth.isCookieSecure,
+                maxAgeSeconds = auth.sessionMaxAgeSeconds,
+            )
+            call.respond(HttpStatusCode.NoContent)
         }.access(RouteAccess.Anonymous)
     }
 

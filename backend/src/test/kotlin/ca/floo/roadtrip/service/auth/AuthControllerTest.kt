@@ -215,4 +215,16 @@ class AuthControllerTest : SharedDbTest() {
         assertEquals(Pkce.challengeFor(start.flow.codeVerifier), start.passwordChallenge)
         assertEquals("/watches", start.flow.returnTo)
     }
+
+    @Test
+    fun `completeLogin from a password-begin flow issues a resolvable session`() {
+        val start = kotlinx.coroutines.runBlocking { authController.beginPasswordLogin("/watches") }
+        val result =
+            kotlinx.coroutines.runBlocking {
+                authController.completeLogin("good-code", start.flow.state, start.flow)
+            }
+        val principal = authController.resolve(result.session.token)
+        assertTrue(principal is Principal.User)
+        assertEquals("/watches", result.returnTo)
+    }
 }
