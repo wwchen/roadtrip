@@ -99,8 +99,8 @@ function showUserLocationMarker(lng, lat) {
     const wrap = document.createElement('div');
     wrap.style.cssText = 'position:relative;width:28px;height:28px;pointer-events:none;';
     wrap.innerHTML =
-      '<div style="position:absolute;inset:0;border-radius:50%;background:#0A84FF;opacity:0.18;"></div>' +
-      '<div style="position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#0A84FF;border:3px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>';
+      '<div style="position:absolute;inset:0;border-radius:50%;background:var(--rt-map-locate);opacity:0.18;"></div>' +
+      '<div style="position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:var(--rt-map-locate);border:3px solid var(--rt-map-pin-stroke);box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>';
     userLocationMarker = new maplibregl.Marker({ element: wrap, anchor: 'center' });
   }
   userLocationMarker.setLngLat([lng, lat]).addTo(map);

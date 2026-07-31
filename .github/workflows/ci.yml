@@ -204,6 +204,11 @@ jobs:
           fi
           node --test "$@"
 
+      # tokens.css is the only place a raw color may live. A hex that slips in
+      # elsewhere survives every theme override, so this gates the same job.
+      - name: Check color tokens
+        run: node scripts/check-color-tokens.mjs
+
   companion-tests:
     needs: changes
     if: needs.changes.outputs.companion == 'true'

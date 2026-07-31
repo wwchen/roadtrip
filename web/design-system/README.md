@@ -28,9 +28,16 @@ convention is documented below.
 
 ## Files
 
-- **`tokens.css`** — the source of truth. Linked from `index.html` and
+- **`tokens.css`** — the source of truth, and the only file in the app allowed
+  to contain a raw color value. Linked from `index.html` and
   `availability.html`. Replaces the ad-hoc `--cg-*` variables that used to live
-  in an inline `:root` block.
+  in an inline `:root` block. Two tiers: `--rt-c-*` primitives hold the raw
+  values, semantic roles alias them. Components use roles only.
+- **`tokens.js`** — the bridge for consumers that can't resolve `var()`
+  (MapLibre paint, canvas charts, inline style strings). Reads the live computed
+  value off `:root`, so there is no second palette to keep in sync.
+  `scripts/check-color-tokens.mjs` enforces both — see
+  `docs/frontend-components.md`.
 - **`gallery.html`** — the living catalog of every primitive and token.
 
 ## The one rule

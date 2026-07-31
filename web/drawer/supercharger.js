@@ -97,7 +97,7 @@ function renderSuperchargerDrawer(f) {
       </div>` : ''}
     ${busyHtml}
     ${p.dateOpened ? `<div class="footer">Opened ${escapeHtml(p.dateOpened)}</div>` : ''}
-    <div class="pricing" style="margin-top:8px; padding-top:6px; border-top:1px solid #eee;">
+    <div class="pricing" style="margin-top:8px; padding-top:6px; border-top:1px solid var(--rt-border);">
       ${pricingHtml}
     </div>
     ${upstreamHTML(p.upstream)}

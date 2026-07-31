@@ -54,6 +54,52 @@ Compose design-system primitives into feature-specific UI. Examples: `web/watche
 
 Domain components import from `web/design-system/` and from `web/api/` but never from other feature directories.
 
+## Color: tokens only
+
+`web/design-system/tokens.css` is the **only** place in the app where a raw
+color value may appear. `node scripts/check-color-tokens.mjs` fails the build on
+a hex anywhere else, and it runs in `make test` and in CI's web-test job.
+
+It is two tiers. Primitives (`--rt-c-*`) hold the raw values and are named for
+what they *are* (`--rt-c-blue-500`). Semantic roles (`--rt-brand`,
+`--rt-surface`, `--rt-avail`) alias a primitive and are named for what they
+*do*. **Components use semantic roles, never primitives** — a primitive at a
+call site is the same drift as a hex, one indirection later.
+
+Need a color no role covers? Add the role to `tokens.css` rather than reaching
+for a primitive or a literal.
+
+### From JS
+
+MapLibre paint properties, canvas charts and inline style strings can't resolve
+`var()`. They go through the bridge, which reads the live computed value off the
+document root — so `tokens.css` stays the single source and a theme reaches the
+map too:
+
+```js
+import { token, seriesColor, cgClassColors } from '/web/design-system/tokens.js';
+
+paint: { 'circle-color': token('--rt-layer-np') }
+```
+
+`tokens.js` carries a fallback table for early boot and for jsdom tests, where
+no stylesheet has loaded. The checker verifies every fallback key names a token
+`tokens.css` actually defines, so a rename fails loudly instead of pinning a
+stale value at runtime.
+
+Two exceptions, both enforced by name in the checker rather than by convention:
+Slack's attachment API takes a literal hex over the wire, and `<meta
+name="theme-color">` is read by browser chrome before any stylesheet loads. Both
+sites name the token they mirror.
+
+### Theming
+
+Because every role resolves through a primitive, a theme is an override block —
+redefine `--rt-c-*` under a scope like `[data-rt-theme="light"]`, plus only the
+roles that genuinely diverge. Custom properties inherit downward only, so the
+scope attribute belongs on `<html>`. Call `resetTokenCache()` from `tokens.js`
+after a runtime swap so the map and charts re-resolve.
+
 ## CSS rules
 
 - All custom properties come from `web/design-system/tokens.css` (`--rt-*` prefix)

@@ -6,6 +6,7 @@ import {
   listChangesForCampsite,
   listChangesForPoi,
 } from '/web/api/availability-dashboard-api.js';
+import { seriesColor } from '/web/design-system/tokens.js';
 
 
 export async function mount(rootEl, { urlParams }) {
@@ -136,10 +137,7 @@ export async function mount(rootEl, { urlParams }) {
     chartPanel.hidden = false;
 
     const STATUS_Y = { available: 2, first_come: 1.5, reserved: 1, closed: 0, unknown: -1, past: -1 };
-    const COLORS = [
-      '#4dc9f6', '#f67019', '#f53794', '#537bc4', '#acc236',
-      '#166a8f', '#00a950', '#58595b', '#8549ba',
-    ];
+    // Categorical series ramp, resolved from --rt-series-* at render time.
 
     // Group by "campsite_name / target_date"
     const groups = new Map();
@@ -159,8 +157,8 @@ export async function mount(rootEl, { urlParams }) {
         label,
         data: points,
         stepped: 'before',
-        borderColor: COLORS[colorIdx % COLORS.length],
-        backgroundColor: COLORS[colorIdx % COLORS.length],
+        borderColor: seriesColor(colorIdx),
+        backgroundColor: seriesColor(colorIdx),
         borderWidth: 2,
         pointRadius: 4,
         fill: false,

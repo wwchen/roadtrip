@@ -302,9 +302,9 @@ function injectWatchEditorStyles() {
     --rt-watch-editor-mobile-margin: 16px;
     width: var(--rt-watch-editor-width);
     box-sizing: border-box;
-    color: var(--rt-text, #e8eaed);
-    background: var(--rt-surface, #26272d);
-    border: 1px solid var(--rt-border-strong, rgba(255,255,255,0.13));
+    color: var(--rt-text);
+    background: var(--rt-surface);
+    border: 1px solid var(--rt-border-strong));
     border-radius: 8px;
     box-shadow: 0 12px 32px rgba(0,0,0,0.18);
     padding: 12px;
@@ -318,13 +318,13 @@ function injectWatchEditorStyles() {
     margin-bottom: 8px;
   }
   .rt-watch-editor-title { font-weight: 700; font-size: 13px; }
-  .rt-watch-editor-subtitle { color: var(--rt-muted, #9aa0a8); margin-top: 2px; }
+  .rt-watch-editor-subtitle { color: var(--rt-muted); margin-top: 2px; }
   .rt-watch-editor-icon {
     width: 24px; height: 24px;
-    border: 0; background: transparent; color: var(--rt-muted, #9aa0a8);
+    border: 0; background: transparent; color: var(--rt-muted);
     border-radius: 4px; cursor: pointer;
   }
-  .rt-watch-editor-icon:hover { background: var(--rt-fill-hover, rgba(255,255,255,0.06)); color: var(--rt-text, #e8eaed); }
+  .rt-watch-editor-icon:hover { background: var(--rt-fill-hover)); color: var(--rt-text); }
   .rt-watch-editor-body { display: grid; gap: 8px; }
   .rt-watch-editor-toggle {
     display: flex;
@@ -334,44 +334,44 @@ function injectWatchEditorStyles() {
   }
   .rt-watch-editor-toggle-text { display: grid; gap: 2px; min-width: 0; }
   .rt-watch-editor-toggle-title { font-weight: 600; }
-  .rt-watch-editor-toggle-help { color: var(--rt-muted, #9aa0a8); font-size: 11px; line-height: 1.25; }
+  .rt-watch-editor-toggle-help { color: var(--rt-muted); font-size: 11px; line-height: 1.25; }
   .rt-watch-editor-switch { position: relative; display: inline-grid; flex: 0 0 auto; }
   .rt-watch-editor-switch input { position: absolute; opacity: 0; pointer-events: none; }
   .rt-watch-editor-switch-track {
     width: 34px; height: 18px; border-radius: 999px;
-    background: var(--rt-border-strong, rgba(255,255,255,0.13)); transition: background 120ms ease;
+    background: var(--rt-border-strong)); transition: background 120ms ease;
   }
   .rt-watch-editor-switch-track::after {
     content: "";
     display: block;
     width: 14px; height: 14px; margin: 2px;
     border-radius: 50%;
-    background: #fff;
+    background: var(--rt-on-accent);
     box-shadow: 0 1px 2px rgba(0,0,0,0.2);
     transition: transform 120ms ease;
   }
-  .rt-watch-editor-switch input:checked + .rt-watch-editor-switch-track { background: var(--rt-brand, #3b82f6); }
+  .rt-watch-editor-switch input:checked + .rt-watch-editor-switch-track { background: var(--rt-brand); }
   .rt-watch-editor-switch input:checked + .rt-watch-editor-switch-track::after { transform: translateX(16px); }
   .rt-watch-editor-switch input:disabled + .rt-watch-editor-switch-track { opacity: 0.55; }
   .rt-watch-editor-field {
     display: grid;
     gap: 4px;
-    color: var(--rt-muted, #9aa0a8);
+    color: var(--rt-muted);
     font-size: 11px;
   }
   .rt-watch-editor-field input {
     width: 100%;
     box-sizing: border-box;
-    border: 1px solid var(--rt-border-strong, rgba(255,255,255,0.13));
+    border: 1px solid var(--rt-border-strong));
     border-radius: 6px;
     padding: 7px 8px;
-    color: var(--rt-text, #e8eaed);
-    background: var(--rt-bg-sunken, #1c1d21);
+    color: var(--rt-text);
+    background: var(--rt-bg-sunken);
     font: inherit;
   }
   .rt-watch-editor-error {
     margin-top: 8px;
-    color: var(--rt-error, #f56565);
+    color: var(--rt-error);
     font-size: 11px;
   }
   .rt-watch-editor-actions {
@@ -389,14 +389,14 @@ function injectWatchEditorStyles() {
     cursor: pointer;
   }
   .rt-watch-editor-save {
-    border: 1px solid var(--rt-brand, #3b82f6);
-    background: var(--rt-brand, #3b82f6);
-    color: #fff;
+    border: 1px solid var(--rt-brand);
+    background: var(--rt-brand);
+    color: var(--rt-on-accent);
   }
   .rt-watch-editor-remove {
-    border: 1px solid var(--rt-border-strong, rgba(255,255,255,0.13));
+    border: 1px solid var(--rt-border-strong));
     background: transparent;
-    color: var(--rt-error, #f56565);
+    color: var(--rt-error);
   }
   .rt-watch-editor-save:disabled,
   .rt-watch-editor-remove:disabled { opacity: 0.6; cursor: wait; }

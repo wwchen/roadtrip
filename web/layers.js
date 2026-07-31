@@ -3,6 +3,7 @@ import { openCampgroundDrawer } from './drawer/campground.js';
 import { openParkDrawer } from './drawer/park.js';
 import { openPlanetFitnessDrawer } from './drawer/planet-fitness.js';
 import { openSuperchargerDrawer } from './drawer/supercharger.js';
+import { token, cgClassColors } from './design-system/tokens.js';
 
 // Remove a source if present, plus any layers that reference it. Used before
 // re-adding on style.load to avoid "source already exists" errors while still
@@ -43,13 +44,6 @@ export function updateFilter() {
   map.setLayoutProperty('sc-points-hit', 'visibility', visible ? 'visible' : 'none');
 }
 
-const CG_COLOR = {
-  federal: '#2e7d32',       // dark green — US federal
-  provincial: '#2e7d32',    // same green — BC provincial parks (parallel to US federal)
-  state: '#558b2f',         // medium green — US state
-  local: '#9ccc65',         // light green — US county/municipal
-  other: '#2e7d32',         // unclassified; shares the federal toggle/color
-};
 const CG_SUBCATEGORIES = ['federal', 'state', 'provincial', 'local'];
 const CG_EMPTY_FC = { type: 'FeatureCollection', features: [] };
 const CG_NO_AGENCY_MATCH = '__roadtrip_no_agency_match__';
@@ -304,6 +298,10 @@ export function installCGLayer(geojson) {
   const { map } = state;
   resetOverlay(['cg'], ['cg-points', 'cg-points-hit']);
   map.addSource('cg', { type: 'geojson', data: geojson });
+  // Jurisdiction palette, resolved from --rt-layer-cg-* at build time so a
+  // theme swap reaches the map. `other` is unclassified and shares the
+  // federal toggle and color.
+  const cgColor = cgClassColors();
   // Radius scales with campsite count (sqrt), with a clickable floor. Per-zoom
   // stops keep dots clickable even at continental zoom.
   const sizeBySites = ['sqrt', ['coalesce', ['get', 'sites'], 15]];
@@ -319,13 +317,13 @@ export function installCGLayer(geojson) {
         10, ['max', 5, ['interpolate', ['linear'], sizeBySites,  1, 5,  5, 6,   15, 8,   50, 11,  200, 16,  1100, 24]],
       ],
       'circle-color': ['match', ['get', 'category'],
-        'federal',    CG_COLOR.federal,
-        'provincial', CG_COLOR.provincial,
-        'state',      CG_COLOR.state,
-        'local',      CG_COLOR.local,
-        CG_COLOR.other,
+        'federal',    cgColor.federal,
+        'provincial', cgColor.provincial,
+        'state',      cgColor.state,
+        'local',      cgColor.local,
+        cgColor.other,
       ],
-      'circle-stroke-color': '#fff',
+      'circle-stroke-color': token('--rt-map-pin-stroke'),
       'circle-stroke-width': 0.8,
       'circle-opacity': 0.85,
     },
@@ -370,7 +368,7 @@ export function installStateLines(states) {
     type: 'line',
     source: 'states',
     paint: {
-      'line-color': '#4a4a4a',
+      'line-color': token('--rt-map-route-alt'),
       'line-width': ['interpolate', ['linear'], ['zoom'], 3, 0.6, 6, 1.0, 10, 1.4],
       'line-opacity': 0.55,
     },
@@ -402,20 +400,20 @@ export function installParkLayers(np, sp) {
   // State Parks (polygons first so NP overlays them on overlap)
   map.addSource('sp', { type: 'geojson', data: sp });
   map.addLayer({ id: 'sp-fill', type: 'fill', source: 'sp',
-    paint: { 'fill-color': '#8d6e63', 'fill-opacity': 0.28 } }, anchor);
+    paint: { 'fill-color': token('--rt-map-sp-fill'), 'fill-opacity': 0.28 } }, anchor);
   map.addLayer({ id: 'sp-line', type: 'line', source: 'sp',
-    paint: { 'line-color': '#5d4037', 'line-width': 1, 'line-opacity': 0.75 } }, anchor);
+    paint: { 'line-color': token('--rt-map-sp-stroke'), 'line-width': 1, 'line-opacity': 0.75 } }, anchor);
 
   // National Parks — fade fill from 0.32 at z<10 down to 0.12 at z>=10 so it
   // stops competing with campground/Supercharger dots when zoomed in.
   map.addSource('np', { type: 'geojson', data: np });
   map.addLayer({ id: 'np-fill', type: 'fill', source: 'np',
     paint: {
-      'fill-color': '#2e7d32',
+      'fill-color': token('--rt-map-np-fill'),
       'fill-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.32, 10, 0.12],
     } }, anchor);
   map.addLayer({ id: 'np-line', type: 'line', source: 'np',
-    paint: { 'line-color': '#1b5e20', 'line-width': 1.2, 'line-opacity': 0.85 } }, anchor);
+    paint: { 'line-color': token('--rt-map-np-stroke'), 'line-width': 1.2, 'line-opacity': 0.85 } }, anchor);
 
   // Centroid dots — navigation aid at continental zoom, fade out by z10 as polygons take over.
   map.addSource('sp-pts', { type: 'geojson', data: toPoints(sp) });
@@ -429,8 +427,8 @@ export function installParkLayers(np, sp) {
         9, ['interpolate', ['linear'], ['sqrt', ['coalesce', ['get', 'GIS_Acres'], 100]],   10, 1.5, 1000, 3,    50000, 4],
         10, 0,
       ],
-      'circle-color': '#8d6e63',
-      'circle-stroke-color': '#5d4037',
+      'circle-color': token('--rt-map-sp-fill'),
+      'circle-stroke-color': token('--rt-map-sp-stroke'),
       'circle-stroke-width': 0.8,
       'circle-opacity': 0.85,
     },
@@ -447,8 +445,8 @@ export function installParkLayers(np, sp) {
         9, ['interpolate', ['linear'], ['sqrt', ['coalesce', ['get', 'GIS_Acres'], 10000]],  1000, 2.5, 50000, 4,   1000000, 6],
         10, 0,
       ],
-      'circle-color': '#2e7d32',
-      'circle-stroke-color': '#1b5e20',
+      'circle-color': token('--rt-map-np-fill'),
+      'circle-stroke-color': token('--rt-map-np-stroke'),
       'circle-stroke-width': 1,
       'circle-opacity': 0.9,
     },
@@ -502,8 +500,8 @@ export function installPFLayer(geojson) {
     paint: {
       'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 3, 6, 5, 10, 7],
       // Planet Fitness brand purple.
-      'circle-color': '#7F3D97',
-      'circle-stroke-color': '#fff',
+      'circle-color': token('--rt-layer-pf-pin'),
+      'circle-stroke-color': token('--rt-map-pin-stroke'),
       'circle-stroke-width': 1.5,
       'circle-opacity': 0.95,
     },
@@ -543,8 +541,8 @@ export function installSCLayer(geojson) {
       // Tesla brand red. Was data-driven via ['get', 'color'] from a per-row
       // property, but the slim /api/pois response (PR #123) doesn't ship
       // that any more — paint resolved to null and pins came back black.
-      'circle-color': '#E31937',
-      'circle-stroke-color': '#fff',
+      'circle-color': token('--rt-layer-supercharger-pin'),
+      'circle-stroke-color': token('--rt-map-pin-stroke'),
       'circle-stroke-width': 1,
       'circle-opacity': 0.9,
     },

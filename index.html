@@ -6,6 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
+<!-- theme-color is read by the browser chrome before any stylesheet loads, so it
+     cannot be a token reference. Mirrors --rt-layer-supercharger. -->
 <meta name="theme-color" content="#e82127">
 <title>Roadtrip Map</title>
 <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
@@ -169,7 +171,7 @@
   .geo-banner {
     position: absolute; left: 50%; transform: translateX(-50%);
     bottom: calc(max(20px, env(safe-area-inset-bottom)) + 56px);
-    background: rgba(40, 40, 40, 0.92); color: #fff;
+    background: var(--rt-overlay-chip); color: var(--rt-on-accent);
     padding: 8px 14px; border-radius: 18px;
     font-size: 13px; z-index: 3;
     max-width: calc(100vw - 32px);
@@ -200,22 +202,22 @@
     font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em;
   }
   .cg-drawer .rating { color: var(--rt-text); font-weight: 600; font-size: 14px; }
-  .cg-drawer .rating .stars { color: #f5a623; letter-spacing: -1px; margin-right: 2px; }
+  .cg-drawer .rating .stars { color: var(--rt-rating); letter-spacing: -1px; margin-right: 2px; }
   .cg-drawer .rating .count { color: var(--rt-muted); font-weight: 400; font-size: 12px; margin-left: 3px; }
   .cg-drawer .cell { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
   .cg-drawer .cell-pill {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 4px 10px; border-radius: 999px;
-    font-size: 12px; font-weight: 500; color: #fff; line-height: 1.4;
+    font-size: 12px; font-weight: 500; color: var(--rt-on-accent); line-height: 1.4;
   }
   .cg-drawer .cell-pill .carrier { font-size: 12px; font-weight: 500; opacity: 0.95; }
   .cg-drawer .cell-pill .val { font-variant-numeric: tabular-nums; font-weight: 600; opacity: 0.85; }
   /* 0-4 scale: 0 = none, 1 = major issues, 2 = some, 3 = good, 4 = excellent */
-  .cg-drawer .cell-pill[data-bucket="0"] { background: #7a2828; }
-  .cg-drawer .cell-pill[data-bucket="1"] { background: #c62828; }
-  .cg-drawer .cell-pill[data-bucket="2"] { background: #b07e1d; }
-  .cg-drawer .cell-pill[data-bucket="3"] { background: #2e7d32; }
-  .cg-drawer .cell-pill[data-bucket="4"] { background: #1f5e2a; }
+  .cg-drawer .cell-pill[data-bucket="0"] { background: var(--rt-heat-0); }
+  .cg-drawer .cell-pill[data-bucket="1"] { background: var(--rt-heat-1); }
+  .cg-drawer .cell-pill[data-bucket="2"] { background: var(--rt-heat-2); }
+  .cg-drawer .cell-pill[data-bucket="3"] { background: var(--rt-heat-3); }
+  .cg-drawer .cell-pill[data-bucket="4"] { background: var(--rt-heat-4); }
   #panel .section-label {
     font-size: 10px; text-transform: uppercase;
     color: var(--rt-muted);
@@ -263,7 +265,7 @@
   .sr-item:hover, .sr-item.active { background: var(--rt-fill-hover); }
   .sr-kind { display: inline-block; font-size: 9px; text-transform: uppercase;
     padding: 1px 5px; border-radius: 3px; margin-right: 6px;
-    color: #fff; vertical-align: middle; font-weight: 600; letter-spacing: 0.04em; }
+    color: var(--rt-on-accent); vertical-align: middle; font-weight: 600; letter-spacing: 0.04em; }
   .sr-sub { color: var(--rt-muted); font-size: 11px; }
   .rates { font-size: 12px; }
   .rate-row { display: flex; justify-content: space-between; padding: 1px 0; }
@@ -330,7 +332,7 @@
       line-height: 1;
       z-index: 1;
     }
-    .cg-drawer-close:hover { background: rgba(0,0,0,0.55); color: #fff; }
+    .cg-drawer-close:hover { background: var(--rt-scrim-strong); color: var(--rt-on-accent); }
   }
 
   .cg-drawer-handle {
@@ -361,7 +363,7 @@
   .cg-hero {
     margin: 0 -16px 16px;
     height: 168px;
-    background: #1c1d21 center/cover no-repeat;
+    background: var(--rt-bg-sunken) center/cover no-repeat;
     position: relative;
   }
   /* Subtle dark gradient at the bottom of the hero so the title underneath
@@ -631,7 +633,7 @@
   }
   .cg-cal-day.cg-cal-selected {
     background: var(--rt-brand);
-    color: #fff;
+    color: var(--rt-on-accent);
   }
   .cg-cal-day.cg-cal-selected:hover { background: var(--rt-brand-hover); }
 
@@ -773,7 +775,7 @@
     padding: 0 10px;
     border-radius: 6px;
     background: var(--rt-brand);
-    color: #fff;
+    color: var(--rt-on-accent);
     font-size: 12px;
     font-weight: 600;
     line-height: 1;
@@ -877,7 +879,7 @@
     padding: 0 8px;
     border: 1px solid var(--rt-border);
     border-radius: 6px;
-    background: #202124;
+    background: var(--rt-surface-inset);
     color: var(--rt-text);
     font: inherit;
     font-size: 12px;
@@ -937,14 +939,14 @@
     position: sticky;
     top: 0;
     z-index: 2;
-    background: #232427;
+    background: var(--rt-surface-alt);
   }
   .cg-site-matrix-table .cg-site-matrix-site {
     position: sticky;
     left: 0;
     z-index: 1;
     width: var(--rt-site-column-width);
-    background: #232427;
+    background: var(--rt-surface-alt);
     text-align: left;
   }
   .cg-site-matrix-table thead .cg-site-matrix-site {
@@ -1193,7 +1195,7 @@
   }
   .cg-site-matrix-cell-button.is-armed {
     background: var(--rt-brand);
-    color: #fff;
+    color: var(--rt-on-accent);
     font-weight: 700;
   }
   .cg-site-matrix-cell-button.is-armed:hover {
@@ -1319,7 +1321,7 @@
   }
   .cg-watch-pop-switch input:checked + .cg-watch-pop-switch-track::after {
     transform: translateX(14px);
-    background: #fff;
+    background: var(--rt-on-accent);
   }
   .cg-watch-pop-switch input:focus-visible + .cg-watch-pop-switch-track {
     outline: 2px solid var(--rt-brand);
@@ -1461,7 +1463,7 @@
     padding: 0 12px;
     border-radius: 6px;
     background: var(--rt-brand);
-    color: #fff;
+    color: var(--rt-on-accent);
     font-size: 12px;
     font-weight: 700;
     text-decoration: none;
@@ -1528,7 +1530,7 @@
   }
 
   .cg-btn-primary {
-    background: var(--rt-brand); color: #fff; border: 0;
+    background: var(--rt-brand); color: var(--rt-on-accent); border: 0;
     font-weight: 600;
   }
   .cg-btn-primary:hover { background: var(--rt-brand-hover); }
@@ -1734,7 +1736,7 @@
     </div>
   </div>
   <div class="section-label">Superchargers</div>
-  <div><label><input type="checkbox" id="f-open" checked><span class="legend-dot" style="background:#e82127"></span>Superchargers <span class="count" id="c-open"></span></label></div>
+  <div><label><input type="checkbox" id="f-open" checked><span class="legend-dot" style="background:var(--rt-layer-supercharger)"></span>Superchargers <span class="count" id="c-open"></span></label></div>
   <!-- Park polygons (NP/SP) hidden until we have a tile-rendered path —
        MapLibre choking on simplified PAD-US polygons over a continental
        bbox is the regression we're avoiding. The toggles + counts still
@@ -1746,25 +1748,25 @@
     <span id="c-np"></span>
     <span id="c-sp"></span>
   </div>
-  <div class="section-label">Campgrounds <span id="cg-load-hint" style="text-transform:none; color:#999; letter-spacing:0;">(zoom in to load)</span></div>
+  <div class="section-label">Campgrounds <span id="cg-load-hint" style="text-transform:none; color:var(--rt-hint); letter-spacing:0;">(zoom in to load)</span></div>
   <div>
-    <label><input type="checkbox" id="f-cg-federal" checked><span class="legend-dot" style="background:#2e7d32"></span>Federal (US) <span class="count" id="c-cg-federal"></span></label>
+    <label><input type="checkbox" id="f-cg-federal" checked><span class="legend-dot" style="background:var(--rt-layer-cg-federal)"></span>Federal (US) <span class="count" id="c-cg-federal"></span></label>
     <div class="cg-agency-host" id="cg-agency-federal" hidden></div>
   </div>
   <div>
-    <label><input type="checkbox" id="f-cg-state" checked><span class="legend-dot" style="background:#558b2f"></span>State <span class="count" id="c-cg-state"></span></label>
+    <label><input type="checkbox" id="f-cg-state" checked><span class="legend-dot" style="background:var(--rt-layer-cg-state)"></span>State <span class="count" id="c-cg-state"></span></label>
     <div class="cg-agency-host" id="cg-agency-state" hidden></div>
   </div>
   <div>
-    <label><input type="checkbox" id="f-cg-provincial" checked><span class="legend-dot" style="background:#2e7d32; border-color:#1b5e20;"></span>BC/AB Provincial <span class="count" id="c-cg-provincial"></span></label>
+    <label><input type="checkbox" id="f-cg-provincial" checked><span class="legend-dot" style="background:var(--rt-layer-cg-provincial); border-color:var(--rt-map-np-stroke);"></span>BC/AB Provincial <span class="count" id="c-cg-provincial"></span></label>
     <div class="cg-agency-host" id="cg-agency-provincial" hidden></div>
   </div>
   <div>
-    <label><input type="checkbox" id="f-cg-local" checked><span class="legend-dot" style="background:#9ccc65"></span>Local <span class="count" id="c-cg-local"></span></label>
+    <label><input type="checkbox" id="f-cg-local" checked><span class="legend-dot" style="background:var(--rt-layer-cg-local)"></span>Local <span class="count" id="c-cg-local"></span></label>
     <div class="cg-agency-host" id="cg-agency-local" hidden></div>
   </div>
   <div class="section-label">Other</div>
-  <div><label><input type="checkbox" id="f-pf" checked><span class="legend-dot" style="background:#7b4bb5"></span>Planet Fitness <span class="count" id="c-pf"></span></label></div>
+  <div><label><input type="checkbox" id="f-pf" checked><span class="legend-dot" style="background:var(--rt-layer-pf)"></span>Planet Fitness <span class="count" id="c-pf"></span></label></div>
   <div class="section-label">Basemap</div>
   <select id="basemap-select"></select>
   <div><label><input type="checkbox" id="f-satellite">Satellite overlay</label></div>
