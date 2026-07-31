@@ -84,8 +84,14 @@ class HttpAspiraAvailabilityClient(
                         httpStatus = null,
                         cause = e,
                     )
+                } finally {
+                    // Record the attempt, not the success. A failed call still
+                    // cost the WAF a request from our IP, so updating this only
+                    // on success meant an outage silently switched the throttle
+                    // off and we hammered them with zero gap — which is how a
+                    // transient block turns into a persistent one.
+                    lastFetchAtMs = System.currentTimeMillis()
                 }
-            lastFetchAtMs = System.currentTimeMillis()
             if (resp.statusCode() != 200) {
                 throw AspiraException(
                     "aspira HTTP ${resp.statusCode()} for mapId=$mapId",
@@ -156,8 +162,10 @@ class HttpAspiraAvailabilityClient(
                         httpStatus = null,
                         cause = e,
                     )
+                } finally {
+                    // See fetch(): throttle on attempts, not successes.
+                    lastFetchAtMs = System.currentTimeMillis()
                 }
-            lastFetchAtMs = System.currentTimeMillis()
             if (resp.statusCode() != 200) {
                 throw AspiraException(
                     "aspira occupancy HTTP ${resp.statusCode()} for resourceLocationId=$resourceLocationId",
