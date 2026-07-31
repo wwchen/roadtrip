@@ -319,6 +319,30 @@ class RecipientEditTest(unittest.TestCase):
             manage.enroll_recipient(NEW_KEY, None, "")
 
 
+class ToolchainHintTest(unittest.TestCase):
+    """The first message a fresh machine sees has to be runnable."""
+
+    def missing(self, *tools):
+        with unittest.mock.patch("shutil.which", lambda _: None):
+            with self.assertRaises(manage.SecretsError) as caught:
+                manage.require_tools(*tools)
+        return str(caught.exception)
+
+    def test_age_keygen_points_at_the_formula_that_provides_it(self):
+        # `brew install age-keygen` is not a thing; the binary comes with `age`.
+        message = self.missing("age-keygen")
+        self.assertIn("brew install age", message)
+        self.assertNotIn("brew install age-keygen", message)
+
+    def test_missing_tools_collapse_to_a_single_install_line(self):
+        self.assertIn("brew install age sops", self.missing("sops", "age-keygen"))
+
+    def test_the_host_setup_target_is_offered_first(self):
+        # `make install` is where the real list lives; brew is the fallback for
+        # a host that doesn't want the rest of it.
+        self.assertIn("make install", self.missing("sops"))
+
+
 class NextStepsTest(unittest.TestCase):
     """Every exit from `enroll` has to end in a command the reader can run."""
 

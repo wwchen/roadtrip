@@ -74,6 +74,13 @@ ADOPTABLE_AGE_KEY_FILES = [
 
 SOPS_FORMAT_ARGS = ["--input-type", "dotenv", "--output-type", "dotenv"]
 
+# Homebrew formula behind each binary this tool shells out to. `age-keygen`
+# ships inside the `age` formula, so telling someone to install a formula by
+# the binary's name sends the newest machine in the fleet to one that does not
+# exist. `make install` (Makefile) installs both alongside the rest of the host
+# setup and stays the single list; this is only for the narrower fallback.
+TOOL_FORMULAE = {"sops": "sops", "age-keygen": "age"}
+
 # age-keygen writes the public half as a comment beside the private key.
 AGE_PUBLIC_KEY_COMMENT = "# public key:"
 
@@ -221,9 +228,11 @@ def parse_dotenv(text: str) -> dict[str, str]:
 def require_tools(*names: str) -> None:
     missing = [n for n in names if shutil.which(n) is None]
     if missing:
+        formulae = sorted({TOOL_FORMULAE.get(name, name) for name in missing})
         raise SecretsError(
             f"missing required tool(s): {', '.join(missing)}\n"
-            f"Install with: brew install {' '.join(missing)}"
+            f"Install with: make install    # host setup, installs these among others\n"
+            f"          or: brew install {' '.join(formulae)}"
         )
 
 
