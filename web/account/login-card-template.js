@@ -1,15 +1,17 @@
 import { escapeHtml } from '../core.js';
 
-const FALLBACK_PROVIDER_LABEL = 'single sign-on';
+const DEFAULT_GOOGLE_LABEL = 'Google';
 
 /**
- * Pure function — no DOM access. Returns an HTML string for the login card body.
+ * Pure function — no DOM access. Returns the login card body HTML: an owned
+ * email/password form plus a Google button that redirects. The password form
+ * authenticates in-page; the Google button leaves the page (OAuth requires it).
  *
- * @param {{ providerLabel?: string | null }} config
+ * @param {{ googleLabel?: string | null }} [config]
  * @returns {string}
  */
-export function loginCardTemplate({ providerLabel } = {}) {
-  const label = providerLabel || FALLBACK_PROVIDER_LABEL;
+export function loginCardTemplate({ googleLabel } = {}) {
+  const google = escapeHtml(googleLabel || DEFAULT_GOOGLE_LABEL);
 
   return `
     <div class="lc-brand-mark" aria-hidden="true">
@@ -20,11 +22,25 @@ export function loginCardTemplate({ providerLabel } = {}) {
     </div>
     <h2 class="lc-title">Sign in to Roadtrip</h2>
     <p class="lc-rationale">Save your notification settings.</p>
-    <button
-      class="rt-btn rt-btn--primary lc-sign-in-btn"
-      type="button"
-      data-action="sign-in"
-      style="width:100%"
-    >Continue with ${escapeHtml(label)}</button>
+
+    <form class="lc-form" data-role="password-form" novalidate>
+      <label class="lc-label" for="lc-email">Email</label>
+      <input class="lc-input" id="lc-email" data-field="email" type="email"
+             name="email" autocomplete="email" required />
+
+      <label class="lc-label" for="lc-password">Password</label>
+      <input class="lc-input" id="lc-password" data-field="password" type="password"
+             name="password" autocomplete="current-password" required />
+
+      <p class="lc-form-error" data-role="form-error" role="alert" hidden></p>
+
+      <button class="rt-btn rt-btn--primary lc-submit-btn" type="submit"
+              data-action="password-submit" style="width:100%">Sign in</button>
+    </form>
+
+    <div class="lc-divider" aria-hidden="true"><span>or</span></div>
+
+    <button class="rt-btn rt-btn--secondary lc-google-btn" type="button"
+            data-action="sign-in-google" style="width:100%">Continue with ${google}</button>
   `;
 }
