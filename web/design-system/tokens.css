@@ -52,6 +52,20 @@
   --rt-c-grey-050: #e8eaed;
   --rt-c-white:    #ffffff;
 
+  /* Channel primitives — the rgb triplets overlay and tint roles compose with.
+     Overlays cannot be plain hexes: they must let the surface beneath show
+     through, so the role needs a channel plus an alpha rather than a colour.
+     Holding the channel here is what makes them themeable — a light theme
+     flips --rt-c-overlay-rgb to 0,0,0 and every overlay below follows. Before
+     this they were literal rgba(255,255,255,...) and a light theme would have
+     painted white-on-white. */
+  --rt-c-overlay-rgb: 255,255,255;  /* tints that lighten the surface */
+  --rt-c-shadow-rgb:  0,0,0;        /* scrims and elevation */
+  --rt-c-chip-rgb:    40,40,40;     /* the map-label chip's own ground */
+  --rt-c-blue-500-rgb:  59,130,246;
+  --rt-c-green-400-rgb: 76,185,106;
+  --rt-c-amber-400-rgb: 241,160,74;
+
   /* Blue ramp */
   --rt-c-blue-300: #5b9cf8;
   --rt-c-blue-500: #3b82f6;
@@ -117,15 +131,16 @@
   --rt-surface-inset: var(--rt-c-grey-860);  /* nested wells inside a panel */
   --rt-surface-alt: var(--rt-c-grey-840);    /* alternating rows, sub-panels */
 
-  /* Overlays & borders */
-  --rt-fill-subtle: rgba(255,255,255,0.04);
-  --rt-fill-hover:  rgba(255,255,255,0.06);
-  --rt-fill-active: rgba(255,255,255,0.08);
-  --rt-border:        rgba(255,255,255,0.08);
-  --rt-border-strong: rgba(255,255,255,0.13);
-  --rt-scrim:         rgba(0,0,0,0.62);      /* modal / drawer backdrop */
-  --rt-scrim-strong:  rgba(0,0,0,0.55);
-  --rt-overlay-chip:  rgba(40,40,40,0.92);   /* labels floating over the map */
+  /* Overlays & borders. Alpha is the role's own; the channel comes from
+     tier 1, so a light theme inverts all eight by flipping one primitive. */
+  --rt-fill-subtle:   rgba(var(--rt-c-overlay-rgb), 0.04);
+  --rt-fill-hover:    rgba(var(--rt-c-overlay-rgb), 0.06);
+  --rt-fill-active:   rgba(var(--rt-c-overlay-rgb), 0.08);
+  --rt-border:        rgba(var(--rt-c-overlay-rgb), 0.08);
+  --rt-border-strong: rgba(var(--rt-c-overlay-rgb), 0.13);
+  --rt-scrim:         rgba(var(--rt-c-shadow-rgb), 0.62);  /* modal / drawer backdrop */
+  --rt-scrim-strong:  rgba(var(--rt-c-shadow-rgb), 0.55);
+  --rt-overlay-chip:  rgba(var(--rt-c-chip-rgb), 0.92);    /* labels floating over the map */
 
   /* Text */
   --rt-text:  var(--rt-c-grey-050);
@@ -140,7 +155,7 @@
   --rt-brand:       var(--rt-c-blue-500);
   --rt-brand-hover: var(--rt-c-blue-600);
   --rt-brand-press: var(--rt-c-blue-700);
-  --rt-brand-tint:  rgba(59,130,246,0.15);
+  --rt-brand-tint:  rgba(var(--rt-c-blue-500-rgb), 0.15);
   /* Brand blue legible as TEXT on a dark surface. --rt-brand is tuned for solid
      fills (white-on-blue) and reaches only 4.05:1 as text on --rt-surface, under
      the 4.5:1 AA floor. Use this for links and text-only buttons instead.
@@ -185,9 +200,9 @@
 
   /* Availability semantics */
   --rt-avail:          var(--rt-c-green-400);
-  --rt-avail-bg:       rgba(76,185,106,0.16);
+  --rt-avail-bg:       rgba(var(--rt-c-green-400-rgb), 0.16);
   --rt-first-come:     var(--rt-c-amber-400);
-  --rt-first-come-bg:  rgba(241,160,74,0.14);
+  --rt-first-come-bg:  rgba(var(--rt-c-amber-400-rgb), 0.14);
   --rt-reserved:       var(--rt-c-grey-500);
   --rt-watching:       var(--rt-c-blue-500);
   --rt-paused:         var(--rt-c-grey-450);
@@ -241,8 +256,8 @@
   --rt-r-xl: 12px; --rt-r-2xl: 18px; --rt-r-pill: 999px;
 
   /* Elevation */
-  --rt-e1: 0 1px 2px rgba(0,0,0,0.35);
-  --rt-e2: 0 4px 12px rgba(0,0,0,0.30);
-  --rt-e3: 0 6px 20px rgba(0,0,0,0.40);
-  --rt-e4: 0 8px 24px rgba(0,0,0,0.45);
+  --rt-e1: 0 1px 2px rgba(var(--rt-c-shadow-rgb), 0.35);
+  --rt-e2: 0 4px 12px rgba(var(--rt-c-shadow-rgb), 0.30);
+  --rt-e3: 0 6px 20px rgba(var(--rt-c-shadow-rgb), 0.40);
+  --rt-e4: 0 8px 24px rgba(var(--rt-c-shadow-rgb), 0.45);
 }
