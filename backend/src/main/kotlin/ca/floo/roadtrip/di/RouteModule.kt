@@ -40,6 +40,7 @@ import ca.floo.roadtrip.service.auth.LoginFlowState
 import ca.floo.roadtrip.service.auth.OidcIdentityProvider
 import ca.floo.roadtrip.service.auth.SessionService
 import ca.floo.roadtrip.service.auth.UserProvisioningService
+import ca.floo.roadtrip.service.auth.sandboxPrincipal
 import ca.floo.roadtrip.service.availability.AvailabilityDashboardController
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
@@ -88,6 +89,7 @@ internal fun Application.registerKoinRoutes() {
     val mapboxGeocoder: ca.floo.roadtrip.client.mapbox.MapboxGeocoder by inject()
     val ingestController: IngestController by inject()
     val userSettings: UserSettingsService by inject()
+    val userRepo: UserRepo by inject()
     val slackInteractivity: SlackInteractivityWiring? = getKoin().getOrNull()
     val readiness: ReadinessService by inject()
     val schedulerScope: CoroutineScope by inject()
@@ -98,7 +100,16 @@ internal fun Application.registerKoinRoutes() {
     // every request to Anonymous — the same state the routes already tolerate.
     val authWiring = authRouteWiring(ctx, config)
     install(roadtripAuthorization) {
-        resolvePrincipal = { token -> authWiring?.authController?.resolve(token) ?: Principal.Anonymous }
+        resolvePrincipal = { token ->
+            when {
+                authWiring != null -> authWiring.authController.resolve(token) ?: Principal.Anonymous
+                // Auth off. Only here can the sandbox sentinel be honored — a real
+                // AuthConfig makes authWiring non-null and this branch unreachable.
+                config.sandbox.assumeUserEnabled ->
+                    sandboxPrincipal(token) { id -> userRepo.findById(id)?.roles }
+                else -> Principal.Anonymous
+            }
+        }
     }
 
     routing {
