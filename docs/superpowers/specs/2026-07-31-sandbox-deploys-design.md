@@ -161,6 +161,32 @@ rendered only when `/api/me` reports `isAuthEnabled: false`; selecting one sets 
 > these gates are what keep a leaked header from handing out admin — hence fail
 > closed now.
 
+### Build-info banner
+
+Every sandbox shows an **absolute-positioned bar across the top** identifying the
+running build, so a reviewer never mistakes which env/change they're looking at.
+It displays: **env** (`SANDBOX`), **short SHA**, and **branch name**.
+
+The values already exist in the deploy path — the sandbox deploys a specific GHCR
+image tag (the SHA) for a specific ref (the branch). They travel:
+
+`deploy → backend env vars → `/api/build-info` → frontend banner`
+
+- **Deploy** passes `ROADTRIP_BUILD_ENV` (`sandbox`|`prod`), `ROADTRIP_BUILD_SHA`,
+  and `ROADTRIP_BUILD_BRANCH` into the backend container. Branch is easy: the
+  trigger already resolves the ref/PR head. SHA is the image tag. Prod sets the same
+  vars (env `prod`), so the mechanism is shared, not sandbox-only.
+- **Backend** exposes them at a tiny unauthenticated `GET /api/build-info` returning
+  `{ env, sha, branch }` (a `@Serializable` DTO — no hand-built JSON), read once at
+  boot from env. This also gives the deploy health-check a version to assert.
+- **Frontend** fetches `/api/build-info`; the banner **renders only when
+  `env == "sandbox"`** — prod stays chrome-free. A shared banner component (not
+  page-specific markup), fixed to the top, with the SHA and branch shown; clicking
+  the SHA can link to the commit on GitHub.
+
+Banner visibility is gated on `env == "sandbox"` from the endpoint, independent of
+the auth/impersonation switches, so it appears regardless of which user is assumed.
+
 ### Lifecycle & triggers
 
 - **Core:** `scripts/sandbox_up.sh <ref> [name]` does resolve-image → prepare-DB →
@@ -195,6 +221,8 @@ change. This is what makes "practically option 1, designed for option 2" real.
 | impersonation wrap in `di/RouteModule.kt` | assume-user when auth off + flag | wraps `resolvePrincipal` only |
 | frontend "assume user" switcher | pick a seeded user when `isAuthEnabled:false` | sets `X-Sandbox-User` |
 | user seed step | insert seed users (≥1 admin, ≥1 regular) into snapshot | boot-time DB seed |
+| `GET /api/build-info` | serve `{ env, sha, branch }` from boot env vars | deploy sets vars; frontend + health-check read it |
+| frontend build-info banner | top bar, renders only when `env == "sandbox"` | shared component; reads `/api/build-info` |
 
 ## Error handling & edge cases
 
@@ -218,6 +246,8 @@ change. This is what makes "practically option 1, designed for option 2" real.
 - **Seed-user assertions**: the admin seed user resolves to admin roles, the regular
   seed user to user roles.
 - **Reaper test**: a sandbox past TTL is fully removed (project, volume, vhost).
+- **Build-info test**: `/api/build-info` returns the env-supplied `{ env, sha, branch }`;
+  the banner renders only when `env == "sandbox"` and is absent in prod.
 
 ## Deferred / later
 
