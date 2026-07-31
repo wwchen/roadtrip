@@ -759,16 +759,76 @@ def suggested_holder_label() -> str:
     return f"{getpass.getuser()}@{socket.gethostname().split('.')[0]}"
 
 
-def vault_recipients(path: Path) -> list[str]:
-    """The age keys a vault is currently wrapped for, from its own metadata.
+def recipients_in(vault_text: str) -> list[str]:
+    """The age keys a vault is wrapped for, read from its own metadata.
 
-    Read from the ciphertext rather than from .sops.yaml, so this answers "who
-    can open this file" instead of "who was supposed to be able to".
+    Taken from the ciphertext rather than from .sops.yaml, so this answers "who
+    can open this file" instead of "who was supposed to be able to". Works on
+    text rather than a path so the same question can be asked of a version of
+    the vault this checkout does not have yet.
     """
     return [
         line.split("=", 1)[1]
-        for line in path.read_text().splitlines()
+        for line in vault_text.splitlines()
         if line.startswith(f"{SOPS_METADATA_PREFIX}age") and "recipient" in line
+    ]
+
+
+def vault_recipients(path: Path) -> list[str]:
+    return recipients_in(path.read_text())
+
+
+def git(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True)
+
+
+def upstream_vault(path: Path) -> str | None:
+    """The committed-and-pushed version of a vault, or None if unavailable.
+
+    Reads the remote-tracking ref this checkout already has — no network, so a
+    stale or missing ref just means "can't tell", never a hang. Enough to spot
+    the case where the enrollment is done and this machine simply hasn't
+    pulled it, which is the one dead end the two-machine handshake leaves.
+    """
+    if not path.is_relative_to(ROOT):
+        return None  # not in this repo, so git has no opinion about it
+    branch = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    if not branch or branch == "HEAD":
+        return None
+    shown = git("show", f"origin/{branch}:{path.relative_to(ROOT)}")
+    return shown.stdout if shown.returncode == 0 else None
+
+
+def enrollment_next_steps(
+    public_key: str, handoff: str, local: list[str], upstream: list[str] | None
+) -> list[str]:
+    """What this machine should do next, given who can open its vaults.
+
+    Every exit from `enroll` ends in a command to run, including the exits that
+    are somebody else's turn — "wait for them" is only actionable if you also
+    know what to run when they're done.
+    """
+    if public_key in local:
+        return [
+            "This machine is already a recipient. Next:",
+            "  ./secrets/manage.py check    # confirm the vault opens here",
+            "  tilt up                      # then bring up the stack",
+        ]
+    if upstream is not None and public_key in upstream:
+        return [
+            "Someone has already enrolled this key — this checkout just doesn't",
+            "have the re-wrapped vaults yet. Next:",
+            "  git pull",
+            "  ./secrets/manage.py enroll   # re-run to confirm",
+        ]
+    return [
+        "This machine is not a recipient yet. Send this line to someone who",
+        "already is — it is the public half, so it is not a secret:",
+        f"  {handoff}",
+        "",
+        "Once they tell you it is committed and pushed, run:",
+        "  git pull",
+        "  ./secrets/manage.py enroll   # re-run to confirm",
     ]
 
 
@@ -859,6 +919,12 @@ def cmd_enroll(args: argparse.Namespace) -> int:
 
 
 def enroll_this_host() -> int:
+    """Mint this machine's identity and say where it stands and what to run.
+
+    Re-running is the way to check progress: the handshake spans two machines,
+    so this one's job is to report the state it can see and hand back a
+    command, every time.
+    """
     public_key = ensure_age_identity()
     if link_native_key_path():
         print("linked sops' default lookup at the same key (so `sops -d` works by hand)")
@@ -866,12 +932,23 @@ def enroll_this_host() -> int:
     print("Public key for this host:")
     print(f"  {public_key}")
     print()
-    if vault_path(COMMON_ENV).exists():
-        print("On a machine that can already decrypt, run:")
-        print(f'  ./secrets/manage.py enroll {public_key} --as "{suggested_holder_label()}"')
-    else:
-        print("No vault exists yet. Seed one with:")
+
+    common = vault_path(COMMON_ENV)
+    if not common.exists():
+        print("No vault exists here yet. Next:")
         print("  ./secrets/manage.py import --source .env")
+        print()
+        print(PRIVATE_KEY_WARNING)
+        return 0
+
+    upstream = upstream_vault(common)
+    for line in enrollment_next_steps(
+        public_key,
+        f'./secrets/manage.py enroll {public_key} --as "{suggested_holder_label()}"',
+        vault_recipients(common),
+        recipients_in(upstream) if upstream is not None else None,
+    ):
+        print(line)
     print()
     print(PRIVATE_KEY_WARNING)
     return 0
@@ -913,10 +990,16 @@ def enroll_recipient(key: str, name: str | None, note: str) -> int:
         )
 
     print()
-    print(f"{label} can now decrypt {len(rotated)} vault(s). Commit both halves together —")
-    print("a .sops.yaml naming a recipient the ciphertext lacks is worse than neither:")
+    print(f"{label} can now decrypt {len(rotated)} vault(s).")
+    print()
+    print("Next — commit both halves together, because a .sops.yaml naming a")
+    print("recipient the ciphertext lacks is worse than neither:")
     print(f"  git add secrets/{SOPS_CONFIG.name} secrets/*.enc.env")
     print(f'  git commit -m "secrets: enroll {name}"')
+    print("  git push")
+    print()
+    print(f"Then tell {name} to run:")
+    print("  git pull && ./secrets/manage.py enroll")
     return 0
 
 

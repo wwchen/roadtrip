@@ -319,6 +319,38 @@ class RecipientEditTest(unittest.TestCase):
             manage.enroll_recipient(NEW_KEY, None, "")
 
 
+class NextStepsTest(unittest.TestCase):
+    """Every exit from `enroll` has to end in a command the reader can run."""
+
+    HANDOFF = f'./secrets/manage.py enroll {NEW_KEY} --as "qa@box"'
+
+    def steps(self, local, upstream):
+        return manage.enrollment_next_steps(NEW_KEY, self.HANDOFF, local, upstream)
+
+    def test_an_enrolled_host_is_pointed_at_the_stack_not_at_the_handshake(self):
+        steps = self.steps([NEW_KEY], [NEW_KEY])
+        self.assertIn("./secrets/manage.py check", "\n".join(steps))
+        self.assertNotIn(self.HANDOFF, steps)
+
+    def test_a_key_enrolled_upstream_asks_for_a_pull_not_another_handoff(self):
+        # The dead end the two-machine handshake leaves: enrolled by someone
+        # else's checkout, so the recipient list here is simply out of date.
+        steps = self.steps([], [NEW_KEY])
+        self.assertIn("  git pull", steps)
+        self.assertNotIn(self.HANDOFF, steps)
+
+    def test_an_unenrolled_host_gets_the_line_to_send_and_what_to_do_after(self):
+        steps = self.steps([], [])
+        self.assertIn(f"  {self.HANDOFF}", steps)
+        self.assertIn("  git pull", steps)
+        self.assertIn("  ./secrets/manage.py enroll   # re-run to confirm", steps)
+
+    def test_an_unknown_upstream_is_treated_as_not_yet_enrolled(self):
+        # No remote-tracking ref, or a detached HEAD. "Can't tell" must not
+        # read as "done" — the handoff is still the next thing to do.
+        self.assertEqual(self.steps([], None), self.steps([], []))
+
+
 @unittest.skipUnless(HAS_SOPS, "requires sops and age-keygen")
 class EnrollTest(unittest.TestCase):
     """The whole handshake: edit, re-wrap, and the enrolled host can decrypt."""
@@ -393,6 +425,33 @@ class EnrollTest(unittest.TestCase):
 
                 config = (secrets_dir / ".sops.yaml").read_text()
                 self.assertEqual(1, config.count(keys["joiner"][1]))
+
+    def test_the_enrolling_side_says_what_to_tell_the_other_machine(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            secrets_dir, keys = self._isolate(tmp)
+            with self._patch(secrets_dir, keys["existing"][0]):
+                manage.write_vault("common", {"SLACK_BOT_TOKEN": "v"})
+                _, output = self._enroll(keys["joiner"][1], "joiner@host")
+
+            self.assertIn("git commit", output)
+            self.assertIn("git push", output)
+            self.assertIn("Then tell joiner@host to run:", output)
+            self.assertIn("git pull && ./secrets/manage.py enroll", output)
+
+    def test_re_running_on_the_enrolled_machine_reports_it_is_done(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            secrets_dir, keys = self._isolate(tmp)
+            with self._patch(secrets_dir, keys["existing"][0]):
+                manage.write_vault("common", {"SLACK_BOT_TOKEN": "v"})
+                self._enroll(keys["joiner"][1])
+
+            # Patched out because it symlinks into the real ~/.config.
+            with self._patch(secrets_dir, keys["joiner"][0]), \
+                    unittest.mock.patch.object(manage, "link_native_key_path", lambda: None), \
+                    contextlib.redirect_stdout(io.StringIO()) as out:
+                manage.enroll_this_host()
+
+            self.assertIn("already a recipient", out.getvalue())
 
     def test_a_note_becomes_part_of_the_holder_comment(self):
         with tempfile.TemporaryDirectory() as tmp:

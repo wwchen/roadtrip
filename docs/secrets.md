@@ -81,8 +81,10 @@ anyone with root on the host or `docker exec` can read a mounted secret.
 
 ## Enrolling a machine
 
-Needs `sops` and `age` (`brew install sops age`, or `make install`). Two
-commands, one on each machine.
+Needs `sops` and `age` (`brew install sops age`, or `make install`). One
+command on each machine, plus the commit that carries the result between them.
+Every one of them ends by printing what to run next, so following the chain
+does not require knowing how any of this works.
 
 **On the new machine:**
 
@@ -97,6 +99,12 @@ existing identity is left alone, and a key stranded where sops doesn't look is
 adopted rather than replaced. (`init` is the same command under its older
 name, and still works.)
 
+Re-running it is also how you check progress. It reports where this machine
+stands and ends in the command to run next — the line to hand over if nobody
+has enrolled you yet, `git pull` if someone has and this checkout hasn't caught
+up, or `check` and `tilt up` once you can decrypt. You never have to know which
+of those is true; the same command tells you.
+
 **On a machine that can already decrypt:**
 
 ```sh
@@ -106,15 +114,21 @@ name, and still works.)
 This adds the recipient to `.sops.yaml` under a comment naming its holder,
 re-wraps every vault's data key, and then reads the ciphertext back to confirm
 the key actually landed — the `rotate` that used to be a step you had to
-remember, plus the check that it worked. Then commit `.sops.yaml` and the
-re-wrapped vaults **together**; the command prints the two lines that do it. A
-`.sops.yaml` naming a recipient the ciphertext doesn't have is worse than
-neither, because it reads as done.
+remember, plus the check that it worked. It finishes by printing the commit
+and push, and the one line to send back. Commit `.sops.yaml` and the re-wrapped
+vaults **together**: a `.sops.yaml` naming a recipient the ciphertext doesn't
+have is worse than neither, because it reads as done.
 
 Re-running is safe: a key already listed is not added twice, and the vaults
 are re-wrapped regardless — which is exactly what you want after an enrollment
 that failed halfway. `--as` is required; an unlabelled key is one nobody can
 identify well enough to remove later.
+
+**Back on the new machine: `git pull`, then `enroll` once more.** The re-wrap
+happened in someone else's checkout, so until it lands here the local vaults
+are still the old ciphertext and the new key won't open them — enrolled, but
+not yet delivered. This is the step people lose an afternoon to, so `enroll`
+detects it by name and answers `git pull`.
 
 Hand-editing `.sops.yaml` still works. It just leaves `rotate` to you.
 
