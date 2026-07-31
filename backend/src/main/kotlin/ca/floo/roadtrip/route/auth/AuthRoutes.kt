@@ -7,15 +7,17 @@ import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
+import ca.floo.roadtrip.route.common.principal
 import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.respondApiError
+import ca.floo.roadtrip.route.common.respondEncodedJson
+import ca.floo.roadtrip.route.common.roadtripApiJson
 import ca.floo.roadtrip.service.auth.AuthController
 import ca.floo.roadtrip.service.auth.LoginFlowState
 import ca.floo.roadtrip.service.auth.encode
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
-import io.ktor.server.response.respond
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
@@ -44,7 +46,10 @@ private val log = LoggerFactory.getLogger("ca.floo.roadtrip.route.auth")
  * `auth_enabled: false`, and the login endpoints answer 503. A fresh clone and
  * CI therefore boot and serve every anonymous surface with no tenant anywhere.
  */
-internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
+internal fun Route.authRoutes(
+    wiring: AuthRouteWiring?,
+    userRepo: UserRepo,
+) {
     route("/auth") {
         get("/login") {
             val auth = wiring ?: return@get call.respondAuthDisabled()
@@ -124,21 +129,36 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
     route("/api") {
         get("/me") {
             if (wiring == null) {
-                return@get call.respond(MeResponseDto(isAuthenticated = false, isAuthEnabled = false))
+                // Auth off. Normally Anonymous, but a sandbox may have assumed a user
+                // via the ambient principal. Report it, while keeping auth "disabled".
+                return@get when (val p = call.principal()) {
+                    is Principal.User ->
+                        call.respondEncodedJson(roadtripApiJson, meResponseForUser(userRepo, p, isAuthEnabled = false))
+                    else ->
+                        call.respondEncodedJson(roadtripApiJson, MeResponseDto(isAuthenticated = false, isAuthEnabled = false))
+                }
             }
             when (val principal = wiring.authController.resolve(call.request.sessionToken())) {
-                is Principal.User -> call.respond(wiring.meResponse(principal))
-                else -> call.respond(MeResponseDto(isAuthenticated = false))
+                is Principal.User -> call.respondEncodedJson(roadtripApiJson, wiring.meResponse(principal))
+                else -> call.respondEncodedJson(roadtripApiJson, MeResponseDto(isAuthenticated = false))
             }
         }.describeApi("auth", "Describe the current caller")
             .access(RouteAccess.Anonymous)
     }
 }
 
-private fun AuthRouteWiring.meResponse(principal: Principal.User): MeResponseDto {
+private fun AuthRouteWiring.meResponse(principal: Principal.User): MeResponseDto =
+    meResponseForUser(userRepo, principal, isAuthEnabled = true)
+
+private fun meResponseForUser(
+    userRepo: UserRepo,
+    principal: Principal.User,
+    isAuthEnabled: Boolean,
+): MeResponseDto {
     val user = userRepo.findById(principal.userId)
     return MeResponseDto(
         isAuthenticated = user != null,
+        isAuthEnabled = isAuthEnabled,
         user =
             user?.let {
                 MeUserDto(

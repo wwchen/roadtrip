@@ -3,6 +3,8 @@ package ca.floo.roadtrip.route.common
 import ca.floo.roadtrip.client.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.model.domain.auth.Role
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
+import ca.floo.roadtrip.model.domain.auth.UserId
+import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.route.api.docs.apiDocsRoutes
 import ca.floo.roadtrip.route.api.geocode.geocodeRoutes
 import ca.floo.roadtrip.route.api.health.healthRoutes
@@ -18,10 +20,18 @@ import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import io.ktor.server.routing.routingRoot
 import io.ktor.server.testing.testApplication
+import org.jooq.SQLDialect
+import org.jooq.impl.DSL
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+
+/** A [UserRepo] stub that returns null for all lookups — sufficient for coverage-only tests. */
+private val noopUserRepo: UserRepo =
+    object : UserRepo(ctx = DSL.using(SQLDialect.POSTGRES)) {
+        override fun findById(id: UserId): UserRepo.User? = null
+    }
 
 /**
  * The mechanism behind RFC 0010's completeness guarantee: every method-leaf
@@ -42,7 +52,7 @@ class RouteAccessCoverageTest {
                 apiDocsRoutes()
                 healthRoutes { ReadinessService.Report(databaseReachable = true) }
                 geocodeRoutes(MapboxGeocoder(token = null))
-                authRoutes(wiring = null)
+                authRoutes(wiring = null, userRepo = noopUserRepo)
                 // Static file mounts register serving leaves beneath each root.
                 staticSiteRoutes(createTempDirectory("rt-access").toFile())
             }

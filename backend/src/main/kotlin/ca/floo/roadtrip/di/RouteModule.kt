@@ -114,7 +114,7 @@ internal fun Application.registerKoinRoutes() {
 
     routing {
         apiDocsRoutes()
-        authRoutes(authWiring)
+        authRoutes(wiring = authWiring, userRepo = userRepo)
         settingsRoutes(userSettings)
         poiRoutes(poiService)
         availabilityWatchRoutes(availabilityWatchController(ctx, watchService, watchCapabilities))
