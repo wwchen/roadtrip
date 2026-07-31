@@ -1,0 +1,118 @@
+# Sandbox overlay — postgres + backend only (no observability, no companion,
+# no tunnel).  Each sandbox runs as a separate Compose project:
+#
+#   SANDBOX_SHA=<sha> SANDBOX_PORT=<port> SANDBOX_BRANCH=<branch> \
+#   docker compose -p roadtrip-sb-<name> -f docker-compose.sandbox.yml up -d
+#
+# All SANDBOX_* env vars are set by scripts/sandbox_up.sh before invoking
+# Compose.  Do not hardcode a `name:` here — the `-p` flag is the isolation
+# boundary; each project gets its own `postgres-data` named volume.
+#
+# Profile choice — ROADTRIP_PROFILE=compose-local (not prod):
+#   The `prod` profile triggers SecretsBootstrap validation for MAPBOX_TOKEN,
+#   ROADTRIP_AUTH_ISSUER, ROADTRIP_AUTH_CLIENT_ID, and
+#   ROADTRIP_AUTH_CLIENT_SECRET (all required_in: [prod], all backend
+#   consumers), none of which a sandbox has.  The `local` profile's
+#   application-local.yaml hardcodes `db.url: jdbc:postgresql://localhost:5432/`
+#   without ${POSTGRES_URL} interpolation, so it won't reach the `postgres`
+#   service inside Docker.  `compose-local` (application-compose-local.yaml)
+#   uses `${POSTGRES_URL:jdbc:postgresql://postgres:5432/...}`, `/app/static`,
+#   and requires no prod secrets.  Auth is disabled independently via the blank
+#   ROADTRIP_AUTH_ISSUER env var; ROADTRIP_SANDBOX_ASSUME_USER=true is the
+#   auth bypass mechanism.
+
+services:
+  # ── Postgres ──────────────────────────────────────────────────────────────
+  # Plain POSTGRES_PASSWORD (no secrets mount) — sandboxes are throwaway.
+  # Named volume scoped to this Compose project; never binds the prod
+  # $HOME/.roadtrip-map/postgres path.
+  # No postgres-init mount: the init scripts create grafana_reader and require
+  # grafana secrets that sandboxes don't have.  Flyway (run by the backend)
+  # owns the full schema.
+  postgres:
+    image: postgis/postgis:16-3.4
+    restart: "no"
+    hostname: postgres
+    shm_size: 1g
+    command:
+      - postgres
+      - -c
+      - max_wal_size=4GB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=256MB
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
+      - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
+      # Plain env var (not _FILE) — acceptable for a throwaway sandbox.
+      - POSTGRES_PASSWORD=${SANDBOX_DB_PASSWORD:-sandbox}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-roadtrip} -d $${POSTGRES_DB:-roadtrip}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ── Backend ───────────────────────────────────────────────────────────────
+  # Pre-built GHCR image identified by SANDBOX_SHA.  Bound host-local so
+  # Caddy can reverse-proxy it; never exposed on 0.0.0.0.
+  backend:
+    image: ghcr.io/wwchen/roadtrip/backend:${SANDBOX_SHA}
+    restart: "no"
+    hostname: backend
+    mem_limit: 4g
+    ports:
+      - "127.0.0.1:${SANDBOX_PORT}:8765"
+    environment:
+      # compose-local: Docker-network-aware DB URL, /app/static, no prod secrets.
+      - ROADTRIP_PROFILE=${SANDBOX_PROFILE:-compose-local}
+      # Build provenance — visible in /api/build-info (env should be "sandbox").
+      - ROADTRIP_BUILD_ENV=sandbox
+      - ROADTRIP_BUILD_SHA=${SANDBOX_SHA}
+      - ROADTRIP_BUILD_BRANCH=${SANDBOX_BRANCH}
+      # Sandbox identity bypass — resolves every request to the seed users
+      # based on X-Sandbox-User-Id; no real OIDC flow required.
+      - ROADTRIP_SANDBOX_ASSUME_USER=true
+      # Blank issuer = auth disabled; OIDC routes are never registered.
+      - ROADTRIP_AUTH_ISSUER=
+      # DB connection — application-compose-local.yaml reads these via
+      # ${POSTGRES_URL:...}, ${POSTGRES_USER}, ${POSTGRES_PASSWORD}.
+      - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
+      - POSTGRES_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-roadtrip}
+      - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
+      - POSTGRES_PASSWORD=${SANDBOX_DB_PASSWORD:-sandbox}
+      # OTEL: disable exporters — no Alloy/collector in a sandbox.
+      # The base compose points to alloy:4317; without the service that hostname
+      # is unreachable and would spam OTEL warnings.
+      - OTEL_TRACES_EXPORTER=none
+      - OTEL_METRICS_EXPORTER=none
+      - OTEL_LOGS_EXPORTER=none
+    volumes:
+      # Static files bind-mounted so reviewers see the frontend at the SHA
+      # being reviewed; the image carries the compiled backend jar only.
+      - ./index.html:/app/static/index.html:ro
+      - ./availability.html:/app/static/availability.html:ro
+      - ./watches.html:/app/static/watches.html:ro
+      - ./web:/app/static/web:ro
+      - ./data:/app/static/data
+    healthcheck:
+      test: ["CMD", "java", "-Xmx32m", "-cp", "/app/app.jar", "ca.floo.roadtrip.HealthProbe"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  # One volume per Compose project — Docker prefixes with the project name,
+  # so `roadtrip-sb-pr532_postgres-data` never collides with production's
+  # bind-mount at $HOME/.roadtrip-map/postgres.
+  postgres-data:
