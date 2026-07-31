@@ -268,7 +268,7 @@ private fun authRouteWiring(
                         providers = listOf(identityProvider),
                         activeId = IdentityProviderId(OidcIdentityProvider.ID),
                     ),
-                userProvisioningService = UserProvisioningService(ctx),
+                userProvisioningService = UserProvisioningService(ctx, config.admin.bootstrapEmails),
                 sessionService = sessionService,
             ),
         userRepo = userRepo,

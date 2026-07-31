@@ -87,6 +87,11 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
       - POSTGRES_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-roadtrip}
       - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
+      # Addresses granted the `admin` role on sign-in. Configuration, not a
+      # credential — knowing an address grants nothing without also controlling
+      # that mailbox at the identity provider — so it lives here rather than in
+      # secrets/registry.yaml. Unset means no admins, which is a working state.
+      - ROADTRIP_BOOTSTRAP_EMAILS=${ROADTRIP_BOOTSTRAP_EMAILS:-}
       # Every backend secret (Mapbox, Slack, Campflare, Resend, auth, the DB
       # password) is mounted under /run/secrets by docker-compose.secrets.yml
       # and read by SecretsBootstrap before Ktor parses config. Nothing secret

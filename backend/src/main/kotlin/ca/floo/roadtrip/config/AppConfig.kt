@@ -3,6 +3,7 @@ package ca.floo.roadtrip.config
 import java.time.Duration
 
 data class AppConfig(
+    val admin: AdminConfig,
     val auth: AuthConfig?,
     val availability: AvailabilityConfig,
     val booking: BookingConfig,
@@ -21,6 +22,7 @@ data class AppConfig(
         fun fromProperties(properties: Map<String, String>): AppConfig {
             val roadtrip = ConfigSection(properties).section("roadtrip")
             return AppConfig(
+                admin = AdminConfig.fromConfig(roadtrip.section("admin")),
                 auth = AuthConfig.fromConfig(roadtrip.section("auth")),
                 availability = AvailabilityConfig.fromConfig(roadtrip.section("availability")),
                 booking = BookingConfig.fromConfig(roadtrip.section("booking")),

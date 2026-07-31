@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.auth
 
 import ca.floo.roadtrip.model.domain.auth.IdentityClaims
+import ca.floo.roadtrip.model.domain.auth.Role
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.UserIdentityRepo
 import ca.floo.roadtrip.repo.UserRepo
@@ -34,9 +35,19 @@ import org.slf4j.LoggerFactory
  * [createUser]. Creating a shadow account would be the other option, but two
  * accounts for one address is its own support burden and invites exactly the
  * confusion the attack relies on.
+ *
+ * It also owns the one role write in the app: a configured bootstrap address
+ * becomes an admin here (see [grantBootstrapAdmin]). Role bootstrap lives with
+ * account linking because both are provisioning policy keyed off the same
+ * verified email, and both must be atomic with the user row they act on.
+ *
+ * @param bootstrapAdminEmails lowercased addresses from
+ *        [ca.floo.roadtrip.config.AdminConfig]. Passed as a plain set rather
+ *        than the config type: this needs the list, not the layer.
  */
 class UserProvisioningService(
     private val ctx: DSLContext,
+    private val bootstrapAdminEmails: Set<String> = emptySet(),
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -60,6 +71,7 @@ class UserProvisioningService(
             userIdentityRepo.findByProviderSubject(provider, claims.subject)?.let { identity ->
                 userIdentityRepo.refresh(identity.id, claims)
                 if (claims.isEmailVerified) userRepo.markEmailVerified(identity.userId)
+                grantBootstrapAdmin(userRepo, identity.userId)
                 return@transactionResult identity.userId
             }
 
@@ -73,6 +85,7 @@ class UserProvisioningService(
                     ?: createUser(userRepo, claims, email)
 
             userIdentityRepo.link(userId, provider, claims)
+            grantBootstrapAdmin(userRepo, userId)
             userId
         }
 
@@ -137,5 +150,50 @@ class UserProvisioningService(
                 displayName = claims.displayName,
                 isEmailVerified = claims.isEmailVerified,
             ).id
+    }
+
+    /**
+     * Grants [Role.ADMIN] to a configured bootstrap address, once.
+     *
+     * The first admin cannot be granted by an admin, so this is the only writer
+     * of `user_role` in the request path. Four deliberate properties:
+     *
+     *  - **Runs on every sign-in**, not only at user creation. Adding an address
+     *    to the config promotes an account that already exists; otherwise the
+     *    first operator would have to delete their own account to become admin.
+     *  - **Verified addresses only.** The same rule that gates account linking:
+     *    an unverified claim must never inherit what an address owns, and admin
+     *    is the largest thing it could inherit.
+     *  - **Grant only, never revoke.** Removing an address from the config does
+     *    not demote anyone. A config typo that silently drops every admin is a
+     *    worse failure than a stale grant, and revocation gets a deliberate path.
+     *  - **Matched against the persisted address**, not the one this particular
+     *    token asserted, so the grant follows the account rather than a session.
+     *
+     * Logged at WARN because a privilege grant should be visible in Loki without
+     * a query — `level` is a stream label there. [UserRepo.grantRole] is
+     * idempotent and reports whether it actually inserted, so this logs once per
+     * user rather than on every sign-in.
+     */
+    private fun grantBootstrapAdmin(
+        userRepo: UserRepo,
+        userId: UserId,
+    ) {
+        if (bootstrapAdminEmails.isEmpty()) return
+        val user = userRepo.findById(userId) ?: return
+        if (!user.isEmailVerified) return
+        // Both sides normalized here: the config is lowercased at parse time and
+        // UserRepo stores lowercase, but a match this consequential should not
+        // depend on a rule that lives in another layer.
+        if (user.email.trim().lowercase() !in bootstrapAdminEmails) return
+
+        if (userRepo.grantRole(userId, Role.ADMIN)) {
+            log.warn(
+                "granted role '{}' to user_id={} ({}): address is in roadtrip.admin.bootstrap-emails",
+                Role.ADMIN.wireValue,
+                userId.value,
+                user.email,
+            )
+        }
     }
 }

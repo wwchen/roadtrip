@@ -24,6 +24,14 @@ roadtrip:
     recgov-atc:
       companion-base-url:
       companion-timeout: 180s
+  admin:
+    # Comma-separated addresses granted the `admin` role when they sign in with
+    # a verified email. This is the only writer of `user_role`, and therefore the
+    # only way a first admin exists at all.
+    #
+    # Grant-only: removing an address here does not demote anyone. Blank grants
+    # nobody, which is the state every environment starts in.
+    bootstrap-emails: "${ROADTRIP_BOOTSTRAP_EMAILS:}"
   auth:
     # Selects a claims dialect only — the flow is plain OIDC for every value.
     # auth0 | workos | oidc. See rfcs/0009-auth-provider-layer.md.

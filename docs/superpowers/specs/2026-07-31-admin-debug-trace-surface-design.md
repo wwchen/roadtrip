@@ -81,7 +81,7 @@ carries it into an HTTP response**, and a place to render it.
 
 Ordered by dependency. A, B are prerequisites; C, D, E are the feature.
 
-### Track A — A way to make someone an admin *(blocker, ~half a day)*
+### Track A — A way to make someone an admin *(landed)*
 
 RFC 0010 already decided this: `ROADTRIP_BOOTSTRAP_EMAIL` — on sign-in, if the
 verified email matches, grant `Role.ADMIN`, idempotently, logged loudly.
@@ -108,6 +108,15 @@ is more predictable (admin exists before anyone signs in) but requires the user
 row to exist, which it does not before first sign-in. Sign-in is proposed.
 
 **Deliberately out of scope for A:** an in-app role-management UI. See Track F.
+
+**As built.** `AdminConfig` (`roadtrip.admin.bootstrap-emails`, a comma-separated
+list, lowercased at parse time) and `UserProvisioningService.grantBootstrapAdmin`.
+One deviation from the shape above: the env var is delivered through
+`docker-compose.yml` rather than `secrets/registry.yaml`. It is not a credential
+— knowing an address grants nothing without also controlling that mailbox at the
+identity provider — and registering it would have made it the first
+compose-mounted secret with no vault value. It is listed in the drift test's
+`nonSecretPlaceholders` alongside `ROADTRIP_AUTH_PROVIDER`.
 
 ### Track B — Gate the admin surfaces that exist *(RFC 0010 PR 2, ~1 day)*
 

@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.service.auth
 
 import ca.floo.roadtrip.model.domain.auth.IdentityClaims
+import ca.floo.roadtrip.model.domain.auth.Role
+import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.UserIdentityRepo
 import ca.floo.roadtrip.repo.UserRepo
@@ -161,5 +163,129 @@ class UserProvisioningServiceTest : SharedDbTest() {
         val identity = userIdentityRepo.listForUser(userId).single()
         assertEquals("google-late", identity.upstreamSubject)
         assertEquals("google", identity.upstreamProvider)
+    }
+
+    // --- bootstrap admin -----------------------------------------------------
+    //
+    // The only writer of `user_role` in the app. Everything below is about what
+    // it must refuse as much as what it grants.
+
+    private fun bootstrapping(vararg emails: String) = UserProvisioningService(ctx, emails.toSet())
+
+    private fun rolesOf(userId: UserId) = userRepo.findById(userId)!!.roles
+
+    @Test
+    fun `a configured address is granted admin on sign-in`() {
+        val userId = bootstrapping("user@example.com").provision(AUTH0, claims("auth0|boot"))
+
+        assertEquals(setOf(Role.ADMIN), rolesOf(userId))
+    }
+
+    @Test
+    fun `an address that is not configured gets no role`() {
+        val userId = bootstrapping("someone-else@example.com").provision(AUTH0, claims("auth0|ordinary"))
+
+        assertEquals(emptySet(), rolesOf(userId))
+    }
+
+    @Test
+    fun `no configured addresses means nobody is granted anything`() {
+        // The default everywhere, including CI: the feature is off until an
+        // operator names an address.
+        val userId = provisioning.provision(AUTH0, claims("auth0|nobody"))
+
+        assertEquals(emptySet(), rolesOf(userId))
+    }
+
+    @Test
+    fun `an unverified address must NOT be granted admin`() {
+        // Same rule that gates account linking. Without it, anyone who can sign
+        // up claiming the bootstrap address — without the provider ever
+        // verifying it — becomes an administrator.
+        val userId =
+            bootstrapping("user@example.com").provision(
+                AUTH0,
+                claims("auth0|unverified", isEmailVerified = false, upstreamProvider = null, upstreamSubject = null),
+            )
+
+        assertEquals(emptySet(), rolesOf(userId))
+    }
+
+    @Test
+    fun `an unverified account is promoted once the provider verifies the address`() {
+        val service = bootstrapping("user@example.com")
+        val userId =
+            service.provision(
+                AUTH0,
+                claims("auth0|later", isEmailVerified = false, upstreamProvider = null, upstreamSubject = null),
+            )
+        assertEquals(emptySet(), rolesOf(userId))
+
+        service.provision(AUTH0, claims("auth0|later", isEmailVerified = true, upstreamProvider = null, upstreamSubject = null))
+
+        assertEquals(setOf(Role.ADMIN), rolesOf(userId))
+    }
+
+    @Test
+    fun `matching is case-insensitive`() {
+        val userId = bootstrapping("user@example.com").provision(AUTH0, claims("auth0|shouty", email = "USER@Example.COM"))
+
+        assertEquals(setOf(Role.ADMIN), rolesOf(userId))
+    }
+
+    @Test
+    fun `an account that predates the config is promoted on its next sign-in`() {
+        // The returning-identity path short-circuits before any linking work, so
+        // it needs its own grant call. Without this the first operator would have
+        // to delete their own account to become an admin.
+        val userId = provisioning.provision(AUTH0, claims("auth0|early"))
+        assertEquals(emptySet(), rolesOf(userId))
+
+        val afterConfig = bootstrapping("user@example.com").provision(AUTH0, claims("auth0|early"))
+
+        assertEquals(userId, afterConfig)
+        assertEquals(setOf(Role.ADMIN), rolesOf(userId))
+    }
+
+    @Test
+    fun `repeated sign-ins re-apply the grant without failing`() {
+        // `user_role` is keyed (user_id, role), so a second insert would violate
+        // the primary key if grantRole were not idempotent — the sign-in would
+        // throw rather than merely double-write.
+        val service = bootstrapping("user@example.com")
+        val userId = service.provision(AUTH0, claims("auth0|repeat-admin"))
+        service.provision(AUTH0, claims("auth0|repeat-admin"))
+
+        assertEquals(setOf(Role.ADMIN), rolesOf(userId))
+    }
+
+    @Test
+    fun `removing an address from the config does not revoke the role`() {
+        // Grant-only by design: a config typo that silently demoted every admin
+        // is a worse failure than a stale grant, and revocation gets its own path.
+        val userId = bootstrapping("user@example.com").provision(AUTH0, claims("auth0|sticky"))
+        assertEquals(setOf(Role.ADMIN), rolesOf(userId))
+
+        provisioning.provision(AUTH0, claims("auth0|sticky"))
+
+        assertEquals(setOf(Role.ADMIN), rolesOf(userId))
+    }
+
+    @Test
+    fun `an account reached by linking a new identity is granted admin`() {
+        // The other call site: not the returning-identity short-circuit, but the
+        // path that resolves an existing user and links a fresh identity to it.
+        val userId =
+            provisioning.provision(AUTH0, claims("auth0|one", upstreamProvider = null, upstreamSubject = null))
+        assertEquals(emptySet(), rolesOf(userId))
+
+        val linked =
+            bootstrapping("user@example.com").provision(
+                WORKOS,
+                claims("workos|two", upstreamProvider = null, upstreamSubject = null),
+            )
+
+        assertEquals(userId, linked)
+        assertEquals(setOf(Role.ADMIN), rolesOf(userId))
     }
 }
