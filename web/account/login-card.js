@@ -6,10 +6,22 @@
 // cannot embed it). The embedded-auth port, completeLogin, signInGoogle and
 // mountModal are injectable so tests pass fakes without network or navigation.
 import { mountModal as _defaultMountModal } from '../design-system/modal.js';
-import { signInWithConnection as _defaultSignInGoogle } from '../api/auth-api.js';
-import { completePasswordLogin as _defaultCompleteLogin } from '../api/password-auth-api.js';
-import { makeFakeEmbeddedAuth } from './embedded-auth-port.js';
+import { signInWithConnection as _defaultSignInGoogle, fetchMe } from '../api/auth-api.js';
+import { completePasswordLogin as _defaultCompleteLogin, beginPasswordLogin } from '../api/password-auth-api.js';
+import { makeAuth0EmbeddedAuth } from './auth0-embedded.js';
 import { loginCardTemplate } from './login-card-template.js';
+
+// Lazily builds the real adapter from public /api/me config. Kept out of the
+// default parameter so tests that inject _embeddedAuth never call fetchMe.
+async function buildDefaultEmbeddedAuth() {
+  const me = await fetchMe();
+  return makeAuth0EmbeddedAuth({
+    domain: me.auth_domain,
+    clientID: me.auth_client_id,
+    realm: me.auth_realm,
+    begin: (returnTo) => beginPasswordLogin(returnTo),
+  });
+}
 
 const STYLE_ID = 'rt-login-card-styles';
 const BUTTONS_STYLE_ID = 'rt-buttons-styles';
@@ -65,7 +77,7 @@ export async function _handlePasswordSubmit(form, { embeddedAuth, completeLogin,
 export function mountLoginCard(config = {}) {
   const {
     returnTo = currentPath(),
-    _embeddedAuth = makeFakeEmbeddedAuth(), // Task 8 replaces this default with the real adapter builder
+    _embeddedAuth = null, // null → lazily built from /api/me in the submit handler; tests inject a fake to skip fetchMe
     _completeLogin = _defaultCompleteLogin,
     _signInGoogle = _defaultSignInGoogle,
     _mountModal = _defaultMountModal,
@@ -116,12 +128,15 @@ export function mountLoginCard(config = {}) {
     };
 
     if (form) {
-      form.addEventListener('submit', (e) => {
+      form.addEventListener('submit', async (e) => {
         e.preventDefault();
+        let embeddedAuth = _embeddedAuth;
+        if (!embeddedAuth) {
+          try { embeddedAuth = await buildDefaultEmbeddedAuth(); }
+          catch { onError(GENERIC_ERROR); return; }
+        }
         _handlePasswordSubmit(form, {
-          embeddedAuth: _embeddedAuth,
-          completeLogin: _completeLogin,
-          onError, onLoading, returnTo,
+          embeddedAuth, completeLogin: _completeLogin, onError, onLoading, returnTo,
         });
       });
     }
