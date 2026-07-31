@@ -26,7 +26,7 @@ private const val SHA_256 = "SHA-256"
  * and in the user's cookie, nowhere else — so a database leak yields no usable
  * session, and a token never reaches a log or a query plan.
  */
-class SessionService(
+open class SessionService(
     private val userRepo: UserRepo,
     private val userSessionRepo: UserSessionRepo,
     private val sessionTtl: Duration,
@@ -56,7 +56,7 @@ class SessionService(
      * sign-in: disabling an account must take effect on the next request, not
      * whenever the user's existing sessions happen to expire.
      */
-    fun resolve(token: String): Principal.User? {
+    open fun resolve(token: String): Principal.User? {
         val session = userSessionRepo.findActiveByTokenHash(hash(token), clock()) ?: return null
         val user = userRepo.findById(session.userId) ?: return null
         if (user.status != UserStatus.ACTIVE) return null
