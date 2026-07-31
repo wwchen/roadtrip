@@ -24,6 +24,7 @@ import ca.floo.roadtrip.route.api.pois.campsiteRoutes
 import ca.floo.roadtrip.route.api.pois.poiRoutes
 import ca.floo.roadtrip.route.api.pois.poisOnRouteRoutes
 import ca.floo.roadtrip.route.api.route.routeRoutes
+import ca.floo.roadtrip.route.api.sandboxRoutes
 import ca.floo.roadtrip.route.api.settings.settingsRoutes
 import ca.floo.roadtrip.route.api.slack.slackInteractivityRoute
 import ca.floo.roadtrip.route.auth.AuthRouteWiring
@@ -137,6 +138,7 @@ internal fun Application.registerKoinRoutes() {
         routeRoutes(routeCache, routeCorridorService, config.route)
         geocodeRoutes(mapboxGeocoder)
         buildInfoRoutes(config.buildInfo)
+        sandboxRoutes(config.sandbox, userRepo)
         healthRoutes(readiness)
         adminIngestRoutes(ingestController, ctx)
         // No /test/* notification routes: they took a caller-supplied recipient

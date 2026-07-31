@@ -34,6 +34,13 @@ open class UserRepo(
         val updatedAt: OffsetDateTime,
     )
 
+    open fun listAll(): List<User> =
+        ctx
+            .select(APP_USER.fields().toList())
+            .from(APP_USER)
+            .fetch()
+            .map { fromRecord(it, rolesFor(UserId(it.get(APP_USER.ID)!!))) }
+
     open fun findById(id: UserId): User? =
         ctx
             .select(APP_USER.fields().toList())
