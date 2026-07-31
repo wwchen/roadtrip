@@ -10,6 +10,7 @@ package ca.floo.roadtrip.support
  */
 class AspiraException(
     message: String,
-    val httpStatus: Int? = null,
+    override val httpStatus: Int? = null,
     cause: Throwable? = null,
-) : RuntimeException(message, cause)
+) : RuntimeException(message, cause),
+    UpstreamHttpException

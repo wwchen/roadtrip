@@ -14,7 +14,7 @@ import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
-import ca.floo.roadtrip.support.AspiraException
+import ca.floo.roadtrip.support.UpstreamHttpException
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -142,10 +142,20 @@ internal fun mapProviderError(e: AvailabilityProviderError): Pair<HttpStatusCode
     }
 }
 
+/**
+ * Extracts the upstream HTTP status a request failed on, if any vendor wrapper
+ * in the cause chain carries one. Matches [UpstreamHttpException] rather than a
+ * single vendor, so Campflare/ReserveAmerica/ReserveCalifornia 5xx surface
+ * `upstream_status` the same way Aspira does. Walks the chain under the same
+ * depth/cycle guard as [causeChain] so a self-referential cause can't spin.
+ */
 internal fun upstreamHttpStatus(e: AvailabilityProviderError): Int? {
     var t: Throwable? = e.cause
-    while (t != null) {
-        if (t is AspiraException) return t.httpStatus
+    var depth = 0
+    val seen = mutableSetOf<Throwable>()
+    while (t != null && depth++ < MAX_CAUSE_DEPTH && seen.add(t)) {
+        val status = (t as? UpstreamHttpException)?.httpStatus
+        if (status != null) return status
         t = t.cause
     }
     return null

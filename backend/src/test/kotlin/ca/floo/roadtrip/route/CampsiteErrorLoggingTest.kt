@@ -6,6 +6,9 @@ import ca.floo.roadtrip.route.api.pois.mapProviderError
 import ca.floo.roadtrip.route.api.pois.upstreamHttpStatus
 import ca.floo.roadtrip.service.availability.provider.upstreamAvailabilityError
 import ca.floo.roadtrip.support.AspiraException
+import ca.floo.roadtrip.support.CampflareException
+import ca.floo.roadtrip.support.ReserveAmericaException
+import ca.floo.roadtrip.support.ReserveCaliforniaException
 import io.ktor.http.HttpStatusCode
 import java.net.ConnectException
 import java.nio.channels.ClosedChannelException
@@ -113,5 +116,38 @@ class CampsiteErrorLoggingTest {
 
         assertEquals("upstream_5xx", dto.error)
         assertEquals(502, dto.upstreamStatus)
+    }
+
+    @Test
+    fun `every provider wrapper surfaces its upstream status, not just Aspira`() {
+        // upstreamHttpStatus once matched AspiraException alone, so a
+        // Campflare/ReserveAmerica/ReserveCalifornia 5xx dropped the status
+        // field the runbook promises. All four now carry it through.
+        val wrappers =
+            listOf(
+                AspiraException("aspira HTTP 503", httpStatus = 503),
+                CampflareException("campflare HTTP 503", httpStatus = 503),
+                ReserveAmericaException("reserveamerica HTTP 503", httpStatus = 503),
+                ReserveCaliforniaException("reservecalifornia HTTP 503", httpStatus = 503),
+            )
+
+        for (wrapper in wrappers) {
+            val e = AvailabilityProviderError.UpstreamUnavailable(wrapper)
+            val (_, dto) = mapProviderError(e)
+            assertEquals("upstream_5xx", dto.error, wrapper.toString())
+            assertEquals(503, dto.upstreamStatus, wrapper.toString())
+        }
+    }
+
+    @Test
+    fun `upstream status extraction terminates on a self-referential chain`() {
+        // upstreamHttpStatus walks the same chain causeChain does; without the
+        // depth/cycle guard a self-referential cause would spin here too.
+        val a = RuntimeException("a")
+        val b = RuntimeException("b", a)
+        a.initCause(b)
+        val e = AvailabilityProviderError.UpstreamUnavailable(b)
+
+        assertEquals(null, upstreamHttpStatus(e))
     }
 }
