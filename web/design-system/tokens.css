@@ -193,13 +193,30 @@
   --rt-paused:         var(--rt-c-grey-450);
   --rt-rating:         var(--rt-c-amber-300);
 
-  /* Availability heat ramp — bucket 0 (none open) → 4 (wide open).
-     Ordinal, not decorative: bucket N must read as "more open" than N-1. */
-  --rt-heat-0: var(--rt-c-red-800);
-  --rt-heat-1: var(--rt-c-red-600);
-  --rt-heat-2: var(--rt-c-amber-700);
-  --rt-heat-3: var(--rt-c-green-600);
-  --rt-heat-4: var(--rt-c-green-800);
+  /* Cell-signal strength, per carrier — rec.gov's 0–4 reception scale,
+     rendered as chips on the campground drawer card. NOT availability:
+     this is the only consumer, and it is a magnitude, not a status.
+
+     Two known defects, preserved at their shipped values because fixing
+     them is a visual change and not a refactor:
+
+     1. NON-MONOTONIC. OKLCH lightness runs 0.401 → 0.539 → 0.628 → 0.523
+        → 0.428, so it rises then falls. Bucket 4 (excellent) is nearly as
+        dark as bucket 0 (none) — in greyscale or for a red-green colour-
+        blind reader, best and worst signal are almost the same chip.
+     2. COLLIDES WITH STATUS. Buckets 0–1 sit at hue 24–27°, the same hue
+        as --rt-error (23°); buckets 3–4 at 144–147°, the same as
+        --rt-avail (150°). A red chip on a campground card cannot be told
+        apart from "unavailable", nor a green one from "available".
+
+     The fix is a single-hue lightness ramp — one neutral or brand hue,
+     five monotonically lighter steps — so magnitude reads as magnitude
+     and the red/amber/green vocabulary stays reserved for status. */
+  --rt-signal-0: var(--rt-c-red-800);
+  --rt-signal-1: var(--rt-c-red-600);
+  --rt-signal-2: var(--rt-c-amber-700);
+  --rt-signal-3: var(--rt-c-green-600);
+  --rt-signal-4: var(--rt-c-green-800);
 
   /* Status */
   --rt-success: var(--rt-c-green-400);
