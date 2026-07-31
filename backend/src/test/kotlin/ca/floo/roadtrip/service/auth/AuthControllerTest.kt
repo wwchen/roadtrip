@@ -205,4 +205,14 @@ class AuthControllerTest : SharedDbTest() {
         authController.logout(null)
         authController.logout("")
     }
+
+    @Test
+    fun `beginPasswordLogin mints a flow whose challenge derives from its verifier`() {
+        val start = kotlinx.coroutines.runBlocking { authController.beginPasswordLogin("/watches") }
+
+        assertNotNull(start.flow.state)
+        assertNotNull(start.flow.codeVerifier)
+        assertEquals(Pkce.challengeFor(start.flow.codeVerifier), start.passwordChallenge)
+        assertEquals("/watches", start.flow.returnTo)
+    }
 }

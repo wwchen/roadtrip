@@ -28,6 +28,13 @@ internal class AuthController(
         val flow: LoginFlowState,
     )
 
+    /** A started embedded password login: the flow to remember, and the PKCE
+     *  challenge the in-page adapter forwards to the provider. */
+    data class PasswordLoginStart(
+        val flow: LoginFlowState,
+        val passwordChallenge: String,
+    )
+
     /** A completed sign-in: the session to hand the browser, and where to land. */
     data class LoginResult(
         val session: SessionService.IssuedSession,
@@ -84,6 +91,27 @@ internal class AuthController(
         return LoginResult(
             session = sessionService.issue(userId),
             returnTo = sanitizeReturnTo(flow.returnTo),
+        )
+    }
+
+    /**
+     * Starts an embedded password login. Identical flow-secret minting to
+     * [beginLogin], but returns the PKCE challenge rather than a redirect URL: the
+     * browser talks to the provider in-page, so there is nowhere to redirect. The
+     * verifier stays server-side in the signed flow cookie.
+     */
+    suspend fun beginPasswordLogin(rawReturnTo: String?): PasswordLoginStart {
+        val returnTo = sanitizeReturnTo(rawReturnTo)
+        val request = identityProviderRegistry.active().authorizationRequest(returnTo)
+        return PasswordLoginStart(
+            flow =
+                LoginFlowState(
+                    state = request.state,
+                    nonce = request.nonce,
+                    codeVerifier = request.codeVerifier,
+                    returnTo = returnTo,
+                ),
+            passwordChallenge = Pkce.challengeFor(request.codeVerifier),
         )
     }
 

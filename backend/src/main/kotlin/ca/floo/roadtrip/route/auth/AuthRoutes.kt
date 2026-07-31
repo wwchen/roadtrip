@@ -2,6 +2,8 @@ package ca.floo.roadtrip.route.auth
 
 import ca.floo.roadtrip.model.api.MeResponseDto
 import ca.floo.roadtrip.model.api.MeUserDto
+import ca.floo.roadtrip.model.api.PasswordBeginRequestDto
+import ca.floo.roadtrip.model.api.PasswordBeginResponseDto
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.repo.UserRepo
@@ -15,10 +17,12 @@ import ca.floo.roadtrip.service.auth.encode
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
+import io.ktor.server.request.receive
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import org.slf4j.LoggerFactory
 
@@ -118,6 +122,25 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
                     runCatching { auth.authController.providerLogoutUrl(root) }.getOrNull()
                 }
             call.respondRedirect(providerLogout ?: DEFAULT_RETURN_TO)
+        }.access(RouteAccess.Anonymous)
+
+        post("/password/begin") {
+            val auth = wiring ?: return@post call.respondAuthDisabled()
+            val body = runCatching { call.receive<PasswordBeginRequestDto>() }.getOrNull()
+            val start =
+                runCatching { auth.authController.beginPasswordLogin(body?.returnTo) }
+                    .getOrElse { failure ->
+                        log.error("could not begin password login", failure)
+                        return@post call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.BadGateway)
+                    }
+            call.response.setLoginFlowCookie(start.flow.encode(auth.flowSigningKey), auth.isCookieSecure)
+            call.respond(
+                PasswordBeginResponseDto(
+                    state = start.flow.state,
+                    nonce = start.flow.nonce,
+                    codeChallenge = start.passwordChallenge,
+                ),
+            )
         }.access(RouteAccess.Anonymous)
     }
 
