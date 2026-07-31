@@ -74,6 +74,27 @@ ADOPTABLE_AGE_KEY_FILES = [
 
 SOPS_FORMAT_ARGS = ["--input-type", "dotenv", "--output-type", "dotenv"]
 
+# age-keygen writes the public half as a comment beside the private key.
+AGE_PUBLIC_KEY_COMMENT = "# public key:"
+
+# An age public key is bech32: "age1" plus 58 characters of bech32's alphabet,
+# which omits 1, b, i and o. Checking the shape before it reaches .sops.yaml
+# turns a truncated paste into an error now, rather than a vault that re-wraps
+# cleanly and still cannot be opened by the machine it was meant to enroll.
+AGE_PUBLIC_KEY_RE = re.compile(r"age1[02-9ac-hj-np-z]{58}")
+
+# Where recipients live in .sops.yaml. Each is a list item under `- age:`,
+# preceded by a comment naming its holder.
+AGE_BLOCK_RE = re.compile(r"^(\s*)-\s+age:\s*$")
+RECIPIENT_RE = re.compile(r"^(\s*)-\s+(age1[02-9ac-hj-np-z]+)\s*$")
+# Indent of a recipient relative to the `- age:` line: past the "- ", then one
+# nesting level in. Only used when the block is empty and has no line to copy.
+AGE_BLOCK_ITEM_INDENT = " " * 4
+
+PRIVATE_KEY_WARNING = (
+    "The private half is not in the repo and cannot be recovered. Back it up."
+)
+
 # sops exits 200 from `edit` when the editor closed without changing anything.
 # An outcome, not a failure.
 SOPS_EXIT_NO_CHANGE = 200
@@ -231,7 +252,7 @@ def run_sops(args: list[str], *, capture: bool = True, stdin: str | None = None,
         stranded = misplaced_age_key()
         hint = (
             f"\n\nhint: an age identity exists at {stranded}, but this repo keeps it at"
-            f"\n      {AGE_KEY_FILE}. Adopt it with: ./secrets/manage.py init"
+            f"\n      {AGE_KEY_FILE}. Adopt it with: ./secrets/manage.py enroll"
             if stranded
             else ""
         )
@@ -248,7 +269,7 @@ def read_vault(env_name: str) -> dict[str, str]:
     if not path.exists():
         raise SecretsError(
             f"{path.relative_to(ROOT)} does not exist.\n"
-            "First-time setup: ./secrets/manage.py init, then ./secrets/manage.py import"
+            "First-time setup: ./secrets/manage.py enroll, then ./secrets/manage.py import"
         )
     _, plaintext = run_sops(["--decrypt", *SOPS_FORMAT_ARGS, path.name])
     return parse_dotenv(plaintext)
@@ -687,7 +708,22 @@ def link_native_key_path() -> Path | None:
     return native
 
 
-def cmd_init(_args: argparse.Namespace) -> int:
+def age_identity_public_key() -> str | None:
+    """This host's age public key, or None if it has no identity yet."""
+    if not AGE_KEY_FILE.exists():
+        return None
+    return next(
+        (
+            line.split(":", 1)[1].strip()
+            for line in AGE_KEY_FILE.read_text().splitlines()
+            if line.startswith(AGE_PUBLIC_KEY_COMMENT)
+        ),
+        None,
+    )
+
+
+def ensure_age_identity() -> str:
+    """Create or adopt this host's identity, and return its public key."""
     require_tools("age-keygen")
     stranded = misplaced_age_key()
     if stranded:
@@ -709,36 +745,189 @@ def cmd_init(_args: argparse.Namespace) -> int:
         os.chmod(AGE_KEY_FILE, AGE_KEY_FILE_MODE)
         print(f"created age identity at {AGE_KEY_FILE}")
 
-    public_key = next(
-        (
-            line.split(":", 1)[1].strip()
-            for line in AGE_KEY_FILE.read_text().splitlines()
-            if line.startswith("# public key:")
-        ),
-        None,
-    )
+    public_key = age_identity_public_key()
     if public_key is None:
         raise SecretsError(f"no public key found in {AGE_KEY_FILE}")
+    return public_key
+
+
+def suggested_holder_label() -> str:
+    """A default holder name for this machine, in .sops.yaml's user@host shape."""
+    import getpass
+    import socket
+
+    return f"{getpass.getuser()}@{socket.gethostname().split('.')[0]}"
+
+
+def vault_recipients(path: Path) -> list[str]:
+    """The age keys a vault is currently wrapped for, from its own metadata.
+
+    Read from the ciphertext rather than from .sops.yaml, so this answers "who
+    can open this file" instead of "who was supposed to be able to".
+    """
+    return [
+        line.split("=", 1)[1]
+        for line in path.read_text().splitlines()
+        if line.startswith(f"{SOPS_METADATA_PREFIX}age") and "recipient" in line
+    ]
+
+
+def existing_vaults() -> list[Path]:
+    return [
+        vault_path(env_name)
+        for env_name in (COMMON_ENV, *ENVIRONMENTS)
+        if vault_path(env_name).exists()
+    ]
+
+
+def rotate_vaults() -> list[Path]:
+    """Re-wrap every vault's data key for the current recipient list."""
+    rotated = []
+    for path in existing_vaults():
+        run_sops(["updatekeys", "--yes", path.name], capture=False)
+        rotated.append(path)
+    return rotated
+
+
+def add_recipient(text: str, key: str, label: str) -> str | None:
+    """Insert a recipient into .sops.yaml, keeping the comment-above-key shape.
+
+    Returns None when the key is already listed, so callers can tell "nothing
+    to do" from "edited" — a re-run of a half-finished enrollment should still
+    re-wrap the vaults rather than adding the key twice.
+    """
+    lines = text.splitlines(keepends=True)
+    recipient_lines = [i for i, line in enumerate(lines) if RECIPIENT_RE.match(line)]
+    if any(RECIPIENT_RE.match(lines[i]).group(2) == key for i in recipient_lines):
+        return None
+
+    if recipient_lines:
+        last = recipient_lines[-1]
+        insert_at, indent = last + 1, RECIPIENT_RE.match(lines[last]).group(1)
+    else:
+        block = next((i for i, line in enumerate(lines) if AGE_BLOCK_RE.match(line)), None)
+        if block is None:
+            raise SecretsError(
+                f"secrets/{SOPS_CONFIG.name} has no `- age:` block to add a recipient to"
+            )
+        insert_at = block + 1
+        indent = AGE_BLOCK_RE.match(lines[block]).group(1) + AGE_BLOCK_ITEM_INDENT
+
+    if not lines[insert_at - 1].endswith("\n"):
+        lines[insert_at - 1] += "\n"
+    lines[insert_at:insert_at] = [f"{indent}# {label}\n", f"{indent}- {key}\n"]
+    return "".join(lines)
+
+
+def require_decrypt_access() -> None:
+    """Fail before touching anything if this host cannot open the vaults.
+
+    `updatekeys` decrypts before it re-encrypts, so a non-recipient running
+    enroll would get a key-lookup failure with .sops.yaml already edited.
+    """
+    common = vault_path(COMMON_ENV)
+    if not common.exists():
+        raise SecretsError(
+            f"secrets/{common.name} does not exist — there is no vault to enroll into.\n"
+            "First-time setup: ./secrets/manage.py enroll, then ./secrets/manage.py import"
+        )
+    public_key = age_identity_public_key()
+    if public_key is None:
+        raise SecretsError(
+            f"this host has no age identity at {AGE_KEY_FILE}.\n"
+            "Enrolling someone else has to be done from a host that is already a recipient."
+        )
+    if public_key not in vault_recipients(common):
+        raise SecretsError(
+            f"this host is not a recipient of secrets/{common.name}, so it cannot re-wrap it.\n"
+            "Run this from a machine that can already decrypt."
+        )
+
+
+def cmd_enroll(args: argparse.Namespace) -> int:
+    """Both halves of the enrollment handshake, told apart by the key argument.
+
+    On the machine being enrolled, bare `enroll` mints the identity and prints
+    the exact command for the other side to run. On a machine that can already
+    decrypt, `enroll <key>` adds the recipient, re-wraps every vault, and
+    checks the key actually landed — the hand-edit and the easily-forgotten
+    `rotate` that used to be steps 2 and 3.
+    """
+    if args.key is None:
+        return enroll_this_host()
+    return enroll_recipient(args.key, args.as_name, args.note)
+
+
+def enroll_this_host() -> int:
+    public_key = ensure_age_identity()
     if link_native_key_path():
         print("linked sops' default lookup at the same key (so `sops -d` works by hand)")
     print()
     print("Public key for this host:")
     print(f"  {public_key}")
     print()
-    print("Add it to secrets/.sops.yaml, then:")
-    print("  ./secrets/manage.py rotate" if vault_path(COMMON_ENV).exists()
-          else "  ./secrets/manage.py import --source .env")
+    if vault_path(COMMON_ENV).exists():
+        print("On a machine that can already decrypt, run:")
+        print(f'  ./secrets/manage.py enroll {public_key} --as "{suggested_holder_label()}"')
+    else:
+        print("No vault exists yet. Seed one with:")
+        print("  ./secrets/manage.py import --source .env")
     print()
-    print("The private half is not in the repo and cannot be recovered. Back it up.")
+    print(PRIVATE_KEY_WARNING)
     return 0
 
 
+def enroll_recipient(key: str, name: str | None, note: str) -> int:
+    if not AGE_PUBLIC_KEY_RE.fullmatch(key):
+        raise SecretsError(
+            f"'{key}' is not an age public key.\n"
+            "Expected the age1… line printed by `./secrets/manage.py enroll` "
+            "on the machine being enrolled."
+        )
+    if not name:
+        raise SecretsError(
+            "--as is required: an unlabelled key is one nobody can identify to remove later.\n"
+            f'    ./secrets/manage.py enroll {key} --as "wc@laptop" --note "primary dev machine"'
+        )
+    require_decrypt_access()
+
+    label = f"{name} — {note}" if note else name
+    updated = add_recipient(SOPS_CONFIG.read_text(), key, label)
+    if updated is None:
+        print(f"already a recipient in {SOPS_CONFIG.name} — re-wrapping anyway")
+    else:
+        SOPS_CONFIG.write_text(updated)
+        print(f"added {label} to secrets/{SOPS_CONFIG.name}")
+
+    rotated = rotate_vaults()
+    for path in rotated:
+        print(f"rotated secrets/{path.name}")
+
+    # The .sops.yaml edit and the re-wrap are separate facts. Read the second
+    # one back off the ciphertext so a silent no-op cannot pass for success.
+    unwrapped = [path.name for path in rotated if key not in vault_recipients(path)]
+    if unwrapped:
+        raise SecretsError(
+            f"the new key is not a recipient of: {', '.join(unwrapped)}\n"
+            "The .sops.yaml edit landed but the re-wrap did not take. Re-run this command."
+        )
+
+    print()
+    print(f"{label} can now decrypt {len(rotated)} vault(s). Commit both halves together —")
+    print("a .sops.yaml naming a recipient the ciphertext lacks is worse than neither:")
+    print(f"  git add secrets/{SOPS_CONFIG.name} secrets/*.enc.env")
+    print(f'  git commit -m "secrets: enroll {name}"')
+    return 0
+
+
+def cmd_init(_args: argparse.Namespace) -> int:
+    """Kept because runbooks and error hints say `init`; `enroll` is the same thing."""
+    return enroll_this_host()
+
+
 def cmd_rotate(_args: argparse.Namespace) -> int:
-    for env_name in (COMMON_ENV, *ENVIRONMENTS):
-        path = vault_path(env_name)
-        if path.exists():
-            run_sops(["updatekeys", "--yes", path.name], capture=False)
-            print(f"rotated secrets/{path.name}")
+    for path in rotate_vaults():
+        print(f"rotated secrets/{path.name}")
     print()
     print("This re-wraps the data key. A removed holder still knows the current")
     print("values — rotate the credentials at their providers too.")
@@ -746,18 +935,11 @@ def cmd_rotate(_args: argparse.Namespace) -> int:
 
 
 def cmd_recipients(_args: argparse.Namespace) -> int:
-    for env_name in (COMMON_ENV, *ENVIRONMENTS):
-        path = vault_path(env_name)
-        if not path.exists():
-            continue
-        recipients = [
-            line.split("=", 1)[1]
-            for line in path.read_text().splitlines()
-            if line.startswith(f"{SOPS_METADATA_PREFIX}age") and "recipient" in line
-        ]
+    for path in existing_vaults():
+        recipients = vault_recipients(path)
         print(f"secrets/{path.name}: {len(recipients)} recipient(s)")
-        for r in recipients:
-            print(f"  {r}")
+        for recipient in recipients:
+            print(f"  {recipient}")
     return 0
 
 
@@ -772,7 +954,8 @@ COMMANDS = {
     "export": (cmd_export, "print KEY=VALUE lines (Tiltfile only)"),
     "generate": (cmd_generate, "regenerate docker-compose.secrets.yml"),
     "check": (cmd_check, "validate registry, vaults and generated output"),
-    "init": (cmd_init, "create or adopt this host's age identity"),
+    "enroll": (cmd_enroll, "mint this host's key, or add another host's as a recipient"),
+    "init": (cmd_init, "alias for `enroll` with no key"),
     "rotate": (cmd_rotate, "re-encrypt for the current recipients"),
     "recipients": (cmd_recipients, "list age keys that can decrypt"),
     "import": (cmd_import, "one-time: seed vaults from a plaintext dotenv"),
@@ -812,6 +995,15 @@ def main(argv: list[str] | None = None) -> int:
         if name == "import":
             sub.add_argument("--source", default=str(ROOT / ".env"))
             sub.add_argument("--force", action="store_true")
+        if name == "enroll":
+            sub.add_argument(
+                "key", nargs="?",
+                help="age public key to add as a recipient; omit to mint and print this host's",
+            )
+            sub.add_argument("--as", dest="as_name", metavar="NAME",
+                             help="who holds the key, e.g. wc@laptop")
+            sub.add_argument("--note", default="",
+                             help="what the machine is, e.g. 'deploy host'")
 
     args = parser.parse_args(argv)
     try:

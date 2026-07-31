@@ -4,8 +4,13 @@ Used by the offline refresh fetchers (fetch_tesla_index.py and
 fetch_tesla_locations.py). The live serving stack does NOT use this —
 no Tesla calls happen in the user request path.
 
-Cookies are bound to the egress IP that minted them, so this only works from
-the machine whose browser session minted the TESLA_COOKIES in .env.local.
+Fetching is retired in practice: Akamai blocks these endpoints, so the
+supercharger import runs off the captures already in data/raw/ (see the Tesla
+section of backend/src/main/resources/poi-registry.yaml). The cookie path
+stays because it is the only way back in if that changes — export
+TESLA_COOKIES for a one-off run. It is not part of setting up a machine: the
+cookie is bound to the egress IP that minted it, so it is per-attempt rather
+than per-host, and there is nothing to hand a new checkout.
 """
 import json
 import os
@@ -14,10 +19,8 @@ import urllib.parse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-# TESLA_COOKIES is deliberately not in the vault: Akamai binds _abck to the
-# egress IP that minted it, so one shared copy would give every host a cookie
-# only one of them can use. Paste it here per machine (see .env.example for
-# the DevTools steps). Everything else arrives via `manage.py exec`.
+# Host-local overrides, if this checkout has any. Everything else arrives via
+# `manage.py exec`, which injects the vault in memory.
 ENV_LOCAL_PATH = ROOT / ".env.local"
 
 

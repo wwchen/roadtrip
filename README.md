@@ -17,14 +17,14 @@ First time only:
 
 ```sh
 make install                 # Homebrew deps (incl. sops + age) + companion (npm + playwright) + git hooks
-./secrets/manage.py init     # mint this host's age key — see docs/secrets.md
+./secrets/manage.py enroll   # mint this host's age key — see docs/secrets.md
 ```
 
 Runtime secrets live encrypted in `secrets/` and are mounted into containers
 at `/run/secrets`; nothing writes a plaintext `.env`. Until the public key
-printed by `init` is added as a vault recipient (someone who can already
-decrypt adds it to `secrets/.sops.yaml` and runs `./secrets/manage.py rotate`),
-`tilt up` and `make run` refuse to boot. `./secrets/manage.py ls` shows what
+printed by `enroll` is added as a vault recipient (someone who can already
+decrypt runs `./secrets/manage.py enroll <that key> --as "you@yourbox"`, which
+adds it and re-wraps the vaults), `tilt up` and `make run` refuse to boot. `./secrets/manage.py ls` shows what
 exists, `set` changes a value, and committing it is the deploy. Full details in
 **[docs/secrets.md](docs/secrets.md)**.
 
@@ -205,8 +205,9 @@ before import.
 2. **Secrets on the deploy host:** nothing to place by hand. They ride along
    encrypted in `secrets/`, and `make run env=prod` decrypts them with the
    host's own age key into `/run/secrets` mounts. The host needs an age key
-   once (`./secrets/manage.py init`, add its public key to `secrets/.sops.yaml`,
-   then `rotate` from a machine that can already decrypt). After that, changing
+   once (`./secrets/manage.py enroll` there, then
+   `./secrets/manage.py enroll <its key> --as "…" --note "deploy host"` from a
+   machine that can already decrypt). After that, changing
    a secret is `./secrets/manage.py set NAME prod` plus a commit — the same
    `git pull` that deploys code deploys the value. See
    [docs/secrets.md](docs/secrets.md).

@@ -79,32 +79,58 @@ left on a decommissioned host — and it stops secrets reaching containers that
 have no use for them. It does not make a running process's memory private, and
 anyone with root on the host or `docker exec` can read a mounted secret.
 
-## First-time setup on a new host
+## Enrolling a machine
 
-Needs `sops` and `age` (`brew install sops age`, or `make install`).
+Needs `sops` and `age` (`brew install sops age`, or `make install`). Two
+commands, one on each machine.
+
+**On the new machine:**
 
 ```sh
-./secrets/manage.py init
+./secrets/manage.py enroll
 ```
 
 Writes an age identity to `~/.config/sops/age/keys.txt` — the same path on
-every platform, so runbooks stay copy-pasteable — and prints its public half.
-Add that to `secrets/.sops.yaml`, then from a host that can already decrypt:
+every platform, so runbooks stay copy-pasteable — and prints its public half
+together with the exact command for the other side to run. Safe to re-run: an
+existing identity is left alone, and a key stranded where sops doesn't look is
+adopted rather than replaced. (`init` is the same command under its older
+name, and still works.)
+
+**On a machine that can already decrypt:**
 
 ```sh
-./secrets/manage.py rotate
+./secrets/manage.py enroll age1… --as "wc@laptop" --note "primary dev machine"
 ```
 
+This adds the recipient to `.sops.yaml` under a comment naming its holder,
+re-wraps every vault's data key, and then reads the ciphertext back to confirm
+the key actually landed — the `rotate` that used to be a step you had to
+remember, plus the check that it worked. Then commit `.sops.yaml` and the
+re-wrapped vaults **together**; the command prints the two lines that do it. A
+`.sops.yaml` naming a recipient the ciphertext doesn't have is worse than
+neither, because it reads as done.
+
+Re-running is safe: a key already listed is not added twice, and the vaults
+are re-wrapped regardless — which is exactly what you want after an enrollment
+that failed halfway. `--as` is required; an unlabelled key is one nobody can
+identify well enough to remove later.
+
+Hand-editing `.sops.yaml` still works. It just leaves `rotate` to you.
+
 **The private key is not in the repo and cannot be recovered.** Back it up.
+
+`./secrets/manage.py recipients` shows who can currently open each vault, read
+from the vaults themselves rather than from `.sops.yaml`.
 
 ## Rotation
 
 Two different things, routinely confused:
 
 - **`manage.py rotate`** re-wraps the vaults' data key for the current
-  recipient list. Use it when adding or removing a holder. It does *not* revoke
-  anyone: git history keeps every past ciphertext, and a removed holder's key
-  still opens it.
+  recipient list. `enroll` runs it for you when adding a holder; you run it by
+  hand after removing one. It does *not* revoke anyone: git history keeps every
+  past ciphertext, and a removed holder's key still opens it.
 - **Rotating a credential** means issuing a new value at Mapbox, Auth0, Slack…
   and `manage.py set`-ing it. This is the only thing that actually revokes
   access, and it's the right response whenever a key is lost, a holder is
@@ -112,11 +138,6 @@ Two different things, routinely confused:
 
 ## Not in the vault, on purpose
 
-- **`TESLA_COOKIES`** — Akamai binds `_abck` to the egress IP that minted it, so
-  one shared copy would give every host a cookie only one can use. Mint it
-  manually per machine: tesla.com/findus → click a Supercharger → DevTools
-  Network → `get-charger-details` → copy the `Cookie` header value into
-  `TESLA_COOKIES=` in `.env.local` (gitignored, per-machine).
 - **GitHub Actions secrets** (`TS_OAUTH_*`, `DEPLOY_SSH_KEY`, `CODECOV_TOKEN`) —
   credentials *for* the pipeline, not runtime config. Keeping them in GitHub is
   what lets CI hold no decryption key at all.
@@ -144,7 +165,12 @@ plus `grafana-cli admin reset-admin-password` — then `manage.py set` to match.
 
 **`sops failed … did not find keys in locations`** — sops lists only the
 environment variables it checked, so a key in the wrong directory looks exactly
-like no key. `manage.py init` adopts a stranded key and tells you it did.
+like no key. `manage.py enroll` adopts a stranded key and tells you it did.
+
+**`this host is not a recipient … so it cannot re-wrap it`** — enrolling
+someone re-encrypts the vaults, which means decrypting them first. Run it from
+a machine that is already a recipient; the refusal comes before anything is
+edited, so there is no half-enrolled state to clean up.
 
 **`missing required secret(s) for profile 'prod'`** — the boot validator did its
 job. It lists all of them at once; `manage.py ls` shows where each is set.

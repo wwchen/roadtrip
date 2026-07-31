@@ -34,15 +34,15 @@ Runtime secrets live encrypted in `secrets/` and are decrypted per-host with
 `sops`/`age`. A fresh clone has no key yet:
 
 ```sh
-./secrets/manage.py init
+./secrets/manage.py enroll
 ```
 
-This mints this machine's age identity and prints its public key. `make run`
-and `tilt up` will refuse to boot until that key is a recipient —
-`SecretsBootstrap` lists everything missing rather than starting on a
-partial secret set. Give the printed public key to someone who can already
-decrypt the vault; they add it to `secrets/.sops.yaml` and run
-`./secrets/manage.py rotate`. Full detail, including the first-time-on-a-new-host
+This mints this machine's age identity and prints its public key, along with
+the one command the other side has to run. `make run` and `tilt up` will refuse
+to boot until that key is a recipient — `SecretsBootstrap` lists everything
+missing rather than starting on a partial secret set. Send the printed command
+to someone who can already decrypt the vault; running it adds your key and
+re-wraps the vaults in one step. Full detail, including the enrollment
 walkthrough, is in [docs/secrets.md](docs/secrets.md) and
 [docs/installation.md](docs/installation.md).
 
@@ -57,8 +57,8 @@ Check where you stand at any point:
 
 To be clear about the boundary: **running the backend (`make run`, `tilt up`)
 requires vault access** — there is no mock-secrets mode. A vault recipient has
-to add your age public key to `secrets/.sops.yaml` and run
-`./secrets/manage.py rotate`; until then the stack will not boot.
+to run `./secrets/manage.py enroll <your key> --as "you@yourbox"`; until then
+the stack will not boot.
 
 Plenty of work needs no vault at all, though:
 

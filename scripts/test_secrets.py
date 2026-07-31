@@ -6,6 +6,8 @@ still exercises everything that doesn't require an encryption toolchain.
 """
 
 import argparse
+import contextlib
+import io
 import shutil
 import subprocess
 import sys
@@ -24,6 +26,10 @@ HAS_SOPS = shutil.which("sops") is not None and shutil.which("age-keygen") is no
 # A value with `=`, `;`, `&` and a stray quote. Cookie headers look like this,
 # and they are what clever dotenv handling is most likely to mangle.
 NASTY_VALUE = 'ak_bmsc=A1B2==; _abck=xy"z; bm_sz=q=1&r=2'
+
+# A syntactically valid age public key that is not a real recipient, for the
+# tests that only exercise the .sops.yaml edit.
+NEW_KEY = "age1ql3z7hjy54pw3hyww5ayyfg7zqgvc7w3j2elw8zmrj2kg5sfn9aqmcac8p"
 
 
 def args(**kwargs):
@@ -180,9 +186,6 @@ class HostToolsDriftTest(unittest.TestCase):
 
 # Credentials deliberately outside the vault, with the reason.
 KNOWN_NON_VAULT = {
-    # IP-bound and minted manually per machine into .env.local; sharing
-    # one encrypted copy would give every host a cookie only one can use.
-    "TESLA_COOKIES",
     # Grafana's admin password is GRAFANA_ADMIN_PASSWORD in the registry; this
     # script's own flag name differs.
     "GRAFANA_PASSWORD",
@@ -257,6 +260,165 @@ class RoundTripTest(unittest.TestCase):
                 self.assertEqual({}, manage.read_vault("local"))
 
 
+class RecipientEditTest(unittest.TestCase):
+    """The .sops.yaml half of `enroll`, which needs no encryption toolchain."""
+
+    def test_a_new_key_lands_in_the_block_with_its_holder_above_it(self):
+        text = manage.SOPS_CONFIG.read_text()
+        updated = manage.add_recipient(text, NEW_KEY, "qa@box — test rig")
+
+        self.assertIn(f"          # qa@box — test rig\n          - {NEW_KEY}\n", updated)
+        # The keys that were already there still are: enrollment adds a
+        # recipient, it never rewrites the list.
+        for line in text.splitlines():
+            if manage.RECIPIENT_RE.match(line):
+                self.assertIn(line, updated.splitlines())
+
+    def test_the_result_is_still_a_list_this_tool_can_read_back(self):
+        updated = manage.add_recipient(manage.SOPS_CONFIG.read_text(), NEW_KEY, "qa@box")
+        found = [
+            m.group(2) for m in (manage.RECIPIENT_RE.match(line) for line in updated.splitlines())
+            if m
+        ]
+        self.assertIn(NEW_KEY, found)
+
+    def test_a_key_already_listed_is_not_added_again(self):
+        # Re-running enroll after a failed rotate must not double the entry.
+        text = manage.SOPS_CONFIG.read_text()
+        already = manage.RECIPIENT_RE.match(
+            next(line for line in text.splitlines() if manage.RECIPIENT_RE.match(line))
+        ).group(2)
+        self.assertIsNone(manage.add_recipient(text, already, "someone"))
+
+    def test_an_empty_age_block_gets_its_first_recipient(self):
+        updated = manage.add_recipient(
+            "creation_rules:\n  - path_regex: x\n    key_groups:\n      - age:\n",
+            NEW_KEY,
+            "first@host",
+        )
+        self.assertEqual(
+            "creation_rules:\n  - path_regex: x\n    key_groups:\n      - age:\n"
+            f"          # first@host\n          - {NEW_KEY}\n",
+            updated,
+        )
+
+    def test_a_config_with_nowhere_to_put_the_key_is_an_error(self):
+        # Better to refuse than to write a recipient sops will never read.
+        with self.assertRaises(manage.SecretsError):
+            manage.add_recipient("creation_rules: []\n", NEW_KEY, "nobody")
+
+    def test_a_malformed_key_is_rejected_before_anything_is_touched(self):
+        before = manage.SOPS_CONFIG.read_text()
+        with self.assertRaises(manage.SecretsError):
+            manage.enroll_recipient("age1-typo", "qa@box", "")
+        self.assertEqual(before, manage.SOPS_CONFIG.read_text())
+
+    def test_an_unlabelled_key_is_refused(self):
+        # A recipient nobody can name is a recipient nobody can remove.
+        with self.assertRaises(manage.SecretsError):
+            manage.enroll_recipient(NEW_KEY, None, "")
+
+
+@unittest.skipUnless(HAS_SOPS, "requires sops and age-keygen")
+class EnrollTest(unittest.TestCase):
+    """The whole handshake: edit, re-wrap, and the enrolled host can decrypt."""
+
+    def _isolate(self, tmp):
+        secrets_dir = Path(tmp) / "secrets"
+        secrets_dir.mkdir()
+        keys = {}
+        for who in ("existing", "joiner", "stranger"):
+            key_file = Path(tmp) / f"{who}.txt"
+            subprocess.run(["age-keygen", "-o", str(key_file)], check=True, capture_output=True)
+            public = next(
+                line.split(":", 1)[1].strip()
+                for line in key_file.read_text().splitlines()
+                if line.startswith(manage.AGE_PUBLIC_KEY_COMMENT)
+            )
+            keys[who] = (key_file, public)
+        (secrets_dir / ".sops.yaml").write_text(
+            "creation_rules:\n"
+            "  - path_regex: .*\\.enc\\.env$\n"
+            "    key_groups:\n"
+            "      - age:\n"
+            "          # existing — the host running enroll\n"
+            f"          - {keys['existing'][1]}\n"
+        )
+        return secrets_dir, keys
+
+    def _patch(self, secrets_dir, key_file):
+        return unittest.mock.patch.multiple(
+            manage,
+            SECRETS_DIR=secrets_dir,
+            SOPS_CONFIG=secrets_dir / ".sops.yaml",
+            AGE_KEY_FILE=key_file,
+        )
+
+    def _enroll(self, key, name="joiner@host", note=""):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            code = manage.enroll_recipient(key, name, note)
+        return code, out.getvalue()
+
+    def test_the_enrolled_host_can_actually_decrypt_afterwards(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            secrets_dir, keys = self._isolate(tmp)
+            with self._patch(secrets_dir, keys["existing"][0]):
+                manage.write_vault("common", {"SLACK_BOT_TOKEN": NASTY_VALUE})
+                self._enroll(keys["joiner"][1])
+
+            # The claim that matters is not what .sops.yaml says, but whether
+            # the joiner's key opens the ciphertext that is on disk.
+            with self._patch(secrets_dir, keys["joiner"][0]):
+                self.assertEqual(NASTY_VALUE, manage.read_vault("common")["SLACK_BOT_TOKEN"])
+
+    def test_every_vault_is_re_wrapped_not_just_the_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            secrets_dir, keys = self._isolate(tmp)
+            with self._patch(secrets_dir, keys["existing"][0]):
+                for env_name in (manage.COMMON_ENV, *manage.ENVIRONMENTS):
+                    manage.write_vault(env_name, {"SLACK_BOT_TOKEN": "v"})
+                self._enroll(keys["joiner"][1])
+
+                for env_name in (manage.COMMON_ENV, *manage.ENVIRONMENTS):
+                    path = manage.vault_path(env_name)
+                    self.assertIn(keys["joiner"][1], manage.vault_recipients(path), path.name)
+
+    def test_enrolling_twice_leaves_one_entry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            secrets_dir, keys = self._isolate(tmp)
+            with self._patch(secrets_dir, keys["existing"][0]):
+                manage.write_vault("common", {"SLACK_BOT_TOKEN": "v"})
+                self._enroll(keys["joiner"][1])
+                self._enroll(keys["joiner"][1])
+
+                config = (secrets_dir / ".sops.yaml").read_text()
+                self.assertEqual(1, config.count(keys["joiner"][1]))
+
+    def test_a_note_becomes_part_of_the_holder_comment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            secrets_dir, keys = self._isolate(tmp)
+            with self._patch(secrets_dir, keys["existing"][0]):
+                manage.write_vault("common", {"SLACK_BOT_TOKEN": "v"})
+                self._enroll(keys["joiner"][1], "mini-ca", "deploy host")
+
+                self.assertIn("# mini-ca — deploy host", (secrets_dir / ".sops.yaml").read_text())
+
+    def test_a_host_that_cannot_decrypt_is_refused_before_editing(self):
+        # sops would fail on the re-wrap anyway, but only after .sops.yaml had
+        # already changed — a half-enrolled state someone has to clean up.
+        with tempfile.TemporaryDirectory() as tmp:
+            secrets_dir, keys = self._isolate(tmp)
+            with self._patch(secrets_dir, keys["existing"][0]):
+                manage.write_vault("common", {"SLACK_BOT_TOKEN": "v"})
+            before = (secrets_dir / ".sops.yaml").read_text()
+
+            with self._patch(secrets_dir, keys["stranger"][0]):
+                with self.assertRaises(manage.SecretsError):
+                    self._enroll(keys["joiner"][1])
+
+            self.assertEqual(before, (secrets_dir / ".sops.yaml").read_text())
+
+
 class VaultStateTest(unittest.TestCase):
     def test_committed_vaults_are_encrypted(self):
         # Runs without an age key: encryption is verifiable from the ciphertext
@@ -271,6 +433,23 @@ class VaultStateTest(unittest.TestCase):
                     self.assertTrue(
                         value.startswith("ENC["), f"{key} is plaintext in {path.name}"
                     )
+
+    def test_every_declared_recipient_can_actually_open_the_vaults(self):
+        # The drift `enroll` exists to prevent: a .sops.yaml entry added without
+        # a re-wrap reads as enrolled while the ciphertext says otherwise. Needs
+        # no age key — recipients are metadata, not encrypted content.
+        declared = {
+            manage.RECIPIENT_RE.match(line).group(2)
+            for line in manage.SOPS_CONFIG.read_text().splitlines()
+            if manage.RECIPIENT_RE.match(line)
+        }
+        for name in (manage.COMMON_ENV, *manage.ENVIRONMENTS):
+            path = manage.vault_path(name)
+            missing = declared - set(manage.vault_recipients(path))
+            self.assertEqual(
+                set(), missing,
+                f"{path.name} is not wrapped for {missing} — run ./secrets/manage.py rotate",
+            )
 
     def test_no_plaintext_env_is_tracked(self):
         tracked = subprocess.run(

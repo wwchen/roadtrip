@@ -16,5 +16,12 @@ showing what it changed to.
 ./secrets/manage.py add NAME --description "…" --consumers backend
 ```
 
-Full documentation — setup, rotation, threat model, the three passwords already
-baked into volumes — is in [`docs/secrets.md`](../docs/secrets.md).
+Enrolling a machine is two commands — one on each side:
+
+```sh
+./secrets/manage.py enroll                                  # new machine: mint + print its key
+./secrets/manage.py enroll age1… --as "who@where"           # enrolled machine: add + re-wrap
+```
+
+Full documentation — enrollment, rotation, threat model, the three passwords
+already baked into volumes — is in [`docs/secrets.md`](../docs/secrets.md).

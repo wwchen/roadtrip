@@ -31,11 +31,13 @@ and hook wiring just rewrites `.git/config`. What it does:
 Then create this machine's age identity and get it added to the vault:
 
 ```sh
-./secrets/manage.py init
+./secrets/manage.py enroll
 ```
 
-Follow [secrets.md](secrets.md#first-time-setup-on-a-new-host) from there.
-Until your key is a recipient, `make run` and `tilt up` fail at the point they
+It prints your public key and the single command someone who can already
+decrypt has to run to enroll it. Follow
+[secrets.md](secrets.md#enrolling-a-machine) from there. Until your key is a
+recipient, `make run` and `tilt up` fail at the point they
 try to decrypt — the stack does not come up on a partial secret set, because
 `SecretsBootstrap` refuses to boot and lists everything missing.
 
@@ -58,7 +60,7 @@ env=prod` fails after `git pull` has already landed new code.
 Then mint the host's identity:
 
 ```sh
-./secrets/manage.py init
+./secrets/manage.py enroll
 ```
 
 This writes `~/.config/sops/age/keys.txt` — the same path on every platform, so
@@ -68,12 +70,19 @@ key stranded in a directory sops doesn't search, it adopts it and says so.
 
 That safety matters. A bare `age-keygen -o` on an existing file **replaces** the
 identity, and a deploy host that loses its key can no longer decrypt the vault —
-you'd be re-issuing credentials, not just re-running this. Use `init`, not
+you'd be re-issuing credentials, not just re-running this. Use `enroll`, not
 `age-keygen`.
 
-Give that public key to someone who can already decrypt; they add it to
-`secrets/.sops.yaml` and run `./secrets/manage.py rotate`. Until then this host
-is not a recipient. Check with:
+`enroll` also prints the command to finish the job. Run it on a machine that
+can already decrypt:
+
+```sh
+./secrets/manage.py enroll age1… --as "mini-ca" --note "deploy host"
+```
+
+That adds the recipient, re-wraps every vault, and verifies the key landed;
+commit `secrets/.sops.yaml` and the vaults together. Until that lands, this
+host is not a recipient. Check with:
 
 ```sh
 ./secrets/manage.py recipients
