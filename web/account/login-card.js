@@ -130,10 +130,13 @@ export function mountLoginCard(config = {}) {
     if (form) {
       form.addEventListener('submit', async (e) => {
         e.preventDefault();
+        // Disable immediately — before any await — to close the double-submit
+        // window. onLoading(false) in _handlePasswordSubmit's finally re-enables.
+        if (submitBtn) submitBtn.disabled = true;
         let embeddedAuth = _embeddedAuth;
         if (!embeddedAuth) {
           try { embeddedAuth = await buildDefaultEmbeddedAuth(); }
-          catch { onError(GENERIC_ERROR); return; }
+          catch { onError(GENERIC_ERROR); if (submitBtn) submitBtn.disabled = false; return; }
         }
         _handlePasswordSubmit(form, {
           embeddedAuth, completeLogin: _completeLogin, onError, onLoading, returnTo,

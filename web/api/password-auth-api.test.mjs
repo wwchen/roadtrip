@@ -7,7 +7,7 @@ test('beginPasswordLogin POSTs return_to and returns the flow material', async (
   const calls = [];
   const fakeFetch = async (url, opts) => {
     calls.push({ url, opts });
-    return { ok: true, status: 200, json: async () => ({ state: 's', nonce: 'n', code_challenge: 'c' }) };
+    return { ok: true, status: 200, json: async () => ({ state: 's', nonce: 'n', code_challenge: 'c', redirect_uri: 'https://app.example.com/auth/callback' }) };
   };
   const out = await beginPasswordLogin('/watches', { _fetch: fakeFetch });
   assert.equal(out.code_challenge, 'c');

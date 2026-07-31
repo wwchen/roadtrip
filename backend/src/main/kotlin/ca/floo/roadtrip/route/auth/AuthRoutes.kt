@@ -30,10 +30,16 @@ import org.slf4j.LoggerFactory
 private const val LOGIN_FAILED_ERROR = "login_failed"
 private const val AUTH_DISABLED_ERROR = "auth_not_configured"
 private const val RETURN_TO_PARAM = "return_to"
+private const val CONNECTION_PARAM = "connection"
 private const val CODE_PARAM = "code"
 private const val STATE_PARAM = "state"
 private const val PROVIDER_ERROR_PARAM = "error"
 private const val DEFAULT_RETURN_TO = "/"
+
+/** Allowlist of connection slugs that may be forwarded to the provider.
+ *  Unknown values are silently dropped — the browser falls through to the
+ *  provider's own login page rather than getting an error. */
+private val allowedConnections = setOf("google-oauth2")
 
 private val log = LoggerFactory.getLogger("ca.floo.roadtrip.route.auth")
 
@@ -54,14 +60,17 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
         get("/login") {
             val auth = wiring ?: return@get call.respondAuthDisabled()
 
+            val connection = call.queryParam(CONNECTION_PARAM)?.takeIf { it in allowedConnections }
+
             // A provider that is unreachable or misconfigured must not 500 into
             // the user's face; it is an operator problem, not a client error.
             val start =
-                runCatching { auth.authController.beginLogin(call.queryParam(RETURN_TO_PARAM)) }
-                    .getOrElse { failure ->
-                        log.error("could not begin login", failure)
-                        return@get call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.BadGateway)
-                    }
+                runCatching {
+                    auth.authController.beginLogin(call.queryParam(RETURN_TO_PARAM), connection)
+                }.getOrElse { failure ->
+                    log.error("could not begin login", failure)
+                    return@get call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.BadGateway)
+                }
 
             call.response.setLoginFlowCookie(start.flow.encode(auth.flowSigningKey), auth.isCookieSecure)
             call.respondRedirect(start.authorizationUrl)
@@ -140,6 +149,7 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
                     state = start.flow.state,
                     nonce = start.flow.nonce,
                     codeChallenge = start.passwordChallenge,
+                    redirectUri = auth.redirectUri,
                 ),
             )
         }.access(RouteAccess.Anonymous)
@@ -241,4 +251,8 @@ internal class AuthRouteWiring(
     val authClientId: String,
     val authDomain: String,
     val authRealm: String,
+    /** The redirect_uri the backend uses at code-exchange time. Surfaced on
+     *  /auth/password/begin so the frontend passes the identical value to
+     *  auth0-js — one source of truth prevents redirect_uri mismatches. */
+    val redirectUri: String,
 )

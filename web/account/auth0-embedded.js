@@ -15,12 +15,20 @@ const CODE_CHALLENGE_METHOD = 'S256';
 export function makeAuth0EmbeddedAuth({ domain, clientID, realm, begin }) {
   return {
     async authenticateWithPassword(email, password) {
-      // Backend mints + stores the PKCE verifier and returns its challenge + state.
-      const { state, nonce, code_challenge: codeChallenge } = await begin(currentPath());
+      // Backend mints + stores the PKCE verifier and returns its challenge,
+      // state, and the redirect_uri it will use at exchange time. Using the
+      // backend-supplied value here ensures both sides agree — two independent
+      // derivations are how redirect_uri mismatches happen.
+      const {
+        state,
+        nonce,
+        code_challenge: codeChallenge,
+        redirect_uri: redirectUri,
+      } = await begin(currentPath());
 
       const webAuth = new globalThis.auth0.WebAuth({
         domain, clientID,
-        redirectUri: `${window.location.origin}/auth/callback`,
+        redirectUri,
         responseType: 'code',
         responseMode: 'web_message',
       });

@@ -45,13 +45,20 @@ internal class AuthController(
      * Starts a flow. [rawReturnTo] comes from the query string and is
      * untrusted — [sanitizeReturnTo] reduces it to a same-origin path.
      *
+     * [connection] is an optional provider-specific connection hint. The caller
+     * is responsible for allowlisting it before passing it here (unknown values
+     * are silently dropped at the route layer; see [AuthRoutes]).
+     *
      * The URL and the flow secrets come from one call deliberately: asking the
      * provider twice would mint a second, different state/nonce/verifier and the
      * callback could never match.
      */
-    suspend fun beginLogin(rawReturnTo: String?): LoginStart {
+    suspend fun beginLogin(
+        rawReturnTo: String?,
+        connection: String? = null,
+    ): LoginStart {
         val returnTo = sanitizeReturnTo(rawReturnTo)
-        val request = identityProviderRegistry.active().authorizationRequest(returnTo)
+        val request = identityProviderRegistry.active().authorizationRequest(returnTo, connection)
         return LoginStart(
             authorizationUrl = request.authorizationUrl,
             flow =

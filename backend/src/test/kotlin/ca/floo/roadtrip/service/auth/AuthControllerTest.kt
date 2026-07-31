@@ -33,10 +33,14 @@ private class FakeIdentityProvider(
     var exchangeCount: Int = 0
     private var counter = 0
 
-    override suspend fun authorizationRequest(returnTo: String): AuthorizationRequest {
+    override suspend fun authorizationRequest(
+        returnTo: String,
+        connection: String?,
+    ): AuthorizationRequest {
         counter++
+        val connectionSuffix = if (connection != null) "&connection=$connection" else ""
         return AuthorizationRequest(
-            authorizationUrl = "https://idp.example.com/authorize?n=$counter",
+            authorizationUrl = "https://idp.example.com/authorize?n=$counter$connectionSuffix",
             state = "state-$counter",
             nonce = "nonce-$counter",
             codeVerifier = "verifier-$counter",
@@ -216,6 +220,24 @@ class AuthControllerTest : SharedDbTest() {
         assertNotNull(start.flow.codeVerifier)
         assertEquals(Pkce.challengeFor(start.flow.codeVerifier), start.passwordChallenge)
         assertEquals("/watches", start.flow.returnTo)
+    }
+
+    @Test
+    fun `beginLogin with google-oauth2 connection produces an authorization URL containing connection param`() {
+        val start = kotlinx.coroutines.runBlocking { authController.beginLogin("/x", "google-oauth2") }
+        assertTrue(
+            start.authorizationUrl.contains("connection=google-oauth2"),
+            "expected 'connection=google-oauth2' in '${start.authorizationUrl}'",
+        )
+    }
+
+    @Test
+    fun `beginLogin without connection produces an authorization URL with no connection param`() {
+        val start = kotlinx.coroutines.runBlocking { authController.beginLogin("/x") }
+        assertTrue(
+            !start.authorizationUrl.contains("connection="),
+            "expected no 'connection=' in '${start.authorizationUrl}'",
+        )
     }
 
     @Test
