@@ -14,7 +14,7 @@ import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
-import ca.floo.roadtrip.support.AspiraException
+import ca.floo.roadtrip.support.UpstreamHttpException
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -98,7 +98,14 @@ internal fun Route.campsiteRoutes(
                             call.respondServiceAvailabilityError(e)
                         } catch (e: AvailabilityProviderError) {
                             val (status, error) = mapProviderError(e)
-                            log.error("poi campsites availability poi={} failed: {}", poiId, e.message, e)
+                            log.error(
+                                "poi campsites availability poi={} failed: {} upstreamStatus={} cause={}",
+                                poiId,
+                                error.error,
+                                error.upstreamStatus,
+                                causeChain(e),
+                                e,
+                            )
                             call.respondAvailabilityJson(error, status)
                         }
                     }.describeApi(
@@ -124,6 +131,10 @@ internal fun mapProviderError(e: AvailabilityProviderError): Pair<HttpStatusCode
             HttpStatusCode.ServiceUnavailable to availabilityErrorDto("upstream_blocked", upstreamStatus = upstream)
         is AvailabilityProviderError.UpstreamUnavailable ->
             HttpStatusCode.ServiceUnavailable to availabilityErrorDto("upstream_5xx", upstreamStatus = upstream)
+        is AvailabilityProviderError.UpstreamUnreachable ->
+            HttpStatusCode.ServiceUnavailable to availabilityErrorDto("upstream_unreachable", upstreamStatus = upstream)
+        is AvailabilityProviderError.Misconfigured ->
+            HttpStatusCode.InternalServerError to availabilityErrorDto("provider_misconfigured")
         is AvailabilityProviderError.Unsupported ->
             HttpStatusCode.NotImplemented to availabilityErrorDto("unsupported")
         is AvailabilityProviderError.WrongRefType ->
@@ -131,13 +142,46 @@ internal fun mapProviderError(e: AvailabilityProviderError): Pair<HttpStatusCode
     }
 }
 
+/**
+ * Extracts the upstream HTTP status a request failed on, if any vendor wrapper
+ * in the cause chain carries one. Matches [UpstreamHttpException] rather than a
+ * single vendor, so Campflare/ReserveAmerica/ReserveCalifornia 5xx surface
+ * `upstream_status` the same way Aspira does. Walks the chain under the same
+ * depth/cycle guard as [causeChain] so a self-referential cause can't spin.
+ */
 internal fun upstreamHttpStatus(e: AvailabilityProviderError): Int? {
     var t: Throwable? = e.cause
-    while (t != null) {
-        if (t is AspiraException) return t.httpStatus
+    var depth = 0
+    val seen = mutableSetOf<Throwable>()
+    while (t != null && depth++ < MAX_CAUSE_DEPTH && seen.add(t)) {
+        val status = (t as? UpstreamHttpException)?.httpStatus
+        if (status != null) return status
         t = t.cause
     }
     return null
+}
+
+/** Depth cap so a self-referential cause chain can't spin or flood a log line. */
+private const val MAX_CAUSE_DEPTH = 8
+
+/**
+ * Renders the cause chain into the log *message*.
+ *
+ * The throwable is also passed to SLF4J, but prod's log pipeline currently
+ * drops the `stack_trace` field — so a message that says only the error code
+ * (which is what `AvailabilityProviderError.message` is) leaves no trace of
+ * the real fault. Inlining `type: message <- type: message` keeps the
+ * diagnosis in the one field that always survives.
+ */
+internal fun causeChain(e: Throwable): String {
+    val parts = mutableListOf<String>()
+    val seen = mutableSetOf<Throwable>()
+    var t: Throwable? = e
+    while (t != null && parts.size < MAX_CAUSE_DEPTH && seen.add(t)) {
+        parts += "${t.javaClass.name}: ${t.message}"
+        t = t.cause
+    }
+    return parts.joinToString(" <- ")
 }
 
 private suspend fun ApplicationCall.respondCampsiteError(

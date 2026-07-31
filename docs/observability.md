@@ -78,6 +78,51 @@ graphs into Prometheus, which is what the Service Graph and `tracesToMetrics`
 views read. Log retention (Loki) and trace retention (Tempo) are both 168h since
 the two are read together; metrics keep 14d (`PROMETHEUS_RETENTION`).
 
+## Runbook: availability 503s
+
+The `error` code in an `AvailabilityErrorDto` says who is at fault. Read it
+together with `upstream_status`, which is only present when something upstream
+actually answered:
+
+| `error` | `upstream_status` | Means |
+| --- | --- | --- |
+| `upstream_5xx` | set | The vendor answered and failed. Their problem; retry later. |
+| `upstream_unreachable` | **absent** | We never reached them. Suspect *our* egress first. |
+| `upstream_blocked` | set | WAF/bot block. Check the UA and request rate. |
+| `rate_limited` | 429 | We are going too fast. |
+| `provider_misconfigured` | absent | Our config: unconfigured tenant, id overflow. Retrying cannot help. |
+
+**`upstream_unreachable` with no `upstream_status` means check the host before
+the vendor.** Confirm the vendor is actually down from somewhere else before
+believing it:
+
+```bash
+curl -sS -o /dev/null -w 'http=%{http_code} connect=%{time_connect}s\n' --max-time 10 https://<vendor-host>/
+```
+
+Run it **on the Docker host, not in the container** — if plain `curl` fails
+too, the JVM is a bystander and no amount of application debugging will help.
+A connect failure in single-digit milliseconds is a local rejection, not a
+network round trip; a `403` from bare `curl` against Aspira hosts is expected
+(their WAF rejects non-browser UAs) and means the network is fine.
+
+The failure mode that has bitten us (2026-07-30): the host exhausted its
+ephemeral ports, so *every* outbound `connect()` on the machine failed
+instantly while UDP kept working — DNS and NTP looked healthy and the box
+appeared online.
+
+```bash
+netstat -an -p tcp | grep -c TIME_WAIT                                    # vs ~16k ports
+sysctl net.inet.ip.portrange.first net.inet.ip.portrange.last             # 49152-65535 on macOS
+```
+
+If `TIME_WAIT` approaches the size of the port range, that is the bug. Widening
+the range (`sudo sysctl -w net.inet.ip.portrange.first=10000`) restores service
+without a reboot; wedged entries that survive a reduced `net.inet.tcp.msl` only
+clear on restart. Note the JDK masks this: `PlainHttpConnection.checkRetryConnect`
+retries the failed bind, hits an already-closed channel, and surfaces
+`ClosedChannelException` — so the trace blames the socket, not the port table.
+
 ## Dashboards
 
 Provisioned dashboards include a catalog explorer

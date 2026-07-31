@@ -87,7 +87,11 @@ class HttpCampflareAvailabilityClient(
             try {
                 httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
             } catch (e: Exception) {
-                throw CampflareException("campflare request failed: ${e.message}", httpStatus = null)
+                throw CampflareException(
+                    "campflare request failed: ${e.javaClass.name}: ${e.message}",
+                    httpStatus = null,
+                    cause = e,
+                )
             }
         if (resp.statusCode() !in 200..299) {
             throw CampflareException("campflare HTTP ${resp.statusCode()} for $url", resp.statusCode())

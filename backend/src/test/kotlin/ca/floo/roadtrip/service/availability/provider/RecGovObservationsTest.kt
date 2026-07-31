@@ -278,6 +278,26 @@ class RecGovObservationsTest {
     }
 
     @Test
+    fun `a connect failure classifies as unreachable, not a vendor 5xx`() {
+        // The incident's misdiagnosis, reproduced for rec.gov: a transport
+        // failure that never reached the vendor must not read as
+        // "booking site returned an error". runWithErrorMapping now routes it
+        // through the shared classifier, so a ConnectException in the chain
+        // becomes UpstreamUnreachable.
+        val connect = java.net.ConnectException("Connection refused")
+        val client =
+            object : RecGovAvailabilityClient {
+                override suspend fun fetchMonth(
+                    campgroundId: String,
+                    monthStart: String,
+                ): Map<String, Campsite> = throw RuntimeException("rec.gov fetch failed", connect)
+            }
+        val ex =
+            runCatching { classify(client, days = 1) }.exceptionOrNull()
+        require(ex is AvailabilityProviderError.UpstreamUnreachable) { "expected UpstreamUnreachable, got $ex" }
+    }
+
+    @Test
     fun `per-day classification ignores following date status`() {
         val map =
             mapOf(

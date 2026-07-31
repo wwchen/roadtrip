@@ -23,10 +23,33 @@ sealed class AvailabilityProviderError(
         cause: Throwable? = null,
     ) : AvailabilityProviderError("upstream_blocked", cause)
 
-    /** Upstream returned 5xx, network error, parse failure. */
+    /** Upstream answered, with a 5xx or an unusable body. */
     class UpstreamUnavailable(
         cause: Throwable,
     ) : AvailabilityProviderError("upstream_5xx", cause)
+
+    /**
+     * We never got an answer: DNS, connect, TLS, or socket failure. Distinct
+     * from [UpstreamUnavailable] because nothing upstream was reached, so
+     * there is no upstream status to report and "upstream is down" may be a
+     * lie — our own egress is equally likely (see the 2026-07-30 incident,
+     * where a JDK HttpClient ConnectException read as `upstream_5xx` while
+     * the vendor was serving 200s).
+     */
+    class UpstreamUnreachable(
+        cause: Throwable,
+    ) : AvailabilityProviderError("upstream_unreachable", cause)
+
+    /**
+     * Our own config or catalog data is wrong for this provider — an
+     * unconfigured tenant, an id that doesn't fit the vendor's type. Retrying
+     * cannot help; a human has to fix config.
+     */
+    class Misconfigured(
+        providerId: String,
+        reason: String,
+        cause: Throwable,
+    ) : AvailabilityProviderError("$providerId misconfigured: $reason", cause)
 
     /** Adapter doesn't yet support the requested operation (capability stub). */
     class Unsupported(
