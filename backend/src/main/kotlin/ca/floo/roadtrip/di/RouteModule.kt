@@ -276,5 +276,8 @@ private fun authRouteWiring(
         isCookieSecure = authConfig.isCookieSecure,
         sessionMaxAgeSeconds = authConfig.sessionTtl.seconds.toInt(),
         appRootUrl = rootUrl,
+        authClientId = authConfig.clientId,
+        authDomain = authConfig.embeddedDomain,
+        authRealm = authConfig.realm,
     )
 }

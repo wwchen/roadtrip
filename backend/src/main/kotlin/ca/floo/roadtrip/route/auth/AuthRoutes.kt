@@ -180,7 +180,16 @@ internal fun Route.authRoutes(wiring: AuthRouteWiring?) {
             }
             when (val principal = wiring.authController.resolve(call.request.sessionToken())) {
                 is Principal.User -> call.respond(wiring.meResponse(principal))
-                else -> call.respond(MeResponseDto(isAuthenticated = false))
+                else -> {
+                    call.respond(
+                        MeResponseDto(
+                            isAuthenticated = false,
+                            authClientId = wiring.authClientId,
+                            authDomain = wiring.authDomain,
+                            authRealm = wiring.authRealm,
+                        ),
+                    )
+                }
             }
         }.describeApi("auth", "Describe the current caller")
             .access(RouteAccess.Anonymous)
@@ -201,6 +210,9 @@ private fun AuthRouteWiring.meResponse(principal: Principal.User): MeResponseDto
                     roles = principal.roles.map { role -> role.wireValue },
                 )
             },
+        authClientId = authClientId,
+        authDomain = authDomain,
+        authRealm = authRealm,
     )
 }
 
@@ -225,4 +237,8 @@ internal class AuthRouteWiring(
     val isCookieSecure: Boolean,
     val sessionMaxAgeSeconds: Int,
     val appRootUrl: String?,
+    /** Public non-secret auth config surfaced on /api/me for the embedded login flow. */
+    val authClientId: String,
+    val authDomain: String,
+    val authRealm: String,
 )

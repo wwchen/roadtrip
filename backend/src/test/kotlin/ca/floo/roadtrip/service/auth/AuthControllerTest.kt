@@ -89,6 +89,8 @@ class AuthControllerTest : SharedDbTest() {
                     provider = PROVIDER,
                     sessionTtl = Duration.ofDays(30),
                     isCookieSecure = true,
+                    realm = "Username-Password-Authentication",
+                    embeddedDomain = "idp.example.com",
                 ),
             identityProviderRegistry =
                 IdentityProviderRegistry(

@@ -8,8 +8,16 @@ private const val CLIENT_SECRET_KEY = "client-secret"
 private const val PROVIDER_KEY = "provider"
 private const val SESSION_TTL_KEY = "session-ttl"
 private const val COOKIE_SECURE_KEY = "cookie-secure"
+private const val REALM_KEY = "realm"
+private const val EMBEDDED_DOMAIN_KEY = "embedded-domain"
 private const val DEFAULT_PROVIDER = "oidc"
 private const val COOKIE_SECURE_DEFAULT = "true"
+
+// The standard Auth0 database connection name.
+// Spike-confirmable: once Task 1 has live tenant access, verify the connection
+// name matches the Auth0 tenant dashboard value.
+private const val DEFAULT_REALM = "Username-Password-Authentication"
+
 private val defaultSessionTtl: Duration = Duration.ofDays(30)
 
 /**
@@ -37,6 +45,18 @@ data class AuthConfig(
     val provider: String,
     val sessionTtl: Duration,
     val isCookieSecure: Boolean,
+    /** Auth0 database connection name for the embedded (resource-owner) flow. */
+    val realm: String,
+    /**
+     * Bare hostname for the embedded auth0-js flow — no scheme, no trailing slash.
+     *
+     * Defaults to [issuer] with the scheme stripped when
+     * [ROADTRIP_AUTH_EMBEDDED_DOMAIN] is unset. The custom domain
+     * `auth.roadtrip.floo.ca` is set via that env var in production.
+     * Spike-confirmable: once Task 1 has live tenant access, verify that
+     * auth0-js accepts this value as its `domain` field.
+     */
+    val embeddedDomain: String,
 ) {
     companion object {
         fun fromConfig(config: ConfigSection): AuthConfig? {
@@ -47,15 +67,21 @@ data class AuthConfig(
             // is derived from it. A deployment without one is misconfigured, not a
             // public client.
             val clientSecret = config.value(CLIENT_SECRET_KEY) ?: return null
+            val trimmedIssuer = issuer.trimEnd('/')
+            // Derive the embedded-auth hostname from the issuer when no explicit
+            // override is provided (strip the scheme: "https://foo.auth0.com" → "foo.auth0.com").
+            val defaultEmbeddedDomain = trimmedIssuer.removePrefix("https://").removePrefix("http://")
             return AuthConfig(
                 // Trailing slash stripped so discovery resolves to
                 // "$issuer/.well-known/openid-configuration" without doubling up.
-                issuer = issuer.trimEnd('/'),
+                issuer = trimmedIssuer,
                 clientId = clientId,
                 clientSecret = clientSecret,
                 provider = config.valueOrDefault(PROVIDER_KEY, DEFAULT_PROVIDER),
                 sessionTtl = config.duration(SESSION_TTL_KEY, defaultSessionTtl),
                 isCookieSecure = config.valueOrDefault(COOKIE_SECURE_KEY, COOKIE_SECURE_DEFAULT).toBoolean(),
+                realm = config.valueOrDefault(REALM_KEY, DEFAULT_REALM),
+                embeddedDomain = config.valueOrDefault(EMBEDDED_DOMAIN_KEY, defaultEmbeddedDomain),
             )
         }
     }
