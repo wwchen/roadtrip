@@ -37,6 +37,9 @@ class SecretRegistryDriftTest {
             "POSTGRES_USER",
             "ROADTRIP_AUTH_PROVIDER",
             "ROADTRIP_EMAIL_FROM",
+            "ROADTRIP_BUILD_ENV",
+            "ROADTRIP_BUILD_SHA",
+            "ROADTRIP_BUILD_BRANCH",
         )
 
     @Test

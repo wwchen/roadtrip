@@ -16,6 +16,7 @@ import ca.floo.roadtrip.repo.UserSessionRepo
 import ca.floo.roadtrip.route.api.admin.adminIngestRoutes
 import ca.floo.roadtrip.route.api.availability.availabilityDashboardRoutes
 import ca.floo.roadtrip.route.api.availability.availabilityWatchRoutes
+import ca.floo.roadtrip.route.api.buildInfoRoutes
 import ca.floo.roadtrip.route.api.docs.apiDocsRoutes
 import ca.floo.roadtrip.route.api.geocode.geocodeRoutes
 import ca.floo.roadtrip.route.api.health.healthRoutes
@@ -124,6 +125,7 @@ internal fun Application.registerKoinRoutes() {
         poisOnRouteRoutes(poisOnRouteService, config.route)
         routeRoutes(routeCache, routeCorridorService, config.route)
         geocodeRoutes(mapboxGeocoder)
+        buildInfoRoutes(config.buildInfo)
         healthRoutes(readiness)
         adminIngestRoutes(ingestController, ctx)
         // No /test/* notification routes: they took a caller-supplied recipient

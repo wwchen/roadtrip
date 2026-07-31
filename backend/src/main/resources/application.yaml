@@ -51,6 +51,10 @@ roadtrip:
   email:
     resend-api-key: "${RESEND_API_KEY:}"
     from: "${ROADTRIP_EMAIL_FROM:Campsite Alerts <alerts@roadtrip.floo.ca>}"
+  build-info:
+    env: "${ROADTRIP_BUILD_ENV:local}"
+    sha: "${ROADTRIP_BUILD_SHA:unknown}"
+    branch: "${ROADTRIP_BUILD_BRANCH:unknown}"
   poi-registry:
     resource: poi-registry.yaml
     path:
