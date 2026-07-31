@@ -96,7 +96,7 @@ only the marked steps branch. **Routing is a pluggable step (`direct` vs
 | **image** | GHCR by SHA *(new)* | GHCR by SHA | local build |
 | **project** | `roadtrip` | `roadtrip-sb-<name>` | `roadtrip` |
 | **profiles** | pois + tunnel + companion | backend + postgres only | full |
-| **DB** | real seeded | cloned snapshot + seed known users | dev import |
+| **DB** | real seeded | cloned snapshot + fresh seed users (Will/Matt) | dev import |
 | **routing** | `direct` (cloudflared→backend) | `caddy-vhost` | direct/port |
 | **auth** | OIDC on | off + `SANDBOX_ASSUME_USER` | off |
 
@@ -135,13 +135,16 @@ Instead, impersonation wraps the single identity seam. When **auth is disabled**
 `Principal.User(...)`; otherwise `Principal.Anonymous`. **Zero route/service
 changes** — everything downstream already reads `call.principal()`.
 
-**A small set of seed users with fixed roles**, seeded into the cloned snapshot at
-boot — at minimum one **admin** and one **regular user** so both role paths are
-reviewable. The concrete names/ids are an implementation detail chosen at build
-time (kept in one place, e.g. a sandbox seed fixture), not baked into this design.
+**Seed users are created fresh at boot** (not inherited from the prod snapshot — the
+`pg_dump` restore is followed by an explicit seed step, and prod identities are never
+cloned into a sandbox). Two seed users with fixed roles, defined in one place (a
+sandbox seed fixture):
+
+- **Will** → admin
+- **Matt** → user
 
 Roles come from the seeded `app_user` / `user_role` rows — there is no separate
-role picker. The frontend gets an "assume user" switcher listing the seeded users,
+role picker. The frontend gets an "assume user" switcher listing these users,
 rendered only when `/api/me` reports `isAuthEnabled: false`; selecting one sets the
 `X-Sandbox-User` signal.
 
@@ -220,7 +223,7 @@ change. This is what makes "practically option 1, designed for option 2" real.
 | Caddy (long-lived) | wildcard vhost → per-sandbox port | the shared routing layer |
 | impersonation wrap in `di/RouteModule.kt` | assume-user when auth off + flag | wraps `resolvePrincipal` only |
 | frontend "assume user" switcher | pick a seeded user when `isAuthEnabled:false` | sets `X-Sandbox-User` |
-| user seed step | insert seed users (≥1 admin, ≥1 regular) into snapshot | boot-time DB seed |
+| user seed step | insert fresh seed users (Will=admin, Matt=user) into snapshot | boot-time DB seed |
 | `GET /api/build-info` | serve `{ env, sha, branch }` from boot env vars | deploy sets vars; frontend + health-check read it |
 | frontend build-info banner | top bar, renders only when `env == "sandbox"` | shared component; reads `/api/build-info` |
 
@@ -243,8 +246,7 @@ change. This is what makes "practically option 1, designed for option 2" real.
   seeded roles; unknown id / `System` id / flag-unset → `Anonymous`.
 - **Script smoke** mirrors the existing CI `smoke` recipe (postgres + bare backend +
   seeded row) to validate spin-up + health-check + Caddy vhost + teardown locally.
-- **Seed-user assertions**: the admin seed user resolves to admin roles, the regular
-  seed user to user roles.
+- **Seed-user assertions**: Will resolves to admin roles, Matt to user roles.
 - **Reaper test**: a sandbox past TTL is fully removed (project, volume, vhost).
 - **Build-info test**: `/api/build-info` returns the env-supplied `{ env, sha, branch }`;
   the banner renders only when `env == "sandbox"` and is absent in prod.
