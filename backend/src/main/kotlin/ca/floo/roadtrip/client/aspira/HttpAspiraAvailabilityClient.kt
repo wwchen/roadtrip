@@ -79,7 +79,11 @@ class HttpAspiraAvailabilityClient(
                 try {
                     httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
                 } catch (e: Exception) {
-                    throw AspiraException("aspira request failed: ${e.message}", httpStatus = null)
+                    throw AspiraException(
+                        "aspira request failed for mapId=$mapId host=$host: ${e.javaClass.name}: ${e.message}",
+                        httpStatus = null,
+                        cause = e,
+                    )
                 }
             lastFetchAtMs = System.currentTimeMillis()
             if (resp.statusCode() != 200) {
@@ -146,7 +150,12 @@ class HttpAspiraAvailabilityClient(
                 try {
                     httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
                 } catch (e: Exception) {
-                    throw AspiraException("aspira occupancy request failed: ${e.message}", httpStatus = null)
+                    throw AspiraException(
+                        "aspira occupancy request failed for resourceLocationId=$resourceLocationId " +
+                            "host=$host: ${e.javaClass.name}: ${e.message}",
+                        httpStatus = null,
+                        cause = e,
+                    )
                 }
             lastFetchAtMs = System.currentTimeMillis()
             if (resp.statusCode() != 200) {

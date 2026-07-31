@@ -119,7 +119,11 @@ class HttpReserveAmericaAvailabilityClient(
             try {
                 httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
             } catch (e: Exception) {
-                throw ReserveAmericaException("reserveamerica request failed: ${e.message}", httpStatus = null)
+                throw ReserveAmericaException(
+                    "reserveamerica request failed: ${e.javaClass.name}: ${e.message}",
+                    httpStatus = null,
+                    cause = e,
+                )
             }
         if (resp.statusCode() !in 200..299) {
             throw ReserveAmericaException("reserveamerica HTTP ${resp.statusCode()} for $url", resp.statusCode())

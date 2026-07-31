@@ -102,8 +102,10 @@ class ReserveAmericaAvailabilityProvider(
 
     private fun tenantForRef(ref: BookingProviderRef.ReserveAmerica): ReserveAmericaTenant =
         ref.contractCode?.let { tenants[it] }
-            ?: throw AvailabilityProviderError.UpstreamUnavailable(
-                IllegalArgumentException("reserveamerica contract '${ref.contractCode}' is not configured"),
+            ?: throw AvailabilityProviderError.Misconfigured(
+                providerId = id.name.lowercase(),
+                reason = "contract '${ref.contractCode}' is not configured",
+                cause = IllegalArgumentException("reserveamerica contract '${ref.contractCode}' is not configured"),
             )
 
     private suspend fun fetch(

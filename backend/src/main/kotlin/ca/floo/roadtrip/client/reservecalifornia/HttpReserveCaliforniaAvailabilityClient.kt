@@ -91,7 +91,11 @@ class HttpReserveCaliforniaAvailabilityClient(
             try {
                 httpClient.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
             } catch (e: Exception) {
-                throw ReserveCaliforniaException("reservecalifornia request failed: ${e.message}", httpStatus = null)
+                throw ReserveCaliforniaException(
+                    "reservecalifornia request failed: ${e.javaClass.name}: ${e.message}",
+                    httpStatus = null,
+                    cause = e,
+                )
             }
         if (resp.statusCode() !in 200..299) {
             throw ReserveCaliforniaException("reservecalifornia HTTP ${resp.statusCode()} for $url", resp.statusCode())

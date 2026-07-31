@@ -501,13 +501,17 @@ function siteLabel(site) {
   return site.id != null ? `Site #${site.id}` : 'Site';
 }
 
+// Keyed by the `error` code from AvailabilityErrorDto. Copy says what actually
+// happened and whether retrying is worth it — "Upstream unavailable" was shown
+// for four unrelated faults, including ones where the booking site was fine.
 const AVAIL_ERROR_LABELS = {
-  rate_limited: 'Upstream rate-limited',
-  upstream_blocked: 'Upstream blocked the request',
-  upstream_5xx: 'Upstream unavailable',
+  rate_limited: 'Booking site rate-limited us — try again shortly',
+  upstream_blocked: 'Booking site blocked the request',
+  upstream_5xx: 'Booking site returned an error',
+  upstream_unreachable: 'Could not reach the booking site',
   unsupported: 'Provider not supported',
-  provider_misconfigured: 'Provider misconfigured',
-  ip_throttled: 'Too many requests',
+  provider_misconfigured: 'Provider misconfigured — we are on it',
+  ip_throttled: 'Too many requests — slow down',
 };
 
 function formatAvailabilityError(json, httpStatus) {
