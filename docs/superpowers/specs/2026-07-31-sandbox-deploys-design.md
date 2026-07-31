@@ -199,6 +199,14 @@ the auth/impersonation switches, so it appears regardless of which user is assum
 - **PR comment:** `.github/workflows/sandbox.yml` reacts to a `/sandbox` comment,
   resolves the PR head SHA, calls the script over SSH, and posts the URL back as a
   comment. `/sandbox stop` tears down.
+- **Authorization (comment path):** the workflow's `if:` gates on
+  `github.event.comment.author_association` being `OWNER` or `COLLABORATOR` — a
+  string check on the event payload, no extra API call, consistent with the existing
+  owner-only gate in `self-approve.yml`/`auto-rebase.yml`. An unauthorized commenter's
+  `/sandbox` never starts a job, so arbitrary branch code can't be run on the host by
+  outsiders. The **CLI path has no GitHub identity** — `make sandbox` runs as the
+  operator's shell using their SSH access to `SANDBOX_HOST`, so it is gated by host
+  access, not by GitHub. The `GITHUB_TOKEN` / `if:` gate governs only the comment path.
 - **Teardown:** `make sandbox-stop NAME=…` and `/sandbox stop`, plus a **scheduled
   reaper** that tears down sandboxes older/idle beyond a TTL (default 24h):
   `compose down`, drop the volume, remove the Caddy vhost snippet.
@@ -216,7 +224,7 @@ change. This is what makes "practically option 1, designed for option 2" real.
 | `scripts/deploy.sh` (or refactor of current deploy) | parameterized `deploy(env, ref, name)` | prod deploy + sandbox share it |
 | `scripts/sandbox_up.sh` / `sandbox_down.sh` | sandbox-specific wrapper (name, port alloc, Caddy snippet) | calls `deploy.sh` with sandbox params |
 | `make sandbox` / `make sandbox-stop` | CLI entry | wraps the scripts |
-| `.github/workflows/sandbox.yml` | `/sandbox` comment reaction | thin GitHub wrapper over SSH → script |
+| `.github/workflows/sandbox.yml` | `/sandbox` comment reaction, gated to OWNER/COLLABORATOR | thin GitHub wrapper over SSH → script |
 | CI `docker-build` step | tag + push image to GHCR by SHA | new; also usable by prod later |
 | snapshot job | nightly `pg_dump` of seeded catalog | produces per-sandbox restore artifact |
 | reaper (scheduled) | TTL teardown | compose down + volume drop + Caddy reload |
@@ -238,6 +246,8 @@ change. This is what makes "practically option 1, designed for option 2" real.
   map; the nightly job's freshness is observable.
 - **Impersonation misconfig**: any failed gate → `Anonymous` (never a partial or
   escalated principal).
+- **Unauthorized `/sandbox` comment**: an author who is not OWNER/COLLABORATOR does
+  not start a job (the `if:` short-circuits) — no code runs on the host.
 
 ## Testing
 
