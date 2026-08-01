@@ -108,6 +108,12 @@ closure(tbl) AS (
 SELECT DISTINCT tbl FROM closure ORDER BY tbl;"
 
 echo "==> computing FK-closure via catalog query..."
+# Capture stdout only — do NOT merge stderr (2>&1) into the value.
+# psql warnings (locale notes, "could not change directory", NOTICEs) go to
+# the terminal/log via their own stderr path; folding them in would produce
+# bogus table names that could carry glob chars and silently over-exclude
+# real catalog tables from the dump.
+# The || block still catches a non-zero exit so failures are loud.
 CLOSURE_OUTPUT="$(docker compose \
     -p "${SNAPSHOT_SOURCE_PROJECT}" \
     -f "${SNAPSHOT_COMPOSE_FILE}" \
@@ -116,10 +122,8 @@ CLOSURE_OUTPUT="$(docker compose \
         -U "${SNAPSHOT_POSTGRES_USER}" \
         -d "${SNAPSHOT_POSTGRES_DB}" \
         -tA \
-        -c "${CLOSURE_SQL}" \
-    2>&1)" || {
+        -c "${CLOSURE_SQL}")" || {
     echo "error: failed to query FK closure from DB — is the stack running?" >&2
-    echo "       psql output: ${CLOSURE_OUTPUT}" >&2
     exit 1
 }
 
@@ -129,9 +133,20 @@ if [[ -z "${CLOSURE_OUTPUT}" ]]; then
 fi
 
 # Parse the closure output into an array of table names.
+# Each line must be a legal unquoted Postgres identifier ([a-zA-Z_][a-zA-Z0-9_]*).
+# An unexpected line (e.g. a stray warning that made it to stdout despite -tA)
+# means the query output is not what we expect — abort rather than silently
+# passing a malformed name to --exclude-table-data, which could match nothing
+# OR, if the line contains glob chars (* ? [), silently over-exclude real tables.
 CLOSURE_TABLES=()
 while IFS= read -r tbl; do
     [[ -z "${tbl}" ]] && continue
+    if [[ ! "${tbl}" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+        echo "error: FK closure query returned a non-identifier line: '${tbl}'" >&2
+        echo "       Expected only unquoted Postgres table names.  Aborting to prevent" >&2
+        echo "       a malformed --exclude-table-data flag in the pg_dump invocation." >&2
+        exit 1
+    fi
     CLOSURE_TABLES+=("${tbl}")
 done <<< "${CLOSURE_OUTPUT}"
 
