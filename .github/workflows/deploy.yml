@@ -292,8 +292,8 @@ jobs:
           exit 1
 
       # The checks above pass with sign-in completely broken: every page returns
-      # 200 and /api/me reports auth_enabled:true whenever the three auth secrets
-      # are merely *present*. Only the provider knows whether the client id and
+      # 200 and /api/me reports auth_enabled:true whenever the active vendor's
+      # auth secrets are merely *present*. Only the provider knows whether the client id and
       # callback URL it received are ones it recognises, so drive one real hop of
       # the handshake and let it answer.
       - name: Verify sign-in handshake
@@ -317,9 +317,9 @@ jobs:
             200|302) echo "auth: provider accepted the callback URL (HTTP $http_code)" ;;
             *)
               echo "auth: provider rejected the authorize request (HTTP $http_code)"
-              # The reason is prose inside an HTML error page ("Callback URL
-              # mismatch. <uri> is not in the list of allowed callback URLs"), so
-              # strip tags rather than pattern-match a class name that will drift.
+              # The reason is prose inside an HTML error page (e.g. "Callback
+              # URL mismatch" — wording varies by vendor), so strip tags rather
+              # than pattern-match a class name that will drift.
               tr -d '\n' < authorize.html \
                 | sed -e 's#<style[^>]*>[^<]*</style>##g' -e 's#<script[^>]*>[^<]*</script>##g' \
                       -e 's/<[^>]*>/ /g' -e 's/  */ /g' \

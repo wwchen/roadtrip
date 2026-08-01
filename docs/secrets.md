@@ -105,7 +105,7 @@ Two different things, routinely confused:
   recipient list. Use it when adding or removing a holder. It does *not* revoke
   anyone: git history keeps every past ciphertext, and a removed holder's key
   still opens it.
-- **Rotating a credential** means issuing a new value at Mapbox, Auth0, Slack…
+- **Rotating a credential** means issuing a new value at Mapbox, Clerk, Slack…
   and `manage.py set`-ing it. This is the only thing that actually revokes
   access, and it's the right response whenever a key is lost, a holder is
   removed, or a value is exposed.
