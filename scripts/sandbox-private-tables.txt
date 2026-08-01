@@ -37,3 +37,9 @@ user_settings
 availability_watch
 availability_watch_target
 availability_watch_poller
+# availability_job (watch_id → availability_watch) and availability_job_run
+# (job_id → availability_job) are NOT NULL ON DELETE CASCADE descendants: their
+# rows would be orphaned by a data-only restore that drops availability_watch
+# rows, so pg_restore --exit-on-error would abort. Co-exclude the full closure.
+availability_job
+availability_job_run
