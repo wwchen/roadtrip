@@ -252,7 +252,7 @@ jobs:
             exit 1
           fi
           # base64-encode the branch name: alnum+/= is safe inside single-quotes.
-          HEAD_REF_B64="$(printf '%s' "$HEAD_REF" | base64 | tr -d '\n')"
+          HEAD_REF_B64="$(printf '%s' "$HEAD_REF" | base64 -w0)"
           ssh -o BatchMode=yes "$SANDBOX_HOST" "bash -s -- '$HEAD_SHA' '$HEAD_REF_B64' '$PR_NUMBER'" <<'REMOTE'
           set -euo pipefail
           head_sha="$1"
