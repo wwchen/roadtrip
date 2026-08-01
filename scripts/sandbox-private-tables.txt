@@ -1,19 +1,39 @@
-# Private (PII / identity / session) tables.
+# Private (PII / identity / session / watch-intent) tables.
 #
 # DATA from these tables is excluded from pg_dump snapshots via
-# --exclude-table-data so that prod user identities are NEVER cloned into
-# a sandbox.  The CREATE TABLE DDL is still included so the restored schema
-# matches flyway_schema_history (Flyway must not re-run those migrations).
+# --exclude-table-data so that prod user identities and notification
+# destinations are NEVER cloned into a sandbox.  The CREATE TABLE DDL is
+# still included so the restored flyway_schema_history stays consistent
+# (Flyway must not re-run those migrations).
 #
-# A guard test (backend/src/test/kotlin/ca/floo/roadtrip/config/
-# SandboxPrivateTablesTest.kt) derives the full set of user-scoped tables
-# from the migration SQL files and asserts it equals this list — a new
-# user-scoped table added without updating this file will fail the build.
+# Two guard heuristics in SandboxPrivateTablesTest.kt flag tables here:
+#   1. FK heuristic: tables with a column REFERENCES app_user (ownership).
+#   2. Column heuristic: tables whose CREATE TABLE block contains a column
+#      named trigger_config, notification_email, slack_channel, slack_token*,
+#      recipient*, or a bare "email" column.
+# Together they catch both ownership tables and notification/PII-bearing
+# tables that have no app_user FK (e.g. availability_watch).
+#
+# FK-dependent closure: every child table whose FK points to a table already
+# in this list must also be listed so that a data-only pg_restore never
+# inserts orphaned FK rows.  Over-exclusion is safe; under-exclusion leaks PII.
 #
 # After restore, scripts/sandbox_seed_users.sql re-seeds app_user and
 # user_role with two fixed sandbox-only users (will/matt @sandbox.local).
+
+# ── Identity / session ────────────────────────────────────────────────────────
 app_user
 user_identity
 user_session
 user_role
 user_settings
+
+# ── Watch intent + notification destinations ──────────────────────────────────
+# availability_watch.trigger_config is a JSONB column holding email recipients
+# and Slack channels — user notification intent.  Its cascade children must be
+# co-excluded so that a data-only restore never leaves orphaned FK rows.
+# (availability_watch has no app_user FK, so the FK heuristic above misses it;
+# the column heuristic on trigger_config catches it instead.)
+availability_watch
+availability_watch_target
+availability_watch_poller
