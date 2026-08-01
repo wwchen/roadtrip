@@ -179,11 +179,42 @@ export POSTGRES_DB
 export POSTGRES_USER
 
 # ── Start Compose services ────────────────────────────────────────────────────
-echo "==> docker compose up (project ${COMPOSE_PROJECT})"
-docker compose \
-    -p "${COMPOSE_PROJECT}" \
-    -f "${COMPOSE_FILE}" \
-    up -d
+# Ordering depends on whether a snapshot will be restored:
+#
+#   WITH snapshot:
+#     1. Start postgres only → wait healthy → pg_restore (DB is still empty,
+#        so no DDL collision with CREATE TABLE) → seed users → start backend.
+#        Flyway boots against the already-restored schema (including the
+#        restored flyway_schema_history) and is a no-op.
+#
+#   WITHOUT snapshot:
+#     1. Start everything together (original behaviour).  Flyway migrates the
+#        empty DB on backend boot; seed users are applied after postgres is
+#        healthy and before the backend is reachable.
+#
+# This avoids the "relation already exists" abort that occurs when pg_restore
+# is called against a DB that Flyway has already fully migrated.
+
+HAVE_SNAPSHOT="false"
+if [[ "${DO_DB_PREP}" == "true" && -n "${SANDBOX_SNAPSHOT_PATH}" && -f "${SANDBOX_SNAPSHOT_PATH}" ]]; then
+    HAVE_SNAPSHOT="true"
+fi
+
+if [[ "${HAVE_SNAPSHOT}" == "true" ]]; then
+    # ── Step 1: postgres only ─────────────────────────────────────────────────
+    echo "==> docker compose up postgres (snapshot path; starting DB before backend)"
+    docker compose \
+        -p "${COMPOSE_PROJECT}" \
+        -f "${COMPOSE_FILE}" \
+        up -d postgres
+else
+    # ── Step 1: all services together ────────────────────────────────────────
+    echo "==> docker compose up (project ${COMPOSE_PROJECT})"
+    docker compose \
+        -p "${COMPOSE_PROJECT}" \
+        -f "${COMPOSE_FILE}" \
+        up -d
+fi
 
 # ── Wait for postgres to be healthy ──────────────────────────────────────────
 echo "==> waiting for postgres to be healthy"
@@ -209,14 +240,14 @@ echo "==> postgres healthy"
 
 # ── Prepare DB (snapshot restore + user seed) ────────────────────────────────
 if [[ "${DO_DB_PREP}" == "true" ]]; then
-    # Restore snapshot (optional).  When absent the Flyway-migrated schema is
-    # used as-is; users are still seeded below.
-    if [[ -n "${SANDBOX_SNAPSHOT_PATH}" && -f "${SANDBOX_SNAPSHOT_PATH}" ]]; then
+    if [[ "${HAVE_SNAPSHOT}" == "true" ]]; then
+        # ── Step 2: restore snapshot into the empty DB ────────────────────────
+        # postgres is up but the backend has NOT started yet, so the DB is still
+        # empty.  pg_restore runs with no risk of DDL collision with Flyway.
+        # --no-owner/--no-acl: restored objects owned by POSTGRES_USER
+        # regardless of the snapshot's origin user.
+        # --exit-on-error: a partial restore is loud rather than silent.
         echo "==> restoring snapshot: ${SANDBOX_SNAPSHOT_PATH}"
-        # pg_restore into the sandbox DB.  --no-owner/--no-acl so restored
-        # objects are owned by POSTGRES_USER regardless of the snapshot's
-        # origin user.  --exit-on-error makes a partial restore loud rather
-        # than silent.
         docker compose \
             -p "${COMPOSE_PROJECT}" \
             -f "${COMPOSE_FILE}" \
@@ -233,7 +264,10 @@ if [[ "${DO_DB_PREP}" == "true" ]]; then
         echo "==> no snapshot to restore (SANDBOX_SNAPSHOT_PATH not set or file absent)"
     fi
 
-    # Apply user seed SQL.
+    # ── Step 3: seed users ────────────────────────────────────────────────────
+    # Runs after restore (or immediately if no snapshot).  The backend has not
+    # started yet in the snapshot path, so seed rows are visible to Flyway's
+    # no-op check and to the first request.
     echo "==> seeding sandbox users"
     docker compose \
         -p "${COMPOSE_PROJECT}" \
@@ -245,6 +279,18 @@ if [[ "${DO_DB_PREP}" == "true" ]]; then
             --no-password \
         < "${SEED_SQL}"
     echo "==> users seeded"
+
+    if [[ "${HAVE_SNAPSHOT}" == "true" ]]; then
+        # ── Step 4: start remaining services (backend + any others) ──────────
+        # Now that the snapshot is restored and users are seeded, bring up the
+        # full stack.  Flyway boots against the already-restored schema
+        # (including flyway_schema_history) and is a no-op.
+        echo "==> docker compose up (remaining services)"
+        docker compose \
+            -p "${COMPOSE_PROJECT}" \
+            -f "${COMPOSE_FILE}" \
+            up -d
+    fi
 fi
 
 # ── Register vhost ────────────────────────────────────────────────────────────
