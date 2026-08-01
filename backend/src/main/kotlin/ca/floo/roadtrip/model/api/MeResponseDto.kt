@@ -29,6 +29,12 @@ data class MeResponseDto(
     @SerialName("auth_client_id") val authClientId: String? = null,
     @SerialName("auth_domain") val authDomain: String? = null,
     @SerialName("auth_realm") val authRealm: String? = null,
+    /**
+     * Human-readable identity-provider name for login UI copy ("Continue
+     * with Clerk"). Null when auth is disabled or the provider is unbranded;
+     * the frontend then falls back to its generic sign-in copy.
+     */
+    @SerialName("provider_label") val providerLabel: String? = null,
 )
 
 @Serializable

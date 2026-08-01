@@ -18,7 +18,7 @@
 - `docker-compose.secrets.yml` is GENERATED — never edit by hand; edit `secrets/registry.yaml` and run `./secrets/manage.py generate`.
 - Layering per `AGENTS.md`: routes → service → repo; no magic constants; dialects never decide policy.
 - Every backend commit must pass: `./gradlew :backend:test :backend:ktlintCheck :backend:detekt`.
-- Frontend tests: `npm test` (run `npm ci --ignore-scripts` first if `node_modules` is missing).
+- Frontend tests: `node --test $(find web -name '*.test.mjs' | sort)` — `web/` is dependency-free node:test modules; there is no root package.json (`npm test` belongs to `companion/` only).
 
 ---
 
@@ -345,8 +345,8 @@ and in the returned `AuthRouteWiring`, after `appRootUrl = rootUrl,`:
 
 Run: `./gradlew :backend:test`
 Expected: PASS
-Run: `npm test` (after `npm ci --ignore-scripts` if needed)
-Expected: PASS — `login-card.test.mjs` already exercises `me.provider_label`; if it only ever stubbed the fallback path, extend it with a case asserting a stubbed `fetchMe` resolving `{ provider_label: 'Clerk' }` renders "Clerk" in the card body.
+Run: `node --test $(find web -name '*.test.mjs' | sort)`
+Expected: PASS — `login-card.test.mjs` already exercises `me.provider_label` (stubs a resolved label and asserts it renders), so no frontend change is needed.
 
 - [ ] **Step 5: Commit**
 
@@ -647,7 +647,7 @@ Expected: all PASS. Fix any ktlint/detekt findings in the new code (line-length 
 
 - [ ] **Step 2: Full web suite**
 
-Run: `npm test`
+Run: `node --test $(find web -name '*.test.mjs' | sort)`
 Expected: PASS
 
 - [ ] **Step 3: Push and open draft PR**

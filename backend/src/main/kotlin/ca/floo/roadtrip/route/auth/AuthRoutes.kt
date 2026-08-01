@@ -211,6 +211,7 @@ internal fun Route.authRoutes(
                             authClientId = wiring.authClientId,
                             authDomain = wiring.authDomain,
                             authRealm = wiring.authRealm,
+                            providerLabel = wiring.providerLabel,
                         ),
                     )
             }
@@ -227,6 +228,7 @@ private fun AuthRouteWiring.meResponse(principal: Principal.User): MeResponseDto
         authClientId = authClientId,
         authDomain = authDomain,
         authRealm = authRealm,
+        providerLabel = providerLabel,
     )
 
 private fun meResponseForUser(
@@ -236,6 +238,7 @@ private fun meResponseForUser(
     authClientId: String? = null,
     authDomain: String? = null,
     authRealm: String? = null,
+    providerLabel: String? = null,
 ): MeResponseDto {
     val user = userRepo.findById(principal.userId)
     return MeResponseDto(
@@ -254,6 +257,7 @@ private fun meResponseForUser(
         authClientId = authClientId,
         authDomain = authDomain,
         authRealm = authRealm,
+        providerLabel = providerLabel,
     )
 }
 
@@ -286,4 +290,6 @@ internal class AuthRouteWiring(
      *  /auth/password/begin so the frontend passes the identical value to
      *  auth0-js — one source of truth prevents redirect_uri mismatches. */
     val redirectUri: String,
+    /** Human-readable provider name for login UI copy; null when unbranded. */
+    val providerLabel: String?,
 )
