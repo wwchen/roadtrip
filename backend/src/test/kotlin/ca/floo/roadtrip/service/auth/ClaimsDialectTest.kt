@@ -119,12 +119,38 @@ class StandardClaimsDialectTest {
     }
 }
 
+class ClerkClaimsDialectTest {
+    private val dialect = ClerkClaimsDialect()
+
+    @Test
+    fun `clerk subjects are opaque and carry no upstream identity`() {
+        // Clerk's sub is `user_…` with no embedded connection; migrated
+        // accounts link on verified email instead (spec: email relink).
+        val claims = dialect.toIdentityClaims(token("user_2abcDEF123"))
+
+        assertEquals("user_2abcDEF123", claims.subject)
+        assertEquals("user@example.com", claims.email)
+        assertEquals("User", claims.displayName)
+        assertNull(claims.upstreamProvider)
+        assertNull(claims.upstreamSubject)
+    }
+
+    @Test
+    fun `vendor-specific claims are ignored rather than misread as upstream identity`() {
+        val claims = dialect.toIdentityClaims(token("user_2abcDEF123", mapOf("idp_id" to "ignored")))
+
+        assertNull(claims.upstreamProvider)
+        assertNull(claims.upstreamSubject)
+    }
+}
+
 class ClaimsDialectRegistryTest {
     private val registry = ClaimsDialectRegistry.default()
 
     @Test
     fun `each known slug selects its dialect`() {
         assertEquals(Auth0ClaimsDialect.ID, registry.forProvider("auth0").id)
+        assertEquals(ClerkClaimsDialect.ID, registry.forProvider("clerk").id)
         assertEquals(WorkOsClaimsDialect.ID, registry.forProvider("workos").id)
         assertEquals(StandardClaimsDialect.ID, registry.forProvider("oidc").id)
     }

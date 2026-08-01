@@ -41,6 +41,7 @@ internal class ClaimsDialectRegistry(
             ClaimsDialectRegistry(
                 listOf(
                     Auth0ClaimsDialect(),
+                    ClerkClaimsDialect(),
                     WorkOsClaimsDialect(),
                     StandardClaimsDialect(),
                 ),
