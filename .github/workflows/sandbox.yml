@@ -60,9 +60,10 @@ jobs:
             core.info(`PR #${context.issue.number} head SHA: ${pr.head.sha} ref: ${pr.head.ref}`);
 
       # ── 2. Parse the command ──────────────────────────────────────────────────
-      # Trim the comment body and branch on:
+      # Trim the comment body and branch on EXACT matches only:
+      #   /sandbox       → spin up
       #   /sandbox stop  → teardown
-      #   /sandbox       → spin up (anything else after /sandbox is ignored)
+      #   anything else  → unknown (posts a usage comment; up/stop/host steps skip)
       - name: Parse command
         id: cmd
         env:
@@ -70,15 +71,34 @@ jobs:
         run: |
           body="$(printf '%s' "$COMMENT_BODY" | tr -d '\r' | xargs)"
           case "$body" in
-            "/sandbox stop"*)
-              echo "action=stop" >> "$GITHUB_OUTPUT"
-              echo "Parsed: stop"
-              ;;
-            "/sandbox"*)
+            "/sandbox")
               echo "action=up" >> "$GITHUB_OUTPUT"
               echo "Parsed: up"
               ;;
+            "/sandbox stop")
+              echo "action=stop" >> "$GITHUB_OUTPUT"
+              echo "Parsed: stop"
+              ;;
+            *)
+              echo "action=unknown" >> "$GITHUB_OUTPUT"
+              echo "Parsed: unknown (body: $body)"
+              ;;
           esac
+
+      # ── 2b. Post usage hint for unrecognised subcommands ─────────────────────
+      - name: Post unknown-command comment
+        if: steps.cmd.outputs.action == 'unknown'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: `Unrecognised sandbox command. Valid commands:\n` +
+                    `- \`/sandbox\` — spin up a sandbox for this PR\n` +
+                    `- \`/sandbox stop\` — tear down the sandbox`,
+            });
 
       # ── 3. Wait for GHCR image ────────────────────────────────────────────────
       # task-C1 pushes ghcr.io/<repo>/backend:<sha> on every branch build.
