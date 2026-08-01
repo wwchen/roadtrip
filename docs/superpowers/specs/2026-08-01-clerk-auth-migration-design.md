@@ -18,8 +18,8 @@ claims dialect remains in the codebase.
 Clerk is integrated as an **OAuth application** (Clerk dashboard: Configure →
 OAuth applications), which yields a standard confidential OIDC client
 (`client_id` + `client_secret`) served from Clerk's OIDC discovery endpoint.
-This slots directly into the existing `ROADTRIP_AUTH_*` configuration and
-preserves RFC 0009's vendor containment.
+This slots directly into the `roadtrip.auth` configuration block (env names
+below) and preserves RFC 0009's vendor containment.
 
 The Clerk SDK-style keys (`pk_live_…` publishable key, `sk_live_…` Backend API
 key) are **not used** by this design. The secret Backend API key never enters
@@ -84,28 +84,30 @@ path and gives Clerk-specific parsing a home if it grows.
 
 Credentials become **per-vendor** rather than generic, so both vendors'
 values coexist in the vault and switching providers is a single
-`ROADTRIP_AUTH_PROVIDER` flip with no secret swapping.
+`AUTH_PROVIDER` flip with no secret swapping.
 
 - `backend/src/main/resources/application.yaml`: default provider flips to
-  `provider: "${ROADTRIP_AUTH_PROVIDER:clerk}"`, and the flat
+  `provider: "${AUTH_PROVIDER:clerk}"`, and the flat
   issuer/client-id/client-secret keys are replaced by per-vendor blocks:
 
   ```yaml
   roadtrip:
     auth:
-      provider: "${ROADTRIP_AUTH_PROVIDER:clerk}"
+      provider: "${AUTH_PROVIDER:clerk}"
       providers:
         auth0:
-          issuer: "${ROADTRIP_AUTH_AUTH0_ISSUER:}"
-          client-id: "${ROADTRIP_AUTH_AUTH0_CLIENT_ID:}"
-          client-secret: "${ROADTRIP_AUTH_AUTH0_CLIENT_SECRET:}"
+          issuer: "${AUTH_AUTH0_ISSUER:}"
+          client-id: "${AUTH_AUTH0_CLIENT_ID:}"
+          client-secret: "${AUTH_AUTH0_CLIENT_SECRET:}"
         clerk:
-          issuer: "${ROADTRIP_AUTH_CLERK_ISSUER:}"
-          client-id: "${ROADTRIP_AUTH_CLERK_CLIENT_ID:}"
-          client-secret: "${ROADTRIP_AUTH_CLERK_CLIENT_SECRET:}"
+          issuer: "${AUTH_CLERK_ISSUER:}"
+          client-id: "${AUTH_CLERK_CLIENT_ID:}"
+          client-secret: "${AUTH_CLERK_CLIENT_SECRET:}"
   ```
 
-  (Names keep the repo's `ROADTRIP_` env prefix convention.)
+  (Per operator preference the auth family drops the repo's `ROADTRIP_` env
+  prefix; other env vars are unaffected. Trade-off noted: unprefixed names
+  are likelier to collide in shared environments.)
 - `AuthConfig.fromConfig` selects the active provider's block; if that
   block is incomplete, auth is disabled (existing null-config behavior).
   The generic `ROADTRIP_AUTH_ISSUER`/`_CLIENT_ID`/`_CLIENT_SECRET` vars are
@@ -169,7 +171,7 @@ and relink via verified email. Unverified-email takeover remains refused.
 
 ## Rollback
 
-Set `ROADTRIP_AUTH_PROVIDER=auth0` — nothing else. Both vendors' credentials
+Set `AUTH_PROVIDER=auth0` — nothing else. Both vendors' credentials
 remain configured side by side (vendor-specific env vars), and the Auth0
 dialect and its tests stay in-tree, so switching back (or forward again) is a
 single env-var flip plus restart. Sessions are unaffected in both directions.
