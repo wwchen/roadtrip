@@ -159,4 +159,19 @@ class ClaimsDialectRegistryTest {
     fun `an unknown slug falls back to standard instead of failing startup`() {
         assertEquals(StandardClaimsDialect.ID, registry.forProvider("typo-provider").id)
     }
+
+    @Test
+    fun `display names are human-readable vendor brands`() {
+        assertEquals("Auth0", registry.displayNameFor("auth0"))
+        assertEquals("Clerk", registry.displayNameFor("clerk"))
+        assertEquals("WorkOS", registry.displayNameFor("workos"))
+    }
+
+    @Test
+    fun `plain oidc and unknown slugs have no display name`() {
+        // Null lets the frontend fall back to its generic "single sign-on"
+        // copy instead of rendering a raw config slug at the user.
+        assertNull(registry.displayNameFor("oidc"))
+        assertNull(registry.displayNameFor("typo-provider"))
+    }
 }

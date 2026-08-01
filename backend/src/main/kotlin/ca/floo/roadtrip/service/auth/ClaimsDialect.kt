@@ -24,6 +24,12 @@ internal interface ClaimsDialect : Dispatchable<ClaimsDialectId> {
     /** Stable slug matching `roadtrip.auth.provider`. */
     val id: String
 
+    /**
+     * Human-readable vendor name for UI copy ("Continue with Clerk").
+     * Null when there is no brand to show; callers fall back to generic copy.
+     */
+    val displayName: String?
+
     override fun canHandle(key: ClaimsDialectId): Boolean = key.slug == id
 
     /** Normalizes a verified token into the provider-neutral domain shape. */

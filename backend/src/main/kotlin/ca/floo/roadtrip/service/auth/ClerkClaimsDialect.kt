@@ -16,6 +16,8 @@ import ca.floo.roadtrip.model.domain.auth.VerifiedIdToken
 internal class ClerkClaimsDialect : ClaimsDialect {
     override val id: String = ID
 
+    override val displayName: String? = "Clerk"
+
     override fun toIdentityClaims(token: VerifiedIdToken): IdentityClaims =
         IdentityClaims(
             subject = token.subject,

@@ -23,6 +23,7 @@ import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
+import ca.floo.roadtrip.service.auth.ClaimsDialectRegistry
 import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
@@ -99,7 +100,8 @@ val serviceModule =
 
         single {
             val config: AppConfig = get()
-            val providerLabel: String? = config.auth?.provider
+            val providerLabel: String? =
+                config.auth?.provider?.let { ClaimsDialectRegistry.default().displayNameFor(it) }
             // Optional deps are built inline here, NOT registered as `single<T?>`.
             // A Koin `single { }` that produces null throws at resolution
             // ("Single instance created couldn't return value") — which crashed

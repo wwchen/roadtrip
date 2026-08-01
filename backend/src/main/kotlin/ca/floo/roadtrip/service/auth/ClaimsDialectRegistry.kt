@@ -35,6 +35,13 @@ internal class ClaimsDialectRegistry(
         return dialects.first { it.id == StandardClaimsDialect.ID }
     }
 
+    /**
+     * Display name for the login card. Unknown slugs return null — unlike
+     * [forProvider] there is no fallback, because falling back would brand
+     * the login card with a vendor we are not actually using.
+     */
+    fun displayNameFor(slug: String): String? = dialects.firstHandlerFor(ClaimsDialectId(slug))?.displayName
+
     companion object {
         /** Every dialect this build ships. */
         fun default(): ClaimsDialectRegistry =

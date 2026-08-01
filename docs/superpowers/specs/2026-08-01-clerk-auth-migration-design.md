@@ -71,7 +71,7 @@ path and gives Clerk-specific parsing a home if it grows.
 
 - Add a human-readable `displayName` to the `ClaimsDialect` contract
   (`"clerk"` → `"Clerk"`, `"auth0"` → `"Auth0"`, WorkOS → `"WorkOS"`,
-  standard/unknown → fall back to the raw slug).
+  standard/unknown → null, so the UI falls back to its generic copy).
 - `ServiceModule` resolves `providerLabel` through the registry instead of
   passing the raw config slug.
 - Bug fix (pre-existing): `web/account/login-card.js` reads

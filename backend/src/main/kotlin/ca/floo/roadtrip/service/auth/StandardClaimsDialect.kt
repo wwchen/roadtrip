@@ -15,6 +15,9 @@ import ca.floo.roadtrip.model.domain.auth.VerifiedIdToken
 internal class StandardClaimsDialect : ClaimsDialect {
     override val id: String = ID
 
+    // Plain OIDC is a protocol, not a brand — nothing to show the user.
+    override val displayName: String? = null
+
     override fun toIdentityClaims(token: VerifiedIdToken): IdentityClaims =
         IdentityClaims(
             subject = token.subject,

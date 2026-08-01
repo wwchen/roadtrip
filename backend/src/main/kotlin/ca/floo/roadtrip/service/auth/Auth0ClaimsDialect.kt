@@ -26,6 +26,8 @@ private const val SUBJECT_PARTS = 2
 internal class Auth0ClaimsDialect : ClaimsDialect {
     override val id: String = ID
 
+    override val displayName: String? = "Auth0"
+
     override fun toIdentityClaims(token: VerifiedIdToken): IdentityClaims {
         val parts = token.subject.split(SUBJECT_SEPARATOR, limit = SUBJECT_PARTS)
         val hasUpstream = parts.size == SUBJECT_PARTS && parts.all { it.isNotBlank() }
