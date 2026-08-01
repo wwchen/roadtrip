@@ -197,12 +197,22 @@ def parse_dotenv(text: str) -> dict[str, str]:
 # --------------------------------------------------------------------------
 
 
+# Homebrew formula names for tools whose binary name differs from the formula
+# that installs it (e.g. `age-keygen` ships inside the `age` formula).
+BREW_FORMULAE = {
+    "age-keygen": "age",
+    "age": "age",
+    "sops": "sops",
+}
+
+
 def require_tools(*names: str) -> None:
     missing = [n for n in names if shutil.which(n) is None]
     if missing:
+        formulae = sorted({BREW_FORMULAE.get(n, n) for n in missing})
         raise SecretsError(
             f"missing required tool(s): {', '.join(missing)}\n"
-            f"Install with: brew install {' '.join(missing)}"
+            f"Install with: brew install {' '.join(formulae)}"
         )
 
 
