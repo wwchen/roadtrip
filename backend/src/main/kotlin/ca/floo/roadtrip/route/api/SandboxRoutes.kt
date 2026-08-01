@@ -25,7 +25,7 @@ internal fun Route.sandboxRoutes(
                 return@get
             }
             val users =
-                userRepo.listAll().map { u ->
+                userRepo.listSandboxUsers().map { u ->
                     SandboxUserDto(
                         id = u.id.value,
                         name = u.displayName ?: u.email,

@@ -28,8 +28,8 @@ class SandboxRoutesTest {
 
     private val willAdmin =
         UserRepo.User(
-            id = UserId(1L),
-            email = "will@example.com",
+            id = UserId(90001L),
+            email = "will@sandbox.local",
             isEmailVerified = true,
             displayName = "Will",
             status = UserStatus.ACTIVE,
@@ -40,8 +40,8 @@ class SandboxRoutesTest {
 
     private val mattUser =
         UserRepo.User(
-            id = UserId(2L),
-            email = "matt@example.com",
+            id = UserId(90002L),
+            email = "matt@sandbox.local",
             isEmailVerified = true,
             displayName = "Matt",
             status = UserStatus.ACTIVE,
@@ -52,7 +52,7 @@ class SandboxRoutesTest {
 
     private fun stubUserRepo(users: List<UserRepo.User>): UserRepo =
         object : UserRepo(ctx = detachedCtx) {
-            override fun listAll(): List<UserRepo.User> = users
+            override fun listSandboxUsers(): List<UserRepo.User> = users
         }
 
     @Test
@@ -67,7 +67,7 @@ class SandboxRoutesTest {
             assertEquals(HttpStatusCode.OK, resp.status)
             val arr = Json.parseToJsonElement(resp.bodyAsText()).jsonArray
             assertEquals(2, arr.size)
-            val willObj = arr.first { it.jsonObject["id"]!!.jsonPrimitive.content == "1" }.jsonObject
+            val willObj = arr.first { it.jsonObject["id"]!!.jsonPrimitive.content == "90001" }.jsonObject
             val roles = willObj["roles"]!!.jsonArray.map { it.jsonPrimitive.content }
             assertTrue("admin" in roles, "Will should have 'admin' role, got: $roles")
         }

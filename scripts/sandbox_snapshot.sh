@@ -50,12 +50,34 @@ _cleanup() {
 }
 trap _cleanup EXIT
 
+# ── Build --exclude-table-data flags for private (PII/session) tables ─────────
+# sandbox-private-tables.txt lists tables whose ROWS must never be cloned into
+# a sandbox (user identity, sessions, roles, settings).  The DDL is kept so the
+# restored flyway_schema_history stays consistent and Flyway is a no-op on boot.
+PRIVATE_TABLES_FILE="${SCRIPT_DIR}/sandbox-private-tables.txt"
+EXCLUDE_TABLE_DATA_FLAGS=()
+if [[ -f "${PRIVATE_TABLES_FILE}" ]]; then
+    while IFS= read -r line; do
+        # Skip blank lines and comment lines.
+        [[ -z "${line}" || "${line}" == \#* ]] && continue
+        EXCLUDE_TABLE_DATA_FLAGS+=("--exclude-table-data=${line}")
+    done < "${PRIVATE_TABLES_FILE}"
+else
+    echo "warning: ${PRIVATE_TABLES_FILE} not found; snapshot will include all table data" >&2
+fi
+
 # ── Dump ──────────────────────────────────────────────────────────────────────
 echo "==> dumping ${SNAPSHOT_POSTGRES_DB} (project: ${SNAPSHOT_SOURCE_PROJECT}) → ${SNAPSHOT_TMP}"
+if [[ ${#EXCLUDE_TABLE_DATA_FLAGS[@]} -gt 0 ]]; then
+    echo "==> excluding table data for: ${EXCLUDE_TABLE_DATA_FLAGS[*]}"
+fi
 
 # Mirror the exec style used by sandbox_up.sh's pg_restore invocation:
 #   docker compose -p <project> -f <file> exec -T <service> <cmd>
 # -Fc produces a custom-format archive (the format sandbox_up.sh pg_restores).
+# --exclude-table-data=<table> omits ROWS but keeps the CREATE TABLE DDL so the
+# restored flyway_schema_history stays consistent (Flyway won't re-run those
+# migrations, and queries against those tables won't hit "relation does not exist").
 # stdout is redirected to the .tmp file; errors go to stderr.
 docker compose \
     -p "${SNAPSHOT_SOURCE_PROJECT}" \
@@ -64,6 +86,7 @@ docker compose \
     pg_dump \
         -Fc \
         -U "${SNAPSHOT_POSTGRES_USER}" \
+        "${EXCLUDE_TABLE_DATA_FLAGS[@]}" \
         "${SNAPSHOT_POSTGRES_DB}" \
     > "${SNAPSHOT_TMP}"
 
