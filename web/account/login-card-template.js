@@ -20,7 +20,7 @@ export function loginCardTemplate({ googleLabel } = {}) {
         <path class="lc-brand-mark-glyph" d="M20 8 L30 28 H10 Z"/>
       </svg>
     </div>
-    <h2 class="lc-title">Sign in to Roadtrip</h2>
+    <h2 class="lc-title" data-role="title">Sign in to Roadtrip</h2>
     <p class="lc-rationale">Save your notification settings.</p>
 
     <form class="lc-form" data-role="password-form" novalidate>
@@ -32,11 +32,17 @@ export function loginCardTemplate({ googleLabel } = {}) {
       <input class="lc-input" id="lc-password" data-field="password" type="password"
              name="password" autocomplete="current-password" required />
 
+      <p class="lc-hint" data-role="password-hint" hidden>Use at least 8 characters.</p>
       <p class="lc-form-error" data-role="form-error" role="alert" hidden></p>
 
       <button class="rt-btn rt-btn--primary lc-submit-btn" type="submit"
               data-action="password-submit" style="width:100%">Sign in</button>
     </form>
+
+    <p class="lc-mode-switch">
+      <span data-role="mode-prompt">Don't have an account?</span>
+      <button type="button" class="lc-mode-toggle" data-action="toggle-mode">Sign up</button>
+    </p>
 
     <div class="lc-divider" aria-hidden="true"><span>or</span></div>
 

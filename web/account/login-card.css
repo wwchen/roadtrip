@@ -59,7 +59,14 @@
   font: inherit;
 }
 .lc-input:focus-visible { outline: 2px solid var(--rt-brand); outline-offset: 1px; }
+.lc-hint { color: var(--rt-muted); font-size: 12px; margin: 4px 0 0; }
 .lc-form-error { color: var(--rt-error); font-size: 13px; margin: 6px 0 0; }
+.lc-mode-switch { margin: 0; font-size: 13px; color: var(--rt-muted); }
+.lc-mode-toggle {
+  background: none; border: none; padding: 0 0 0 4px; font: inherit; cursor: pointer;
+  color: var(--rt-brand); text-decoration: underline;
+}
+.lc-mode-toggle:focus-visible { outline: 2px solid var(--rt-brand); outline-offset: 2px; }
 .lc-submit-btn { margin-top: 12px; }
 .lc-submit-btn:disabled { opacity: 0.7; cursor: progress; }
 .lc-divider {

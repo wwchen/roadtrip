@@ -31,28 +31,43 @@ const ERROR_MESSAGES = {
   invalid_credentials: 'That email or password is incorrect.',
   too_many_attempts: 'Too many attempts. Please wait a moment and try again.',
   unverified_email: 'Please verify your email address before signing in.',
+  user_exists: 'That email already has an account — sign in instead.',
+  invalid_password: 'That password does not meet the requirements. Use at least 8 characters.',
+  invalid_signup: 'We could not create that account. Please check your details and try again.',
   network: 'We could not reach the sign-in service. Please try again.',
 };
 const GENERIC_ERROR = 'Something went wrong signing you in. Please try again.';
 const VALIDATION_ERROR = 'Email and password are required.';
+
+// The two dialog modes. Sign-in authenticates an existing account; signup
+// creates one and (per product decision) logs in immediately after.
+const MODE_SIGNIN = 'signin';
+const MODE_SIGNUP = 'signup';
 
 function messageForCode(code) {
   return ERROR_MESSAGES[code] || GENERIC_ERROR;
 }
 
 /**
- * Validate + authenticate + complete. Extracted for unit testing without a DOM.
+ * Validate, then authenticate-or-signup, then complete. Extracted for unit
+ * testing without a DOM. `mode` selects the port method: sign-in calls
+ * authenticateWithPassword; signup calls signupWithPassword (which creates the
+ * account and logs in, resolving with the same { artifact, state }).
  *
  * @param {{ querySelector: (s: string) => ({ value: string } | null) }} form
  * @param {{
- *   embeddedAuth: { authenticateWithPassword: (e: string, p: string) => Promise<{artifact: string, state: string}> },
+ *   embeddedAuth: {
+ *     authenticateWithPassword: (e: string, p: string) => Promise<{artifact: string, state: string}>,
+ *     signupWithPassword: (e: string, p: string) => Promise<{artifact: string, state: string}>,
+ *   },
  *   completeLogin: (artifact: string, state: string, returnTo: string) => Promise<unknown>,
  *   onError: (msg: string | null) => void,
  *   onLoading: (busy: boolean) => void,
  *   returnTo: string,
+ *   mode?: string,
  * }} deps
  */
-export async function _handlePasswordSubmit(form, { embeddedAuth, completeLogin, onError, onLoading, returnTo }) {
+export async function _handlePasswordSubmit(form, { embeddedAuth, completeLogin, onError, onLoading, returnTo, mode = MODE_SIGNIN }) {
   const email = (form.querySelector('[data-field="email"]')?.value || '').trim();
   const password = form.querySelector('[data-field="password"]')?.value || '';
 
@@ -64,7 +79,10 @@ export async function _handlePasswordSubmit(form, { embeddedAuth, completeLogin,
 
   onLoading(true);
   try {
-    const { artifact, state } = await embeddedAuth.authenticateWithPassword(email, password);
+    const authenticate = mode === MODE_SIGNUP
+      ? embeddedAuth.signupWithPassword.bind(embeddedAuth)
+      : embeddedAuth.authenticateWithPassword.bind(embeddedAuth);
+    const { artifact, state } = await authenticate(email, password);
     await completeLogin(artifact, state, returnTo);
     if (typeof window !== 'undefined') window.location.assign(returnTo || '/');
   } catch (err) {
@@ -114,6 +132,25 @@ export function mountLoginCard(config = {}) {
     const form = wrapper.querySelector('[data-role="password-form"]');
     const errorEl = wrapper.querySelector('[data-role="form-error"]');
     const submitBtn = wrapper.querySelector('[data-action="password-submit"]');
+    const titleEl = wrapper.querySelector('[data-role="title"]');
+    const promptEl = wrapper.querySelector('[data-role="mode-prompt"]');
+    const toggleBtn = wrapper.querySelector('[data-action="toggle-mode"]');
+    const passwordInput = wrapper.querySelector('[data-field="password"]');
+    const passwordHint = wrapper.querySelector('[data-role="password-hint"]');
+
+    // Current dialog mode; the toggle flips it and re-labels the UI.
+    let mode = MODE_SIGNIN;
+
+    const applyMode = () => {
+      const signup = mode === MODE_SIGNUP;
+      if (titleEl) titleEl.textContent = signup ? 'Create your Roadtrip account' : 'Sign in to Roadtrip';
+      if (submitBtn && !submitBtn.disabled) submitBtn.textContent = signup ? 'Create account' : 'Sign in';
+      if (promptEl) promptEl.textContent = signup ? 'Already have an account?' : "Don't have an account?";
+      if (toggleBtn) toggleBtn.textContent = signup ? 'Sign in' : 'Sign up';
+      // New-password autocomplete + the policy hint only make sense while signing up.
+      if (passwordInput) passwordInput.setAttribute('autocomplete', signup ? 'new-password' : 'current-password');
+      if (passwordHint) passwordHint.hidden = !signup;
+    };
 
     const onError = (msg) => {
       if (!errorEl) return;
@@ -123,7 +160,9 @@ export function mountLoginCard(config = {}) {
     const onLoading = (busy) => {
       if (submitBtn) {
         submitBtn.disabled = busy;
-        submitBtn.textContent = busy ? 'Signing in…' : 'Sign in';
+        const signup = mode === MODE_SIGNUP;
+        if (busy) submitBtn.textContent = signup ? 'Creating account…' : 'Signing in…';
+        else submitBtn.textContent = signup ? 'Create account' : 'Sign in';
       }
     };
 
@@ -139,14 +178,20 @@ export function mountLoginCard(config = {}) {
           catch { onError(GENERIC_ERROR); if (submitBtn) submitBtn.disabled = false; return; }
         }
         _handlePasswordSubmit(form, {
-          embeddedAuth, completeLogin: _completeLogin, onError, onLoading, returnTo,
+          embeddedAuth, completeLogin: _completeLogin, onError, onLoading, returnTo, mode,
         });
       });
     }
 
     wrapper.addEventListener('click', (e) => {
-      if (e.target.closest && e.target.closest('[data-action="sign-in-google"]')) {
+      if (!e.target.closest) return;
+      if (e.target.closest('[data-action="sign-in-google"]')) {
         _signInGoogle(GOOGLE_CONNECTION, returnTo);
+      } else if (e.target.closest('[data-action="toggle-mode"]')) {
+        e.preventDefault();
+        mode = mode === MODE_SIGNUP ? MODE_SIGNIN : MODE_SIGNUP;
+        onError(null);
+        applyMode();
       }
     });
 
