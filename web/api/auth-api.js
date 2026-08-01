@@ -14,6 +14,9 @@ const ME_URL = '/api/me';
 const LOGIN_URL = '/auth/login';
 const LOGOUT_URL = '/auth/logout';
 
+const RETURN_TO_PARAM = 'return_to';
+const CONNECTION_PARAM = 'connection';
+
 /**
  * Who the caller is.
  *
@@ -37,7 +40,17 @@ export function fetchMe({ signal } = {}) {
  * this into an open redirect.
  */
 export function signIn(returnTo = currentPath()) {
-  window.location.assign(`${LOGIN_URL}?return_to=${encodeURIComponent(returnTo)}`);
+  window.location.assign(`${LOGIN_URL}?${RETURN_TO_PARAM}=${encodeURIComponent(returnTo)}`);
+}
+
+/**
+ * Starts a social sign-in that redirects to the provider's consent screen.
+ * OAuth cannot embed this step, so it is a full-page navigation like signIn.
+ */
+export function signInWithConnection(connection, returnTo = currentPath()) {
+  const url = `${LOGIN_URL}?${RETURN_TO_PARAM}=${encodeURIComponent(returnTo)}` +
+    `&${CONNECTION_PARAM}=${encodeURIComponent(connection)}`;
+  window.location.assign(url);
 }
 
 export function signOut() {

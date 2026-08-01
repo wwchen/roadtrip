@@ -76,4 +76,34 @@ class AuthConfigTest {
         assertEquals(Duration.ofHours(12), config.sessionTtl)
         assertTrue(!config.isCookieSecure)
     }
+
+    @Test
+    fun `realm defaults to the standard Auth0 database connection name`() {
+        val config = assertNotNull(AuthConfig.fromConfig(section(complete)))
+
+        assertEquals("Username-Password-Authentication", config.realm)
+    }
+
+    @Test
+    fun `realm is overridable`() {
+        val config = assertNotNull(AuthConfig.fromConfig(section(complete + ("realm" to "MyConnection"))))
+
+        assertEquals("MyConnection", config.realm)
+    }
+
+    @Test
+    fun `embeddedDomain defaults to the issuer host with scheme stripped`() {
+        val config = assertNotNull(AuthConfig.fromConfig(section(complete)))
+
+        // issuer is "https://tenant.example.com" → domain is "tenant.example.com"
+        assertEquals("tenant.example.com", config.embeddedDomain)
+    }
+
+    @Test
+    fun `embeddedDomain is overridable via embedded-domain`() {
+        val config =
+            assertNotNull(AuthConfig.fromConfig(section(complete + ("embedded-domain" to "auth.roadtrip.floo.ca"))))
+
+        assertEquals("auth.roadtrip.floo.ca", config.embeddedDomain)
+    }
 }

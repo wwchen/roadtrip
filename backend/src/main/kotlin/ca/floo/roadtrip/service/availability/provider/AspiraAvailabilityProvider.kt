@@ -249,8 +249,10 @@ class AspiraAvailabilityProvider(
 
     private fun tenantForRef(ref: BookingProviderRef.Aspira): AspiraTenant =
         tenants[ref.tenant]
-            ?: throw AvailabilityProviderError.UpstreamUnavailable(
-                IllegalArgumentException("aspira tenant '${ref.tenant}' is not configured"),
+            ?: throw AvailabilityProviderError.Misconfigured(
+                providerId = id.name.lowercase(),
+                reason = "tenant '${ref.tenant}' is not configured",
+                cause = IllegalArgumentException("aspira tenant '${ref.tenant}' is not configured"),
             )
 
     private fun mapIdOrThrow(mapId: Long): Int = intOrThrow("mapId", mapId)
@@ -267,8 +269,10 @@ class AspiraAvailabilityProvider(
         value: Long,
     ): Int {
         if (value !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) {
-            throw AvailabilityProviderError.UpstreamUnavailable(
-                IllegalStateException("aspira $label $value does not fit in Int"),
+            throw AvailabilityProviderError.Misconfigured(
+                providerId = id.name.lowercase(),
+                reason = "$label $value does not fit in Int",
+                cause = IllegalStateException("aspira $label $value does not fit in Int"),
             )
         }
         return value.toInt()

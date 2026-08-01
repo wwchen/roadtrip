@@ -13,6 +13,9 @@ internal fun AvailabilityProviderError.toFetchOutcome(): FetchOutcome =
         is AvailabilityProviderError.RateLimited -> FetchOutcome.RATE_LIMITED
         is AvailabilityProviderError.UpstreamBlocked -> FetchOutcome.BLOCKED
         is AvailabilityProviderError.UpstreamUnavailable -> FetchOutcome.UPSTREAM_5XX
+        // Unreachable is still retryable: fail over to the next candidate
+        // rather than dropping to OTHER, which does not trigger failover.
+        is AvailabilityProviderError.UpstreamUnreachable -> FetchOutcome.UPSTREAM_5XX
         else -> FetchOutcome.OTHER
     }
 

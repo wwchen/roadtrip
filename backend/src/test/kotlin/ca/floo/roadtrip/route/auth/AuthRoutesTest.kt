@@ -88,6 +88,8 @@ private fun authOnWiring(): AuthRouteWiring {
             provider = "oidc",
             sessionTtl = Duration.ofHours(1),
             isCookieSecure = false,
+            realm = "Username-Password-Authentication",
+            embeddedDomain = "test.example",
         )
     val sessionService = StubSessionService(AUTH_ON_TOKEN, authOnPrincipal)
     val authController =
@@ -120,6 +122,10 @@ private fun authOnWiring(): AuthRouteWiring {
         isCookieSecure = false,
         sessionMaxAgeSeconds = 3600,
         appRootUrl = null,
+        authClientId = "test-client",
+        authDomain = "test.example",
+        authRealm = "Username-Password-Authentication",
+        redirectUri = "https://test.example/auth/callback",
     )
 }
 

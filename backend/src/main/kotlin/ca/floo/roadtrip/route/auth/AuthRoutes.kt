@@ -2,6 +2,9 @@ package ca.floo.roadtrip.route.auth
 
 import ca.floo.roadtrip.model.api.MeResponseDto
 import ca.floo.roadtrip.model.api.MeUserDto
+import ca.floo.roadtrip.model.api.PasswordBeginRequestDto
+import ca.floo.roadtrip.model.api.PasswordBeginResponseDto
+import ca.floo.roadtrip.model.api.PasswordCompleteRequestDto
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.repo.UserRepo
@@ -18,19 +21,28 @@ import ca.floo.roadtrip.service.auth.encode
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
+import io.ktor.server.request.receive
+import io.ktor.server.response.respond
 import io.ktor.server.response.respondRedirect
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import org.slf4j.LoggerFactory
 
 private const val LOGIN_FAILED_ERROR = "login_failed"
 private const val AUTH_DISABLED_ERROR = "auth_not_configured"
 private const val RETURN_TO_PARAM = "return_to"
+private const val CONNECTION_PARAM = "connection"
 private const val CODE_PARAM = "code"
 private const val STATE_PARAM = "state"
 private const val PROVIDER_ERROR_PARAM = "error"
 private const val DEFAULT_RETURN_TO = "/"
+
+/** Allowlist of connection slugs that may be forwarded to the provider.
+ *  Unknown values are silently dropped — the browser falls through to the
+ *  provider's own login page rather than getting an error. */
+private val allowedConnections = setOf("google-oauth2")
 
 private val log = LoggerFactory.getLogger("ca.floo.roadtrip.route.auth")
 
@@ -54,14 +66,17 @@ internal fun Route.authRoutes(
         get("/login") {
             val auth = wiring ?: return@get call.respondAuthDisabled()
 
+            val connection = call.queryParam(CONNECTION_PARAM)?.takeIf { it in allowedConnections }
+
             // A provider that is unreachable or misconfigured must not 500 into
             // the user's face; it is an operator problem, not a client error.
             val start =
-                runCatching { auth.authController.beginLogin(call.queryParam(RETURN_TO_PARAM)) }
-                    .getOrElse { failure ->
-                        log.error("could not begin login", failure)
-                        return@get call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.BadGateway)
-                    }
+                runCatching {
+                    auth.authController.beginLogin(call.queryParam(RETURN_TO_PARAM), connection)
+                }.getOrElse { failure ->
+                    log.error("could not begin login", failure)
+                    return@get call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.BadGateway)
+                }
 
             call.response.setLoginFlowCookie(start.flow.encode(auth.flowSigningKey), auth.isCookieSecure)
             call.respondRedirect(start.authorizationUrl)
@@ -124,6 +139,54 @@ internal fun Route.authRoutes(
                 }
             call.respondRedirect(providerLogout ?: DEFAULT_RETURN_TO)
         }.access(RouteAccess.Anonymous)
+
+        post("/password/begin") {
+            val auth = wiring ?: return@post call.respondAuthDisabled()
+            val body = runCatching { call.receive<PasswordBeginRequestDto>() }.getOrNull()
+            val start =
+                runCatching { auth.authController.beginPasswordLogin(body?.returnTo) }
+                    .getOrElse { failure ->
+                        log.error("could not begin password login", failure)
+                        return@post call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.BadGateway)
+                    }
+            call.response.setLoginFlowCookie(start.flow.encode(auth.flowSigningKey), auth.isCookieSecure)
+            call.respond(
+                PasswordBeginResponseDto(
+                    state = start.flow.state,
+                    nonce = start.flow.nonce,
+                    codeChallenge = start.passwordChallenge,
+                    redirectUri = auth.redirectUri,
+                ),
+            )
+        }.access(RouteAccess.Anonymous)
+
+        post("/password/complete") {
+            val auth = wiring ?: return@post call.respondAuthDisabled()
+
+            val flowCookie = call.request.loginFlowCookie()
+            call.response.clearLoginFlowCookie(auth.isCookieSecure)
+
+            val body = runCatching { call.receive<PasswordCompleteRequestDto>() }.getOrNull()
+            val flow = flowCookie?.let { LoginFlowState.decode(it, auth.flowSigningKey) }
+            if (body == null || flow == null) {
+                log.warn("password/complete without a usable flow or body")
+                return@post call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.BadRequest)
+            }
+
+            val result =
+                runCatching { auth.authController.completeLogin(body.code, body.state, flow) }
+                    .getOrElse { failure ->
+                        log.warn("password login could not be completed: {}", failure.message)
+                        return@post call.respondApiError(LOGIN_FAILED_ERROR, HttpStatusCode.Unauthorized)
+                    }
+
+            call.response.setSessionCookie(
+                token = result.session.token,
+                isSecure = auth.isCookieSecure,
+                maxAgeSeconds = auth.sessionMaxAgeSeconds,
+            )
+            call.respond(HttpStatusCode.NoContent)
+        }.access(RouteAccess.Anonymous)
     }
 
     route("/api") {
@@ -140,7 +203,16 @@ internal fun Route.authRoutes(
             }
             when (val principal = wiring.authController.resolve(call.request.sessionToken())) {
                 is Principal.User -> call.respondEncodedJson(roadtripApiJson, wiring.meResponse(principal))
-                else -> call.respondEncodedJson(roadtripApiJson, MeResponseDto(isAuthenticated = false))
+                else ->
+                    call.respondEncodedJson(
+                        roadtripApiJson,
+                        MeResponseDto(
+                            isAuthenticated = false,
+                            authClientId = wiring.authClientId,
+                            authDomain = wiring.authDomain,
+                            authRealm = wiring.authRealm,
+                        ),
+                    )
             }
         }.describeApi("auth", "Describe the current caller")
             .access(RouteAccess.Anonymous)
@@ -148,12 +220,22 @@ internal fun Route.authRoutes(
 }
 
 private fun AuthRouteWiring.meResponse(principal: Principal.User): MeResponseDto =
-    meResponseForUser(userRepo, principal, isAuthEnabled = true)
+    meResponseForUser(
+        userRepo,
+        principal,
+        isAuthEnabled = true,
+        authClientId = authClientId,
+        authDomain = authDomain,
+        authRealm = authRealm,
+    )
 
 private fun meResponseForUser(
     userRepo: UserRepo,
     principal: Principal.User,
     isAuthEnabled: Boolean,
+    authClientId: String? = null,
+    authDomain: String? = null,
+    authRealm: String? = null,
 ): MeResponseDto {
     val user = userRepo.findById(principal.userId)
     return MeResponseDto(
@@ -169,6 +251,9 @@ private fun meResponseForUser(
                     roles = principal.roles.map { role -> role.wireValue },
                 )
             },
+        authClientId = authClientId,
+        authDomain = authDomain,
+        authRealm = authRealm,
     )
 }
 
@@ -193,4 +278,12 @@ internal class AuthRouteWiring(
     val isCookieSecure: Boolean,
     val sessionMaxAgeSeconds: Int,
     val appRootUrl: String?,
+    /** Public non-secret auth config surfaced on /api/me for the embedded login flow. */
+    val authClientId: String,
+    val authDomain: String,
+    val authRealm: String,
+    /** The redirect_uri the backend uses at code-exchange time. Surfaced on
+     *  /auth/password/begin so the frontend passes the identical value to
+     *  auth0-js — one source of truth prevents redirect_uri mismatches. */
+    val redirectUri: String,
 )

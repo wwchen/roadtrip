@@ -1,10 +1,42 @@
 package ca.floo.roadtrip.client.aspira
 
 import ca.floo.roadtrip.model.metadata.aspira.AspiraResourceAvailability
+import ca.floo.roadtrip.support.AspiraException
+import kotlinx.coroutines.runBlocking
+import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+
+/** Port 1 is reserved and never listening, so connect is refused immediately. */
+private const val REFUSED_HOST = "127.0.0.1:1"
+private const val TEST_THROTTLE_MS = 300L
 
 class AspiraAvailabilityClientTest {
+    @Test
+    fun `throttle still applies after a transport failure`() =
+        runBlocking {
+            // Regression: lastFetchAtMs was assigned after the try/catch, so a
+            // throwing sendAsync skipped it. During the 2026-07-30 outage that
+            // silently disabled the 1.5s gap and every retry went straight out.
+            val client = HttpAspiraAvailabilityClient(throttleMs = TEST_THROTTLE_MS)
+            val day = LocalDate.of(2026, 7, 31)
+
+            val startedAt = System.currentTimeMillis()
+            repeat(2) {
+                assertFailsWith<AspiraException> {
+                    client.fetch(REFUSED_HOST, mapId = 1, startDate = day, endDate = day.plusDays(1))
+                }
+            }
+            val elapsedMs = System.currentTimeMillis() - startedAt
+
+            assertTrue(
+                elapsedMs >= TEST_THROTTLE_MS,
+                "second attempt did not wait for the throttle: ${elapsedMs}ms",
+            )
+        }
+
     @Test
     fun `parse extracts resource availability object arrays`() {
         val parsed =

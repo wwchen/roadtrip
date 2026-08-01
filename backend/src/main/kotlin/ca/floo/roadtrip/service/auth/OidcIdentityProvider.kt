@@ -30,7 +30,10 @@ internal class OidcIdentityProvider(
 ) : IdentityProvider {
     override val id: String = ID
 
-    override suspend fun authorizationRequest(returnTo: String): AuthorizationRequest {
+    override suspend fun authorizationRequest(
+        returnTo: String,
+        connection: String?,
+    ): AuthorizationRequest {
         val codeVerifier = Pkce.newCodeVerifier()
         val state = Pkce.newState()
         val nonce = Pkce.newNonce()
@@ -46,6 +49,7 @@ internal class OidcIdentityProvider(
                     parameters.append("nonce", nonce)
                     parameters.append("code_challenge", Pkce.challengeFor(codeVerifier))
                     parameters.append("code_challenge_method", CODE_CHALLENGE_METHOD_S256)
+                    if (connection != null) parameters.append("connection", connection)
                 }.buildString()
 
         return AuthorizationRequest(
