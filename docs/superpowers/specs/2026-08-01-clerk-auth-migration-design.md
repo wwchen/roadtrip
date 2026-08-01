@@ -68,17 +68,43 @@ path and gives Clerk-specific parsing a home if it grows.
   `provider_label` to `MeResponseDto` (populated from the same resolved
   label) so the card reads "Continue with Clerk".
 
-### 3. Configuration and secrets
+### 3. Configuration and secrets — vendor-specific credentials
+
+Credentials become **per-vendor** rather than generic, so both vendors'
+values coexist in the vault and switching providers is a single
+`ROADTRIP_AUTH_PROVIDER` flip with no secret swapping.
 
 - `backend/src/main/resources/application.yaml`: default provider flips to
-  `provider: "${ROADTRIP_AUTH_PROVIDER:clerk}"`.
-- `secrets/registry.yaml`: update guidance for `ROADTRIP_AUTH_ISSUER`
-  (`https://clerk.roadtrip.floo.ca`), `ROADTRIP_AUTH_CLIENT_ID`, and
-  `ROADTRIP_AUTH_CLIENT_SECRET` (values from the Clerk OAuth application).
-- Encrypted values in `secrets/*.enc.env` are updated out-of-band once the
-  Clerk OAuth application exists (operator step below).
-- Note: `ROADTRIP_AUTH_CLIENT_SECRET` also derives the login-flow cookie HMAC
-  key; rotation invalidates in-flight login cookies (10-minute TTL — harmless).
+  `provider: "${ROADTRIP_AUTH_PROVIDER:clerk}"`, and the flat
+  issuer/client-id/client-secret keys are replaced by per-vendor blocks:
+
+  ```yaml
+  roadtrip:
+    auth:
+      provider: "${ROADTRIP_AUTH_PROVIDER:clerk}"
+      providers:
+        auth0:
+          issuer: "${ROADTRIP_AUTH_AUTH0_ISSUER:}"
+          client-id: "${ROADTRIP_AUTH_AUTH0_CLIENT_ID:}"
+          client-secret: "${ROADTRIP_AUTH_AUTH0_CLIENT_SECRET:}"
+        clerk:
+          issuer: "${ROADTRIP_AUTH_CLERK_ISSUER:}"
+          client-id: "${ROADTRIP_AUTH_CLERK_CLIENT_ID:}"
+          client-secret: "${ROADTRIP_AUTH_CLERK_CLIENT_SECRET:}"
+  ```
+
+  (Names keep the repo's `ROADTRIP_` env prefix convention.)
+- `AuthConfig.fromConfig` selects the active provider's block; if that
+  block is incomplete, auth is disabled (existing null-config behavior).
+  The generic `ROADTRIP_AUTH_ISSUER`/`_CLIENT_ID`/`_CLIENT_SECRET` vars are
+  retired — no back-compat shim.
+- `secrets/registry.yaml` and `docker-compose.secrets.yml`: replace the three
+  generic entries with the six vendor-specific ones; existing Auth0 vault
+  values move under the `AUTH0`-suffixed keys, Clerk values are added under
+  the `CLERK`-suffixed keys (operator step below).
+- Note: the **active provider's** client secret derives the login-flow
+  cookie HMAC key; switching providers invalidates in-flight login cookies
+  (10-minute TTL — harmless).
 
 **Operator step (dashboard, cannot be done from the repo):** create the OAuth
 application in Clerk with scopes `openid email profile` and callback URL
@@ -126,6 +152,7 @@ and relink via verified email. Unverified-email takeover remains refused.
 
 ## Rollback
 
-Set `ROADTRIP_AUTH_PROVIDER=auth0` and restore the previous Auth0
-issuer/client credentials in the vault. The Auth0 dialect and its tests stay
-in-tree. Sessions are unaffected in both directions.
+Set `ROADTRIP_AUTH_PROVIDER=auth0` — nothing else. Both vendors' credentials
+remain configured side by side (vendor-specific env vars), and the Auth0
+dialect and its tests stay in-tree, so switching back (or forward again) is a
+single env-var flip plus restart. Sessions are unaffected in both directions.
