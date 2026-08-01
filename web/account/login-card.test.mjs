@@ -1,172 +1,155 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-
 import { loginCardTemplate } from './login-card-template.js';
+import { makeFakeEmbeddedAuth } from './embedded-auth-port.js';
 
-// ── Pure template tests ──────────────────────────────────────────────────────
-
-test('loginCardTemplate renders the sign-in title', () => {
-  const html = loginCardTemplate({ providerLabel: 'Google' });
-  assert.match(html, /Sign in to Roadtrip/);
+test('template renders the sign-in title', () => {
+  assert.match(loginCardTemplate({}), /Sign in to Roadtrip/);
 });
 
-test('loginCardTemplate renders a rationale line', () => {
-  const html = loginCardTemplate({ providerLabel: 'Google' });
-  // A non-empty descriptive line exists (not the title itself)
-  assert.match(html, /save|sync|personali|account|access/i);
+test('template renders email and password inputs', () => {
+  const html = loginCardTemplate({});
+  assert.match(html, /data-field="email"/);
+  assert.match(html, /type="email"/);
+  assert.match(html, /data-field="password"/);
+  assert.match(html, /type="password"/);
 });
 
-test('loginCardTemplate renders a primary button containing the providerLabel', () => {
-  const html = loginCardTemplate({ providerLabel: 'Acme SSO' });
-  assert.match(html, /Continue with Acme SSO/);
+test('template renders a password submit button', () => {
+  assert.match(loginCardTemplate({}), /data-action="password-submit"/);
 });
 
-test('loginCardTemplate button carries data-action="sign-in"', () => {
-  const html = loginCardTemplate({ providerLabel: 'Google' });
-  assert.match(html, /data-action="sign-in"/);
+test('template renders an error region', () => {
+  assert.match(loginCardTemplate({}), /data-role="form-error"/);
 });
 
-test('loginCardTemplate escapes a dangerous providerLabel', () => {
-  const html = loginCardTemplate({ providerLabel: '<script>evil</script>' });
-  assert.doesNotMatch(html, /<script>/);
+test('template renders a Google button', () => {
+  const html = loginCardTemplate({});
+  assert.match(html, /data-action="sign-in-google"/);
+  assert.match(html, /Continue with Google/);
+});
+
+test('template escapes a dangerous googleLabel', () => {
+  const html = loginCardTemplate({ googleLabel: '<script>evil</script>' });
+  assert.doesNotMatch(html, /<script>evil/);
   assert.match(html, /&lt;script&gt;/);
 });
 
-test('loginCardTemplate falls back to "single sign-on" when providerLabel is null', () => {
-  const html = loginCardTemplate({ providerLabel: null });
-  assert.match(html, /Continue with single sign-on/);
-});
-
-test('loginCardTemplate falls back to "single sign-on" when providerLabel is absent', () => {
+test('template renders a mode toggle for switching to signup', () => {
   const html = loginCardTemplate({});
-  assert.match(html, /Continue with single sign-on/);
+  assert.match(html, /data-action="toggle-mode"/);
+  assert.match(html, /data-role="mode-prompt"/);
 });
 
-// ── Stub-mount smoke test ────────────────────────────────────────────────────
-
-test('stub-mount: mountLoginCard builds host, opens modal, dispose clears', async () => {
-  const originalDocument = globalThis.document;
-  let injectedLink = null;
-
-  globalThis.document = {
-    getElementById() { return null; },
-    createElement(tagName) {
-      const el = { id: '', rel: '', href: '', tagName, className: '', textContent: '' };
-      if (tagName === 'link') { injectedLink = el; }
-      if (tagName === 'div') {
-        return {
-          id: '', className: '', tagName,
-          innerHTML: '',
-          addEventListener() {},
-          removeEventListener() {},
-          querySelector() { return null; },
-        };
-      }
-      return el;
+test('_handlePasswordSubmit: valid credentials call embeddedAuth then completeLogin', async () => {
+  const { _handlePasswordSubmit } = await import('./login-card.js');
+  const embeddedAuth = makeFakeEmbeddedAuth({ artifact: 'code-xyz', state: 'st-9' });
+  const completed = [];
+  const completeLogin = async (artifact, state, returnTo) => { completed.push([artifact, state, returnTo]); };
+  const errors = [];
+  const loading = [];
+  const form = {
+    querySelector(sel) {
+      if (sel === '[data-field="email"]') return { value: 'a@b.com' };
+      if (sel === '[data-field="password"]') return { value: 'secret' };
+      return null;
     },
-    head: { appendChild(el) { if (el.tagName === 'link') injectedLink = el; } },
-    body: { appendChild() {} },
-    addEventListener() {},
-    removeEventListener() {},
   };
-
-  // Fake fetchMe — resolves quickly with a provider_label
-  const fakeFetchMe = async () => ({ authenticated: false, auth_enabled: true, provider_label: 'Test Provider' });
-  const signInCalls = [];
-  const fakeSignIn = (returnTo) => { signInCalls.push(returnTo); };
-
-  const { mountLoginCard } = await import('./login-card.js');
-
-  const controller = mountLoginCard({
-    returnTo: '/trips',
-    _fetchMe: fakeFetchMe,
-    _signIn: fakeSignIn,
+  await _handlePasswordSubmit(form, {
+    embeddedAuth, completeLogin,
+    onError: (m) => errors.push(m), onLoading: (b) => loading.push(b),
+    returnTo: '/watches',
   });
-
-  // Returns a dispose function
-  assert.equal(typeof controller.dispose, 'function');
-
-  controller.dispose();
-
-  if (originalDocument === undefined) {
-    delete globalThis.document;
-  } else {
-    globalThis.document = originalDocument;
-  }
+  assert.deepEqual(completed, [['code-xyz', 'st-9', '/watches']]);
+  assert.equal(errors.filter(Boolean).length, 0);
+  assert.deepEqual(loading, [true, false]);
 });
 
-test('stub-mount: handleSignIn calls injected signIn with returnTo', async () => {
-  // Import the named export for the click handler unit test
-  const { _handleSignInClick } = await import('./login-card.js');
+test('_handlePasswordSubmit: empty fields report a validation error and skip the network', async () => {
+  const { _handlePasswordSubmit } = await import('./login-card.js');
+  let called = false;
+  const embeddedAuth = { authenticateWithPassword: async () => { called = true; return { artifact: 'x', state: 's' }; } };
+  const errors = [];
+  const form = {
+    querySelector(sel) {
+      if (sel === '[data-field="email"]') return { value: '' };
+      if (sel === '[data-field="password"]') return { value: '' };
+      return null;
+    },
+  };
+  const loading = [];
+  await _handlePasswordSubmit(form, {
+    embeddedAuth, completeLogin: async () => {},
+    onError: (m) => errors.push(m), onLoading: (b) => loading.push(b), returnTo: '/',
+  });
+  assert.equal(called, false);
+  assert.equal(errors.filter(Boolean).length, 1);
+  assert.match(errors.filter(Boolean)[0], /email|password|required/i);
+  // The caller disables the submit button before awaiting; validation must
+  // re-enable it (onLoading(false)) or the button stays stuck disabled.
+  assert.deepEqual(loading, [false]);
+});
 
-  if (typeof _handleSignInClick !== 'function') {
-    // If not exported, skip — this path is covered by the smoke test above
-    return;
-  }
+test('_handlePasswordSubmit: invalid_credentials maps to an owned message and clears loading', async () => {
+  const { _handlePasswordSubmit } = await import('./login-card.js');
+  const embeddedAuth = makeFakeEmbeddedAuth({ failWith: 'invalid_credentials' });
+  const errors = [];
+  const loading = [];
+  const form = {
+    querySelector(sel) {
+      if (sel === '[data-field="email"]') return { value: 'a@b.com' };
+      if (sel === '[data-field="password"]') return { value: 'wrong' };
+      return null;
+    },
+  };
+  await _handlePasswordSubmit(form, {
+    embeddedAuth, completeLogin: async () => {},
+    onError: (m) => errors.push(m), onLoading: (b) => loading.push(b), returnTo: '/',
+  });
+  assert.equal(errors.filter(Boolean).length, 1);
+  assert.match(errors.filter(Boolean)[0], /incorrect|invalid|wrong/i);
+  assert.deepEqual(loading, [true, false]);
+});
 
+test('_handlePasswordSubmit: signup mode calls signupWithPassword then completeLogin', async () => {
+  const { _handlePasswordSubmit } = await import('./login-card.js');
   const calls = [];
-  const fakeSignIn = (rt) => calls.push(rt);
-  _handleSignInClick({ target: { closest: (sel) => sel === '[data-action="sign-in"]' ? {} : null } }, fakeSignIn, '/plans');
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0], '/plans');
+  const embeddedAuth = {
+    authenticateWithPassword: async () => { calls.push('login'); return { artifact: 'x', state: 's' }; },
+    signupWithPassword: async () => { calls.push('signup'); return { artifact: 'code-new', state: 'st-new' }; },
+  };
+  const completed = [];
+  const completeLogin = async (artifact, state, returnTo) => { completed.push([artifact, state, returnTo]); };
+  const form = {
+    querySelector(sel) {
+      if (sel === '[data-field="email"]') return { value: 'new@b.com' };
+      if (sel === '[data-field="password"]') return { value: 'longenough' };
+      return null;
+    },
+  };
+  await _handlePasswordSubmit(form, {
+    embeddedAuth, completeLogin,
+    onError: () => {}, onLoading: () => {}, returnTo: '/watches', mode: 'signup',
+  });
+  assert.deepEqual(calls, ['signup']); // signup path only — login not called directly
+  assert.deepEqual(completed, [['code-new', 'st-new', '/watches']]);
 });
 
-// ── Dismissal wiring ─────────────────────────────────────────────────────────
-
-/**
- * The card shipped without an onClose, so Modal's close() had nothing to call
- * and the ✕, the backdrop and Escape were all inert. This asserts the card
- * actually hands Modal a dismissal path, and that taking it tears the host down.
- */
-test('mountLoginCard gives the modal an onClose that removes the host', async () => {
-  const originalDocument = globalThis.document;
-  const appended = [];
-  globalThis.document = {
-    getElementById() { return null; },
-    createElement(tagName) {
-      return { tagName, className: '', innerHTML: '', id: '', rel: '', href: '', addEventListener() {} };
+test('_handlePasswordSubmit: signup user_exists maps to an owned message', async () => {
+  const { _handlePasswordSubmit } = await import('./login-card.js');
+  const embeddedAuth = makeFakeEmbeddedAuth({ signupFailWith: 'user_exists' });
+  const errors = [];
+  const form = {
+    querySelector(sel) {
+      if (sel === '[data-field="email"]') return { value: 'taken@b.com' };
+      if (sel === '[data-field="password"]') return { value: 'longenough' };
+      return null;
     },
-    head: { appendChild() {} },
-    body: {
-      appendChild(el) { appended.push(el); el.parentNode = globalThis.document.body; },
-      removeChild(el) {
-        const i = appended.indexOf(el);
-        if (i >= 0) appended.splice(i, 1);
-        el.parentNode = null;
-      },
-    },
-    addEventListener() {},
-    removeEventListener() {},
   };
-
-  const { mountLoginCard } = await import('./login-card.js');
-
-  let capturedOnClose = null;
-  let modalDisposed = false;
-  const fakeMountModal = (_host, config) => {
-    capturedOnClose = config.onClose;
-    return { setBody() {}, close() {}, dispose() { modalDisposed = true; } };
-  };
-
-  try {
-    mountLoginCard({
-      _fetchMe: () => Promise.resolve({ provider_label: 'Google' }),
-      _signIn: () => {},
-      _mountModal: fakeMountModal,
-    });
-
-    assert.equal(typeof capturedOnClose, 'function', 'the card must pass an onClose');
-    assert.equal(appended.length, 1, 'the host should be in the document while open');
-
-    capturedOnClose();
-    assert.ok(modalDisposed, 'closing should dispose the modal');
-    assert.equal(appended.length, 0, 'closing should remove the host from the document');
-
-    // Idempotent: the ✕ and a drag-dismiss can both land here.
-    capturedOnClose();
-    assert.equal(appended.length, 0);
-  } finally {
-    if (originalDocument === undefined) delete globalThis.document;
-    else globalThis.document = originalDocument;
-  }
+  await _handlePasswordSubmit(form, {
+    embeddedAuth, completeLogin: async () => {},
+    onError: (m) => errors.push(m), onLoading: () => {}, returnTo: '/', mode: 'signup',
+  });
+  assert.equal(errors.filter(Boolean).length, 1);
+  assert.match(errors.filter(Boolean)[0], /already has an account|sign in instead/i);
 });

@@ -21,6 +21,14 @@ data class MeResponseDto(
      * hide sign-in entirely rather than offer a control that cannot work.
      */
     @SerialName("auth_enabled") val isAuthEnabled: Boolean = true,
+    /**
+     * Public auth config for the embedded (resource-owner) login flow.
+     * Null when auth is disabled. These are non-secret values safe to expose to
+     * the browser; secrets (client_secret, PKCE verifier) never leave the backend.
+     */
+    @SerialName("auth_client_id") val authClientId: String? = null,
+    @SerialName("auth_domain") val authDomain: String? = null,
+    @SerialName("auth_realm") val authRealm: String? = null,
 )
 
 @Serializable

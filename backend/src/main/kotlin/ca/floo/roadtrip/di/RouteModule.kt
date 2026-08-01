@@ -259,6 +259,8 @@ private fun authRouteWiring(
             sessionTtl = authConfig.sessionTtl,
         )
 
+    val callbackRedirectUri = "$rootUrl/auth/callback"
+
     return AuthRouteWiring(
         authController =
             AuthController(
@@ -276,5 +278,9 @@ private fun authRouteWiring(
         isCookieSecure = authConfig.isCookieSecure,
         sessionMaxAgeSeconds = authConfig.sessionTtl.seconds.toInt(),
         appRootUrl = rootUrl,
+        authClientId = authConfig.clientId,
+        authDomain = authConfig.embeddedDomain,
+        authRealm = authConfig.realm,
+        redirectUri = callbackRedirectUri,
     )
 }

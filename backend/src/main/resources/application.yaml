@@ -39,6 +39,12 @@ roadtrip:
     client-secret: "${ROADTRIP_AUTH_CLIENT_SECRET:}"
     session-ttl: 30d
     cookie-secure: true
+    # Auth0 database connection name for the embedded (resource-owner) flow.
+    # Spike-confirmable: verify against the Auth0 tenant dashboard once live.
+    realm: "${ROADTRIP_AUTH_REALM:Username-Password-Authentication}"
+    # Bare hostname for auth0-js `domain` in the embedded flow (no scheme).
+    # Defaults to issuer host when unset. Set to the custom domain in production.
+    embedded-domain: "${ROADTRIP_AUTH_EMBEDDED_DOMAIN:}"
   mapbox:
     token: "${MAPBOX_TOKEN:}"
   campflare:

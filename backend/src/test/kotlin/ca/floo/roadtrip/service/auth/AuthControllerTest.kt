@@ -33,10 +33,14 @@ private class FakeIdentityProvider(
     var exchangeCount: Int = 0
     private var counter = 0
 
-    override suspend fun authorizationRequest(returnTo: String): AuthorizationRequest {
+    override suspend fun authorizationRequest(
+        returnTo: String,
+        connection: String?,
+    ): AuthorizationRequest {
         counter++
+        val connectionSuffix = if (connection != null) "&connection=$connection" else ""
         return AuthorizationRequest(
-            authorizationUrl = "https://idp.example.com/authorize?n=$counter",
+            authorizationUrl = "https://idp.example.com/authorize?n=$counter$connectionSuffix",
             state = "state-$counter",
             nonce = "nonce-$counter",
             codeVerifier = "verifier-$counter",
@@ -89,6 +93,8 @@ class AuthControllerTest : SharedDbTest() {
                     provider = PROVIDER,
                     sessionTtl = Duration.ofDays(30),
                     isCookieSecure = true,
+                    realm = "Username-Password-Authentication",
+                    embeddedDomain = "idp.example.com",
                 ),
             identityProviderRegistry =
                 IdentityProviderRegistry(
@@ -204,5 +210,45 @@ class AuthControllerTest : SharedDbTest() {
     fun `logout tolerates a missing session`() {
         authController.logout(null)
         authController.logout("")
+    }
+
+    @Test
+    fun `beginPasswordLogin mints a flow whose challenge derives from its verifier`() {
+        val start = kotlinx.coroutines.runBlocking { authController.beginPasswordLogin("/watches") }
+
+        assertNotNull(start.flow.state)
+        assertNotNull(start.flow.codeVerifier)
+        assertEquals(Pkce.challengeFor(start.flow.codeVerifier), start.passwordChallenge)
+        assertEquals("/watches", start.flow.returnTo)
+    }
+
+    @Test
+    fun `beginLogin with google-oauth2 connection produces an authorization URL containing connection param`() {
+        val start = kotlinx.coroutines.runBlocking { authController.beginLogin("/x", "google-oauth2") }
+        assertTrue(
+            start.authorizationUrl.contains("connection=google-oauth2"),
+            "expected 'connection=google-oauth2' in '${start.authorizationUrl}'",
+        )
+    }
+
+    @Test
+    fun `beginLogin without connection produces an authorization URL with no connection param`() {
+        val start = kotlinx.coroutines.runBlocking { authController.beginLogin("/x") }
+        assertTrue(
+            !start.authorizationUrl.contains("connection="),
+            "expected no 'connection=' in '${start.authorizationUrl}'",
+        )
+    }
+
+    @Test
+    fun `completeLogin from a password-begin flow issues a resolvable session`() {
+        val start = kotlinx.coroutines.runBlocking { authController.beginPasswordLogin("/watches") }
+        val result =
+            kotlinx.coroutines.runBlocking {
+                authController.completeLogin("good-code", start.flow.state, start.flow)
+            }
+        val principal = authController.resolve(result.session.token)
+        assertTrue(principal is Principal.User)
+        assertEquals("/watches", result.returnTo)
     }
 }
