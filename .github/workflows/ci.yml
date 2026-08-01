@@ -329,8 +329,14 @@ jobs:
       - name: Tag and push backend image by SHA
         run: |
           IMAGE="ghcr.io/${{ github.repository }}/backend"
-          docker tag roadtrip/backend "$IMAGE:${{ github.sha }}"
-          docker push "$IMAGE:${{ github.sha }}"
+          # On pull_request events github.sha is the ephemeral merge commit, not
+          # the PR branch tip.  The sandbox workflow resolves pr.head.sha and
+          # polls GHCR for that tag — so we must push the head SHA, not the
+          # merge SHA.  On push (master) github.event.pull_request.head.sha is
+          # empty and the expression falls through to github.sha.
+          SHA="${{ github.event.pull_request.head.sha || github.sha }}"
+          docker tag roadtrip/backend "$IMAGE:${SHA}"
+          docker push "$IMAGE:${SHA}"
 
   backend-tests:
     needs: changes
