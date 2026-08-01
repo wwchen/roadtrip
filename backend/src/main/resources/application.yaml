@@ -25,18 +25,26 @@ roadtrip:
       companion-base-url:
       companion-timeout: 180s
   auth:
-    # Selects a claims dialect only — the flow is plain OIDC for every value.
-    # auth0 | workos | oidc. See rfcs/0009-auth-provider-layer.md.
+    # Selects the active vendor block under `providers` and its claims
+    # dialect — the flow is plain OIDC for every value. clerk | auth0 |
+    # workos | oidc. See rfcs/0009-auth-provider-layer.md and
+    # docs/superpowers/specs/2026-08-01-clerk-auth-migration-design.md.
     #
-    # Defaults to the vendor we actually use. The `oidc` fallback records no
-    # upstream identity, and that column cannot be backfilled for users who stop
-    # signing in — so a forgotten env var should not silently cost us it.
-    provider: "${ROADTRIP_AUTH_PROVIDER:auth0}"
-    # Blank issuer or client-id = auth disabled, a first-class state: the app
-    # boots and every anonymous surface works with no tenant provisioned.
-    issuer: "${ROADTRIP_AUTH_ISSUER:}"
-    client-id: "${ROADTRIP_AUTH_CLIENT_ID:}"
-    client-secret: "${ROADTRIP_AUTH_CLIENT_SECRET:}"
+    # Both vendors stay configured so switching (or rolling back) is this one
+    # value — no credential swapping. Defaults to the vendor we actually use.
+    provider: "${AUTH_PROVIDER:clerk}"
+    # Blank issuer or client-id in the ACTIVE block = auth disabled, a
+    # first-class state: the app boots and every anonymous surface works with
+    # no tenant provisioned.
+    providers:
+      auth0:
+        issuer: "${AUTH_AUTH0_ISSUER:}"
+        client-id: "${AUTH_AUTH0_CLIENT_ID:}"
+        client-secret: "${AUTH_AUTH0_CLIENT_SECRET:}"
+      clerk:
+        issuer: "${AUTH_CLERK_ISSUER:}"
+        client-id: "${AUTH_CLERK_CLIENT_ID:}"
+        client-secret: "${AUTH_CLERK_CLIENT_SECRET:}"
     session-ttl: 30d
     cookie-secure: true
     # Auth0 database connection name for the embedded (resource-owner) flow.
