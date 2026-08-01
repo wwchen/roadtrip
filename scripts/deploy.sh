@@ -78,6 +78,10 @@ SANDBOX_DB_PASSWORD="${SANDBOX_DB_PASSWORD:-sandbox}"
 # SQL seed file applied after snapshot restore.
 SEED_SQL="${SEED_SQL:-${SCRIPT_DIR}/sandbox_seed_users.sql}"
 
+# SQL scrub file applied after snapshot restore to blank PII columns in the
+# watch subtree (availability_watch.trigger_config) while keeping all rows.
+SCRUB_SQL="${SCRUB_SQL:-${SCRIPT_DIR}/sandbox_scrub.sql}"
+
 # Postgres connection settings inside the sandbox (must match compose file).
 POSTGRES_DB="${POSTGRES_DB:-roadtrip}"
 POSTGRES_USER="${POSTGRES_USER:-roadtrip}"
@@ -280,7 +284,24 @@ if [[ "${DO_DB_PREP}" == "true" ]]; then
                 < "${SANDBOX_SNAPSHOT_PATH}"
             echo "==> snapshot restored"
 
-            # ── Step 3: seed users ────────────────────────────────────────────
+            # ── Step 3a: scrub PII columns ────────────────────────────────
+            # Blank availability_watch.trigger_config (email/Slack destinations)
+            # while preserving every watch row and FK integrity.  The watch
+            # subtree is no longer excluded from snapshots — it's scrubbed here.
+            echo "==> scrubbing PII columns (trigger_config)"
+            docker compose \
+                -p "${COMPOSE_PROJECT}" \
+                -f "${COMPOSE_FILE}" \
+                exec -T postgres \
+                psql \
+                    --username="${POSTGRES_USER}" \
+                    --dbname="${POSTGRES_DB}" \
+                    --no-password \
+                    -v ON_ERROR_STOP=1 \
+                < "${SCRUB_SQL}"
+            echo "==> PII scrubbed"
+
+            # ── Step 3b: seed users ───────────────────────────────────────────
             # Runs after restore.  The backend has not started yet, so seed
             # rows are visible to Flyway's no-op check and to the first request.
             echo "==> seeding sandbox users"

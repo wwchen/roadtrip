@@ -50,27 +50,124 @@ _cleanup() {
 }
 trap _cleanup EXIT
 
-# ── Build --exclude-table-data flags for private (PII/session) tables ─────────
-# sandbox-private-tables.txt lists tables whose ROWS must never be cloned into
-# a sandbox (user identity, sessions, roles, settings).  The DDL is kept so the
-# restored flyway_schema_history stays consistent and Flyway is a no-op on boot.
+# ── Compute FK-dependent closure of PII root tables ───────────────────────────
+# sandbox-private-tables.txt lists only the PII/identity/session ROOT tables.
+# We query the live DB to compute every table that has a foreign-key path
+# leading back to any root, then exclude the entire closure from the dump.
+# This means a future user-owned table is auto-excluded without hand-editing.
+#
+# The watch subtree is NOT in the roots file — its PII is scrubbed in-place
+# at restore time (scripts/sandbox_scrub.sql) rather than excluded.
 PRIVATE_TABLES_FILE="${SCRIPT_DIR}/sandbox-private-tables.txt"
-EXCLUDE_TABLE_DATA_FLAGS=()
-if [[ -f "${PRIVATE_TABLES_FILE}" ]]; then
-    while IFS= read -r line; do
-        # Skip blank lines and comment lines.
-        [[ -z "${line}" || "${line}" == \#* ]] && continue
-        EXCLUDE_TABLE_DATA_FLAGS+=("--exclude-table-data=${line}")
-    done < "${PRIVATE_TABLES_FILE}"
-else
-    echo "warning: ${PRIVATE_TABLES_FILE} not found; snapshot will include all table data" >&2
+
+if [[ ! -f "${PRIVATE_TABLES_FILE}" ]]; then
+    echo "error: ${PRIVATE_TABLES_FILE} not found; cannot build exclusion list" >&2
+    exit 1
 fi
+
+# Read root table names from the file (skip blanks and comments).
+ROOT_TABLES=()
+while IFS= read -r line; do
+    [[ -z "${line}" || "${line}" == \#* ]] && continue
+    ROOT_TABLES+=("${line}")
+done < "${PRIVATE_TABLES_FILE}"
+
+if [[ ${#ROOT_TABLES[@]} -eq 0 ]]; then
+    echo "error: ${PRIVATE_TABLES_FILE} contains no table names" >&2
+    exit 1
+fi
+
+echo "==> PII roots (from file): ${ROOT_TABLES[*]}"
+
+# Build the VALUES list for the recursive CTE: ('app_user'),('user_identity'),...
+VALUES_LIST=""
+for tbl in "${ROOT_TABLES[@]}"; do
+    if [[ -n "${VALUES_LIST}" ]]; then
+        VALUES_LIST="${VALUES_LIST},"
+    fi
+    VALUES_LIST="${VALUES_LIST}('${tbl}')"
+done
+
+# Recursive CTE: starting from the roots, walk forward through FK constraints
+# to find every table that has a FK path leading back to a root.  This
+# computes the transitive closure of "tables whose data would be orphaned if
+# root data is excluded".
+CLOSURE_SQL="WITH RECURSIVE roots(tbl) AS (
+    VALUES ${VALUES_LIST}
+),
+closure(tbl) AS (
+    SELECT tbl FROM roots
+    UNION
+    SELECT c.relname
+    FROM closure cl
+    JOIN pg_constraint con ON con.contype = 'f'
+    JOIN pg_class pf ON pf.oid = con.confrelid AND pf.relname = cl.tbl
+    JOIN pg_class c  ON c.oid  = con.conrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+)
+SELECT DISTINCT tbl FROM closure ORDER BY tbl;"
+
+echo "==> computing FK-closure via catalog query..."
+CLOSURE_OUTPUT="$(docker compose \
+    -p "${SNAPSHOT_SOURCE_PROJECT}" \
+    -f "${SNAPSHOT_COMPOSE_FILE}" \
+    exec -T postgres \
+    psql \
+        -U "${SNAPSHOT_POSTGRES_USER}" \
+        -d "${SNAPSHOT_POSTGRES_DB}" \
+        -tA \
+        -c "${CLOSURE_SQL}" \
+    2>&1)" || {
+    echo "error: failed to query FK closure from DB — is the stack running?" >&2
+    echo "       psql output: ${CLOSURE_OUTPUT}" >&2
+    exit 1
+}
+
+if [[ -z "${CLOSURE_OUTPUT}" ]]; then
+    echo "error: FK closure query returned no rows; expected at least the root tables" >&2
+    exit 1
+fi
+
+# Parse the closure output into an array of table names.
+CLOSURE_TABLES=()
+while IFS= read -r tbl; do
+    [[ -z "${tbl}" ]] && continue
+    CLOSURE_TABLES+=("${tbl}")
+done <<< "${CLOSURE_OUTPUT}"
+
+echo "==> FK closure (roots + descendants): ${CLOSURE_TABLES[*]}"
+
+# ── Catalog safety assertion ──────────────────────────────────────────────────
+# Fail loud if the computed closure intersects the core catalog tables.
+# A new FK from a catalog table to an identity root would silently gut the
+# sandbox map — this check prevents that.
+CATALOG_DENYLIST=(pois campgrounds campsites reservables availability)
+OFFENDING_TABLES=()
+for tbl in "${CLOSURE_TABLES[@]}"; do
+    for denied in "${CATALOG_DENYLIST[@]}"; do
+        if [[ "${tbl}" == "${denied}" ]]; then
+            OFFENDING_TABLES+=("${tbl}")
+        fi
+    done
+done
+
+if [[ ${#OFFENDING_TABLES[@]} -gt 0 ]]; then
+    echo "error: FK closure intersects core catalog tables: ${OFFENDING_TABLES[*]}" >&2
+    echo "       A new FK has coupled the catalog to an identity/session root." >&2
+    echo "       A human must decide whether to exclude this table or restructure the FK." >&2
+    echo "       Aborting snapshot to prevent a gutted sandbox." >&2
+    exit 1
+fi
+
+# ── Build --exclude-table-data flags ─────────────────────────────────────────
+EXCLUDE_TABLE_DATA_FLAGS=()
+for tbl in "${CLOSURE_TABLES[@]}"; do
+    EXCLUDE_TABLE_DATA_FLAGS+=("--exclude-table-data=${tbl}")
+done
 
 # ── Dump ──────────────────────────────────────────────────────────────────────
 echo "==> dumping ${SNAPSHOT_POSTGRES_DB} (project: ${SNAPSHOT_SOURCE_PROJECT}) → ${SNAPSHOT_TMP}"
-if [[ ${#EXCLUDE_TABLE_DATA_FLAGS[@]} -gt 0 ]]; then
-    echo "==> excluding table data for: ${EXCLUDE_TABLE_DATA_FLAGS[*]}"
-fi
+echo "==> excluding table data for: ${EXCLUDE_TABLE_DATA_FLAGS[*]}"
 
 # Mirror the exec style used by sandbox_up.sh's pg_restore invocation:
 #   docker compose -p <project> -f <file> exec -T <service> <cmd>

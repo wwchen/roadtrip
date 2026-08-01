@@ -1,22 +1,25 @@
-# Private (PII / identity / session / watch-intent) tables.
+# PII / identity / session ROOTS for sandbox snapshot exclusion.
 #
-# DATA from these tables is excluded from pg_dump snapshots via
-# --exclude-table-data so that prod user identities and notification
-# destinations are NEVER cloned into a sandbox.  The CREATE TABLE DDL is
-# still included so the restored flyway_schema_history stays consistent
-# (Flyway must not re-run those migrations).
+# These are the identity and session tables whose ROWS must never be cloned
+# into a sandbox.  Their FK-dependent descendants are computed automatically
+# at snapshot time via a recursive CTE over pg_constraint, so only the roots
+# need to be listed here.  A future user-owned table (e.g. watch ownership
+# adding user_id) will be auto-excluded with no hand-editing required.
 #
-# Two guard heuristics in SandboxPrivateTablesTest.kt flag tables here:
+# The watch subtree (availability_watch, availability_watch_target,
+# availability_watch_poller, availability_job, availability_job_run,
+# availability_fetch_call) is NOT listed here.  Instead, the single PII
+# column in that subtree — availability_watch.trigger_config (JSONB holding
+# email recipients and Slack channels) — is scrubbed in place after restore
+# by scripts/sandbox_scrub.sql.  This preserves all watch rows and FK
+# integrity while removing notification destinations.
+#
+# Two guard heuristics in SandboxPrivateTablesTest.kt derive the PII set:
 #   1. FK heuristic: tables with a column REFERENCES app_user (ownership).
-#   2. Column heuristic: tables whose CREATE TABLE block contains a column
-#      named trigger_config, notification_email, slack_channel, slack_token*,
-#      recipient*, or a bare "email" column.
-# Together they catch both ownership tables and notification/PII-bearing
-# tables that have no app_user FK (e.g. availability_watch).
-#
-# FK-dependent closure: every child table whose FK points to a table already
-# in this list must also be listed so that a data-only pg_restore never
-# inserts orphaned FK rows.  Over-exclusion is safe; under-exclusion leaks PII.
+#   2. Column heuristic: tables whose CREATE TABLE or ALTER TABLE ADD COLUMN
+#      block contains a column matching sensitiveColumnPatterns.
+# Every derived table must be COVERED by either appearing in this roots list
+# or being the scrub target (availability_watch via sandbox_scrub.sql).
 #
 # After restore, scripts/sandbox_seed_users.sql re-seeds app_user and
 # user_role with two fixed sandbox-only users (will/matt @sandbox.local).
@@ -28,18 +31,7 @@ user_session
 user_role
 user_settings
 
-# ── Watch intent + notification destinations ──────────────────────────────────
-# availability_watch.trigger_config is a JSONB column holding email recipients
-# and Slack channels — user notification intent.  Its cascade children must be
-# co-excluded so that a data-only restore never leaves orphaned FK rows.
-# (availability_watch has no app_user FK, so the FK heuristic above misses it;
-# the column heuristic on trigger_config catches it instead.)
-availability_watch
-availability_watch_target
-availability_watch_poller
-# availability_job (watch_id → availability_watch) and availability_job_run
-# (job_id → availability_job) are NOT NULL ON DELETE CASCADE descendants: their
-# rows would be orphaned by a data-only restore that drops availability_watch
-# rows, so pg_restore --exit-on-error would abort. Co-exclude the full closure.
-availability_job
-availability_job_run
+# ── Legacy key/value store ────────────────────────────────────────────────────
+# Unclassified generic key/value table from V2 migrations; included
+# defensively since its schema predates PII classification.
+settings
