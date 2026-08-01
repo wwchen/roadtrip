@@ -77,13 +77,17 @@ test('_handlePasswordSubmit: empty fields report a validation error and skip the
       return null;
     },
   };
+  const loading = [];
   await _handlePasswordSubmit(form, {
     embeddedAuth, completeLogin: async () => {},
-    onError: (m) => errors.push(m), onLoading: () => {}, returnTo: '/',
+    onError: (m) => errors.push(m), onLoading: (b) => loading.push(b), returnTo: '/',
   });
   assert.equal(called, false);
   assert.equal(errors.filter(Boolean).length, 1);
   assert.match(errors.filter(Boolean)[0], /email|password|required/i);
+  // The caller disables the submit button before awaiting; validation must
+  // re-enable it (onLoading(false)) or the button stays stuck disabled.
+  assert.deepEqual(loading, [false]);
 });
 
 test('_handlePasswordSubmit: invalid_credentials maps to an owned message and clears loading', async () => {

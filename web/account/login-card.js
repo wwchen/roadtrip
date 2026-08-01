@@ -74,6 +74,10 @@ export async function _handlePasswordSubmit(form, { embeddedAuth, completeLogin,
   onError(null);
   if (!email || !password) {
     onError(VALIDATION_ERROR);
+    // The caller disables the submit button before awaiting; this early return
+    // never reaches the try/finally, so re-enable here or the button stays
+    // stuck disabled with the validation error showing.
+    onLoading(false);
     return;
   }
 

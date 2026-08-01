@@ -93,7 +93,10 @@ function mapAuth0SignupError(err) {
   if (code === 'user_exists' || code === 'username_exists') e.code = 'user_exists';
   else if (code === 'invalid_password' || code === 'PasswordStrengthError' || code === 'PasswordHistoryError' || code === 'PasswordDictionaryError') e.code = 'invalid_password';
   else if (code === 'invalid_signup') e.code = 'invalid_signup';
-  else if (code === 'too_many_attempts' || code === 'too_many_signups') e.code = 'too_many_attempts';
+  else if (code === 'too_many_attempts' || code === 'too_many_signups' || code === 'blocked') e.code = 'too_many_attempts';
+  // A server-side Action/Rule refused the signup: the request completed, so
+  // 'network' would be a lie. Surface it as a signup-rejected policy error.
+  else if (code === 'extensibility_error' || code === 'rule_error') e.code = 'invalid_signup';
   else e.code = 'network';
   return e;
 }
