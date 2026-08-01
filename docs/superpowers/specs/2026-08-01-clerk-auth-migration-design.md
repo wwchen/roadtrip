@@ -26,6 +26,15 @@ key) are **not used** by this design. The secret Backend API key never enters
 the repo. (If Clerk Backend API enrichment of upstream identities is ever
 wanted, it becomes a well-defined extension point inside the Clerk adapter.)
 
+Sign-in/sign-up UI is Clerk's hosted **Account Portal**
+(`accounts.roadtrip.floo.ca`) — the Universal-Login equivalent — reached
+automatically when `/oauth/authorize` sees an unauthenticated user. Clerk's
+embeddable `<SignIn />`/`<SignUp />` React components are not adopted (the
+frontend is vanilla ES modules; embedding them is the SDK-native path this
+design rejects). Dashboard component paths stay on their Account Portal
+defaults, and the OAuth application should be set to skip the consent screen
+(first-party app) so login flows sign-in → callback with no consent prompt.
+
 Verified against the live discovery document
 (`https://clerk.roadtrip.floo.ca/.well-known/openid-configuration`):
 
