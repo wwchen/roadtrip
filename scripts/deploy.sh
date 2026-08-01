@@ -241,55 +241,87 @@ echo "==> postgres healthy"
 # ── Prepare DB (snapshot restore + user seed) ────────────────────────────────
 if [[ "${DO_DB_PREP}" == "true" ]]; then
     if [[ "${HAVE_SNAPSHOT}" == "true" ]]; then
-        # ── Step 2: restore snapshot into the empty DB ────────────────────────
-        # postgres is up but the backend has NOT started yet, so the DB is still
-        # empty.  pg_restore runs with no risk of DDL collision with Flyway.
-        # --no-owner/--no-acl: restored objects owned by POSTGRES_USER
-        # regardless of the snapshot's origin user.
-        # --exit-on-error: a partial restore is loud rather than silent.
-        echo "==> restoring snapshot: ${SANDBOX_SNAPSHOT_PATH}"
-        docker compose \
+        # ── Idempotency check ─────────────────────────────────────────────────
+        # The postgres-data named volume persists across re-ups of the same
+        # Compose project, so a second /sandbox on the same PR would call
+        # pg_restore over an already-migrated DB → "relation already exists"
+        # abort.  Check for flyway_schema_history before restoring; if it
+        # already exists the restore + seed already ran and we just start the
+        # backend.
+        already_initialized="$(docker compose \
             -p "${COMPOSE_PROJECT}" \
             -f "${COMPOSE_FILE}" \
             exec -T postgres \
-            pg_restore \
-                --username="${POSTGRES_USER}" \
-                --dbname="${POSTGRES_DB}" \
-                --no-owner \
-                --no-acl \
-                --exit-on-error \
-            < "${SANDBOX_SNAPSHOT_PATH}"
-        echo "==> snapshot restored"
-    else
-        echo "==> no snapshot to restore (SANDBOX_SNAPSHOT_PATH not set or file absent)"
-    fi
+            psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -tAc \
+            "SELECT to_regclass('public.flyway_schema_history') IS NOT NULL" \
+            2>/dev/null | tr -d '[:space:]')"
 
-    # ── Step 3: seed users ────────────────────────────────────────────────────
-    # Runs after restore (or immediately if no snapshot).  The backend has not
-    # started yet in the snapshot path, so seed rows are visible to Flyway's
-    # no-op check and to the first request.
-    echo "==> seeding sandbox users"
-    docker compose \
-        -p "${COMPOSE_PROJECT}" \
-        -f "${COMPOSE_FILE}" \
-        exec -T postgres \
-        psql \
-            --username="${POSTGRES_USER}" \
-            --dbname="${POSTGRES_DB}" \
-            --no-password \
-        < "${SEED_SQL}"
-    echo "==> users seeded"
+        if [[ "${already_initialized}" == "t" ]]; then
+            echo "==> DB already initialized (re-up); skipping restore+seed"
+        else
+            # ── Step 2: restore snapshot into the empty DB ────────────────────
+            # postgres is up but the backend has NOT started yet, so the DB is
+            # still empty.  pg_restore runs with no risk of DDL collision with
+            # Flyway.
+            # --no-owner/--no-acl: restored objects owned by POSTGRES_USER
+            # regardless of the snapshot's origin user.
+            # --exit-on-error: a partial restore is loud rather than silent.
+            echo "==> restoring snapshot: ${SANDBOX_SNAPSHOT_PATH}"
+            docker compose \
+                -p "${COMPOSE_PROJECT}" \
+                -f "${COMPOSE_FILE}" \
+                exec -T postgres \
+                pg_restore \
+                    --username="${POSTGRES_USER}" \
+                    --dbname="${POSTGRES_DB}" \
+                    --no-owner \
+                    --no-acl \
+                    --exit-on-error \
+                < "${SANDBOX_SNAPSHOT_PATH}"
+            echo "==> snapshot restored"
 
-    if [[ "${HAVE_SNAPSHOT}" == "true" ]]; then
+            # ── Step 3: seed users ────────────────────────────────────────────
+            # Runs after restore.  The backend has not started yet, so seed
+            # rows are visible to Flyway's no-op check and to the first request.
+            echo "==> seeding sandbox users"
+            docker compose \
+                -p "${COMPOSE_PROJECT}" \
+                -f "${COMPOSE_FILE}" \
+                exec -T postgres \
+                psql \
+                    --username="${POSTGRES_USER}" \
+                    --dbname="${POSTGRES_DB}" \
+                    --no-password \
+                < "${SEED_SQL}"
+            echo "==> users seeded"
+        fi
+
         # ── Step 4: start remaining services (backend + any others) ──────────
-        # Now that the snapshot is restored and users are seeded, bring up the
-        # full stack.  Flyway boots against the already-restored schema
-        # (including flyway_schema_history) and is a no-op.
+        # Runs whether this was a fresh restore or a re-up.  Flyway boots
+        # against the already-restored schema (including flyway_schema_history)
+        # and is a no-op.
         echo "==> docker compose up (remaining services)"
         docker compose \
             -p "${COMPOSE_PROJECT}" \
             -f "${COMPOSE_FILE}" \
             up -d
+    else
+        echo "==> no snapshot to restore (SANDBOX_SNAPSHOT_PATH not set or file absent)"
+
+        # ── Step 3 (no-snapshot path): seed users ─────────────────────────────
+        # The backend has not started yet (Flyway runs on boot); seed rows are
+        # applied after postgres is healthy and before the backend is reachable.
+        echo "==> seeding sandbox users"
+        docker compose \
+            -p "${COMPOSE_PROJECT}" \
+            -f "${COMPOSE_FILE}" \
+            exec -T postgres \
+            psql \
+                --username="${POSTGRES_USER}" \
+                --dbname="${POSTGRES_DB}" \
+                --no-password \
+            < "${SEED_SQL}"
+        echo "==> users seeded"
     fi
 fi
 

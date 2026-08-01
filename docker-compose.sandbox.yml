@@ -100,7 +100,7 @@ services:
       - ./availability.html:/app/static/availability.html:ro
       - ./watches.html:/app/static/watches.html:ro
       - ./web:/app/static/web:ro
-      - ./data:/app/static/data
+      - ./data:/app/static/data:ro
     healthcheck:
       test: ["CMD", "java", "-Xmx32m", "-cp", "/app/app.jar", "ca.floo.roadtrip.HealthProbe"]
       interval: 5s
