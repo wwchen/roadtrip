@@ -32,8 +32,11 @@ automatically when `/oauth/authorize` sees an unauthenticated user. Clerk's
 embeddable `<SignIn />`/`<SignUp />` React components are not adopted (the
 frontend is vanilla ES modules; embedding them is the SDK-native path this
 design rejects). Dashboard component paths stay on their Account Portal
-defaults, and the OAuth application should be set to skip the consent screen
-(first-party app) so login flows sign-in → callback with no consent prompt.
+defaults. Clerk shows an OAuth consent screen by default and recommends
+keeping it enabled (disabling means any logged-in user visiting an authorize
+URL auto-grants the requested scopes); with only `openid email profile`
+requested the prompt is mild, so it stays on unless the operator explicitly
+opts out in the dashboard.
 
 Verified against the live discovery document
 (`https://clerk.roadtrip.floo.ca/.well-known/openid-configuration`):
@@ -158,6 +161,11 @@ and relink via verified email. Unverified-email takeover remains refused.
 - Discovery issuer mismatch: existing hard assertion in
   `OidcClient.discovery()` — verified to match (`https://clerk.roadtrip.floo.ca`,
   no trailing-slash quirk).
+- Rollout verification: on the first real Clerk login, confirm the id_token
+  carries `email_verified` (advertised in `claims_supported` and in Clerk's
+  docs). Email relinking depends on it; if it were ever absent the dialect
+  reads it as unverified and provisioning safely refuses the email link
+  rather than mislinking.
 
 ## Rollback
 
