@@ -2,6 +2,7 @@ package ca.floo.roadtrip.config
 
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -37,6 +38,57 @@ class SandboxPrivateTablesTest {
     private val repoRoot =
         generateSequence(File(".").absoluteFile) { it.parentFile }
             .first { File(it, "secrets/registry.yaml").isFile }
+
+    // ── addColumnRegex used by unit tests below (matches derivePiiTables' local val) ──
+    private val addColumnRegex =
+        Regex("""(?i)ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)\s+(.+)""")
+
+    @Test
+    fun `alterBufferIndicatesPii detects REFERENCES app_user in ADD COLUMN form`() {
+        val buffer = "ALTER TABLE some_table ADD COLUMN owner_id BIGINT REFERENCES app_user(id);"
+        assertTrue(
+            alterBufferIndicatesPii(buffer, addColumnRegex),
+            "Expected ALTER ADD COLUMN ... REFERENCES app_user to be flagged as PII-bearing",
+        )
+    }
+
+    @Test
+    fun `alterBufferIndicatesPii detects REFERENCES app_user in ADD CONSTRAINT form`() {
+        val buffer =
+            "ALTER TABLE some_table " +
+                "ADD CONSTRAINT fk_owner FOREIGN KEY (owner_id) REFERENCES app_user(id);"
+        assertTrue(
+            alterBufferIndicatesPii(buffer, addColumnRegex),
+            "Expected ALTER ADD CONSTRAINT ... REFERENCES app_user to be flagged as PII-bearing",
+        )
+    }
+
+    @Test
+    fun `alterBufferIndicatesPii detects REFERENCES APP_USER case-insensitively`() {
+        val buffer = "ALTER TABLE some_table ADD COLUMN owner_id BIGINT REFERENCES APP_USER(id);"
+        assertTrue(
+            alterBufferIndicatesPii(buffer, addColumnRegex),
+            "Expected REFERENCES APP_USER (uppercase) to be flagged as PII-bearing",
+        )
+    }
+
+    @Test
+    fun `alterBufferIndicatesPii detects PII column name in ADD COLUMN`() {
+        val buffer = "ALTER TABLE some_table ADD COLUMN notification_email TEXT NOT NULL;"
+        assertTrue(
+            alterBufferIndicatesPii(buffer, addColumnRegex),
+            "Expected ALTER ADD COLUMN notification_email to be flagged as PII-bearing",
+        )
+    }
+
+    @Test
+    fun `alterBufferIndicatesPii returns false for innocuous ALTER TABLE`() {
+        val buffer = "ALTER TABLE some_table ADD COLUMN retry_count INT NOT NULL DEFAULT 0;"
+        assertFalse(
+            alterBufferIndicatesPii(buffer, addColumnRegex),
+            "Expected ALTER with no PII column name and no app_user FK to NOT be flagged",
+        )
+    }
 
     @Test
     fun `every PII-bearing table is excluded or scrubbed in sandbox snapshots`() {
@@ -107,7 +159,9 @@ class SandboxPrivateTablesTest {
      * Derives PII-bearing tables from migration SQL files using two heuristics:
      *
      *   1. FK heuristic: `app_user` itself, plus any table with a column
-     *      `REFERENCES app_user` in its CREATE TABLE block.
+     *      `REFERENCES app_user` in its CREATE TABLE block **or ALTER TABLE
+     *      statement** (ADD COLUMN ... REFERENCES app_user, or ADD CONSTRAINT
+     *      ... FOREIGN KEY ... REFERENCES app_user).
      *
      *   2. PII-column heuristic: any table whose CREATE TABLE block, or any
      *      ALTER TABLE ... ADD COLUMN statement, contains a column whose
@@ -121,8 +175,14 @@ class SandboxPrivateTablesTest {
      *     then apply both heuristics to each ADD COLUMN fragment found.
      *     Handles multi-ADD forms: `ALTER TABLE t ADD COLUMN a TYPE, ADD COLUMN b TYPE;`
      *     and `ADD COLUMN IF NOT EXISTS col TYPE`.
+     *   - For ALTER TABLE ... REFERENCES app_user (FK added via ALTER): the
+     *     whole buffer is scanned for `REFERENCES app_user`, so an
+     *     `ADD CONSTRAINT ... FOREIGN KEY ... REFERENCES app_user` form is also
+     *     caught even though it does not match an ADD COLUMN fragment.
      *
      * This ensures a future `ALTER TABLE x ADD COLUMN notification_email TEXT`
+     * or `ALTER TABLE x ADD COLUMN owner_id BIGINT REFERENCES app_user(id)` or
+     * `ALTER TABLE x ADD CONSTRAINT fk FOREIGN KEY (owner_id) REFERENCES app_user`
      * is caught even if the CREATE TABLE block predates the PII naming.
      */
     private fun derivePiiTables(): Set<String> {
@@ -209,8 +269,17 @@ class SandboxPrivateTablesTest {
     }
 
     /**
-     * Processes a collected ALTER TABLE statement buffer, applying the PII-column
-     * heuristic to every ADD COLUMN fragment found within it.
+     * Processes a collected ALTER TABLE statement buffer, applying both PII
+     * heuristics:
+     *
+     *   1. FK heuristic: if the buffer contains `REFERENCES app_user` anywhere
+     *      (covers ADD COLUMN ... REFERENCES app_user AND ADD CONSTRAINT ...
+     *      FOREIGN KEY ... REFERENCES app_user), the table is PII-bearing.
+     *
+     *   2. PII-column heuristic: applied to every ADD COLUMN fragment.
+     *
+     * Delegates the actual detection to [alterBufferIndicatesPii] so the logic
+     * is unit-testable without real migration files.
      */
     private fun processAlterBuffer(
         tableName: String,
@@ -218,18 +287,46 @@ class SandboxPrivateTablesTest {
         piiTables: MutableSet<String>,
         addColumnRegex: Regex,
     ) {
-        // Split on commas to handle multi-ADD forms:
-        //   ALTER TABLE t ADD COLUMN a TYPE, ADD COLUMN b TYPE;
-        // Each segment is checked for an ADD COLUMN clause.
+        if (alterBufferIndicatesPii(buffer, addColumnRegex)) {
+            piiTables.add(tableName)
+        }
+    }
+
+    /**
+     * Pure function: returns true if an ALTER TABLE buffer indicates the table
+     * is PII-bearing under either heuristic.
+     *
+     * Heuristic 1 — FK to app_user: checks the WHOLE buffer for
+     * `REFERENCES app_user` (case-insensitive).  This catches both:
+     *   - `ADD COLUMN owner_id BIGINT REFERENCES app_user(id)`
+     *   - `ADD CONSTRAINT fk FOREIGN KEY (owner_id) REFERENCES app_user`
+     *
+     * Heuristic 2 — PII column name: splits on commas to handle multi-ADD forms
+     *   (`ALTER TABLE t ADD COLUMN a TYPE, ADD COLUMN b TYPE;`) and checks each
+     *   ADD COLUMN fragment against [sensitiveColumnPatterns].
+     *
+     * Exposed as `internal` so unit tests in the same module can call it
+     * directly with synthetic ALTER strings.
+     */
+    internal fun alterBufferIndicatesPii(
+        buffer: String,
+        addColumnRegex: Regex,
+    ): Boolean {
+        // Heuristic 1: FK to app_user anywhere in the ALTER statement.
+        if (buffer.contains("REFERENCES app_user", ignoreCase = true)) {
+            return true
+        }
+        // Heuristic 2: PII column name in an ADD COLUMN fragment.
         val segments = buffer.split(",")
         for (segment in segments) {
             val addMatch = addColumnRegex.find(segment) ?: continue
             val colName = addMatch.groupValues[1]
             val colDef = "$colName ${addMatch.groupValues[2]}".trim()
             if (sensitiveColumnPatterns.any { it.containsMatchIn(colDef) }) {
-                piiTables.add(tableName)
+                return true
             }
         }
+        return false
     }
 
     companion object {
