@@ -292,6 +292,7 @@ if [[ "${DO_DB_PREP}" == "true" ]]; then
                     --username="${POSTGRES_USER}" \
                     --dbname="${POSTGRES_DB}" \
                     --no-password \
+                    -v ON_ERROR_STOP=1 \
                 < "${SEED_SQL}"
             echo "==> users seeded"
         fi
@@ -307,21 +308,10 @@ if [[ "${DO_DB_PREP}" == "true" ]]; then
             up -d
     else
         echo "==> no snapshot to restore (SANDBOX_SNAPSHOT_PATH not set or file absent)"
-
-        # ── Step 3 (no-snapshot path): seed users ─────────────────────────────
-        # The backend has not started yet (Flyway runs on boot); seed rows are
-        # applied after postgres is healthy and before the backend is reachable.
-        echo "==> seeding sandbox users"
-        docker compose \
-            -p "${COMPOSE_PROJECT}" \
-            -f "${COMPOSE_FILE}" \
-            exec -T postgres \
-            psql \
-                --username="${POSTGRES_USER}" \
-                --dbname="${POSTGRES_DB}" \
-                --no-password \
-            < "${SEED_SQL}"
-        echo "==> users seeded"
+        # No-snapshot seed is deferred to AFTER the backend health-check below
+        # (step 4-no-snapshot) so that Flyway has completed its migrations before
+        # we INSERT into app_user / user_role.  Seeding before the backend is up
+        # races Flyway: app_user may not exist yet.
     fi
 fi
 
@@ -364,6 +354,9 @@ printf 'NAME=%s\nPORT=%s\nSTART_EPOCH=%s\n' \
 echo "==> wrote marker: ${MARKER}"
 
 # ── Health-check the backend ──────────────────────────────────────────────────
+# For the no-snapshot path this is also the Flyway gate: the backend's /ready
+# endpoint only returns 200 after Flyway has completed all migrations, so the
+# seed that follows is guaranteed to find app_user / user_role already present.
 echo "==> waiting for backend to be ready"
 HEALTH_URL="http://127.0.0.1:${SANDBOX_PORT}/api/health/ready"
 HEALTH_WAIT=0
@@ -376,6 +369,25 @@ until curl -fsS "${HEALTH_URL}" >/dev/null 2>&1; do
     sleep 1
 done
 echo "==> backend ready"
+
+# ── Step 4 (no-snapshot path): seed users after Flyway ───────────────────────
+# With a snapshot, seed runs before the backend starts (schema from restore).
+# Without a snapshot, seed runs here — after the backend health-check confirms
+# Flyway is complete — so we never INSERT into tables that don't exist yet.
+if [[ "${DO_DB_PREP}" == "true" && "${HAVE_SNAPSHOT}" == "false" ]]; then
+    echo "==> seeding sandbox users (post-Flyway)"
+    docker compose \
+        -p "${COMPOSE_PROJECT}" \
+        -f "${COMPOSE_FILE}" \
+        exec -T postgres \
+        psql \
+            --username="${POSTGRES_USER}" \
+            --dbname="${POSTGRES_DB}" \
+            --no-password \
+            -v ON_ERROR_STOP=1 \
+        < "${SEED_SQL}"
+    echo "==> users seeded"
+fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 SANDBOX_URL="https://sb-${SANDBOX_NAME}.${SANDBOX_TUNNEL_ZONE}"
