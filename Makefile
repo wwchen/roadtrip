@@ -1,4 +1,4 @@
-.PHONY: help run test data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export
+.PHONY: help run test data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop
 
 PORT       ?= 8765
 BACKEND_IMAGE ?= roadtrip/backend
@@ -182,3 +182,9 @@ _ensure-hooks:
 grafana-export:
 	./scripts/export_grafana_dashboards.py
 	./scripts/sync_grafana_dashboard_links.py
+
+sandbox:
+	SANDBOX_SHA=$(or $(SHA),$(shell git rev-parse HEAD)) scripts/sandbox_up.sh $(or $(REF),$(shell git rev-parse --abbrev-ref HEAD)) $(NAME)
+
+sandbox-stop:
+	scripts/sandbox_down.sh $(NAME)
