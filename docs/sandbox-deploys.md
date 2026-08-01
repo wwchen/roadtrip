@@ -146,7 +146,7 @@ command) re-targets the entire tier with no code change.
 | `SANDBOX_CADDY_DIR` | `/etc/caddy/sandboxes` | Per-sandbox `.caddy` snippet files; root Caddyfile must `import /etc/caddy/sandboxes/*.caddy` |
 | `SANDBOX_CADDY_CONFIG` | `/etc/caddy/Caddyfile` | Passed to `caddy reload --config <path>` |
 | `SANDBOX_STATE_DIR` | `/var/lib/roadtrip-sandboxes` | Holds `<name>.meta` marker files consumed by the reaper |
-| `SANDBOX_SNAPSHOT_PATH` | _(empty)_ | Path to a `pg_dump -Fc` archive; if blank or absent, sandboxes start with an empty Flyway-migrated schema. The snapshot script and reaper both default to `/var/lib/roadtrip-sandboxes/snapshot.dump` when this var is set there |
+| `SANDBOX_SNAPSHOT_PATH` | _(empty)_ | Path to a `pg_dump -Fc` archive; if blank or absent, sandboxes start with an empty Flyway-migrated schema. `scripts/sandbox_snapshot.sh` defaults this to `/var/lib/roadtrip-sandboxes/snapshot.dump` when the var is unset |
 | `SANDBOX_PORT_RANGE_START` | `41000` | First port in the host-local range allocated to sandboxes |
 | `SANDBOX_PORT_RANGE_END` | `41999` | Last port in the range |
 | `SANDBOX_DB_PASSWORD` | `sandbox` | Throwaway Postgres password for the sandbox DB |

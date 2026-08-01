@@ -77,7 +77,7 @@ services:
       - ROADTRIP_BUILD_SHA=${SANDBOX_SHA}
       - ROADTRIP_BUILD_BRANCH=${SANDBOX_BRANCH}
       # Sandbox identity bypass — resolves every request to the seed users
-      # based on X-Sandbox-User-Id; no real OIDC flow required.
+      # via the rt_session=sandbox:<id> cookie sentinel; no real OIDC flow required.
       - ROADTRIP_SANDBOX_ASSUME_USER=true
       # Blank issuer = auth disabled; OIDC routes are never registered.
       - ROADTRIP_AUTH_ISSUER=
