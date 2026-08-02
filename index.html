@@ -204,6 +204,22 @@
   .cg-drawer .rating { color: var(--rt-text); font-weight: 600; font-size: 14px; }
   .cg-drawer .rating .stars { color: var(--rt-rating); letter-spacing: -1px; margin-right: 2px; }
   .cg-drawer .rating .count { color: var(--rt-muted); font-weight: 400; font-size: 12px; margin-left: 3px; }
+  .cg-drawer .cell { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .cg-drawer .cell-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 500; color: var(--rt-on-accent); line-height: 1.4;
+  }
+  .cg-drawer .cell-pill .carrier { font-size: 12px; font-weight: 500; opacity: 0.95; }
+  .cg-drawer .cell-pill .val { font-variant-numeric: tabular-nums; font-weight: 600; opacity: 0.85; }
+  /* Per-carrier cell reception, rec.gov's 0-4 scale:
+     0 = none, 1 = major issues, 2 = some, 3 = good, 4 = excellent.
+     See the defect note on --rt-signal-* in tokens.css. */
+  .cg-drawer .cell-pill[data-bucket="0"] { background: var(--rt-signal-0); }
+  .cg-drawer .cell-pill[data-bucket="1"] { background: var(--rt-signal-1); }
+  .cg-drawer .cell-pill[data-bucket="2"] { background: var(--rt-signal-2); }
+  .cg-drawer .cell-pill[data-bucket="3"] { background: var(--rt-signal-3); }
+  .cg-drawer .cell-pill[data-bucket="4"] { background: var(--rt-signal-4); }
   #panel .section-label {
     font-size: 10px; text-transform: uppercase;
     color: var(--rt-muted);

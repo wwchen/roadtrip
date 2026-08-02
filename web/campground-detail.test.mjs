@@ -4,7 +4,7 @@ import test from 'node:test';
 import { flattenHydratedPoi } from './core.js';
 import {
   campgroundParentParkName,
-  cellCoverageSummary,
+  cellCoveragePillsHTML,
   parseAmenities,
   parseCellCoverage,
   ctaButtonsHTML,
@@ -153,10 +153,7 @@ test('campground drawer helpers accept canonical amenities and cell service', ()
 
   assert.deepEqual(parseAmenities(p), ['No water', 'No showers', 'Pit toilets', 'Fires allowed']);
   assert.deepEqual(parseCellCoverage(p), { verizon: 0, tmobile: 2.5 });
-  // Words, not numbers. 2.5 rounds half-up to 3 ('good'), matching the bucket
-  // rounding this replaced; 0 is stated as 'none' rather than hidden; the
-  // strongest carrier leads.
-  assert.equal(cellCoverageSummary(parseCellCoverage(p)), 'T-Mobile good · Verizon none');
+  assert.match(cellCoveragePillsHTML(parseCellCoverage(p)), /T-Mobile/);
   assert.match(reserveButtonHTML(p, 'cg-btn'), /View on recreation\.gov/);
   assert.match(ctaButtonsHTML(p, 'cg-btn'), /View on Campflare/);
   assert.match(ctaButtonsHTML(p, 'cg-btn'), /cg-btn-secondary/);

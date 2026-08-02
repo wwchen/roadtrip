@@ -56,32 +56,24 @@ export function amenitiesPillsHTML(amenities) {
 }
 
 const CARRIER_LABEL = { verizon: 'Verizon', att: 'AT&T', tmobile: 'T-Mobile', sprint: 'Sprint', uscell: 'US Cellular' };
-
-/** rec.gov rates reception 0-4. Campers think in words, not in a mean of
- *  star ratings, so the number never reaches the UI -- a "2.6" implies a
- *  precision that a median of nine crowd-sourced reports cannot support. */
-const SIGNAL_WORD = ['none', 'poor', 'fair', 'good', 'excellent'];
-
 /**
- * One line summarising per-carrier reception, best first:
- * "Verizon good · AT&T fair · T-Mobile poor".
- *
- * Deliberately prose in a detail row rather than a chip per carrier. This is
- * one soft, crowd-sourced datapoint; four tags gave it the visual weight of
- * four facts, and colour-coding them collided with availability status, which
- * owns green and amber on this card.
+ * Render per-carrier cell-signal chips. cc is `{verizon: [avg, count], ...}`
+ * where avg is rec.gov's 0–4 scale. Sorts by signal strength desc.
  */
-export function cellCoverageSummary(cc) {
+export function cellCoveragePillsHTML(cc) {
   if (!cc) return '';
-  return Object.entries(cc)
+  const entries = Object.entries(cc)
     .map(([k, v]) => [k, normalizeCellValue(v)])
-    .filter(([, v]) => v && Number.isFinite(v.avg))
-    .sort((a, b) => b[1].avg - a[1].avg)
-    .map(([k, v]) => {
-      const level = Math.max(0, Math.min(SIGNAL_WORD.length - 1, Math.round(v.avg)));
-      return `${CARRIER_LABEL[k] || k} ${SIGNAL_WORD[level]}`;
-    })
-    .join(' · ');
+    .filter(([, v]) => v && Number.isFinite(v.avg));
+  if (!entries.length) return '';
+  entries.sort((a, b) => b[1].avg - a[1].avg);
+  return '<div class="cell">' + entries.map(([k, v]) => {
+    const { avg, count } = v;
+    const bucket = Math.max(0, Math.min(4, Math.round(avg)));
+    const label = CARRIER_LABEL[k] || k;
+    const title = Number.isFinite(count) ? ` title="${count} reports"` : '';
+    return `<span class="cell-pill" data-bucket="${bucket}"${title}><span class="carrier">${label}</span><span class="val">${avg.toFixed(1)}</span></span>`;
+  }).join('') + '</div>';
 }
 
 /** 4.3 → "★★★★☆" — half-stars round down. */
@@ -154,7 +146,6 @@ export function structuredCampgroundDetailsHTML(p) {
     detailRow('Pull-through', booleanDisplay(p.has_pull_through_sites)),
     detailRow('Big-rig friendly', booleanDisplay(p.big_rig_friendly)),
     detailRow('Elevation', elevationDisplay(p.elevation)),
-    detailRow('Cell service', cellCoverageSummary(parseCellCoverage(p))),
   ].filter(Boolean).join('');
 
   const contactRows = [
