@@ -53,11 +53,14 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
         ctx.cleanCanonicalCatalogFixtures()
     }
 
-    private fun seedOwner(): Long = ca.floo.roadtrip.repo.UserRepo(ctx).create(
-        email = "owner-${userSeq++}@example.com",
-        displayName = null,
-        isEmailVerified = true,
-    ).id.value
+    private fun seedOwner(): Long =
+        ca.floo.roadtrip.repo
+            .UserRepo(ctx)
+            .create(
+                email = "owner-${userSeq++}@example.com",
+                displayName = null,
+                isEmailVerified = true,
+            ).id.value
 
     private fun seedPoi(sourceId: String = "p1"): Long =
         ctx

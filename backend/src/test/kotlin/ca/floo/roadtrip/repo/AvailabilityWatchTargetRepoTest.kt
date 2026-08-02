@@ -14,11 +14,13 @@ class AvailabilityWatchTargetRepoTest : SharedDbTest() {
         ctx.cleanCanonicalCatalogFixtures()
     }
 
-    private fun seedOwner(): Long = UserRepo(ctx).create(
-        email = "owner-${userSeq++}@example.com",
-        displayName = null,
-        isEmailVerified = true,
-    ).id.value
+    private fun seedOwner(): Long =
+        UserRepo(ctx)
+            .create(
+                email = "owner-${userSeq++}@example.com",
+                displayName = null,
+                isEmailVerified = true,
+            ).id.value
 
     private fun insertPoi(): Long {
         val sourceId = "poi-target-repo-${poiSeq++}"

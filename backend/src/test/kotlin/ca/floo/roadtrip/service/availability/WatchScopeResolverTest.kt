@@ -30,11 +30,13 @@ class WatchScopeResolverTest : SharedDbTest() {
         ctx.cleanCanonicalCatalogFixtures()
     }
 
-    private fun seedAppUser(email: String): UserId = UserRepo(ctx).create(
-        email = "owner-${userSeq++}@example.com",
-        displayName = null,
-        isEmailVerified = true,
-    ).id
+    private fun seedAppUser(email: String): UserId =
+        UserRepo(ctx)
+            .create(
+                email = "owner-${userSeq++}@example.com",
+                displayName = null,
+                isEmailVerified = true,
+            ).id
 
     private fun insertPoi(): Long {
         val sourceId = "poi-scope-${poiSeq++}"

@@ -22,11 +22,13 @@ class AvailabilityPollerRepoTest : SharedDbTest() {
 
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
 
-    private fun seedOwner(): Long = UserRepo(ctx).create(
-        email = "owner-${userSeq++}@example.com",
-        displayName = null,
-        isEmailVerified = true,
-    ).id.value
+    private fun seedOwner(): Long =
+        UserRepo(ctx)
+            .create(
+                email = "owner-${userSeq++}@example.com",
+                displayName = null,
+                isEmailVerified = true,
+            ).id.value
 
     private fun insertPoi(): Long = ctx.seedCatalogPoi(sourceId = "p1", name = "Upper Pines", lon = -119.56, lat = 37.74).poiId
 

@@ -31,11 +31,14 @@ class PollerBackfillTest : SharedDbTest() {
         ctx.cleanCanonicalCatalogFixtures()
     }
 
-    private fun seedOwner(): Long = ca.floo.roadtrip.repo.UserRepo(ctx).create(
-        email = "owner-${userSeq++}@example.com",
-        displayName = null,
-        isEmailVerified = true,
-    ).id.value
+    private fun seedOwner(): Long =
+        ca.floo.roadtrip.repo
+            .UserRepo(ctx)
+            .create(
+                email = "owner-${userSeq++}@example.com",
+                displayName = null,
+                isEmailVerified = true,
+            ).id.value
 
     private fun seedPoi(campgroundId: String): Long =
         ctx

@@ -35,6 +35,7 @@ internal class AvailabilityWatchController(
         requireNotNull(userRepo.findById(principal.userId)) {
             "no app_user for authenticated principal ${principal.userId}"
         }
+
     fun list(
         principal: Principal.User,
         status: WatchStatus?,
@@ -50,7 +51,10 @@ internal class AvailabilityWatchController(
         return watchMapper.listResponse(rows, total, limit, offset)
     }
 
-    fun get(principal: Principal.User, id: Long): AvailabilityWatchResponse? {
+    fun get(
+        principal: Principal.User,
+        id: Long,
+    ): AvailabilityWatchResponse? {
         val user = resolve(principal)
         val watch = watchRepo.findById(id) ?: return null
         if (!user.isAdmin && watch.ownerUserId != user.id.value) return null // 404, don't leak existence
@@ -121,7 +125,10 @@ internal class AvailabilityWatchController(
         return AvailabilityWatchControllerResult.Ok(watchMapper.response(updated))
     }
 
-    fun delete(principal: Principal.User, id: Long): Boolean {
+    fun delete(
+        principal: Principal.User,
+        id: Long,
+    ): Boolean {
         val user = resolve(principal)
         val existing = watchRepo.findById(id) ?: return false
         if (!user.isAdmin && existing.ownerUserId != user.id.value) return false

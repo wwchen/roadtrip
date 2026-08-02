@@ -96,11 +96,14 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
 
-    private fun seedOwner(): Long = ca.floo.roadtrip.repo.UserRepo(ctx).create(
-        email = "owner-${userSeq++}@example.com",
-        displayName = null,
-        isEmailVerified = true,
-    ).id.value
+    private fun seedOwner(): Long =
+        ca.floo.roadtrip.repo
+            .UserRepo(ctx)
+            .create(
+                email = "owner-${userSeq++}@example.com",
+                displayName = null,
+                isEmailVerified = true,
+            ).id.value
 
     /** Seeds a campground POI whose provider_ref resolves to ProviderRef.RecGov(campgroundId). */
     private fun seedPoi(
