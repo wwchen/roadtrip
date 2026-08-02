@@ -11,11 +11,11 @@
   align-items: center;
   justify-content: center;
   padding: 4px 12px;
-  font-family: var(--rt-sans, system-ui, sans-serif);
+  font-family: var(--rt-sans);
   font-size: 12px;
   line-height: 1.4;
-  background: var(--rt-warn, #f1a04a);
-  color: #fff;
+  background: var(--rt-warn);
+  color: var(--rt-on-accent);
 }
 
 .sandbox-banner__env {
@@ -25,9 +25,9 @@
 
 .sandbox-banner__sha,
 .sandbox-banner a {
-  color: #fff;
+  color: var(--rt-on-accent);
   text-decoration: underline;
-  font-family: var(--rt-mono, ui-monospace, monospace);
+  font-family: var(--rt-mono);
   font-size: 11px;
 }
 
