@@ -57,12 +57,20 @@ internal class WatchNotificationTargetResolver(
         }
 
     /**
-     * The owner-scoped Slack target, or null when no owner-controlled channel is
-     * available (the leak-closure case). Channel = the watch's own override, else
-     * the OWNER's stored `slack_channel`; when neither yields a channel this returns
-     * null rather than falling back to the shared default. Trigger-kind-agnostic:
-     * callers decide when Slack applies ([resolve] gates on `slack_notify`; ATC calls
-     * this directly regardless of kind).
+     * The owner-scoped Slack target, or null when the security invariant cannot be
+     * met. A Slack target is produced ONLY when the owner has BOTH a resolved
+     * channel AND a personal token, so the card is delivered via the owner's own
+     * token into a space the owner controls — never via the shared global bot to a
+     * user-named channel.
+     *
+     * Channel = the watch's own override, else the OWNER's stored `slack_channel`;
+     * when neither yields a channel this returns null. Token = the owner's decrypted
+     * `slack_token_cipher` when present; when absent or undecryptable this also
+     * returns null. The leak-closure: if either channel OR token is missing, no
+     * Slack card is emitted (email still fires when enabled).
+     *
+     * Trigger-kind-agnostic: callers decide when Slack applies ([resolve] gates on
+     * `slack_notify`; ATC calls this directly regardless of kind).
      */
     fun resolveSlackTarget(watch: AvailabilityWatchRepo.Watch): NotificationTarget.Slack? {
         val ownerSettings = userSettingsRepo.find(UserId(watch.ownerUserId))
@@ -73,7 +81,7 @@ internal class WatchNotificationTargetResolver(
                     .onFailure {
                         log.warn("Failed to decrypt Slack token for owner user_id={}: {}", watch.ownerUserId, it.message)
                     }.getOrNull()
-            }
+            } ?: return null
         return NotificationTarget.Slack(channel = channel, token = token)
     }
 }

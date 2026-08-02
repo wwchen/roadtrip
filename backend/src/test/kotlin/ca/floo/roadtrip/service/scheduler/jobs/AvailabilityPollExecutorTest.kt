@@ -56,6 +56,7 @@ import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import ca.floo.roadtrip.service.notification.slack.SlackContentAvailabilityRenderer
 import ca.floo.roadtrip.service.notification.slack.SlackContentWatchStatusRenderer
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
+import ca.floo.roadtrip.service.security.SecretCipher
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -75,6 +76,7 @@ import kotlin.test.assertTrue
 class AvailabilityPollExecutorTest : SharedDbTest() {
     private val testProviderCooldown = Duration.ofMinutes(5)
     private var userSeq = 0
+    private val testCipher = SecretCipher(ByteArray(32) { it.toByte() })
 
     // Pin the clock to noon UTC so the earliest-bookable-date calculation
     // (18:00 local cutoff) never drifts across midnight for the test POI
@@ -99,9 +101,11 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
 
     /** Seeds an app_user and, when [slackChannel] is non-null, a matching
-     *  `user_settings.slack_channel`. The channel is what the owner-scoped
-     *  resolver keys off (there is no shared-default fallback anymore), so a
-     *  watch whose owner has no channel produces NO Slack target. */
+     *  `user_settings.slack_channel` AND a sealed token. Both channel AND token
+     *  are now required for the owner-scoped resolver to emit a Slack target
+     *  (the security invariant: cards only via the owner's own token, never the
+     *  shared global bot). A watch whose owner has no channel OR no token produces
+     *  NO Slack target. */
     private fun seedOwner(slackChannel: String? = "#camping"): Long {
         val userId =
             ca.floo.roadtrip.repo
@@ -112,9 +116,12 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     isEmailVerified = true,
                 ).id
         if (slackChannel != null) {
-            ca.floo.roadtrip.repo
-                .UserSettingsRepo(ctx)
-                .upsertNotifications(userId, notificationEmail = null, slackChannel = slackChannel)
+            val repo =
+                ca.floo.roadtrip.repo
+                    .UserSettingsRepo(ctx)
+            repo.upsertNotifications(userId, notificationEmail = null, slackChannel = slackChannel)
+            // Seed a token so the resolver produces a Slack target (new security gate).
+            repo.setSlackToken(userId, cipher = testCipher.seal("xoxb-owner-token"), hint = "oken")
         }
         return userId.value
     }
@@ -371,12 +378,14 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             pollerRepo = AvailabilityPollerRepo(ctx),
         )
 
-    /** A resolver over the real seeded `user_settings` rows, cipher null (tests
-     *  seed no per-user token; owner-scoped channel routing is what matters). */
+    /** A resolver over the real seeded `user_settings` rows. Tests now seed a
+     *  per-user token (via seedOwner), and the cipher is passed so the resolver
+     *  can decrypt it and produce Slack targets (both channel AND token are now
+     *  required per the security invariant). */
     private fun targetResolver(): WatchNotificationTargetResolver =
         WatchNotificationTargetResolver(
             userSettingsRepo = UserSettingsRepo(ctx),
-            cipher = null,
+            cipher = testCipher,
         )
 
     /** Dispatcher with Slack disabled — a null-config service that no-ops and

@@ -61,15 +61,21 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
     @Test
     fun `watch channel override wins and is used as the slack channel`() {
         val owner = seedOwner()
+        val repo = UserSettingsRepo(ctx)
         // Owner also has a stored channel — the watch's own override must win.
-        UserSettingsRepo(ctx).upsertNotifications(owner, notificationEmail = null, slackChannel = "#owner-channel")
+        repo.upsertNotifications(owner, notificationEmail = null, slackChannel = "#owner-channel")
+        // A personal token is now required to emit any Slack target.
+        repo.setSlackToken(owner, cipher = testCipher.seal("xoxb-owner-token"), hint = "oken")
 
         val targets =
             resolver().resolve(
                 watch(owner, triggerConfig = JsonObject(mapOf("channel" to JsonPrimitive("#watch-override")))),
             )
 
-        assertEquals(listOf(NotificationTarget.Slack(channel = "#watch-override")), slackTargets(targets))
+        assertEquals(
+            listOf(NotificationTarget.Slack(channel = "#watch-override", token = "xoxb-owner-token")),
+            slackTargets(targets),
+        )
     }
 
     @Test
@@ -139,11 +145,17 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
     fun `slack_notify watch with an owner channel still gets its slack card`() {
         // Guard against over-correcting: the opt-in path must still deliver.
         val owner = seedOwner()
-        UserSettingsRepo(ctx).upsertNotifications(owner, notificationEmail = null, slackChannel = "#owner-channel")
+        val repo = UserSettingsRepo(ctx)
+        repo.upsertNotifications(owner, notificationEmail = null, slackChannel = "#owner-channel")
+        // A personal token is now required to emit any Slack target.
+        repo.setSlackToken(owner, cipher = testCipher.seal("xoxb-owner-token"), hint = "oken")
 
         val targets = resolver().resolve(watch(owner, triggerKinds = listOf(AvailabilityTriggerKinds.SLACK_NOTIFY)))
 
-        assertEquals(listOf(NotificationTarget.Slack(channel = "#owner-channel")), slackTargets(targets))
+        assertEquals(
+            listOf(NotificationTarget.Slack(channel = "#owner-channel", token = "xoxb-owner-token")),
+            slackTargets(targets),
+        )
     }
 
     @Test
@@ -151,11 +163,14 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
         // ATC carries the `atc` kind, not slack_notify, yet must still notify Slack.
         // resolveSlackTarget is not kind-gated; the channel gate still applies.
         val owner = seedOwner()
-        UserSettingsRepo(ctx).upsertNotifications(owner, notificationEmail = null, slackChannel = "#owner-channel")
+        val repo = UserSettingsRepo(ctx)
+        repo.upsertNotifications(owner, notificationEmail = null, slackChannel = "#owner-channel")
+        // A personal token is now required to emit any Slack target.
+        repo.setSlackToken(owner, cipher = testCipher.seal("xoxb-owner-token"), hint = "oken")
 
         val slack = resolver().resolveSlackTarget(watch(owner, triggerKinds = listOf(AvailabilityTriggerKinds.ATC)))
 
-        assertEquals(NotificationTarget.Slack(channel = "#owner-channel"), slack)
+        assertEquals(NotificationTarget.Slack(channel = "#owner-channel", token = "xoxb-owner-token"), slack)
     }
 
     @Test
@@ -168,23 +183,68 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
     }
 
     @Test
-    fun `null cipher yields a null token even when a token blob is stored`() {
+    fun `owner has channel but no token emits no slack target - security invariant`() {
+        // Core security gate: even when a channel is configured (owner channel or
+        // watch override), if the owner has NO personal token, NO Slack target is
+        // produced. This prevents the card from being posted via the shared global
+        // bot to a user-named channel a non-owner could act on. Email still fires
+        // when enabled.
+        val owner = seedOwner()
+        UserSettingsRepo(ctx).upsertNotifications(owner, notificationEmail = null, slackChannel = "#owner-channel")
+        // No token set for the owner — token resolves to null.
+
+        val targets =
+            resolver().resolve(
+                watch(
+                    owner,
+                    triggerKinds = listOf(AvailabilityTriggerKinds.SLACK_NOTIFY, AvailabilityTriggerKinds.EMAIL_NOTIFY),
+                    triggerConfig = JsonObject(mapOf(AvailabilityTriggerKinds.EMAIL_NOTIFY to emailTo("alerts@example.test"))),
+                ),
+            )
+
+        assertTrue(slackTargets(targets).isEmpty(), "channel without token must yield no Slack target")
+        // Email still fires when configured.
+        assertEquals(
+            listOf(NotificationTarget.Email(listOf("alerts@example.test"))),
+            targets.filterIsInstance<NotificationTarget.Email>(),
+        )
+    }
+
+    @Test
+    fun `watch override channel but owner has no token emits no slack target`() {
+        // Variant of the core security gate: even when the WATCH specifies a channel
+        // override (bypassing the owner's stored channel), if the owner has NO
+        // personal token, NO Slack target is produced. The override alone is not
+        // enough — the token is what confines delivery.
+        val owner = seedOwner()
+        // No channel or token set for the owner.
+
+        val targets =
+            resolver().resolve(
+                watch(owner, triggerConfig = JsonObject(mapOf("channel" to JsonPrimitive("#watch-override")))),
+            )
+
+        assertTrue(slackTargets(targets).isEmpty(), "watch override channel without token must yield no Slack target")
+    }
+
+    @Test
+    fun `null cipher yields no slack target when token cannot be decrypted`() {
         val owner = seedOwner()
         val repo = UserSettingsRepo(ctx)
         repo.upsertNotifications(owner, notificationEmail = null, slackChannel = "#owner-channel")
         repo.setSlackToken(owner, cipher = testCipher.seal("xoxb-owner-token"), hint = "oken")
 
-        // A resolver with no cipher cannot decrypt: token is null, no crash, and
-        // the channel still routes to the owner (global bot token is fine).
+        // A resolver with no cipher cannot decrypt: token resolves to null, and
+        // per the new security invariant (both channel AND token required), no
+        // Slack target is produced. This prevents cards from being delivered via
+        // the shared global bot to a user-named channel a non-owner could act on.
         val targets = resolver(cipher = null).resolve(watch(owner))
 
-        val slack = slackTargets(targets).single()
-        assertEquals("#owner-channel", slack.channel)
-        assertNull(slack.token)
+        assertTrue(slackTargets(targets).isEmpty(), "no decryptable token must yield no Slack target")
     }
 
     @Test
-    fun `undecryptable token blob degrades to null token without throwing`() {
+    fun `undecryptable token blob yields no slack target without throwing`() {
         val owner = seedOwner()
         val repo = UserSettingsRepo(ctx)
         repo.upsertNotifications(owner, notificationEmail = null, slackChannel = "#owner-channel")
@@ -193,13 +253,13 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
         repo.setSlackToken(owner, cipher = wrongCipher.seal("xoxb-owner-token"), hint = "oken")
 
         // The resolver's testCipher cannot decrypt the blob sealed with wrongCipher.
-        // It must degrade to token=null without throwing, so the watch alert still
-        // fires via the owner's channel with the global bot token.
+        // It degrades to token=null gracefully (no throw), and per the new security
+        // invariant (both channel AND token required), no Slack target is produced.
+        // This prevents cards from being delivered via the shared global bot to a
+        // user-named channel a non-owner could act on.
         val targets = resolver(cipher = testCipher).resolve(watch(owner))
 
-        val slack = slackTargets(targets).single()
-        assertEquals("#owner-channel", slack.channel)
-        assertNull(slack.token, "undecryptable blob must yield token=null, not throw")
+        assertTrue(slackTargets(targets).isEmpty(), "undecryptable blob must yield no Slack target (graceful, no throw)")
     }
 
     private fun emailTo(to: String): JsonObject = JsonObject(mapOf("to" to JsonPrimitive(to)))

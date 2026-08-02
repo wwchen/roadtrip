@@ -91,7 +91,19 @@ class TriggerActionHandlerTest {
         runBlocking {
             val notifications = CapturingNotifications(result = true)
             val handler =
-                NotifyTriggerActionHandler(notifications = notifications, targetResolver = resolver(), appRootUrl = "https://app.example")
+                NotifyTriggerActionHandler(
+                    notifications = notifications,
+                    targetResolver =
+                        resolver(
+                            UserSettingsRepo.Settings(
+                                notificationEmail = null,
+                                slackChannel = null,
+                                slackTokenCipher = testCipher.seal("xoxb-owner-token"),
+                                slackTokenHint = "oken",
+                            ),
+                        ),
+                    appRootUrl = "https://app.example",
+                )
 
             val watch =
                 fakeWatch(
@@ -103,7 +115,7 @@ class TriggerActionHandlerTest {
 
             assertTrue(delivered)
             assertEquals(42L, notifications.lastWatchId)
-            assertEquals(listOf(NotificationTarget.Slack("custom-channel")), notifications.lastTargets)
+            assertEquals(listOf(NotificationTarget.Slack("custom-channel", "xoxb-owner-token")), notifications.lastTargets)
             assertEquals("https://app.example", notifications.lastAppRootUrl)
         }
 
@@ -112,7 +124,19 @@ class TriggerActionHandlerTest {
         runBlocking {
             val notifications = CapturingNotifications(result = true)
             val handler =
-                NotifyTriggerActionHandler(notifications = notifications, targetResolver = resolver(), appRootUrl = "https://app.example")
+                NotifyTriggerActionHandler(
+                    notifications = notifications,
+                    targetResolver =
+                        resolver(
+                            UserSettingsRepo.Settings(
+                                notificationEmail = null,
+                                slackChannel = null,
+                                slackTokenCipher = testCipher.seal("xoxb-owner-token"),
+                                slackTokenHint = "oken",
+                            ),
+                        ),
+                    appRootUrl = "https://app.example",
+                )
 
             val delivered =
                 handler.fire(
@@ -133,7 +157,7 @@ class TriggerActionHandlerTest {
                 )
 
             assertTrue(delivered)
-            assertEquals(listOf(NotificationTarget.Slack("nested-channel")), notifications.lastTargets)
+            assertEquals(listOf(NotificationTarget.Slack("nested-channel", "xoxb-owner-token")), notifications.lastTargets)
         }
 
     @Test
@@ -227,7 +251,20 @@ class TriggerActionHandlerTest {
     fun `NotifyTriggerActionHandler combines slack and email targets into one send`() =
         runBlocking {
             val notifications = CapturingNotifications(result = true)
-            val handler = NotifyTriggerActionHandler(notifications = notifications, targetResolver = resolver(), appRootUrl = null)
+            val handler =
+                NotifyTriggerActionHandler(
+                    notifications = notifications,
+                    targetResolver =
+                        resolver(
+                            UserSettingsRepo.Settings(
+                                notificationEmail = null,
+                                slackChannel = null,
+                                slackTokenCipher = testCipher.seal("xoxb-owner-token"),
+                                slackTokenHint = "oken",
+                            ),
+                        ),
+                    appRootUrl = null,
+                )
 
             val delivered =
                 handler.fire(
@@ -250,7 +287,7 @@ class TriggerActionHandlerTest {
 
             assertTrue(delivered)
             assertEquals(
-                listOf(NotificationTarget.Slack("#custom"), NotificationTarget.Email(listOf("alerts@example.test"))),
+                listOf(NotificationTarget.Slack("#custom", "xoxb-owner-token"), NotificationTarget.Email(listOf("alerts@example.test"))),
                 notifications.lastTargets,
             )
             assertEquals(1, notifications.openingSends)
@@ -320,7 +357,15 @@ class TriggerActionHandlerTest {
                 AtcTriggerActionHandler(
                     bookings = registry,
                     bookingTargets = AvailabilityBookingTargetResolver(registry),
-                    targetResolver = resolver(),
+                    targetResolver =
+                        resolver(
+                            UserSettingsRepo.Settings(
+                                notificationEmail = null,
+                                slackChannel = null,
+                                slackTokenCipher = testCipher.seal("xoxb-owner-token"),
+                                slackTokenHint = "oken",
+                            ),
+                        ),
                     notifications = notifications,
                 )
             val watch =
@@ -338,7 +383,7 @@ class TriggerActionHandlerTest {
             assertEquals(42L, result.watchId)
             assertEquals("recgov", result.vendor)
             assertEquals("completed", result.status)
-            assertEquals(listOf(NotificationTarget.Slack("#custom")), result.targets)
+            assertEquals(listOf(NotificationTarget.Slack("#custom", "xoxb-owner-token")), result.targets)
         }
 
     @Test
@@ -460,12 +505,13 @@ class TriggerActionHandlerTest {
         override fun find(userId: UserId): UserSettingsRepo.Settings? = settings
     }
 
-    /** A resolver over an owner that has no stored settings (null cipher), so the
-     *  Slack channel comes purely from the watch's own override. */
+    /** A resolver over an owner that has no stored settings by default. When
+     *  settings with a token are provided, testCipher is passed so the token can
+     *  be decrypted, otherwise cipher is null. */
     private fun resolver(settings: UserSettingsRepo.Settings? = null): WatchNotificationTargetResolver =
         WatchNotificationTargetResolver(
             userSettingsRepo = FakeUserSettingsRepo(settings),
-            cipher = null,
+            cipher = if (settings?.slackTokenCipher != null) testCipher else null,
         )
 
     private class FakeHandler(
