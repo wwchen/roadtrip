@@ -33,6 +33,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
     private lateinit var campsiteRepo: CampsiteRepo
     private lateinit var scopeResolver: WatchScopeResolver
     private var poiSeq = 0
+    private var userSeq = 0
     private val fakeDateContext = PoiDateContext(timeZone = ZoneId.of("UTC"), earliestDate = LocalDate.now())
 
     @BeforeAll
@@ -47,6 +48,12 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
     }
 
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
+
+    private fun seedOwner(): Long = ca.floo.roadtrip.repo.UserRepo(ctx).create(
+        email = "owner-${userSeq++}@example.com",
+        displayName = null,
+        isEmailVerified = true,
+    ).id.value
 
     private fun insertPoi(name: String = "Upper Pines"): Long {
         val sourceId = "poi-${poiSeq++}"
@@ -66,16 +73,18 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         startDate: String = "2026-07-04",
         endDate: String = "2026-12-31",
     ): Long {
+        val ownerId = seedOwner()
         val watchId =
             ctx
                 .fetchOne(
                     """
                     INSERT INTO availability_watch (
-                        start_date, end_date, cadence_sec, trigger_kinds
+                        owner_user_id, start_date, end_date, cadence_sec, trigger_kinds
                     ) VALUES (
-                        ?::date, ?::date, 60, ARRAY['atc']
+                        ?, ?::date, ?::date, 60, ARRAY['atc']
                     ) RETURNING id
                     """.trimIndent(),
+                    ownerId,
                     startDate,
                     endDate,
                 )!!
@@ -90,16 +99,18 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
     }
 
     private fun insertPausedWatch(poiId: Long): Long {
+        val ownerId = seedOwner()
         val watchId =
             ctx
                 .fetchOne(
                     """
                     INSERT INTO availability_watch (
-                        start_date, end_date, cadence_sec, trigger_kinds, status
+                        owner_user_id, start_date, end_date, cadence_sec, trigger_kinds, status
                     ) VALUES (
-                        '2026-07-04'::date, '2026-12-31'::date, 60, ARRAY['atc'], 'paused'
+                        ?, '2026-07-04'::date, '2026-12-31'::date, 60, ARRAY['atc'], 'paused'
                     ) RETURNING id
                     """.trimIndent(),
+                    ownerId,
                 )!!
                 .get("id", Long::class.java)
         ctx.execute("INSERT INTO availability_watch_target (watch_id, poi_id) VALUES (?, ?)", watchId, poiId)

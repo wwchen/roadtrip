@@ -24,10 +24,18 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class PollerBackfillTest : SharedDbTest() {
+    private var userSeq = 0
+
     @BeforeEach
     fun cleanup() {
         ctx.cleanCanonicalCatalogFixtures()
     }
+
+    private fun seedOwner(): Long = ca.floo.roadtrip.repo.UserRepo(ctx).create(
+        email = "owner-${userSeq++}@example.com",
+        displayName = null,
+        isEmailVerified = true,
+    ).id.value
 
     private fun seedPoi(campgroundId: String): Long =
         ctx
@@ -59,14 +67,16 @@ class PollerBackfillTest : SharedDbTest() {
             .get("campground_id", Long::class.java)
 
     private fun seedActiveWatch(poiId: Long): Long {
+        val ownerId = seedOwner()
         val watchId =
             ctx
                 .fetchOne(
                     """
-                    INSERT INTO availability_watch (start_date, end_date, cadence_sec, trigger_kinds)
-                    VALUES ('2026-07-04'::date, '2026-07-06'::date, 60, ARRAY['atc'])
+                    INSERT INTO availability_watch (owner_user_id, start_date, end_date, cadence_sec, trigger_kinds)
+                    VALUES (?, '2026-07-04'::date, '2026-07-06'::date, 60, ARRAY['atc'])
                     RETURNING id
                     """.trimIndent(),
+                    ownerId,
                 )!!
                 .get("id", Long::class.java)
         ctx.execute("INSERT INTO availability_watch_target (watch_id, poi_id) VALUES (?, ?)", watchId, poiId)

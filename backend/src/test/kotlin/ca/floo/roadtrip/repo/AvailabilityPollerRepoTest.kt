@@ -13,12 +13,20 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class AvailabilityPollerRepoTest : SharedDbTest() {
+    private var userSeq = 0
+
     @BeforeEach
     fun cleanup() {
         ctx.cleanCanonicalCatalogFixtures()
     }
 
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
+
+    private fun seedOwner(): Long = UserRepo(ctx).create(
+        email = "owner-${userSeq++}@example.com",
+        displayName = null,
+        isEmailVerified = true,
+    ).id.value
 
     private fun insertPoi(): Long = ctx.seedCatalogPoi(sourceId = "p1", name = "Upper Pines", lon = -119.56, lat = 37.74).poiId
 
@@ -28,16 +36,18 @@ class AvailabilityPollerRepoTest : SharedDbTest() {
         startDate: String = "2026-07-04",
         endDate: String = "2026-12-31",
     ): Long {
+        val ownerId = seedOwner()
         val watchId =
             ctx
                 .fetchOne(
                     """
                     INSERT INTO availability_watch (
-                        start_date, end_date, cadence_sec, trigger_kinds
+                        owner_user_id, start_date, end_date, cadence_sec, trigger_kinds
                     ) VALUES (
-                        ?::date, ?::date, 60, ARRAY['atc']
+                        ?, ?::date, ?::date, 60, ARRAY['atc']
                     ) RETURNING id
                     """.trimIndent(),
+                    ownerId,
                     startDate,
                     endDate,
                 )!!
@@ -52,16 +62,18 @@ class AvailabilityPollerRepoTest : SharedDbTest() {
         startDate: String = "2026-07-04",
         endDate: String = "2026-12-31",
     ): Long {
+        val ownerId = seedOwner()
         val watchId =
             ctx
                 .fetchOne(
                     """
                     INSERT INTO availability_watch (
-                        start_date, end_date, cadence_sec, trigger_kinds, status
+                        owner_user_id, start_date, end_date, cadence_sec, trigger_kinds, status
                     ) VALUES (
-                        ?::date, ?::date, 60, ARRAY['atc'], 'paused'
+                        ?, ?::date, ?::date, 60, ARRAY['atc'], 'paused'
                     ) RETURNING id
                     """.trimIndent(),
+                    ownerId,
                     startDate,
                     endDate,
                 )!!

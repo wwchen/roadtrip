@@ -72,6 +72,7 @@ import kotlin.test.assertTrue
 
 class AvailabilityPollExecutorTest : SharedDbTest() {
     private val testProviderCooldown = Duration.ofMinutes(5)
+    private var userSeq = 0
 
     // Pin the clock to noon UTC so the earliest-bookable-date calculation
     // (18:00 local cutoff) never drifts across midnight for the test POI
@@ -94,6 +95,12 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     }
 
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
+
+    private fun seedOwner(): Long = ca.floo.roadtrip.repo.UserRepo(ctx).create(
+        email = "owner-${userSeq++}@example.com",
+        displayName = null,
+        isEmailVerified = true,
+    ).id.value
 
     /** Seeds a campground POI whose provider_ref resolves to ProviderRef.RecGov(campgroundId). */
     private fun seedPoi(
@@ -143,16 +150,18 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         stopWhenTriggered: Boolean = false,
     ): Long {
         val kindsLiteral = triggerKinds.joinToString(prefix = "ARRAY[", postfix = "]") { "'$it'" }
+        val ownerId = seedOwner()
         val watchId =
             ctx
                 .fetchOne(
                     """
                     INSERT INTO availability_watch (
-                        start_date, end_date, cadence_sec, trigger_kinds, trigger_config, stop_when_triggered
+                        owner_user_id, start_date, end_date, cadence_sec, trigger_kinds, trigger_config, stop_when_triggered
                     ) VALUES (
-                        ?::date, ?::date, ?::int, $kindsLiteral, ?::jsonb, ?
+                        ?, ?::date, ?::date, ?::int, $kindsLiteral, ?::jsonb, ?
                     ) RETURNING id
                     """.trimIndent(),
+                    ownerId,
                     startDate,
                     endDate,
                     cadenceSec,
@@ -172,16 +181,18 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         startDate: String,
         endDate: String,
     ): Long {
+        val ownerId = seedOwner()
         val watchId =
             ctx
                 .fetchOne(
                     """
                     INSERT INTO availability_watch (
-                        start_date, end_date, cadence_sec, trigger_kinds, trigger_config, stop_when_triggered
+                        owner_user_id, start_date, end_date, cadence_sec, trigger_kinds, trigger_config, stop_when_triggered
                     ) VALUES (
-                        ?::date, ?::date, 60, ARRAY['atc'], '{}'::jsonb, false
+                        ?, ?::date, ?::date, 60, ARRAY['atc'], '{}'::jsonb, false
                     ) RETURNING id
                     """.trimIndent(),
+                    ownerId,
                     startDate,
                     endDate,
                 )!!

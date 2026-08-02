@@ -7,11 +7,18 @@ import kotlin.test.assertTrue
 
 class AvailabilityWatchTargetRepoTest : SharedDbTest() {
     private var poiSeq = 0
+    private var userSeq = 0
 
     @BeforeEach
     fun cleanup() {
         ctx.cleanCanonicalCatalogFixtures()
     }
+
+    private fun seedOwner(): Long = UserRepo(ctx).create(
+        email = "owner-${userSeq++}@example.com",
+        displayName = null,
+        isEmailVerified = true,
+    ).id.value
 
     private fun insertPoi(): Long {
         val sourceId = "poi-target-repo-${poiSeq++}"
@@ -31,16 +38,19 @@ class AvailabilityWatchTargetRepoTest : SharedDbTest() {
             .fetchOne("SELECT count(*) AS c FROM availability_watch WHERE id = ?", watchId)!!
             .get("c", Long::class.java) > 0
 
-    private fun insertWatch(): Long =
-        ctx
+    private fun insertWatch(): Long {
+        val ownerId = seedOwner()
+        return ctx
             .fetchOne(
                 """
-                INSERT INTO availability_watch (start_date, end_date, cadence_sec, trigger_kinds)
-                VALUES ('2026-07-04'::date, '2026-07-06'::date, 60, ARRAY['atc'])
+                INSERT INTO availability_watch (owner_user_id, start_date, end_date, cadence_sec, trigger_kinds)
+                VALUES (?, '2026-07-04'::date, '2026-07-06'::date, 60, ARRAY['atc'])
                 RETURNING id
                 """.trimIndent(),
+                ownerId,
             )!!
             .get("id", Long::class.java)
+    }
 
     @Test
     fun `replaceForWatch inserts a mixed set of poi and reservable targets`() {
