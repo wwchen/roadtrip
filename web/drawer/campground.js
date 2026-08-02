@@ -16,10 +16,8 @@ import {
   campgroundParentParkName,
   parseActivities,
   parseAmenities,
-  parseCellCoverage,
   parseRatingReviews,
   amenitiesPillsHTML,
-  cellCoveragePillsHTML,
   ratingHTML,
   sitesTagHTML,
   lastVerifiedFooterHTML,
@@ -181,10 +179,8 @@ function renderShell(f, signal) {
 
   const amenities = parseAmenities(p);
   const activities = parseActivities(p);
-  const cc = parseCellCoverage(p);
   const rr = parseRatingReviews(p);
   const pills = amenitiesPillsHTML([...amenities, ...activities]);
-  const cellPills = cellCoveragePillsHTML(cc);
   const rating = ratingHTML(rr);
   const sitesTag = sitesTagHTML(p);
   const footer = lastVerifiedFooterHTML(p);
@@ -218,7 +214,7 @@ function renderShell(f, signal) {
         ${ctaButtonsHTML(p, 'cg-btn')}
       </div>`;
 
-  const detailsBody = [structuredDetails, pills, cellPills, rating,
+  const detailsBody = [structuredDetails, pills, rating,
     sitesTag ? `<div class="cg-sites">${sitesTag}</div>` : '',
     bookingSysFooter,
     footer].filter(Boolean).join('');

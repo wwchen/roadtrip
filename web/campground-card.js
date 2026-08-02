@@ -57,43 +57,31 @@ export function amenitiesPillsHTML(amenities) {
 
 const CARRIER_LABEL = { verizon: 'Verizon', att: 'AT&T', tmobile: 'T-Mobile', sprint: 'Sprint', uscell: 'US Cellular' };
 
-/** Bars in the signal meter. rec.gov rates 0-4, which is exactly five states
- *  (none + four bars), so the familiar handset glyph carries the scale with no
- *  loss. Three bars would fold five levels into three and throw data away. */
-const SIGNAL_BARS = 4;
+/** rec.gov rates reception 0-4. Campers think in words, not in a mean of
+ *  star ratings, so the number never reaches the UI -- a "2.6" implies a
+ *  precision that a median of nine crowd-sourced reports cannot support. */
+const SIGNAL_WORD = ['none', 'poor', 'fair', 'good', 'excellent'];
 
 /**
- * Render per-carrier cell-signal meters. cc is `{verizon: [avg, count], ...}`
- * where avg is rec.gov's 0-4 scale. Sorts by signal strength desc.
+ * One line summarising per-carrier reception, best first:
+ * "Verizon good · AT&T fair · T-Mobile poor".
  *
- * Strength is carried by the number of filled bars, NOT by hue. Colour in this
- * drawer already means demand -- --rt-avail marks open sites and matrix cells,
- * --rt-first-come marks first-come -- and these chips sit on the same card, so
- * a red/amber/green signal chip competed with availability status for the same
- * vocabulary. The meter also survives greyscale and colour blindness, which a
- * hue ramp alone does not.
+ * Deliberately prose in a detail row rather than a chip per carrier. This is
+ * one soft, crowd-sourced datapoint; four tags gave it the visual weight of
+ * four facts, and colour-coding them collided with availability status, which
+ * owns green and amber on this card.
  */
-export function cellCoveragePillsHTML(cc) {
+export function cellCoverageSummary(cc) {
   if (!cc) return '';
-  const entries = Object.entries(cc)
+  return Object.entries(cc)
     .map(([k, v]) => [k, normalizeCellValue(v)])
-    .filter(([, v]) => v && Number.isFinite(v.avg));
-  if (!entries.length) return '';
-  entries.sort((a, b) => b[1].avg - a[1].avg);
-  return '<div class="cell">' + entries.map(([k, v]) => {
-    const { avg, count } = v;
-    const level = Math.max(0, Math.min(SIGNAL_BARS, Math.round(avg)));
-    const label = CARRIER_LABEL[k] || k;
-    const reports = Number.isFinite(count) ? `${count} report${count === 1 ? '' : 's'}` : '';
-    const title = reports ? ` title="${reports}"` : '';
-    // The bars are decorative once the label states the level in words.
-    const bars = `<span class="cell-bars" data-level="${level}" aria-hidden="true">${
-      '<i></i>'.repeat(SIGNAL_BARS)}</span>`;
-    const aria = `${label} signal ${level} of ${SIGNAL_BARS}${reports ? `, ${reports}` : ''}`;
-    return `<span class="cell-pill" role="img" aria-label="${escapeHtml(aria)}"${title}>` +
-      `<span class="carrier">${escapeHtml(label)}</span>${bars}` +
-      `<span class="val">${avg.toFixed(1)}</span></span>`;
-  }).join('') + '</div>';
+    .filter(([, v]) => v && Number.isFinite(v.avg))
+    .sort((a, b) => b[1].avg - a[1].avg)
+    .map(([k, v]) => {
+      const level = Math.max(0, Math.min(SIGNAL_WORD.length - 1, Math.round(v.avg)));
+      return `${CARRIER_LABEL[k] || k} ${SIGNAL_WORD[level]}`;
+    })
+    .join(' · ');
 }
 
 /** 4.3 → "★★★★☆" — half-stars round down. */
@@ -166,6 +154,7 @@ export function structuredCampgroundDetailsHTML(p) {
     detailRow('Pull-through', booleanDisplay(p.has_pull_through_sites)),
     detailRow('Big-rig friendly', booleanDisplay(p.big_rig_friendly)),
     detailRow('Elevation', elevationDisplay(p.elevation)),
+    detailRow('Cell service', cellCoverageSummary(parseCellCoverage(p))),
   ].filter(Boolean).join('');
 
   const contactRows = [
