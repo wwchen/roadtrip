@@ -284,7 +284,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             val resp =
                 client.post(WATCHES_PATH) {
                     asUser(USER_TOKEN)
-                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -319,7 +318,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             val resp =
                 client.post(WATCHES_PATH) {
                     asUser(USER_TOKEN)
-                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -339,7 +337,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         watchService(),
                     )
                 }
-                seedUsers()
             }
             seedUsers()
             val poiId = seedPoi(sourceId = "p-removed-create", name = "Removed Create")
@@ -379,7 +376,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         watchService(),
                     )
                 }
-                seedUsers()
             }
             seedUsers()
             val body =
@@ -408,7 +404,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         watchServiceRejectingAtc(),
                     )
                 }
-                seedUsers()
             }
             seedUsers()
             val poiId = seedPoi(sourceId = "p-atc-unsupported", name = "Unsupported ATC")
@@ -443,7 +438,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         watchService(),
                     )
                 }
-                seedUsers()
             }
             seedUsers()
             val poiA = seedPoi(sourceId = "p-targets-a", name = "Upper Pines")
@@ -484,7 +478,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         watchService(),
                     )
                 }
-                seedUsers()
             }
             seedUsers()
             val poiId = seedPoi(sourceId = "p-legacy-single", name = "Legacy Single")
@@ -517,7 +510,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         watchService(),
                     )
                 }
-                seedUsers()
             }
             seedUsers()
             val poiId = seedPoi(sourceId = "p-conflict", name = "Conflict")
@@ -547,7 +539,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         watchService(),
                     )
                 }
-                seedUsers()
             }
             seedUsers()
             val poiId = seedPoi(sourceId = "p-bad-target", name = "Bad Target")
@@ -610,7 +601,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         watchService(),
                     )
                 }
-                seedUsers()
             }
             seedUsers()
             val poiId = seedPoi(sourceId = "p3", name = "Yosemite")
@@ -652,7 +642,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         watchService(),
                     )
                 }
-                seedUsers()
             }
             seedUsers()
             val poiId = seedPoi(sourceId = "p-invalid-patch", name = "Invalid Patch")
@@ -745,7 +734,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         watchService(),
                     )
                 }
-                seedUsers()
             }
             seedUsers()
             val poiId = seedPoi(sourceId = "p-trigger-patch", name = "Trigger Patch")
@@ -815,7 +803,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         watchService(),
                     )
                 }
-                seedUsers()
             }
             seedUsers()
             val poiId = seedPoi(sourceId = "p-removed-patch", name = "Removed Patch")
@@ -860,7 +847,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         watchService(),
                     )
                 }
-                seedUsers()
             }
             seedUsers()
             val poiId = seedPoi(sourceId = "p-patch-empty-targets", name = "Patch Empty Targets")
@@ -903,7 +889,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         watchService(),
                     )
                 }
-                seedUsers()
             }
             seedUsers()
             val poiId = seedPoi(sourceId = "p-patch-bad-target", name = "Patch Bad Target")
@@ -946,7 +931,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         watchService(),
                     )
                 }
-                seedUsers()
             }
             seedUsers()
             val poiId = seedPoi(sourceId = "p-patch-targets-a", name = "Patch Targets A")
@@ -1091,7 +1075,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             val created =
                 client.post(WATCHES_PATH) {
                     asUser(USER_TOKEN)
-                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(createBody)
                 }
@@ -1110,7 +1093,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
             val paused =
                 client.post(modifyWatchPath(watchId)) {
-                    asUser(USER_TOKEN)
                     asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody("""{"status": "paused"}""")
