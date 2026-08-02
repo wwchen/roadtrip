@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.auth.Principal
+import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
@@ -13,6 +15,8 @@ import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
+import ca.floo.roadtrip.route.auth.SESSION_COOKIE
+import ca.floo.roadtrip.route.auth.roadtripAuthorization
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
@@ -28,13 +32,17 @@ import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
+import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
+import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.server.application.install
 import io.ktor.server.routing.Route
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
@@ -61,10 +69,42 @@ private fun modifyWatchPath(id: Long): String = "${watchPath(id)}/$MODIFY_ACTION
 
 private fun deleteWatchPath(id: Long): String = "${watchPath(id)}/$DELETE_ACTION"
 
+private const val USER_TOKEN = "user-token"
+private const val OTHER_TOKEN = "other-token"
+
 class AvailabilityWatchRoutesTest : SharedDbTest() {
+    private var ownerId: UserId? = null
+    private var otherId: UserId? = null
+
+    private fun seedUsers() {
+        if (ownerId == null) {
+            ownerId = UserRepo(ctx).create("owner@example.com", null, true).id
+            otherId = UserRepo(ctx).create("other@example.com", null, true).id
+        }
+    }
+
+    private fun resolvePrincipalFor(token: String?): Principal =
+        when (token) {
+            USER_TOKEN -> Principal.User(ownerId!!, roles = emptySet())
+            OTHER_TOKEN -> Principal.User(otherId!!, roles = emptySet())
+            else -> Principal.Anonymous
+        }
+
+    private fun HttpRequestBuilder.asUser(token: String = USER_TOKEN) {
+        header(HttpHeaders.Cookie, "$SESSION_COOKIE=$token")
+    }
+
+    private fun createBody(poiId: Long): String =
+        """{"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-06", "cadence_sec": 60, "trigger_kinds": ["atc"]}"""
+
     @BeforeEach
     fun cleanup() {
         ctx.cleanCanonicalCatalogFixtures()
+        // Clean users between tests
+        ctx.execute("DELETE FROM app_user")
+        // Reset user state for seedUsers()
+        ownerId = null
+        otherId = null
     }
 
     /**
@@ -220,6 +260,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST creates a poi-scoped watch with filters`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
@@ -227,6 +268,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     )
                 }
             }
+            seedUsers()
             val poiId = seedPoi(sourceId = "p1", name = "Upper Pines")
             val body =
                 """
@@ -241,6 +283,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
             val resp =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -258,6 +302,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST rejects invalid date window`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
@@ -265,6 +310,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     )
                 }
             }
+            seedUsers()
             val poiId = seedPoi(sourceId = "p-invalid-window", name = "Invalid Window")
             val body =
                 """
@@ -272,6 +318,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
             val resp =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -284,13 +332,16 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST ignores removed date fields`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
                     )
                 }
+                seedUsers()
             }
+            seedUsers()
             val poiId = seedPoi(sourceId = "p-removed-create", name = "Removed Create")
             val body =
                 """
@@ -306,6 +357,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
             val resp =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -320,19 +372,23 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST rejects missing scope`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
                     )
                 }
+                seedUsers()
             }
+            seedUsers()
             val body =
                 """
                 {"start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val resp =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -345,13 +401,16 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST rejects atc watch when booking capability is unsupported`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchServiceRejectingAtc(),
                     )
                 }
+                seedUsers()
             }
+            seedUsers()
             val poiId = seedPoi(sourceId = "p-atc-unsupported", name = "Unsupported ATC")
             val campsiteId = seedCampsite(vendorId = "unsupported-atc")
             linkCampsiteToPoi(campsiteId, poiId)
@@ -362,6 +421,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
             val resp =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -376,13 +436,16 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST with an explicit targets array persists a multi-target watch`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
                     )
                 }
+                seedUsers()
             }
+            seedUsers()
             val poiA = seedPoi(sourceId = "p-targets-a", name = "Upper Pines")
             val poiB = seedPoi(sourceId = "p-targets-b", name = "Lower Pines")
             val body =
@@ -397,6 +460,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
             val resp =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -413,13 +477,16 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST with legacy poi_id is accepted as a one-element target list`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
                     )
                 }
+                seedUsers()
             }
+            seedUsers()
             val poiId = seedPoi(sourceId = "p-legacy-single", name = "Legacy Single")
             val body =
                 """
@@ -427,6 +494,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
             val resp =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -442,13 +510,16 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST rejects both targets and legacy poi_id set together`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
                     )
                 }
+                seedUsers()
             }
+            seedUsers()
             val poiId = seedPoi(sourceId = "p-conflict", name = "Conflict")
             val body =
                 """
@@ -456,6 +527,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
             val resp =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -468,13 +540,16 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST rejects a target with both poi_id and campsite_id set`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
                     )
                 }
+                seedUsers()
             }
+            seedUsers()
             val poiId = seedPoi(sourceId = "p-bad-target", name = "Bad Target")
             val campsiteId = seedCampsite("bad-target-1")
             linkCampsiteToPoi(campsiteId, poiId)
@@ -484,6 +559,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
             val resp =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -496,6 +572,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `GET list filters by status`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
@@ -503,6 +580,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     )
                 }
             }
+            seedUsers()
             val poiId = seedPoi(sourceId = "p2", name = "Glacier")
             val body =
                 """
@@ -510,11 +588,12 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
             repeat(3) {
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
             }
-            val resp = client.get("$WATCHES_PATH?status=active")
+            val resp = client.get("$WATCHES_PATH?status=active") { asUser(USER_TOKEN) }
             assertEquals(HttpStatusCode.OK, resp.status)
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(3, obj["total"]!!.jsonPrimitive.int)
@@ -524,13 +603,16 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST modify pauses a watch`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
                     )
                 }
+                seedUsers()
             }
+            seedUsers()
             val poiId = seedPoi(sourceId = "p3", name = "Yosemite")
             val body =
                 """
@@ -538,6 +620,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
             val created =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -549,6 +632,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonPrimitive.long
             val resp =
                 client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody("""{"status": "paused"}""")
                 }
@@ -561,13 +645,16 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST modify rejects invalid cadence and triggers`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
                     )
                 }
+                seedUsers()
             }
+            seedUsers()
             val poiId = seedPoi(sourceId = "p-invalid-patch", name = "Invalid Patch")
             val body =
                 """
@@ -575,6 +662,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
             val created =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -587,6 +675,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
             val badCadence =
                 client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody("""{"cadence_sec": 1}""")
                 }
@@ -601,6 +690,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
             val badTriggers =
                 client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody("""{"trigger_kinds": []}""")
                 }
@@ -615,6 +705,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
             val badEmailTrigger =
                 client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody("""{"trigger_kinds": ["email_notify"]}""")
                 }
@@ -629,6 +720,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
             val badConfig =
                 client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody("""{"trigger_config": {"slack_notify": {"channel": ""}}}""")
                 }
@@ -646,16 +738,20 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST modify updates trigger config and stop when triggered`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
                     )
                 }
+                seedUsers()
             }
+            seedUsers()
             val poiId = seedPoi(sourceId = "p-trigger-patch", name = "Trigger Patch")
             val created =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(
                         """
@@ -672,6 +768,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
             val resp =
                 client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(
                         """
@@ -711,13 +808,16 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST modify ignores removed date fields`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
                     )
                 }
+                seedUsers()
             }
+            seedUsers()
             val poiId = seedPoi(sourceId = "p-removed-patch", name = "Removed Patch")
             val body =
                 """
@@ -725,6 +825,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
             val created =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -737,6 +838,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
             val resp =
                 client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody("""{"target_dates": ["2026-07-04"], "min_nights": 1}""")
                 }
@@ -751,13 +853,16 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST modify rejects targets as immutable`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
                     )
                 }
+                seedUsers()
             }
+            seedUsers()
             val poiId = seedPoi(sourceId = "p-patch-empty-targets", name = "Patch Empty Targets")
             val body =
                 """
@@ -765,6 +870,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
             val created =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -777,6 +883,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
             val resp =
                 client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody("""{"targets": []}""")
                 }
@@ -789,13 +896,16 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST modify rejects dates as immutable`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
                     )
                 }
+                seedUsers()
             }
+            seedUsers()
             val poiId = seedPoi(sourceId = "p-patch-bad-target", name = "Patch Bad Target")
             val body =
                 """
@@ -803,6 +913,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
             val created =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -815,6 +926,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
             val resp =
                 client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody("""{"start_date": "2026-08-01", "end_date": "2026-08-02"}""")
                 }
@@ -827,13 +939,16 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST modify allows updating trigger config without targets or dates`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
                     )
                 }
+                seedUsers()
             }
+            seedUsers()
             val poiId = seedPoi(sourceId = "p-patch-targets-a", name = "Patch Targets A")
             val body =
                 """
@@ -841,6 +956,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
             val created =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -853,6 +969,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
             val resp =
                 client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody("""{"trigger_kinds": ["slack_notify"], "stop_when_triggered": false}""")
                 }
@@ -865,6 +982,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST delete removes a watch`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
@@ -872,6 +990,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     )
                 }
             }
+            seedUsers()
             val poiId = seedPoi(sourceId = "p4", name = "Tunnel")
             val body =
                 """
@@ -879,6 +998,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
             val created =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
@@ -888,9 +1008,9 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonObject["watch"]!!
                     .jsonObject["id"]!!
                     .jsonPrimitive.long
-            val del = client.post(deleteWatchPath(id))
+            val del = client.post(deleteWatchPath(id)) { asUser(USER_TOKEN) }
             assertEquals(HttpStatusCode.NoContent, del.status)
-            val getAfter = client.get(watchPath(id))
+            val getAfter = client.get(watchPath(id)) { asUser(USER_TOKEN) }
             assertEquals(HttpStatusCode.NotFound, getAfter.status)
         }
 
@@ -898,6 +1018,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `GET watch includes watch capabilities when configured`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(
                         ctx,
@@ -906,6 +1027,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     )
                 }
             }
+            seedUsers()
             val poiId =
                 seedPoi(
                     sourceId = "p-capabilities",
@@ -917,6 +1039,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             linkCampsiteToPoi(seedCampsite(vendorId = "cap-100"), poiId)
             val created =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(
                         """
@@ -931,7 +1054,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonObject["id"]!!
                     .jsonPrimitive.long
 
-            val resp = client.get(watchPath(id))
+            val resp = client.get(watchPath(id)) { asUser(USER_TOKEN) }
 
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
@@ -944,10 +1067,12 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     fun `POST links a poller and POST modify paused drops the link and deactivates it`() =
         testApplication {
             application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
                 routeTestApplication {
                     availabilityWatchRoutes(ctx, watchServiceWithRecgov())
                 }
             }
+            seedUsers()
             // POI with a resolvable recgov provider_ref + a child reservable so the
             // watch resolves to exactly one (recgov, 232447) poller.
             val poiId =
@@ -965,6 +1090,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """.trimIndent()
             val created =
                 client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody(createBody)
                 }
@@ -983,6 +1110,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
             val paused =
                 client.post(modifyWatchPath(watchId)) {
+                    asUser(USER_TOKEN)
+                    asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody("""{"status": "paused"}""")
                 }
@@ -991,6 +1120,66 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             // Pausing drops the watch's poller links; the now-orphaned poller goes dormant.
             assertTrue(pollerRepo.pollerIdsForWatch(watchId).isEmpty())
             assertEquals(false, pollerRepo.findById(linked.single())!!.active)
+        }
+
+    @Test
+    fun `GET watches anonymous returns 401`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            assertEquals(HttpStatusCode.Unauthorized, client.get(WATCHES_PATH).status)
+        }
+
+    @Test
+    fun `GET watches lists only the caller's own`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "mine", name = "Mine")
+            client.post(WATCHES_PATH) {
+                asUser(USER_TOKEN)
+                contentType(ContentType.Application.Json)
+                setBody(createBody(poiId))
+            }
+            client.post(WATCHES_PATH) {
+                asUser(OTHER_TOKEN)
+                contentType(ContentType.Application.Json)
+                setBody(createBody(poiId))
+            }
+            val resp = client.get(WATCHES_PATH) { asUser(USER_TOKEN) }
+            val watches = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watches"]!!.jsonArray
+            assertEquals(1, watches.size)
+        }
+
+    @Test
+    fun `POST delete of another user's watch returns 404`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "theirs", name = "Theirs")
+            val created =
+                client.post(WATCHES_PATH) {
+                    asUser(OTHER_TOKEN)
+                    contentType(ContentType.Application.Json)
+                    setBody(createBody(poiId))
+                }
+            val id =
+                Json
+                    .parseToJsonElement(created.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+            val resp = client.post(deleteWatchPath(id)) { asUser(USER_TOKEN) }
+            assertEquals(HttpStatusCode.NotFound, resp.status)
         }
 
     private fun seedPoi(

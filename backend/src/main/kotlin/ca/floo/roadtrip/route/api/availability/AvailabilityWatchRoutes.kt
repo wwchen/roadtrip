@@ -2,6 +2,7 @@ package ca.floo.roadtrip.route.api.availability
 
 import ca.floo.roadtrip.model.api.AvailabilityWatchCreateRequest
 import ca.floo.roadtrip.model.api.AvailabilityWatchUpdateRequest
+import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.RouteBodyResult
 import ca.floo.roadtrip.route.common.access
@@ -10,6 +11,7 @@ import ca.floo.roadtrip.route.common.describeApi
 import ca.floo.roadtrip.route.common.intQueryAtLeast
 import ca.floo.roadtrip.route.common.longPath
 import ca.floo.roadtrip.route.common.optionalLongQuery
+import ca.floo.roadtrip.route.common.principal
 import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.receiveJsonBody
 import ca.floo.roadtrip.route.common.respondApiError
@@ -44,10 +46,17 @@ private val watchJson =
         ignoreUnknownKeys = true
     }
 
+private suspend fun ApplicationCall.requireUser(): Principal.User? {
+    val p = principal() as? Principal.User
+    if (p == null) respondApiError("unauthenticated", HttpStatusCode.Unauthorized)
+    return p
+}
+
 internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController) {
     route("/api") {
         route("/watches") {
             get {
+                val user = call.requireUser() ?: return@get
                 val status =
                     call.queryParam("status")?.let {
                         WatchStatus.parse(it)
@@ -62,19 +71,20 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                 val limit = call.boundedIntQuery("limit", DEFAULT_LIST_LIMIT, listLimitRange)
                 val offset = call.intQueryAtLeast("offset", DEFAULT_LIST_OFFSET, MIN_LIST_OFFSET)
                 call.respondJson(
-                    watches.list(status, poiId, campsiteId, limit, offset),
+                    watches.list(user, status, poiId, campsiteId, limit, offset),
                 )
             }.describeApi("watches", "List availability watches")
-                .access(RouteAccess.Anonymous)
+                .access(RouteAccess.User)
 
             post {
+                val user = call.requireUser() ?: return@post
                 val req =
                     when (val body = call.receiveJsonBody<AvailabilityWatchCreateRequest>()) {
                         is RouteBodyResult.Invalid ->
                             return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, body.detail)
                         is RouteBodyResult.Valid -> body.value
                     }
-                when (val result = watches.create(req)) {
+                when (val result = watches.create(user, req)) {
                     is AvailabilityWatchControllerResult.Invalid ->
                         call.respondError(result.error, HttpStatusCode.BadRequest, result.detail)
                     is AvailabilityWatchControllerResult.NotFound ->
@@ -83,21 +93,23 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                         call.respondJson(result.value, HttpStatusCode.Created)
                 }
             }.describeApi("watches", "Create a watch")
-                .access(RouteAccess.Anonymous)
+                .access(RouteAccess.User)
 
             route("/{id}") {
                 get {
+                    val user = call.requireUser() ?: return@get
                     val id =
                         call.longPath("id")
                             ?: return@get call.respondError("invalid_id", HttpStatusCode.BadRequest)
                     val watch =
-                        watches.get(id)
+                        watches.get(user, id)
                             ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
                     call.respondJson(watch)
                 }.describeApi("watches", "Get one watch")
-                    .access(RouteAccess.Anonymous)
+                    .access(RouteAccess.User)
 
                 post("/modify") {
+                    val user = call.requireUser() ?: return@post
                     val id =
                         call.longPath("id")
                             ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
@@ -107,7 +119,7 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                                 return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, body.detail)
                             is RouteBodyResult.Valid -> body.value
                         }
-                    when (val result = watches.update(id, req)) {
+                    when (val result = watches.update(user, id, req)) {
                         is AvailabilityWatchControllerResult.Invalid ->
                             call.respondError(result.error, HttpStatusCode.BadRequest, result.detail)
                         is AvailabilityWatchControllerResult.NotFound ->
@@ -116,19 +128,20 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                             call.respondJson(result.value)
                     }
                 }.describeApi("watches", "Modify a watch")
-                    .access(RouteAccess.Anonymous)
+                    .access(RouteAccess.User)
 
                 post("/delete") {
+                    val user = call.requireUser() ?: return@post
                     val id =
                         call.longPath("id")
                             ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
-                    if (watches.delete(id)) {
+                    if (watches.delete(user, id)) {
                         call.respond(HttpStatusCode.NoContent)
                     } else {
                         call.respondError("not_found", HttpStatusCode.NotFound)
                     }
                 }.describeApi("watches", "Delete a watch")
-                    .access(RouteAccess.Anonymous)
+                    .access(RouteAccess.User)
             }
         }
     }
