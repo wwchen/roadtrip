@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { alertEditorContainsFocus, shouldHideAlerts } from './topbar/alerts.js';
+import { alertEditorContainsFocus, shouldHideAlerts, hasAlertDeepLink } from './topbar/alerts.js';
 
 test('alertEditorContainsFocus detects active controls inside the alert editor host', () => {
   const originalElement = globalThis.Element;
@@ -39,4 +39,28 @@ test('shouldHideAlerts is true for a 401 and false otherwise', () => {
   assert.equal(shouldHideAlerts({ status: 500 }), false);
   assert.equal(shouldHideAlerts(null), false);
   assert.equal(shouldHideAlerts(new Error('network')), false);
+});
+
+test('hasAlertDeepLink detects presence of alert param', () => {
+  const originalWindow = globalThis.window;
+
+  try {
+    // Mock window.location with alert param
+    globalThis.window = { location: { search: '?alert=123&alert_action=pause' } };
+    assert.equal(hasAlertDeepLink(), true);
+
+    // Mock window.location without alert param
+    globalThis.window = { location: { search: '?foo=bar' } };
+    assert.equal(hasAlertDeepLink(), false);
+
+    // Mock window.location with empty search
+    globalThis.window = { location: { search: '' } };
+    assert.equal(hasAlertDeepLink(), false);
+  } finally {
+    if (originalWindow === undefined) {
+      delete globalThis.window;
+    } else {
+      globalThis.window = originalWindow;
+    }
+  }
 });

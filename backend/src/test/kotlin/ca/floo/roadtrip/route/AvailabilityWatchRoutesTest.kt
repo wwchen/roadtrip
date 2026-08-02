@@ -71,15 +71,20 @@ private fun deleteWatchPath(id: Long): String = "${watchPath(id)}/$DELETE_ACTION
 
 private const val USER_TOKEN = "user-token"
 private const val OTHER_TOKEN = "other-token"
+private const val ADMIN_TOKEN = "admin-token"
 
 class AvailabilityWatchRoutesTest : SharedDbTest() {
     private var ownerId: UserId? = null
     private var otherId: UserId? = null
+    private var adminId: UserId? = null
 
     private fun seedUsers() {
         if (ownerId == null) {
-            ownerId = UserRepo(ctx).create("owner@example.com", null, true).id
-            otherId = UserRepo(ctx).create("other@example.com", null, true).id
+            val userRepo = UserRepo(ctx)
+            ownerId = userRepo.create("owner@example.com", null, true).id
+            otherId = userRepo.create("other@example.com", null, true).id
+            adminId = userRepo.create("admin@example.com", null, true).id
+            userRepo.grantRole(adminId!!, ca.floo.roadtrip.model.domain.auth.Role.ADMIN)
         }
     }
 
@@ -87,6 +92,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         when (token) {
             USER_TOKEN -> Principal.User(ownerId!!, roles = emptySet())
             OTHER_TOKEN -> Principal.User(otherId!!, roles = emptySet())
+            ADMIN_TOKEN -> Principal.User(adminId!!, roles = setOf(ca.floo.roadtrip.model.domain.auth.Role.ADMIN))
             else -> Principal.Anonymous
         }
 
@@ -1217,6 +1223,89 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonPrimitive.long
             val resp = client.post(deleteWatchPath(id)) { asUser(USER_TOKEN) }
             assertEquals(HttpStatusCode.NotFound, resp.status)
+        }
+
+    @Test
+    fun `admin GET lists all users watches`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "admin-list", name = "Admin List")
+
+            // OTHER creates a watch
+            val otherResp =
+                client.post(WATCHES_PATH) {
+                    asUser(OTHER_TOKEN)
+                    contentType(ContentType.Application.Json)
+                    setBody(createBody(poiId))
+                }
+            val otherWatchId =
+                Json
+                    .parseToJsonElement(otherResp.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+
+            // USER creates a watch
+            val userResp =
+                client.post(WATCHES_PATH) {
+                    asUser(USER_TOKEN)
+                    contentType(ContentType.Application.Json)
+                    setBody(createBody(poiId))
+                }
+            val userWatchId =
+                Json
+                    .parseToJsonElement(userResp.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+
+            // Admin lists all watches and sees both
+            val resp = client.get(WATCHES_PATH) { asUser(ADMIN_TOKEN) }
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val watches = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watches"]!!.jsonArray
+            assertTrue(watches.size >= 2, "Admin should see at least 2 watches (from OTHER and USER)")
+
+            // Verify watches from both users are present by checking IDs
+            val watchIds = watches.map { it.jsonObject["id"]!!.jsonPrimitive.long }.toSet()
+            assertTrue(watchIds.contains(otherWatchId), "Admin should see OTHER's watch")
+            assertTrue(watchIds.contains(userWatchId), "Admin should see USER's watch")
+        }
+
+    @Test
+    fun `admin can delete another user's watch`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "admin-delete", name = "Admin Delete")
+
+            // OTHER creates a watch
+            val created =
+                client.post(WATCHES_PATH) {
+                    asUser(OTHER_TOKEN)
+                    contentType(ContentType.Application.Json)
+                    setBody(createBody(poiId))
+                }
+            val id =
+                Json
+                    .parseToJsonElement(created.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+
+            // Admin deletes OTHER's watch
+            val resp = client.post(deleteWatchPath(id)) { asUser(ADMIN_TOKEN) }
+            assertEquals(HttpStatusCode.NoContent, resp.status)
+
+            // Verify the watch is deleted
+            val getAfter = client.get(watchPath(id)) { asUser(ADMIN_TOKEN) }
+            assertEquals(HttpStatusCode.NotFound, getAfter.status)
         }
 
     private fun seedPoi(

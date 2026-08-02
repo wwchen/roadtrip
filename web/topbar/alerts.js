@@ -4,8 +4,9 @@
 // availability watches. Clicking it expands a summary table (POI, date,
 // trigger, last-checked) listing active, paused, and done watches, with
 // per-row pause/resume + delete (done watches show a ✅ found / ⌛ ended
-// status instead of a toggle). Watches are global (no auth), so this
-// reflects everyone's watches.
+// status instead of a toggle). Watches are per-user: this shows only the
+// signed-in user's watches, and the panel is hidden entirely when signed out
+// (a 401 from the watches API).
 //
 // Self-contained: owns its DOM (#tb-alerts), injects its own tb-* styles,
 // and refreshes on the shared 'watches-changed' event fired whenever a watch
@@ -23,6 +24,7 @@ import { onWatchesChanged } from '../availability/watch-events.js';
 import { onAuthChanged } from '../availability/auth-events.js';
 import { mountWatchEditor } from '../availability/watch-editor.js';
 import { escapeHtml } from '../core.js';
+import { signIn } from '../api/auth-api.js';
 
 const UNAUTHORIZED_STATUS = 401;
 
@@ -74,6 +76,7 @@ let focusAction = null;
 let focusTimer = null;
 let editing = null;
 let editorController = null;
+let signedOut = false;
 
 export function initAlerts() {
   rootEl = document.getElementById('tb-alerts');
@@ -88,6 +91,7 @@ export function initAlerts() {
 }
 
 async function refresh() {
+  const wasSignedOut = signedOut;
   try {
     const [active, paused, done] = await Promise.all([
       listWatches({ status: 'active', limit: WATCH_LIST_LIMIT }),
@@ -102,10 +106,16 @@ async function refresh() {
       ...(done?.watches || []),
     ].sort(byStartDate);
     await ensurePoiNames(watches);
+    signedOut = false;
     if (rootEl) rootEl.hidden = false;
     render();
+    // If we just transitioned from signed-out to signed-in and there's a deep link, apply it.
+    if (wasSignedOut && hasAlertDeepLink()) {
+      applyAlertDeepLink();
+    }
   } catch (e) {
     if (shouldHideAlerts(e)) {
+      signedOut = true;
       watches = [];
       if (rootEl) { rootEl.hidden = true; rootEl.innerHTML = ''; }
       return;
@@ -261,6 +271,13 @@ function applyAlertDeepLink() {
   const params = new URLSearchParams(window.location.search);
   const id = params.get(ALERT_PARAM);
   if (!id) return;
+
+  // When signed out with a deep link, preserve the params and show a sign-in prompt.
+  if (signedOut) {
+    renderSignInPrompt();
+    return;
+  }
+
   const action = params.get(ALERT_ACTION_PARAM);
   // Strip the params so a manual refresh or back-nav doesn't re-focus.
   clearAlertDeepLinkParams();
@@ -302,12 +319,28 @@ function clearFocusHighlightInPlace() {
   rootEl?.querySelectorAll('.tb-alerts-act.is-armed').forEach((button) => button.classList.remove('is-armed'));
 }
 
+export function hasAlertDeepLink() {
+  const params = new URLSearchParams(window.location.search);
+  return params.has(ALERT_PARAM);
+}
+
 function clearAlertDeepLinkParams() {
   const url = new URL(window.location.href);
   if (!url.searchParams.has(ALERT_PARAM) && !url.searchParams.has(ALERT_ACTION_PARAM)) return;
   url.searchParams.delete(ALERT_PARAM);
   url.searchParams.delete(ALERT_ACTION_PARAM);
   window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function renderSignInPrompt() {
+  if (!rootEl) return;
+  rootEl.hidden = false;
+  rootEl.innerHTML = `
+    <div class="tb-alerts-signin-prompt">
+      <p class="tb-alerts-signin-msg">Sign in to view this alert</p>
+      <button type="button" class="tb-alerts-signin-btn" data-act="signin">Sign in</button>
+    </div>
+  `;
 }
 
 // A watch goes `done` two ways (see WatchAlertDispatcher / AvailabilityPollerRepo.retire):
@@ -377,11 +410,18 @@ async function onClick(e) {
   const tgt = e.target;
   if (!(tgt instanceof Element)) return;
 
-  const actBtn = tgt.closest('.tb-alerts-act');
+  const actBtn = tgt.closest('.tb-alerts-act, .tb-alerts-signin-btn');
   if (actBtn) {
     e.stopPropagation();
-    const id = actBtn.getAttribute('data-id');
     const act = actBtn.getAttribute('data-act');
+
+    // Handle sign-in action (no id needed)
+    if (act === 'signin') {
+      signIn();
+      return;
+    }
+
+    const id = actBtn.getAttribute('data-id');
     if (!id) return;
     actBtn.disabled = true;
     try {
@@ -556,6 +596,32 @@ function injectAlertsStyles() {
     padding: 8px;
   }
   .tb-alerts-editor-error { color: var(--rt-error); }
+  .tb-alerts-signin-prompt {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 24px;
+    text-align: center;
+  }
+  .tb-alerts-signin-msg {
+    margin: 0;
+    color: var(--rt-text);
+    font-size: 14px;
+  }
+  .tb-alerts-signin-btn {
+    background: var(--rt-brand);
+    color: var(--rt-brand-text);
+    border: 0;
+    padding: 8px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .tb-alerts-signin-btn:hover { opacity: 0.9; }
+  .tb-alerts-signin-btn:focus-visible { outline: 2px solid var(--rt-brand); outline-offset: 2px; }
   `;
   const tag = document.createElement('style');
   tag.id = 'tb-alerts-styles';
