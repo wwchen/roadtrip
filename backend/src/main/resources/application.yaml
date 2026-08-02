@@ -31,11 +31,10 @@ roadtrip:
     # docs/superpowers/specs/2026-08-01-clerk-auth-migration-design.md.
     #
     # Both vendors stay configured so switching (or rolling back) is this one
-    # value — no credential swapping. Defaults to auth0 during the Clerk
-    # migration: the vault is populated for auth0, so prod keeps working sign-in
-    # on merge. Flip this default to clerk once the AUTH_CLERK_* vault values are
-    # set (see the operator checklist in PR #537).
-    provider: "${AUTH_PROVIDER:auth0}"
+    # value — no credential swapping. Defaults to clerk: the AUTH_CLERK_* vault
+    # values are set in prod, so this is the active vendor. Rollback is
+    # AUTH_PROVIDER=auth0 (requires AUTH_AUTH0_* to be populated first).
+    provider: "${AUTH_PROVIDER:clerk}"
     # Blank issuer or client-id in the ACTIVE block = auth disabled, a
     # first-class state: the app boots and every anonymous surface works with
     # no tenant provisioned.
