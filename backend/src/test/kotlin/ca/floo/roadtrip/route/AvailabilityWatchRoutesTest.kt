@@ -1140,6 +1140,61 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
+    fun `GET of another user's watch returns 404`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "theirs-get", name = "Theirs Get")
+            val created =
+                client.post(WATCHES_PATH) {
+                    asUser(OTHER_TOKEN)
+                    contentType(ContentType.Application.Json)
+                    setBody(createBody(poiId))
+                }
+            val id =
+                Json
+                    .parseToJsonElement(created.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+            val resp = client.get(watchPath(id)) { asUser(USER_TOKEN) }
+            assertEquals(HttpStatusCode.NotFound, resp.status)
+        }
+
+    @Test
+    fun `POST modify of another user's watch returns 404`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "theirs-modify", name = "Theirs Modify")
+            val created =
+                client.post(WATCHES_PATH) {
+                    asUser(OTHER_TOKEN)
+                    contentType(ContentType.Application.Json)
+                    setBody(createBody(poiId))
+                }
+            val id =
+                Json
+                    .parseToJsonElement(created.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+            val resp =
+                client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"status":"paused"}""")
+                }
+            assertEquals(HttpStatusCode.NotFound, resp.status)
+        }
+
+    @Test
     fun `POST delete of another user's watch returns 404`() =
         testApplication {
             application {

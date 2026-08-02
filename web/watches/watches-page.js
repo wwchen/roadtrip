@@ -66,12 +66,27 @@ async function loadWatches() {
     ].sort(byStartDate);
     await ensurePoiNames(watches);
     tableCtrl.update({ watches, poiNames: poiNameCache });
+    restoreForm();
   } catch (e) {
     if (isUnauthorized(e)) {
       renderSignedOut();
       return;
     }
     throw e;
+  }
+}
+
+function restoreForm() {
+  const formHost = document.getElementById('form-host');
+  if (!formHost) return;
+  if (!formCtrl || formHost.innerHTML === '') {
+    formCtrl = mountWatchForm(formHost, {
+      mode: 'create',
+      onSubmit: handleSubmit,
+      onCancel: handleCancel,
+    });
+  } else {
+    formCtrl.setMode('create', null);
   }
 }
 
