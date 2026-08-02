@@ -52,7 +52,7 @@ class SlackNotificationService(
     ): Boolean {
         val slackTarget = target as? NotificationTarget.Slack ?: return false
         val (fallback, attachments) = SlackContentWatchStatusRenderer.render(notice)
-        return send(slackTarget.channel, fallback, attachments)
+        return send(slackTarget.channel, fallback, attachments, slackTarget.token)
     }
 
     override suspend fun sendWatchOpenings(
@@ -67,7 +67,7 @@ class SlackNotificationService(
         val slackTarget = target as? NotificationTarget.Slack ?: return false
         val (fallback, attachments) =
             SlackContentAvailabilityRenderer.openings(watchId, startDate, endDate, openings, appRootUrl)
-        return send(slackTarget.channel, fallback, attachments)
+        return send(slackTarget.channel, fallback, attachments, slackTarget.token)
     }
 
     override suspend fun sendAtcResult(
@@ -104,7 +104,7 @@ class SlackNotificationService(
                     blocks = blocks,
                 ),
             )
-        return send(slackTarget.channel, text, attachments)
+        return send(slackTarget.channel, text, attachments, slackTarget.token)
     }
 
     override suspend fun postResponseWatchStatus(
@@ -136,12 +136,26 @@ class SlackNotificationService(
     }
 
     /** The single send gate: no-ops (logging why) when Slack is disabled,
-     *  otherwise posts [text] plus [attachments] to [channel] or the default. */
+     *  otherwise posts [text] plus [attachments] to [channel] or the default.
+     *
+     *  When [token] is non-null the message goes through the owner's per-user bot
+     *  token — the channel must already be set (the resolver never emits a Slack
+     *  target with a null channel), so no default fallback applies. When [token]
+     *  is null the global-bot path is used, falling back to [SlackConfig.defaultChannel]
+     *  only for the legacy/global callers that still leave a channel unset. */
     private suspend fun send(
         channel: String?,
         text: String,
         attachments: List<SlackAttachmentDto>,
+        token: String? = null,
     ): Boolean {
+        // Per-user token path: independent of the global Slack config, so a null
+        // config must not disable it. The token carries its own workspace. Only
+        // available when a transport (HTTP client) exists; a fully disabled Slack
+        // install (no client) can't reach Slack at all.
+        if (token != null && slackClient != null) {
+            return slackClient.postMessage(token = token, channel = channel ?: "", text = text, attachments = attachments)
+        }
         if (config == null || slackClient == null) {
             log.warn("Slack disabled (bot-token/default-channel unset); message not sent: {}", text)
             return false

@@ -19,6 +19,7 @@ import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.UserRepo
+import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
@@ -180,15 +181,24 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
+        val targetResolver =
+            WatchNotificationTargetResolver(
+                userSettingsRepo = UserSettingsRepo(ctx),
+                cipher = null,
+            )
         val dispatcher =
             WatchAlertDispatcher(
                 notifications = notifications,
                 scopeResolver = WatchScopeResolver(campsitesRepo),
                 watchRepo = AvailabilityWatchRepo(ctx),
+                targetResolver = targetResolver,
                 targets = targets,
                 poiRepo = PoiServingRepo(ctx, enabledDataProviders = emptySet()),
                 availabilityRepo = AvailabilityRepo(ctx),
-                triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, appRootUrl = null))),
+                triggerActions =
+                    TriggerActionRegistry(
+                        listOf(NotifyTriggerActionHandler(notifications, targetResolver, appRootUrl = null)),
+                    ),
                 grafanaRootUrl = null,
                 appRootUrl = null,
             )

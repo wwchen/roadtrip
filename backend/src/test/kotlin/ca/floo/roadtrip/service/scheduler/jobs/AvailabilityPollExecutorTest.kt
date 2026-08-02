@@ -24,6 +24,7 @@ import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
@@ -42,6 +43,7 @@ import ca.floo.roadtrip.service.availability.TriggerActionHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.TriggerOpening
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
+import ca.floo.roadtrip.service.availability.WatchNotificationTargetResolver
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
@@ -96,14 +98,26 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
 
-    private fun seedOwner(): Long =
-        ca.floo.roadtrip.repo
-            .UserRepo(ctx)
-            .create(
-                email = "owner-${userSeq++}@example.com",
-                displayName = null,
-                isEmailVerified = true,
-            ).id.value
+    /** Seeds an app_user and, when [slackChannel] is non-null, a matching
+     *  `user_settings.slack_channel`. The channel is what the owner-scoped
+     *  resolver keys off (there is no shared-default fallback anymore), so a
+     *  watch whose owner has no channel produces NO Slack target. */
+    private fun seedOwner(slackChannel: String? = "#camping"): Long {
+        val userId =
+            ca.floo.roadtrip.repo
+                .UserRepo(ctx)
+                .create(
+                    email = "owner-${userSeq++}@example.com",
+                    displayName = null,
+                    isEmailVerified = true,
+                ).id
+        if (slackChannel != null) {
+            ca.floo.roadtrip.repo
+                .UserSettingsRepo(ctx)
+                .upsertNotifications(userId, notificationEmail = null, slackChannel = slackChannel)
+        }
+        return userId.value
+    }
 
     /** Seeds a campground POI whose provider_ref resolves to ProviderRef.RecGov(campgroundId). */
     private fun seedPoi(
@@ -151,9 +165,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         triggerKinds: List<String> = listOf("atc"),
         triggerConfig: String = "{}",
         stopWhenTriggered: Boolean = false,
+        ownerSlackChannel: String? = "#camping",
     ): Long {
         val kindsLiteral = triggerKinds.joinToString(prefix = "ARRAY[", postfix = "]") { "'$it'" }
-        val ownerId = seedOwner()
+        val ownerId = seedOwner(ownerSlackChannel)
         val watchId =
             ctx
                 .fetchOne(
@@ -356,6 +371,14 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             pollerRepo = AvailabilityPollerRepo(ctx),
         )
 
+    /** A resolver over the real seeded `user_settings` rows, cipher null (tests
+     *  seed no per-user token; owner-scoped channel routing is what matters). */
+    private fun targetResolver(): WatchNotificationTargetResolver =
+        WatchNotificationTargetResolver(
+            userSettingsRepo = UserSettingsRepo(ctx),
+            cipher = null,
+        )
+
     /** Dispatcher with Slack disabled — a null-config service that no-ops and
      *  returns false. Default for tests that don't exercise alerting. */
     private fun disabledDispatcher(): WatchAlertDispatcher {
@@ -364,6 +387,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             notifications = notifications,
             scopeResolver = WatchScopeResolver(CampsiteRepo(ctx)),
             watchRepo = AvailabilityWatchRepo(ctx),
+            targetResolver = targetResolver(),
             targets =
                 DbAvailabilityTargetResolver(
                     poiRepo = PoiRepo(ctx),
@@ -377,7 +401,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 ),
             poiRepo = PoiServingRepo(ctx, enabledDataProviders = emptySet()),
             availabilityRepo = AvailabilityRepo(ctx),
-            triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, APP_ROOT_URL))),
+            triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, targetResolver(), APP_ROOT_URL))),
             grafanaRootUrl = GRAFANA_ROOT_URL,
             appRootUrl = APP_ROOT_URL,
         )
@@ -394,10 +418,14 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             notifications = notifications,
             scopeResolver = WatchScopeResolver(CampsiteRepo(ctx)),
             watchRepo = AvailabilityWatchRepo(ctx),
+            targetResolver = targetResolver(),
             targets = targetsFor(provider),
             poiRepo = PoiServingRepo(ctx, enabledDataProviders = emptySet()),
             availabilityRepo = AvailabilityRepo(ctx),
-            triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, appRootUrl)) + extraTriggerHandlers),
+            triggerActions =
+                TriggerActionRegistry(
+                    listOf(NotifyTriggerActionHandler(notifications, targetResolver(), appRootUrl)) + extraTriggerHandlers,
+                ),
             grafanaRootUrl = grafanaRootUrl,
             appRootUrl = appRootUrl,
         )
@@ -841,6 +869,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY),
                     triggerConfig =
                         """{"email_notify":{"to":"one@example.test, two@example.test"}}""",
+                    // No owner Slack channel: an email-only watch must produce only
+                    // the Email target (the resolver is channel-gated, not
+                    // kind-gated, so a stored channel would add a Slack card too).
+                    ownerSlackChannel = null,
                 )
             // No cube data: this is the confirmation/status path, not an opening alert.
             val notifier = RecordingSlackNotifications()

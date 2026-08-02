@@ -14,10 +14,17 @@ internal class AtcTriggerActionHandler(
     private val bookings: BookingAdapterRegistry,
     private val bookingTargets: AvailabilityBookingTargetResolver,
     private val notifications: NotificationSender,
+    private val targetResolver: WatchNotificationTargetResolver,
 ) : TriggerActionHandler {
     private val log = LoggerFactory.getLogger(javaClass)
 
     override val kinds: Set<String> = setOf(KIND)
+
+    /** ATC only notifies Slack; take the owner-scoped Slack target(s) from the
+     *  resolver and drop the email target it may also build. Empty when the
+     *  owner has no owner-controlled channel — the alert simply doesn't fire. */
+    private fun slackTargets(watch: AvailabilityWatchRepo.Watch): List<NotificationTarget> =
+        targetResolver.resolve(watch).filterIsInstance<NotificationTarget.Slack>()
 
     override suspend fun fire(
         watch: AvailabilityWatchRepo.Watch,
@@ -63,7 +70,7 @@ internal class AtcTriggerActionHandler(
                     status = ATC_RESULT_COMPLETED,
                     request = result.request,
                     response = result.response,
-                    targets = listOf(NotificationTarget.Slack(channel = watch.channelOverride())),
+                    targets = slackTargets(watch),
                 )
                 true
             }
@@ -83,7 +90,7 @@ internal class AtcTriggerActionHandler(
                     status = ATC_RESULT_FAILED,
                     request = result.request,
                     response = result.response,
-                    targets = listOf(NotificationTarget.Slack(channel = watch.channelOverride())),
+                    targets = slackTargets(watch),
                 )
                 false
             }
