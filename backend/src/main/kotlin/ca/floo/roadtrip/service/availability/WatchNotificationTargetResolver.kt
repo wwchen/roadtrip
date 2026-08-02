@@ -5,6 +5,7 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.security.SecretCipher
+import org.slf4j.LoggerFactory
 
 /**
  * Translates a watch's persisted trigger intent into concrete notification
@@ -43,6 +44,8 @@ internal class WatchNotificationTargetResolver(
     private val userSettingsRepo: UserSettingsRepo,
     private val cipher: SecretCipher?,
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
+
     fun resolve(watch: AvailabilityWatchRepo.Watch): List<NotificationTarget> =
         buildList {
             if (AvailabilityTriggerKinds.SLACK_NOTIFY in watch.triggerKinds) {
@@ -64,7 +67,13 @@ internal class WatchNotificationTargetResolver(
     fun resolveSlackTarget(watch: AvailabilityWatchRepo.Watch): NotificationTarget.Slack? {
         val ownerSettings = userSettingsRepo.find(UserId(watch.ownerUserId))
         val channel = watch.channelOverride() ?: ownerSettings?.slackChannel ?: return null
-        val token = ownerSettings?.slackTokenCipher?.let { blob -> cipher?.open(blob) }
+        val token =
+            ownerSettings?.slackTokenCipher?.let { blob ->
+                runCatching { cipher?.open(blob) }
+                    .onFailure {
+                        log.warn("Failed to decrypt Slack token for owner user_id={}: {}", watch.ownerUserId, it.message)
+                    }.getOrNull()
+            }
         return NotificationTarget.Slack(channel = channel, token = token)
     }
 }

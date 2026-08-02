@@ -117,7 +117,11 @@ async function refresh() {
     if (shouldHideAlerts(e)) {
       signedOut = true;
       watches = [];
-      if (rootEl) { rootEl.hidden = true; rootEl.innerHTML = ''; }
+      if (rootEl) {
+        rootEl.hidden = true;
+        rootEl.innerHTML = '';
+        rootEl.classList.remove('visible');
+      }
       return;
     }
     console.warn('[alerts] watch fetch failed', e);
@@ -321,7 +325,7 @@ function clearFocusHighlightInPlace() {
 
 export function hasAlertDeepLink() {
   const params = new URLSearchParams(window.location.search);
-  return params.has(ALERT_PARAM);
+  return !!params.get(ALERT_PARAM);
 }
 
 function clearAlertDeepLinkParams() {
@@ -332,10 +336,11 @@ function clearAlertDeepLinkParams() {
   window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
-function renderSignInPrompt() {
-  if (!rootEl) return;
-  rootEl.hidden = false;
-  rootEl.innerHTML = `
+export function renderSignInPrompt(root = rootEl) {
+  if (!root) return;
+  root.hidden = false;
+  root.classList.add('visible');
+  root.innerHTML = `
     <div class="tb-alerts-signin-prompt">
       <p class="tb-alerts-signin-msg">Sign in to view this alert</p>
       <button type="button" class="tb-alerts-signin-btn" data-act="signin">Sign in</button>

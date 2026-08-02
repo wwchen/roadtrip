@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { alertEditorContainsFocus, shouldHideAlerts, hasAlertDeepLink } from './topbar/alerts.js';
+import { alertEditorContainsFocus, shouldHideAlerts, hasAlertDeepLink, renderSignInPrompt } from './topbar/alerts.js';
 
 test('alertEditorContainsFocus detects active controls inside the alert editor host', () => {
   const originalElement = globalThis.Element;
@@ -56,6 +56,10 @@ test('hasAlertDeepLink detects presence of alert param', () => {
     // Mock window.location with empty search
     globalThis.window = { location: { search: '' } };
     assert.equal(hasAlertDeepLink(), false);
+
+    // Mock window.location with empty alert param
+    globalThis.window = { location: { search: '?alert=' } };
+    assert.equal(hasAlertDeepLink(), false);
   } finally {
     if (originalWindow === undefined) {
       delete globalThis.window;
@@ -63,4 +67,31 @@ test('hasAlertDeepLink detects presence of alert param', () => {
       globalThis.window = originalWindow;
     }
   }
+});
+
+test('renderSignInPrompt adds visible class and sets content', () => {
+  const classList = {
+    items: new Set(),
+    add(name) {
+      this.items.add(name);
+    },
+    remove(name) {
+      this.items.delete(name);
+    },
+    contains(name) {
+      return this.items.has(name);
+    },
+  };
+
+  const fakeRoot = {
+    hidden: true,
+    innerHTML: '',
+    classList,
+  };
+
+  renderSignInPrompt(fakeRoot);
+
+  assert.equal(fakeRoot.hidden, false, 'rootEl.hidden should be false');
+  assert.equal(classList.contains('visible'), true, 'rootEl should have visible class');
+  assert.ok(fakeRoot.innerHTML.includes('Sign in to view this alert'), 'innerHTML should contain sign-in message');
 });

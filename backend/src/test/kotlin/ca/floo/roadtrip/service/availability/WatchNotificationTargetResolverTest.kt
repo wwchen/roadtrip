@@ -183,5 +183,24 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
         assertNull(slack.token)
     }
 
+    @Test
+    fun `undecryptable token blob degrades to null token without throwing`() {
+        val owner = seedOwner()
+        val repo = UserSettingsRepo(ctx)
+        repo.upsertNotifications(owner, notificationEmail = null, slackChannel = "#owner-channel")
+        // Seed a blob that's encrypted with a DIFFERENT key than the resolver's cipher.
+        val wrongCipher = SecretCipher(ByteArray(32) { (it + 1).toByte() })
+        repo.setSlackToken(owner, cipher = wrongCipher.seal("xoxb-owner-token"), hint = "oken")
+
+        // The resolver's testCipher cannot decrypt the blob sealed with wrongCipher.
+        // It must degrade to token=null without throwing, so the watch alert still
+        // fires via the owner's channel with the global bot token.
+        val targets = resolver(cipher = testCipher).resolve(watch(owner))
+
+        val slack = slackTargets(targets).single()
+        assertEquals("#owner-channel", slack.channel)
+        assertNull(slack.token, "undecryptable blob must yield token=null, not throw")
+    }
+
     private fun emailTo(to: String): JsonObject = JsonObject(mapOf("to" to JsonPrimitive(to)))
 }
