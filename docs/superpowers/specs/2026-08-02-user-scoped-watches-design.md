@@ -66,42 +66,71 @@ CREATE INDEX availability_watch_owner_idx ON availability_watch (owner_user_id);
 - jOOQ regen picks up `OWNER_USER_ID` automatically — `availability_watch` is
   already in the `database.includes` allowlist.
 
+### A proper domain `User`, not a loose caller tuple
+
+Owner-scoping needs "who is this and are they an admin". Rather than pass loose
+`(userId, isAdmin)` params around, thread a first-class domain user object. One
+already exists in all but name — it's just misplaced and under-used:
+
+- **`Principal.User(userId, roles)`** is the *request auth identity* ("who is
+  making this call"), ambient per request. It is correctly thin and stays thin —
+  it is an auth/request concept, **not** the account record. Not touched by this
+  work.
+- **`UserRepo.User(id, email, isEmailVerified, displayName, status, roles, …)`**
+  is the *account entity*. This is the "User with id, isAdmin, name, email"
+  object we want — but it is currently a repo-private nested type with no
+  `isAdmin` convenience.
+
+**Refactor:** promote that record to a canonical domain model
+`backend/.../model/domain/auth/User.kt`:
+
+```kotlin
+data class User(
+    val id: UserId,
+    val email: String,
+    val displayName: String?,
+    val isEmailVerified: Boolean,
+    val status: UserStatus,
+    val roles: Set<Role>,
+    val createdAt: OffsetDateTime,
+    val updatedAt: OffsetDateTime,
+) {
+    val isAdmin: Boolean get() = Role.Admin in roles
+}
+```
+
+`UserRepo` returns this same type (moves the existing nested `User` up a layer;
+no new parallel type). Blast radius is small — the type is referenced by ~5
+files (`UserSettingsService`, a few tests, sandbox routes); they get an import
+change. This is a contained cleanup, not a cross-cutting refactor: it does **not**
+enrich `Principal.User` or touch the existing settings/`me` re-fetch pattern —
+watches simply follows that established pattern with a proper object.
+
 ### Backend layering (routes → service → repo)
 
-The caller identity flows down as domain values, not Ktor types (routes own the
-`Principal`; services take plain `UserId`/flags).
+Ktor types stay in `route/`; the controller takes the domain `Principal.User`
+(services already do this, e.g. `UserSettingsService.read(Principal.User)`),
+resolves the domain `User` from the repo, and scopes on it.
 
 **Routes** (`AvailabilityWatchRoutes.kt`):
 
 - Flip all five endpoints from `.access(RouteAccess.Anonymous)` to
   `.access(RouteAccess.User)`. Anonymous → 401 via the existing interceptor; no
   handler code runs.
-- Each handler reads `call.principal()` and passes a resolved `WatchCaller`
-  (see below) to the controller. `Principal.User` and `Principal.System` both
-  reach the handler under `RouteAccess.User`.
-
-Introduce a small caller value the controller consumes so routes don't leak
-`Principal` downward and the controller has one clear input:
-
-```kotlin
-// service/availability — the identity a watch operation runs as.
-data class WatchCaller(val userId: UserId, val isAdmin: Boolean)
-```
-
-Routes map `principal()` → `WatchCaller`:
-- `Principal.User(id, roles)` → `WatchCaller(id, isAdmin = Role.Admin in roles)`.
-- `Principal.System` → treated as admin (operational). Not reachable from these
-  routes today, but keeps the mapping total.
-- `Principal.Anonymous` is unreachable (the guard already denied it).
+- Each handler reads `call.principal()` and passes the `Principal.User` down.
+  Under `RouteAccess.User` the principal is always `Principal.User` (or
+  `System`); `Anonymous` was already refused by the guard.
 
 **Controller** (`AvailabilityWatchController`): every method takes
-`caller: WatchCaller`.
+`principal: Principal.User` and resolves the account once via
+`userRepo.findById(principal.userId)` (the same pattern `UserSettingsService`
+uses), giving a domain `User` with `id`/`isAdmin`.
 
-- `list`: passes `ownerUserId = if (caller.isAdmin) null else caller.userId`
-  to the repo. `null` = admin-sees-all.
-- `get`: fetch by id, then return `null` (→ 404) if the watch's owner ≠ caller
-  and caller is not admin. **404, not 403** — don't leak that a watch exists.
-- `create`: stamps `ownerUserId = caller.userId`.
+- `list`: passes `ownerUserId = if (user.isAdmin) null else user.id` to the
+  repo. `null` = admin-sees-all.
+- `get`: fetch by id, then return `null` (→ 404) if the watch's owner ≠ `user.id`
+  and `!user.isAdmin`. **404, not 403** — don't leak that a watch exists.
+- `create`: stamps `ownerUserId = user.id`.
 - `update`/`delete`: ownership assertion identical to `get` — a non-owner
   non-admin gets `NotFound` (→ 404), never mutating another user's watch.
 
@@ -152,8 +181,9 @@ a 401 is detectable in the existing `catch`.
 - **Repo**: owner filter (own only), `ownerUserId = null` returns all,
   `create` persists owner, `fromRecord` maps it.
 - **Controller/service**: non-owner `get`/`update`/`delete` → `NotFound`;
-  owner and admin succeed; `create` stamps caller; `list` passes `null` for
-  admin and the id otherwise.
+  owner and admin (`user.isAdmin`) succeed; `create` stamps the resolved user's
+  id; `list` passes `null` for admin and the id otherwise. Existing tests that
+  reference `UserRepo.User` compile against the promoted domain `User`.
 - **Routes**: anonymous → 401 on all five endpoints; authed owner → 2xx.
 - **Frontend**: `alerts.js` hides on 401 and renders when authed;
   `roadtrip:auth-changed` triggers a re-`refresh()`; watches page shows the
