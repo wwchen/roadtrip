@@ -1,11 +1,27 @@
 import { listWatches, getWatch, createWatch, updateWatch, deleteWatch } from '../api/watches-api.js';
 import { fetchPoiDetail } from '../api/poi-api.js';
 import { notifyWatchesChanged } from '../availability/watch-events.js';
+import { onAuthChanged } from '../availability/auth-events.js';
 import { mountBanner } from '../design-system/banner.js';
 import { mountWatchForm } from './watch-form.js';
 import { mountWatchTable } from './watch-table.js';
 
 const WATCH_LIST_LIMIT = 200;
+const UNAUTHORIZED_STATUS = 401;
+
+export function isUnauthorized(error) {
+  return !!error && error.status === UNAUTHORIZED_STATUS;
+}
+
+function renderSignedOut() {
+  const formHost = document.getElementById('form-host');
+  const tableHost = document.getElementById('table-host');
+  if (formHost) formHost.innerHTML = '';
+  if (tableHost) {
+    tableHost.innerHTML =
+      '<p class="watches-signed-out">Sign in to create and manage your availability alerts.</p>';
+  }
+}
 
 let bannerCtrl = null;
 let formCtrl = null;
@@ -32,22 +48,31 @@ async function init() {
   });
 
   await loadWatches();
+  onAuthChanged(loadWatches);
   applyUrlAction(bannerHost);
 }
 
 async function loadWatches() {
-  const [active, paused, done] = await Promise.all([
-    listWatches({ status: 'active', limit: WATCH_LIST_LIMIT }),
-    listWatches({ status: 'paused', limit: WATCH_LIST_LIMIT }),
-    listWatches({ status: 'done', limit: WATCH_LIST_LIMIT }),
-  ]);
-  const watches = [
-    ...(active?.watches || []),
-    ...(paused?.watches || []),
-    ...(done?.watches || []),
-  ].sort(byStartDate);
-  await ensurePoiNames(watches);
-  tableCtrl.update({ watches, poiNames: poiNameCache });
+  try {
+    const [active, paused, done] = await Promise.all([
+      listWatches({ status: 'active', limit: WATCH_LIST_LIMIT }),
+      listWatches({ status: 'paused', limit: WATCH_LIST_LIMIT }),
+      listWatches({ status: 'done', limit: WATCH_LIST_LIMIT }),
+    ]);
+    const watches = [
+      ...(active?.watches || []),
+      ...(paused?.watches || []),
+      ...(done?.watches || []),
+    ].sort(byStartDate);
+    await ensurePoiNames(watches);
+    tableCtrl.update({ watches, poiNames: poiNameCache });
+  } catch (e) {
+    if (isUnauthorized(e)) {
+      renderSignedOut();
+      return;
+    }
+    throw e;
+  }
 }
 
 async function ensurePoiNames(list) {
@@ -178,4 +203,4 @@ function byStartDate(a, b) {
   return da < db ? -1 : 1;
 }
 
-init();
+if (typeof document !== 'undefined' && document.getElementById('table-host')) init();
