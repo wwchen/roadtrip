@@ -58,6 +58,7 @@ async function setup(meObject) {
 
   const mountLoginCardCalls = [];
   const mountSettingsModalCalls = [];
+  const signInCalls = [];
   const signOutCalls = [];
 
   const { initAuth, refresh } = await import('./auth.js');
@@ -69,6 +70,7 @@ async function setup(meObject) {
     _fetchMe: () => fetchMePromise,
     _mountLoginCard:    () => mountLoginCardCalls.push(1),
     _mountSettingsModal: () => mountSettingsModalCalls.push(1),
+    _signIn:            () => signInCalls.push(1),
     _signOut:           () => signOutCalls.push(1),
   });
 
@@ -86,7 +88,7 @@ async function setup(meObject) {
     }
   }
 
-  return { rootEl, mountLoginCardCalls, mountSettingsModalCalls, signOutCalls, restore };
+  return { rootEl, mountLoginCardCalls, mountSettingsModalCalls, signInCalls, signOutCalls, restore };
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -101,10 +103,11 @@ test('auth_enabled:false → row is hidden and empty after refresh', async () =>
   }
 });
 
-test('anonymous (auth_enabled:true, authenticated:false) → sign-in action calls mountLoginCard', async () => {
-  const { rootEl, mountLoginCardCalls, restore } = await setup({
+test('anonymous embedded provider (auth_embedded:true) → sign-in action mounts the login card', async () => {
+  const { rootEl, mountLoginCardCalls, signInCalls, restore } = await setup({
     auth_enabled: true,
     authenticated: false,
+    auth_embedded: true,
   });
   try {
     assert.equal(rootEl.hidden, false);
@@ -112,6 +115,39 @@ test('anonymous (auth_enabled:true, authenticated:false) → sign-in action call
 
     fireAction('sign-in');
     assert.equal(mountLoginCardCalls.length, 1, 'mountLoginCard should have been called once');
+    assert.equal(signInCalls.length, 0, 'embedded provider must not do a full-page redirect');
+  } finally {
+    restore();
+  }
+});
+
+test('anonymous hosted provider (auth_embedded:false) → sign-in action redirects to hosted flow', async () => {
+  const { rootEl, mountLoginCardCalls, signInCalls, restore } = await setup({
+    auth_enabled: true,
+    authenticated: false,
+    auth_embedded: false,
+  });
+  try {
+    assert.equal(rootEl.hidden, false);
+    assert.match(rootEl.innerHTML, /data-auth-action="sign-in"/);
+
+    fireAction('sign-in');
+    assert.equal(signInCalls.length, 1, 'hosted provider should redirect via signIn once');
+    assert.equal(mountLoginCardCalls.length, 0, 'hosted provider must not mount the embedded card');
+  } finally {
+    restore();
+  }
+});
+
+test('anonymous with no auth_embedded field → defaults to hosted redirect, not the embedded card', async () => {
+  const { signInCalls, mountLoginCardCalls, restore } = await setup({
+    auth_enabled: true,
+    authenticated: false,
+  });
+  try {
+    fireAction('sign-in');
+    assert.equal(signInCalls.length, 1, 'absent auth_embedded must fall back to the hosted redirect');
+    assert.equal(mountLoginCardCalls.length, 0, 'absent auth_embedded must not offer the Auth0-only card');
   } finally {
     restore();
   }

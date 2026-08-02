@@ -257,6 +257,7 @@ private fun authRouteWiring(
             return null
         }
 
+    val dialectRegistry = ClaimsDialectRegistry.default()
     val oidcClient = OidcClient(issuer = authConfig.issuer)
     val identityProvider =
         OidcIdentityProvider(
@@ -264,7 +265,7 @@ private fun authRouteWiring(
             redirectUri = "$rootUrl/auth/callback",
             oidcClient = oidcClient,
             idTokenVerifier = IdTokenVerifier(clientId = authConfig.clientId),
-            claimsDialect = ClaimsDialectRegistry.default().forProvider(authConfig.provider),
+            claimsDialect = dialectRegistry.forProvider(authConfig.provider),
         )
     val userRepo = UserRepo(ctx)
     val sessionService =
@@ -297,5 +298,7 @@ private fun authRouteWiring(
         authDomain = authConfig.embeddedDomain,
         authRealm = authConfig.realm,
         redirectUri = callbackRedirectUri,
+        providerLabel = dialectRegistry.displayNameFor(authConfig.provider),
+        isEmbeddedLogin = dialectRegistry.supportsEmbeddedLoginFor(authConfig.provider),
     )
 }

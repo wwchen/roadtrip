@@ -211,6 +211,8 @@ internal fun Route.authRoutes(
                             authClientId = wiring.authClientId,
                             authDomain = wiring.authDomain,
                             authRealm = wiring.authRealm,
+                            providerLabel = wiring.providerLabel,
+                            isEmbeddedLogin = wiring.isEmbeddedLogin,
                         ),
                     )
             }
@@ -227,6 +229,8 @@ private fun AuthRouteWiring.meResponse(principal: Principal.User): MeResponseDto
         authClientId = authClientId,
         authDomain = authDomain,
         authRealm = authRealm,
+        providerLabel = providerLabel,
+        isEmbeddedLogin = isEmbeddedLogin,
     )
 
 private fun meResponseForUser(
@@ -236,6 +240,8 @@ private fun meResponseForUser(
     authClientId: String? = null,
     authDomain: String? = null,
     authRealm: String? = null,
+    providerLabel: String? = null,
+    isEmbeddedLogin: Boolean = false,
 ): MeResponseDto {
     val user = userRepo.findById(principal.userId)
     return MeResponseDto(
@@ -254,6 +260,8 @@ private fun meResponseForUser(
         authClientId = authClientId,
         authDomain = authDomain,
         authRealm = authRealm,
+        providerLabel = providerLabel,
+        isEmbeddedLogin = isEmbeddedLogin,
     )
 }
 
@@ -286,4 +294,9 @@ internal class AuthRouteWiring(
      *  /auth/password/begin so the frontend passes the identical value to
      *  auth0-js — one source of truth prevents redirect_uri mismatches. */
     val redirectUri: String,
+    /** Human-readable provider name for login UI copy; null when unbranded. */
+    val providerLabel: String?,
+    /** True when the active provider uses the embedded login card (Auth0);
+     *  false routes the frontend to the full-page hosted flow. */
+    val isEmbeddedLogin: Boolean,
 )

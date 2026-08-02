@@ -8,71 +8,90 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AuthConfigTest {
+    private val clerk =
+        mapOf(
+            "provider" to "clerk",
+            "providers.clerk.issuer" to "https://clerk.example.com",
+            "providers.clerk.client-id" to "client-clerk",
+            "providers.clerk.client-secret" to "shh-clerk",
+        )
+    private val auth0 =
+        mapOf(
+            "providers.auth0.issuer" to "https://tenant.auth0.example.com",
+            "providers.auth0.client-id" to "client-auth0",
+            "providers.auth0.client-secret" to "shh-auth0",
+        )
+
+    // A complete active block whose issuer host is asserted by the realm /
+    // embedded-domain tests below. auth0 is the active vendor here so the
+    // issuer host ("tenant.example.com") is unambiguous.
     private val complete =
         mapOf(
-            "issuer" to "https://tenant.example.com",
-            "client-id" to "client-abc",
-            "client-secret" to "shh",
+            "provider" to "auth0",
+            "providers.auth0.issuer" to "https://tenant.example.com",
+            "providers.auth0.client-id" to "client-auth0",
+            "providers.auth0.client-secret" to "shh-auth0",
         )
 
     private fun section(values: Map<String, String>) = ConfigSection(values.mapKeys { "roadtrip.auth.${it.key}" }).section("roadtrip.auth")
 
     @Test
-    fun `a complete section parses`() {
-        val config = assertNotNull(AuthConfig.fromConfig(section(complete)))
+    fun `the active vendor block parses`() {
+        val config = assertNotNull(AuthConfig.fromConfig(section(clerk)))
 
-        assertEquals("https://tenant.example.com", config.issuer)
-        assertEquals("client-abc", config.clientId)
-        assertEquals("shh", config.clientSecret)
-        assertEquals("oidc", config.provider)
+        assertEquals("https://clerk.example.com", config.issuer)
+        assertEquals("client-clerk", config.clientId)
+        assertEquals("shh-clerk", config.clientSecret)
+        assertEquals("clerk", config.provider)
         assertEquals(Duration.ofDays(30), config.sessionTtl)
         assertTrue(config.isCookieSecure)
     }
 
     @Test
-    fun `a blank issuer or client id means auth disabled, not an error`() {
-        // The first-class disabled state: a fresh clone and CI must boot with no
-        // tenant provisioned anywhere.
-        assertNull(AuthConfig.fromConfig(section(complete - "issuer")))
-        assertNull(AuthConfig.fromConfig(section(complete - "client-id")))
-        assertNull(AuthConfig.fromConfig(section(complete + ("issuer" to "   "))))
+    fun `switching provider selects the other vendor's credentials`() {
+        // The whole rollback story: both blocks stay configured, one value flips.
+        val config = assertNotNull(AuthConfig.fromConfig(section(clerk + auth0 + ("provider" to "auth0"))))
+
+        assertEquals("auth0", config.provider)
+        assertEquals("https://tenant.auth0.example.com", config.issuer)
+        assertEquals("client-auth0", config.clientId)
+        assertEquals("shh-auth0", config.clientSecret)
+    }
+
+    @Test
+    fun `an incomplete active block means auth disabled even when the other vendor is complete`() {
+        assertNull(AuthConfig.fromConfig(section(auth0 + ("provider" to "clerk"))))
+        assertNull(AuthConfig.fromConfig(section(clerk - "providers.clerk.issuer")))
+        assertNull(AuthConfig.fromConfig(section(clerk - "providers.clerk.client-id")))
+        assertNull(AuthConfig.fromConfig(section(clerk + ("providers.clerk.issuer" to "   "))))
         assertNull(AuthConfig.fromConfig(section(emptyMap())))
+    }
+
+    @Test
+    fun `a missing client secret means auth disabled, not a public client`() {
+        // Confidential client doing a server-side code exchange; the login-flow
+        // cookie's signing key derives from the secret.
+        assertNull(AuthConfig.fromConfig(section(clerk - "providers.clerk.client-secret")))
+        assertNull(AuthConfig.fromConfig(section(clerk + ("providers.clerk.client-secret" to "  "))))
     }
 
     @Test
     fun `a trailing slash on the issuer is stripped`() {
         // Otherwise discovery resolves to a doubled slash and 404s.
-        val config = assertNotNull(AuthConfig.fromConfig(section(complete + ("issuer" to "https://tenant.example.com/"))))
+        val config = assertNotNull(AuthConfig.fromConfig(section(clerk + ("providers.clerk.issuer" to "https://clerk.example.com/"))))
 
-        assertEquals("https://tenant.example.com", config.issuer)
+        assertEquals("https://clerk.example.com", config.issuer)
     }
 
     @Test
-    fun `a missing client secret means auth disabled, not a public client`() {
-        // This is a confidential client doing a server-side code exchange, and
-        // the login-flow cookie's signing key derives from the secret. A
-        // deployment without one is misconfigured rather than public.
-        assertNull(AuthConfig.fromConfig(section(complete - "client-secret")))
-        assertNull(AuthConfig.fromConfig(section(complete + ("client-secret" to "  "))))
-    }
-
-    @Test
-    fun `provider, ttl and cookie flag are overridable`() {
+    fun `ttl and cookie flag stay at the auth level, not per vendor`() {
         val config =
             assertNotNull(
                 AuthConfig.fromConfig(
-                    section(
-                        complete +
-                            mapOf(
-                                "provider" to "auth0",
-                                "session-ttl" to "12h",
-                                "cookie-secure" to "false",
-                            ),
-                    ),
+                    section(clerk + mapOf("session-ttl" to "12h", "cookie-secure" to "false")),
                 ),
             )
 
-        assertEquals("auth0", config.provider)
         assertEquals(Duration.ofHours(12), config.sessionTtl)
         assertTrue(!config.isCookieSecure)
     }

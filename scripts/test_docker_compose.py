@@ -40,5 +40,40 @@ class DockerComposeRestartPolicyTest(unittest.TestCase):
                 )
 
 
+class BackendAuthProviderPassthroughTest(unittest.TestCase):
+    """RFC 0009's rollback is `AUTH_PROVIDER=auth0`. That only works if the
+    selector actually reaches the backend process — application.yaml reads it,
+    but a container env var is only visible if compose passes it in. Regression
+    guard: an earlier revision defaulted the provider without this passthrough,
+    so `AUTH_PROVIDER=auth0 make run env=prod` silently kept the default."""
+
+    def _backend_environment(self) -> list[str]:
+        backend = compose("docker-compose.yml")["services"]["backend"]
+        env = backend["environment"]
+        # environment may be a list ("K=V") or a mapping; normalise to list form.
+        if isinstance(env, dict):
+            return [f"{k}={v}" for k, v in env.items()]
+        return list(env)
+
+    def test_backend_passes_auth_provider_through_to_the_container(self):
+        env = self._backend_environment()
+        auth_provider = [e for e in env if e.split("=", 1)[0] == "AUTH_PROVIDER"]
+
+        self.assertEqual(
+            1,
+            len(auth_provider),
+            "backend service must declare AUTH_PROVIDER so the RFC 0009 rollback "
+            "selector reaches the process; found: " + repr(auth_provider),
+        )
+        # Must interpolate from the host env, defaulting to clerk — matching
+        # application.yaml's `provider: \"${AUTH_PROVIDER:clerk}\"`. A hardcoded
+        # value would ignore an operator's rollback flip.
+        self.assertEqual(
+            "AUTH_PROVIDER=${AUTH_PROVIDER:-clerk}",
+            auth_provider[0],
+            "AUTH_PROVIDER must pass through from the host env with a clerk default",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

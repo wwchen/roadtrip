@@ -9,16 +9,16 @@
 # boundary; each project gets its own `postgres-data` named volume.
 #
 # Profile choice — ROADTRIP_PROFILE=compose-local (not prod):
-#   The `prod` profile triggers SecretsBootstrap validation for MAPBOX_TOKEN,
-#   ROADTRIP_AUTH_ISSUER, ROADTRIP_AUTH_CLIENT_ID, and
-#   ROADTRIP_AUTH_CLIENT_SECRET (all required_in: [prod], all backend
-#   consumers), none of which a sandbox has.  The `local` profile's
-#   application-local.yaml hardcodes `db.url: jdbc:postgresql://localhost:5432/`
-#   without ${POSTGRES_URL} interpolation, so it won't reach the `postgres`
-#   service inside Docker.  `compose-local` (application-compose-local.yaml)
-#   uses `${POSTGRES_URL:jdbc:postgresql://postgres:5432/...}`, `/app/static`,
-#   and requires no prod secrets.  Auth is disabled independently via the blank
-#   ROADTRIP_AUTH_ISSUER env var; ROADTRIP_SANDBOX_ASSUME_USER=true is the
+#   The `prod` profile triggers SecretsBootstrap validation for MAPBOX_TOKEN and
+#   the active auth vendor's credentials (AUTH_CLERK_ISSUER / _CLIENT_ID /
+#   _CLIENT_SECRET, all required_in: [prod], all backend consumers), none of
+#   which a sandbox has.  The `local` profile's application-local.yaml hardcodes
+#   `db.url: jdbc:postgresql://localhost:5432/` without ${POSTGRES_URL}
+#   interpolation, so it won't reach the `postgres` service inside Docker.
+#   `compose-local` (application-compose-local.yaml) uses
+#   `${POSTGRES_URL:jdbc:postgresql://postgres:5432/...}`, `/app/static`, and
+#   requires no prod secrets.  Auth is disabled independently by leaving the
+#   active provider's issuer blank; ROADTRIP_SANDBOX_ASSUME_USER=true is the
 #   auth bypass mechanism.
 
 services:
@@ -78,9 +78,10 @@ services:
       - ROADTRIP_BUILD_BRANCH=${SANDBOX_BRANCH}
       # Sandbox identity bypass — resolves every request to the seed users
       # via the rt_session=sandbox:<id> cookie sentinel; no real OIDC flow required.
+      # Auth is also disabled by construction: no AUTH_<vendor>_ISSUER var is
+      # passed here, so the active provider's issuer is blank and OIDC routes are
+      # never registered.
       - ROADTRIP_SANDBOX_ASSUME_USER=true
-      # Blank issuer = auth disabled; OIDC routes are never registered.
-      - ROADTRIP_AUTH_ISSUER=
       # DB connection — application-compose-local.yaml reads these via
       # ${POSTGRES_URL:...}, ${POSTGRES_USER}, ${POSTGRES_PASSWORD}.
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}

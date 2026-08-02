@@ -35,12 +35,27 @@ internal class ClaimsDialectRegistry(
         return dialects.first { it.id == StandardClaimsDialect.ID }
     }
 
+    /**
+     * Display name for the login card. Unknown slugs return null — unlike
+     * [forProvider] there is no fallback, because falling back would brand
+     * the login card with a vendor we are not actually using.
+     */
+    fun displayNameFor(slug: String): String? = dialects.firstHandlerFor(ClaimsDialectId(slug))?.displayName
+
+    /**
+     * Whether the provider for [slug] uses the embedded login card. Unknown
+     * slugs return false — an unrecognized provider falls back to the hosted
+     * flow, the same conservative default as [ClaimsDialect.supportsEmbeddedLogin].
+     */
+    fun supportsEmbeddedLoginFor(slug: String): Boolean = dialects.firstHandlerFor(ClaimsDialectId(slug))?.supportsEmbeddedLogin ?: false
+
     companion object {
         /** Every dialect this build ships. */
         fun default(): ClaimsDialectRegistry =
             ClaimsDialectRegistry(
                 listOf(
                     Auth0ClaimsDialect(),
+                    ClerkClaimsDialect(),
                     WorkOsClaimsDialect(),
                     StandardClaimsDialect(),
                 ),

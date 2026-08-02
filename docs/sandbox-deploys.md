@@ -4,9 +4,10 @@ A sandbox is a throwaway live environment for a PR or branch: backend +
 Postgres only, no observability, no companion, no Cloudflare tunnel of its
 own. It is reachable at `https://sb-<name>.sandbox.roadtrip.floo.ca`.
 
-Auth is disabled in every sandbox (`ROADTRIP_AUTH_ISSUER` is blank and
-`ROADTRIP_SANDBOX_ASSUME_USER=true`). Instead the backend resolves every
-request to one of two seeded users selected via a header:
+Auth is disabled in every sandbox (no `AUTH_<vendor>_ISSUER` is passed, so the
+active provider's issuer is blank, and `ROADTRIP_SANDBOX_ASSUME_USER=true`).
+Instead the backend resolves every request to one of two seeded users selected
+via a header:
 
 - **Will** (id 90001) — admin role
 - **Matt** (id 90002) — regular user (no role)
@@ -130,8 +131,7 @@ The backend container runs with:
 | `ROADTRIP_BUILD_ENV` | `sandbox` |
 | `ROADTRIP_BUILD_SHA` | `<sha>` |
 | `ROADTRIP_BUILD_BRANCH` | `<branch>` |
-| `ROADTRIP_AUTH_ISSUER` | _(blank — auth disabled)_ |
-| `ROADTRIP_SANDBOX_ASSUME_USER` | `true` |
+| `ROADTRIP_SANDBOX_ASSUME_USER` | `true` (auth bypass; no OIDC issuer is passed, so auth is off) |
 | `OTEL_*_EXPORTER` | `none` (no Alloy collector in a sandbox) |
 
 ## Host configuration

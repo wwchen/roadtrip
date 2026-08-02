@@ -9,9 +9,12 @@
 // configured. A fresh clone with no Auth0 tenant should look exactly as it did
 // before auth existed, not show a control that cannot work.
 //
-// The topbar "Sign in" button opens the in-app LoginCard (modal). The card's
-// "Sign in" button and the topbar "Sign out" button trigger full-page
-// navigations (cross-site redirects to the provider, which fetch cannot follow).
+// The topbar "Sign in" button is provider-aware. For a provider with an
+// embedded login card (Auth0, `auth_embedded:true` on /api/me) it opens the
+// in-app LoginCard (modal). For a hosted provider (Clerk and every other
+// vendor) it does a full-page redirect to the provider's hosted flow via
+// `signIn()`. The topbar "Sign out" button is likewise a full-page navigation
+// (cross-site redirects to the provider, which fetch cannot follow).
 
 import { fetchMe, signIn, signOut } from '../api/auth-api.js';
 import { mountLoginCard } from '../account/login-card.js';
@@ -25,11 +28,15 @@ const SIGN_OUT_ACTION = 'sign-out';
 const OPEN_SETTINGS_ACTION = 'open-settings';
 
 let rootEl = null;
+// The last /api/me the row rendered, so the click handler can branch the
+// sign-in flow (embedded vs hosted) on the same data the row was drawn from.
+let lastMe = null;
 
 // Resolved at init-time; may be overridden by tests via the deps argument.
 let _fetchMe = fetchMe;
 let _mountLoginCard = mountLoginCard;
 let _mountSettingsModal = mountSettingsModal;
+let _signIn = signIn;
 let _signOut = signOut;
 
 /**
@@ -39,12 +46,14 @@ let _signOut = signOut;
  * @param {Function} [deps._fetchMe]            - Replaces the real fetchMe.
  * @param {Function} [deps._mountLoginCard]     - Replaces the real mountLoginCard.
  * @param {Function} [deps._mountSettingsModal] - Replaces the real mountSettingsModal.
+ * @param {Function} [deps._signIn]             - Replaces the real signIn (hosted redirect).
  * @param {Function} [deps._signOut]            - Replaces the real signOut.
  */
 export function initAuth(deps = {}) {
   if (deps._fetchMe)            _fetchMe            = deps._fetchMe;
   if (deps._mountLoginCard)     _mountLoginCard     = deps._mountLoginCard;
   if (deps._mountSettingsModal) _mountSettingsModal = deps._mountSettingsModal;
+  if (deps._signIn)             _signIn             = deps._signIn;
   if (deps._signOut)            _signOut            = deps._signOut;
 
   rootEl = document.getElementById(ROOT_ID);
@@ -73,12 +82,27 @@ function onClick(e) {
   const btn = e.target.closest('[data-auth-action]');
   if (!btn) return;
   e.preventDefault();
-  if (btn.dataset.authAction === SIGN_IN_ACTION)      _mountLoginCard();
+  if (btn.dataset.authAction === SIGN_IN_ACTION)      startSignIn();
   if (btn.dataset.authAction === SIGN_OUT_ACTION)     _signOut();
   if (btn.dataset.authAction === OPEN_SETTINGS_ACTION) _mountSettingsModal();
 }
 
+// Embedded providers (Auth0) open the in-app card; hosted providers (Clerk and
+// every other vendor) redirect the full page to their hosted flow. The signal
+// is `auth_embedded` on /api/me; default to the hosted redirect when it is
+// absent, so a provider that never advertises embedded login is never handed
+// the Auth0-only card.
+function startSignIn() {
+  if (lastMe?.auth_embedded) {
+    _mountLoginCard();
+  } else {
+    // signIn() defaults returnTo to the current path, re-validated server-side.
+    _signIn();
+  }
+}
+
 function render(me) {
+  lastMe = me;
   if (!me || me.auth_enabled === false) {
     rootEl.innerHTML = '';
     rootEl.hidden = true;

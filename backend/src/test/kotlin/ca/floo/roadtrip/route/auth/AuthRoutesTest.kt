@@ -126,6 +126,8 @@ private fun authOnWiring(): AuthRouteWiring {
         authDomain = "test.example",
         authRealm = "Username-Password-Authentication",
         redirectUri = "https://test.example/auth/callback",
+        providerLabel = null,
+        isEmbeddedLogin = true,
     )
 }
 
