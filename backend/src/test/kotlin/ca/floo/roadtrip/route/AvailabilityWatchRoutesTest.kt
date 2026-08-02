@@ -8,6 +8,7 @@ import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCampsite
@@ -211,6 +212,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     scopeResolver = WatchScopeResolver(campsitesRepo),
                     watchCapabilityService = watchCapabilities,
                 ),
+            userRepo = UserRepo(ctx),
         )
     }
 
