@@ -72,6 +72,12 @@ services:
       # Profile selection is a process env control that chooses
       # application-<profile>.yaml before backend config is parsed.
       - ROADTRIP_PROFILE=${ROADTRIP_PROFILE:-prod}
+      # Active auth vendor selector (non-secret). Matches application.yaml's
+      # `provider: "${AUTH_PROVIDER:clerk}"` default, and — because it is passed
+      # through here — makes the RFC 0009 rollback a real one-variable flip:
+      # `AUTH_PROVIDER=auth0 make run env=prod` reaches the backend process.
+      # Without this line the container always saw the compiled-in default.
+      - AUTH_PROVIDER=${AUTH_PROVIDER:-clerk}
       # OpenTelemetry Java agent exports Ktor/JDBC/JVM telemetry to Alloy.
       # Logs still go through stdout -> Alloy -> Loki; trace/span ids are
       # injected into Logback MDC and emitted by logback.xml's JSON encoder.
