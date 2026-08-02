@@ -205,21 +205,38 @@
   .cg-drawer .rating .stars { color: var(--rt-rating); letter-spacing: -1px; margin-right: 2px; }
   .cg-drawer .rating .count { color: var(--rt-muted); font-weight: 400; font-size: 12px; margin-left: 3px; }
   .cg-drawer .cell { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+  /* Per-carrier cell reception, rec.gov's 0-4 scale. Strength is the bar
+     count, never the hue: colour on this card already means demand
+     (--rt-avail = open, --rt-first-come = first-come) and these chips sit
+     beside it. The chip is a neutral surface; the meter does the work, so it
+     survives greyscale and colour blindness too. */
   .cg-drawer .cell-pill {
-    display: inline-flex; align-items: center; gap: 6px;
+    display: inline-flex; align-items: center; gap: 7px;
     padding: 4px 10px; border-radius: 999px;
-    font-size: 12px; font-weight: 500; color: var(--rt-on-accent); line-height: 1.4;
+    background: var(--rt-fill-subtle);
+    border: 1px solid var(--rt-border);
+    font-size: 12px; font-weight: 500; color: var(--rt-text); line-height: 1.4;
   }
-  .cg-drawer .cell-pill .carrier { font-size: 12px; font-weight: 500; opacity: 0.95; }
-  .cg-drawer .cell-pill .val { font-variant-numeric: tabular-nums; font-weight: 600; opacity: 0.85; }
-  /* Per-carrier cell reception, rec.gov's 0-4 scale:
-     0 = none, 1 = major issues, 2 = some, 3 = good, 4 = excellent.
-     See the defect note on --rt-signal-* in tokens.css. */
-  .cg-drawer .cell-pill[data-bucket="0"] { background: var(--rt-signal-0); }
-  .cg-drawer .cell-pill[data-bucket="1"] { background: var(--rt-signal-1); }
-  .cg-drawer .cell-pill[data-bucket="2"] { background: var(--rt-signal-2); }
-  .cg-drawer .cell-pill[data-bucket="3"] { background: var(--rt-signal-3); }
-  .cg-drawer .cell-pill[data-bucket="4"] { background: var(--rt-signal-4); }
+  .cg-drawer .cell-pill .carrier { font-size: 12px; font-weight: 500; color: var(--rt-muted); }
+  .cg-drawer .cell-pill .val {
+    font-variant-numeric: tabular-nums; font-weight: 600; color: var(--rt-text);
+  }
+  /* Four bars of rising height, filled left to right. */
+  .cg-drawer .cell-bars {
+    display: inline-flex; align-items: flex-end; gap: 1.5px; height: 11px;
+  }
+  .cg-drawer .cell-bars i { width: 3px; border-radius: 1px; background: var(--rt-border-strong); }
+  .cg-drawer .cell-bars i:nth-child(1) { height: 29%; }
+  .cg-drawer .cell-bars i:nth-child(2) { height: 52%; }
+  .cg-drawer .cell-bars i:nth-child(3) { height: 76%; }
+  .cg-drawer .cell-bars i:nth-child(4) { height: 100%; }
+  .cg-drawer .cell-bars[data-level="1"] i:nth-child(-n+1),
+  .cg-drawer .cell-bars[data-level="2"] i:nth-child(-n+2),
+  .cg-drawer .cell-bars[data-level="3"] i:nth-child(-n+3),
+  .cg-drawer .cell-bars[data-level="4"] i:nth-child(-n+4) { background: var(--rt-text); }
+  /* Zero bars needs to read as "measured, none" rather than "not measured",
+     so the empty track stays visible and the value carries the 0.0. */
+  .cg-drawer .cell-pill:has(.cell-bars[data-level="0"]) .val { color: var(--rt-muted); }
   #panel .section-label {
     font-size: 10px; text-transform: uppercase;
     color: var(--rt-muted);

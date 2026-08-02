@@ -56,9 +56,22 @@ export function amenitiesPillsHTML(amenities) {
 }
 
 const CARRIER_LABEL = { verizon: 'Verizon', att: 'AT&T', tmobile: 'T-Mobile', sprint: 'Sprint', uscell: 'US Cellular' };
+
+/** Bars in the signal meter. rec.gov rates 0-4, which is exactly five states
+ *  (none + four bars), so the familiar handset glyph carries the scale with no
+ *  loss. Three bars would fold five levels into three and throw data away. */
+const SIGNAL_BARS = 4;
+
 /**
- * Render per-carrier cell-signal chips. cc is `{verizon: [avg, count], ...}`
- * where avg is rec.gov's 0–4 scale. Sorts by signal strength desc.
+ * Render per-carrier cell-signal meters. cc is `{verizon: [avg, count], ...}`
+ * where avg is rec.gov's 0-4 scale. Sorts by signal strength desc.
+ *
+ * Strength is carried by the number of filled bars, NOT by hue. Colour in this
+ * drawer already means demand -- --rt-avail marks open sites and matrix cells,
+ * --rt-first-come marks first-come -- and these chips sit on the same card, so
+ * a red/amber/green signal chip competed with availability status for the same
+ * vocabulary. The meter also survives greyscale and colour blindness, which a
+ * hue ramp alone does not.
  */
 export function cellCoveragePillsHTML(cc) {
   if (!cc) return '';
@@ -69,10 +82,17 @@ export function cellCoveragePillsHTML(cc) {
   entries.sort((a, b) => b[1].avg - a[1].avg);
   return '<div class="cell">' + entries.map(([k, v]) => {
     const { avg, count } = v;
-    const bucket = Math.max(0, Math.min(4, Math.round(avg)));
+    const level = Math.max(0, Math.min(SIGNAL_BARS, Math.round(avg)));
     const label = CARRIER_LABEL[k] || k;
-    const title = Number.isFinite(count) ? ` title="${count} reports"` : '';
-    return `<span class="cell-pill" data-bucket="${bucket}"${title}><span class="carrier">${label}</span><span class="val">${avg.toFixed(1)}</span></span>`;
+    const reports = Number.isFinite(count) ? `${count} report${count === 1 ? '' : 's'}` : '';
+    const title = reports ? ` title="${reports}"` : '';
+    // The bars are decorative once the label states the level in words.
+    const bars = `<span class="cell-bars" data-level="${level}" aria-hidden="true">${
+      '<i></i>'.repeat(SIGNAL_BARS)}</span>`;
+    const aria = `${label} signal ${level} of ${SIGNAL_BARS}${reports ? `, ${reports}` : ''}`;
+    return `<span class="cell-pill" role="img" aria-label="${escapeHtml(aria)}"${title}>` +
+      `<span class="carrier">${escapeHtml(label)}</span>${bars}` +
+      `<span class="val">${avg.toFixed(1)}</span></span>`;
   }).join('') + '</div>';
 }
 
