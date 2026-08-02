@@ -9,6 +9,7 @@ import ca.floo.roadtrip.model.api.SlackTestResponseDto
 import ca.floo.roadtrip.model.api.UpdateNotificationsRequest
 import ca.floo.roadtrip.model.api.UpdateProfileRequest
 import ca.floo.roadtrip.model.domain.auth.Principal
+import ca.floo.roadtrip.model.domain.auth.User
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
@@ -234,7 +235,7 @@ class UserSettingsService(
     // --- private helpers ---
 
     private fun assembleDto(
-        user: UserRepo.User,
+        user: User,
         settings: UserSettingsRepo.Settings?,
         principal: Principal.User,
     ): SettingsResponseDto {
