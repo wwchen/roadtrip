@@ -54,6 +54,32 @@ const LINE_EXEMPT = [
 
 const HEX = /#[0-9a-fA-F]{3,8}\b/;
 
+/**
+ * Functional color notation that is NOT already composed from a token, i.e.
+ * `rgba(255,255,255,.06)` but not `rgba(var(--rt-c-overlay-rgb), .06)`.
+ *
+ * These are ratcheted rather than banned. Unlike a hex, most of these are
+ * overlays at one-off alphas (0.03, 0.05, 0.14, 0.18, 0.28 ...) with no
+ * existing role to map onto. Converting them would mean either inventing a
+ * token per alpha or rounding onto the nearest one -- a silent visual change,
+ * which is the one thing the token migration promised not to do.
+ *
+ * So: the counts below are a high-water mark. New raw color of this form
+ * fails the build; the existing debt can only shrink. Drop a file's number
+ * when you tokenize some, and delete the entry when it reaches zero.
+ */
+const RGB_FUNC = /(?:rgba?|hsla?)\(\s*(?!var\(--rt-)/g;
+const LEGACY_RAW_COLOR_BUDGET = {
+  'index.html': 32,
+  'web/sandbox-user-switcher.css': 7,
+  'web/design-system/banner.css': 3,
+  'web/topbar.js': 3,
+  'web/availability/watch-editor.js': 2,
+  'web/design-system/double-confirm-button.css': 2,
+  'web/app.js': 1,
+  'web/design-system/toggle-switch.css': 1,
+};
+
 function walk(path, out = []) {
   const abs = join(ROOT, path);
   if (statSync(abs).isDirectory()) {
@@ -85,6 +111,18 @@ for (const root of ROOTS) {
   }
 }
 
+// Ratchet: raw rgb()/rgba()/hsl() outside tokens.css may not increase.
+const budgetBreaches = [];
+for (const root of ROOTS) {
+  for (const file of walk(root)) {
+    if (isExempt(file)) continue;
+    const source = readFileSync(join(ROOT, file), 'utf8');
+    const found = (source.match(RGB_FUNC) || []).length;
+    const allowed = LEGACY_RAW_COLOR_BUDGET[file] ?? 0;
+    if (found > allowed) budgetBreaches.push({ file, found, allowed });
+  }
+}
+
 // The JS bridge must only name tokens that exist.
 const css = readFileSync(join(ROOT, TOKENS_CSS), 'utf8');
 const defined = new Set([...css.matchAll(/^\s*(--rt-[a-z0-9-]+)\s*:/gm)].map((m) => m[1]));
@@ -106,9 +144,22 @@ if (orphans.length) {
       orphans.map((t) => `  ${t}`).join('\n'),
   );
 }
-if (violations.length || orphans.length) process.exit(1);
+if (budgetBreaches.length) {
+  console.error(
+    '\nRaw rgb()/rgba()/hsl() outside ' + TOKENS_CSS + ' increased:\n' +
+      budgetBreaches
+        .map((b) => `  ${b.file}: ${b.found} (budget ${b.allowed})`)
+        .join('\n') +
+      '\n\nCompose from a channel primitive instead, e.g.\n' +
+      '  rgba(var(--rt-c-overlay-rgb), 0.06)\n' +
+      `If you deliberately tokenized some away, lower the number in ${'LEGACY_RAW_COLOR_BUDGET'}.`,
+  );
+}
+if (violations.length || orphans.length || budgetBreaches.length) process.exit(1);
 
 console.log(
   `color tokens ok — ${defined.size} tokens defined, ` +
-    `${referenced.size} bridged to JS, no raw color outside ${TOKENS_CSS}`,
+    `${referenced.size} bridged to JS, no raw hex outside ${TOKENS_CSS}, ` +
+    `${Object.values(LEGACY_RAW_COLOR_BUDGET).reduce((a, b) => a + b, 0)} legacy ` +
+    'rgb()/rgba() occurrences held at their high-water mark',
 );

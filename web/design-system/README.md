@@ -28,8 +28,9 @@ convention is documented below.
 
 ## Files
 
-- **`tokens.css`** — the source of truth, and the only file in the app allowed
-  to contain a raw color value. Linked from `index.html` and
+- **`tokens.css`** — the source of truth, and the only file allowed to contain
+  a raw hex. Functional `rgba()`/`hsl()` is ratcheted at a per-file high-water
+  mark rather than banned; see `docs/frontend-components.md`. Linked from `index.html` and
   `availability.html`. Replaces the ad-hoc `--cg-*` variables that used to live
   in an inline `:root` block. Two tiers: `--rt-c-*` primitives hold the raw
   values, semantic roles alias them. Components use roles only.

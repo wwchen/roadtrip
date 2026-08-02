@@ -56,9 +56,18 @@ Domain components import from `web/design-system/` and from `web/api/` but never
 
 ## Color: tokens only
 
-`web/design-system/tokens.css` is the **only** place in the app where a raw
-color value may appear. `node scripts/check-color-tokens.mjs` fails the build on
-a hex anywhere else, and it runs in `make test` and in CI's web-test job.
+`web/design-system/tokens.css` is the only place a raw **hex** may appear.
+`node scripts/check-color-tokens.mjs` fails the build on one anywhere else, and
+it runs in `make test` and in CI's web-test job.
+
+Functional notation — `rgba()`, `hsl()` — is **ratcheted, not banned**. 51
+occurrences predate the rule, nearly all overlays at one-off alphas with no
+role to map onto; converting them would mean inventing a token per alpha or
+rounding onto the nearest one, which is a silent visual change. The checker
+holds a per-file high-water mark instead: new raw `rgba()` fails the build,
+existing debt can only shrink. Tokenize some, lower the file's number, delete
+the entry at zero. Compose new ones from a channel primitive:
+`rgba(var(--rt-c-overlay-rgb), 0.06)`.
 
 It is two tiers. Primitives (`--rt-c-*`) hold the raw values and are named for
 what they *are* (`--rt-c-blue-500`). Semantic roles (`--rt-brand`,

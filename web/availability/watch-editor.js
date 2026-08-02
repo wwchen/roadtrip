@@ -304,7 +304,7 @@ function injectWatchEditorStyles() {
     box-sizing: border-box;
     color: var(--rt-text);
     background: var(--rt-surface);
-    border: 1px solid var(--rt-border-strong));
+    border: 1px solid var(--rt-border-strong);
     border-radius: 8px;
     box-shadow: 0 12px 32px rgba(0,0,0,0.18);
     padding: 12px;
@@ -324,7 +324,7 @@ function injectWatchEditorStyles() {
     border: 0; background: transparent; color: var(--rt-muted);
     border-radius: 4px; cursor: pointer;
   }
-  .rt-watch-editor-icon:hover { background: var(--rt-fill-hover)); color: var(--rt-text); }
+  .rt-watch-editor-icon:hover { background: var(--rt-fill-hover); color: var(--rt-text); }
   .rt-watch-editor-body { display: grid; gap: 8px; }
   .rt-watch-editor-toggle {
     display: flex;
@@ -339,7 +339,7 @@ function injectWatchEditorStyles() {
   .rt-watch-editor-switch input { position: absolute; opacity: 0; pointer-events: none; }
   .rt-watch-editor-switch-track {
     width: 34px; height: 18px; border-radius: 999px;
-    background: var(--rt-border-strong)); transition: background 120ms ease;
+    background: var(--rt-border-strong); transition: background 120ms ease;
   }
   .rt-watch-editor-switch-track::after {
     content: "";
@@ -362,7 +362,7 @@ function injectWatchEditorStyles() {
   .rt-watch-editor-field input {
     width: 100%;
     box-sizing: border-box;
-    border: 1px solid var(--rt-border-strong));
+    border: 1px solid var(--rt-border-strong);
     border-radius: 6px;
     padding: 7px 8px;
     color: var(--rt-text);
@@ -394,7 +394,7 @@ function injectWatchEditorStyles() {
     color: var(--rt-on-accent);
   }
   .rt-watch-editor-remove {
-    border: 1px solid var(--rt-border-strong));
+    border: 1px solid var(--rt-border-strong);
     background: transparent;
     color: var(--rt-error);
   }
