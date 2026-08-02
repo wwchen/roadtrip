@@ -56,7 +56,7 @@ const FALLBACKS = {
   '--rt-map-locate': '#0a84ff',
   '--rt-kind-place': '#3a7bd5',
   '--rt-kind-address': '#5a6a8a',
-  '--rt-kind-default': '#626770',
+  '--rt-kind-default': '#666666',
   '--rt-series-1': '#4dc9f6',
   '--rt-series-2': '#f67019',
   '--rt-series-3': '#f53794',

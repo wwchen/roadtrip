@@ -46,6 +46,7 @@
   --rt-c-grey-750: #2f3037;
   --rt-c-grey-600: #4a4a4a;
   --rt-c-grey-500: #626770;
+  --rt-c-grey-660: #666666;
   --rt-c-grey-450: #8a8f96;
   --rt-c-grey-400: #9aa0a8;
   --rt-c-grey-300: #999999;
@@ -196,7 +197,10 @@
   /* Search result kinds (topbar autocomplete) */
   --rt-kind-place:   var(--rt-c-blue-450);
   --rt-kind-address: var(--rt-c-blue-slate);
-  --rt-kind-default: var(--rt-c-grey-500);
+  /* The fallback for a search-result kind the palette does not name. Held at
+     the literal it shipped as (#666) rather than snapped to --rt-c-grey-500;
+     the two differ visibly and unifying them is a design call, not a refactor. */
+  --rt-kind-default: var(--rt-c-grey-660);
 
   /* Availability semantics */
   --rt-avail:          var(--rt-c-green-400);
