@@ -20,6 +20,7 @@ import { fetchMe, signIn, signOut } from '../api/auth-api.js';
 import { mountLoginCard } from '../account/login-card.js';
 import { mountSettingsModal } from '../account/settings-modal.js';
 import { escapeHtml } from '../core.js';
+import { notifyAuthChanged } from '../availability/auth-events.js';
 
 const ROOT_ID = 'tb-auth';
 const STYLE_ID = 'tb-auth-styles';
@@ -106,10 +107,12 @@ function render(me) {
   if (!me || me.auth_enabled === false) {
     rootEl.innerHTML = '';
     rootEl.hidden = true;
+    notifyAuthChanged();
     return;
   }
   rootEl.hidden = false;
   rootEl.innerHTML = me.authenticated ? signedInHtml(me.user) : signedOutHtml();
+  notifyAuthChanged();
 }
 
 function signedOutHtml() {
