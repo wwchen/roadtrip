@@ -35,5 +35,36 @@ fun upstreamAvailabilityError(
         blockedMessageMarker != null && cause.message?.contains(blockedMessageMarker) == true ->
             AvailabilityProviderError.UpstreamBlocked(cause)
 
+        httpStatus == null && isTransportFailure(cause) -> AvailabilityProviderError.UpstreamUnreachable(cause)
         else -> AvailabilityProviderError.UpstreamUnavailable(cause)
     }
+
+/** Depth cap so a self-referential cause chain can't spin. */
+private const val MAX_CAUSE_DEPTH = 8
+
+/**
+ * True when the exchange never reached the vendor: DNS, connect, TLS, socket.
+ *
+ * Guarded by `httpStatus == null` at the call site — once upstream has given
+ * us a status, a later IO failure is a bad response, not an unreachable host.
+ */
+private fun isTransportFailure(cause: Throwable): Boolean {
+    var t: Throwable? = cause
+    var depth = 0
+    val seen = mutableSetOf<Throwable>()
+    while (t != null && depth++ < MAX_CAUSE_DEPTH && seen.add(t)) {
+        when (t) {
+            is java.net.UnknownHostException,
+            is java.net.ConnectException,
+            is java.net.NoRouteToHostException,
+            is java.net.PortUnreachableException,
+            is java.net.SocketTimeoutException,
+            is java.nio.channels.ClosedChannelException,
+            is javax.net.ssl.SSLException,
+            is java.net.http.HttpConnectTimeoutException,
+            -> return true
+        }
+        t = t.cause
+    }
+    return false
+}

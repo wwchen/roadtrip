@@ -26,6 +26,12 @@ private const val SUBJECT_PARTS = 2
 internal class Auth0ClaimsDialect : ClaimsDialect {
     override val id: String = ID
 
+    override val displayName: String? = "Auth0"
+
+    // Auth0 is the one vendor with an embedded resource-owner login card; the
+    // frontend renders the in-app email/password form for it. See ClaimsDialect.
+    override val supportsEmbeddedLogin: Boolean = true
+
     override fun toIdentityClaims(token: VerifiedIdToken): IdentityClaims {
         val parts = token.subject.split(SUBJECT_SEPARATOR, limit = SUBJECT_PARTS)
         val hasUpstream = parts.size == SUBJECT_PARTS && parts.all { it.isNotBlank() }

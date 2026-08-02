@@ -24,6 +24,8 @@ import ca.floo.roadtrip.model.domain.auth.stringClaim
 internal class WorkOsClaimsDialect : ClaimsDialect {
     override val id: String = ID
 
+    override val displayName: String? = "WorkOS"
+
     override fun toIdentityClaims(token: VerifiedIdToken): IdentityClaims {
         val connectionType =
             connectionTypeClaims.firstNotNullOfOrNull { token.stringClaim(it) }

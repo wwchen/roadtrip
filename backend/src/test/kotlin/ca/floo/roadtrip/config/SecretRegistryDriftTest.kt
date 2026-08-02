@@ -35,8 +35,14 @@ class SecretRegistryDriftTest {
             "ROADTRIP_PROFILE",
             "POSTGRES_URL",
             "POSTGRES_USER",
-            "ROADTRIP_AUTH_PROVIDER",
+            "AUTH_PROVIDER",
+            "ROADTRIP_AUTH_REALM",
+            "ROADTRIP_AUTH_EMBEDDED_DOMAIN",
             "ROADTRIP_EMAIL_FROM",
+            "ROADTRIP_BUILD_ENV",
+            "ROADTRIP_BUILD_SHA",
+            "ROADTRIP_BUILD_BRANCH",
+            "ROADTRIP_SANDBOX_ASSUME_USER",
         )
 
     @Test

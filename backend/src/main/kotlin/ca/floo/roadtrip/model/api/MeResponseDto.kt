@@ -21,6 +21,29 @@ data class MeResponseDto(
      * hide sign-in entirely rather than offer a control that cannot work.
      */
     @SerialName("auth_enabled") val isAuthEnabled: Boolean = true,
+    /**
+     * Public auth config for the embedded (resource-owner) login flow.
+     * Null when auth is disabled. These are non-secret values safe to expose to
+     * the browser; secrets (client_secret, PKCE verifier) never leave the backend.
+     */
+    @SerialName("auth_client_id") val authClientId: String? = null,
+    @SerialName("auth_domain") val authDomain: String? = null,
+    @SerialName("auth_realm") val authRealm: String? = null,
+    /**
+     * Human-readable identity-provider name for login UI copy ("Continue
+     * with Clerk"). Null when auth is disabled or the provider is unbranded;
+     * the frontend then falls back to its generic sign-in copy.
+     */
+    @SerialName("provider_label") val providerLabel: String? = null,
+    /**
+     * Whether the active provider uses the in-app embedded login card (Auth0)
+     * versus the full-page hosted flow (Clerk and every other vendor). The
+     * frontend branches its sign-in affordance on this: true → mount the
+     * email/password card, false → redirect to `GET /auth/login`. Defaults
+     * false so an unconfigured or hosted provider never offers the Auth0-only
+     * embedded form.
+     */
+    @SerialName("auth_embedded") val isEmbeddedLogin: Boolean = false,
 )
 
 @Serializable

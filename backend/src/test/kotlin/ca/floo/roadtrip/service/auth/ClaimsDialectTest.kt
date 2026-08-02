@@ -3,7 +3,9 @@ package ca.floo.roadtrip.service.auth
 import ca.floo.roadtrip.model.domain.auth.VerifiedIdToken
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 private fun token(
     subject: String,
@@ -119,12 +121,38 @@ class StandardClaimsDialectTest {
     }
 }
 
+class ClerkClaimsDialectTest {
+    private val dialect = ClerkClaimsDialect()
+
+    @Test
+    fun `clerk subjects are opaque and carry no upstream identity`() {
+        // Clerk's sub is `user_…` with no embedded connection; migrated
+        // accounts link on verified email instead (spec: email relink).
+        val claims = dialect.toIdentityClaims(token("user_2abcDEF123"))
+
+        assertEquals("user_2abcDEF123", claims.subject)
+        assertEquals("user@example.com", claims.email)
+        assertEquals("User", claims.displayName)
+        assertNull(claims.upstreamProvider)
+        assertNull(claims.upstreamSubject)
+    }
+
+    @Test
+    fun `vendor-specific claims are ignored rather than misread as upstream identity`() {
+        val claims = dialect.toIdentityClaims(token("user_2abcDEF123", mapOf("idp_id" to "ignored")))
+
+        assertNull(claims.upstreamProvider)
+        assertNull(claims.upstreamSubject)
+    }
+}
+
 class ClaimsDialectRegistryTest {
     private val registry = ClaimsDialectRegistry.default()
 
     @Test
     fun `each known slug selects its dialect`() {
         assertEquals(Auth0ClaimsDialect.ID, registry.forProvider("auth0").id)
+        assertEquals(ClerkClaimsDialect.ID, registry.forProvider("clerk").id)
         assertEquals(WorkOsClaimsDialect.ID, registry.forProvider("workos").id)
         assertEquals(StandardClaimsDialect.ID, registry.forProvider("oidc").id)
     }
@@ -132,5 +160,32 @@ class ClaimsDialectRegistryTest {
     @Test
     fun `an unknown slug falls back to standard instead of failing startup`() {
         assertEquals(StandardClaimsDialect.ID, registry.forProvider("typo-provider").id)
+    }
+
+    @Test
+    fun `display names are human-readable vendor brands`() {
+        assertEquals("Auth0", registry.displayNameFor("auth0"))
+        assertEquals("Clerk", registry.displayNameFor("clerk"))
+        assertEquals("WorkOS", registry.displayNameFor("workos"))
+    }
+
+    @Test
+    fun `plain oidc and unknown slugs have no display name`() {
+        // Null lets the frontend fall back to its generic "single sign-on"
+        // copy instead of rendering a raw config slug at the user.
+        assertNull(registry.displayNameFor("oidc"))
+        assertNull(registry.displayNameFor("typo-provider"))
+    }
+
+    @Test
+    fun `only auth0 advertises the embedded login card`() {
+        // Drives the /api/me `auth_embedded` flag: Auth0 gets the in-app
+        // email/password card, every other (hosted) provider gets the full-page
+        // redirect. Unknown slugs fall back to hosted, never the Auth0-only card.
+        assertTrue(registry.supportsEmbeddedLoginFor("auth0"))
+        assertFalse(registry.supportsEmbeddedLoginFor("clerk"))
+        assertFalse(registry.supportsEmbeddedLoginFor("workos"))
+        assertFalse(registry.supportsEmbeddedLoginFor("oidc"))
+        assertFalse(registry.supportsEmbeddedLoginFor("typo-provider"))
     }
 }

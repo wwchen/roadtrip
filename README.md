@@ -234,6 +234,10 @@ before import.
    The `backend` container serves the map on port 8765 (not exposed to the
    public host — cloudflared talks to it on the compose network).
 
+   Throwaway per-PR/branch environments (backend + Postgres only, auth off)
+   are available via `make sandbox` or PR comment `/sandbox`; see
+   **[docs/sandbox-deploys.md](docs/sandbox-deploys.md)**.
+
 ## Architecture notes
 
 - **Backend.** Kotlin/Ktor + Netty serves the entire site: `/` →

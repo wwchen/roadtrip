@@ -1,56 +1,112 @@
 // web/account/login-card.js
 //
-// Mounts an in-app sign-in card inside a Modal (sheetOnMobile: true).
-// The card shows a brand mark, title, rationale, and a single "Continue with
-// <provider>" button that triggers signIn.
-//
-// signIn and fetchMe are injectable so tests can pass fakes without real
-// navigation or network calls.
-
+// Mounts an in-app sign-in card inside a Modal (sheetOnMobile: true). The card
+// owns an email/password form (authenticates in-page via the embedded-auth
+// port) and a "Continue with Google" button (a full-page redirect — OAuth
+// cannot embed it). The embedded-auth port, completeLogin, signInGoogle and
+// mountModal are injectable so tests pass fakes without network or navigation.
 import { mountModal as _defaultMountModal } from '../design-system/modal.js';
-import { signIn as _defaultSignIn, fetchMe as _defaultFetchMe } from '../api/auth-api.js';
+import { signInWithConnection as _defaultSignInGoogle, fetchMe } from '../api/auth-api.js';
+import { completePasswordLogin as _defaultCompleteLogin, beginPasswordLogin } from '../api/password-auth-api.js';
+import { makeAuth0EmbeddedAuth } from './auth0-embedded.js';
 import { loginCardTemplate } from './login-card-template.js';
+
+// Lazily builds the real adapter from public /api/me config. Kept out of the
+// default parameter so tests that inject _embeddedAuth never call fetchMe.
+async function buildDefaultEmbeddedAuth() {
+  const me = await fetchMe();
+  return makeAuth0EmbeddedAuth({
+    domain: me.auth_domain,
+    clientID: me.auth_client_id,
+    realm: me.auth_realm,
+    begin: (returnTo) => beginPasswordLogin(returnTo),
+  });
+}
 
 const STYLE_ID = 'rt-login-card-styles';
 const BUTTONS_STYLE_ID = 'rt-buttons-styles';
-const FALLBACK_LABEL = 'single sign-on';
+const GOOGLE_CONNECTION = 'google-oauth2';
 
-/**
- * Handle a click on the sign-in button.
- * Extracted so it can be unit-tested without touching the DOM.
- *
- * @param {Event} e
- * @param {(returnTo?: string) => void} signInFn
- * @param {string|undefined} returnTo
- */
-export function _handleSignInClick(e, signInFn, returnTo) {
-  if (!e.target || !e.target.closest) return;
-  if (!e.target.closest('[data-action="sign-in"]')) return;
-  signInFn(returnTo);
+const ERROR_MESSAGES = {
+  invalid_credentials: 'That email or password is incorrect.',
+  too_many_attempts: 'Too many attempts. Please wait a moment and try again.',
+  unverified_email: 'Please verify your email address before signing in.',
+  user_exists: 'That email already has an account — sign in instead.',
+  invalid_password: 'That password does not meet the requirements. Use at least 8 characters.',
+  invalid_signup: 'We could not create that account. Please check your details and try again.',
+  network: 'We could not reach the sign-in service. Please try again.',
+};
+const GENERIC_ERROR = 'Something went wrong signing you in. Please try again.';
+const VALIDATION_ERROR = 'Email and password are required.';
+
+// The two dialog modes. Sign-in authenticates an existing account; signup
+// creates one and (per product decision) logs in immediately after.
+const MODE_SIGNIN = 'signin';
+const MODE_SIGNUP = 'signup';
+
+function messageForCode(code) {
+  return ERROR_MESSAGES[code] || GENERIC_ERROR;
 }
 
 /**
- * Mount a sign-in card modal.
+ * Validate, then authenticate-or-signup, then complete. Extracted for unit
+ * testing without a DOM. `mode` selects the port method: sign-in calls
+ * authenticateWithPassword; signup calls signupWithPassword (which creates the
+ * account and logs in, resolving with the same { artifact, state }).
  *
+ * @param {{ querySelector: (s: string) => ({ value: string } | null) }} form
  * @param {{
- *   returnTo?: string,
- *   _fetchMe?: () => Promise<object>,
- *   _signIn?: (returnTo?: string) => void,
- *   _mountModal?: Function,
- * }} [config]
- * @returns {{ dispose(): void }}
+ *   embeddedAuth: {
+ *     authenticateWithPassword: (e: string, p: string) => Promise<{artifact: string, state: string}>,
+ *     signupWithPassword: (e: string, p: string) => Promise<{artifact: string, state: string}>,
+ *   },
+ *   completeLogin: (artifact: string, state: string, returnTo: string) => Promise<unknown>,
+ *   onError: (msg: string | null) => void,
+ *   onLoading: (busy: boolean) => void,
+ *   returnTo: string,
+ *   mode?: string,
+ * }} deps
  */
+export async function _handlePasswordSubmit(form, { embeddedAuth, completeLogin, onError, onLoading, returnTo, mode = MODE_SIGNIN }) {
+  const email = (form.querySelector('[data-field="email"]')?.value || '').trim();
+  const password = form.querySelector('[data-field="password"]')?.value || '';
+
+  onError(null);
+  if (!email || !password) {
+    onError(VALIDATION_ERROR);
+    // The caller disables the submit button before awaiting; this early return
+    // never reaches the try/finally, so re-enable here or the button stays
+    // stuck disabled with the validation error showing.
+    onLoading(false);
+    return;
+  }
+
+  onLoading(true);
+  try {
+    const authenticate = mode === MODE_SIGNUP
+      ? embeddedAuth.signupWithPassword.bind(embeddedAuth)
+      : embeddedAuth.authenticateWithPassword.bind(embeddedAuth);
+    const { artifact, state } = await authenticate(email, password);
+    await completeLogin(artifact, state, returnTo);
+    if (typeof window !== 'undefined') window.location.assign(returnTo || '/');
+  } catch (err) {
+    onError(messageForCode(err && err.code));
+  } finally {
+    onLoading(false);
+  }
+}
+
 export function mountLoginCard(config = {}) {
   const {
-    returnTo,
-    _fetchMe = _defaultFetchMe,
-    _signIn = _defaultSignIn,
+    returnTo = currentPath(),
+    _embeddedAuth = null, // null → lazily built from /api/me in the submit handler; tests inject a fake to skip fetchMe
+    _completeLogin = _defaultCompleteLogin,
+    _signInGoogle = _defaultSignInGoogle,
     _mountModal = _defaultMountModal,
   } = config;
 
   injectStyles();
 
-  // Create a detached host element that we own and can remove on dispose.
   const host = typeof document !== 'undefined' ? document.createElement('div') : null;
   if (host) {
     host.className = 'rt-login-card-host';
@@ -58,8 +114,6 @@ export function mountLoginCard(config = {}) {
   }
 
   let isDisposed = false;
-
-  /** Idempotent — the ✕, the backdrop, Escape and a drag-dismiss can all land here. */
   function dispose() {
     if (isDisposed) return;
     isDisposed = true;
@@ -67,9 +121,6 @@ export function mountLoginCard(config = {}) {
     if (host && host.parentNode) host.parentNode.removeChild(host);
   }
 
-  // onClose is what actually makes the ✕, the backdrop and Escape do anything:
-  // Modal's close() only invokes this callback, so omitting it leaves every
-  // dismissal affordance inert. settings-modal.js wires it the same way.
   const modal = _mountModal(host, {
     title: '',
     sheetOnMobile: true,
@@ -77,32 +128,87 @@ export function mountLoginCard(config = {}) {
     onClose: dispose,
   });
 
-  // Render with fallback label immediately, then update when fetchMe resolves.
-  function renderContent(providerLabel) {
-    const wrapper = document.createElement('div');
+  const wrapper = typeof document !== 'undefined' ? document.createElement('div') : null;
+  if (wrapper) {
     wrapper.className = 'rt-login-card-body';
-    wrapper.innerHTML = loginCardTemplate({ providerLabel });
+    wrapper.innerHTML = loginCardTemplate({});
 
-    // Wire up the click handler on the wrapper.
-    wrapper.addEventListener('click', (e) => _handleSignInClick(e, _signIn, returnTo));
+    const form = wrapper.querySelector('[data-role="password-form"]');
+    const errorEl = wrapper.querySelector('[data-role="form-error"]');
+    const submitBtn = wrapper.querySelector('[data-action="password-submit"]');
+    const titleEl = wrapper.querySelector('[data-role="title"]');
+    const promptEl = wrapper.querySelector('[data-role="mode-prompt"]');
+    const toggleBtn = wrapper.querySelector('[data-action="toggle-mode"]');
+    const passwordInput = wrapper.querySelector('[data-field="password"]');
+    const passwordHint = wrapper.querySelector('[data-role="password-hint"]');
+
+    // Current dialog mode; the toggle flips it and re-labels the UI.
+    let mode = MODE_SIGNIN;
+
+    const applyMode = () => {
+      const signup = mode === MODE_SIGNUP;
+      if (titleEl) titleEl.textContent = signup ? 'Create your Roadtrip account' : 'Sign in to Roadtrip';
+      if (submitBtn && !submitBtn.disabled) submitBtn.textContent = signup ? 'Create account' : 'Sign in';
+      if (promptEl) promptEl.textContent = signup ? 'Already have an account?' : "Don't have an account?";
+      if (toggleBtn) toggleBtn.textContent = signup ? 'Sign in' : 'Sign up';
+      // New-password autocomplete + the policy hint only make sense while signing up.
+      if (passwordInput) passwordInput.setAttribute('autocomplete', signup ? 'new-password' : 'current-password');
+      if (passwordHint) passwordHint.hidden = !signup;
+    };
+
+    const onError = (msg) => {
+      if (!errorEl) return;
+      errorEl.textContent = msg || '';
+      errorEl.hidden = !msg;
+    };
+    const onLoading = (busy) => {
+      if (submitBtn) {
+        submitBtn.disabled = busy;
+        const signup = mode === MODE_SIGNUP;
+        if (busy) submitBtn.textContent = signup ? 'Creating account…' : 'Signing in…';
+        else submitBtn.textContent = signup ? 'Create account' : 'Sign in';
+      }
+    };
+
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        // Disable immediately — before any await — to close the double-submit
+        // window. onLoading(false) in _handlePasswordSubmit's finally re-enables.
+        if (submitBtn) submitBtn.disabled = true;
+        let embeddedAuth = _embeddedAuth;
+        if (!embeddedAuth) {
+          try { embeddedAuth = await buildDefaultEmbeddedAuth(); }
+          catch { onError(GENERIC_ERROR); if (submitBtn) submitBtn.disabled = false; return; }
+        }
+        _handlePasswordSubmit(form, {
+          embeddedAuth, completeLogin: _completeLogin, onError, onLoading, returnTo, mode,
+        });
+      });
+    }
+
+    wrapper.addEventListener('click', (e) => {
+      if (!e.target.closest) return;
+      if (e.target.closest('[data-action="sign-in-google"]')) {
+        _signInGoogle(GOOGLE_CONNECTION, returnTo);
+      } else if (e.target.closest('[data-action="toggle-mode"]')) {
+        e.preventDefault();
+        mode = mode === MODE_SIGNUP ? MODE_SIGNIN : MODE_SIGNUP;
+        onError(null);
+        applyMode();
+      }
+    });
 
     modal.setBody(wrapper);
   }
 
-  // First render with fallback.
-  renderContent(FALLBACK_LABEL);
-
-  // Async update: fetch the real provider label and re-render.
-  _fetchMe()
-    .then((me) => {
-      const label = (me && me.provider_label) || FALLBACK_LABEL;
-      renderContent(label);
-    })
-    .catch(() => {
-      // fetchMe failed — keep the fallback already rendered.
-    });
-
   return { dispose };
+}
+
+function currentPath() {
+  if (typeof window === 'undefined') return '/';
+  const { pathname, search, hash } = window.location;
+  return `${pathname}${search}${hash}` || '/';
 }
 
 function injectStyles() {

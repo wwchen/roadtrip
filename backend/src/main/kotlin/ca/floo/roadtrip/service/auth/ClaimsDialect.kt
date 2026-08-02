@@ -24,6 +24,22 @@ internal interface ClaimsDialect : Dispatchable<ClaimsDialectId> {
     /** Stable slug matching `roadtrip.auth.provider`. */
     val id: String
 
+    /**
+     * Human-readable vendor name for UI copy ("Continue with Clerk").
+     * Null when there is no brand to show; callers fall back to generic copy.
+     */
+    val displayName: String?
+
+    /**
+     * Whether this provider supports the in-app embedded (resource-owner
+     * password) login card. Only Auth0 does; every other vendor authenticates
+     * through the full-page hosted flow (`GET /auth/login`). The frontend reads
+     * this via `/api/me` to pick the sign-in affordance — embedded card vs
+     * hosted redirect — so a provider switch changes the login UX with no
+     * frontend deploy. Default false: hosted is the safe, universal path.
+     */
+    val supportsEmbeddedLogin: Boolean get() = false
+
     override fun canHandle(key: ClaimsDialectId): Boolean = key.slug == id
 
     /** Normalizes a verified token into the provider-neutral domain shape. */

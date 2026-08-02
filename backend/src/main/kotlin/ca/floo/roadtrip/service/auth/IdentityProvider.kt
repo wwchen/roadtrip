@@ -32,10 +32,20 @@ internal interface IdentityProvider : Dispatchable<IdentityProviderId> {
      * afterwards; the caller is responsible for having validated it as
      * same-origin before it gets here.
      *
+     * [connection] is an optional provider-specific connection hint (e.g.
+     * `"google-oauth2"`). When present it is appended to the authorization URL
+     * so the provider skips its own login page and goes straight to the named
+     * social connection. The caller is responsible for allowlisting the value
+     * before passing it here — the provider will reject unknown connections, but
+     * an unsanitised caller could otherwise inject arbitrary query parameters.
+     *
      * The returned [AuthorizationRequest] carries single-use secrets the caller
      * must persist across the redirect and hand back to [exchange].
      */
-    suspend fun authorizationRequest(returnTo: String): AuthorizationRequest
+    suspend fun authorizationRequest(
+        returnTo: String,
+        connection: String? = null,
+    ): AuthorizationRequest
 
     /**
      * Completes a sign-in: redeems [code], verifies the resulting ID token, and

@@ -1,0 +1,36 @@
+/* Sandbox build-info banner — fixed top bar, visible only in sandbox builds. */
+
+.sandbox-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  font-family: var(--rt-sans, system-ui, sans-serif);
+  font-size: 12px;
+  line-height: 1.4;
+  background: var(--rt-warn, #f1a04a);
+  color: #fff;
+}
+
+.sandbox-banner__env {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.sandbox-banner__sha,
+.sandbox-banner a {
+  color: #fff;
+  text-decoration: underline;
+  font-family: var(--rt-mono, ui-monospace, monospace);
+  font-size: 11px;
+}
+
+.sandbox-banner__branch {
+  opacity: 0.85;
+}
