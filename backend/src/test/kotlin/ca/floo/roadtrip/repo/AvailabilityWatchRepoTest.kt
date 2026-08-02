@@ -13,13 +13,15 @@ import kotlin.test.assertTrue
 
 class AvailabilityWatchRepoTest : SharedDbTest() {
     private var poiSeq = 0
+    private var userSeq = 0
 
     @BeforeEach
     fun cleanup() {
         ctx.cleanCanonicalCatalogFixtures()
     }
 
-    private fun seedAppUser(email: String): UserId = UserRepo(ctx).create(email = email, displayName = null, isEmailVerified = true).id
+    private fun seedAppUser(): UserId =
+        UserRepo(ctx).create(email = "owner-${userSeq++}@example.com", displayName = null, isEmailVerified = true).id
 
     private fun insertPoller(poiId: Long): Long =
         ctx
@@ -76,7 +78,7 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
 
     @Test
     fun `create persists a multi-poi target set`() {
-        val owner = seedAppUser(email = "owner@example.com")
+        val owner = seedAppUser()
         val poiA = insertPoi()
         val poiB = insertPoi()
         val repo = AvailabilityWatchRepo(ctx)
@@ -98,7 +100,7 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
 
     @Test
     fun `findById reloads the persisted target set`() {
-        val owner = seedAppUser(email = "owner@example.com")
+        val owner = seedAppUser()
         val poi = insertPoi()
         val repo = AvailabilityWatchRepo(ctx)
         val created =
@@ -114,7 +116,7 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
 
     @Test
     fun `update replaces the target set when targets is provided`() {
-        val owner = seedAppUser(email = "owner@example.com")
+        val owner = seedAppUser()
         val poiA = insertPoi()
         val poiB = insertPoi()
         val repo = AvailabilityWatchRepo(ctx)
@@ -137,7 +139,7 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
 
     @Test
     fun `update without targets leaves the existing target set untouched`() {
-        val owner = seedAppUser(email = "owner@example.com")
+        val owner = seedAppUser()
         val poi = insertPoi()
         val repo = AvailabilityWatchRepo(ctx)
         val created =
@@ -154,7 +156,7 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
 
     @Test
     fun `list filtered by poiId matches watches whose target set includes that poi`() {
-        val owner = seedAppUser(email = "owner@example.com")
+        val owner = seedAppUser()
         val poiA = insertPoi()
         val poiB = insertPoi()
         val repo = AvailabilityWatchRepo(ctx)
@@ -181,7 +183,7 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
 
     @Test
     fun `list surfaces the latest run status and error across the watch's pollers`() {
-        val owner = seedAppUser(email = "owner@example.com")
+        val owner = seedAppUser()
         val poi = insertPoi()
         val repo = AvailabilityWatchRepo(ctx)
         val watch =
@@ -205,7 +207,7 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
 
     @Test
     fun `list leaves lastRun null when the watch has never polled`() {
-        val owner = seedAppUser(email = "owner@example.com")
+        val owner = seedAppUser()
         val poi = insertPoi()
         val repo = AvailabilityWatchRepo(ctx)
         repo.create(createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, campsiteId = null)), ownerUserId = owner.value))
@@ -215,8 +217,8 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
 
     @Test
     fun `list scopes to owner and null owner returns all`() {
-        val owner = seedAppUser(email = "owner@example.com")
-        val other = seedAppUser(email = "other@example.com")
+        val owner = seedAppUser()
+        val other = seedAppUser()
         val poiId = insertPoi()
 
         val repo = AvailabilityWatchRepo(ctx)

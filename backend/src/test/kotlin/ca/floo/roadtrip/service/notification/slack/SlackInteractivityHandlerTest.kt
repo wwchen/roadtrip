@@ -100,6 +100,7 @@ class SlackInteractivityHandlerTest {
         triggerConfig: JsonObject = JsonObject(emptyMap()),
     ) = AvailabilityWatchRepo.Watch(
         id = id,
+        ownerUserId = 1L,
         targets = listOf(AvailabilityWatchTargetRepo.WatchTarget(id = 100, watchId = id, poiId = 7, campsiteId = null)),
         campsiteFilters = JsonObject(emptyMap()),
         startDate = LocalDate.of(2026, 7, 11),

@@ -1070,6 +1070,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     private fun watchWithCadence(cadenceSec: Int?): AvailabilityWatchRepo.Watch =
         AvailabilityWatchRepo.Watch(
             id = 0,
+            ownerUserId = 1L,
             targets = emptyList(),
             campsiteFilters = kotlinx.serialization.json.JsonObject(emptyMap()),
             startDate = farStart,

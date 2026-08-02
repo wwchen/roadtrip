@@ -468,6 +468,7 @@ class TriggerActionHandlerTest {
     ): AvailabilityWatchRepo.Watch =
         AvailabilityWatchRepo.Watch(
             id = id,
+            ownerUserId = 1L,
             targets = emptyList<AvailabilityWatchTargetRepo.WatchTarget>(),
             campsiteFilters = JsonObject(emptyMap()),
             startDate = LocalDate.parse("2026-07-04"),

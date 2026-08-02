@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.api.AvailabilityWatchCreateRequest
 import ca.floo.roadtrip.model.api.AvailabilityWatchListResponse
 import ca.floo.roadtrip.model.api.AvailabilityWatchResponse
 import ca.floo.roadtrip.model.api.AvailabilityWatchUpdateRequest
+import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 
 internal sealed class AvailabilityWatchControllerResult<out T> {
@@ -31,7 +32,7 @@ internal class AvailabilityWatchController(
         limit: Int,
         offset: Int,
     ): AvailabilityWatchListResponse {
-        val rows = watchRepo.list(status, poiId, campsiteId, limit, offset)
+        val rows = watchRepo.list(status, poiId, campsiteId, ownerUserId = null, limit, offset)
         val total = watchRepo.count(status, poiId, campsiteId)
         return watchMapper.listResponse(rows, total, limit, offset)
     }
@@ -51,6 +52,7 @@ internal class AvailabilityWatchController(
         val watch =
             try {
                 watchService.create(
+                    ownerUserId = UserId(0L), // TODO Task 5: owner from authenticated user
                     targets = parsed.targets,
                     campsiteFilters = req.campsiteFilters,
                     startDate = parsed.dateWindow.startDate,
