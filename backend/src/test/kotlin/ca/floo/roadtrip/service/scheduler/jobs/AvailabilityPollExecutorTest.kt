@@ -869,10 +869,6 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY),
                     triggerConfig =
                         """{"email_notify":{"to":"one@example.test, two@example.test"}}""",
-                    // No owner Slack channel: an email-only watch must produce only
-                    // the Email target (the resolver is channel-gated, not
-                    // kind-gated, so a stored channel would add a Slack card too).
-                    ownerSlackChannel = null,
                 )
             // No cube data: this is the confirmation/status path, not an opening alert.
             val notifier = RecordingSlackNotifications()

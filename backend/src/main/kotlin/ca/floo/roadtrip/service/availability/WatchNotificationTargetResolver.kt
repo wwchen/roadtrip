@@ -29,7 +29,15 @@ import ca.floo.roadtrip.service.security.SecretCipher
  * CHANNEL, not the token. [cipher] is null when the encryption key is not
  * configured; in that case the token stays null (no crash).
  *
- * Email is unchanged: the recipients the watch opted into.
+ * Two entry points keep opt-in intact while ATC stays owner-scoped:
+ *  - [resolve] is the general notify path: it emits the Slack target ONLY when the
+ *    watch opted into `slack_notify`, and the Email target only when it opted into
+ *    `email_notify`. So an email-only watch never gets an unsolicited Slack card,
+ *    even if the owner happens to have a channel configured.
+ *  - [resolveSlackTarget] is the raw owner-scoped Slack resolution, with no
+ *    trigger-kind gate. ATC uses it directly, because ATC is Slack-only yet carries
+ *    the `atc` kind rather than `slack_notify`. Both entry points share the same
+ *    channel/token logic, so the no-shared-default-fallback property lives in one place.
  */
 internal class WatchNotificationTargetResolver(
     private val userSettingsRepo: UserSettingsRepo,
@@ -37,7 +45,9 @@ internal class WatchNotificationTargetResolver(
 ) {
     fun resolve(watch: AvailabilityWatchRepo.Watch): List<NotificationTarget> =
         buildList {
-            slackTarget(watch)?.let(::add)
+            if (AvailabilityTriggerKinds.SLACK_NOTIFY in watch.triggerKinds) {
+                resolveSlackTarget(watch)?.let(::add)
+            }
             if (AvailabilityTriggerKinds.EMAIL_NOTIFY in watch.triggerKinds) {
                 add(NotificationTarget.Email(recipients = watch.emailRecipients()))
             }
@@ -45,13 +55,13 @@ internal class WatchNotificationTargetResolver(
 
     /**
      * The owner-scoped Slack target, or null when no owner-controlled channel is
-     * available (the leak-closure case). Kind-agnostic by design: it resolves
-     * purely from the channel sources, because ATC is Slack-only yet carries the
-     * `atc` kind rather than `slack_notify`. The channel gate (not a trigger-kind
-     * gate) is what decides whether Slack fires: no owner-controlled channel means
-     * no card, for any kind.
+     * available (the leak-closure case). Channel = the watch's own override, else
+     * the OWNER's stored `slack_channel`; when neither yields a channel this returns
+     * null rather than falling back to the shared default. Trigger-kind-agnostic:
+     * callers decide when Slack applies ([resolve] gates on `slack_notify`; ATC calls
+     * this directly regardless of kind).
      */
-    private fun slackTarget(watch: AvailabilityWatchRepo.Watch): NotificationTarget.Slack? {
+    fun resolveSlackTarget(watch: AvailabilityWatchRepo.Watch): NotificationTarget.Slack? {
         val ownerSettings = userSettingsRepo.find(UserId(watch.ownerUserId))
         val channel = watch.channelOverride() ?: ownerSettings?.slackChannel ?: return null
         val token = ownerSettings?.slackTokenCipher?.let { blob -> cipher?.open(blob) }

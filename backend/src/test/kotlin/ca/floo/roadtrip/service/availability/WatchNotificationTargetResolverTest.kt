@@ -112,6 +112,62 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
     }
 
     @Test
+    fun `email-only watch with an owner channel emits no slack target - opt-in preserved`() {
+        // Regression closure: a watch that opted into email_notify only (no
+        // slack_notify) must NOT get an unsolicited Slack card even when the owner
+        // has a stored slack_channel. resolve() is kind-gated on slack_notify.
+        val owner = seedOwner()
+        UserSettingsRepo(ctx).upsertNotifications(owner, notificationEmail = null, slackChannel = "#owner-channel")
+
+        val targets =
+            resolver().resolve(
+                watch(
+                    owner,
+                    triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY),
+                    triggerConfig = JsonObject(mapOf(AvailabilityTriggerKinds.EMAIL_NOTIFY to emailTo("alerts@example.test"))),
+                ),
+            )
+
+        assertTrue(slackTargets(targets).isEmpty(), "email-only watch must not produce a Slack card")
+        assertEquals(
+            listOf(NotificationTarget.Email(listOf("alerts@example.test"))),
+            targets.filterIsInstance<NotificationTarget.Email>(),
+        )
+    }
+
+    @Test
+    fun `slack_notify watch with an owner channel still gets its slack card`() {
+        // Guard against over-correcting: the opt-in path must still deliver.
+        val owner = seedOwner()
+        UserSettingsRepo(ctx).upsertNotifications(owner, notificationEmail = null, slackChannel = "#owner-channel")
+
+        val targets = resolver().resolve(watch(owner, triggerKinds = listOf(AvailabilityTriggerKinds.SLACK_NOTIFY)))
+
+        assertEquals(listOf(NotificationTarget.Slack(channel = "#owner-channel")), slackTargets(targets))
+    }
+
+    @Test
+    fun `resolveSlackTarget resolves owner channel regardless of trigger kind - ATC path`() {
+        // ATC carries the `atc` kind, not slack_notify, yet must still notify Slack.
+        // resolveSlackTarget is not kind-gated; the channel gate still applies.
+        val owner = seedOwner()
+        UserSettingsRepo(ctx).upsertNotifications(owner, notificationEmail = null, slackChannel = "#owner-channel")
+
+        val slack = resolver().resolveSlackTarget(watch(owner, triggerKinds = listOf(AvailabilityTriggerKinds.ATC)))
+
+        assertEquals(NotificationTarget.Slack(channel = "#owner-channel"), slack)
+    }
+
+    @Test
+    fun `resolveSlackTarget returns null when the owner has no channel - leak closure`() {
+        val owner = seedOwner()
+
+        val slack = resolver().resolveSlackTarget(watch(owner, triggerKinds = listOf(AvailabilityTriggerKinds.ATC)))
+
+        assertNull(slack)
+    }
+
+    @Test
     fun `null cipher yields a null token even when a token blob is stored`() {
         val owner = seedOwner()
         val repo = UserSettingsRepo(ctx)

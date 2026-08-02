@@ -20,11 +20,13 @@ internal class AtcTriggerActionHandler(
 
     override val kinds: Set<String> = setOf(KIND)
 
-    /** ATC only notifies Slack; take the owner-scoped Slack target(s) from the
-     *  resolver and drop the email target it may also build. Empty when the
-     *  owner has no owner-controlled channel — the alert simply doesn't fire. */
+    /** ATC only notifies Slack, and carries the `atc` kind rather than
+     *  `slack_notify`, so it takes the owner-scoped Slack target directly (not via
+     *  the kind-gated [WatchNotificationTargetResolver.resolve]). Empty when the
+     *  owner has no owner-controlled channel — the alert simply doesn't fire, and
+     *  never falls back to the shared default. */
     private fun slackTargets(watch: AvailabilityWatchRepo.Watch): List<NotificationTarget> =
-        targetResolver.resolve(watch).filterIsInstance<NotificationTarget.Slack>()
+        listOfNotNull(targetResolver.resolveSlackTarget(watch))
 
     override suspend fun fire(
         watch: AvailabilityWatchRepo.Watch,
