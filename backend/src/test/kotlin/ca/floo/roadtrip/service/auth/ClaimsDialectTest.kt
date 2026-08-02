@@ -3,7 +3,9 @@ package ca.floo.roadtrip.service.auth
 import ca.floo.roadtrip.model.domain.auth.VerifiedIdToken
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 private fun token(
     subject: String,
@@ -173,5 +175,17 @@ class ClaimsDialectRegistryTest {
         // copy instead of rendering a raw config slug at the user.
         assertNull(registry.displayNameFor("oidc"))
         assertNull(registry.displayNameFor("typo-provider"))
+    }
+
+    @Test
+    fun `only auth0 advertises the embedded login card`() {
+        // Drives the /api/me `auth_embedded` flag: Auth0 gets the in-app
+        // email/password card, every other (hosted) provider gets the full-page
+        // redirect. Unknown slugs fall back to hosted, never the Auth0-only card.
+        assertTrue(registry.supportsEmbeddedLoginFor("auth0"))
+        assertFalse(registry.supportsEmbeddedLoginFor("clerk"))
+        assertFalse(registry.supportsEmbeddedLoginFor("workos"))
+        assertFalse(registry.supportsEmbeddedLoginFor("oidc"))
+        assertFalse(registry.supportsEmbeddedLoginFor("typo-provider"))
     }
 }

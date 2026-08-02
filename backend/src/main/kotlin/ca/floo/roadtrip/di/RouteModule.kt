@@ -299,5 +299,6 @@ private fun authRouteWiring(
         authRealm = authConfig.realm,
         redirectUri = callbackRedirectUri,
         providerLabel = dialectRegistry.displayNameFor(authConfig.provider),
+        isEmbeddedLogin = dialectRegistry.supportsEmbeddedLoginFor(authConfig.provider),
     )
 }

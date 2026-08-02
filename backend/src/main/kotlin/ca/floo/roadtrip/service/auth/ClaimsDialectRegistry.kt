@@ -42,6 +42,13 @@ internal class ClaimsDialectRegistry(
      */
     fun displayNameFor(slug: String): String? = dialects.firstHandlerFor(ClaimsDialectId(slug))?.displayName
 
+    /**
+     * Whether the provider for [slug] uses the embedded login card. Unknown
+     * slugs return false — an unrecognized provider falls back to the hosted
+     * flow, the same conservative default as [ClaimsDialect.supportsEmbeddedLogin].
+     */
+    fun supportsEmbeddedLoginFor(slug: String): Boolean = dialects.firstHandlerFor(ClaimsDialectId(slug))?.supportsEmbeddedLogin ?: false
+
     companion object {
         /** Every dialect this build ships. */
         fun default(): ClaimsDialectRegistry =

@@ -212,6 +212,7 @@ internal fun Route.authRoutes(
                             authDomain = wiring.authDomain,
                             authRealm = wiring.authRealm,
                             providerLabel = wiring.providerLabel,
+                            isEmbeddedLogin = wiring.isEmbeddedLogin,
                         ),
                     )
             }
@@ -229,6 +230,7 @@ private fun AuthRouteWiring.meResponse(principal: Principal.User): MeResponseDto
         authDomain = authDomain,
         authRealm = authRealm,
         providerLabel = providerLabel,
+        isEmbeddedLogin = isEmbeddedLogin,
     )
 
 private fun meResponseForUser(
@@ -239,6 +241,7 @@ private fun meResponseForUser(
     authDomain: String? = null,
     authRealm: String? = null,
     providerLabel: String? = null,
+    isEmbeddedLogin: Boolean = false,
 ): MeResponseDto {
     val user = userRepo.findById(principal.userId)
     return MeResponseDto(
@@ -258,6 +261,7 @@ private fun meResponseForUser(
         authDomain = authDomain,
         authRealm = authRealm,
         providerLabel = providerLabel,
+        isEmbeddedLogin = isEmbeddedLogin,
     )
 }
 
@@ -292,4 +296,7 @@ internal class AuthRouteWiring(
     val redirectUri: String,
     /** Human-readable provider name for login UI copy; null when unbranded. */
     val providerLabel: String?,
+    /** True when the active provider uses the embedded login card (Auth0);
+     *  false routes the frontend to the full-page hosted flow. */
+    val isEmbeddedLogin: Boolean,
 )
