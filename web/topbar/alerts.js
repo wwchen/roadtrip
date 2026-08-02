@@ -20,8 +20,16 @@
 import { listWatches, getWatch, updateWatch, deleteWatch } from '../api/watches-api.js';
 import { fetchPoiDetail } from '../api/poi-api.js';
 import { onWatchesChanged } from '../availability/watch-events.js';
+import { onAuthChanged } from '../availability/auth-events.js';
 import { mountWatchEditor } from '../availability/watch-editor.js';
 import { escapeHtml } from '../core.js';
+
+const UNAUTHORIZED_STATUS = 401;
+
+/** A 401 means "not signed in": hide the whole alerts panel. */
+export function shouldHideAlerts(error) {
+  return !!error && error.status === UNAUTHORIZED_STATUS;
+}
 
 const WATCH_LIST_LIMIT = 200;
 // Slack alert deep-link params — kept in sync with WatchAlertDispatcher on the
@@ -73,6 +81,7 @@ export function initAlerts() {
   injectAlertsStyles();
   rootEl.addEventListener('click', onClick);
   onWatchesChanged(refresh);
+  onAuthChanged(refresh);
   // Handle a Slack deep-link only after the first load has the watch rows, so
   // the target row exists to focus.
   refresh().then(applyAlertDeepLink);
@@ -93,8 +102,14 @@ async function refresh() {
       ...(done?.watches || []),
     ].sort(byStartDate);
     await ensurePoiNames(watches);
+    if (rootEl) rootEl.hidden = false;
     render();
   } catch (e) {
+    if (shouldHideAlerts(e)) {
+      watches = [];
+      if (rootEl) { rootEl.hidden = true; rootEl.innerHTML = ''; }
+      return;
+    }
     console.warn('[alerts] watch fetch failed', e);
   }
 }

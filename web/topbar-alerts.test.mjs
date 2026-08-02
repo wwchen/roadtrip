@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { alertEditorContainsFocus } from './topbar/alerts.js';
+import { alertEditorContainsFocus, shouldHideAlerts } from './topbar/alerts.js';
 
 test('alertEditorContainsFocus detects active controls inside the alert editor host', () => {
   const originalElement = globalThis.Element;
@@ -32,4 +32,11 @@ test('alertEditorContainsFocus detects active controls inside the alert editor h
       globalThis.Element = originalElement;
     }
   }
+});
+
+test('shouldHideAlerts is true for a 401 and false otherwise', () => {
+  assert.equal(shouldHideAlerts({ status: 401 }), true);
+  assert.equal(shouldHideAlerts({ status: 500 }), false);
+  assert.equal(shouldHideAlerts(null), false);
+  assert.equal(shouldHideAlerts(new Error('network')), false);
 });
