@@ -1,0 +1,197 @@
+/* Landing — the first screen.
+   Mobile: the panel is the whole viewport and no map exists behind it.
+   Desktop: the panel is a left column and the map shows through beside it,
+   which is why the panel paints an opaque surface and the host does not. */
+
+#landing {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  /* No background: on desktop the map is the right-hand two thirds. The panel
+     below supplies the only opaque surface. */
+  pointer-events: none;
+}
+
+#landing[hidden] { display: none; }
+
+/* While the landing is up the map's own chrome is suppressed. On desktop the
+   map itself stays visible beside the panel — it is showing coverage, not
+   waiting to be operated — but a legend and a trip planner behind a screen
+   that has not been answered yet are two sets of controls for one decision.
+   The map app owns these elements; the landing only borrows their visibility
+   for as long as it is on screen. */
+body.rt-landing-active #panel,
+body.rt-landing-active #panel-toggle,
+body.rt-landing-active #panel-show,
+body.rt-landing-active #topbar {
+  display: none;
+}
+
+.rt-landing__panel {
+  pointer-events: auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  padding: 28px 22px calc(28px + env(safe-area-inset-bottom));
+  padding-top: max(28px, env(safe-area-inset-top));
+  background: var(--rt-bg);
+  color: var(--rt-text);
+  overflow-y: auto;
+  -webkit-font-smoothing: antialiased;
+}
+
+.rt-landing__brand {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.rt-landing__pitch {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rt-landing__title {
+  margin: 0;
+  font-size: 30px;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+.rt-landing__sub {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--rt-muted);
+  max-width: 46ch;
+}
+
+/* ---- form ---- */
+
+.rt-landing__form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rt-landing__field {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rt-landing__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rt-muted);
+}
+
+.rt-landing__input {
+  width: 100%;
+  box-sizing: border-box;
+  /* 16px avoids iOS Safari's zoom-on-focus, which on a first screen reads as
+     the page jumping the moment you tap it. */
+  font: inherit;
+  font-size: 16px;
+  padding: 12px 13px;
+  color: var(--rt-text);
+  background: var(--rt-surface);
+  border: 1px solid var(--rt-border-strong);
+  border-radius: var(--rt-r-md);
+  outline: none;
+}
+
+.rt-landing__input::placeholder { color: var(--rt-hint); }
+
+.rt-landing__input:focus {
+  border-color: var(--rt-brand);
+  box-shadow: 0 0 0 3px var(--rt-brand-tint);
+}
+
+.rt-landing__submit {
+  justify-content: center;
+  width: 100%;
+  min-height: 46px;
+  font-size: 15px;
+}
+
+.rt-landing__error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--rt-error);
+}
+
+/* ---- suggestions ---- */
+
+.rt-landing__results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--rt-surface-raised);
+  border: 1px solid var(--rt-border-strong);
+  border-radius: var(--rt-r-md);
+  box-shadow: var(--rt-e3);
+  max-height: 258px;
+  overflow-y: auto;
+}
+
+.rt-landing__result {
+  padding: 9px 10px;
+  border-radius: var(--rt-r-sm);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.rt-landing__result.is-active,
+.rt-landing__result:hover { background: var(--rt-surface-inset); }
+
+.rt-landing__result-name { display: block; }
+
+/* ---- secondary affordances ---- */
+
+.rt-landing__browse {
+  align-self: flex-start;
+  padding-left: 0;
+  font-size: 14px;
+}
+
+.rt-landing__coverage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: auto 0 0;
+  padding: 14px 0 0;
+  list-style: none;
+  border-top: 1px solid var(--rt-border);
+  font-size: 12px;
+  color: var(--rt-muted);
+}
+
+/* ---- desktop: the panel becomes a rail and the map shows beside it ---- */
+
+@media (min-width: 900px) {
+  .rt-landing__panel {
+    width: 420px;
+    flex: 0 0 420px;
+    gap: 22px;
+    padding: 32px 30px;
+    border-right: 1px solid var(--rt-border-strong);
+    box-shadow: var(--rt-e4);
+  }
+
+  .rt-landing__title { font-size: 34px; }
+}

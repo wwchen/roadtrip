@@ -2,6 +2,7 @@ package ca.floo.roadtrip
 
 import com.microsoft.playwright.Browser
 import com.microsoft.playwright.BrowserType
+import com.microsoft.playwright.Locator
 import com.microsoft.playwright.Page
 import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.Route
@@ -62,7 +63,7 @@ class SmokeTest {
             // 1. Cold load. Don't wait for NETWORKIDLE — MapLibre keeps
             // fetching tiles forever, so it never settles. `load` (default)
             // is enough; the next step polls __rtState.mapReady directly.
-            page.navigate("/")
+            page.navigate("/?map=1")
 
             // 2. Wait for map to be ready — state.mapReady is set inside the
             // style.load handler in app.js after maplibregl resolves the style.
@@ -168,6 +169,65 @@ class SmokeTest {
         }
     }
 
+    // The landing is the first screen on `/`, and the map engine must not be
+    // fetched to render it — that is the whole point of the split. Asserting on
+    // the network is the only way to catch a regression that re-adds a blocking
+    // <script>: the page would still look right, it would just be heavy again.
+    @Test
+    fun `mobile landing renders without loading the map engine, then opens the map`() {
+        val context =
+            browser.newContext(
+                Browser
+                    .NewContextOptions()
+                    .setBaseURL(baseUrl)
+                    .setViewportSize(390, 844),
+            )
+        val page = context.newPage()
+        val pageErrors = mutableListOf<String>()
+        page.onPageError { pageErrors.add(it) }
+        val vendorRequests = mutableListOf<String>()
+        page.onRequest { req ->
+            val url = req.url()
+            if (url.contains("maplibre") || url.contains("turf") || url.contains("auth0")) {
+                vendorRequests.add(url)
+            }
+        }
+
+        try {
+            page.navigate("/")
+            assertThat(page.locator("#landing .rt-landing__title")).isVisible()
+            assertThat(page.locator("#rt-landing-origin")).isVisible()
+            // Map chrome stays out of the way until the landing is answered.
+            assertThat(page.locator("#topbar")).not().isVisible()
+
+            assertTrue(
+                vendorRequests.isEmpty(),
+                "Landing fetched the map/auth stack: ${vendorRequests.joinToString(" | ")}",
+            )
+
+            page.locator("[data-action=\"browse\"]").click()
+            page.waitForFunction(
+                "() => globalThis.__rtState?.mapReady === true",
+                null,
+                Page.WaitForFunctionOptions().setTimeout(15_000.0),
+            )
+            page.locator("#landing").waitFor(
+                Locator.WaitForOptions().setState(WaitForSelectorState.HIDDEN),
+            )
+            assertTrue(
+                vendorRequests.any { it.contains("maplibre") },
+                "Map engine was never fetched after opening the map",
+            )
+            assertTrue(
+                pageErrors.isEmpty(),
+                "Page errors during landing smoke: ${pageErrors.joinToString(" | ")}",
+            )
+        } finally {
+            page.close()
+            context.close()
+        }
+    }
+
     @Test
     fun `mobile layers panel can close after opening`() {
         val context =
@@ -182,7 +242,7 @@ class SmokeTest {
         page.onPageError { pageErrors.add(it) }
 
         try {
-            page.navigate("/")
+            page.navigate("/?map=1")
             page.waitForFunction(
                 "() => globalThis.__rtState?.mapReady === true",
                 null,
@@ -277,7 +337,7 @@ class SmokeTest {
         }
 
         try {
-            page.navigate("/")
+            page.navigate("/?map=1")
             page.waitForFunction(
                 "() => globalThis.__rtState?.mapReady === true",
                 null,
@@ -826,7 +886,7 @@ class SmokeTest {
         }
 
         try {
-            page.navigate("/")
+            page.navigate("/?map=1")
             page.waitForFunction(
                 "() => globalThis.__rtState?.mapReady === true",
                 null,

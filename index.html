@@ -10,11 +10,15 @@
      cannot be a token reference. Mirrors --rt-layer-supercharger. -->
 <meta name="theme-color" content="#e82127">
 <title>Roadtrip Map</title>
-<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<!-- MapLibre's stylesheet loads with the map engine, in web/map-stack.js. The
+     landing page has no map on it, so neither is fetched until one is wanted. -->
 <link rel="stylesheet" href="web/design-system/tokens.css">
 <style>
   html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-tap-highlight-color: transparent; }
-  #map { position: absolute; inset: 0; }
+  /* Painted before the map engine loads, so the landing's right-hand side is
+     the app's own ground rather than a white slab that flashes dark when
+     tiles arrive. */
+  #map { position: absolute; inset: 0; background: var(--rt-bg-base); }
 
   #panel-toggle {
     display: none;
@@ -1722,6 +1726,7 @@
 </head>
 <body>
 <div id="map"></div>
+<div id="landing" hidden></div>
 <button id="panel-toggle" aria-label="Toggle layers panel">☰</button>
 <button id="panel-show" aria-label="Show layers panel" title="Show layers">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
@@ -1774,12 +1779,10 @@
   <div><label><input type="checkbox" id="f-satellite">Satellite overlay</label></div>
 </div>
 
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
-<!-- turf.js — used by topbar.js for corridor buffer + polygon simplification -->
-<script src="https://unpkg.com/@turf/turf@7/turf.min.js"></script>
-<!-- auth0-js — embedded (resource-owner) login adapter; confined to web/account/auth0-embedded.js -->
-<script src="https://cdn.auth0.com/js/auth0/9.24.1/auth0.min.js"></script>
-<script type="module" src="/web/app.js"></script>
+<!-- maplibre + turf load on demand from web/map-stack.js; auth0-js loads from
+     web/account/auth0-embedded.js at first sign-in. None of the three are
+     needed to render the landing, and all three used to block it. -->
+<script type="module" src="/web/landing-page.js"></script>
 <link rel="stylesheet" href="/web/sandbox-banner.css">
 <script type="module" src="/web/sandbox-banner.js"></script>
 <link rel="stylesheet" href="/web/sandbox-user-switcher.css">

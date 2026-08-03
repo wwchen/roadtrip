@@ -293,6 +293,40 @@ function addTripStopFromExternal(stop) {
   if (allStopsFilled()) tryFetchRoute();
 }
 
+/**
+ * Replace the whole trip with an explicit origin → destination pair and plan
+ * it. This is the landing page's hand-off.
+ *
+ * Deliberately not addTripStopFromExternal: that one appends a POI to whatever
+ * the user is already holding and carries browse-mode behaviour with it
+ * (auto-focusing an empty origin, asking the browser for a location). The
+ * landing already knows both ends, so it states the trip rather than growing
+ * one.
+ *
+ * @param {Array<{name?: string, lng: number, lat: number, kind?: string}>} stops
+ * @returns {boolean} false when the topbar is not mounted or the pair is
+ *   incomplete — the caller keeps its own UI up rather than leaving the user
+ *   on a blank map.
+ */
+export function startTrip(stops) {
+  if (!mapRef) return false;
+  const normalized = (stops || [])
+    .filter(s => s && Number.isFinite(s.lng) && Number.isFinite(s.lat))
+    .map(s => ({
+      name: s.name || 'Stop',
+      lng: s.lng,
+      lat: s.lat,
+      kind: s.kind || 'PLACE',
+    }));
+  if (normalized.length < 2) return false;
+  trip.mode = 'directions';
+  trip.stops = normalized;
+  trip.route = null;
+  rerender();
+  tryFetchRoute();
+  return true;
+}
+
 // --- DOM scaffolding -----------------------------------------------------
 
 function injectStyles() {

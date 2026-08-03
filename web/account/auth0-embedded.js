@@ -2,10 +2,22 @@
 //
 // THE ONLY file that imports/uses auth0-js. Everything else speaks the
 // embedded-auth-port contract. Swapping providers means rewriting this file.
-// auth0-js loads via a CDN <script> in index.html as the global `auth0`
-// (same pattern as maplibre/turf).
+//
+// auth0-js is fetched here, at first use, rather than by a <script> tag in
+// index.html: most visits never sign in, and it used to block the first render
+// for all of them. Because this file is already the only consumer of the
+// global, the load has exactly one place to live.
+
+import { loadScript } from '../vendor-scripts.js';
+
+const AUTH0_JS = 'https://cdn.auth0.com/js/auth0/9.24.1/auth0.min.js';
 
 const CODE_CHALLENGE_METHOD = 'S256';
+
+async function auth0Sdk() {
+  if (!globalThis.auth0) await loadScript(AUTH0_JS);
+  return globalThis.auth0;
+}
 
 /**
  * @param {{ domain: string, clientID: string, realm: string,
@@ -29,7 +41,7 @@ export function makeAuth0EmbeddedAuth({ domain, clientID, realm, begin }) {
       redirect_uri: redirectUri,
     } = await begin(currentPath());
 
-    const webAuth = new globalThis.auth0.WebAuth({
+    const webAuth = new (await auth0Sdk()).WebAuth({
       domain, clientID,
       redirectUri,
       responseType: 'code',
@@ -60,7 +72,7 @@ export function makeAuth0EmbeddedAuth({ domain, clientID, realm, begin }) {
       // signup() only creates the account; it does not establish a session.
       // On success we chain straight into login() so the caller gets the same
       // { artifact, state } and drives the identical /auth/password/complete path.
-      const webAuth = new globalThis.auth0.WebAuth({ domain, clientID });
+      const webAuth = new (await auth0Sdk()).WebAuth({ domain, clientID });
       await new Promise((resolve, reject) => {
         webAuth.signup(
           { connection: realm, email, password },
