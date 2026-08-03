@@ -17,17 +17,18 @@ updates:
       gradle-minor-and-patch:
         update-types: [minor, patch]
     ignore:
-      # Ktor 3.5.2 regressed ktor-server-config-yaml: its property-reference
-      # resolver (YamlConfigKt.deepReference) hits a reified-inline stub at
-      # runtime, throwing UnsupportedOperationException from ConfigLoader.load
-      # and failing backend tests (ApplicationPropertiesTest — see #547/#554).
-      # The stack trace is entirely inside Ktor's own precompiled bytecode, so
-      # our compiler version can't fix it. Hold Ktor at 3.5.1 until a fixed
-      # release lands, so routine minor/patch bumps keep grouping cleanly.
-      - dependency-name: "io.ktor:*"
-        versions: [">=3.5.2"]
-      - dependency-name: "io.ktor.plugin"
-        versions: [">=3.5.2"]
+      # kaml is ABI-coupled to Ktor. ktor-server-config-yaml is compiled against
+      # kaml 0.79.x, where YamlMap.get is a normal method; kaml 0.104.0 made
+      # YamlMap.get a reified inline fun, so Ktor's precompiled bytecode calls a
+      # reified stub at runtime and throws UnsupportedOperationException from
+      # ConfigLoader.load — failing ApplicationPropertiesTest. This was the real
+      # (and only) cause of the #547/#554/#557 grouped-bump failures: verified
+      # by reverting only kaml on #557 (full suite passes), and Ktor 3.5.2 with
+      # kaml held at 0.74.0 also passes — so Ktor was never the problem. kaml
+      # must track the version Ktor is built against; bump the two together in a
+      # dedicated PR, not via the group.
+      - dependency-name: "com.charleskorn.kaml:*"
+        versions: [">=0.80.0"]
 
   # Rec.gov companion sidecar — the only npm project in the tree. web/ is
   # dependency-free ES modules with no package.json, so there is nothing to
