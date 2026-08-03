@@ -20,7 +20,7 @@ buildscript {
         classpath("org.testcontainers:postgresql:1.21.4")
         classpath("org.flywaydb:flyway-core:10.20.1")
         classpath("org.flywaydb:flyway-database-postgresql:10.20.1")
-        classpath("org.postgresql:postgresql:42.7.4")
+        classpath("org.postgresql:postgresql:42.7.13")
     }
 }
 
@@ -35,7 +35,7 @@ plugins {
     id("dev.detekt") version "2.0.0-alpha.5"
     // Line/branch coverage. `./gradlew :backend:koverXmlReport` produces the XML the
     // CI job uploads to Codecov.
-    id("org.jetbrains.kotlinx.kover") version "0.9.8"
+    id("org.jetbrains.kotlinx.kover") version "0.9.9"
 }
 
 ktlint {
@@ -85,9 +85,9 @@ repositories {
     mavenCentral()
 }
 
-val ktorVersion = "3.5.1"
-val jooqVersion = "3.19.15"
-val postgresVersion = "42.7.4"
+val ktorVersion = "3.5.2"
+val jooqVersion = "3.21.6"
+val postgresVersion = "42.7.13"
 val flywayVersion = "10.20.1"
 val testcontainersVersion = "1.21.4"
 val bucket4jVersion = "8.10.1"
@@ -95,8 +95,8 @@ val timeshapeVersion = "2026b.29"
 val resendVersion = "4.13.0"
 val nimbusJoseVersion = "10.9.1"
 val junitVersion = "5.11.3"
-val koinVersion = "4.2.0"
-val playwrightVersion = "1.50.0"
+val koinVersion = "4.2.2"
+val playwrightVersion = "1.61.0"
 val backendImageName = "roadtrip/backend"
 val backendPort = 8765
 
@@ -155,7 +155,7 @@ dependencies {
     implementation("io.ktor:ktor-client-core:$ktorVersion")
     implementation("io.ktor:ktor-client-cio:$ktorVersion")
     implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
-    implementation("ch.qos.logback:logback-classic:1.5.12")
+    implementation("ch.qos.logback:logback-classic:1.6.1")
     // JSON log encoder that emits the fully-formatted message (SLF4J {}
     // placeholders interpolated). Replaces Logback's built-in JsonEncoder,
     // which logged the raw pattern + a separate arguments array. 8.x targets
@@ -168,7 +168,7 @@ dependencies {
     // version the agent embeds: opentelemetry-instrumentation-bom 2.29.0
     // (OTEL_JAVAAGENT_VERSION in the Dockerfile) imports opentelemetry-bom
     // 1.63.0. Bump both together.
-    implementation("io.opentelemetry:opentelemetry-api:1.63.0")
+    implementation("io.opentelemetry:opentelemetry-api:1.64.0")
 
     // Self-documenting /api/docs at runtime from Ktor's routing tree.
     implementation("io.ktor:ktor-server-swagger:$ktorVersion")
@@ -196,7 +196,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-slf4j:1.11.0")
     // YAML reader for the POI registry resource.
-    implementation("com.charleskorn.kaml:kaml:0.74.0")
+    implementation("com.charleskorn.kaml:kaml:0.79.0")
     // Coordinate -> IANA ZoneId lookup from timezone-boundary-builder data.
     implementation("net.iakovlev:timeshape:$timeshapeVersion")
     // Transactional email delivery for availability watch alerts.
@@ -212,8 +212,8 @@ dependencies {
     testImplementation(kotlin("test"))
     // In-memory metric reader, so OtelRoadtripMetricsTest can assert the exact
     // instrument names and attributes the dashboards and alert rules query.
-    testImplementation("io.opentelemetry:opentelemetry-sdk-metrics:1.63.0")
-    testImplementation("io.opentelemetry:opentelemetry-sdk-testing:1.63.0")
+    testImplementation("io.opentelemetry:opentelemetry-sdk-metrics:1.64.0")
+    testImplementation("io.opentelemetry:opentelemetry-sdk-testing:1.64.0")
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
     testImplementation("io.ktor:ktor-client-cio:$ktorVersion")
     // MockEngine lets SlackNotifier / AvailabilityClient tests assert request
