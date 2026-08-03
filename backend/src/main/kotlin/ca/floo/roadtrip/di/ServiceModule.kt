@@ -87,7 +87,10 @@ val serviceModule =
     module {
         single {
             val config: AppConfig = get()
-            SlackNotificationService(config.slack)
+            // Per-user Slack transport is ALWAYS available (even when config.slack
+            // is null) so watch cards with an owner token can be delivered without
+            // a global bot token. SlackClient(null) is a valid per-user-only client.
+            SlackNotificationService(config.slack, SlackClient(config.slack))
         }
         single {
             val config: AppConfig = get()
