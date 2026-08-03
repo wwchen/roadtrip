@@ -17,18 +17,17 @@ updates:
       gradle-minor-and-patch:
         update-types: [minor, patch]
     ignore:
-      # Kotlin 2.4 is a language/stdlib jump: its reified-inline ABI breaks
-      # against Ktor's precompiled config helpers, so the grouped bump fails
-      # backend tests (ApplicationPropertiesTest, UnsupportedOperationException
-      # on ConfigLoader.load — see #547). Hold 2.4+ back so routine minor/patch
-      # bumps keep grouping cleanly; do the Kotlin 2.4 upgrade in a dedicated PR
-      # (bump Kotlin + kotlinx + a compatible Ktor together and fix fallout).
-      - dependency-name: "org.jetbrains.kotlin:*"
-        versions: [">=2.4.0"]
-      - dependency-name: "org.jetbrains.kotlin.jvm"
-        versions: [">=2.4.0"]
-      - dependency-name: "org.jetbrains.kotlin.plugin.serialization"
-        versions: [">=2.4.0"]
+      # Ktor 3.5.2 regressed ktor-server-config-yaml: its property-reference
+      # resolver (YamlConfigKt.deepReference) hits a reified-inline stub at
+      # runtime, throwing UnsupportedOperationException from ConfigLoader.load
+      # and failing backend tests (ApplicationPropertiesTest — see #547/#554).
+      # The stack trace is entirely inside Ktor's own precompiled bytecode, so
+      # our compiler version can't fix it. Hold Ktor at 3.5.1 until a fixed
+      # release lands, so routine minor/patch bumps keep grouping cleanly.
+      - dependency-name: "io.ktor:*"
+        versions: [">=3.5.2"]
+      - dependency-name: "io.ktor.plugin"
+        versions: [">=3.5.2"]
 
   # Rec.gov companion sidecar — the only npm project in the tree. web/ is
   # dependency-free ES modules with no package.json, so there is nothing to
