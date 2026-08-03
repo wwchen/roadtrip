@@ -100,3 +100,20 @@ test('watchedDatesSet handles watches with startDate camelCase property', () => 
   assert.equal(result.size, 1, 'should handle camelCase startDate');
   assert.ok(result.has('2026-08-05'), 'should include the watched date');
 });
+
+test('popover 401 handling invokes clearWatchState', () => {
+  // The popover onSave/onRemove callbacks are inline in availability-week.js
+  // and catch 401s to route them to clearWatchState + closeWatchPopover + rerender.
+  // This test confirms the clearWatchState logic they rely on is correct.
+  const ctx = {
+    watchesByWindow: new Map([['2026-08-05|2026-08-06', { id: 123, start_date: '2026-08-05' }]]),
+    canManageWatches: true,
+    watchPopover: {
+      dispose: () => {},
+    },
+  };
+  clearWatchState(ctx);
+  assert.equal(ctx.canManageWatches, false, 'should clear canManageWatches on 401');
+  assert.equal(ctx.watchesByWindow.size, 0, 'should clear watches on 401');
+  assert.equal(ctx.watchPopover, null, 'should dispose popover on 401');
+});

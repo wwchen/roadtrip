@@ -26,6 +26,7 @@ function renderSignedOut() {
 let bannerCtrl = null;
 let formCtrl = null;
 let tableCtrl = null;
+let signedOut = false;
 const poiNameCache = new Map();
 
 async function init() {
@@ -49,7 +50,7 @@ async function init() {
 
   await loadWatches();
   onAuthChanged(loadWatches);
-  applyUrlAction(bannerHost);
+  if (!signedOut) applyUrlAction(bannerHost);
 }
 
 async function loadWatches() {
@@ -66,9 +67,11 @@ async function loadWatches() {
     ].sort(byStartDate);
     await ensurePoiNames(watches);
     tableCtrl.update({ watches, poiNames: poiNameCache });
+    signedOut = false;
     restoreForm();
   } catch (e) {
     if (isUnauthorized(e)) {
+      signedOut = true;
       renderSignedOut();
       return;
     }
@@ -120,7 +123,12 @@ async function handleSubmit(data) {
     notifyWatchesChanged();
     await loadWatches();
   } catch (err) {
-    formCtrl.setError(err?.message || 'Could not save. Try again.');
+    if (isUnauthorized(err)) {
+      signedOut = true;
+      renderSignedOut();
+    } else {
+      formCtrl.setError(err?.message || 'Could not save. Try again.');
+    }
   } finally {
     formCtrl.setLoading(false);
   }
@@ -148,8 +156,13 @@ async function handlePauseResume(id, newStatus) {
     await updateWatch(id, { status: newStatus });
     notifyWatchesChanged();
     await loadWatches();
-  } catch {
-    showBanner(bannerHost, 'error', 'Could not update watch status.');
+  } catch (err) {
+    if (isUnauthorized(err)) {
+      signedOut = true;
+      renderSignedOut();
+    } else {
+      showBanner(bannerHost, 'error', 'Could not update watch status.');
+    }
   }
 }
 
@@ -163,8 +176,13 @@ async function handleDelete(id) {
       formCtrl.setMode('create', null);
     }
     await loadWatches();
-  } catch {
-    showBanner(bannerHost, 'error', 'Could not delete watch.');
+  } catch (err) {
+    if (isUnauthorized(err)) {
+      signedOut = true;
+      renderSignedOut();
+    } else {
+      showBanner(bannerHost, 'error', 'Could not delete watch.');
+    }
   }
 }
 

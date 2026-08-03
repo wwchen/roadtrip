@@ -655,26 +655,46 @@ function openWatchPopover(ctx, anchorEl, date) {
     supportsAddToCart: supportsAddToCart(ctx),
     watchCapabilities: ctx.watchCapabilities,
     onSave: async (triggerPayload) => {
-      const existing = ctx.watchesByWindow.get(key);
-      if (existing) {
-        const updated = await updateWatch(existing.id, triggerPayload, { signal: ctx.signal });
-        ctx.watchesByWindow.set(key, updated.watch || { ...existing, ...triggerPayload });
-      } else {
-        const payload = buildWatchPayload(ctx, date, endDate, triggerPayload);
-        const created = await createWatch(payload, { signal: ctx.signal });
-        ctx.watchesByWindow.set(key, created.watch || { ...payload, id: created.id });
+      try {
+        const existing = ctx.watchesByWindow.get(key);
+        if (existing) {
+          const updated = await updateWatch(existing.id, triggerPayload, { signal: ctx.signal });
+          ctx.watchesByWindow.set(key, updated.watch || { ...existing, ...triggerPayload });
+        } else {
+          const payload = buildWatchPayload(ctx, date, endDate, triggerPayload);
+          const created = await createWatch(payload, { signal: ctx.signal });
+          ctx.watchesByWindow.set(key, created.watch || { ...payload, id: created.id });
+        }
+        notifyWatchesChanged();
+        rerender(ctx);
+      } catch (e) {
+        if (e.status === 401) {
+          clearWatchState(ctx);
+          closeWatchPopover(ctx);
+          rerender(ctx);
+          return;
+        }
+        throw e;
       }
-      notifyWatchesChanged();
-      rerender(ctx);
     },
     onRemove: async () => {
-      const existing = ctx.watchesByWindow.get(key);
-      if (existing) {
-        await deleteWatch(existing.id, { signal: ctx.signal });
-        ctx.watchesByWindow.delete(key);
+      try {
+        const existing = ctx.watchesByWindow.get(key);
+        if (existing) {
+          await deleteWatch(existing.id, { signal: ctx.signal });
+          ctx.watchesByWindow.delete(key);
+        }
+        notifyWatchesChanged();
+        rerender(ctx);
+      } catch (e) {
+        if (e.status === 401) {
+          clearWatchState(ctx);
+          closeWatchPopover(ctx);
+          rerender(ctx);
+          return;
+        }
+        throw e;
       }
-      notifyWatchesChanged();
-      rerender(ctx);
     },
     onClose: () => closeWatchPopover(ctx),
   });

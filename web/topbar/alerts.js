@@ -441,6 +441,10 @@ async function onClick(e) {
       if (String(editing?.id ?? '') === String(id)) closeEditor();
       await refresh();
     } catch (err) {
+      if (err.status === 401) {
+        await refresh();
+        return;
+      }
       console.warn('[alerts] action failed', act, err);
       actBtn.disabled = false;
     }
@@ -492,14 +496,30 @@ function mountCurrentEditor() {
     watch,
     capabilities: editing.detail.watch_capabilities,
     onSave: async (payload) => {
-      await updateWatch(watch.id, payload);
-      editing = null;
-      await refresh();
+      try {
+        await updateWatch(watch.id, payload);
+        editing = null;
+        await refresh();
+      } catch (err) {
+        if (err.status === 401) {
+          await refresh();
+          return;
+        }
+        throw err;
+      }
     },
     onRemove: async () => {
-      await deleteWatch(watch.id);
-      editing = null;
-      await refresh();
+      try {
+        await deleteWatch(watch.id);
+        editing = null;
+        await refresh();
+      } catch (err) {
+        if (err.status === 401) {
+          await refresh();
+          return;
+        }
+        throw err;
+      }
     },
     onClose: closeEditor,
   });
