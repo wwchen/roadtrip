@@ -24,6 +24,7 @@ import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
@@ -42,6 +43,7 @@ import ca.floo.roadtrip.service.availability.TriggerActionHandler
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.TriggerOpening
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
+import ca.floo.roadtrip.service.availability.WatchNotificationTargetResolver
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.ReservationUrlTemplate
@@ -54,6 +56,7 @@ import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import ca.floo.roadtrip.service.notification.slack.SlackContentAvailabilityRenderer
 import ca.floo.roadtrip.service.notification.slack.SlackContentWatchStatusRenderer
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
+import ca.floo.roadtrip.service.security.SecretCipher
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -72,6 +75,8 @@ import kotlin.test.assertTrue
 
 class AvailabilityPollExecutorTest : SharedDbTest() {
     private val testProviderCooldown = Duration.ofMinutes(5)
+    private var userSeq = 0
+    private val testCipher = SecretCipher(ByteArray(32) { it.toByte() })
 
     // Pin the clock to noon UTC so the earliest-bookable-date calculation
     // (18:00 local cutoff) never drifts across midnight for the test POI
@@ -94,6 +99,32 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     }
 
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
+
+    /** Seeds an app_user and, when [slackChannel] is non-null, a matching
+     *  `user_settings.slack_channel` AND a sealed token. Both channel AND token
+     *  are now required for the owner-scoped resolver to emit a Slack target
+     *  (the security invariant: cards only via the owner's own token, never the
+     *  shared global bot). A watch whose owner has no channel OR no token produces
+     *  NO Slack target. */
+    private fun seedOwner(slackChannel: String? = "#camping"): Long {
+        val userId =
+            ca.floo.roadtrip.repo
+                .UserRepo(ctx)
+                .create(
+                    email = "owner-${userSeq++}@example.com",
+                    displayName = null,
+                    isEmailVerified = true,
+                ).id
+        if (slackChannel != null) {
+            val repo =
+                ca.floo.roadtrip.repo
+                    .UserSettingsRepo(ctx)
+            repo.upsertNotifications(userId, notificationEmail = null, slackChannel = slackChannel)
+            // Seed a token so the resolver produces a Slack target (new security gate).
+            repo.setSlackToken(userId, cipher = testCipher.seal("xoxb-owner-token"), hint = "oken")
+        }
+        return userId.value
+    }
 
     /** Seeds a campground POI whose provider_ref resolves to ProviderRef.RecGov(campgroundId). */
     private fun seedPoi(
@@ -141,18 +172,21 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         triggerKinds: List<String> = listOf("atc"),
         triggerConfig: String = "{}",
         stopWhenTriggered: Boolean = false,
+        ownerSlackChannel: String? = "#camping",
     ): Long {
         val kindsLiteral = triggerKinds.joinToString(prefix = "ARRAY[", postfix = "]") { "'$it'" }
+        val ownerId = seedOwner(ownerSlackChannel)
         val watchId =
             ctx
                 .fetchOne(
                     """
                     INSERT INTO availability_watch (
-                        start_date, end_date, cadence_sec, trigger_kinds, trigger_config, stop_when_triggered
+                        owner_user_id, start_date, end_date, cadence_sec, trigger_kinds, trigger_config, stop_when_triggered
                     ) VALUES (
-                        ?::date, ?::date, ?::int, $kindsLiteral, ?::jsonb, ?
+                        ?, ?::date, ?::date, ?::int, $kindsLiteral, ?::jsonb, ?
                     ) RETURNING id
                     """.trimIndent(),
+                    ownerId,
                     startDate,
                     endDate,
                     cadenceSec,
@@ -172,16 +206,18 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         startDate: String,
         endDate: String,
     ): Long {
+        val ownerId = seedOwner()
         val watchId =
             ctx
                 .fetchOne(
                     """
                     INSERT INTO availability_watch (
-                        start_date, end_date, cadence_sec, trigger_kinds, trigger_config, stop_when_triggered
+                        owner_user_id, start_date, end_date, cadence_sec, trigger_kinds, trigger_config, stop_when_triggered
                     ) VALUES (
-                        ?::date, ?::date, 60, ARRAY['atc'], '{}'::jsonb, false
+                        ?, ?::date, ?::date, 60, ARRAY['atc'], '{}'::jsonb, false
                     ) RETURNING id
                     """.trimIndent(),
+                    ownerId,
                     startDate,
                     endDate,
                 )!!
@@ -342,6 +378,16 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             pollerRepo = AvailabilityPollerRepo(ctx),
         )
 
+    /** A resolver over the real seeded `user_settings` rows. Tests now seed a
+     *  per-user token (via seedOwner), and the cipher is passed so the resolver
+     *  can decrypt it and produce Slack targets (both channel AND token are now
+     *  required per the security invariant). */
+    private fun targetResolver(): WatchNotificationTargetResolver =
+        WatchNotificationTargetResolver(
+            userSettingsRepo = UserSettingsRepo(ctx),
+            cipher = testCipher,
+        )
+
     /** Dispatcher with Slack disabled — a null-config service that no-ops and
      *  returns false. Default for tests that don't exercise alerting. */
     private fun disabledDispatcher(): WatchAlertDispatcher {
@@ -350,6 +396,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             notifications = notifications,
             scopeResolver = WatchScopeResolver(CampsiteRepo(ctx)),
             watchRepo = AvailabilityWatchRepo(ctx),
+            targetResolver = targetResolver(),
             targets =
                 DbAvailabilityTargetResolver(
                     poiRepo = PoiRepo(ctx),
@@ -363,7 +410,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 ),
             poiRepo = PoiServingRepo(ctx, enabledDataProviders = emptySet()),
             availabilityRepo = AvailabilityRepo(ctx),
-            triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, APP_ROOT_URL))),
+            triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, targetResolver(), APP_ROOT_URL))),
             grafanaRootUrl = GRAFANA_ROOT_URL,
             appRootUrl = APP_ROOT_URL,
         )
@@ -380,10 +427,14 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             notifications = notifications,
             scopeResolver = WatchScopeResolver(CampsiteRepo(ctx)),
             watchRepo = AvailabilityWatchRepo(ctx),
+            targetResolver = targetResolver(),
             targets = targetsFor(provider),
             poiRepo = PoiServingRepo(ctx, enabledDataProviders = emptySet()),
             availabilityRepo = AvailabilityRepo(ctx),
-            triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, appRootUrl)) + extraTriggerHandlers),
+            triggerActions =
+                TriggerActionRegistry(
+                    listOf(NotifyTriggerActionHandler(notifications, targetResolver(), appRootUrl)) + extraTriggerHandlers,
+                ),
             grafanaRootUrl = grafanaRootUrl,
             appRootUrl = appRootUrl,
         )
@@ -1070,6 +1121,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     private fun watchWithCadence(cadenceSec: Int?): AvailabilityWatchRepo.Watch =
         AvailabilityWatchRepo.Watch(
             id = 0,
+            ownerUserId = 1L,
             targets = emptyList(),
             campsiteFilters = kotlinx.serialization.json.JsonObject(emptyMap()),
             startDate = farStart,

@@ -17,7 +17,7 @@ import {
  * @param {boolean} args.watching
  * @param {boolean} args.canWatch
  */
-export function renderDayDetail({ day, watching, canWatch }) {
+export function renderDayDetail({ day, watching, canWatch, signedOut = false }) {
   const dateLabel = new Date(day.date + 'T00:00:00Z').toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -25,7 +25,7 @@ export function renderDayDetail({ day, watching, canWatch }) {
     timeZone: 'UTC',
   });
   const statusLine = renderStatusLine(day);
-  const actions = renderActions({ day, watching, canWatch });
+  const actions = renderActions({ day, watching, canWatch, signedOut });
 
   return `
     <div class="cg-day-detail">
@@ -48,7 +48,7 @@ function renderStatusLine(day) {
   return `<span class="${meta.detailClass}">${meta.text}</span>`;
 }
 
-function renderActions({ day, watching, canWatch }) {
+function renderActions({ day, watching, canWatch, signedOut = false }) {
   const parts = [];
 
   // Watch toggle: hidden on closed days because there is no available inventory
@@ -61,6 +61,8 @@ function renderActions({ day, watching, canWatch }) {
         ? `<button type="button" class="cg-btn cg-btn-secondary cg-day-alert" data-state="watching">Watching - tap to remove</button>`
         : `<button type="button" class="cg-btn cg-btn-primary cg-day-alert" data-state="set">Set watch</button>`,
     );
+  } else if (signedOut) {
+    parts.push(`<span class="cg-day-detail-meta">Sign in to set availability alerts.</span>`);
   } else if (!canWatch) {
     parts.push(`<span class="cg-day-detail-meta">Watches are not available for this campground.</span>`);
   } else {

@@ -35,6 +35,7 @@ class AvailabilityWatchRepo(
         val triggerKinds: List<String>,
         val triggerConfig: JsonObject,
         val stopWhenTriggered: Boolean,
+        val ownerUserId: Long,
     )
 
     data class UpdateInput(
@@ -51,6 +52,7 @@ class AvailabilityWatchRepo(
 
     data class Watch(
         val id: Long,
+        val ownerUserId: Long,
         val targets: List<AvailabilityWatchTargetRepo.WatchTarget>,
         val campsiteFilters: JsonObject,
         val startDate: LocalDate,
@@ -93,6 +95,7 @@ class AvailabilityWatchRepo(
                 .set(AVAILABILITY_WATCH.TRIGGER_KINDS, input.triggerKinds.toTypedArray())
                 .set(AVAILABILITY_WATCH.TRIGGER_CONFIG, JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.triggerConfig)))
                 .set(AVAILABILITY_WATCH.STOP_WHEN_TRIGGERED, input.stopWhenTriggered)
+                .set(AVAILABILITY_WATCH.OWNER_USER_ID, input.ownerUserId)
                 .returningResult(AVAILABILITY_WATCH.ID)
                 .fetchOne()!!
                 .value1()!!
@@ -111,13 +114,14 @@ class AvailabilityWatchRepo(
         status: WatchStatus? = null,
         poiId: Long? = null,
         campsiteId: Long? = null,
+        ownerUserId: Long? = null,
         limit: Int = DEFAULT_LIST_LIMIT,
         offset: Int = 0,
     ): List<Watch> {
         val effectiveLimit = limit.coerceIn(1, MAX_LIST_LIMIT)
         val rows =
             baseSelect()
-                .where(scopeConditions(status, poiId, campsiteId))
+                .where(scopeConditions(status, poiId, campsiteId, ownerUserId))
                 .orderBy(AVAILABILITY_WATCH.CREATED_AT.desc(), AVAILABILITY_WATCH.ID.desc())
                 .limit(effectiveLimit)
                 .offset(offset)
@@ -171,11 +175,12 @@ class AvailabilityWatchRepo(
         status: WatchStatus? = null,
         poiId: Long? = null,
         campsiteId: Long? = null,
+        ownerUserId: Long? = null,
     ): Int =
         ctx
             .selectCount()
             .from(AVAILABILITY_WATCH)
-            .where(scopeConditions(status, poiId, campsiteId))
+            .where(scopeConditions(status, poiId, campsiteId, ownerUserId))
             .fetchOne(0, Int::class.java) ?: 0
 
     /**
@@ -189,9 +194,11 @@ class AvailabilityWatchRepo(
         status: WatchStatus?,
         poiId: Long?,
         campsiteId: Long?,
+        ownerUserId: Long?,
     ): org.jooq.Condition {
         val conds = mutableListOf<org.jooq.Condition>()
         if (status != null) conds += AVAILABILITY_WATCH.STATUS.eq(status.wireValue)
+        if (ownerUserId != null) conds += AVAILABILITY_WATCH.OWNER_USER_ID.eq(ownerUserId)
         if (poiId != null) {
             conds +=
                 DSL.exists(
@@ -261,6 +268,7 @@ class AvailabilityWatchRepo(
     internal fun fromRecord(r: Record): Watch =
         Watch(
             id = r.get(AVAILABILITY_WATCH.ID)!!,
+            ownerUserId = r.get(AVAILABILITY_WATCH.OWNER_USER_ID)!!,
             targets = targetsRepo.listForWatch(r.get(AVAILABILITY_WATCH.ID)!!),
             campsiteFilters = json.parseToJsonElement(r.get(AVAILABILITY_WATCH.CAMPSITE_FILTERS)!!.data()).jsonObject,
             startDate = r.get(AVAILABILITY_WATCH.START_DATE)!!,

@@ -14,10 +14,19 @@ internal class AtcTriggerActionHandler(
     private val bookings: BookingAdapterRegistry,
     private val bookingTargets: AvailabilityBookingTargetResolver,
     private val notifications: NotificationSender,
+    private val targetResolver: WatchNotificationTargetResolver,
 ) : TriggerActionHandler {
     private val log = LoggerFactory.getLogger(javaClass)
 
     override val kinds: Set<String> = setOf(KIND)
+
+    /** ATC only notifies Slack, and carries the `atc` kind rather than
+     *  `slack_notify`, so it takes the owner-scoped Slack target directly (not via
+     *  the kind-gated [WatchNotificationTargetResolver.resolve]). Empty when the
+     *  owner has no owner-controlled channel — the alert simply doesn't fire, and
+     *  never falls back to the shared default. */
+    private fun slackTargets(watch: AvailabilityWatchRepo.Watch): List<NotificationTarget> =
+        listOfNotNull(targetResolver.resolveSlackTarget(watch))
 
     override suspend fun fire(
         watch: AvailabilityWatchRepo.Watch,
@@ -63,7 +72,7 @@ internal class AtcTriggerActionHandler(
                     status = ATC_RESULT_COMPLETED,
                     request = result.request,
                     response = result.response,
-                    targets = listOf(NotificationTarget.Slack(channel = watch.channelOverride())),
+                    targets = slackTargets(watch),
                 )
                 true
             }
@@ -83,7 +92,7 @@ internal class AtcTriggerActionHandler(
                     status = ATC_RESULT_FAILED,
                     request = result.request,
                     response = result.response,
-                    targets = listOf(NotificationTarget.Slack(channel = watch.channelOverride())),
+                    targets = slackTargets(watch),
                 )
                 false
             }

@@ -53,3 +53,10 @@
 .rt-watch-table-status-active { color: var(--rt-success); }
 .rt-watch-table-status-paused { color: var(--rt-warn); }
 .rt-watch-table-status-done { color: var(--rt-muted); }
+
+.watches-signed-out {
+  padding: 24px;
+  text-align: center;
+  color: var(--rt-muted);
+  font-size: 14px;
+}

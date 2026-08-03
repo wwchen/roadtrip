@@ -3,6 +3,7 @@ package ca.floo.roadtrip.route.common
 import ca.floo.roadtrip.client.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.model.domain.auth.Role
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
+import ca.floo.roadtrip.model.domain.auth.User
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.route.api.docs.apiDocsRoutes
@@ -30,7 +31,7 @@ import kotlin.test.assertTrue
 /** A [UserRepo] stub that returns null for all lookups — sufficient for coverage-only tests. */
 private val noopUserRepo: UserRepo =
     object : UserRepo(ctx = DSL.using(SQLDialect.POSTGRES)) {
-        override fun findById(id: UserId): UserRepo.User? = null
+        override fun findById(id: UserId): User? = null
     }
 
 /**

@@ -11,6 +11,7 @@ import ca.floo.roadtrip.service.notification.common.NotificationSender
  */
 internal class NotifyTriggerActionHandler(
     private val notifications: NotificationSender,
+    private val targetResolver: WatchNotificationTargetResolver,
     private val appRootUrl: String?,
 ) : TriggerActionHandler {
     override val kinds: Set<String> =
@@ -23,7 +24,7 @@ internal class NotifyTriggerActionHandler(
         watch: AvailabilityWatchRepo.Watch,
         openings: List<TriggerOpening>,
     ): Boolean {
-        val targets = watch.notificationTargets()
+        val targets = targetResolver.resolve(watch)
         if (targets.isEmpty()) return false
         return notifications.sendWatchOpenings(
             watchId = watch.id,

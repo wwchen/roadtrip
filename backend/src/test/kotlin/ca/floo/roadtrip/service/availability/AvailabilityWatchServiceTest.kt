@@ -18,6 +18,8 @@ import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.UserRepo
+import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
@@ -46,6 +48,10 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class AvailabilityWatchServiceTest : SharedDbTest() {
+    private val testOwner: ca.floo.roadtrip.model.domain.auth.UserId by lazy {
+        UserRepo(ctx).create(email = "test-owner@example.com", displayName = null, isEmailVerified = true).id
+    }
+
     @BeforeEach
     fun cleanup() {
         ctx.cleanCanonicalCatalogFixtures()
@@ -175,15 +181,24 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
                 pollerRepo = AvailabilityPollerRepo(ctx),
             )
+        val targetResolver =
+            WatchNotificationTargetResolver(
+                userSettingsRepo = UserSettingsRepo(ctx),
+                cipher = null,
+            )
         val dispatcher =
             WatchAlertDispatcher(
                 notifications = notifications,
                 scopeResolver = WatchScopeResolver(campsitesRepo),
                 watchRepo = AvailabilityWatchRepo(ctx),
+                targetResolver = targetResolver,
                 targets = targets,
                 poiRepo = PoiServingRepo(ctx, enabledDataProviders = emptySet()),
                 availabilityRepo = AvailabilityRepo(ctx),
-                triggerActions = TriggerActionRegistry(listOf(NotifyTriggerActionHandler(notifications, appRootUrl = null))),
+                triggerActions =
+                    TriggerActionRegistry(
+                        listOf(NotifyTriggerActionHandler(notifications, targetResolver, appRootUrl = null)),
+                    ),
                 grafanaRootUrl = null,
                 appRootUrl = null,
             )
@@ -197,8 +212,10 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         poiId: Long,
         triggerKinds: List<String> = listOf("atc"),
         triggerConfig: JsonObject = JsonObject(emptyMap()),
+        ownerUserId: ca.floo.roadtrip.model.domain.auth.UserId = testOwner,
     ): AvailabilityWatchRepo.CreateInput =
         AvailabilityWatchRepo.CreateInput(
+            ownerUserId = ownerUserId.value,
             targets = listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiId, campsiteId = null)),
             campsiteFilters = JsonObject(emptyMap()),
             startDate = LocalDate.parse("2026-07-04"),
@@ -219,17 +236,20 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
             ),
         )
 
-    private fun AvailabilityWatchService.createForTest(input: AvailabilityWatchRepo.CreateInput) =
-        create(
-            targets = input.targets,
-            campsiteFilters = input.campsiteFilters,
-            startDate = input.startDate,
-            endDate = input.endDate,
-            cadenceSec = input.cadenceSec,
-            triggerKinds = input.triggerKinds,
-            triggerConfig = input.triggerConfig,
-            stopWhenTriggered = input.stopWhenTriggered,
-        )
+    private fun AvailabilityWatchService.createForTest(
+        input: AvailabilityWatchRepo.CreateInput,
+        ownerUserId: ca.floo.roadtrip.model.domain.auth.UserId = testOwner,
+    ) = create(
+        ownerUserId = ownerUserId,
+        targets = input.targets,
+        campsiteFilters = input.campsiteFilters,
+        startDate = input.startDate,
+        endDate = input.endDate,
+        cadenceSec = input.cadenceSec,
+        triggerKinds = input.triggerKinds,
+        triggerConfig = input.triggerConfig,
+        stopWhenTriggered = input.stopWhenTriggered,
+    )
 
     private fun AvailabilityWatchService.updateForTest(
         id: Long,
@@ -248,6 +268,41 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     )
 
     @Test
+    fun `create stamps the owner`() {
+        val poiId =
+            ctx
+                .seedCatalogPoi(
+                    sourceId = "svc-owner",
+                    name = "Owner",
+                    lon = -119.56,
+                    lat = 37.74,
+                    source = "recgov",
+                    providerRefJson = """{"recgov_id": "999999"}""",
+                    bookingProvider = "recgov",
+                    bookingProviderRef = "999999",
+                ).poiId
+        ctx.seedCampsite(
+            campgroundId = campgroundIdFor(poiId),
+            vendor = "recgov",
+            vendorId = "999",
+            name = "Site 999",
+        )
+        val watch =
+            service().create(
+                ownerUserId = testOwner,
+                targets = listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiId, campsiteId = null)),
+                campsiteFilters = kotlinx.serialization.json.JsonObject(emptyMap()),
+                startDate = java.time.LocalDate.parse("2026-07-04"),
+                endDate = java.time.LocalDate.parse("2026-07-06"),
+                cadenceSec = 60,
+                triggerKinds = listOf("atc"),
+                triggerConfig = kotlinx.serialization.json.JsonObject(emptyMap()),
+                stopWhenTriggered = false,
+            )
+        assertEquals(testOwner.value, watch.ownerUserId)
+    }
+
+    @Test
     fun `a watch spanning two campgrounds links to two pollerRepo`() {
         val poiA = seedPoi("232447")
         seedCampsite(poiA, "100")
@@ -258,6 +313,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val watch =
             svc.createForTest(
                 AvailabilityWatchRepo.CreateInput(
+                    ownerUserId = testOwner.value,
                     targets =
                         listOf(
                             AvailabilityWatchTargetRepo.TargetInput(poiId = poiA, campsiteId = null),

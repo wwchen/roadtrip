@@ -2,6 +2,7 @@ package ca.floo.roadtrip.route.api
 
 import ca.floo.roadtrip.config.SandboxConfig
 import ca.floo.roadtrip.model.domain.auth.Role
+import ca.floo.roadtrip.model.domain.auth.User
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.auth.UserStatus
 import ca.floo.roadtrip.repo.UserRepo
@@ -27,7 +28,7 @@ class SandboxRoutesTest {
     private val now = OffsetDateTime.now()
 
     private val willAdmin =
-        UserRepo.User(
+        User(
             id = UserId(90001L),
             email = "will@sandbox.local",
             isEmailVerified = true,
@@ -39,7 +40,7 @@ class SandboxRoutesTest {
         )
 
     private val mattUser =
-        UserRepo.User(
+        User(
             id = UserId(90002L),
             email = "matt@sandbox.local",
             isEmailVerified = true,
@@ -50,9 +51,9 @@ class SandboxRoutesTest {
             updatedAt = now,
         )
 
-    private fun stubUserRepo(users: List<UserRepo.User>): UserRepo =
+    private fun stubUserRepo(users: List<User>): UserRepo =
         object : UserRepo(ctx = detachedCtx) {
-            override fun listSandboxUsers(): List<UserRepo.User> = users
+            override fun listSandboxUsers(): List<User> = users
         }
 
     @Test

@@ -1,9 +1,11 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
@@ -18,6 +20,7 @@ class WatchScopeResolverTest : SharedDbTest() {
     private lateinit var watchRepo: AvailabilityWatchRepo
     private lateinit var resolver: WatchScopeResolver
     private var poiSeq = 0
+    private var userSeq = 0
 
     @BeforeEach
     fun setUp() {
@@ -26,6 +29,14 @@ class WatchScopeResolverTest : SharedDbTest() {
         resolver = WatchScopeResolver(campsiteRepo)
         ctx.cleanCanonicalCatalogFixtures()
     }
+
+    private fun seedAppUser(email: String): UserId =
+        UserRepo(ctx)
+            .create(
+                email = "owner-${userSeq++}@example.com",
+                displayName = null,
+                isEmailVerified = true,
+            ).id
 
     private fun insertPoi(): Long {
         val sourceId = "poi-scope-${poiSeq++}"
@@ -55,8 +66,9 @@ class WatchScopeResolverTest : SharedDbTest() {
             .fetchOne("SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?", poiId)!!
             .get("campground_id", Long::class.java)
 
-    private fun createWatch(targets: List<AvailabilityWatchTargetRepo.TargetInput>): AvailabilityWatchRepo.Watch =
-        watchRepo.create(
+    private fun createWatch(targets: List<AvailabilityWatchTargetRepo.TargetInput>): AvailabilityWatchRepo.Watch {
+        val owner = seedAppUser(email = "owner@example.com")
+        return watchRepo.create(
             AvailabilityWatchRepo.CreateInput(
                 targets = targets,
                 campsiteFilters = JsonObject(emptyMap()),
@@ -66,8 +78,10 @@ class WatchScopeResolverTest : SharedDbTest() {
                 triggerKinds = listOf("atc"),
                 triggerConfig = JsonObject(emptyMap()),
                 stopWhenTriggered = false,
+                ownerUserId = owner.value,
             ),
         )
+    }
 
     @Test
     fun `resolve unions reservables across a poi target and a reservable target`() {

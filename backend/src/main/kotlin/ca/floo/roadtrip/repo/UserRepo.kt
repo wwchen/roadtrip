@@ -3,6 +3,7 @@ package ca.floo.roadtrip.repo
 import ca.floo.roadtrip.db.generated.tables.AppUser.Companion.APP_USER
 import ca.floo.roadtrip.db.generated.tables.UserRole.Companion.USER_ROLE
 import ca.floo.roadtrip.model.domain.auth.Role
+import ca.floo.roadtrip.model.domain.auth.User
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.auth.UserStatus
 import org.jooq.DSLContext
@@ -23,17 +24,6 @@ import java.time.OffsetDateTime
 open class UserRepo(
     private val ctx: DSLContext,
 ) {
-    data class User(
-        val id: UserId,
-        val email: String,
-        val isEmailVerified: Boolean,
-        val displayName: String?,
-        val status: UserStatus,
-        val roles: Set<Role>,
-        val createdAt: OffsetDateTime,
-        val updatedAt: OffsetDateTime,
-    )
-
     /**
      * Lists only the seeded sandbox users (those whose email ends with
      * `@sandbox.local`).  Used by [sandboxRoutes] so that even a mis-scoped
@@ -159,8 +149,8 @@ open class UserRepo(
         User(
             id = UserId(record.get(APP_USER.ID)!!),
             email = record.get(APP_USER.EMAIL)!!,
-            isEmailVerified = record.get(APP_USER.EMAIL_VERIFIED)!!,
             displayName = record.get(APP_USER.DISPLAY_NAME),
+            isEmailVerified = record.get(APP_USER.EMAIL_VERIFIED)!!,
             // An unparseable status means the CHECK constraint and this enum have
             // drifted; failing loudly beats silently treating it as active.
             status =

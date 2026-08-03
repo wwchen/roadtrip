@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.oidc.OidcClient
 import ca.floo.roadtrip.config.AuthConfig
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.Role
+import ca.floo.roadtrip.model.domain.auth.User
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.auth.UserStatus
 import ca.floo.roadtrip.repo.UserRepo
@@ -41,7 +42,7 @@ private val detachedCtx = DSL.using(SQLDialect.POSTGRES)
 
 private val stubUserId = UserId(1L)
 private val stubUser =
-    UserRepo.User(
+    User(
         id = stubUserId,
         email = "sandbox-user@example.com",
         isEmailVerified = true,
@@ -55,7 +56,7 @@ private val stubUser =
 /** Stub [UserRepo] returning [stubUser] for [stubUserId] and null for everything else. */
 private val stubUserRepo: UserRepo =
     object : UserRepo(ctx = detachedCtx) {
-        override fun findById(id: UserId): UserRepo.User? = if (id == stubUserId) stubUser else null
+        override fun findById(id: UserId): User? = if (id == stubUserId) stubUser else null
     }
 
 /**

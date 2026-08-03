@@ -226,6 +226,7 @@ private fun availabilityWatchController(
                 scopeResolver = WatchScopeResolver(campsitesRepo),
                 watchCapabilityService = watchCapabilities,
             ),
+        userRepo = UserRepo(ctx),
     )
 }
 

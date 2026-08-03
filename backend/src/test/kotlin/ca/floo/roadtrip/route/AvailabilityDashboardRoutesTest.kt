@@ -34,6 +34,8 @@ import kotlin.test.assertEquals
 import ca.floo.roadtrip.route.api.availability.availabilityDashboardRoutes as installAvailabilityDashboardRoutes
 
 class AvailabilityDashboardRoutesTest : SharedDbTest() {
+    private var userSeq = 0
+
     private fun Route.testAvailabilityDashboardRoutes() {
         installAvailabilityDashboardRoutes(
             AvailabilityDashboardController(
@@ -51,6 +53,15 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
         ctx.cleanCanonicalCatalogFixtures()
     }
 
+    private fun seedOwner(): Long =
+        ca.floo.roadtrip.repo
+            .UserRepo(ctx)
+            .create(
+                email = "owner-${userSeq++}@example.com",
+                displayName = null,
+                isEmailVerified = true,
+            ).id.value
+
     private fun seedPoi(sourceId: String = "p1"): Long =
         ctx
             .seedCatalogPoi(
@@ -64,16 +75,18 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     /** Seeds an active poller for (recgov, [parentRef]) with one attached watch. */
     private fun seedPoller(parentRef: String = "232447"): Long {
         val poiId = seedPoi("poi-$parentRef")
+        val ownerId = seedOwner()
         val watchId =
             ctx
                 .fetchOne(
                     """
                     INSERT INTO availability_watch (
-                        start_date, end_date, cadence_sec, trigger_kinds
+                        owner_user_id, start_date, end_date, cadence_sec, trigger_kinds
                     ) VALUES (
-                        '2026-07-04'::date, '2026-07-05'::date, 60, ARRAY['atc']
+                        ?, '2026-07-04'::date, '2026-07-05'::date, 60, ARRAY['atc']
                     ) RETURNING id
                     """.trimIndent(),
+                    ownerId,
                 )!!
                 .get("id", Long::class.java)
         ctx.execute("INSERT INTO availability_watch_target (watch_id, poi_id) VALUES (?, ?)", watchId, poiId)

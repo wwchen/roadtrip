@@ -41,6 +41,7 @@ import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
+import ca.floo.roadtrip.service.availability.WatchNotificationTargetResolver
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
@@ -86,7 +87,10 @@ val serviceModule =
     module {
         single {
             val config: AppConfig = get()
-            SlackNotificationService(config.slack)
+            // Per-user Slack transport is ALWAYS available (even when config.slack
+            // is null) so watch cards with an owner token can be delivered without
+            // a global bot token. SlackClient(null) is a valid per-user-only client.
+            SlackNotificationService(config.slack, SlackClient(config.slack))
         }
         single {
             val config: AppConfig = get()
@@ -196,16 +200,30 @@ val serviceModule =
                 notificationTriggerKinds = notificationTriggerKinds(emailConfigured = config.email != null),
             )
         }
+        single {
+            // Resolves owner-scoped Slack channel/token so alert cards only reach a
+            // channel the watch's owner controls (no shared-default fallback). The
+            // cipher (same instance the settings service uses) decrypts the owner's
+            // stored token; null when the encryption key is unconfigured.
+            val config: AppConfig = get()
+            val cipher: SecretCipher? = config.secrets?.let { SecretCipher(it.encryptionKey) }
+            WatchNotificationTargetResolver(
+                userSettingsRepo = get<UserSettingsRepo>(),
+                cipher = cipher,
+            )
+        }
         single(named("triggerActionHandlers")) {
             listOf(
                 NotifyTriggerActionHandler(
                     notifications = get<NotificationFanout>(),
+                    targetResolver = get<WatchNotificationTargetResolver>(),
                     appRootUrl = get<AppConfig>().webApp?.rootUrl,
                 ),
                 AtcTriggerActionHandler(
                     bookings = get<BookingAdapterRegistry>(),
                     bookingTargets = get<AvailabilityBookingTargetResolver>(),
                     notifications = get<NotificationFanout>(),
+                    targetResolver = get<WatchNotificationTargetResolver>(),
                 ),
             )
         }
@@ -217,6 +235,7 @@ val serviceModule =
                 notifications = get<NotificationFanout>(),
                 scopeResolver = get<WatchScopeResolver>(),
                 watchRepo = get<AvailabilityWatchRepo>(),
+                targetResolver = get<WatchNotificationTargetResolver>(),
                 targets = get<DbAvailabilityTargetResolver>(),
                 poiRepo = get<PoiServingRepo>(),
                 availabilityRepo = get<AvailabilityRepo>(),

@@ -9,6 +9,7 @@ import ca.floo.roadtrip.model.api.UpdateNotificationsRequest
 import ca.floo.roadtrip.model.api.UpdateProfileRequest
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.Role
+import ca.floo.roadtrip.model.domain.auth.User
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.model.domain.auth.UserStatus
 import ca.floo.roadtrip.repo.UserRepo
@@ -33,18 +34,18 @@ private val testKey = ByteArray(32) { it.toByte() }
 
 /** Fake in-memory implementation of [UserRepo]. Only the fields the service uses. */
 private class FakeUserRepo : UserRepo(ctx = detachedCtx) {
-    private val users = mutableMapOf<Long, UserRepo.User>()
+    private val users = mutableMapOf<Long, User>()
 
-    fun seed(user: UserRepo.User) {
+    fun seed(user: User) {
         users[user.id.value] = user
     }
 
-    override fun findById(id: UserId): UserRepo.User? = users[id.value]
+    override fun findById(id: UserId): User? = users[id.value]
 
     override fun updateProfile(
         id: UserId,
         displayName: String?,
-    ): UserRepo.User? {
+    ): User? {
         val u = users[id.value] ?: return null
         val updated = u.copy(displayName = displayName)
         users[id.value] = updated
@@ -151,8 +152,8 @@ private fun testUser(
     email: String = "user@example.com",
     displayName: String? = "Alice",
     roles: Set<Role> = emptySet(),
-): UserRepo.User =
-    UserRepo.User(
+): User =
+    User(
         id = userId,
         email = email,
         isEmailVerified = true,

@@ -52,6 +52,7 @@ internal class WatchAlertDispatcher(
     private val notifications: NotificationSender,
     private val scopeResolver: WatchScopeResolver,
     private val watchRepo: AvailabilityWatchRepo,
+    private val targetResolver: WatchNotificationTargetResolver,
     private val targets: AvailabilityTargetResolver,
     private val poiRepo: PoiServingRepo,
     private val availabilityRepo: AvailabilityRepo,
@@ -103,7 +104,7 @@ internal class WatchAlertDispatcher(
      */
     suspend fun dispatchInitial(watch: AvailabilityWatchRepo.Watch) {
         val handlers = triggerActions.forKinds(watch.triggerKinds)
-        val notificationTargets = watch.notificationTargets()
+        val notificationTargets = targetResolver.resolve(watch)
         if (notificationTargets.isEmpty() && handlers.isEmpty()) return
 
         val campsites = scopeResolver.resolve(watch)
@@ -143,7 +144,7 @@ internal class WatchAlertDispatcher(
      * throws into its caller and no-ops for a watch with no notification target.
      */
     suspend fun dispatchStopped(watch: AvailabilityWatchRepo.Watch) {
-        val notificationTargets = watch.notificationTargets()
+        val notificationTargets = targetResolver.resolve(watch)
         if (notificationTargets.isEmpty()) return
         val campsites = scopeResolver.resolve(watch)
         notifications.sendWatchStatus(

@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
@@ -34,6 +35,7 @@ internal class AvailabilityWatchService(
     private val lifecycleNotifications: WatchLifecycleNotifications,
 ) {
     fun create(
+        ownerUserId: UserId,
         targets: List<AvailabilityWatchTargetRepo.TargetInput>,
         campsiteFilters: JsonObject,
         startDate: LocalDate,
@@ -47,6 +49,7 @@ internal class AvailabilityWatchService(
             ctx.transactionResult { config ->
                 val input =
                     AvailabilityWatchRepo.CreateInput(
+                        ownerUserId = ownerUserId.value,
                         targets = targets,
                         campsiteFilters = campsiteFilters,
                         startDate = startDate,

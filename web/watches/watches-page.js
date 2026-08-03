@@ -1,15 +1,46 @@
 import { listWatches, getWatch, createWatch, updateWatch, deleteWatch } from '../api/watches-api.js';
 import { fetchPoiDetail } from '../api/poi-api.js';
 import { notifyWatchesChanged } from '../availability/watch-events.js';
+import { onAuthChanged } from '../availability/auth-events.js';
 import { mountBanner } from '../design-system/banner.js';
 import { mountWatchForm } from './watch-form.js';
 import { mountWatchTable } from './watch-table.js';
 
 const WATCH_LIST_LIMIT = 200;
+const UNAUTHORIZED_STATUS = 401;
+
+export function isUnauthorized(error) {
+  return !!error && error.status === UNAUTHORIZED_STATUS;
+}
+
+// Exported for testing - allows tests to inject a fake form controller
+export function _setFormCtrlForTest(ctrl) {
+  formCtrl = ctrl;
+  signedOut = false;
+}
+
+// Exported for testing - get current module state
+export function _getModuleState() {
+  return { formCtrl, signedOut };
+}
+
+function renderSignedOut() {
+  const formHost = document.getElementById('form-host');
+  const tableHost = document.getElementById('table-host');
+  if (formHost) formHost.innerHTML = '';
+  if (tableHost) {
+    tableHost.innerHTML =
+      '<p class="watches-signed-out">Sign in to create and manage your availability alerts.</p>';
+  }
+  formCtrl?.dispose();
+  formCtrl = null;
+  signedOut = true;
+}
 
 let bannerCtrl = null;
 let formCtrl = null;
 let tableCtrl = null;
+let signedOut = false;
 const poiNameCache = new Map();
 
 async function init() {
@@ -32,22 +63,47 @@ async function init() {
   });
 
   await loadWatches();
-  applyUrlAction(bannerHost);
+  onAuthChanged(loadWatches);
+  if (!signedOut) applyUrlAction(bannerHost);
 }
 
 async function loadWatches() {
-  const [active, paused, done] = await Promise.all([
-    listWatches({ status: 'active', limit: WATCH_LIST_LIMIT }),
-    listWatches({ status: 'paused', limit: WATCH_LIST_LIMIT }),
-    listWatches({ status: 'done', limit: WATCH_LIST_LIMIT }),
-  ]);
-  const watches = [
-    ...(active?.watches || []),
-    ...(paused?.watches || []),
-    ...(done?.watches || []),
-  ].sort(byStartDate);
-  await ensurePoiNames(watches);
-  tableCtrl.update({ watches, poiNames: poiNameCache });
+  try {
+    const [active, paused, done] = await Promise.all([
+      listWatches({ status: 'active', limit: WATCH_LIST_LIMIT }),
+      listWatches({ status: 'paused', limit: WATCH_LIST_LIMIT }),
+      listWatches({ status: 'done', limit: WATCH_LIST_LIMIT }),
+    ]);
+    const watches = [
+      ...(active?.watches || []),
+      ...(paused?.watches || []),
+      ...(done?.watches || []),
+    ].sort(byStartDate);
+    await ensurePoiNames(watches);
+    tableCtrl.update({ watches, poiNames: poiNameCache });
+    signedOut = false;
+    restoreForm();
+  } catch (e) {
+    if (isUnauthorized(e)) {
+      renderSignedOut();
+      return;
+    }
+    throw e;
+  }
+}
+
+function restoreForm() {
+  const formHost = document.getElementById('form-host');
+  if (!formHost) return;
+  if (!formCtrl || formHost.innerHTML === '') {
+    formCtrl = mountWatchForm(formHost, {
+      mode: 'create',
+      onSubmit: handleSubmit,
+      onCancel: handleCancel,
+    });
+  } else {
+    formCtrl.setMode('create', null);
+  }
 }
 
 async function ensurePoiNames(list) {
@@ -62,27 +118,33 @@ async function ensurePoiNames(list) {
   }));
 }
 
-async function handleSubmit(data) {
+export async function handleSubmit(data, deps = null) {
+  const api = deps || { createWatch, updateWatch, loadWatches, notifyWatchesChanged, showBanner };
+
   formCtrl.setLoading(true);
   formCtrl.setError(null);
   const bannerHost = document.getElementById('banner-host');
   const editingId = formCtrl.getEditingId();
   try {
     if (editingId) {
-      await updateWatch(editingId, data);
+      await api.updateWatch(editingId, data);
       const verb = data.status === 'active' ? 'reactivated' : 'updated';
-      showBanner(bannerHost, 'success', `Watch #${editingId} ${verb}.`);
+      api.showBanner(bannerHost, 'success', `Watch #${editingId} ${verb}.`);
     } else {
-      await createWatch(data);
-      showBanner(bannerHost, 'success', `Watch created for POI ${data.poi_id}.`);
+      await api.createWatch(data);
+      api.showBanner(bannerHost, 'success', `Watch created for POI ${data.poi_id}.`);
     }
     formCtrl.setMode('create', null);
-    notifyWatchesChanged();
-    await loadWatches();
+    api.notifyWatchesChanged();
+    await api.loadWatches();
   } catch (err) {
-    formCtrl.setError(err?.message || 'Could not save. Try again.');
+    if (isUnauthorized(err)) {
+      renderSignedOut();
+    } else {
+      formCtrl.setError(err?.message || 'Could not save. Try again.');
+    }
   } finally {
-    formCtrl.setLoading(false);
+    if (!signedOut && formCtrl) formCtrl.setLoading(false);
   }
 }
 
@@ -108,8 +170,12 @@ async function handlePauseResume(id, newStatus) {
     await updateWatch(id, { status: newStatus });
     notifyWatchesChanged();
     await loadWatches();
-  } catch {
-    showBanner(bannerHost, 'error', 'Could not update watch status.');
+  } catch (err) {
+    if (isUnauthorized(err)) {
+      renderSignedOut();
+    } else {
+      showBanner(bannerHost, 'error', 'Could not update watch status.');
+    }
   }
 }
 
@@ -123,8 +189,12 @@ async function handleDelete(id) {
       formCtrl.setMode('create', null);
     }
     await loadWatches();
-  } catch {
-    showBanner(bannerHost, 'error', 'Could not delete watch.');
+  } catch (err) {
+    if (isUnauthorized(err)) {
+      renderSignedOut();
+    } else {
+      showBanner(bannerHost, 'error', 'Could not delete watch.');
+    }
   }
 }
 
@@ -178,4 +248,4 @@ function byStartDate(a, b) {
   return da < db ? -1 : 1;
 }
 
-init();
+if (typeof document !== 'undefined' && document.getElementById('table-host')) init();
