@@ -24,6 +24,7 @@ import { reservationUrlFromTemplate } from './booking-links.js';
 import { mountCalendarPopover } from './calendar-popover.js';
 import { mountWatchPopover } from './watch-popover.js';
 import { notifyWatchesChanged, onWatchesChanged } from './watch-events.js';
+import { onAuthChanged } from './auth-events.js';
 import { availableCount } from './day-fields.js';
 import { availabilityStatusLabel } from '../utils/availability-status.js';
 import { addLocalDays, localToday, localYmd, parseLocalYmd, sameLocalDay } from '../utils/local-date.js';
@@ -71,6 +72,8 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
   // Keep the drawer's watched-cell indicators in sync when a watch is
   // created/removed/paused elsewhere (e.g. the nav alerts summary).
   const unsubscribeWatches = onWatchesChanged(() => fetchWatches(ctx));
+  // Refresh watches and re-render on auth change so signed-in users see CTAs.
+  const unsubscribeAuth = onAuthChanged(() => fetchWatches(ctx));
 
   return {
     dispose() {
@@ -80,6 +83,7 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
       ctx.calendar = null;
       closeWatchPopover(ctx);
       unsubscribeWatches();
+      unsubscribeAuth();
       window.removeEventListener('resize', onResize);
     },
   };
@@ -115,6 +119,7 @@ function makeContext(host, feature, signal) {
     error: null,
     watchesByWindow: new Map(),
     watchCapabilities: defaultWatchCapabilities(),
+    canManageWatches: false, // true once fetchWatches succeeds, false on 401
     skeletonTimer: null,
     sitesState: 'loading',
     sites: [],
@@ -201,7 +206,7 @@ function renderAvailabilitySurface(ctx) {
     showToday: shouldShowEarliestButton(ctx),
     armedBook: ctx.armedBook,
     watchedDates: watchedDatesSet(ctx),
-    canWatch: supportsWatchAlerts(ctx),
+    canWatch: supportsWatchAlerts(ctx) && ctx.canManageWatches,
   });
 }
 
@@ -231,7 +236,7 @@ function renderDetail(ctx) {
   return renderDayDetail({
     day,
     watching: ctx.watchesByWindow.has(watchWindowKey(day.date, stayEndDate(ctx, day.date))),
-    canWatch: ctx.poiId != null && ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY),
+    canWatch: ctx.poiId != null && ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY) && ctx.canManageWatches,
   });
 }
 
@@ -957,10 +962,17 @@ async function fetchWatches(ctx) {
     const data = await listWatches({ status: 'active', poiId: ctx.poiId, signal: ctx.signal });
     if (ctx.signal?.aborted) return;
     ctx.watchesByWindow = indexWatchesByWindow(data?.watches, ctx.poiId);
+    ctx.canManageWatches = true;
     rerender(ctx);
   } catch (e) {
     if (e.name === 'AbortError') return;
-    // Non-fatal: badges just don't render.
+    // A 401 means the user is signed out; disable watch CTAs.
+    if (e.status === 401) {
+      ctx.canManageWatches = false;
+      rerender(ctx);
+      return;
+    }
+    // Other errors are non-fatal: badges just don't render.
     console.warn('watch list fetch failed', e);
   }
 }
@@ -1011,6 +1023,12 @@ async function toggleWatch(ctx, button) {
     if (e.name === 'AbortError') return;
     button.textContent = previousLabel;
     button.disabled = false;
+    // A 401 means the session expired; collapse the CTA so it doesn't silently fail.
+    if (e.status === 401) {
+      ctx.canManageWatches = false;
+      rerender(ctx);
+      return;
+    }
     console.warn('watch toggle failed', e);
   }
 }
