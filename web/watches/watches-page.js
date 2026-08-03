@@ -13,6 +13,17 @@ export function isUnauthorized(error) {
   return !!error && error.status === UNAUTHORIZED_STATUS;
 }
 
+// Exported for testing - allows tests to inject a fake form controller
+export function _setFormCtrlForTest(ctrl) {
+  formCtrl = ctrl;
+  signedOut = false;
+}
+
+// Exported for testing - get current module state
+export function _getModuleState() {
+  return { formCtrl, signedOut };
+}
+
 function renderSignedOut() {
   const formHost = document.getElementById('form-host');
   const tableHost = document.getElementById('table-host');
@@ -21,6 +32,9 @@ function renderSignedOut() {
     tableHost.innerHTML =
       '<p class="watches-signed-out">Sign in to create and manage your availability alerts.</p>';
   }
+  formCtrl?.dispose();
+  formCtrl = null;
+  signedOut = true;
 }
 
 let bannerCtrl = null;
@@ -71,7 +85,6 @@ async function loadWatches() {
     restoreForm();
   } catch (e) {
     if (isUnauthorized(e)) {
-      signedOut = true;
       renderSignedOut();
       return;
     }
@@ -105,32 +118,33 @@ async function ensurePoiNames(list) {
   }));
 }
 
-async function handleSubmit(data) {
+export async function handleSubmit(data, deps = null) {
+  const api = deps || { createWatch, updateWatch, loadWatches, notifyWatchesChanged, showBanner };
+
   formCtrl.setLoading(true);
   formCtrl.setError(null);
   const bannerHost = document.getElementById('banner-host');
   const editingId = formCtrl.getEditingId();
   try {
     if (editingId) {
-      await updateWatch(editingId, data);
+      await api.updateWatch(editingId, data);
       const verb = data.status === 'active' ? 'reactivated' : 'updated';
-      showBanner(bannerHost, 'success', `Watch #${editingId} ${verb}.`);
+      api.showBanner(bannerHost, 'success', `Watch #${editingId} ${verb}.`);
     } else {
-      await createWatch(data);
-      showBanner(bannerHost, 'success', `Watch created for POI ${data.poi_id}.`);
+      await api.createWatch(data);
+      api.showBanner(bannerHost, 'success', `Watch created for POI ${data.poi_id}.`);
     }
     formCtrl.setMode('create', null);
-    notifyWatchesChanged();
-    await loadWatches();
+    api.notifyWatchesChanged();
+    await api.loadWatches();
   } catch (err) {
     if (isUnauthorized(err)) {
-      signedOut = true;
       renderSignedOut();
     } else {
       formCtrl.setError(err?.message || 'Could not save. Try again.');
     }
   } finally {
-    formCtrl.setLoading(false);
+    if (!signedOut && formCtrl) formCtrl.setLoading(false);
   }
 }
 
@@ -158,7 +172,6 @@ async function handlePauseResume(id, newStatus) {
     await loadWatches();
   } catch (err) {
     if (isUnauthorized(err)) {
-      signedOut = true;
       renderSignedOut();
     } else {
       showBanner(bannerHost, 'error', 'Could not update watch status.');
@@ -178,7 +191,6 @@ async function handleDelete(id) {
     await loadWatches();
   } catch (err) {
     if (isUnauthorized(err)) {
-      signedOut = true;
       renderSignedOut();
     } else {
       showBanner(bannerHost, 'error', 'Could not delete watch.');
