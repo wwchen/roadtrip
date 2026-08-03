@@ -233,10 +233,15 @@ function renderFreshness(ctx) {
 function renderDetail(ctx) {
   const day = selectedAvailabilityDay(ctx);
   if (!day || availableCount(day) > 0) return '';
+  const providerSupportsWatch =
+    ctx.poiId != null && ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY);
   return renderDayDetail({
     day,
     watching: ctx.watchesByWindow.has(watchWindowKey(day.date, stayEndDate(ctx, day.date))),
-    canWatch: ctx.poiId != null && ctx.watchCapabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY) && ctx.canManageWatches,
+    canWatch: providerSupportsWatch && ctx.canManageWatches,
+    // Distinguish "sign in to watch" from "provider can't watch": only prompt
+    // sign-in when the campground would support alerts for a signed-in user.
+    signedOut: providerSupportsWatch && !ctx.canManageWatches,
   });
 }
 
