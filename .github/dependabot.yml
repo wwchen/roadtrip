@@ -17,13 +17,18 @@ updates:
       gradle-minor-and-patch:
         update-types: [minor, patch]
     ignore:
-      # Ktor 3.5.2 regressed ktor-server-config-yaml: its property-reference
-      # resolver (YamlConfigKt.deepReference) hits a reified-inline stub at
-      # runtime, throwing UnsupportedOperationException from ConfigLoader.load
-      # and failing backend tests (ApplicationPropertiesTest — see #547/#554).
-      # The stack trace is entirely inside Ktor's own precompiled bytecode, so
-      # our compiler version can't fix it. Hold Ktor at 3.5.1 until a fixed
-      # release lands, so routine minor/patch bumps keep grouping cleanly.
+      # kaml is coupled to Ktor: ktor-server-config-yaml 3.5.1 is compiled
+      # against kaml 0.79.0, where YamlMap.get is a normal method. kaml 0.104.0
+      # made YamlMap.get a reified inline fun, so Ktor's precompiled bytecode
+      # calls a reified stub at runtime and throws UnsupportedOperationException
+      # from ConfigLoader.load — failing ApplicationPropertiesTest (the real
+      # cause of the #547/#554/#557 backend-test failures, verified by reverting
+      # only kaml on #557's branch). kaml must track the version Ktor expects,
+      # so bump it together with Ktor in a dedicated PR, not via the group.
+      - dependency-name: "com.charleskorn.kaml:*"
+        versions: [">=0.80.0"]
+      # Ktor itself: hold 3.5.2+ out of the group until a coordinated Ktor +
+      # kaml upgrade is done deliberately (they must move together).
       - dependency-name: "io.ktor:*"
         versions: [">=3.5.2"]
       - dependency-name: "io.ktor.plugin"
