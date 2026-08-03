@@ -1,5 +1,9 @@
 roadtrip:
   static-dir: /app/static
+  auth:
+    role-emails:
+      admin:
+        - williamchen16@gmail.com
   db:
     url: "${POSTGRES_URL:jdbc:postgresql://postgres:5432/roadtrip}"
     user: ${POSTGRES_USER}
