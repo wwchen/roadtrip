@@ -214,6 +214,7 @@ function renderAvailabilitySurface(ctx) {
 // Watches are single-day (end = start + 1), so the start date is the watched
 // day and the matrix marks that column's reserved cells.
 function watchedDatesSet(ctx) {
+  if (!ctx.canManageWatches) return new Set();
   const out = new Set();
   for (const w of ctx.watchesByWindow.values()) {
     const start = w?.start_date ?? w?.startDate;
@@ -701,6 +702,13 @@ function closeWatchPopover(ctx) {
   ctx.watchPopover = null;
 }
 
+function clearWatchState(ctx) {
+  ctx.watchesByWindow = new Map();
+  ctx.canManageWatches = false;
+  ctx.watchPopover?.dispose();
+  ctx.watchPopover = null;
+}
+
 function repositionWatchPopover(ctx) {
   ctx.watchPopover?.reposition?.();
 }
@@ -973,7 +981,7 @@ async function fetchWatches(ctx) {
     if (e.name === 'AbortError') return;
     // A 401 means the user is signed out; disable watch CTAs.
     if (e.status === 401) {
-      ctx.canManageWatches = false;
+      clearWatchState(ctx);
       rerender(ctx);
       return;
     }
@@ -1030,7 +1038,7 @@ async function toggleWatch(ctx, button) {
     button.disabled = false;
     // A 401 means the session expired; collapse the CTA so it doesn't silently fail.
     if (e.status === 401) {
-      ctx.canManageWatches = false;
+      clearWatchState(ctx);
       rerender(ctx);
       return;
     }
@@ -1193,3 +1201,6 @@ function shouldShowEarliestButton(ctx) {
 function clampSiteColumnWidth(width) {
   return Math.max(MIN_SITE_COLUMN_WIDTH, Math.min(MAX_SITE_COLUMN_WIDTH, Math.round(width)));
 }
+
+// Test-only exports
+export { clearWatchState, watchedDatesSet };
