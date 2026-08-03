@@ -371,7 +371,12 @@ jobs:
 
       # fail_ci_if_error was false, so a Codecov outage (or a revoked token)
       # silently removed the coverage gate instead of failing the run.
+      #
+      # Skipped for Dependabot: its runs can't read the Actions secrets store,
+      # so CODECOV_TOKEN is empty and the tokenless upload is rejected on the
+      # protected branch. Coverage doesn't change on a dependency bump anyway.
       - name: Upload coverage to Codecov
+        if: github.actor != 'dependabot[bot]'
         uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
         with:
           files: backend/build/reports/kover/report.xml
