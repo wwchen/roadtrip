@@ -72,6 +72,38 @@ class CampflareCampgroundsEtlTest {
     }
 
     @Test
+    fun `promotes management agency_name to the canonical agency key`() {
+        val etl = CampflareCampgroundsEtl()
+        val rows = terminalRecords(etl, bundle("campflare-campgrounds", campgroundPayload()), transformCtx())
+        val management = rows.single().management!!.jsonObject
+
+        // Serving query and every other vendor read management->>'agency'.
+        assertEquals("National Park Service", management["agency"]!!.jsonPrimitive.content)
+        // Upstream keys are preserved for detail rendering.
+        assertEquals("National Park Service", management["agency_name"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `leaves management null when upstream names no agency`() {
+        val etl = CampflareCampgroundsEtl()
+        val rows =
+            terminalRecords(
+                etl,
+                bundle(
+                    "campflare-campgrounds",
+                    """
+                    [
+                      {"id":"no-agency","name":"No Agency","location":{"latitude":1,"longitude":2}}
+                    ]
+                    """.trimIndent(),
+                ),
+                transformCtx(),
+            )
+
+        assertNull(rows.single().management)
+    }
+
+    @Test
     fun `skips campground rows without id name or coordinates`() {
         val etl = CampflareCampgroundsEtl()
         val rows =

@@ -9,6 +9,8 @@ import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 class CampflareCampgroundsEtl : CampgroundEtl<JsonObject> {
     override val etlSlug = CAMPGROUNDS_ETL_SLUG
@@ -66,7 +68,7 @@ class CampflareCampgroundsEtl : CampgroundEtl<JsonObject> {
                 alerts = raw.arrayField("alerts"),
                 price = raw.objectField("price"),
                 cellService = raw.objectField("cell_service"),
-                management = raw.objectField("management"),
+                management = normalizedManagement(raw.objectField("management")),
                 contact = raw.objectField("contact"),
                 connections = raw.objectField("connections"),
                 metadata = raw.objectField("metadata"),
@@ -75,4 +77,19 @@ class CampflareCampgroundsEtl : CampgroundEtl<JsonObject> {
             ),
         )
     }
+
+    // Campflare ships management as {agency_name, agency_id, agency_website};
+    // the serving query and every other vendor read management->>'agency'.
+    // Promote agency_name to the canonical `agency` key while keeping the
+    // upstream keys for detail rendering. Null when upstream names no agency.
+    private fun normalizedManagement(management: JsonObject?): JsonObject? {
+        val agencyName = management?.stringField(AGENCY_NAME_KEY) ?: return null
+        return buildJsonObject {
+            management.forEach { (key, value) -> put(key, value) }
+            put(AGENCY_KEY, agencyName)
+        }
+    }
 }
+
+private const val AGENCY_KEY = "agency"
+private const val AGENCY_NAME_KEY = "agency_name"
