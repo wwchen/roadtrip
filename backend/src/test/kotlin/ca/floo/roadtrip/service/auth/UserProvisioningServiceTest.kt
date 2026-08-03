@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.auth
 
 import ca.floo.roadtrip.model.domain.auth.IdentityClaims
+import ca.floo.roadtrip.model.domain.auth.Role
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.UserIdentityRepo
 import ca.floo.roadtrip.repo.UserRepo
@@ -16,9 +17,11 @@ private const val AUTH0 = "auth0"
 private const val WORKOS = "workos"
 
 class UserProvisioningServiceTest : SharedDbTest() {
-    private val provisioning by lazy { UserProvisioningService(ctx) }
+    private val provisioning by lazy { provisioningWith(emptyMap()) }
     private val userRepo by lazy { UserRepo(ctx) }
     private val userIdentityRepo by lazy { UserIdentityRepo(ctx) }
+
+    private fun provisioningWith(roleGrants: Map<Role, Set<String>>) = UserProvisioningService(ctx, roleGrants)
 
     @BeforeEach
     fun cleanup() {
@@ -161,5 +164,77 @@ class UserProvisioningServiceTest : SharedDbTest() {
         val identity = userIdentityRepo.listForUser(userId).single()
         assertEquals("google-late", identity.upstreamSubject)
         assertEquals("google", identity.upstreamProvider)
+    }
+
+    @Test
+    fun `a verified email in the admin allowlist is granted ADMIN`() {
+        val svc = provisioningWith(mapOf(Role.ADMIN to setOf("user@example.com")))
+
+        val userId = svc.provision(AUTH0, claims("auth0|admin"))
+
+        assertTrue(Role.ADMIN in userRepo.rolesFor(userId))
+    }
+
+    @Test
+    fun `a verified email not in any allowlist gets no role`() {
+        val svc = provisioningWith(mapOf(Role.ADMIN to setOf("someone-else@example.com")))
+
+        val userId = svc.provision(AUTH0, claims("auth0|plain"))
+
+        assertTrue(userRepo.rolesFor(userId).isEmpty())
+    }
+
+    @Test
+    fun `an UNVERIFIED email in the admin allowlist is NOT granted ADMIN`() {
+        // Mirrors the account-linking rule: an unverified address confers no authority.
+        val svc = provisioningWith(mapOf(Role.ADMIN to setOf("newcomer@example.com")))
+
+        val userId =
+            svc.provision(
+                AUTH0,
+                claims(
+                    "auth0|unverified",
+                    email = "newcomer@example.com",
+                    isEmailVerified = false,
+                    upstreamProvider = null,
+                    upstreamSubject = null,
+                ),
+            )
+
+        assertTrue(Role.ADMIN !in userRepo.rolesFor(userId))
+    }
+
+    @Test
+    fun `a returning identity added to the allowlist later is granted on next sign-in`() {
+        // First sign-in with no allowlist: account exists, no role.
+        val userId = provisioning.provision(AUTH0, claims("auth0|returning"))
+        assertTrue(userRepo.rolesFor(userId).isEmpty())
+
+        // Email is added to the allowlist; the SAME identity signs in again.
+        // This exercises the returning-identity short-circuit path.
+        val svc = provisioningWith(mapOf(Role.ADMIN to setOf("user@example.com")))
+        val again = svc.provision(AUTH0, claims("auth0|returning"))
+
+        assertEquals(userId, again)
+        assertTrue(Role.ADMIN in userRepo.rolesFor(userId))
+    }
+
+    @Test
+    fun `granting is idempotent across repeat sign-ins`() {
+        val svc = provisioningWith(mapOf(Role.ADMIN to setOf("user@example.com")))
+
+        val userId = svc.provision(AUTH0, claims("auth0|idem"))
+        svc.provision(AUTH0, claims("auth0|idem"))
+
+        assertEquals(setOf(Role.ADMIN), userRepo.rolesFor(userId))
+    }
+
+    @Test
+    fun `matching is case-insensitive on the email`() {
+        val svc = provisioningWith(mapOf(Role.ADMIN to setOf("user@example.com")))
+
+        val userId = svc.provision(AUTH0, claims("auth0|case", email = "User@Example.com"))
+
+        assertTrue(Role.ADMIN in userRepo.rolesFor(userId))
     }
 }

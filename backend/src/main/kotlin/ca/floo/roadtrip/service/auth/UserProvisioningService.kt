@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.auth
 
 import ca.floo.roadtrip.model.domain.auth.IdentityClaims
+import ca.floo.roadtrip.model.domain.auth.Role
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.UserIdentityRepo
 import ca.floo.roadtrip.repo.UserRepo
@@ -37,6 +38,7 @@ import org.slf4j.LoggerFactory
  */
 class UserProvisioningService(
     private val ctx: DSLContext,
+    private val roleGrants: Map<Role, Set<String>> = emptyMap(),
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -57,22 +59,27 @@ class UserProvisioningService(
             val userIdentityRepo = UserIdentityRepo(txn)
 
             // The common path: this identity has signed in before.
-            userIdentityRepo.findByProviderSubject(provider, claims.subject)?.let { identity ->
-                userIdentityRepo.refresh(identity.id, claims)
-                if (claims.isEmailVerified) userRepo.markEmailVerified(identity.userId)
-                return@transactionResult identity.userId
-            }
-
-            val email =
-                claims.email
-                    ?: throw AuthException("identity ${claims.subject} from '$provider' carries no email address")
-
+            val returning = userIdentityRepo.findByProviderSubject(provider, claims.subject)
             val userId =
-                userByUpstreamIdentity(userIdentityRepo, provider, claims)
-                    ?: userByVerifiedEmail(userRepo, claims, email)
-                    ?: createUser(userRepo, claims, email)
+                if (returning != null) {
+                    userIdentityRepo.refresh(returning.id, claims)
+                    if (claims.isEmailVerified) userRepo.markEmailVerified(returning.userId)
+                    returning.userId
+                } else {
+                    val email =
+                        claims.email
+                            ?: throw AuthException("identity ${claims.subject} from '$provider' carries no email address")
 
-            userIdentityRepo.link(userId, provider, claims)
+                    val resolved =
+                        userByUpstreamIdentity(userIdentityRepo, provider, claims)
+                            ?: userByVerifiedEmail(userRepo, claims, email)
+                            ?: createUser(userRepo, claims, email)
+
+                    userIdentityRepo.link(resolved, provider, claims)
+                    resolved
+                }
+
+            grantConfiguredRoles(userRepo, claims, userId)
             userId
         }
 
@@ -137,5 +144,24 @@ class UserProvisioningService(
                 displayName = claims.displayName,
                 isEmailVerified = claims.isEmailVerified,
             ).id
+    }
+
+    /**
+     * Grants every role whose allowlist contains this identity's verified email.
+     * Grant-only and idempotent (see [UserRepo.grantRole]); an unverified email
+     * grants nothing, mirroring the linking rule enforced elsewhere here.
+     */
+    private fun grantConfiguredRoles(
+        userRepo: UserRepo,
+        claims: IdentityClaims,
+        userId: UserId,
+    ) {
+        if (!claims.isEmailVerified) return
+        val email = claims.email?.lowercase() ?: return
+        roleGrants.forEach { (role, emails) ->
+            if (email in emails && userRepo.grantRole(userId, role)) {
+                log.info("granted {} to user_id={} via role-emails allowlist", role, userId.value)
+            }
+        }
     }
 }
