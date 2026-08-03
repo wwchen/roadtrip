@@ -16,19 +16,24 @@ import org.slf4j.LoggerFactory
  * the card is delivered. Each owner's cards land only in a channel that owner
  * controls; a different user never sees the card, so can't click it.
  *
- * Slack channel priority (never falls back to the shared global default):
+ * A Slack target is produced **only when the owner has BOTH a resolved channel
+ * AND a personal token**, so the card is delivered via the owner's own token into
+ * a space that owner controls — never via the shared global bot to a user-named
+ * channel (which a non-owner could read and click). If either is missing, no Slack
+ * target is produced: Slack alerts simply don't fire for that watch (email still
+ * does). That is the safe, fail-closed default — silence beats an actionable card
+ * a stranger can act on.
+ *
+ * Slack channel priority:
  *  1. the watch's own `trigger_config.slack.channel` override
  *     ([AvailabilityWatchRepo.Watch.channelOverride]),
  *  2. else the OWNER's `user_settings.slack_channel`.
- * When neither yields a channel, **no Slack target is produced** — Slack alerts
- * simply don't fire for that watch (email still does). That is the safe default:
- * silence beats leaking a card into a shared channel a stranger can act on.
  *
- * Slack token: the owner's decrypted `user_settings.slack_token_cipher` when
- * present ([SecretCipher.open]), else null. A null token means "use the global
- * bot token" — acceptable, because the security property is the owner-scoped
- * CHANNEL, not the token. [cipher] is null when the encryption key is not
- * configured; in that case the token stays null (no crash).
+ * Slack token: the owner's decrypted `user_settings.slack_token_cipher`
+ * ([SecretCipher.open]). Required — a null token (no stored token, an
+ * undecryptable blob, or [cipher] null because the encryption key is not
+ * configured) means no Slack target, never a global-bot fallback. Decryption
+ * failure degrades that one watch to no-Slack rather than throwing.
  *
  * Two entry points keep opt-in intact while ATC stays owner-scoped:
  *  - [resolve] is the general notify path: it emits the Slack target ONLY when the
