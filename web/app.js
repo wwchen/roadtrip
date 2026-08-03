@@ -18,7 +18,6 @@ import {
   setNPData,
   setSPData,
   synthesizeClick,
-  campgroundLayerCategory,
 } from './layers.js';
 import { initSearch, getSearchIndex } from './search.js';
 import { closeDrawer } from './drawer/chrome.js';
@@ -204,18 +203,15 @@ map.on('style.load', () => {
 // buckets, so they render as "other".
 //
 // Slim path (POST /api/pois): properties carries category, subcategory,
-// and agency. We rewrite category here for the legend filter; everything
-// richer (name, address, provider_ref, raw upstream) is fetched on click via
+// and agency. The legend filters campgrounds by agency now, so we keep the
+// category as-is (`campground`) and pass through; everything richer (name,
+// address, provider_ref, raw upstream) is fetched on click via
 // GET /api/pois/{id} and re-runs this function in flattenHydrated().
 //
 // Hydrated path (GET /api/pois/{id}): properties carries the wide row.
 // flattenHydrated calls into this same function so the post-hydration
 // shape matches what popups read.
 function flattenPoi(f) {
-  const p = f.properties || {};
-  if (p.category === 'campground') {
-    return { ...f, properties: { ...p, category: campgroundLayerCategory(p.subcategory) } };
-  }
   return f;
 }
 
@@ -247,7 +243,6 @@ async function load() {
   // doesn't fire mid-gesture. AbortController kills the in-flight request
   // when the user keeps panning. Counts on the legend reflect the current
   // viewport, not a global total.
-  const cgCounts = { federal: 0, state: 0, local: 0, provincial: 0, other: 0 };
   const CG_ZOOM_THRESHOLD = 6;
   let cgUnlocked = false;
   let inflight = null;
@@ -315,15 +310,8 @@ async function load() {
     setCount('c-sp', sp.length);
     setCount('c-pf', pf.length);
     setCount('c-open', sc.length);
-    cgCounts.federal = 0; cgCounts.state = 0; cgCounts.local = 0;
-    cgCounts.provincial = 0; cgCounts.other = 0;
-    cg.forEach(f => {
-      const cat = Object.prototype.hasOwnProperty.call(cgCounts, f.properties.category)
-        ? f.properties.category
-        : 'other';
-      cgCounts[cat] += 1;
-    });
-    for (const [k, v] of Object.entries(cgCounts)) setCount('c-cg-' + k, v);
+    // Per-agency campground counts live on the legend rows; setCGData
+    // re-renders them from the current viewport's cg features above.
     if (wantCG) {
       const hint = document.getElementById('cg-load-hint');
       if (hint) hint.remove();

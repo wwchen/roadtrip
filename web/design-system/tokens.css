@@ -170,6 +170,7 @@
      silently unified; reconciling them is a visual change, not a refactor. */
   --rt-layer-supercharger:     var(--rt-c-brand-tesla);
   --rt-layer-supercharger-pin: var(--rt-c-brand-tesla-pin);
+  --rt-layer-cg:            var(--rt-c-green-600);
   --rt-layer-cg-federal:    var(--rt-c-green-600);
   --rt-layer-cg-state:      var(--rt-c-green-500);
   --rt-layer-cg-provincial: var(--rt-c-green-600);
