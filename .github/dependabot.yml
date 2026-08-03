@@ -16,6 +16,19 @@ updates:
     groups:
       gradle-minor-and-patch:
         update-types: [minor, patch]
+    ignore:
+      # Kotlin 2.4 is a language/stdlib jump: its reified-inline ABI breaks
+      # against Ktor's precompiled config helpers, so the grouped bump fails
+      # backend tests (ApplicationPropertiesTest, UnsupportedOperationException
+      # on ConfigLoader.load — see #547). Hold 2.4+ back so routine minor/patch
+      # bumps keep grouping cleanly; do the Kotlin 2.4 upgrade in a dedicated PR
+      # (bump Kotlin + kotlinx + a compatible Ktor together and fix fallout).
+      - dependency-name: "org.jetbrains.kotlin:*"
+        versions: [">=2.4.0"]
+      - dependency-name: "org.jetbrains.kotlin.jvm"
+        versions: [">=2.4.0"]
+      - dependency-name: "org.jetbrains.kotlin.plugin.serialization"
+        versions: [">=2.4.0"]
 
   # Rec.gov companion sidecar — the only npm project in the tree. web/ is
   # dependency-free ES modules with no package.json, so there is nothing to
