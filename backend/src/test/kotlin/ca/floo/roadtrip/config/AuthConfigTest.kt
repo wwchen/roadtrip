@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.config
 
+import ca.floo.roadtrip.model.domain.auth.Role
 import org.junit.jupiter.api.Test
 import java.time.Duration
 import kotlin.test.assertEquals
@@ -124,5 +125,45 @@ class AuthConfigTest {
             assertNotNull(AuthConfig.fromConfig(section(complete + ("embedded-domain" to "auth.roadtrip.floo.ca"))))
 
         assertEquals("auth.roadtrip.floo.ca", config.embeddedDomain)
+    }
+
+    @Test
+    fun `role-emails parses an inline array into a lowercased set keyed by role`() {
+        val config =
+            assertNotNull(
+                AuthConfig.fromConfig(
+                    // The flattener turns the YAML list into a comma-joined string,
+                    // which is exactly what a flat map key holds at this layer.
+                    section(clerk + ("role-emails.admin" to "You@Example.com, other@example.com")),
+                ),
+            )
+
+        assertEquals(mapOf(Role.ADMIN to setOf("you@example.com", "other@example.com")), config.roleGrants)
+    }
+
+    @Test
+    fun `role-emails skips unknown role keys without crashing`() {
+        val config =
+            assertNotNull(
+                AuthConfig.fromConfig(
+                    section(clerk + mapOf("role-emails.admin" to "a@example.com", "role-emails.wizard" to "b@example.com")),
+                ),
+            )
+
+        assertEquals(mapOf(Role.ADMIN to setOf("a@example.com")), config.roleGrants)
+    }
+
+    @Test
+    fun `an empty list for a role key yields an empty set for that role`() {
+        val config = assertNotNull(AuthConfig.fromConfig(section(clerk + ("role-emails.admin" to ""))))
+
+        assertEquals(mapOf(Role.ADMIN to emptySet()), config.roleGrants)
+    }
+
+    @Test
+    fun `absent role-emails yields an empty map`() {
+        val config = assertNotNull(AuthConfig.fromConfig(section(clerk)))
+
+        assertEquals(emptyMap(), config.roleGrants)
     }
 }
