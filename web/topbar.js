@@ -17,7 +17,7 @@
 
 import { state, distanceKm, formatDistance, flattenHydratedPoi, geomCenter, zoomForBbox } from './core.js';
 import { fitAndSelect } from './search.js';
-import { applyCGFilter, campgroundFeaturePassesFilter, featureAgency, onCampgroundFilterChange, renderCampgroundLegend, setAgencyHidden, synthesizeClick } from './layers.js';
+import { applyCGFilter, campgroundFeaturePassesFilter, featureAgency, notifyCampgroundFilterChanged, onCampgroundFilterChange, renderCampgroundLegend, setAgencyHidden, synthesizeClick } from './layers.js';
 import { openCampgroundDrawer } from './drawer/campground.js';
 import { openParkDrawer } from './drawer/park.js';
 import { openPlanetFitnessDrawer } from './drawer/planet-fitness.js';
@@ -1017,10 +1017,12 @@ function openBackendPoiDrawer(result) {
 function enablePoiToggle(category, feature) {
   if (category === 'campground') {
     // Campgrounds filter by agency now; make sure this feature's agency is
-    // shown, then re-render the legend + re-apply the map filter.
+    // shown, then re-render the legend + re-apply the map filter. Notify so
+    // the trip-results list re-filters to include the now-visible agency.
     setAgencyHidden(featureAgency(feature), false);
     applyCGFilter();
     renderCampgroundLegend();
+    notifyCampgroundFilterChanged();
     return;
   }
   let id = null;
@@ -2007,14 +2009,9 @@ function renderResults() {
       const id = node.dataset.id;
       const card = tripResults.byId.get(id) || tripResults.byId.get(Number(id));
       if (!card) return;
-      // Make sure this campground's agency is shown, then fly to the pin and
-      // synthesize a click so the existing drawer path takes over (handles
-      // availability fetch + pin reselect logic).
-      if (card.agency !== undefined) {
-        setAgencyHidden(featureAgency({ agency: card.agency }), false);
-        applyCGFilter();
-        renderCampgroundLegend();
-      }
+      // Only cards whose agency passes the filter are rendered (visibleCards),
+      // so the pin is already visible — just fly to it and synthesize a click
+      // so the existing drawer path takes over (availability fetch + reselect).
       // suppressPinClick prevents bindPinClicks() from overwriting the
       // destination input with this campground's name when synthesizeClick
       // dispatches the synthetic map-click event.

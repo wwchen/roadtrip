@@ -119,7 +119,7 @@ export function campgroundFeaturePassesFilter(featureOrProps) {
   return !cgHiddenAgencies.has(featureAgency(featureOrProps));
 }
 
-function notifyCampgroundFilterChanged() {
+export function notifyCampgroundFilterChanged() {
   for (const listener of cgFilterListeners) listener();
 }
 

@@ -7,6 +7,7 @@ import {
   UNCATEGORIZED_AGENCY, featureAgency, agenciesInViewport,
   agencyCountsInViewport, campgroundFeaturePassesFilter,
   setAgencyHidden, isAgencyHidden,
+  onCampgroundFilterChange, notifyCampgroundFilterChanged,
 } from './layers.js';
 
 const cgFc = (agencies) => ({
@@ -106,6 +107,16 @@ test('new agencies pass the filter by default; unchecking hides only that one', 
   assert.equal(campgroundFeaturePassesFilter({ category: 'campground', agency: 'BC Parks' }), false);
   assert.equal(campgroundFeaturePassesFilter({ category: 'campground', agency: 'Ohio State Parks' }), true);
   setAgencyHidden('BC Parks', false); // reset for other tests
+});
+
+test('notifyCampgroundFilterChanged fires registered listeners once, unsub stops them', () => {
+  let calls = 0;
+  const off = onCampgroundFilterChange(() => { calls += 1; });
+  notifyCampgroundFilterChanged();
+  assert.equal(calls, 1);
+  off();
+  notifyCampgroundFilterChanged();
+  assert.equal(calls, 1); // no further calls after unsubscribe
 });
 
 // Minimal single-element DOM stub: renderCampgroundLegend only needs
