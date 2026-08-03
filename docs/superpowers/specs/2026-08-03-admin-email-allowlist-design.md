@@ -39,33 +39,35 @@ Rejected alternatives:
 
 ## Config
 
-New subsection under the existing `auth` block, keyed by role:
+New subsection under the existing `auth` block, keyed by role, with each role's
+emails as an **inline YAML array** committed to the config file:
 
 ```yaml
 roadtrip:
   auth:
     role-emails:
-      admin: "${AUTH_ADMIN_EMAILS:}"
+      admin:
+        - you@example.com
       # add more role keys here as roles are added to the Role enum, e.g.
-      # editor: "${AUTH_EDITOR_EMAILS:}"
+      # editor:
+      #   - editor@example.com
 ```
 
 - Each key under `role-emails` is a `Role` wireValue (`admin` today). Its value
-  is a comma-separated email list, env-driven via `AUTH_<ROLE>_EMAILS` (matching
-  the existing `AUTH_*` family, no `ROADTRIP` prefix).
-- **Comma-separated strings, not YAML arrays.** `ConfigSection` is backed by a
-  flat `Map<String, String>` and the YAML flattener (`ApplicationProperties`)
-  does not descend into list *elements* — so a list-of-objects
-  (`- role: admin\n  email: ...`) is not representable. A role-keyed map of CSV
-  strings is. Comma-separated env values are the house convention (see
-  `ReadPathProviderConfig`'s `enabled-data-providers`).
-- Each value is parsed with the existing `ConfigSection.csvSet(name)` helper
-  (split on `,`, trim, drop blanks → `Set<String>`), then lowercased in
-  `AuthConfig` for case-insensitive email matching (`csvSet` does not lowercase).
+  is a YAML list of emails, written directly in the config file — no env var, no
+  `${...}` placeholder, no deploy-time injection.
+- **Inline array, not a comma-separated string.** This works with no new parsing
+  code because the YAML flattener (`ApplicationProperties.flattenMap`) already
+  collapses any YAML list into a comma-joined string
+  (`is List<*> -> value.joinToString(",")`), and `ConfigSection.csvSet(name)`
+  splits it back (trim, drop blanks → `Set<String>`). Emails never contain
+  commas, so the array → `"a,b"` → set round-trip is lossless. `AuthConfig` then
+  lowercases each entry for case-insensitive matching (`csvSet` does not
+  lowercase).
 - Unknown role keys (no matching `Role.parse`) are skipped, so a stale config
   key never crashes startup.
-- A role key with an empty/unset value contributes an empty set (no grants).
-- The whole subsection unset ⇒ empty map ⇒ nobody is auto-granted.
+- A role key with an empty list contributes an empty set (no grants).
+- The whole subsection absent ⇒ empty map ⇒ nobody is auto-granted.
 
 `AuthConfig` gains one field: `val roleGrants: Map<Role, Set<String>>`,
 populated in `AuthConfig.fromConfig` by enumerating the `role-emails`
@@ -73,30 +75,27 @@ subsection. It lives on `AuthConfig`, which is `null` when auth is disabled — 
 in local / CI / sandbox (auth off) the allowlist is inert and the sandbox seed
 SQL stays the local admin path.
 
-### Where the value comes from in prod (non-secret config, not a secret)
+### Where the value lives (committed config, no secrets, no env)
 
-`AUTH_<ROLE>_EMAILS` is authorization *configuration*, not a credential —
-knowing the list grants nothing, since gaining the role still requires
-controlling that email's IdP account and completing a verified sign-in. It
-therefore follows the same path as `AUTH_PROVIDER`, **not** the secret path:
+The email list is authorization *configuration*, not a credential — knowing the
+list grants nothing, since gaining the role still requires controlling that
+email's IdP account and completing a verified sign-in. It is written as a plain
+literal in the config file and committed to git:
 
-- Declared as a plain env var in the backend `environment:` block of
-  `docker-compose.yml`, with an empty default:
-  `- AUTH_ADMIN_EMAILS=${AUTH_ADMIN_EMAILS:-}` (mirrors the existing
-  `AUTH_PROVIDER=${AUTH_PROVIDER:-clerk}` line).
-- Added to `nonSecretPlaceholders` in `SecretRegistryDriftTest`. Without this
-  the drift test fails: every `${...}` placeholder in `application.yaml` must be
-  either a registered secret or an explicit non-secret.
-- **Not** encrypted, **not** in `secrets/registry.yaml`, **not** mounted under
-  `/run/secrets`. (This corrects the earlier draft, which wrongly routed it
-  through the secret registry.)
-- The actual value at deploy time is supplied by the operator in the deploy
-  shell/host env, exactly like the RFC 0009 rollback flip
-  (`AUTH_PROVIDER=auth0 make run env=prod`). To bootstrap the first admin:
-  `AUTH_ADMIN_EMAILS=you@example.com` on the deploy that ships this change.
-- The email verified by the IdP (Clerk) at sign-in must match an entry; that is
-  the natural link between "the email I set here" and "the person who becomes
-  admin".
+- No `secrets/registry.yaml` entry, no encryption, no `/run/secrets` mount — it
+  is not a secret.
+- No `docker-compose.yml` env line and no `SecretRegistryDriftTest` change: the
+  drift test only inspects `${...}` placeholders, and an inline literal is not
+  one. This keeps the change to the backend config + code only.
+- Prod-specific lists belong in the `application-prod.yaml` overlay (merged over
+  the base by `ApplicationProperties`), so a prod-only admin list does not leak
+  into local/CI. The base `application.yaml` can carry an empty
+  `role-emails:` block (or omit it) so nobody is granted by default.
+- Changing the admin list is a config commit + redeploy — acceptable for a
+  rarely-changing bootstrap list. To bootstrap the first admin: add your
+  Clerk-verified email under `admin:` and deploy. The email the IdP verifies at
+  sign-in must match an entry; that is the link between "the email in config"
+  and "the person who becomes admin".
 
 ### Enumerating the subsection
 
@@ -170,18 +169,19 @@ no repo re-read.
   `fromConfig`, enumerate the `role-emails` subsection (via `absoluteKeys` /
   `relativeKey`), `Role.parse` each key (skip unknowns), read each value via
   `csvSet`, lowercase entries.
-- `backend/src/main/resources/application.yaml` — `role-emails:` block under
-  `auth` with `admin: "${AUTH_ADMIN_EMAILS:}"`.
+- `backend/src/main/resources/application.yaml` — empty/omitted `role-emails:`
+  block under `auth` (nobody granted by default).
+- `backend/src/main/resources/application-prod.yaml` — `role-emails:` block with
+  the inline `admin:` list for prod (merged over the base overlay).
 - `service/auth/UserProvisioningService.kt` — new `roleGrants` constructor
   param; converge resolution paths; grant each matching role when the verified
   email is allowlisted.
 - `di/RouteModule.kt` — pass `authConfig.roleGrants` into
   `UserProvisioningService`.
-- `docker-compose.yml` — add `- AUTH_ADMIN_EMAILS=${AUTH_ADMIN_EMAILS:-}` to the
-  backend `environment:` block (non-secret, alongside `AUTH_PROVIDER`).
-- `backend/src/test/kotlin/ca/floo/roadtrip/config/SecretRegistryDriftTest.kt` —
-  add `AUTH_ADMIN_EMAILS` to `nonSecretPlaceholders`. (Not `secrets/registry.yaml`
-  — this is config, not a credential.)
+
+No `docker-compose.yml`, `secrets/registry.yaml`, or `SecretRegistryDriftTest`
+changes: the list is an inline committed literal, not a `${...}` placeholder or
+a secret.
 
 ## Testing
 
@@ -197,10 +197,11 @@ no repo re-read.
   (proves the mechanism is generic, not admin-hardcoded).
 
 `AuthConfigTest`:
-- `role-emails` parsing: role key → CSV emails, comma-split, surrounding
-  whitespace trimmed, blanks dropped, case normalized to lowercase;
+- `role-emails` parsing: an inline YAML array under a role key → `Set<String>`,
+  with entries lowercased (exercises the array → comma-joined-string → `csvSet`
+  round-trip via the flattener, plus whitespace trim / blank drop);
 - unknown role key → skipped, no crash;
-- absent/blank value for a role key → empty set for that role;
+- empty list for a role key → empty set for that role;
 - absent `role-emails` subsection → empty map;
 - reading `role-emails` does not flip auth enabled/disabled.
 
