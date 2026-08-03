@@ -73,6 +73,31 @@ subsection. It lives on `AuthConfig`, which is `null` when auth is disabled — 
 in local / CI / sandbox (auth off) the allowlist is inert and the sandbox seed
 SQL stays the local admin path.
 
+### Where the value comes from in prod (non-secret config, not a secret)
+
+`AUTH_<ROLE>_EMAILS` is authorization *configuration*, not a credential —
+knowing the list grants nothing, since gaining the role still requires
+controlling that email's IdP account and completing a verified sign-in. It
+therefore follows the same path as `AUTH_PROVIDER`, **not** the secret path:
+
+- Declared as a plain env var in the backend `environment:` block of
+  `docker-compose.yml`, with an empty default:
+  `- AUTH_ADMIN_EMAILS=${AUTH_ADMIN_EMAILS:-}` (mirrors the existing
+  `AUTH_PROVIDER=${AUTH_PROVIDER:-clerk}` line).
+- Added to `nonSecretPlaceholders` in `SecretRegistryDriftTest`. Without this
+  the drift test fails: every `${...}` placeholder in `application.yaml` must be
+  either a registered secret or an explicit non-secret.
+- **Not** encrypted, **not** in `secrets/registry.yaml`, **not** mounted under
+  `/run/secrets`. (This corrects the earlier draft, which wrongly routed it
+  through the secret registry.)
+- The actual value at deploy time is supplied by the operator in the deploy
+  shell/host env, exactly like the RFC 0009 rollback flip
+  (`AUTH_PROVIDER=auth0 make run env=prod`). To bootstrap the first admin:
+  `AUTH_ADMIN_EMAILS=you@example.com` on the deploy that ships this change.
+- The email verified by the IdP (Clerk) at sign-in must match an entry; that is
+  the natural link between "the email I set here" and "the person who becomes
+  admin".
+
 ### Enumerating the subsection
 
 `ConfigSection` exposes `absoluteKeys()` and `relativeKey(absoluteKey)`. To read
@@ -152,8 +177,11 @@ no repo re-read.
   email is allowlisted.
 - `di/RouteModule.kt` — pass `authConfig.roleGrants` into
   `UserProvisioningService`.
-- `secrets/registry.yaml` — register `AUTH_ADMIN_EMAILS` if the drift test
-  requires it (confirm during implementation).
+- `docker-compose.yml` — add `- AUTH_ADMIN_EMAILS=${AUTH_ADMIN_EMAILS:-}` to the
+  backend `environment:` block (non-secret, alongside `AUTH_PROVIDER`).
+- `backend/src/test/kotlin/ca/floo/roadtrip/config/SecretRegistryDriftTest.kt` —
+  add `AUTH_ADMIN_EMAILS` to `nonSecretPlaceholders`. (Not `secrets/registry.yaml`
+  — this is config, not a credential.)
 
 ## Testing
 
