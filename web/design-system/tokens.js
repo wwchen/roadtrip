@@ -36,6 +36,7 @@ const FALLBACKS = {
   '--rt-rating': '#f5a623',
   '--rt-layer-supercharger': '#e82127',
   '--rt-layer-supercharger-pin': '#e31937',
+  '--rt-layer-cg': '#2e7d32',
   '--rt-layer-cg-federal': '#2e7d32',
   '--rt-layer-cg-state': '#558b2f',
   '--rt-layer-cg-provincial': '#2e7d32',
