@@ -192,9 +192,9 @@ dependencies {
     // no identity-provider SDK is on the classpath.
     implementation("com.nimbusds:nimbus-jose-jwt:$nimbusJoseVersion")
 
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-slf4j:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.11.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-slf4j:1.11.0")
     // YAML reader for the POI registry resource.
     implementation("com.charleskorn.kaml:kaml:0.74.0")
     // Coordinate -> IANA ZoneId lookup from timezone-boundary-builder data.
