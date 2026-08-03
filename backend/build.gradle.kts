@@ -28,7 +28,9 @@ plugins {
     application
     kotlin("jvm")
     kotlin("plugin.serialization")
-    id("io.ktor.plugin") version "3.5.1"
+    // Keep in lockstep with `ktorVersion` below (the plugins block can't
+    // reference a val, so this literal must be bumped alongside it).
+    id("io.ktor.plugin") version "3.5.2"
     id("org.flywaydb.flyway") version "10.20.1"
     id("nu.studer.jooq") version "10.2.1"
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
