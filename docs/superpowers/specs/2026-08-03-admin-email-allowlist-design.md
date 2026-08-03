@@ -43,8 +43,13 @@ roadtrip:
 
 - Env var `AUTH_ADMIN_EMAILS`, matching the existing `AUTH_*` family (no
   `ROADTRIP` prefix).
-- Comma-separated. Parsed into a normalized `Set<String>`: split on `,`, trim,
-  drop blanks, lowercase.
+- **Comma-separated string, not a YAML array.** `ConfigSection` is backed by a
+  flat `Map<String, String>`, so a YAML list is not readable as structured data
+  here; comma-separated env values are the house convention (see
+  `ReadPathProviderConfig`'s `enabled-data-providers`).
+- Parsed with the existing `ConfigSection.csvSet(name)` helper (split on `,`,
+  trim, drop blanks → `Set<String>`), then lowercased in `AuthConfig` for
+  case-insensitive email matching (`csvSet` does not lowercase).
 - Unset/empty ⇒ empty set ⇒ nobody is auto-granted.
 - Lives on `AuthConfig`, which is `null` when auth is disabled. So in local /
   CI / sandbox (auth off) the allowlist is inert and the sandbox seed SQL stays
@@ -111,8 +116,8 @@ no repo re-read.
 
 ## Components touched
 
-- `config/AuthConfig.kt` — new `adminEmails: Set<String>` field; parse
-  `admin-emails` in `fromConfig` (comma-split, trim, drop-blank, lowercase).
+- `config/AuthConfig.kt` — new `adminEmails: Set<String>` field; in `fromConfig`
+  read `admin-emails` via `config.csvSet(...)` and lowercase each entry.
 - `backend/src/main/resources/application.yaml` — `admin-emails:
   "${AUTH_ADMIN_EMAILS:}"` under `auth`.
 - `service/auth/UserProvisioningService.kt` — new `adminEmails` constructor
