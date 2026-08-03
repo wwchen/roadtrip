@@ -95,6 +95,7 @@ class AuthControllerTest : SharedDbTest() {
                     isCookieSecure = true,
                     realm = "Username-Password-Authentication",
                     embeddedDomain = "idp.example.com",
+                    roleGrants = emptyMap(),
                 ),
             identityProviderRegistry =
                 IdentityProviderRegistry(

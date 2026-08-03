@@ -91,6 +91,7 @@ private fun authOnWiring(): AuthRouteWiring {
             isCookieSecure = false,
             realm = "Username-Password-Authentication",
             embeddedDomain = "test.example",
+            roleGrants = emptyMap(),
         )
     val sessionService = StubSessionService(AUTH_ON_TOKEN, authOnPrincipal)
     val authController =

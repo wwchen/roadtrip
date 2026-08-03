@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.config
 
+import ca.floo.roadtrip.model.domain.auth.Role
 import java.time.Duration
 
 private const val ISSUER_KEY = "issuer"
@@ -11,6 +12,7 @@ private const val SESSION_TTL_KEY = "session-ttl"
 private const val COOKIE_SECURE_KEY = "cookie-secure"
 private const val REALM_KEY = "realm"
 private const val EMBEDDED_DOMAIN_KEY = "embedded-domain"
+private const val ROLE_EMAILS_KEY = "role-emails"
 private const val DEFAULT_PROVIDER = "oidc"
 private const val COOKIE_SECURE_DEFAULT = "true"
 
@@ -57,6 +59,13 @@ data class AuthConfig(
      * auth0-js accepts this value as its `domain` field.
      */
     val embeddedDomain: String,
+    /**
+     * Verified emails that are auto-granted a role on sign-in, keyed by role.
+     * Grant-only and inert when empty; see UserProvisioningService for how it is
+     * applied. Committed config, not a secret — knowing the list grants nothing
+     * without control of the address's verified IdP account.
+     */
+    val roleGrants: Map<Role, Set<String>>,
 ) {
     companion object {
         fun fromConfig(config: ConfigSection): AuthConfig? {
@@ -77,6 +86,7 @@ data class AuthConfig(
             // Derive the embedded-auth hostname from the issuer when no explicit
             // override is provided (strip the scheme: "https://foo.auth0.com" → "foo.auth0.com").
             val defaultEmbeddedDomain = trimmedIssuer.removePrefix("https://").removePrefix("http://")
+            val roleGrants = parseRoleGrants(config.section(ROLE_EMAILS_KEY))
             return AuthConfig(
                 // Trailing slash stripped so discovery resolves to
                 // "$issuer/.well-known/openid-configuration" without doubling up.
@@ -88,7 +98,20 @@ data class AuthConfig(
                 isCookieSecure = config.valueOrDefault(COOKIE_SECURE_KEY, COOKIE_SECURE_DEFAULT).toBoolean(),
                 realm = config.valueOrDefault(REALM_KEY, DEFAULT_REALM),
                 embeddedDomain = config.valueOrDefault(EMBEDDED_DOMAIN_KEY, defaultEmbeddedDomain),
+                roleGrants = roleGrants,
             )
         }
+
+        /**
+         * Enumerates the immediate child keys of `role-emails` (each a [Role]
+         * wireValue), parsing each into a lowercased email set. Unknown role
+         * keys are skipped so a stale config key never fails boot.
+         */
+        private fun parseRoleGrants(section: ConfigSection): Map<Role, Set<String>> =
+            section
+                .absoluteKeys()
+                .mapNotNull { section.relativeKey(it) }
+                .mapNotNull { childKey -> Role.parse(childKey)?.let { it to section.csvSet(childKey).map(String::lowercase).toSet() } }
+                .toMap()
     }
 }
