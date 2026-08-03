@@ -60,3 +60,38 @@ test('every var(--rt-*) reference is a token defined in tokens.css', () => {
     `Undefined design tokens (add to tokens.css, use an existing one, or — for a\ncomponent-local property — add it to COMPONENT_LOCAL above):\n${missing.join('\n')}`,
   );
 });
+
+test('every declaration containing var(--rt-*) has balanced parentheses', () => {
+  // A stripped fallback is the easy edit to get wrong. Removing the tail of
+  // `var(--rt-border-strong, rgba(255,255,255,0.13))` with a naive
+  // `var\((--rt-[a-z-]+), [^)]*\)` stops at the rgba's OWN closing paren and
+  // leaves `var(--rt-border-strong))` behind. Browsers drop the whole
+  // declaration, so a border silently disappears — invisible to template
+  // tests, and invisible in review because the token name still looks right.
+  // Counting parens per declaration catches it without banning legitimate
+  // nesting like min(var(--a), calc(100vw - var(--b))).
+  const broken = [];
+  for (const file of walkFiles(webDir)) {
+    const source = readFileSync(file, 'utf8');
+    source.split('\n').forEach((line, i) => {
+      if (!line.includes('var(--rt-')) return;
+      // Only the value side of a real `prop: value` declaration. The property
+      // must sit at a declaration boundary (line start, `;` or `{`), which is
+      // what keeps a JS ternary's `cond ? a : 'var(--x)'` out of the scan.
+      for (const m of line.matchAll(/(?:^|[;{])\s*(?:--)?[a-z][a-z-]*\s*:([^;{}]*)/g)) {
+        const value = m[1];
+        if (!value.includes('var(--rt-')) continue;
+        const open = (value.match(/\(/g) || []).length;
+        const close = (value.match(/\)/g) || []).length;
+        if (open !== close) {
+          broken.push(`${path.relative(webDir, file)}:${i + 1}: ${line.trim()}`);
+        }
+      }
+    });
+  }
+  assert.deepEqual(
+    broken,
+    [],
+    `Unbalanced parentheses in a declaration using var(--rt-*). The declaration\nis dropped by the browser, so the property silently reverts:\n${broken.join('\n')}`,
+  );
+});

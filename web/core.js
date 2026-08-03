@@ -1,6 +1,9 @@
+
 // Shared state + low-level helpers. Mutable singletons live on `state` so
 // imports get live values (modules can reassign `state.foo` and other
 // modules read the latest via `state.foo`, instead of needing setters).
+import { token } from './design-system/tokens.js';
+
 export const state = {
   map: null,
   userLocation: null,
@@ -225,7 +228,7 @@ export function flattenHydratedPoi(f) {
     flat.locationId = p.source_id || raw.location_slug || flat.location_slug;
     flat.stallCount = raw.stall_count ?? 0;
     flat.powerKilowatt = raw.max_power_kw ?? 0;
-    flat.color = raw.color || '#e82127';
+    flat.color = raw.color || token('--rt-layer-supercharger');
     flat.status = firstText(raw.status, raw.site_status, indexPayload?.supercharger_function?.site_status) || 'OPEN';
     flat.pricebooks = raw.pricebooks || [];
     flat.timeZone = timeZone;

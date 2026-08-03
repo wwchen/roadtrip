@@ -1,6 +1,11 @@
 // Shared constants + mutable trip state for the topbar module.
 
-export const ROUTE_COLOR = '#3b82f6';   // --rt-brand (see web/design-system/tokens.css)
+import { token, KIND_TOKEN } from '../design-system/tokens.js';
+
+/** CSS-side route color. Use inside style strings, where `var()` resolves. */
+export const ROUTE_COLOR_VAR = 'var(--rt-map-route)';
+/** Resolved route color, for MapLibre paint properties and inline styles. */
+export const routeColor = () => token('--rt-map-route');
 export const GEOCODE_DEBOUNCE_MS = 220;
 export const MAX_STOPS = 25;
 
@@ -16,15 +21,11 @@ export const CORRIDOR_MAX_MILES = 100;
 export const CORRIDOR_STEP_MILES = 5;
 export const CORRIDOR_SIMPLIFY_TOLERANCE = 0.02;  // degrees — ~2km at mid-latitudes
 
-export const KIND_COLOR = {
-  PLACE: '#3a7bd5',
-  ADDR:  '#5a6a8a',
-  CG:    '#2e7d32',
-  SC:    '#e82127',
-  NP:    '#2e7d32',
-  SP:    '#8d6e63',
-  PF:    '#7b4bb5',
-};
+/** Search-result kind → resolved pin color. Falls back to the neutral
+ *  kind color for kinds the palette doesn't name. */
+export function kindColor(kind) {
+  return token(KIND_TOKEN[kind] || '--rt-kind-default');
+}
 
 export function createTripState() {
   return {

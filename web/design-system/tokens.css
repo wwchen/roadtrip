@@ -1,82 +1,267 @@
 /* ============================================================
-   Roadtrip Map — Design System tokens  (v1.0 · dark)
-   Drop into index.html. Replaces the ad-hoc --cg-* variables.
+   Roadtrip Map — Design System tokens  (v2.0 · dark)
 
-   Four color roles, kept strictly apart:
+   THE ONE RULE: this file is the only place in the app where a raw
+   color value may appear. Everything else — CSS, HTML, JS — reads a
+   token. `scripts/check-color-tokens.mjs` enforces it in CI.
+
+   Two tiers, kept strictly apart:
+
+     Tier 1 — primitives (--rt-c-*)
+       Raw values. Named for what they ARE (grey-900, blue-500), never
+       for what they do. A theme is a redefinition of this tier.
+
+     Tier 2 — semantic roles (everything else)
+       Named for what they DO (--rt-surface, --rt-brand, --rt-avail).
+       Always an alias of a primitive. Components only ever use these.
+
+   Four semantic families, kept strictly apart:
      • Neutrals    → every surface
      • Brand blue  → the ONLY interactive color (CTA, focus, links, route)
      • Layer hues  → map data identity (pins + legend)
      • Availability / status → meaning, never decoration
+
+   Adding a theme (light mode, a future LDS mapping) means overriding
+   tier 1 — and only the tier-2 roles that genuinely diverge — under a
+   scope like `[data-rt-theme="light"]`. Custom properties inherit
+   downward only, so the theme attribute belongs on <html>.
+
+   JS consumers (MapLibre paint properties, canvas charts) cannot read
+   CSS custom properties directly — they go through
+   `web/design-system/tokens.js`, which resolves these at runtime.
    ============================================================ */
 
 :root {
+  /* ==========================================================
+     TIER 1 — PRIMITIVES. The only raw values in the codebase.
+     ========================================================== */
+
+  /* Neutral ramp — cool dark */
+  --rt-c-grey-950: #0e0f12;
+  --rt-c-grey-900: #16171b;
+  --rt-c-grey-880: #1c1d21;
+  --rt-c-grey-860: #202124;
+  --rt-c-grey-840: #232427;
+  --rt-c-grey-800: #26272d;
+  --rt-c-grey-750: #2f3037;
+  --rt-c-grey-600: #4a4a4a;
+  --rt-c-grey-500: #626770;
+  --rt-c-grey-660: #666666;
+  --rt-c-grey-450: #8a8f96;
+  --rt-c-grey-400: #9aa0a8;
+  --rt-c-grey-300: #999999;
+  --rt-c-grey-050: #e8eaed;
+  --rt-c-white:    #ffffff;
+
+  /* Channel primitives — the rgb triplets overlay and tint roles compose with.
+     Overlays cannot be plain hexes: they must let the surface beneath show
+     through, so the role needs a channel plus an alpha rather than a colour.
+     Holding the channel here is what makes them themeable — a light theme
+     flips --rt-c-overlay-rgb to 0,0,0 and every overlay below follows. Before
+     this they were literal rgba(255,255,255,...) and a light theme would have
+     painted white-on-white. */
+  --rt-c-overlay-rgb: 255,255,255;  /* tints that lighten the surface */
+  --rt-c-shadow-rgb:  0,0,0;        /* scrims and elevation */
+  --rt-c-chip-rgb:    40,40,40;     /* the map-label chip's own ground */
+  --rt-c-blue-500-rgb:  59,130,246;
+  --rt-c-green-400-rgb: 76,185,106;
+  --rt-c-amber-400-rgb: 241,160,74;
+
+  /* Blue ramp */
+  --rt-c-blue-300: #5b9cf8;
+  --rt-c-blue-500: #3b82f6;
+  --rt-c-blue-600: #2b6dd1;
+  --rt-c-blue-700: #245bb0;
+  --rt-c-blue-450: #3a7bd5;
+  --rt-c-blue-slate: #5a6a8a;
+  --rt-c-blue-ios:   #0a84ff;
+
+  /* Green ramp */
+  --rt-c-lime-400:  #cddc39;
+  --rt-c-green-200: #9ccc65;
+  --rt-c-green-400: #4cb96a;
+  --rt-c-green-500: #558b2f;
+  --rt-c-green-600: #2e7d32;
+  --rt-c-green-800: #1f5e2a;
+  --rt-c-green-900: #1b5e20;
+
+  /* Amber / red / purple / brown */
+  --rt-c-amber-300: #f5a623;
+  --rt-c-amber-400: #f1a04a;
+  --rt-c-amber-500: #e0a543;
+  --rt-c-amber-700: #b07e1d;
+  --rt-c-red-400:   #f56565;
+  --rt-c-red-600:   #c62828;
+  --rt-c-red-800:   #7a2828;
+  --rt-c-purple-500: #7b4bb5;
+  --rt-c-purple-600: #7f3d97;
+  --rt-c-brown-400: #8d6e63;
+  --rt-c-brown-600: #5d4037;
+
+  /* Categorical chart ramp — distinguishable at small sizes, no meaning
+     attached to any single hue. */
+  --rt-c-series-1: #4dc9f6;
+  --rt-c-series-2: #f67019;
+  --rt-c-series-3: #f53794;
+  --rt-c-series-4: #537bc4;
+  --rt-c-series-5: #acc236;
+  --rt-c-series-6: #166a8f;
+  --rt-c-series-7: #00a950;
+  --rt-c-series-8: #58595b;
+  --rt-c-series-9: #8549ba;
+
+  /* Fixed brand marks. Not themeable — these belong to someone else.
+     A theme must NOT redefine these; a Tesla pin is Tesla red. */
+  --rt-c-brand-tesla: #e82127;
+  --rt-c-brand-tesla-pin: #e31937;
+
+  /* ==========================================================
+     TIER 2 — SEMANTIC ROLES. What components actually use.
+     ========================================================== */
+
   /* Type */
   --rt-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --rt-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  /* Neutrals — cool dark ramp */
-  --rt-bg-base: #0e0f12;      /* app frame, map void */
-  --rt-bg: #16171b;           /* page background */
-  --rt-bg-sunken: #1c1d21;    /* map canvas, wells */
-  --rt-surface: #26272d;      /* panels, drawer, popovers */
-  --rt-surface-raised: #2f3037;
+  /* Neutrals — surfaces */
+  --rt-bg-base: var(--rt-c-grey-950);   /* app frame, map void */
+  --rt-bg: var(--rt-c-grey-900);        /* page background */
+  --rt-bg-sunken: var(--rt-c-grey-880); /* map canvas, wells */
+  --rt-surface: var(--rt-c-grey-800);   /* panels, drawer, popovers */
+  --rt-surface-raised: var(--rt-c-grey-750);
+  --rt-surface-inset: var(--rt-c-grey-860);  /* nested wells inside a panel */
+  --rt-surface-alt: var(--rt-c-grey-840);    /* alternating rows, sub-panels */
 
-  /* Overlays & borders */
-  --rt-fill-subtle: rgba(255,255,255,0.04);
-  --rt-fill-hover:  rgba(255,255,255,0.06);
-  --rt-fill-active: rgba(255,255,255,0.08);
-  --rt-border:        rgba(255,255,255,0.08);
-  --rt-border-strong: rgba(255,255,255,0.13);
-  --rt-scrim:         rgba(0,0,0,0.62);      /* modal / drawer backdrop */
+  /* Overlays & borders. Alpha is the role's own; the channel comes from
+     tier 1, so a light theme inverts all eight by flipping one primitive. */
+  --rt-fill-subtle:   rgba(var(--rt-c-overlay-rgb), 0.04);
+  --rt-fill-hover:    rgba(var(--rt-c-overlay-rgb), 0.06);
+  --rt-fill-active:   rgba(var(--rt-c-overlay-rgb), 0.08);
+  --rt-border:        rgba(var(--rt-c-overlay-rgb), 0.08);
+  --rt-border-strong: rgba(var(--rt-c-overlay-rgb), 0.13);
+  --rt-scrim:         rgba(var(--rt-c-shadow-rgb), 0.62);  /* modal / drawer backdrop */
+  --rt-scrim-strong:  rgba(var(--rt-c-shadow-rgb), 0.55);
+  --rt-overlay-chip:  rgba(var(--rt-c-chip-rgb), 0.92);    /* labels floating over the map */
 
   /* Text */
-  --rt-text:  #e8eaed;
-  --rt-muted: #9aa0a8;
-  --rt-faint: #626770;
+  --rt-text:  var(--rt-c-grey-050);
+  --rt-muted: var(--rt-c-grey-400);
+  --rt-faint: var(--rt-c-grey-500);
+  --rt-hint:  var(--rt-c-grey-300);
+  /* Foreground on any saturated fill (brand button, pin, status chip).
+     Fixed white by design — a theme changes the fill, not this. */
+  --rt-on-accent: var(--rt-c-white);
 
   /* Interactive / brand — the ONE interactive color */
-  --rt-brand:       #3b82f6;
-  --rt-brand-hover: #2b6dd1;
-  --rt-brand-press: #245bb0;
-  --rt-brand-tint:  rgba(59,130,246,0.15);
+  --rt-brand:       var(--rt-c-blue-500);
+  --rt-brand-hover: var(--rt-c-blue-600);
+  --rt-brand-press: var(--rt-c-blue-700);
+  --rt-brand-tint:  rgba(var(--rt-c-blue-500-rgb), 0.15);
   /* Brand blue legible as TEXT on a dark surface. --rt-brand is tuned for solid
      fills (white-on-blue) and reaches only 4.05:1 as text on --rt-surface, under
      the 4.5:1 AA floor. Use this for links and text-only buttons instead.
      Contrast: --rt-bg 6.4:1 · --rt-surface 5.4:1 · --rt-surface-raised 4.7:1. */
-  --rt-brand-text:  #5b9cf8;
+  --rt-brand-text:  var(--rt-c-blue-300);
 
-  /* Map data layers */
-  --rt-layer-supercharger: #e82127;
-  --rt-layer-cg-federal:    #2e7d32;
-  --rt-layer-cg-state:      #4e9a3f;
-  --rt-layer-cg-provincial: #1f7a34;
-  --rt-layer-cg-local:      #8fbf5a;
-  --rt-layer-pf:            #7b4bb5;
-  --rt-layer-np:            #2e7d32;
-  --rt-layer-sp:            #8d6e63;
+  /* Map data layers.
+     NOTE: pin fills and legend swatches diverged before tokens existed —
+     --rt-layer-supercharger (legend) vs --rt-layer-supercharger-pin, and
+     --rt-layer-pf vs --rt-layer-pf-pin. Both are preserved here rather than
+     silently unified; reconciling them is a visual change, not a refactor. */
+  --rt-layer-supercharger:     var(--rt-c-brand-tesla);
+  --rt-layer-supercharger-pin: var(--rt-c-brand-tesla-pin);
+  --rt-layer-cg-federal:    var(--rt-c-green-600);
+  --rt-layer-cg-state:      var(--rt-c-green-500);
+  --rt-layer-cg-provincial: var(--rt-c-green-600);
+  --rt-layer-cg-local:      var(--rt-c-green-200);
+  --rt-layer-cg-other:      var(--rt-c-green-600);
+  /* Trip-result dots render unclassified campgrounds in lime while the map
+     folds them into federal green. Preserved, not unified — see the note above. */
+  --rt-layer-cg-unclassified: var(--rt-c-lime-400);
+  --rt-layer-pf:            var(--rt-c-purple-500);
+  --rt-layer-pf-pin:        var(--rt-c-purple-600);
+  --rt-layer-np:            var(--rt-c-green-600);
+  --rt-layer-sp:            var(--rt-c-brown-400);
+
+  /* Map geometry — polygon fills, strokes, route lines */
+  --rt-map-np-fill:     var(--rt-c-green-600);
+  --rt-map-np-stroke:   var(--rt-c-green-900);
+  --rt-map-sp-fill:     var(--rt-c-brown-400);
+  --rt-map-sp-stroke:   var(--rt-c-brown-600);
+  --rt-map-pin-stroke:  var(--rt-c-white);
+  --rt-map-route:       var(--rt-brand);
+  --rt-map-route-alt:   var(--rt-c-grey-600);   /* alternate / inactive route */
+  --rt-map-waypoint:    var(--rt-c-amber-500);  /* via stops along a route */
+  --rt-map-locate:      var(--rt-c-blue-ios);   /* "you are here" puck */
+
+  /* Search result kinds (topbar autocomplete) */
+  --rt-kind-place:   var(--rt-c-blue-450);
+  --rt-kind-address: var(--rt-c-blue-slate);
+  /* The fallback for a search-result kind the palette does not name. Held at
+     the literal it shipped as (#666) rather than snapped to --rt-c-grey-500;
+     the two differ visibly and unifying them is a design call, not a refactor. */
+  --rt-kind-default: var(--rt-c-grey-660);
 
   /* Availability semantics */
-  --rt-avail:          #4cb96a;
-  --rt-avail-bg:       rgba(76,185,106,0.16);
-  --rt-first-come:     #f1a04a;
-  --rt-first-come-bg:  rgba(241,160,74,0.14);
-  --rt-reserved:       #626770;
-  --rt-watching:       #3b82f6;
-  --rt-rating:         #f5a623;
+  --rt-avail:          var(--rt-c-green-400);
+  --rt-avail-bg:       rgba(var(--rt-c-green-400-rgb), 0.16);
+  --rt-first-come:     var(--rt-c-amber-400);
+  --rt-first-come-bg:  rgba(var(--rt-c-amber-400-rgb), 0.14);
+  --rt-reserved:       var(--rt-c-grey-500);
+  --rt-watching:       var(--rt-c-blue-500);
+  --rt-paused:         var(--rt-c-grey-450);
+  --rt-rating:         var(--rt-c-amber-300);
+
+  /* Cell-signal strength, per carrier — rec.gov's 0–4 reception scale,
+     rendered as chips on the campground drawer card. NOT availability:
+     this is the only consumer, and it is a magnitude, not a status.
+
+     Two known defects, preserved at their shipped values because fixing
+     them is a visual change and not a refactor:
+
+     1. NON-MONOTONIC. OKLCH lightness runs 0.401 → 0.539 → 0.628 → 0.523
+        → 0.428, so it rises then falls. Bucket 4 (excellent) is nearly as
+        dark as bucket 0 (none) — in greyscale or for a red-green colour-
+        blind reader, best and worst signal are almost the same chip.
+     2. COLLIDES WITH STATUS. Buckets 0–1 sit at hue 24–27°, the same hue
+        as --rt-error (23°); buckets 3–4 at 144–147°, the same as
+        --rt-avail (150°). A red chip on a campground card cannot be told
+        apart from "unavailable", nor a green one from "available".
+
+     The fix is a single-hue lightness ramp — one neutral or brand hue,
+     five monotonically lighter steps — so magnitude reads as magnitude
+     and the red/amber/green vocabulary stays reserved for status. */
+  --rt-signal-0: var(--rt-c-red-800);
+  --rt-signal-1: var(--rt-c-red-600);
+  --rt-signal-2: var(--rt-c-amber-700);
+  --rt-signal-3: var(--rt-c-green-600);
+  --rt-signal-4: var(--rt-c-green-800);
 
   /* Status */
-  --rt-success: #4cb96a;
-  --rt-warn:    #f1a04a;
-  --rt-error:   #f56565;
-  --rt-info:    #3b82f6;
+  --rt-success: var(--rt-c-green-400);
+  --rt-warn:    var(--rt-c-amber-400);
+  --rt-error:   var(--rt-c-red-400);
+  --rt-info:    var(--rt-c-blue-500);
+
+  /* Chart series — categorical, for canvas/SVG plots. Order is the
+     assignment order; series N takes --rt-series-N. */
+  --rt-series-1: var(--rt-c-series-1);
+  --rt-series-2: var(--rt-c-series-2);
+  --rt-series-3: var(--rt-c-series-3);
+  --rt-series-4: var(--rt-c-series-4);
+  --rt-series-5: var(--rt-c-series-5);
+  --rt-series-6: var(--rt-c-series-6);
+  --rt-series-7: var(--rt-c-series-7);
+  --rt-series-8: var(--rt-c-series-8);
+  --rt-series-9: var(--rt-c-series-9);
 
   /* Radii */
   --rt-r-sm: 6px; --rt-r-md: 8px; --rt-r-lg: 10px;
   --rt-r-xl: 12px; --rt-r-2xl: 18px; --rt-r-pill: 999px;
 
   /* Elevation */
-  --rt-e1: 0 1px 2px rgba(0,0,0,0.35);
-  --rt-e2: 0 4px 12px rgba(0,0,0,0.30);
-  --rt-e3: 0 6px 20px rgba(0,0,0,0.40);
-  --rt-e4: 0 8px 24px rgba(0,0,0,0.45);
+  --rt-e1: 0 1px 2px rgba(var(--rt-c-shadow-rgb), 0.35);
+  --rt-e2: 0 4px 12px rgba(var(--rt-c-shadow-rgb), 0.30);
+  --rt-e3: 0 6px 20px rgba(var(--rt-c-shadow-rgb), 0.40);
+  --rt-e4: 0 8px 24px rgba(var(--rt-c-shadow-rgb), 0.45);
 }

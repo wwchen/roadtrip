@@ -17,6 +17,18 @@
 
 const WATCH_ID = "{{watchId}}"; // echoed in every button's value
 
+// Attachment color bars. Slack's API takes a literal hex over the wire — it
+// cannot resolve a CSS custom property — so this is the one sanctioned mirror
+// of the availability tokens outside `tokens.css`. Each entry names the token
+// it mirrors; change both together.
+const BAR = {
+  available: "#4cb96a", // --rt-avail
+  watching: "#3b82f6",  // --rt-watching
+  paused: "#8a8f96",    // --rt-paused
+  expiring: "#f1a04a",  // --rt-first-come
+  error: "#f56565",     // --rt-error
+};
+
 module.exports = {
   // ── A · Sites available ────────────────────────────────────────────────
   available: {
@@ -26,7 +38,7 @@ module.exports = {
     text: "🏕️ 6 sites opened at Red Bridge Campground (Jul 9 → Jul 10)",
     attachments: [
       {
-        color: "#4cb96a",
+        color: BAR.available,
         blocks: [
           {
             type: "section",
@@ -105,7 +117,7 @@ module.exports = {
     text: "👀 Watching Upper Pines Campground (Jul 10 → Jul 11)",
     attachments: [
       {
-        color: "#3b82f6",
+        color: BAR.watching,
         blocks: [
           { type: "section", text: { type: "mrkdwn", text: "*👀 Watching for openings*" } },
           {
@@ -140,7 +152,7 @@ module.exports = {
     text: "⏸ Watch paused — Upper Pines Campground",
     attachments: [
       {
-        color: "#8a8f96",
+        color: BAR.paused,
         blocks: [
           { type: "section", text: { type: "mrkdwn", text: "*⏸ Watch paused*" } },
           {
@@ -171,7 +183,7 @@ module.exports = {
     text: "⏳ Watch expires tomorrow — Kirk Creek Campground",
     attachments: [
       {
-        color: "#f1a04a",
+        color: BAR.expiring,
         blocks: [
           { type: "section", text: { type: "mrkdwn", text: "*⏳ Watch expires tomorrow*" } },
           {
@@ -202,7 +214,7 @@ module.exports = {
     text: "⚠️ Couldn't check availability — Limekiln SP",
     attachments: [
       {
-        color: "#f56565",
+        color: BAR.error,
         blocks: [
           { type: "section", text: { type: "mrkdwn", text: "*⚠️ Couldn't check availability*" } },
           {

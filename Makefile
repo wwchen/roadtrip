@@ -115,6 +115,7 @@ test: _ensure-hooks
 	echo "discovered $$# web test files"; \
 	if [ "$$#" -eq 0 ]; then echo "no web test files found - discovery is broken"; exit 1; fi; \
 	node --test "$$@"
+	node scripts/check-color-tokens.mjs
 	cd companion && npm test
 	python3 -m unittest discover -s scripts -p 'test_*.py'
 	python3 secrets/manage.py generate --check

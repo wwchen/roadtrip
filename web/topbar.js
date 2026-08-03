@@ -34,11 +34,13 @@ import {
   CORRIDOR_SIMPLIFY_TOLERANCE,
   CORRIDOR_STEP_MILES,
   GEOCODE_DEBOUNCE_MS,
-  KIND_COLOR,
+  kindColor,
   MAX_STOPS,
-  ROUTE_COLOR,
+  ROUTE_COLOR_VAR,
+  routeColor,
   trip,
 } from './topbar/state.js';
+import { token } from './design-system/tokens.js';
 import { clearVisibleShareUrl, decodeRouteState, replaceVisibleUrl, routeShareUrl } from './share-links.js';
 import { initAlerts } from './topbar/alerts.js';
 import { initAuth } from './topbar/auth.js';
@@ -342,8 +344,8 @@ function injectStyles() {
     background: var(--rt-brand);
     box-shadow: 0 0 0 2px var(--rt-fill-subtle);
   }
-  .tb-icon.via  { background: #e0a543; border-radius: 2px; }
-  .tb-icon.last { background: ${ROUTE_COLOR}; border-radius: 2px; }
+  .tb-icon.via  { background: var(--rt-map-waypoint); border-radius: 2px; }
+  .tb-icon.last { background: ${ROUTE_COLOR_VAR}; border-radius: 2px; }
 
   .tb-input {
     flex: 1; min-width: 0;
@@ -421,11 +423,11 @@ function injectStyles() {
   }
   .tb-icon-btn:hover { background: var(--rt-fill-hover); border-color: var(--rt-brand); }
   .tb-icon-btn.primary {
-    background: ${ROUTE_COLOR};
-    border-color: ${ROUTE_COLOR};
-    color: #fff;
+    background: ${ROUTE_COLOR_VAR};
+    border-color: ${ROUTE_COLOR_VAR};
+    color: var(--rt-on-accent);
   }
-  .tb-icon-btn.primary:hover { background: #2b6dd1; }
+  .tb-icon-btn.primary:hover { background: var(--rt-brand-hover); }
   .tb-icon-btn[hidden] { display: none; }
 
   /* Dropdown */
@@ -452,7 +454,7 @@ function injectStyles() {
     flex-shrink: 0;
     font-size: 9px; text-transform: uppercase;
     padding: 2px 6px; border-radius: 3px;
-    color: #fff; font-weight: 600; letter-spacing: 0.04em;
+    color: var(--rt-on-accent); font-weight: 600; letter-spacing: 0.04em;
     min-width: 28px; text-align: center;
   }
   .tb-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -467,7 +469,7 @@ function injectStyles() {
   }
   #tb-status.visible { display: block; }
   #tb-status.error { color: var(--rt-error); }
-  #tb-status .tb-stat-num { color: ${ROUTE_COLOR}; font-weight: 600; }
+  #tb-status .tb-stat-num { color: ${ROUTE_COLOR_VAR}; font-weight: 600; }
   #tb-status .tb-stat-sep { color: var(--rt-faint); margin: 0 8px; }
 
   /* Corridor radius slider — visible inside the campgrounds collapsible. */
@@ -487,7 +489,7 @@ function injectStyles() {
   }
   #tb-corridor input[type=range] {
     flex: 1;
-    accent-color: ${ROUTE_COLOR};
+    accent-color: ${ROUTE_COLOR_VAR};
     cursor: pointer;
     margin: 0;
   }
@@ -592,8 +594,8 @@ function injectStyles() {
     font-size: 11px; color: var(--rt-faint);
     font-variant-numeric: tabular-nums;
   }
-  .tb-card-dist { color: ${ROUTE_COLOR}; font-weight: 500; }
-  .tb-card-rating { color: #f5a623; font-weight: 500; }
+  .tb-card-dist { color: ${ROUTE_COLOR_VAR}; font-weight: 500; }
+  .tb-card-rating { color: var(--rt-rating); font-weight: 500; }
   .tb-card-sites { color: var(--rt-muted); }
   .tb-card-season { color: var(--rt-muted); }
   .tb-card-empty {
@@ -870,7 +872,7 @@ function renderDropdown() {
       html += `<div class="tb-section">${section}</div>`;
       prevSection = section;
     }
-    const color = KIND_COLOR[r.kind] || '#666';
+    const color = kindColor(r.kind);
     const sub = r.sub ? ` <span class="tb-sub">${escapeHtml(r.sub)}</span>` : '';
     const dist = r.distKm != null ? ` <span class="tb-sub">${formatDist(r.distKm)}</span>` : '';
     html += `<div class="tb-result" data-i="${i}">
@@ -1319,7 +1321,7 @@ function drawRoute() {
       source: 'trip-corridor',
       type: 'fill',
       paint: {
-        'fill-color': ROUTE_COLOR,
+        'fill-color': routeColor(),
         'fill-opacity': 0.08,
       },
     }, firstSymbolLayerId());
@@ -1334,7 +1336,7 @@ function drawRoute() {
     source: 'trip-route',
     type: 'line',
     layout: { 'line-join': 'round', 'line-cap': 'round' },
-    paint: { 'line-color': ROUTE_COLOR, 'line-width': 5, 'line-opacity': 0.85 },
+    paint: { 'line-color': routeColor(), 'line-width': 5, 'line-opacity': 0.85 },
   });
 
   document.getElementById('tb-corridor').classList.add('visible');
@@ -1473,7 +1475,7 @@ function syncMarkers() {
     }
     const role = (i === 0) ? 'origin' : (i === trip.stops.length - 1 ? 'last' : 'via');
     const color = role === 'origin' ? 'var(--rt-brand)' :
-      (role === 'last' ? ROUTE_COLOR : '#e0a543');
+      (role === 'last' ? ROUTE_COLOR_VAR : 'var(--rt-map-waypoint)');
     const shape = role === 'last' ? 'square' : 'circle';
     const label = role === 'origin' ? 'A' :
       (role === 'last' ? String.fromCharCode(65 + Math.min(trip.stops.length - 1, 25)) : String(i));
@@ -1481,8 +1483,8 @@ function syncMarkers() {
     const wrap = document.createElement('div');
     wrap.style.cssText = `
       width: 26px; height: 26px;
-      background: ${color}; color: #fff;
-      border: 2.5px solid #fff;
+      background: ${color}; color: var(--rt-on-accent);
+      border: 2.5px solid var(--rt-map-pin-stroke);
       border-radius: ${shape === 'circle' ? '50%' : '4px'};
       box-shadow: 0 2px 6px rgba(0,0,0,0.5);
       display: grid; place-items: center;
@@ -1723,12 +1725,12 @@ function hideStatus() {
 
 // --- trip results (campground cards) ----------------------------------
 
-const CG_DOT_COLOR = {
-  federal: '#2e7d32',
-  provincial: '#2e7d32',
-  state: '#558b2f',
-  local: '#9ccc65',
-  other: '#cddc39',
+const CG_DOT_TOKEN = {
+  federal: '--rt-layer-cg-federal',
+  provincial: '--rt-layer-cg-provincial',
+  state: '--rt-layer-cg-state',
+  local: '--rt-layer-cg-local',
+  other: '--rt-layer-cg-unclassified',
 };
 
 const tripResults = {
@@ -1966,7 +1968,7 @@ function renderResults() {
   }
   let body = '';
   for (const c of cards) {
-    const color = CG_DOT_COLOR[c.category] || CG_DOT_COLOR.other;
+    const color = token(CG_DOT_TOKEN[c.category] || CG_DOT_TOKEN.other);
     const ratingHtml = c.rating
       ? `<span class="tb-card-rating">★ ${c.rating[0].toFixed(1)}</span>`
       : '';

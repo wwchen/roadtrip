@@ -63,7 +63,7 @@ textarea:focus {
 button.primary {
   border-color: var(--rt-brand);
   background: var(--rt-brand);
-  color: #fff;
+  color: var(--rt-on-accent);
 }
 
 button.primary:hover { background: var(--rt-brand-hover); border-color: var(--rt-brand-hover); }

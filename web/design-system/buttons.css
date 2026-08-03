@@ -19,7 +19,7 @@
 .rt-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .rt-btn:focus-visible { outline: 2px solid var(--rt-brand); outline-offset: 2px; }
 
-.rt-btn--primary { background: var(--rt-brand); color: #fff; font-weight: 600; }
+.rt-btn--primary { background: var(--rt-brand); color: var(--rt-on-accent); font-weight: 600; }
 .rt-btn--primary:not(:disabled):hover { background: var(--rt-brand-hover); }
 
 .rt-btn--secondary { background: var(--rt-surface-raised); color: var(--rt-text); }
