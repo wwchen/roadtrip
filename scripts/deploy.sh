@@ -19,10 +19,11 @@
 # Caddy snippets and state markers are overwritten on re-up.
 #
 # Runtime assumptions (documented):
-#   - caddy-vhost: Caddy is running on the host and accepts
-#     `caddy reload --config <path>`.  SANDBOX_CADDY_CONFIG is the path to
-#     the root Caddyfile that imports per-sandbox snippets from
-#     SANDBOX_CADDY_DIR.
+#   - caddy-vhost: the caddy CONTAINER (SANDBOX_CADDY_CONTAINER, default
+#     roadtrip-caddy-1) is running with SANDBOX_CADDY_DIR bind-mounted to
+#     /etc/caddy/sandboxes and joined to SANDBOX_NETWORK.  Reload is
+#     `docker exec <container> caddy reload --config SANDBOX_CADDY_CONFIG`;
+#     no host `caddy` binary is required.
 #   - Snapshot (if present) is a pg_dump -Fc custom-format archive.
 #     pg_restore runs as the sandbox POSTGRES_USER inside the postgres
 #     container.
@@ -50,16 +51,50 @@ NAME_OVERRIDE="${3:-}"
 # All host-specific values live here so the script can be re-targeted without
 # touching the pipeline steps below.
 
-# DNS zone used to build the sandbox URL: sb-<name>.<zone>
-SANDBOX_TUNNEL_ZONE="${SANDBOX_TUNNEL_ZONE:-sandbox.roadtrip.floo.ca}"
+# DNS zone used to build the sandbox URL: <prefix><name>.<zone>
+# Default is `floo.ca` (one label under the apex) so the free Cloudflare
+# Universal SSL cert `*.floo.ca` covers sandbox hostnames — a deeper zone like
+# `sandbox.roadtrip.floo.ca` is a second-level wildcard the free cert does NOT
+# cover (TLS wildcards match a single label), which needs paid ACM.
+SANDBOX_TUNNEL_ZONE="${SANDBOX_TUNNEL_ZONE:-floo.ca}"
 
-# Directory where per-sandbox Caddy snippet files are written.
-# The root Caddyfile must `import` this directory, e.g.:
-#   import /etc/caddy/sandboxes/*.caddy
-SANDBOX_CADDY_DIR="${SANDBOX_CADDY_DIR:-/etc/caddy/sandboxes}"
+# Hostname prefix for the sandbox vhost: full host is <prefix><name>.<zone>,
+# e.g. roadtrip-sb-pr560.floo.ca.  Both the DNS record and the Cloudflare tunnel
+# rule are broad single-label `*.floo.ca` wildcards (partial labels like
+# `roadtrip-sb-*` are rejected by both, and a deeper zone needs paid ACM), so
+# Caddy is the actual filter: it only serves vhosts named with this prefix, and
+# any other `*.floo.ca` host reaches caddy but matches no vhost.  This prefix
+# namespaces sandbox hosts and keeps them recognisable.
+SANDBOX_HOST_PREFIX="${SANDBOX_HOST_PREFIX:-roadtrip-sb-}"
 
-# Path to the root Caddyfile — passed to `caddy reload --config`.
+# Cloudflare DNS + Access provisioning (per-sandbox public exposure).  All the
+# CF_* config lives in scripts/cloudflare_sandbox.sh; provisioning is a no-op
+# unless CF_API_TOKEN_FILE is readable, so local/CI runs are unaffected.
+# shellcheck source=scripts/cloudflare_sandbox.sh
+source "${SCRIPT_DIR}/cloudflare_sandbox.sh"
+
+# Directory where per-sandbox Caddy snippet files are written.  This is the
+# HOST side of the caddy container's bind-mount (see docker-compose.yml's caddy
+# service: ./caddy/sandboxes → /etc/caddy/sandboxes).  Default resolves to the
+# repo's caddy/sandboxes so a plain checkout works with no host setup.
+SANDBOX_CADDY_DIR="${SANDBOX_CADDY_DIR:-${REPO_ROOT}/caddy/sandboxes}"
+
+# Path to the root Caddyfile INSIDE the caddy container — passed to
+# `caddy reload --config` via `docker exec`.
 SANDBOX_CADDY_CONFIG="${SANDBOX_CADDY_CONFIG:-/etc/caddy/Caddyfile}"
+
+# Name of the running caddy container (base `roadtrip` compose project, so
+# `roadtrip-caddy-1`).  `docker exec <this> caddy reload` re-reads the snippets;
+# this replaces the old assumption that a `caddy` binary is on the host PATH.
+SANDBOX_CADDY_CONTAINER="${SANDBOX_CADDY_CONTAINER:-roadtrip-caddy-1}"
+
+# Shared Docker network (owned by the base project) that the caddy proxy and
+# every sandbox backend join.  Must match the `name:` in docker-compose.yml.
+SANDBOX_NETWORK="${SANDBOX_NETWORK:-roadtrip-sandbox}"
+
+# Backend container port the proxy forwards to (matches the sandbox backend's
+# in-container listen port, 8765).
+SANDBOX_BACKEND_PORT="${SANDBOX_BACKEND_PORT:-8765}"
 
 # Directory for .meta marker files (consumed by sandbox_reap.sh).
 SANDBOX_STATE_DIR="${SANDBOX_STATE_DIR:-/var/lib/roadtrip-sandboxes}"
@@ -181,6 +216,31 @@ export SANDBOX_PORT
 export SANDBOX_DB_PASSWORD
 export POSTGRES_DB
 export POSTGRES_USER
+# Consumed by the backend service's network alias (sb-${SANDBOX_NAME}-backend).
+export SANDBOX_NAME
+
+# ── Ensure the shared proxy network exists ───────────────────────────────────
+# The base `roadtrip` project owns this network, but a sandbox may be brought
+# up before (or without) that project on a given host.  `docker network create`
+# is not idempotent, so guard it — the sandbox compose attaches to it as
+# external and would fail hard if it were missing.
+#
+# The `com.docker.compose.network` label is REQUIRED: if this fallback creates a
+# bare (unlabeled) network and the base `roadtrip` project is later brought up,
+# `docker compose up` aborts with "network roadtrip-sandbox was found but has
+# incorrect label" — breaking prod deploys.  Creating it with the label Compose
+# expects lets the base project adopt it cleanly.  (Verified against Compose
+# 5.3.1.)  Note this is only reachable if the base stack — and thus the caddy
+# container — is down, in which case the sandbox won't route until it's up; the
+# guard just avoids a cryptic external-network-missing error in that window.
+if [[ "${ROUTING}" == "caddy-vhost" ]]; then
+    if ! docker network inspect "${SANDBOX_NETWORK}" >/dev/null 2>&1; then
+        echo "==> creating shared proxy network: ${SANDBOX_NETWORK}"
+        docker network create \
+            --label "com.docker.compose.network=${SANDBOX_NETWORK}" \
+            "${SANDBOX_NETWORK}" >/dev/null
+    fi
+fi
 
 # ── Start Compose services ────────────────────────────────────────────────────
 # Ordering depends on whether a snapshot will be restored:
@@ -341,18 +401,42 @@ case "${ROUTING}" in
     caddy-vhost)
         CADDY_SNIPPET="${SANDBOX_CADDY_DIR}/sb-${SANDBOX_NAME}.caddy"
         mkdir -p "${SANDBOX_CADDY_DIR}"
+        # The `http://` scheme is REQUIRED: a scheme-less site address binds
+        # :443 even with `auto_https off` (that flag disables cert automation,
+        # not the 443 default), so Caddy would never listen on :80 and the
+        # tunnel (→ caddy:80) would get no listener.  With `http://` the vhost
+        # binds :80.  Verified against caddy:2-alpine.
+        #
+        # reverse_proxy targets the backend's network alias on the shared
+        # roadtrip-sandbox network, NOT a host port: the caddy container cannot
+        # reach the host's 127.0.0.1:${SANDBOX_PORT} loopback bind.
+        SANDBOX_FQDN="${SANDBOX_HOST_PREFIX}${SANDBOX_NAME}.${SANDBOX_TUNNEL_ZONE}"
         cat > "${CADDY_SNIPPET}" <<CADDY
 # Auto-generated by deploy.sh — do not edit by hand.
-# Sandbox: ${SANDBOX_NAME}   port: ${SANDBOX_PORT}
-sb-${SANDBOX_NAME}.${SANDBOX_TUNNEL_ZONE} {
-    reverse_proxy 127.0.0.1:${SANDBOX_PORT}
+# Sandbox: ${SANDBOX_NAME}   host-probe port: ${SANDBOX_PORT}
+http://${SANDBOX_FQDN} {
+    reverse_proxy sb-${SANDBOX_NAME}-backend:${SANDBOX_BACKEND_PORT}
 }
 CADDY
         echo "==> wrote Caddy snippet: ${CADDY_SNIPPET}"
-        # Reload Caddy so the new vhost is active.
-        # Assumption: `caddy` is on PATH and accepts `reload --config <path>`.
-        echo "==> reloading Caddy"
-        caddy reload --config "${SANDBOX_CADDY_CONFIG}"
+        # Reload the caddy CONTAINER so the new vhost is active — the snippet
+        # dir is bind-mounted in, so the file is already visible to it.
+        echo "==> reloading Caddy (docker exec ${SANDBOX_CADDY_CONTAINER})"
+        docker exec "${SANDBOX_CADDY_CONTAINER}" \
+            caddy reload --config "${SANDBOX_CADDY_CONFIG}"
+        # Provision the per-sandbox public DNS CNAME for this host.  No-op when
+        # no CF token is present (local/CI).  The Cloudflare Access app that
+        # gates roadtrip-sb-*.<zone> is a static, human-configured wildcard app
+        # (see docs) — so the moment this DNS resolves, the host is already
+        # behind Access; there is no ungated window.
+        # Fatal on failure: a swallowed DNS/Access-gate failure would let the
+        # script print "Sandbox is live" and the workflow post a URL that can't
+        # resolve (or, worse, an ungated host).  cf_sandbox_up returns 0 on the
+        # no-token local/CI path, so this only fails a token-configured host.
+        if ! cf_sandbox_up "${SANDBOX_FQDN}"; then
+            echo "error: Cloudflare provisioning failed for ${SANDBOX_FQDN}; not marking the sandbox live" >&2
+            exit 1
+        fi
         ;;
     direct)
         # Prod-style ingress: cloudflared routes directly to the backend
@@ -411,6 +495,6 @@ if [[ "${DO_DB_PREP}" == "true" && "${HAVE_SNAPSHOT}" == "false" ]]; then
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
-SANDBOX_URL="https://sb-${SANDBOX_NAME}.${SANDBOX_TUNNEL_ZONE}"
+SANDBOX_URL="https://${SANDBOX_HOST_PREFIX}${SANDBOX_NAME}.${SANDBOX_TUNNEL_ZONE}"
 echo ""
 echo "Sandbox is live: ${SANDBOX_URL}"
