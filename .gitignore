@@ -36,3 +36,7 @@ data/etl-out/
 
 # Brainstorming visual companion
 .superpowers/
+
+# Per-sandbox Caddy vhost snippets are generated at runtime by deploy.sh;
+# only caddy/sandboxes/.gitkeep is tracked (keeps the bind-mount dir present).
+caddy/sandboxes/*.caddy
