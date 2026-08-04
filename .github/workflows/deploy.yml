@@ -130,6 +130,7 @@ jobs:
               # and are just as invisible to a filter that omits them.
               - 'grafana/**'
               - 'postgres-init/**'
+              - 'caddy/**'
               - 'data/**'
               - 'index.html'
               - 'availability.html'
