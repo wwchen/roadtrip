@@ -47,6 +47,17 @@ DEPLOY_ENV="$1"
 REF="$2"
 NAME_OVERRIDE="${3:-}"
 
+# ── Host config file ──────────────────────────────────────────────────────────
+# Persistent per-host SANDBOX_* config (e.g. SANDBOX_SNAPSHOT_PATH).  The GitHub
+# workflow runs this over SSH with no per-run env, so host-specific values must
+# live in a file.  Sourced BEFORE the tunables so each `${VAR:-default}` below
+# picks up what the file set (and falls back to the default otherwise).
+SANDBOX_ENV_FILE="${SANDBOX_ENV_FILE:-/var/lib/roadtrip-sandboxes/sandbox.env}"
+if [[ -f "${SANDBOX_ENV_FILE}" ]]; then
+    # shellcheck disable=SC1090
+    source "${SANDBOX_ENV_FILE}"
+fi
+
 # ── Tunables ──────────────────────────────────────────────────────────────────
 # All host-specific values live here so the script can be re-targeted without
 # touching the pipeline steps below.
