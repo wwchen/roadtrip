@@ -56,19 +56,25 @@ _cf_enabled() {
 
 # ── Internal: authenticated curl against the CF API. ─────────────────────────
 # Usage: _cf_api <method> <path> [json-body]
-# Echoes the raw JSON response; returns curl's exit status.  The token is read
-# per-call from the file and never placed in the process args or logged.
+# Echoes the raw JSON response; returns curl's exit status.
+#
+# The bearer token is passed via `curl --config -` (a config file read from
+# stdin), NOT `-H "Authorization: Bearer <token>"`: a header on the command line
+# puts the token in the process's argv, where any local `ps`/`/proc` reader sees
+# it for the life of the request.  With --config, argv contains only "--config"
+# and "-"; the header (and token) arrive on stdin, which is not world-readable.
 _cf_api() {
     local method="$1" path="$2" body="${3:-}"
     local token; token="$(cat "${CF_API_TOKEN_FILE}")"
+    # curl config syntax: one option per line; header value quoted.
+    local config
+    config="header = \"Authorization: Bearer ${token}\""
     if [[ -n "${body}" ]]; then
-        curl -sS -X "${method}" "${CF_API_BASE}${path}" \
-            -H "Authorization: Bearer ${token}" \
-            -H "Content-Type: application/json" \
-            --data "${body}"
+        printf '%s\nheader = "Content-Type: application/json"\n' "${config}" \
+            | curl -sS -X "${method}" "${CF_API_BASE}${path}" --config - --data "${body}"
     else
-        curl -sS -X "${method}" "${CF_API_BASE}${path}" \
-            -H "Authorization: Bearer ${token}"
+        printf '%s\n' "${config}" \
+            | curl -sS -X "${method}" "${CF_API_BASE}${path}" --config -
     fi
 }
 
@@ -115,10 +121,13 @@ _cf_access_app_id() {
 }
 
 # ── Internal: Access include[] array from IdP ids + emails. ──────────────────
-# With neither set, defaults to [{"everyone": {}}] — in Cloudflare Access that
-# means "anyone who AUTHENTICATES via a configured IdP" (Google/GitHub here),
-# NOT anonymous access.  So the host is always login-gated; CF_ACCESS_* only
-# NARROWS it to specific IdPs/emails.
+# Returns [] when NEITHER selector is set — the caller treats that as a hard
+# error and refuses to provision (fail closed).  We deliberately do NOT fall
+# back to {"everyone": {}}: in a Cloudflare Access *allow* policy "Everyone"
+# admits anyone who can authenticate to ANY configured IdP (i.e. any Google or
+# GitHub account), which Cloudflare documents as a common misconfiguration —
+# and here it would expose a backend running as an unauthenticated seed admin.
+# A restrictive selector (CF_ACCESS_IDP_IDS and/or CF_ACCESS_EMAILS) is required.
 _cf_access_includes() {
     python3 - "$@" <<'PY'
 import sys, json
@@ -126,8 +135,6 @@ idps = [x for x in sys.argv[1].split(',') if x]
 emails = [x for x in sys.argv[2].split(',') if x] if len(sys.argv) > 2 else []
 inc = [{"login_method": {"id": i}} for i in idps]
 inc += [{"email": {"email": e}} for e in emails]
-if not inc:
-    inc = [{"everyone": {}}]  # authenticated via any configured IdP
 print(json.dumps(inc))
 PY
 }
@@ -159,8 +166,14 @@ cf_sandbox_up() {
     if [[ -n "${app_id}" ]]; then
         echo "==> cf: Access app for ${fqdn} exists (${app_id}); reusing"
     else
-        # Always non-empty: falls back to {"everyone":{}} (auth-gated via any IdP).
+        # Fail closed: without a restrictive selector we refuse to provision,
+        # so the host never becomes publicly reachable ungated (DNS is created
+        # after this, so returning here means no public exposure).
         local includes; includes="$(_cf_access_includes "${CF_ACCESS_IDP_IDS:-}" "${CF_ACCESS_EMAILS:-}")"
+        if [[ "${includes}" == "[]" ]]; then
+            echo "cf: no Access selector (set CF_ACCESS_IDP_IDS and/or CF_ACCESS_EMAILS in ${CF_SANDBOX_CONFIG_FILE}); refusing to expose ${fqdn} with an open 'everyone' policy" >&2
+            return 1
+        fi
         echo "==> cf: creating Access app for ${fqdn}"
         local app_body
         app_body="$(python3 - "${fqdn}" "${includes}" <<'PY'
