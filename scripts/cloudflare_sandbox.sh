@@ -1,48 +1,47 @@
 #!/usr/bin/env bash
-# cloudflare_sandbox.sh — per-sandbox Cloudflare DNS + Access provisioning.
+# cloudflare_sandbox.sh — per-sandbox Cloudflare DNS provisioning.
 #
 # Sourced by deploy.sh (on up) and sandbox_down.sh (on down).  NOT executable on
 # its own.  Provides two entrypoints:
 #
-#   cf_sandbox_up   <fqdn>   — create the proxied CNAME + a Cloudflare Access app
-#                              gating <fqdn> behind the configured IdP.
-#   cf_sandbox_down <fqdn>   — delete both (idempotent; missing = success).
+#   cf_sandbox_up   <fqdn>   — create/refresh the proxied CNAME for <fqdn>.
+#   cf_sandbox_down <fqdn>   — delete it (idempotent; missing = success).
 #
 # Design (see docs/sandbox-deploys.md):
-#   * DNS is the gate that decides which hostnames reach the tunnel.  We create
-#     ONE explicit proxied CNAME per sandbox (roadtrip-sb-<name>.<zone> →
+#   * DNS is the only per-sandbox Cloudflare resource these scripts manage.  We
+#     create ONE explicit proxied CNAME per sandbox (roadtrip-sb-<name>.<zone> →
 #     <tunnel-id>.cfargotunnel.com).  No wildcard DNS exists, so only sandboxes
 #     we made (plus explicit prod records) resolve to the tunnel.
-#   * The tunnel's ingress rule (*.<zone> → caddy:80) is configured ONCE by hand
-#     (not here) — this library never mutates the production tunnel config, so a
-#     sandbox op can never break roadtrip.floo.ca.
-#   * Access: sandboxes disable app auth (ROADTRIP_SANDBOX_ASSUME_USER=true) and
-#     resolve every request to a seeded ADMIN user, so a public host would be
-#     open admin.  Each sandbox host gets a self-hosted Access application whose
-#     policy allows the configured IdP identities only.
+#   * The tunnel ingress rule (*.<zone> → caddy:80) is configured ONCE by hand,
+#     as is the Cloudflare Access application that gates roadtrip-sb-*.<zone>
+#     behind the identity providers.  Neither is touched here — a static,
+#     human-set Access policy can't be misconfigured open by automation, and a
+#     sandbox op can never mutate (or break) the production tunnel.  See the
+#     "First-time host setup" checklist in the docs.
+#
+# Because Access is a static wildcard app covering roadtrip-sb-*.<zone>, a new
+# sandbox is gated the instant its DNS resolves — there is no window where the
+# host is reachable ungated.
 #
 # All Cloudflare interaction is gated on CF_API_TOKEN_FILE being readable.  When
 # it is absent (local dev, CI, SSH-less hosts) every function is a logged no-op,
-# so the sandbox still comes up host-locally without exposure.
+# so the sandbox still comes up host-locally without public exposure.
 #
-# Required config (env vars; sane failures if unset while the token IS present):
+# Config (env vars; sane failures if unset while the token IS present):
 #   CF_API_TOKEN_FILE   Path to a file containing the API token (default below).
-#   CF_ACCOUNT_ID       Cloudflare account id (resolved from the zone if unset).
+#                       Needs only Zone:DNS:Edit for the zone.
 #   CF_ZONE_NAME        DNS zone (defaults to SANDBOX_TUNNEL_ZONE).
 #   CF_TUNNEL_ID        Main tunnel id; CNAME target is <id>.cfargotunnel.com.
-#   CF_ACCESS_IDP_IDS   Comma-separated Access identity-provider ids to allow.
-#   CF_ACCESS_EMAILS    Optional comma-separated allowed emails (extra include).
 #
 # curl + python3 are required on the host (already used elsewhere in deploy.sh).
 
 CF_API_TOKEN_FILE="${CF_API_TOKEN_FILE:-/var/lib/roadtrip-sandboxes/cloudflare_api_token}"
 CF_API_BASE="${CF_API_BASE:-https://api.cloudflare.com/client/v4}"
 
-# Host config file: CF_TUNNEL_ID / CF_ACCESS_IDP_IDS / CF_ACCESS_EMAILS /
-# CF_ACCOUNT_ID live here (not in git — host-specific).  The GitHub workflow
-# invokes these scripts over SSH with no per-run CF env, so persistent host
-# config must come from a file.  Sourced if present; env vars still win because
-# the `:-` defaults below only apply when unset.
+# Host config file: CF_TUNNEL_ID / CF_ZONE_NAME live here (not in git —
+# host-specific).  The GitHub workflow invokes these scripts over SSH with no
+# per-run CF env, so persistent host config must come from a file.  Sourced if
+# present; env vars still win because the `:-` defaults only apply when unset.
 CF_SANDBOX_CONFIG_FILE="${CF_SANDBOX_CONFIG_FILE:-/var/lib/roadtrip-sandboxes/cloudflare.env}"
 if [[ -f "${CF_SANDBOX_CONFIG_FILE}" ]]; then
     # shellcheck disable=SC1090
@@ -62,11 +61,10 @@ _cf_enabled() {
 # stdin), NOT `-H "Authorization: Bearer <token>"`: a header on the command line
 # puts the token in the process's argv, where any local `ps`/`/proc` reader sees
 # it for the life of the request.  With --config, argv contains only "--config"
-# and "-"; the header (and token) arrive on stdin, which is not world-readable.
+# and "-"; the header (and token) arrive on stdin.
 _cf_api() {
     local method="$1" path="$2" body="${3:-}"
     local token; token="$(cat "${CF_API_TOKEN_FILE}")"
-    # curl config syntax: one option per line; header value quoted.
     local config
     config="header = \"Authorization: Bearer ${token}\""
     if [[ -n "${body}" ]]; then
@@ -84,7 +82,7 @@ _cf_json() {
     python3 -c "import sys,json; d=json.load(sys.stdin); print(${1})" 2>/dev/null
 }
 
-# ── Internal: resolve + cache zone id (and account id if unset). ─────────────
+# ── Internal: resolve + cache zone id. ───────────────────────────────────────
 _cf_resolve_zone() {
     local zone="${CF_ZONE_NAME:-${SANDBOX_TUNNEL_ZONE}}"
     if [[ -z "${zone}" ]]; then
@@ -97,9 +95,6 @@ _cf_resolve_zone() {
         echo "cf: could not resolve zone id for ${zone}" >&2
         return 1
     fi
-    if [[ -z "${CF_ACCOUNT_ID:-}" ]]; then
-        CF_ACCOUNT_ID="$(printf '%s' "${resp}" | _cf_json "d['result'][0]['account']['id']")"
-    fi
     return 0
 }
 
@@ -110,97 +105,20 @@ _cf_dns_record_id() {
         | _cf_json "(d['result'][0]['id'] if d.get('result') else '')"
 }
 
-# ── Internal: find an Access app id by exact domain (empty if none). ─────────
-# Uses the server-side ?domain= filter so this stays correct past the 1000-app
-# default page size (a client-side scan of an unpaginated list would silently
-# miss apps beyond page 1).
-_cf_access_app_id() {
-    local fqdn="$1"
-    _cf_api GET "/accounts/${CF_ACCOUNT_ID}/access/apps?domain=${fqdn}" \
-        | _cf_json "next((a['id'] for a in d.get('result',[]) if a.get('domain')=='${fqdn}'), '')"
-}
-
-# ── Internal: Access include[] array from IdP ids + emails. ──────────────────
-# Returns [] when NEITHER selector is set — the caller treats that as a hard
-# error and refuses to provision (fail closed).  We deliberately do NOT fall
-# back to {"everyone": {}}: in a Cloudflare Access *allow* policy "Everyone"
-# admits anyone who can authenticate to ANY configured IdP (i.e. any Google or
-# GitHub account), which Cloudflare documents as a common misconfiguration —
-# and here it would expose a backend running as an unauthenticated seed admin.
-# A restrictive selector (CF_ACCESS_IDP_IDS and/or CF_ACCESS_EMAILS) is required.
-_cf_access_includes() {
-    python3 - "$@" <<'PY'
-import sys, json
-idps = [x for x in sys.argv[1].split(',') if x]
-emails = [x for x in sys.argv[2].split(',') if x] if len(sys.argv) > 2 else []
-inc = [{"login_method": {"id": i}} for i in idps]
-inc += [{"email": {"email": e}} for e in emails]
-print(json.dumps(inc))
-PY
-}
-
-# ── Public: provision DNS + Access for a sandbox host. ───────────────────────
+# ── Public: create/refresh the proxied CNAME for a sandbox host. ─────────────
 cf_sandbox_up() {
     local fqdn="$1"
     if ! _cf_enabled; then
-        echo "==> cf: token absent (${CF_API_TOKEN_FILE}); skipping DNS/Access for ${fqdn}"
+        echo "==> cf: token absent (${CF_API_TOKEN_FILE}); skipping DNS for ${fqdn}"
         return 0
     fi
     _cf_resolve_zone || return 1
-
     if [[ -z "${CF_TUNNEL_ID:-}" ]]; then
         echo "cf: CF_TUNNEL_ID unset — cannot point ${fqdn} at the tunnel" >&2
         return 1
     fi
     local target="${CF_TUNNEL_ID}.cfargotunnel.com"
 
-    # ── ORDER MATTERS (security): create the Access gate BEFORE the DNS record.
-    # DNS is what makes the host publicly reach caddy→backend, and the sandbox
-    # backend runs as an unauthenticated ADMIN.  If DNS existed before Access,
-    # any failure in between would leave a publicly-reachable admin instance.
-    # So: Access app first; only once it exists do we point DNS at the tunnel.
-
-    # ── Access application + policy ──────────────────────────────────────────
-    # Idempotent: reuse an app already covering this exact domain.
-    local app_id; app_id="$(_cf_access_app_id "${fqdn}")"
-    if [[ -n "${app_id}" ]]; then
-        echo "==> cf: Access app for ${fqdn} exists (${app_id}); reusing"
-    else
-        # Fail closed: without a restrictive selector we refuse to provision,
-        # so the host never becomes publicly reachable ungated (DNS is created
-        # after this, so returning here means no public exposure).
-        local includes; includes="$(_cf_access_includes "${CF_ACCESS_IDP_IDS:-}" "${CF_ACCESS_EMAILS:-}")"
-        if [[ "${includes}" == "[]" ]]; then
-            echo "cf: no Access selector (set CF_ACCESS_IDP_IDS and/or CF_ACCESS_EMAILS in ${CF_SANDBOX_CONFIG_FILE}); refusing to expose ${fqdn} with an open 'everyone' policy" >&2
-            return 1
-        fi
-        echo "==> cf: creating Access app for ${fqdn}"
-        local app_body
-        app_body="$(python3 - "${fqdn}" "${includes}" <<'PY'
-import sys, json
-fqdn, includes = sys.argv[1], json.loads(sys.argv[2])
-print(json.dumps({
-    "name": f"sandbox {fqdn}",
-    "domain": fqdn,
-    "type": "self_hosted",
-    "session_duration": "24h",
-    "policies": [{
-        "name": "sandbox-allow",
-        "decision": "allow",
-        "include": includes,
-    }],
-}))
-PY
-)"
-        local resp; resp="$(_cf_api POST "/accounts/${CF_ACCOUNT_ID}/access/apps" "${app_body}")"
-        if [[ "$(printf '%s' "${resp}" | _cf_json "d.get('success')")" != "True" ]]; then
-            echo "cf: Access app create failed: $(printf '%s' "${resp}" | _cf_json "d.get('errors')")" >&2
-            return 1
-        fi
-        echo "==> cf: Access app created for ${fqdn}"
-    fi
-
-    # ── DNS CNAME (proxied) — LAST, so the gate always precedes reachability. ─
     local existing; existing="$(_cf_dns_record_id "${fqdn}")"
     local dns_body
     dns_body="$(printf '{"type":"CNAME","name":"%s","content":"%s","proxied":true}' "${fqdn}" "${target}")"
@@ -221,36 +139,24 @@ PY
     return 0
 }
 
-# ── Public: remove DNS + Access for a sandbox host (idempotent). ─────────────
+# ── Public: delete the proxied CNAME for a sandbox host (idempotent). ─────────
 cf_sandbox_down() {
     local fqdn="$1"
     if ! _cf_enabled; then
-        echo "==> cf: token absent; skipping DNS/Access teardown for ${fqdn}"
+        echo "==> cf: token absent; skipping DNS teardown for ${fqdn}"
         return 0
     fi
-    # Best-effort: a transient zone-resolve failure must NOT abort before we
-    # remove the public record — an orphaned DNS + no-op teardown would leave a
-    # reachable admin host.  Track failures and report, but attempt every step.
     if ! _cf_resolve_zone; then
-        echo "cf: could not resolve zone; DNS/Access for ${fqdn} may be orphaned — remove manually" >&2
+        echo "cf: could not resolve zone; DNS for ${fqdn} may be orphaned — remove manually" >&2
         return 1
     fi
-
-    local failed=0
-    # DNS first (kill public reachability before the gate), then the Access app.
     local rec; rec="$(_cf_dns_record_id "${fqdn}")"
     if [[ -n "${rec}" ]]; then
         echo "==> cf: deleting DNS ${fqdn} (${rec})"
         if [[ "$(_cf_api DELETE "/zones/${CF_ZONE_ID}/dns_records/${rec}" | _cf_json "d.get('success')")" != "True" ]]; then
-            echo "cf: DNS delete failed for ${fqdn}" >&2; failed=1
+            echo "cf: DNS delete failed for ${fqdn}" >&2
+            return 1
         fi
     fi
-    local app_id; app_id="$(_cf_access_app_id "${fqdn}")"
-    if [[ -n "${app_id}" ]]; then
-        echo "==> cf: deleting Access app ${app_id} (${fqdn})"
-        if [[ "$(_cf_api DELETE "/accounts/${CF_ACCOUNT_ID}/access/apps/${app_id}" | _cf_json "d.get('success')")" != "True" ]]; then
-            echo "cf: Access app delete failed for ${fqdn}" >&2; failed=1
-        fi
-    fi
-    return "${failed}"
+    return 0
 }

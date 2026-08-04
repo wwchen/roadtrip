@@ -30,11 +30,15 @@ per-sandbox by `scripts/cloudflare_sandbox.sh` except where noted:
 - **Caddy** — filters to the `roadtrip-sb-<name>` vhost and reverse-proxies to
   the backend.
 - **Access** — because sandboxes disable app auth and resolve every request to
-  a seeded **admin** user (below), each host sits behind a Cloudflare Access
-  self-hosted application whose policy is `include: everyone` — meaning anyone
-  who **authenticates** via a configured IdP (Google or GitHub), not anonymous
-  access. Created on up, deleted on down. An unauthenticated request gets a 302
-  to the Access login, never the backend.
+  a seeded **admin** user (below), the hosts sit behind Cloudflare Access. This
+  is a **single static, human-configured** self-hosted application whose domain
+  is the wildcard `roadtrip-sb-*.floo.ca` (Access apps accept partial-label
+  wildcards even though DNS/tunnel rules don't). Its policy restricts entry to
+  the chosen identity providers (Google/GitHub). Automation never creates or
+  edits Access apps — a static policy set once by a human can't be misconfigured
+  open by a script, and the wildcard app already covers every sandbox, so a new
+  host is gated the instant its DNS resolves. An unauthenticated request gets a
+  302 to the Access login, never the backend.
 
 TLS: the zone is `floo.ca` (one label under the apex) so the free Cloudflare
 `*.floo.ca` cert covers sandbox hostnames; a deeper zone like
@@ -42,11 +46,11 @@ TLS: the zone is `floo.ca` (one label under the apex) so the free Cloudflare
 cover and would need paid Advanced Certificate Manager.
 
 Host config for the provisioning scripts lives in
-`/var/lib/roadtrip-sandboxes/cloudflare.env` (`CF_TUNNEL_ID`, `CF_ACCOUNT_ID`,
-optional `CF_ACCESS_IDP_IDS`/`CF_ACCESS_EMAILS` to narrow the policy) plus the
-API token file `cloudflare_api_token` (Zone:DNS:Edit + Account:Access:Apps:Edit).
-Without the token file, provisioning is a logged no-op — the sandbox still comes
-up host-locally, just not publicly reachable.
+`/var/lib/roadtrip-sandboxes/cloudflare.env` (`CF_TUNNEL_ID`, and `CF_ZONE_NAME`
+if it differs from the sandbox zone) plus the API token file
+`cloudflare_api_token` — which needs only **`Zone:DNS:Edit`** now that Access is
+static. Without the token file, DNS provisioning is a logged no-op — the sandbox
+still comes up host-locally, just not publicly reachable.
 
 Auth is disabled in every sandbox (no `AUTH_<vendor>_ISSUER` is passed, so the
 active provider's issuer is blank, and `ROADTRIP_SANDBOX_ASSUME_USER=true`).
@@ -275,7 +279,7 @@ sandbox tier off the production box:
 1. Provision the new host with Docker and `docker compose` (v2 plugin). No host `caddy` binary is needed — the proxy is the `caddy` container.
 2. Log in to GHCR on the new host so `docker pull ghcr.io/wwchen/roadtrip/backend:<sha>` succeeds — the same `GHCR_TOKEN` / `GITHUB_TOKEN` already used by the deploy host works.
 3. Bring up the base stack with the `tunnel` profile (`make run env=prod`, or at minimum `docker compose --profile tunnel --profile pois up -d caddy cloudflared`) so the `caddy` container and the `roadtrip-sandbox` network exist.
-4. Route sandboxes through the new host's tunnel: the one-time `*.floo.ca → http://caddy:80` ingress rule, the CF API token + `cloudflare.env` (with that host's tunnel id), and an IdP in Zero Trust. Per-sandbox DNS + Access are then automatic. See First-time host setup.
+4. Route sandboxes through the new host's tunnel: the one-time `*.floo.ca → http://caddy:80` ingress rule, the one-time wildcard Access app for `roadtrip-sb-*.floo.ca`, and the CF API token + `cloudflare.env` (with that host's tunnel id). Per-sandbox DNS is then automatic. See First-time host setup.
 5. Update `SANDBOX_HOST` in `.github/workflows/sandbox.yml` to the new host and add its Tailscale address to `DEPLOY_KNOWN_HOSTS`.
 6. Set the `SANDBOX_*` env vars in the host's environment (or export them before the SSH call) for any non-default values.
 
@@ -287,8 +291,9 @@ Checklist for a host that has not previously run sandboxes:
 
 - [ ] **Base stack up with the `tunnel` profile.** The `caddy` container and the `roadtrip-sandbox` network both come from the base `roadtrip` project. Run `make run env=prod` (or `docker compose --profile tunnel --profile pois up -d caddy cloudflared`) once so they exist before the first `/sandbox`. No host `caddy` install and no `/etc/caddy` setup is required — the container carries `caddy/Caddyfile` and imports the bind-mounted `caddy/sandboxes/`.
 - [ ] **One-time tunnel ingress rule.** On the main `roadtrip` tunnel, add a public-hostname rule subdomain `*` (→ `*.floo.ca`) → `http://caddy:80`, ordered after the explicit `roadtrip.floo.ca` rules and before the `404` catch-all. This is the ONLY tunnel edit; per-sandbox automation never touches it. (Applying via API: `PUT .../cfd_tunnel/<id>/configurations` with the full ingress list — insert the one rule, preserve the rest.)
-- [ ] **CF API token + config.** Place a token (Zone:DNS:Edit + Account:Access:Apps:Edit, scoped to `floo.ca` + the account) at `/var/lib/roadtrip-sandboxes/cloudflare_api_token` (chmod 600), and write `/var/lib/roadtrip-sandboxes/cloudflare.env` with `CF_TUNNEL_ID` (main tunnel) and `CF_ACCOUNT_ID`. Per-sandbox DNS + Access are then created/deleted automatically by the up/down scripts. No wildcard DNS record is needed — each sandbox gets its own explicit CNAME.
-- [ ] **Identity provider.** A Google and/or GitHub IdP configured in Zero Trust → Settings → Authentication (the Access policy defaults to "everyone", i.e. anyone who authenticates via a configured IdP). Narrow with `CF_ACCESS_IDP_IDS`/`CF_ACCESS_EMAILS` in `cloudflare.env` if desired.
+- [ ] **CF API token + config.** Place a token (**`Zone:DNS:Edit`** for `floo.ca` — that's all the scripts need now) at `/var/lib/roadtrip-sandboxes/cloudflare_api_token` (chmod 600), and write `/var/lib/roadtrip-sandboxes/cloudflare.env` with `CF_TUNNEL_ID` (main tunnel). Per-sandbox DNS is then created/deleted automatically. No wildcard DNS record is needed — each sandbox gets its own explicit CNAME.
+- [ ] **One-time Access app.** In Zero Trust → Access → Applications, create ONE self-hosted app with domain `roadtrip-sb-*.floo.ca` and a policy that **allows only your identity providers** (Google/GitHub) — e.g. an Allow policy including your email(s) or a Groups/IdP selector. This one wildcard app gates every sandbox; automation never touches it. NOTE: an app with `allowed_idps` but an empty `policies` array does not admit anyone — you must add at least one Allow policy.
+- [ ] **Identity provider.** A Google and/or GitHub IdP configured in Zero Trust → Settings → Authentication, referenced by the Access app above.
 - [ ] **GHCR login.** Run `docker login ghcr.io` on the host with credentials that can pull from `ghcr.io/wwchen/roadtrip/backend`. A GitHub PAT with `read:packages` scope works; store it so `docker pull` runs unattended (e.g. `~/.docker/config.json`).
 - [ ] **State and snapshot directories.** Create `SANDBOX_STATE_DIR` (`/var/lib/roadtrip-sandboxes` by default) and ensure it is writable by the user running the sandbox scripts.
 - [ ] **Cron entries.** Add the snapshot (nightly) and reaper (hourly) cron entries from the Scheduled jobs section above, pointing to the scripts in the repo checkout.

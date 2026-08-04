@@ -424,12 +424,12 @@ CADDY
         echo "==> reloading Caddy (docker exec ${SANDBOX_CADDY_CONTAINER})"
         docker exec "${SANDBOX_CADDY_CONTAINER}" \
             caddy reload --config "${SANDBOX_CADDY_CONFIG}"
-        # Provision the Cloudflare Access gate THEN public DNS for this host
-        # (cf_sandbox_up enforces that order).  No-op when no CF token is present
-        # (local/CI).  Because the gate is created before DNS, a failure leaves
-        # the host either fully gated or not publicly reachable — never an
-        # ungated public admin instance.
-        cf_sandbox_up "${SANDBOX_FQDN}" || echo "==> warning: Cloudflare provisioning failed; ${SANDBOX_FQDN} may not be publicly reachable"
+        # Provision the per-sandbox public DNS CNAME for this host.  No-op when
+        # no CF token is present (local/CI).  The Cloudflare Access app that
+        # gates roadtrip-sb-*.<zone> is a static, human-configured wildcard app
+        # (see docs) — so the moment this DNS resolves, the host is already
+        # behind Access; there is no ungated window.
+        cf_sandbox_up "${SANDBOX_FQDN}" || echo "==> warning: Cloudflare DNS provisioning failed; ${SANDBOX_FQDN} may not be publicly reachable"
         ;;
     direct)
         # Prod-style ingress: cloudflared routes directly to the backend
