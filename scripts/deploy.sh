@@ -291,8 +291,19 @@ else
         up -d
 fi
 
-# ── Wait for postgres to be healthy ──────────────────────────────────────────
-echo "==> waiting for postgres to be healthy"
+# ── Wait for postgres init to COMPLETE, then be healthy ──────────────────────
+# The postgres image's entrypoint runs /docker-entrypoint-initdb.d scripts
+# against a TEMPORARY internal server, then fast-shuts-it-down and restarts as
+# the real server.  `pg_isready` passes against that temp server, so a restore
+# started on `pg_isready` alone races the restart and dies mid-COPY with
+# "server closed the connection unexpectedly".  On a fresh volume we therefore
+# first wait for the entrypoint's one-shot marker "PostgreSQL init process
+# complete; ready for start up." (printed only as the temp server hands off),
+# and only then poll pg_isready.  On a re-up (volume already initialized) the
+# entrypoint skips init and never prints the marker, so we don't require it.
+_postgres_log() {
+    docker compose -p "${COMPOSE_PROJECT}" -f "${COMPOSE_FILE}" logs postgres 2>/dev/null
+}
 _postgres_healthy() {
     docker compose \
         -p "${COMPOSE_PROJECT}" \
@@ -302,6 +313,25 @@ _postgres_healthy() {
         >/dev/null 2>&1
 }
 
+echo "==> waiting for postgres init to complete"
+PG_WAIT=0
+while :; do
+    logs="$(_postgres_log)"
+    # Init done (fresh volume) OR init was skipped (re-up: data dir already
+    # populated, entrypoint logs "Skipping initialization").
+    if grep -q "init process complete" <<<"${logs}" \
+        || grep -q "Skipping initialization" <<<"${logs}"; then
+        break
+    fi
+    PG_WAIT=$(( PG_WAIT + 1 ))
+    if [[ ${PG_WAIT} -ge ${POSTGRES_HEALTH_RETRIES} ]]; then
+        echo "error: postgres init did not complete after ${POSTGRES_HEALTH_RETRIES}s" >&2
+        exit 1
+    fi
+    sleep 1
+done
+
+echo "==> waiting for postgres to accept connections"
 PG_WAIT=0
 while ! _postgres_healthy; do
     PG_WAIT=$(( PG_WAIT + 1 ))
