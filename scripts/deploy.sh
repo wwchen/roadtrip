@@ -191,6 +191,11 @@ echo "==> ${DEPLOY_ENV}: ${SANDBOX_NAME}  (project: ${COMPOSE_PROJECT})"
 # use REF as the image tag directly (assumes CI tagged it as the branch name).
 SANDBOX_SHA="${SANDBOX_SHA:-${REF}}"
 SANDBOX_BRANCH="${SANDBOX_BRANCH:-${REF}}"
+# The commit under review (what /api/build-info reports).  Distinct from
+# SANDBOX_SHA, which is the IMAGE tag to pull and may be an ancestor when the
+# PR head has no built image (scripts/docs/frontend PR).  Defaults to the image
+# SHA so callers that don't set it keep the old behaviour.
+SANDBOX_BUILD_SHA="${SANDBOX_BUILD_SHA:-${SANDBOX_SHA}}"
 
 # ── Allocate a free host-local port ──────────────────────────────────────────
 _port_in_use() {
@@ -222,6 +227,7 @@ echo "==> allocated port ${SANDBOX_PORT}"
 
 # ── Export vars consumed by docker-compose.sandbox.yml ───────────────────────
 export SANDBOX_SHA
+export SANDBOX_BUILD_SHA
 export SANDBOX_BRANCH
 export SANDBOX_PORT
 export SANDBOX_DB_PASSWORD

@@ -292,6 +292,7 @@ jobs:
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           HEAD_REF: ${{ steps.pr.outputs.head_ref }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          REPO: ${{ github.repository }}
         run: |
           # Validate runner-controlled values before use.
           if ! printf '%s' "$HEAD_SHA" | grep -qE '^[0-9a-f]{40}$'; then
@@ -336,7 +337,11 @@ jobs:
           if [ "$image_sha" != "$head_sha" ]; then
             echo "==> no image for head $head_sha; using ancestor image $image_sha (backend jar only; PR code is checked out)"
           fi
-          SANDBOX_SHA="$image_sha" SANDBOX_BRANCH="$head_ref" scripts/sandbox_up.sh "$pr_number"
+          # SANDBOX_SHA = which image to PULL (may be an ancestor).
+          # SANDBOX_BUILD_SHA = the commit under review (PR head) — what
+          # /api/build-info reports, so the banner shows the PR's SHA, not the
+          # ancestor whose jar happens to be running.
+          SANDBOX_SHA="$image_sha" SANDBOX_BUILD_SHA="$head_sha" SANDBOX_BRANCH="$head_ref" scripts/sandbox_up.sh "$pr_number"
           REMOTE
 
       - name: Run on host (stop)
