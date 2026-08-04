@@ -205,10 +205,21 @@ export SANDBOX_NAME
 # up before (or without) that project on a given host.  `docker network create`
 # is not idempotent, so guard it — the sandbox compose attaches to it as
 # external and would fail hard if it were missing.
+#
+# The `com.docker.compose.network` label is REQUIRED: if this fallback creates a
+# bare (unlabeled) network and the base `roadtrip` project is later brought up,
+# `docker compose up` aborts with "network roadtrip-sandbox was found but has
+# incorrect label" — breaking prod deploys.  Creating it with the label Compose
+# expects lets the base project adopt it cleanly.  (Verified against Compose
+# 5.3.1.)  Note this is only reachable if the base stack — and thus the caddy
+# container — is down, in which case the sandbox won't route until it's up; the
+# guard just avoids a cryptic external-network-missing error in that window.
 if [[ "${ROUTING}" == "caddy-vhost" ]]; then
     if ! docker network inspect "${SANDBOX_NETWORK}" >/dev/null 2>&1; then
         echo "==> creating shared proxy network: ${SANDBOX_NETWORK}"
-        docker network create "${SANDBOX_NETWORK}" >/dev/null
+        docker network create \
+            --label "com.docker.compose.network=${SANDBOX_NETWORK}" \
+            "${SANDBOX_NETWORK}" >/dev/null
     fi
 fi
 
