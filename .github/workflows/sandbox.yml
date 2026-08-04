@@ -100,20 +100,17 @@ jobs:
                     `- \`/sandbox stop\` — tear down the sandbox`,
             });
 
-      # ── 3. Wait for GHCR image ────────────────────────────────────────────────
-      # task-C1 pushes ghcr.io/<repo>/backend:<sha> on every branch build.
-      # Poll the GHCR API (no docker login required to check existence) until
-      # the image is present, then fail loudly with a PR comment if it never
-      # appears within the timeout.
+      # ── 3. Wait (opportunistically) for the head-SHA GHCR image ──────────────
+      # CI publishes ghcr.io/<repo>/backend:<sha> ONLY when a PR changes
+      # docker-relevant paths (ci.yml `docker` filter); a scripts/docs/frontend
+      # PR produces no image for its head SHA.  So this step no longer hard-fails
+      # on absence: it polls briefly to let an in-progress build land (giving the
+      # exact image when there is one), then proceeds regardless.  The host step
+      # resolves the actual image to run — head SHA if present, else the newest
+      # ancestor that has an image — so a code-less PR still gets a sandbox.
       #
-      # Approach: use the GHCR OCI distribution API
-      #   GET https://ghcr.io/v2/<repo>/backend/manifests/<sha>
-      # with a bearer token obtained from the GitHub token exchange endpoint.
-      # A 200 or 404/401 (after auth) is definitive; we retry on network errors.
-      #
-      # Alternative considered: `docker buildx imagetools inspect` after
-      # `docker login ghcr.io`.  That works too but requires an extra docker
-      # setup step; the HTTP approach is lighter and doesn't require daemon state.
+      # Uses the GHCR OCI distribution API (GET .../manifests/<sha>) with a
+      # bearer from the token exchange; no docker login needed for the check.
       - name: Wait for GHCR image
         if: steps.cmd.outputs.action == 'up'
         env:
@@ -123,39 +120,41 @@ jobs:
         run: |
           set -euo pipefail
           image_ref="ghcr.io/${REPO}/backend:${HEAD_SHA}"
-          echo "Waiting for image: ${image_ref}"
+          echo "Polling briefly for head-SHA image: ${image_ref}"
 
-          # Exchange the GITHUB_TOKEN for a GHCR bearer token.
-          # The scope is repository:pull (read-only manifest check).
           token_url="https://ghcr.io/token?scope=repository:${REPO}/backend:pull&service=ghcr.io"
           bearer="$(curl -fsSL -u "${GITHUB_ACTOR}:${GH_TOKEN}" "$token_url" \
                     | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")"
 
-          MAX_ATTEMPTS=30   # 30 × 20 s = 10 minutes max
+          # Short opportunistic wait (6 × 20 s = 2 min): long enough to catch a
+          # build that's finishing, short enough not to stall a code-less PR.
+          MAX_ATTEMPTS=6
           ATTEMPT=0
-          while true; do
+          while [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]; do
             ATTEMPT=$(( ATTEMPT + 1 ))
             status="$(curl -sL -o /dev/null -w '%{http_code}' \
                        -H "Authorization: Bearer ${bearer}" \
                        "https://ghcr.io/v2/${REPO}/backend/manifests/${HEAD_SHA}")"
             echo "Attempt ${ATTEMPT}/${MAX_ATTEMPTS}: HTTP ${status}"
             if [ "$status" = "200" ]; then
-              echo "Image present: ${image_ref}"
-              break
+              echo "Head-SHA image present: ${image_ref}"
+              exit 0
             fi
-            if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
-              echo "::error::Image ${image_ref} not found after ${MAX_ATTEMPTS} attempts (CI build still running?)"
-              exit 1
-            fi
-            sleep 20
+            [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ] && sleep 20
           done
+          echo "No head-SHA image yet; the host step will fall back to the newest ancestor image."
 
-      # ── 3b. Post "CI not done" comment if image wait fails ───────────────────
-      - name: Post build-not-ready comment
+      # ── 3b. Post a failure comment if the up path errors ─────────────────────
+      # Fires on any failure of the up path (image resolution, host deploy, etc.).
+      # The host step falls back to an ancestor image when the head SHA has none,
+      # so the most likely real failure is a genuine deploy error — point the
+      # reader at the Actions logs rather than blaming an unbuilt image.
+      - name: Post failure comment
         if: failure() && steps.cmd.outputs.action == 'up'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         with:
           script: |
             const sha = process.env.HEAD_SHA;
@@ -164,8 +163,8 @@ jobs:
               repo: context.repo.repo,
               issue_number: context.issue.number,
               body: `> /sandbox\n\n` +
-                    `CI hasn't finished building \`${sha.slice(0,12)}\` yet — ` +
-                    `wait for the \`docker-build\` job to complete, then retry.`,
+                    `Sandbox deploy for \`${sha.slice(0,12)}\` failed. ` +
+                    `See the [workflow run](${process.env.RUN_URL}) for details.`,
             });
 
       # ── 4. Join tailnet ───────────────────────────────────────────────────────
@@ -253,15 +252,39 @@ jobs:
           fi
           # base64-encode the branch name: alnum+/= is safe inside single-quotes.
           HEAD_REF_B64="$(printf '%s' "$HEAD_REF" | base64 -w0)"
-          ssh -o BatchMode=yes "$SANDBOX_HOST" "bash -s -- '$HEAD_SHA' '$HEAD_REF_B64' '$PR_NUMBER'" <<'REMOTE'
+          ssh -o BatchMode=yes "$SANDBOX_HOST" "bash -s -- '$HEAD_SHA' '$HEAD_REF_B64' '$PR_NUMBER' '$REPO'" <<'REMOTE'
           set -euo pipefail
           head_sha="$1"
           head_ref="$(printf '%s' "$2" | base64 -d)"
           pr_number="$3"
+          repo="$4"
           cd ~/workspace/roadtrip
           git fetch --prune origin
           git checkout --detach "$head_sha"
-          SANDBOX_SHA="$head_sha" SANDBOX_BRANCH="$head_ref" scripts/sandbox_up.sh "$pr_number"
+
+          # ── Resolve the backend IMAGE sha (may differ from the code sha) ─────
+          # CI only publishes ghcr.io/<repo>/backend:<sha> when a PR changes
+          # docker-relevant paths (see ci.yml `docker` filter).  A scripts/docs/
+          # frontend-only PR has no image for its head SHA, so fall back to the
+          # newest ANCESTOR commit that does have one — the backend jar isn't
+          # PR-specific for those PRs, and the PR's own static assets/scripts
+          # (checked out above / bind-mounted) are what's under review.
+          # `docker manifest inspect` needs no special API scope; the host is
+          # already logged in to GHCR for pulls.
+          image_sha=""
+          for cand in $(git rev-list --max-count=50 "$head_sha"); do
+            if docker manifest inspect "ghcr.io/${repo}/backend:${cand}" >/dev/null 2>&1; then
+              image_sha="$cand"; break
+            fi
+          done
+          if [ -z "$image_sha" ]; then
+            echo "error: no backend image found for $head_sha or its last 50 ancestors" >&2
+            exit 1
+          fi
+          if [ "$image_sha" != "$head_sha" ]; then
+            echo "==> no image for head $head_sha; using ancestor image $image_sha (backend jar only; PR code is checked out)"
+          fi
+          SANDBOX_SHA="$image_sha" SANDBOX_BRANCH="$head_ref" scripts/sandbox_up.sh "$pr_number"
           REMOTE
 
       - name: Run on host (stop)
