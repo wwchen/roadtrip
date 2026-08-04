@@ -278,6 +278,30 @@ services:
       - TUNNEL_TOKEN_FILE=/run/secrets/cloudflare_tunnel_token
     depends_on:
       - backend
+      - caddy
+
+  # Sandbox reverse proxy — demuxes *.sandbox.roadtrip.floo.ca by Host header
+  # to per-sandbox backend containers (see docs/sandbox-deploys.md).  Runs only
+  # under the `tunnel` profile (deploy host), same as cloudflared: local dev
+  # doesn't serve sandboxes.  Cloudflare's tunnel reaches it at http://caddy:8080
+  # (a Zero Trust public-hostname rule for *.sandbox.roadtrip.floo.ca).  No host
+  # ports are published — pihole owns 80/443 on the deploy host.
+  caddy:
+    profiles: [tunnel]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    logging: *log-rotation
+    hostname: caddy
+    volumes:
+      # Root config + the runtime snippet directory deploy.sh writes into.
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/sandboxes:/etc/caddy/sandboxes:ro
+    # Join the shared sandbox network so `reverse_proxy sb-<name>-backend:8765`
+    # resolves the per-sandbox containers by their network alias.  `caddy` also
+    # stays on the default project network for cloudflared to reach :8080.
+    networks:
+      - default
+      - roadtrip-sandbox
 
 volumes:
   grafana-data:
@@ -285,3 +309,12 @@ volumes:
   tempo-data:
   prometheus-data:
   alloy-data:
+
+# The shared network that the sandbox reverse proxy and every sandbox backend
+# join.  Declared here (owned by the base `roadtrip` project) with an explicit
+# name so docker-compose.sandbox.yml can attach to it as `external: true` — the
+# sandbox Compose projects never create it, they only join it.
+networks:
+  default:
+  roadtrip-sandbox:
+    name: roadtrip-sandbox

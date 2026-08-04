@@ -60,8 +60,16 @@ services:
       retries: 10
 
   # ── Backend ───────────────────────────────────────────────────────────────
-  # Pre-built GHCR image identified by SANDBOX_SHA.  Bound host-local so
-  # Caddy can reverse-proxy it; never exposed on 0.0.0.0.
+  # Pre-built GHCR image identified by SANDBOX_SHA.
+  #
+  # Reached two ways:
+  #   * By the sandbox Caddy over the shared `roadtrip-sandbox` network, via the
+  #     per-sandbox alias `sb-<name>-backend` (this is the request path browsers
+  #     hit through the Cloudflare tunnel).  All sandbox backends are literally
+  #     named `backend`, so the alias — not the service name — is what makes each
+  #     one addressable on the shared network without collision.
+  #   * On 127.0.0.1:${SANDBOX_PORT} on the host, host-loopback only, used by
+  #     deploy.sh's readiness probe and never exposed on 0.0.0.0.
   backend:
     image: ghcr.io/wwchen/roadtrip/backend:${SANDBOX_SHA}
     restart: "no"
@@ -69,6 +77,11 @@ services:
     mem_limit: 4g
     ports:
       - "127.0.0.1:${SANDBOX_PORT}:8765"
+    networks:
+      default: {}
+      roadtrip-sandbox:
+        aliases:
+          - sb-${SANDBOX_NAME}-backend
     environment:
       # compose-local: Docker-network-aware DB URL, /app/static, no prod secrets.
       - ROADTRIP_PROFILE=${SANDBOX_PROFILE:-compose-local}
@@ -117,3 +130,13 @@ volumes:
   # so `roadtrip-sb-pr532_postgres-data` never collides with production's
   # bind-mount at $HOME/.roadtrip-map/postgres.
   postgres-data:
+
+networks:
+  # Per-project default network (postgres lives here only, so no sandbox can
+  # reach another sandbox's database).
+  default:
+  # The shared proxy network, created and owned by the base `roadtrip` project.
+  # `external: true` means this Compose project only joins it — it never
+  # creates or removes it.  sandbox_up.sh ensures it exists before `up`.
+  roadtrip-sandbox:
+    external: true

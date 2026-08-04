@@ -1,0 +1,6 @@
+# Per-sandbox Caddy vhost snippets (sb-<name>.caddy) are written here at
+# runtime by scripts/deploy.sh and removed by scripts/sandbox_down.sh.
+# This directory is bind-mounted into the caddy container at
+# /etc/caddy/sandboxes and imported by caddy/Caddyfile. Kept in git so the
+# mount source exists on a fresh checkout; the generated *.caddy files are
+# gitignored.

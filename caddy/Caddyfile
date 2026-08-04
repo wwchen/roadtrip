@@ -1,0 +1,38 @@
+# Root Caddyfile for the sandbox reverse proxy (see docs/sandbox-deploys.md).
+#
+# This Caddy runs as the `caddy` service in the base `roadtrip` compose project
+# (profile: tunnel) and demuxes `*.sandbox.roadtrip.floo.ca` by Host header to
+# the per-sandbox backend containers.  It does NOT bind host ports 80/443
+# (pihole owns those on the deploy host); Cloudflare's tunnel reaches it in the
+# Docker network at `http://caddy:80`.
+#
+# Per-sandbox vhost snippets are written by scripts/deploy.sh into the
+# bind-mounted directory below (host: ./caddy/sandboxes, container:
+# /etc/caddy/sandboxes) and activated with `docker exec <caddy> caddy reload`.
+# The glob matches nothing until the first sandbox is created — Caddy tolerates
+# an empty match, so the base stack boots fine with zero sandboxes.
+{
+	# Listen on plain HTTP only: TLS is terminated by Cloudflare at the tunnel
+	# edge, so Caddy must not try to provision its own certificates.  Each
+	# imported vhost uses an `http://sb-<name>.<zone>` site address so it binds
+	# :80 (a scheme-less address would bind :443) — :80 is the port Cloudflare's
+	# tunnel must target (http://caddy:80).
+	auto_https off
+	# Admin API on localhost inside the container (Caddy's default). `caddy
+	# reload` run via `docker exec` in this same container talks to it; it is
+	# never exposed outside the container.
+	admin localhost:2019
+}
+
+# Per-sandbox vhosts (sb-<name>.<zone> → reverse_proxy sb-<name>-backend:8765),
+# each binding :80 via its host-specific site address.  Empty until the first
+# sandbox; Caddy tolerates a glob that matches nothing.
+#
+# No bare `:80` catch-all block: a site address of `:80` (no host) matches ALL
+# hosts on the port and, in practice, shadows the host-specific sandbox vhosts
+# (verified — it captured even a matching Host).  Cloudflare only routes real
+# `sb-*.<zone>` hostnames to this proxy, so an unmatched Host never arrives in
+# normal operation; if one does, Caddy's default is a 200 with an empty body,
+# which is harmless.  Keeping only the import is what makes the sandbox vhosts
+# actually win.
+import /etc/caddy/sandboxes/*.caddy
