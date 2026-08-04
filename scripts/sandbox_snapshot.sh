@@ -96,7 +96,11 @@ CLOSURE_SQL="WITH RECURSIVE roots(tbl) AS (
     VALUES ${VALUES_LIST}
 ),
 closure(tbl) AS (
-    SELECT tbl FROM roots
+    -- Cast the anchor column to name so its collation ('C') matches the
+    -- recursive term's c.relname (also type name/'C').  Without the cast the
+    -- roots VALUES literals carry the database default collation and Postgres
+    -- rejects the UNION with a collation-mismatch error.
+    SELECT tbl::name FROM roots
     UNION
     SELECT c.relname
     FROM closure cl
