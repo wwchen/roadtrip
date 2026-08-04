@@ -299,7 +299,9 @@ jobs:
             const zone = process.env.SANDBOX_TUNNEL_ZONE;
             const pr   = process.env.PR_NUMBER;
             const sha  = process.env.HEAD_SHA;
-            const url  = `https://sb-pr${pr}.${zone}`;
+            // Must match deploy.sh's SANDBOX_HOST_PREFIX (roadtrip-sb-) + name
+            // (pr<N>) so the posted URL is the host the Caddy vhost serves.
+            const url  = `https://roadtrip-sb-pr${pr}.${zone}`;
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
