@@ -67,53 +67,20 @@
   #panel label input { margin-right: 6px; vertical-align: middle; accent-color: var(--rt-brand); }
   #panel .count { color: var(--rt-faint); font-size: 11px; }
   #panel .status { color: var(--rt-muted); font-size: 11px; margin-top: 6px; }
-  .cg-agency-host {
-    margin: 0 0 4px 24px;
+  /* Flat, viewport-scoped agency legend: one checkbox row per agency
+     present in the current view, with its count. */
+  .cg-agency-legend {
+    max-height: 220px;
+    overflow-y: auto;
   }
-  .cg-agency-host[hidden] { display: none; }
-  .cg-agency-menu summary {
+  #panel .cg-agency-row {
     display: flex;
     align-items: center;
-    min-height: 22px;
-    color: var(--rt-muted);
-    cursor: pointer;
-    font-size: 11px;
-    line-height: 1.3;
-    list-style: none;
-  }
-  .cg-agency-menu summary::-webkit-details-marker { display: none; }
-  .cg-agency-menu summary::before {
-    content: "›";
-    color: var(--rt-faint);
-    font-size: 13px;
-    margin-right: 5px;
-    transform: rotate(0deg);
-    transition: transform 120ms ease;
-  }
-  .cg-agency-menu[open] summary::before { transform: rotate(90deg); }
-  .cg-agency-options {
-    max-height: 154px;
-    overflow-y: auto;
-    margin: 2px 0 4px 5px;
-    padding-left: 9px;
-    border-left: 1px solid var(--rt-border);
-  }
-  #panel .cg-agency-choice {
-    display: flex;
-    align-items: flex-start;
     gap: 6px;
-    margin: 4px 0;
-    color: var(--rt-muted);
-    font-size: 11px;
+    min-height: 22px;
     line-height: 1.25;
   }
-  #panel .cg-agency-choice input {
-    flex: 0 0 auto;
-    width: 13px;
-    height: 13px;
-    margin: 1px 0 0;
-  }
-  .cg-agency-choice span {
+  .cg-agency-row span:last-child {
     min-width: 0;
     overflow-wrap: anywhere;
   }
@@ -1751,22 +1718,7 @@
     <span id="c-sp"></span>
   </div>
   <div class="section-label">Campgrounds <span id="cg-load-hint" style="text-transform:none; color:var(--rt-hint); letter-spacing:0;">(zoom in to load)</span></div>
-  <div>
-    <label><input type="checkbox" id="f-cg-federal" checked><span class="legend-dot" style="background:var(--rt-layer-cg-federal)"></span>Federal (US) <span class="count" id="c-cg-federal"></span></label>
-    <div class="cg-agency-host" id="cg-agency-federal" hidden></div>
-  </div>
-  <div>
-    <label><input type="checkbox" id="f-cg-state" checked><span class="legend-dot" style="background:var(--rt-layer-cg-state)"></span>State <span class="count" id="c-cg-state"></span></label>
-    <div class="cg-agency-host" id="cg-agency-state" hidden></div>
-  </div>
-  <div>
-    <label><input type="checkbox" id="f-cg-provincial" checked><span class="legend-dot" style="background:var(--rt-layer-cg-provincial); border-color:var(--rt-map-np-stroke);"></span>BC/AB Provincial <span class="count" id="c-cg-provincial"></span></label>
-    <div class="cg-agency-host" id="cg-agency-provincial" hidden></div>
-  </div>
-  <div>
-    <label><input type="checkbox" id="f-cg-local" checked><span class="legend-dot" style="background:var(--rt-layer-cg-local)"></span>Local <span class="count" id="c-cg-local"></span></label>
-    <div class="cg-agency-host" id="cg-agency-local" hidden></div>
-  </div>
+  <div id="cg-agency-legend" class="cg-agency-legend"></div>
   <div class="section-label">Other</div>
   <div><label><input type="checkbox" id="f-pf" checked><span class="legend-dot" style="background:var(--rt-layer-pf)"></span>Planet Fitness <span class="count" id="c-pf"></span></label></div>
   <div class="section-label">Basemap</div>

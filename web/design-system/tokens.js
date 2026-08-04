@@ -36,6 +36,7 @@ const FALLBACKS = {
   '--rt-rating': '#f5a623',
   '--rt-layer-supercharger': '#e82127',
   '--rt-layer-supercharger-pin': '#e31937',
+  '--rt-layer-cg': '#2e7d32',
   '--rt-layer-cg-federal': '#2e7d32',
   '--rt-layer-cg-state': '#558b2f',
   '--rt-layer-cg-provincial': '#2e7d32',
@@ -97,29 +98,11 @@ export function resetTokenCache() {
   cache.clear();
 }
 
-/** Campground jurisdiction → layer color. Keys match the `class` field
- *  on campground features and the legend toggle ids. */
-export const CG_CLASS_TOKEN = {
-  federal: '--rt-layer-cg-federal',
-  provincial: '--rt-layer-cg-provincial',
-  state: '--rt-layer-cg-state',
-  local: '--rt-layer-cg-local',
-  other: '--rt-layer-cg-other',
-};
-
-/** Resolved campground palette, built on demand so it reflects the
- *  active theme rather than whatever was current at import time. */
-export function cgClassColors() {
-  return Object.fromEntries(
-    Object.entries(CG_CLASS_TOKEN).map(([k, t]) => [k, token(t)]),
-  );
-}
-
 /** Search-result kind → pin color. */
 export const KIND_TOKEN = {
   PLACE: '--rt-kind-place',
   ADDR: '--rt-kind-address',
-  CG: '--rt-layer-cg-federal',
+  CG: '--rt-layer-cg',
   SC: '--rt-layer-supercharger',
   NP: '--rt-layer-np',
   SP: '--rt-layer-sp',

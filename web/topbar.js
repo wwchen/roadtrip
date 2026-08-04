@@ -17,7 +17,7 @@
 
 import { state, distanceKm, formatDistance, flattenHydratedPoi, geomCenter, zoomForBbox } from './core.js';
 import { fitAndSelect } from './search.js';
-import { campgroundFeaturePassesFilter, campgroundLayerCategory, onCampgroundFilterChange, synthesizeClick } from './layers.js';
+import { applyCGFilter, campgroundFeaturePassesFilter, featureAgency, notifyCampgroundFilterChanged, onCampgroundFilterChange, renderCampgroundLegend, setAgencyHidden, synthesizeClick } from './layers.js';
 import { openCampgroundDrawer } from './drawer/campground.js';
 import { openParkDrawer } from './drawer/park.js';
 import { openPlanetFitnessDrawer } from './drawer/planet-fitness.js';
@@ -944,8 +944,9 @@ function pickResult(result) {
   if (trip.mode === 'directions' && allStopsFilled()) tryFetchRoute();
 }
 
+// Campgrounds have no on/off toggle — the cg layer is always visible and
+// filtered by agency — so CG is absent here; backend CG hits open by id.
 const BACKEND_POI_TOGGLES = {
-  CG: 'f-cg-federal',
   NP: 'f-np',
   SP: 'f-sp',
   PF: 'f-pf',
@@ -1014,11 +1015,18 @@ function openBackendPoiDrawer(result) {
 }
 
 function enablePoiToggle(category, feature) {
-  let id = null;
   if (category === 'campground') {
-    const cat = campgroundLayerCategory(feature?.properties?.subcategory || feature?.properties?.category);
-    id = `f-cg-${cat === 'other' ? 'federal' : cat}`;
-  } else if (category === 'national-park') id = 'f-np';
+    // Campgrounds filter by agency now; make sure this feature's agency is
+    // shown, then re-render the legend + re-apply the map filter. Notify so
+    // the trip-results list re-filters to include the now-visible agency.
+    setAgencyHidden(featureAgency(feature), false);
+    applyCGFilter();
+    renderCampgroundLegend();
+    notifyCampgroundFilterChanged();
+    return;
+  }
+  let id = null;
+  if (category === 'national-park') id = 'f-np';
   else if (category === 'state-park') id = 'f-sp';
   else if (category === 'planet_fitness_location' || category === 'planet-fitness') id = 'f-pf';
   else if (category === 'tesla_supercharger' || category === 'supercharger') id = 'f-open';
@@ -1725,13 +1733,7 @@ function hideStatus() {
 
 // --- trip results (campground cards) ----------------------------------
 
-const CG_DOT_TOKEN = {
-  federal: '--rt-layer-cg-federal',
-  provincial: '--rt-layer-cg-provincial',
-  state: '--rt-layer-cg-state',
-  local: '--rt-layer-cg-local',
-  other: '--rt-layer-cg-unclassified',
-};
+const CG_DOT_TOKEN = '--rt-layer-cg';
 
 const tripResults = {
   cards: [],     // [{ id, name, sub, lng, lat, category, routeKm, distKm, rating, sites, season, feature }]
@@ -1818,13 +1820,12 @@ function setTripPois(cgFeatures) {
     const [lng, lat] = f.geometry?.coordinates || [];
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
     const p = f.properties || {};
-    const subcat = campgroundLayerCategory(p.subcategory || p.category);
     const card = {
       id,
       name: 'Campground',
       sub: '',
       location: '',
-      category: subcat,
+      category: 'campground',
       sites: null,
       season: null,
       reservable: undefined,
@@ -1968,7 +1969,7 @@ function renderResults() {
   }
   let body = '';
   for (const c of cards) {
-    const color = token(CG_DOT_TOKEN[c.category] || CG_DOT_TOKEN.other);
+    const color = token(CG_DOT_TOKEN);
     const ratingHtml = c.rating
       ? `<span class="tb-card-rating">★ ${c.rating[0].toFixed(1)}</span>`
       : '';
@@ -2008,15 +2009,9 @@ function renderResults() {
       const id = node.dataset.id;
       const card = tripResults.byId.get(id) || tripResults.byId.get(Number(id));
       if (!card) return;
-      // Make sure the federal/state/local toggle for this campground is on,
-      // then fly to the pin and synthesize a click so the existing drawer
-      // path takes over (handles availability fetch + pin reselect logic).
-      const cat = card.category === 'other' ? 'federal' : card.category;
-      const toggle = document.getElementById(`f-cg-${cat}`);
-      if (toggle && !toggle.checked) {
-        toggle.checked = true;
-        toggle.dispatchEvent(new Event('change'));
-      }
+      // Only cards whose agency passes the filter are rendered (visibleCards),
+      // so the pin is already visible — just fly to it and synthesize a click
+      // so the existing drawer path takes over (availability fetch + reselect).
       // suppressPinClick prevents bindPinClicks() from overwriting the
       // destination input with this campground's name when synthesizeClick
       // dispatches the synthetic map-click event.

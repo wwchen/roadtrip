@@ -286,42 +286,27 @@ class SmokeTest {
             page.evaluate(
                 "() => { globalThis.__rtMap.jumpTo({ center: [-123.02, 49.02], zoom: 10 }); return true; }",
             )
+            // Flat legend: one checkbox per agency present in the viewport.
             page.waitForFunction(
-                "() => document.querySelectorAll('#cg-agency-federal input[data-cg-agency]').length >= 2",
+                "() => document.querySelectorAll('#cg-agency-legend input[data-cg-agency]').length >= 3",
                 null,
                 Page.WaitForFunctionOptions().setTimeout(15_000.0),
             )
 
-            assertThat(page.locator("#cg-agency-federal summary")).containsText("All agencies")
-            assertTrue(
-                page.locator("#cg-agency-federal details").evaluate("el => el.open") as Boolean,
-            )
-            assertEquals(0, page.locator("""#cg-agency-federal input[data-cg-agency-all]""").count())
-            val allFederal = page.locator("#f-cg-federal")
-            val npsAgency = page.locator("""#cg-agency-federal input[data-cg-agency][value="National Park Service"]""")
-            val forestServiceAgency =
-                page.locator("""#cg-agency-federal input[data-cg-agency][value="US Forest Service"]""")
-            assertTrue(allFederal.isChecked())
-            assertFalse(allFederal.evaluate("el => el.indeterminate") as Boolean)
-            assertTrue(npsAgency.isChecked())
-            assertTrue(forestServiceAgency.isChecked())
+            val nps = page.locator("""#cg-agency-legend input[data-cg-agency="National Park Service"]""")
+            val forestService =
+                page.locator("""#cg-agency-legend input[data-cg-agency="US Forest Service"]""")
+            val stateParks = page.locator("""#cg-agency-legend input[data-cg-agency="WA State Parks"]""")
+            // Every agency present defaults to shown (checked).
+            assertTrue(nps.isChecked())
+            assertTrue(forestService.isChecked())
+            assertTrue(stateParks.isChecked())
 
-            allFederal.uncheck()
-            assertFalse(npsAgency.isChecked())
-            assertFalse(forestServiceAgency.isChecked())
-            assertThat(page.locator("#cg-agency-federal summary")).containsText("No agencies")
-
-            allFederal.check()
-            assertTrue(npsAgency.isChecked())
-            assertTrue(forestServiceAgency.isChecked())
-            assertThat(page.locator("#cg-agency-federal summary")).containsText("All agencies")
-
-            forestServiceAgency.uncheck()
-            assertFalse(allFederal.isChecked())
-            assertTrue(allFederal.evaluate("el => el.indeterminate") as Boolean)
-            assertTrue(npsAgency.isChecked())
-            assertFalse(forestServiceAgency.isChecked())
-
+            // Un-checking one agency hides only its pins from the map.
+            forestService.uncheck()
+            assertFalse(forestService.isChecked())
+            assertTrue(nps.isChecked())
+            assertTrue(stateParks.isChecked())
             page.waitForFunction(
                 """
                 () => {
@@ -330,18 +315,18 @@ class SmokeTest {
                   if (!map || !canvas || !map.getLayer('cg-points')) return false;
                   const agencies = map
                     .queryRenderedFeatures([[0, 0], [canvas.width, canvas.height]], { layers: ['cg-points'] })
-                    .filter(f => f.properties.category === 'federal')
                     .map(f => f.properties.agency)
                     .filter(Boolean)
                     .sort();
-                  return JSON.stringify(agencies) === JSON.stringify(['National Park Service']);
+                  return JSON.stringify(agencies) === JSON.stringify(['National Park Service', 'WA State Parks']);
                 }
                 """.trimIndent(),
                 null,
                 Page.WaitForFunctionOptions().setTimeout(5_000.0),
             )
-            assertThat(page.locator("#cg-agency-federal summary")).containsText("National Park Service")
 
+            // The un-check persists across a re-render (route-scoped repaint),
+            // even though the agency is still present in the data.
             page.evaluate(
                 """
                 () => {
@@ -350,11 +335,13 @@ class SmokeTest {
                       type: 'Feature',
                       id: 8101,
                       geometry: { type: 'Point', coordinates: [-123.00, 49.00] },
-                      properties: {
-                        category: 'campground',
-                        subcategory: 'federal',
-                        agency: 'National Park Service'
-                      }
+                      properties: { category: 'campground', agency: 'National Park Service' }
+                    },
+                    {
+                      type: 'Feature',
+                      id: 8102,
+                      geometry: { type: 'Point', coordinates: [-123.02, 49.02] },
+                      properties: { category: 'campground', agency: 'US Forest Service' }
                     }
                   ]);
                   return true;
@@ -362,55 +349,33 @@ class SmokeTest {
                 """.trimIndent(),
             )
             page.waitForFunction(
-                "() => document.querySelectorAll('#cg-agency-federal input[data-cg-agency]').length >= 2",
+                "() => document.querySelectorAll('#cg-agency-legend input[data-cg-agency]').length >= 2",
                 null,
                 Page.WaitForFunctionOptions().setTimeout(5_000.0),
             )
-            assertFalse(allFederal.isChecked())
-            assertTrue(allFederal.evaluate("el => el.indeterminate") as Boolean)
-            assertTrue(npsAgency.isChecked())
-            assertFalse(forestServiceAgency.isChecked())
+            assertTrue(nps.isChecked())
+            assertFalse(forestService.isChecked())
 
-            page.evaluate(
+            // Re-checking the agency shows its pins again.
+            forestService.check()
+            assertTrue(forestService.isChecked())
+            page.waitForFunction(
                 """
                 () => {
-                  globalThis.__rtSetRoutePois([
-                    {
-                      type: 'Feature',
-                      id: 8101,
-                      geometry: { type: 'Point', coordinates: [-123.00, 49.00] },
-                      properties: {
-                        category: 'campground',
-                        subcategory: 'federal',
-                        agency: 'National Park Service'
-                      }
-                    },
-                    {
-                      type: 'Feature',
-                      id: 8102,
-                      geometry: { type: 'Point', coordinates: [-123.02, 49.02] },
-                      properties: {
-                        category: 'campground',
-                        subcategory: 'federal',
-                        agency: 'US Forest Service'
-                      }
-                    }
-                  ]);
-                  return true;
+                  const map = globalThis.__rtMap;
+                  const canvas = map?.getCanvas?.();
+                  if (!map || !canvas || !map.getLayer('cg-points')) return false;
+                  const agencies = map
+                    .queryRenderedFeatures([[0, 0], [canvas.width, canvas.height]], { layers: ['cg-points'] })
+                    .map(f => f.properties.agency)
+                    .filter(Boolean)
+                    .sort();
+                  return JSON.stringify(agencies) === JSON.stringify(['National Park Service', 'US Forest Service']);
                 }
                 """.trimIndent(),
+                null,
+                Page.WaitForFunctionOptions().setTimeout(5_000.0),
             )
-            assertFalse(allFederal.isChecked())
-            assertTrue(allFederal.evaluate("el => el.indeterminate") as Boolean)
-            assertTrue(npsAgency.isChecked())
-            assertFalse(forestServiceAgency.isChecked())
-
-            allFederal.check()
-            assertTrue(allFederal.isChecked())
-            assertFalse(allFederal.evaluate("el => el.indeterminate") as Boolean)
-            assertTrue(npsAgency.isChecked())
-            assertTrue(forestServiceAgency.isChecked())
-            assertThat(page.locator("#cg-agency-federal summary")).containsText("All agencies")
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors during agency filter smoke: ${pageErrors.joinToString(" | ")}",

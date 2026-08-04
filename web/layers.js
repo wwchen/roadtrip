@@ -3,7 +3,7 @@ import { openCampgroundDrawer } from './drawer/campground.js';
 import { openParkDrawer } from './drawer/park.js';
 import { openPlanetFitnessDrawer } from './drawer/planet-fitness.js';
 import { openSuperchargerDrawer } from './drawer/supercharger.js';
-import { token, cgClassColors } from './design-system/tokens.js';
+import { token } from './design-system/tokens.js';
 
 // Remove a source if present, plus any layers that reference it. Used before
 // re-adding on style.load to avoid "source already exists" errors while still
@@ -44,18 +44,18 @@ export function updateFilter() {
   map.setLayoutProperty('sc-points-hit', 'visibility', visible ? 'visible' : 'none');
 }
 
-const CG_SUBCATEGORIES = ['federal', 'state', 'provincial', 'local'];
+export const UNCATEGORIZED_AGENCY = 'Uncategorized';
 const CG_EMPTY_FC = { type: 'FeatureCollection', features: [] };
-const CG_NO_AGENCY_MATCH = '__roadtrip_no_agency_match__';
-const cgAgencySelections = Object.fromEntries(
-  CG_SUBCATEGORIES.map(cat => [cat, { all: true, agencies: new Set() }]),
-);
-const cgKnownAgencies = Object.fromEntries(
-  CG_SUBCATEGORIES.map(cat => [cat, new Set()]),
-);
+const CG_AGENCY_LEGEND_ID = 'cg-agency-legend';
+const CG_LAYER_IDS = ['cg-points', 'cg-points-hit'];
+
+// Persistent selection: agencies the user explicitly UN-checked. Absence
+// from this set == shown, so agencies never seen before default on and a
+// pan to a new region shows everything there without re-enabling.
+const cgHiddenAgencies = new Set();
 const cgFilterListeners = new Set();
 let lastCgGeojson = CG_EMPTY_FC;
-let cgFilterControlsBound = false;
+let cgLegendBound = false;
 
 function openFirstCampgroundFeature(e) {
   const f = e.features?.[0];
@@ -86,48 +86,40 @@ function normalizeAgency(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-export function campgroundLayerCategory(value) {
-  const category = typeof value === 'string' ? value.trim() : '';
-  if (!category || category === 'campground' || category === 'null') return 'other';
-  return CG_SUBCATEGORIES.includes(category) ? category : 'other';
+export function featureAgency(featureOrProps) {
+  const props = featureOrProps?.properties || featureOrProps || {};
+  return normalizeAgency(props.agency) || UNCATEGORIZED_AGENCY;
 }
 
-function effectiveCampgroundCategory(category) {
-  const layerCategory = campgroundLayerCategory(category);
-  return layerCategory === 'other' ? 'federal' : layerCategory;
+export function agencyCountsInViewport(geojson = lastCgGeojson) {
+  const counts = new Map();
+  for (const feature of geojson?.features || []) {
+    const props = feature.properties || {};
+    if (props.category !== 'campground') continue;
+    const agency = featureAgency(props);
+    counts.set(agency, (counts.get(agency) || 0) + 1);
+  }
+  return counts;
 }
 
-function featureCampgroundCategory(props) {
-  const category = props?.category === 'campground' ? props?.subcategory : props?.category;
-  return effectiveCampgroundCategory(category);
+export function agenciesInViewport(geojson = lastCgGeojson) {
+  return [...agencyCountsInViewport(geojson).keys()].sort((a, b) => a.localeCompare(b));
 }
 
-function agencySelection(category) {
-  return cgAgencySelections[effectiveCampgroundCategory(category)];
+export function isAgencyHidden(agency) {
+  return cgHiddenAgencies.has(agency);
 }
 
-function campgroundCategoryHasSelection(category) {
-  const selection = agencySelection(category);
-  return !!selection && (selection.all || selection.agencies.size > 0);
+export function setAgencyHidden(agency, hidden) {
+  if (hidden) cgHiddenAgencies.add(agency);
+  else cgHiddenAgencies.delete(agency);
 }
 
-function availableAgencies(category, geojson = lastCgGeojson) {
-  return [...agenciesByCategory(geojson)[effectiveCampgroundCategory(category)]].sort((a, b) => a.localeCompare(b));
+export function campgroundFeaturePassesFilter(featureOrProps) {
+  return !cgHiddenAgencies.has(featureAgency(featureOrProps));
 }
 
-function selectAllAgencies(category) {
-  const selection = agencySelection(category);
-  selection.all = true;
-  selection.agencies.clear();
-}
-
-function selectNoAgencies(category) {
-  const selection = agencySelection(category);
-  selection.all = false;
-  selection.agencies.clear();
-}
-
-function notifyCampgroundFilterChanged() {
+export function notifyCampgroundFilterChanged() {
   for (const listener of cgFilterListeners) listener();
 }
 
@@ -136,172 +128,68 @@ export function onCampgroundFilterChange(listener) {
   return () => cgFilterListeners.delete(listener);
 }
 
-export function campgroundFeaturePassesFilter(featureOrProps) {
-  const props = featureOrProps?.properties || featureOrProps || {};
-  const category = featureCampgroundCategory(props);
-  const selection = agencySelection(category);
-  if (!selection) return false;
-  if (selection.all) return true;
-  return selection.agencies.has(normalizeAgency(props.agency));
+// One checkbox per agency present in the current viewport, sorted, with its
+// live count. Rows come purely from the current features — no accumulating
+// "known agencies" set — so panning away from a region drops its agencies.
+export function renderCampgroundLegend(geojson = lastCgGeojson) {
+  const host = document.getElementById(CG_AGENCY_LEGEND_ID);
+  if (!host) return;
+  const counts = agencyCountsInViewport(geojson);
+  const agencies = [...counts.keys()].sort((a, b) => a.localeCompare(b));
+  host.innerHTML = agencies.map(agency => `
+    <label class="cg-agency-row">
+      <input type="checkbox" data-cg-agency="${escapeHtml(agency)}"${isAgencyHidden(agency) ? '' : ' checked'}>
+      <span class="legend-dot" style="background:var(--rt-layer-cg)"></span>
+      ${escapeHtml(agency)} <span class="count">(${counts.get(agency)})</span>
+    </label>
+  `).join('');
 }
 
-function agenciesByCategory(geojson) {
-  const out = Object.fromEntries(
-    CG_SUBCATEGORIES.map(cat => {
-      const selection = cgAgencySelections[cat];
-      const known = selection.all ? [] : [...cgKnownAgencies[cat], ...selection.agencies];
-      return [cat, new Set(known)];
-    }),
-  );
-  for (const feature of geojson?.features || []) {
-    const props = feature.properties || {};
-    const category = featureCampgroundCategory(props);
-    if (!Object.prototype.hasOwnProperty.call(out, category)) continue;
-    const agency = normalizeAgency(props.agency);
-    if (agency) {
-      cgKnownAgencies[category].add(agency);
-      out[category].add(agency);
-    }
-  }
-  return out;
-}
-
-function syncCampgroundCategoryCheckbox(category, agencies = availableAgencies(category)) {
-  const checkbox = document.getElementById(`f-cg-${category}`);
-  if (!(checkbox instanceof HTMLInputElement)) return;
-  const selection = agencySelection(category);
-  if (!selection) return;
-  const selectedCount = selection.all
-    ? agencies.length
-    : agencies.filter(agency => selection.agencies.has(agency)).length;
-  checkbox.checked = selection.all;
-  checkbox.indeterminate = !selection.all && selectedCount > 0;
-}
-
-function renderCgAgencyControls(geojson = lastCgGeojson) {
-  const byCategory = agenciesByCategory(geojson);
-  for (const category of CG_SUBCATEGORIES) {
-    const host = document.getElementById(`cg-agency-${category}`);
-    const selection = agencySelection(category);
-    const agencies = [...byCategory[category]].sort((a, b) => a.localeCompare(b));
-    if (!host) {
-      syncCampgroundCategoryCheckbox(category, agencies);
-      continue;
-    }
-    if (agencies.length === 0) {
-      host.hidden = true;
-      host.innerHTML = '';
-      syncCampgroundCategoryCheckbox(category, agencies);
-      continue;
-    }
-    const selected = selection.all ? agencies : agencies.filter(agency => selection.agencies.has(agency));
-    const isAllSelected = selection.all;
-    const wasOpen = host.querySelector('details')?.open ?? true;
-    const summary =
-      isAllSelected
-        ? 'All agencies'
-        : selected.length === 0
-          ? 'No agencies'
-          : selected.length === 1
-            ? selected[0]
-            : `${selected.length} agencies`;
-    host.hidden = false;
-    host.innerHTML = `
-      <details class="cg-agency-menu"${wasOpen ? ' open' : ''}>
-        <summary>${escapeHtml(summary)}</summary>
-        <div class="cg-agency-options">
-          ${agencies.map(agency => `
-            <label class="cg-agency-choice">
-              <input type="checkbox" data-cg-agency="${category}" value="${escapeHtml(agency)}"${isAllSelected || selection.agencies.has(agency) ? ' checked' : ''}>
-              <span>${escapeHtml(agency)}</span>
-            </label>
-          `).join('')}
-        </div>
-      </details>
-    `;
-    syncCampgroundCategoryCheckbox(category, agencies);
-  }
-}
-
-function checkedCampgroundCategories() {
-  return CG_SUBCATEGORIES.filter(campgroundCategoryHasSelection);
-}
-
-function filterCategoriesFor(category) {
-  return category === 'federal' ? ['federal', 'other'] : [category];
-}
-
-function campgroundFilterClause(category) {
-  const categoryClause = ['in', ['get', 'category'], ['literal', filterCategoriesFor(category)]];
-  const selection = agencySelection(category);
-  if (selection.all) return categoryClause;
-  const agencies = selection.agencies.size > 0 ? [...selection.agencies] : [CG_NO_AGENCY_MATCH];
-  return ['all', categoryClause, ['in', ['get', 'agency'], ['literal', agencies]]];
-}
-
-function applyCGFilter() {
-  const { map } = state;
-  if (!map?.getLayer('cg-points') || !map?.getLayer('cg-points-hit')) return;
-  const cats = checkedCampgroundCategories();
-  const visibility = cats.length === 0 ? 'none' : 'visible';
-  map.setLayoutProperty('cg-points', 'visibility', visibility);
-  map.setLayoutProperty('cg-points-hit', 'visibility', visibility);
-  if (cats.length === 0) return;
-  const clauses = cats.map(campgroundFilterClause);
-  const filter = clauses.length === 1 ? clauses[0] : ['any', ...clauses];
-  map.setFilter('cg-points', filter);
-  map.setFilter('cg-points-hit', filter);
-}
-
-function onCgAgencyControlChange(e) {
+function onLegendChange(e) {
   const target = e.target;
   if (!(target instanceof HTMLInputElement)) return;
-  const agencyCategory = target.dataset.cgAgency;
-  if (!agencyCategory) return;
-  const agency = normalizeAgency(target.value);
-  const selection = agencySelection(agencyCategory);
-  if (selection.all) {
-    selection.all = false;
-    selection.agencies.clear();
-    for (const availableAgency of availableAgencies(agencyCategory)) selection.agencies.add(availableAgency);
-  }
-  if (agency && target.checked) selection.agencies.add(agency);
-  else selection.agencies.delete(agency);
-  const agencies = availableAgencies(agencyCategory);
-  if (agencies.length > 0 && agencies.every(availableAgency => selection.agencies.has(availableAgency))) {
-    selectAllAgencies(agencyCategory);
-  }
-  renderCgAgencyControls();
+  const agency = target.dataset.cgAgency;
+  if (!agency) return;
+  setAgencyHidden(agency, !target.checked);
   applyCGFilter();
   notifyCampgroundFilterChanged();
 }
 
-function bindCGFilterControls() {
-  if (cgFilterControlsBound) return;
-  cgFilterControlsBound = true;
-  for (const category of CG_SUBCATEGORIES) {
-    document.getElementById(`f-cg-${category}`)?.addEventListener('change', (event) => {
-      const target = event.target;
-      if (target instanceof HTMLInputElement) {
-        if (target.checked) selectAllAgencies(category);
-        else selectNoAgencies(category);
-        renderCgAgencyControls();
-      }
-      applyCGFilter();
-      notifyCampgroundFilterChanged();
-    });
-    document.getElementById(`cg-agency-${category}`)?.addEventListener('change', onCgAgencyControlChange);
+export function applyCGFilter() {
+  const { map } = state;
+  if (!map?.getLayer('cg-points') || !map?.getLayer('cg-points-hit')) return;
+  // MapLibre can only test present properties; the Uncategorized sentinel
+  // represents features with NO agency, so hiding it means excluding
+  // agency-absent features, handled with a has-agency guard.
+  const hideUncategorized = cgHiddenAgencies.has(UNCATEGORIZED_AGENCY);
+  const namedHidden = [...cgHiddenAgencies].filter(a => a !== UNCATEGORIZED_AGENCY);
+  const clauses = ['all'];
+  if (namedHidden.length > 0) {
+    clauses.push(['!', ['in', ['get', 'agency'], ['literal', namedHidden]]]);
   }
+  if (hideUncategorized) {
+    clauses.push(['has', 'agency']);
+  }
+  const filter = clauses.length === 1 ? null : clauses;
+  for (const id of CG_LAYER_IDS) {
+    map.setLayoutProperty(id, 'visibility', 'visible');
+    map.setFilter(id, filter);
+  }
+}
+
+function bindCGLegendControls() {
+  if (cgLegendBound) return;
+  cgLegendBound = true;
+  document.getElementById(CG_AGENCY_LEGEND_ID)?.addEventListener('change', onLegendChange);
 }
 
 export function installCGLayer(geojson) {
   const { map } = state;
   resetOverlay(['cg'], ['cg-points', 'cg-points-hit']);
   map.addSource('cg', { type: 'geojson', data: geojson });
-  // Jurisdiction palette, resolved from --rt-layer-cg-* at build time so a
-  // theme swap reaches the map. `other` is unclassified and shares the
-  // federal toggle and color.
-  const cgColor = cgClassColors();
+  // Single campground pin color: the legend now filters by agency (50+
+  // values), which can't be color-coded legibly, so agency is conveyed by
+  // the legend row rather than the dot.
   // Radius scales with campsite count (sqrt), with a clickable floor. Per-zoom
   // stops keep dots clickable even at continental zoom.
   const sizeBySites = ['sqrt', ['coalesce', ['get', 'sites'], 15]];
@@ -316,13 +204,7 @@ export function installCGLayer(geojson) {
         6,  ['max', 4, ['interpolate', ['linear'], sizeBySites,  1, 4,  5, 4.5, 15, 5.5, 50, 7,   200, 10,  1100, 14]],
         10, ['max', 5, ['interpolate', ['linear'], sizeBySites,  1, 5,  5, 6,   15, 8,   50, 11,  200, 16,  1100, 24]],
       ],
-      'circle-color': ['match', ['get', 'category'],
-        'federal',    cgColor.federal,
-        'provincial', cgColor.provincial,
-        'state',      cgColor.state,
-        'local',      cgColor.local,
-        cgColor.other,
-      ],
+      'circle-color': token('--rt-layer-cg'),
       'circle-stroke-color': token('--rt-map-pin-stroke'),
       'circle-stroke-width': 0.8,
       'circle-opacity': 0.85,
@@ -344,9 +226,9 @@ export function installCGLayer(geojson) {
   });
 
   lastCgGeojson = geojson || CG_EMPTY_FC;
-  renderCgAgencyControls(lastCgGeojson);
+  renderCampgroundLegend(lastCgGeojson);
   applyCGFilter();
-  bindCGFilterControls();
+  bindCGLegendControls();
 
   // Layer-scoped map handlers do NOT survive setStyle — always rebind here.
   // Bind to the hit layer (transparent, generous radius); MapLibre dispatches
@@ -568,7 +450,7 @@ export function installSCLayer(geojson) {
 // No-ops if the layer hasn't been installed yet (initial load races moveend).
 export function setCGData(geojson) {
   lastCgGeojson = geojson || CG_EMPTY_FC;
-  renderCgAgencyControls(lastCgGeojson);
+  renderCampgroundLegend(lastCgGeojson);
   const src = state.map?.getSource('cg');
   if (src) src.setData(lastCgGeojson);
   applyCGFilter();

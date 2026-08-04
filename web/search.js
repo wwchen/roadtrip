@@ -20,11 +20,9 @@ function togglesForItem(item) {
     case 'NP': return ['f-np'];
     case 'SP': return ['f-sp'];
     case 'PF': return ['f-pf'];
-    case 'CG': {
-      const cat = item.cgCategory || 'federal';
-      const id = cat === 'other' ? 'f-cg-federal' : `f-cg-${cat}`;
-      return [id];
-    }
+    // Campgrounds have no visibility toggle — the cg layer is always on and
+    // filtered by agency — so no toggle needs flipping to render the pin.
+    case 'CG': return [];
     case 'SC': return ['f-open'];
     default: return [];
   }
