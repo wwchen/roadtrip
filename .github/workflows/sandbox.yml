@@ -161,13 +161,23 @@ jobs:
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           REPO: ${{ github.repository }}
         run: |
-          set -euo pipefail
+          # NOT `set -e`: this step is purely opportunistic — it gives an
+          # in-flight CI build up to 2 min to publish the head-SHA image so the
+          # sandbox runs the exact commit.  If anything here fails (token
+          # exchange, network, no image), we must still PROCEED: the host step
+          # resolves the real image (head or newest ancestor).  Aborting here
+          # would defeat the fallback and strand a code-less PR.
+          set -uo pipefail
           image_ref="ghcr.io/${REPO}/backend:${HEAD_SHA}"
           echo "Polling briefly for head-SHA image: ${image_ref}"
 
           token_url="https://ghcr.io/token?scope=repository:${REPO}/backend:pull&service=ghcr.io"
-          bearer="$(curl -fsSL -u "${GITHUB_ACTOR}:${GH_TOKEN}" "$token_url" \
-                    | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")"
+          bearer="$(curl -fsSL -u "${GITHUB_ACTOR}:${GH_TOKEN}" "$token_url" 2>/dev/null \
+                    | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])" 2>/dev/null)"
+          if [ -z "${bearer}" ]; then
+            echo "Could not get a GHCR token; skipping the opportunistic wait — host step resolves the image."
+            exit 0
+          fi
 
           # Short opportunistic wait (6 × 20 s = 2 min): long enough to catch a
           # build that's finishing, short enough not to stall a code-less PR.
@@ -186,39 +196,6 @@ jobs:
             [ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ] && sleep 20
           done
           echo "No head-SHA image yet; the host step will fall back to the newest ancestor image."
-
-      # ── Status: failed ───────────────────────────────────────────────────────
-      # Fires on any failure of an up/stop run.  Edits the status comment (if one
-      # was created) into a terminal ❌ state with a run link; falls back to a new
-      # comment if the failure happened before the status comment existed.
-      - name: Status failed
-        if: failure() && (steps.cmd.outputs.action == 'up' || steps.cmd.outputs.action == 'stop')
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
-        env:
-          ACTION: ${{ steps.cmd.outputs.action }}
-          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          COMMENT_ID: ${{ steps.status.outputs.comment_id }}
-        with:
-          script: |
-            const marker = `<!-- sandbox-status:pr${context.issue.number} -->`;
-            const sha = (process.env.HEAD_SHA || '').slice(0, 12);
-            const verb = process.env.ACTION === 'stop' ? 'teardown' : 'deploy';
-            const body = `${marker}\n### ❌ Sandbox ${verb} failed\n` +
-              `- **Commit:** \`${sha}\`\n` +
-              `- See the [workflow run](${process.env.RUN_URL}) for details.`;
-            const id = process.env.COMMENT_ID;
-            if (id) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                comment_id: Number(id), body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                issue_number: context.issue.number, body,
-              });
-            }
 
       # ── 4. Join tailnet ───────────────────────────────────────────────────────
       # Verbatim from deploy.yml lines 187-195: same action SHA, same secrets,
@@ -430,3 +407,40 @@ jobs:
                 `- **Was:** \`roadtrip-sb-pr${pr}\`\n` +
                 `- Re-create with \`/sandbox\`  ·  [logs](${process.env.RUN_URL})`,
             });
+
+      # ── Status: failed ───────────────────────────────────────────────────────
+      # MUST be the LAST step: a step with `if: failure()` runs only when reached
+      # in sequence AND a prior step has already failed.  Placed here, it catches
+      # a failure in ANY earlier step (image wait, tailnet, SSH, the host deploy)
+      # and flips the status comment to a terminal ❌.  Earlier in the job it
+      # would miss the most common failure — the host deploy — leaving the
+      # comment stuck on "deploying…".  Edits the existing comment, or posts a
+      # new one if the failure predated the status comment.
+      - name: Status failed
+        if: failure() && (steps.cmd.outputs.action == 'up' || steps.cmd.outputs.action == 'stop')
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          ACTION: ${{ steps.cmd.outputs.action }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMENT_ID: ${{ steps.status.outputs.comment_id }}
+        with:
+          script: |
+            const marker = `<!-- sandbox-status:pr${context.issue.number} -->`;
+            const sha = (process.env.HEAD_SHA || '').slice(0, 12);
+            const verb = process.env.ACTION === 'stop' ? 'teardown' : 'deploy';
+            const body = `${marker}\n### ❌ Sandbox ${verb} failed\n` +
+              `- **Commit:** \`${sha}\`\n` +
+              `- See the [workflow run](${process.env.RUN_URL}) for details.`;
+            const id = process.env.COMMENT_ID;
+            if (id) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: Number(id), body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body,
+              });
+            }
