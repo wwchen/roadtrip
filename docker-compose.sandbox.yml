@@ -87,7 +87,11 @@ services:
       - ROADTRIP_PROFILE=${SANDBOX_PROFILE:-compose-local}
       # Build provenance — visible in /api/build-info (env should be "sandbox").
       - ROADTRIP_BUILD_ENV=sandbox
-      - ROADTRIP_BUILD_SHA=${SANDBOX_SHA}
+      # Build provenance is the commit UNDER REVIEW (PR head), not the image tag
+      # SANDBOX_SHA — those differ when the head has no built image and we pull
+      # an ancestor's jar.  Falls back to SANDBOX_SHA when the caller didn't set
+      # SANDBOX_BUILD_SHA (e.g. a direct `make sandbox`).
+      - ROADTRIP_BUILD_SHA=${SANDBOX_BUILD_SHA:-${SANDBOX_SHA}}
       - ROADTRIP_BUILD_BRANCH=${SANDBOX_BRANCH}
       # Sandbox identity bypass — resolves every request to the seed users
       # via the rt_session=sandbox:<id> cookie sentinel; no real OIDC flow required.

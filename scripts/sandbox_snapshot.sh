@@ -96,7 +96,12 @@ CLOSURE_SQL="WITH RECURSIVE roots(tbl) AS (
     VALUES ${VALUES_LIST}
 ),
 closure(tbl) AS (
-    SELECT tbl FROM roots
+    -- Force the anchor column to collation 'C' to match the recursive term's
+    -- c.relname (type name, collation C).  A plain cast isn't enough — the
+    -- VALUES literals keep the DB default collation — so pin it explicitly, as
+    -- Postgres's own hint advises, or the UNION is rejected with a
+    -- collation-mismatch error.
+    SELECT tbl::name COLLATE \"C\" FROM roots
     UNION
     SELECT c.relname
     FROM closure cl
