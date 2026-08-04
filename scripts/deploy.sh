@@ -424,9 +424,11 @@ CADDY
         echo "==> reloading Caddy (docker exec ${SANDBOX_CADDY_CONTAINER})"
         docker exec "${SANDBOX_CADDY_CONTAINER}" \
             caddy reload --config "${SANDBOX_CADDY_CONFIG}"
-        # Provision public DNS + a Cloudflare Access gate for this host.  No-op
-        # when no CF token is present (local/CI); on failure the sandbox is up
-        # host-locally but not publicly reachable, which is the safe direction.
+        # Provision the Cloudflare Access gate THEN public DNS for this host
+        # (cf_sandbox_up enforces that order).  No-op when no CF token is present
+        # (local/CI).  Because the gate is created before DNS, a failure leaves
+        # the host either fully gated or not publicly reachable — never an
+        # ungated public admin instance.
         cf_sandbox_up "${SANDBOX_FQDN}" || echo "==> warning: Cloudflare provisioning failed; ${SANDBOX_FQDN} may not be publicly reachable"
         ;;
     direct)

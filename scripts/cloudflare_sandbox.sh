@@ -105,9 +105,12 @@ _cf_dns_record_id() {
 }
 
 # ── Internal: find an Access app id by exact domain (empty if none). ─────────
+# Uses the server-side ?domain= filter so this stays correct past the 1000-app
+# default page size (a client-side scan of an unpaginated list would silently
+# miss apps beyond page 1).
 _cf_access_app_id() {
     local fqdn="$1"
-    _cf_api GET "/accounts/${CF_ACCOUNT_ID}/access/apps" \
+    _cf_api GET "/accounts/${CF_ACCOUNT_ID}/access/apps?domain=${fqdn}" \
         | _cf_json "next((a['id'] for a in d.get('result',[]) if a.get('domain')=='${fqdn}'), '')"
 }
 
@@ -144,34 +147,23 @@ cf_sandbox_up() {
     fi
     local target="${CF_TUNNEL_ID}.cfargotunnel.com"
 
-    # ── DNS CNAME (proxied) ──────────────────────────────────────────────────
-    local existing; existing="$(_cf_dns_record_id "${fqdn}")"
-    local dns_body
-    dns_body="$(printf '{"type":"CNAME","name":"%s","content":"%s","proxied":true}' "${fqdn}" "${target}")"
-    if [[ -n "${existing}" ]]; then
-        echo "==> cf: DNS ${fqdn} exists; updating"
-        _cf_api PUT "/zones/${CF_ZONE_ID}/dns_records/${existing}" "${dns_body}" >/dev/null
-    else
-        echo "==> cf: creating DNS ${fqdn} → ${target}"
-        local resp; resp="$(_cf_api POST "/zones/${CF_ZONE_ID}/dns_records" "${dns_body}")"
-        if [[ "$(printf '%s' "${resp}" | _cf_json "d.get('success')")" != "True" ]]; then
-            echo "cf: DNS create failed: $(printf '%s' "${resp}" | _cf_json "d.get('errors')")" >&2
-            return 1
-        fi
-    fi
+    # ── ORDER MATTERS (security): create the Access gate BEFORE the DNS record.
+    # DNS is what makes the host publicly reach caddy→backend, and the sandbox
+    # backend runs as an unauthenticated ADMIN.  If DNS existed before Access,
+    # any failure in between would leave a publicly-reachable admin instance.
+    # So: Access app first; only once it exists do we point DNS at the tunnel.
 
     # ── Access application + policy ──────────────────────────────────────────
-    # Idempotent: skip creation if an app already covers this exact domain.
+    # Idempotent: reuse an app already covering this exact domain.
     local app_id; app_id="$(_cf_access_app_id "${fqdn}")"
     if [[ -n "${app_id}" ]]; then
-        echo "==> cf: Access app for ${fqdn} exists (${app_id}); leaving in place"
-        return 0
-    fi
-    # Always non-empty: falls back to {"everyone":{}} (auth-gated via any IdP).
-    local includes; includes="$(_cf_access_includes "${CF_ACCESS_IDP_IDS:-}" "${CF_ACCESS_EMAILS:-}")"
-    echo "==> cf: creating Access app for ${fqdn}"
-    local app_body
-    app_body="$(python3 - "${fqdn}" "${includes}" <<'PY'
+        echo "==> cf: Access app for ${fqdn} exists (${app_id}); reusing"
+    else
+        # Always non-empty: falls back to {"everyone":{}} (auth-gated via any IdP).
+        local includes; includes="$(_cf_access_includes "${CF_ACCESS_IDP_IDS:-}" "${CF_ACCESS_EMAILS:-}")"
+        echo "==> cf: creating Access app for ${fqdn}"
+        local app_body
+        app_body="$(python3 - "${fqdn}" "${includes}" <<'PY'
 import sys, json
 fqdn, includes = sys.argv[1], json.loads(sys.argv[2])
 print(json.dumps({
@@ -187,12 +179,32 @@ print(json.dumps({
 }))
 PY
 )"
-    local resp; resp="$(_cf_api POST "/accounts/${CF_ACCOUNT_ID}/access/apps" "${app_body}")"
-    if [[ "$(printf '%s' "${resp}" | _cf_json "d.get('success')")" != "True" ]]; then
-        echo "cf: Access app create failed: $(printf '%s' "${resp}" | _cf_json "d.get('errors')")" >&2
-        return 1
+        local resp; resp="$(_cf_api POST "/accounts/${CF_ACCOUNT_ID}/access/apps" "${app_body}")"
+        if [[ "$(printf '%s' "${resp}" | _cf_json "d.get('success')")" != "True" ]]; then
+            echo "cf: Access app create failed: $(printf '%s' "${resp}" | _cf_json "d.get('errors')")" >&2
+            return 1
+        fi
+        echo "==> cf: Access app created for ${fqdn}"
     fi
-    echo "==> cf: Access app created for ${fqdn}"
+
+    # ── DNS CNAME (proxied) — LAST, so the gate always precedes reachability. ─
+    local existing; existing="$(_cf_dns_record_id "${fqdn}")"
+    local dns_body
+    dns_body="$(printf '{"type":"CNAME","name":"%s","content":"%s","proxied":true}' "${fqdn}" "${target}")"
+    if [[ -n "${existing}" ]]; then
+        echo "==> cf: DNS ${fqdn} exists; updating"
+        if [[ "$(_cf_api PUT "/zones/${CF_ZONE_ID}/dns_records/${existing}" "${dns_body}" | _cf_json "d.get('success')")" != "True" ]]; then
+            echo "cf: DNS update failed for ${fqdn}" >&2
+            return 1
+        fi
+    else
+        echo "==> cf: creating DNS ${fqdn} → ${target}"
+        local resp; resp="$(_cf_api POST "/zones/${CF_ZONE_ID}/dns_records" "${dns_body}")"
+        if [[ "$(printf '%s' "${resp}" | _cf_json "d.get('success')")" != "True" ]]; then
+            echo "cf: DNS create failed: $(printf '%s' "${resp}" | _cf_json "d.get('errors')")" >&2
+            return 1
+        fi
+    fi
     return 0
 }
 
@@ -203,17 +215,29 @@ cf_sandbox_down() {
         echo "==> cf: token absent; skipping DNS/Access teardown for ${fqdn}"
         return 0
     fi
-    _cf_resolve_zone || return 1
-
-    local app_id; app_id="$(_cf_access_app_id "${fqdn}")"
-    if [[ -n "${app_id}" ]]; then
-        echo "==> cf: deleting Access app ${app_id} (${fqdn})"
-        _cf_api DELETE "/accounts/${CF_ACCOUNT_ID}/access/apps/${app_id}" >/dev/null || true
+    # Best-effort: a transient zone-resolve failure must NOT abort before we
+    # remove the public record — an orphaned DNS + no-op teardown would leave a
+    # reachable admin host.  Track failures and report, but attempt every step.
+    if ! _cf_resolve_zone; then
+        echo "cf: could not resolve zone; DNS/Access for ${fqdn} may be orphaned — remove manually" >&2
+        return 1
     fi
+
+    local failed=0
+    # DNS first (kill public reachability before the gate), then the Access app.
     local rec; rec="$(_cf_dns_record_id "${fqdn}")"
     if [[ -n "${rec}" ]]; then
         echo "==> cf: deleting DNS ${fqdn} (${rec})"
-        _cf_api DELETE "/zones/${CF_ZONE_ID}/dns_records/${rec}" >/dev/null || true
+        if [[ "$(_cf_api DELETE "/zones/${CF_ZONE_ID}/dns_records/${rec}" | _cf_json "d.get('success')")" != "True" ]]; then
+            echo "cf: DNS delete failed for ${fqdn}" >&2; failed=1
+        fi
     fi
-    return 0
+    local app_id; app_id="$(_cf_access_app_id "${fqdn}")"
+    if [[ -n "${app_id}" ]]; then
+        echo "==> cf: deleting Access app ${app_id} (${fqdn})"
+        if [[ "$(_cf_api DELETE "/accounts/${CF_ACCOUNT_ID}/access/apps/${app_id}" | _cf_json "d.get('success')")" != "True" ]]; then
+            echo "cf: Access app delete failed for ${fqdn}" >&2; failed=1
+        fi
+    fi
+    return "${failed}"
 }
