@@ -20,6 +20,14 @@ SANDBOX_CADDY_CONFIG="${SANDBOX_CADDY_CONFIG:-/etc/caddy/Caddyfile}"
 SANDBOX_CADDY_CONTAINER="${SANDBOX_CADDY_CONTAINER:-roadtrip-caddy-1}"
 SANDBOX_STATE_DIR="${SANDBOX_STATE_DIR:-/var/lib/roadtrip-sandboxes}"
 COMPOSE_FILE="${COMPOSE_FILE:-${REPO_ROOT}/docker-compose.sandbox.yml}"
+# Must mirror deploy.sh so the FQDN reconstructed for Cloudflare teardown
+# matches what was provisioned on up.
+SANDBOX_TUNNEL_ZONE="${SANDBOX_TUNNEL_ZONE:-floo.ca}"
+SANDBOX_HOST_PREFIX="${SANDBOX_HOST_PREFIX:-roadtrip-sb-}"
+
+# Cloudflare DNS + Access teardown; no-op unless CF_API_TOKEN_FILE is readable.
+# shellcheck source=scripts/cloudflare_sandbox.sh
+source "${SCRIPT_DIR}/cloudflare_sandbox.sh"
 
 # ── Argument handling ─────────────────────────────────────────────────────────
 if [[ $# -lt 1 ]]; then
@@ -58,6 +66,11 @@ if [[ -f "${CADDY_SNIPPET}" ]]; then
 else
     echo "==> Caddy snippet not found (already removed): ${CADDY_SNIPPET}"
 fi
+
+# ── Remove Cloudflare DNS + Access ────────────────────────────────────────────
+# Reconstruct the same FQDN deploy.sh provisioned; no-op without a CF token.
+cf_sandbox_down "${SANDBOX_HOST_PREFIX}${SANDBOX_NAME}.${SANDBOX_TUNNEL_ZONE}" \
+    || echo "==> warning: Cloudflare teardown failed; check DNS/Access for ${SANDBOX_NAME}"
 
 # ── Remove state marker ───────────────────────────────────────────────────────
 MARKER="${SANDBOX_STATE_DIR}/${SANDBOX_NAME}.meta"
