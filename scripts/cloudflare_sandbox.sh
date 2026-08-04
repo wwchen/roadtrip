@@ -112,6 +112,10 @@ _cf_access_app_id() {
 }
 
 # ── Internal: Access include[] array from IdP ids + emails. ──────────────────
+# With neither set, defaults to [{"everyone": {}}] — in Cloudflare Access that
+# means "anyone who AUTHENTICATES via a configured IdP" (Google/GitHub here),
+# NOT anonymous access.  So the host is always login-gated; CF_ACCESS_* only
+# NARROWS it to specific IdPs/emails.
 _cf_access_includes() {
     python3 - "$@" <<'PY'
 import sys, json
@@ -119,6 +123,8 @@ idps = [x for x in sys.argv[1].split(',') if x]
 emails = [x for x in sys.argv[2].split(',') if x] if len(sys.argv) > 2 else []
 inc = [{"login_method": {"id": i}} for i in idps]
 inc += [{"email": {"email": e}} for e in emails]
+if not inc:
+    inc = [{"everyone": {}}]  # authenticated via any configured IdP
 print(json.dumps(inc))
 PY
 }
@@ -161,11 +167,8 @@ cf_sandbox_up() {
         echo "==> cf: Access app for ${fqdn} exists (${app_id}); leaving in place"
         return 0
     fi
+    # Always non-empty: falls back to {"everyone":{}} (auth-gated via any IdP).
     local includes; includes="$(_cf_access_includes "${CF_ACCESS_IDP_IDS:-}" "${CF_ACCESS_EMAILS:-}")"
-    if [[ "${includes}" == "[]" ]]; then
-        echo "cf: no Access identities (set CF_ACCESS_IDP_IDS/CF_ACCESS_EMAILS); refusing to expose ${fqdn} unprotected" >&2
-        return 1
-    fi
     echo "==> cf: creating Access app for ${fqdn}"
     local app_body
     app_body="$(python3 - "${fqdn}" "${includes}" <<'PY'
