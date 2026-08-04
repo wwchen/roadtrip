@@ -101,7 +101,7 @@ closure(tbl) AS (
     -- VALUES literals keep the DB default collation — so pin it explicitly, as
     -- Postgres's own hint advises, or the UNION is rejected with a
     -- collation-mismatch error.
-    SELECT tbl::name COLLATE "C" FROM roots
+    SELECT tbl::name COLLATE \"C\" FROM roots
     UNION
     SELECT c.relname
     FROM closure cl
