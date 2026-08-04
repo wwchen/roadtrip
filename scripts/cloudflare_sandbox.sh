@@ -131,11 +131,16 @@ _cf_access_gate_status() {
     if [[ -z "${CF_ACCOUNT_ID:-}" ]]; then
         echo "no-account-id"; return 0
     fi
-    _cf_api GET "/accounts/${CF_ACCOUNT_ID}/access/apps" | python3 - "${fqdn}" <<'PY'
+    # Capture the API response into a var and pass it as argv — NOT via a pipe.
+    # A heredoc (`python3 - <<PY`) makes the heredoc itself stdin, so a piped
+    # curl body would be discarded and json.load(sys.stdin) would read the
+    # script.  argv keeps both the response and the fqdn explicit.
+    local resp; resp="$(_cf_api GET "/accounts/${CF_ACCOUNT_ID}/access/apps")"
+    python3 - "${fqdn}" "${resp}" <<'PY'
 import sys, json, fnmatch
-fqdn = sys.argv[1]
+fqdn, raw = sys.argv[1], sys.argv[2]
 try:
-    d = json.load(sys.stdin)
+    d = json.loads(raw)
 except Exception:
     print("unreadable"); sys.exit(0)
 if not d.get("success"):
