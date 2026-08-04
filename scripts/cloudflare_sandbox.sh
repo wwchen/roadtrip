@@ -29,9 +29,15 @@
 #
 # Config (env vars; sane failures if unset while the token IS present):
 #   CF_API_TOKEN_FILE   Path to a file containing the API token (default below).
-#                       Needs only Zone:DNS:Edit for the zone.
+#                       Needs Zone:DNS:Edit and Access:Apps:Read (the read is
+#                       used to VERIFY the static Access gate before publishing
+#                       DNS — it never edits Access).
 #   CF_ZONE_NAME        DNS zone (defaults to SANDBOX_TUNNEL_ZONE).
+#   CF_ACCOUNT_ID       Cloudflare account id (for the Access-app verification).
 #   CF_TUNNEL_ID        Main tunnel id; CNAME target is <id>.cfargotunnel.com.
+#   CF_SKIP_ACCESS_CHECK  Set to "1" to bypass the Access verification (e.g. if
+#                       the token lacks Access:Apps:Read).  Discouraged: it
+#                       removes the guarantee that a published host is gated.
 #
 # curl + python3 are required on the host (already used elsewhere in deploy.sh).
 
@@ -95,6 +101,12 @@ _cf_resolve_zone() {
         echo "cf: could not resolve zone id for ${zone}" >&2
         return 1
     fi
+    # The zone response also carries the account id — use it for the Access
+    # verification if the operator didn't set CF_ACCOUNT_ID explicitly.
+    if [[ -z "${CF_ACCOUNT_ID:-}" ]]; then
+        CF_ACCOUNT_ID="$(printf '%s' "${resp}" | _cf_json "d['result'][0]['account']['id']")"
+        [[ "${CF_ACCOUNT_ID}" == "None" ]] && CF_ACCOUNT_ID=""
+    fi
     return 0
 }
 
@@ -103,6 +115,43 @@ _cf_dns_record_id() {
     local fqdn="$1"
     _cf_api GET "/zones/${CF_ZONE_ID}/dns_records?type=CNAME&name=${fqdn}" \
         | _cf_json "(d['result'][0]['id'] if d.get('result') else '')"
+}
+
+# ── Internal: verify a static Access app actually gates <fqdn>. ──────────────
+# The static-wildcard-app model only protects a sandbox if that app EXISTS and
+# has at least one `allow` policy.  Publishing DNS before confirming this would
+# expose an unauthenticated seed-admin backend, so cf_sandbox_up calls this
+# first and fails closed on a negative/unverifiable result.
+#
+# Prints "ok" to stdout when a self-hosted Access app whose (possibly wildcard)
+# domain matches <fqdn> has >=1 allow policy; prints a reason otherwise.  Uses
+# only Access:Apps:Read.  fnmatch handles the `roadtrip-sb-*.floo.ca` wildcard.
+_cf_access_gate_status() {
+    local fqdn="$1"
+    if [[ -z "${CF_ACCOUNT_ID:-}" ]]; then
+        echo "no-account-id"; return 0
+    fi
+    _cf_api GET "/accounts/${CF_ACCOUNT_ID}/access/apps" | python3 - "${fqdn}" <<'PY'
+import sys, json, fnmatch
+fqdn = sys.argv[1]
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    print("unreadable"); sys.exit(0)
+if not d.get("success"):
+    print("api-error"); sys.exit(0)
+for app in d.get("result", []):
+    domains = list(app.get("self_hosted_domains") or [])
+    if app.get("domain"):
+        domains.append(app["domain"])
+    if not any(fnmatch.fnmatch(fqdn, dom) for dom in domains):
+        continue
+    policies = app.get("policies") or []
+    if any(p.get("decision") == "allow" for p in policies):
+        print("ok"); sys.exit(0)
+    print("no-allow-policy"); sys.exit(0)
+print("no-app")
+PY
 }
 
 # ── Public: create/refresh the proxied CNAME for a sandbox host. ─────────────
@@ -118,6 +167,20 @@ cf_sandbox_up() {
         return 1
     fi
     local target="${CF_TUNNEL_ID}.cfargotunnel.com"
+
+    # ── Verify the Access gate BEFORE publishing DNS (fail closed). ──────────
+    # DNS is what makes the host publicly reach the seed-admin backend; if the
+    # static wildcard Access app is missing/mistyped/policy-less, publishing
+    # would expose it ungated.  So confirm a matching app with an allow policy
+    # exists first.  CF_SKIP_ACCESS_CHECK=1 opts out (discouraged).
+    if [[ "${CF_SKIP_ACCESS_CHECK:-}" != "1" ]]; then
+        local gate; gate="$(_cf_access_gate_status "${fqdn}")"
+        if [[ "${gate}" != "ok" ]]; then
+            echo "cf: Access gate not verified for ${fqdn} (${gate}); refusing to publish DNS for an ungated seed-admin backend. Fix the static Access app for roadtrip-sb-*.${CF_ZONE_NAME:-${SANDBOX_TUNNEL_ZONE}} (needs an allow policy), or set CF_SKIP_ACCESS_CHECK=1 to override." >&2
+            return 1
+        fi
+        echo "==> cf: Access gate verified for ${fqdn}"
+    fi
 
     local existing; existing="$(_cf_dns_record_id "${fqdn}")"
     local dns_body

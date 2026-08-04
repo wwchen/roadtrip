@@ -45,12 +45,21 @@ TLS: the zone is `floo.ca` (one label under the apex) so the free Cloudflare
 `*.sandbox.roadtrip.floo.ca` is a second-level wildcard the free cert does NOT
 cover and would need paid Advanced Certificate Manager.
 
+Before publishing DNS, `cf_sandbox_up` **verifies the Access gate exists**: it
+looks up the wildcard Access app covering the host and confirms it has at least
+one `allow` policy (read-only). If that check fails — app missing, mistyped, or
+no allow policy — it refuses to create DNS rather than expose an ungated
+seed-admin backend. `CF_SKIP_ACCESS_CHECK=1` overrides (discouraged). A DNS or
+gate failure on a token-configured host is **fatal**: the deploy aborts instead
+of printing "Sandbox is live" for a URL that can't resolve.
+
 Host config for the provisioning scripts lives in
-`/var/lib/roadtrip-sandboxes/cloudflare.env` (`CF_TUNNEL_ID`, and `CF_ZONE_NAME`
-if it differs from the sandbox zone) plus the API token file
-`cloudflare_api_token` — which needs only **`Zone:DNS:Edit`** now that Access is
-static. Without the token file, DNS provisioning is a logged no-op — the sandbox
-still comes up host-locally, just not publicly reachable.
+`/var/lib/roadtrip-sandboxes/cloudflare.env` (`CF_TUNNEL_ID`; `CF_ACCOUNT_ID`
+and `CF_ZONE_NAME` are auto-resolved from the zone but may be set explicitly)
+plus the API token file `cloudflare_api_token` — which needs **`Zone:DNS:Edit`**
+(manage the CNAME) and **`Access: Apps: Read`** (verify the gate; it never edits
+Access). Without the token file, DNS provisioning is a logged no-op — the
+sandbox still comes up host-locally, just not publicly reachable.
 
 Auth is disabled in every sandbox (no `AUTH_<vendor>_ISSUER` is passed, so the
 active provider's issuer is blank, and `ROADTRIP_SANDBOX_ASSUME_USER=true`).
@@ -291,7 +300,7 @@ Checklist for a host that has not previously run sandboxes:
 
 - [ ] **Base stack up with the `tunnel` profile.** The `caddy` container and the `roadtrip-sandbox` network both come from the base `roadtrip` project. Run `make run env=prod` (or `docker compose --profile tunnel --profile pois up -d caddy cloudflared`) once so they exist before the first `/sandbox`. No host `caddy` install and no `/etc/caddy` setup is required — the container carries `caddy/Caddyfile` and imports the bind-mounted `caddy/sandboxes/`.
 - [ ] **One-time tunnel ingress rule.** On the main `roadtrip` tunnel, add a public-hostname rule subdomain `*` (→ `*.floo.ca`) → `http://caddy:80`, ordered after the explicit `roadtrip.floo.ca` rules and before the `404` catch-all. This is the ONLY tunnel edit; per-sandbox automation never touches it. (Applying via API: `PUT .../cfd_tunnel/<id>/configurations` with the full ingress list — insert the one rule, preserve the rest.)
-- [ ] **CF API token + config.** Place a token (**`Zone:DNS:Edit`** for `floo.ca` — that's all the scripts need now) at `/var/lib/roadtrip-sandboxes/cloudflare_api_token` (chmod 600), and write `/var/lib/roadtrip-sandboxes/cloudflare.env` with `CF_TUNNEL_ID` (main tunnel). Per-sandbox DNS is then created/deleted automatically. No wildcard DNS record is needed — each sandbox gets its own explicit CNAME.
+- [ ] **CF API token + config.** Place a token with **`Zone:DNS:Edit`** and **`Access: Apps: Read`** for `floo.ca`/the account at `/var/lib/roadtrip-sandboxes/cloudflare_api_token` (chmod 600), and write `/var/lib/roadtrip-sandboxes/cloudflare.env` with `CF_TUNNEL_ID` (main tunnel). Per-sandbox DNS is then created/deleted automatically; `cf_sandbox_up` uses the Access read to verify the gate before publishing DNS. No wildcard DNS record is needed — each sandbox gets its own explicit CNAME.
 - [ ] **One-time Access app.** In Zero Trust → Access → Applications, create ONE self-hosted app with domain `roadtrip-sb-*.floo.ca` and a policy that **allows only your identity providers** (Google/GitHub) — e.g. an Allow policy including your email(s) or a Groups/IdP selector. This one wildcard app gates every sandbox; automation never touches it. NOTE: an app with `allowed_idps` but an empty `policies` array does not admit anyone — you must add at least one Allow policy.
 - [ ] **Identity provider.** A Google and/or GitHub IdP configured in Zero Trust → Settings → Authentication, referenced by the Access app above.
 - [ ] **GHCR login.** Run `docker login ghcr.io` on the host with credentials that can pull from `ghcr.io/wwchen/roadtrip/backend`. A GitHub PAT with `read:packages` scope works; store it so `docker pull` runs unattended (e.g. `~/.docker/config.json`).

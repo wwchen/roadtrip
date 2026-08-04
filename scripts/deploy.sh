@@ -429,7 +429,14 @@ CADDY
         # gates roadtrip-sb-*.<zone> is a static, human-configured wildcard app
         # (see docs) — so the moment this DNS resolves, the host is already
         # behind Access; there is no ungated window.
-        cf_sandbox_up "${SANDBOX_FQDN}" || echo "==> warning: Cloudflare DNS provisioning failed; ${SANDBOX_FQDN} may not be publicly reachable"
+        # Fatal on failure: a swallowed DNS/Access-gate failure would let the
+        # script print "Sandbox is live" and the workflow post a URL that can't
+        # resolve (or, worse, an ungated host).  cf_sandbox_up returns 0 on the
+        # no-token local/CI path, so this only fails a token-configured host.
+        if ! cf_sandbox_up "${SANDBOX_FQDN}"; then
+            echo "error: Cloudflare provisioning failed for ${SANDBOX_FQDN}; not marking the sandbox live" >&2
+            exit 1
+        fi
         ;;
     direct)
         # Prod-style ingress: cloudflared routes directly to the backend
