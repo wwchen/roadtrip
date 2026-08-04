@@ -283,14 +283,15 @@ jobs:
           REMOTE
 
       # ── 7. Post result back ───────────────────────────────────────────────────
-      # sandbox_up.sh uses SANDBOX_TUNNEL_ZONE (default: sandbox.roadtrip.floo.ca)
-      # to form the URL.  Mirror that default here; override via repo var
-      # SANDBOX_TUNNEL_ZONE if the zone is ever renamed.
+      # sandbox_up.sh uses SANDBOX_TUNNEL_ZONE (default: floo.ca) to form the
+      # URL.  Mirror that default here; override via repo var SANDBOX_TUNNEL_ZONE
+      # if the zone is ever renamed.  floo.ca (one label under the apex) is
+      # required for the free *.floo.ca TLS cert to cover sandbox hostnames.
       - name: Post sandbox URL
         if: steps.cmd.outputs.action == 'up'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
-          SANDBOX_TUNNEL_ZONE: ${{ vars.SANDBOX_TUNNEL_ZONE || 'sandbox.roadtrip.floo.ca' }}
+          SANDBOX_TUNNEL_ZONE: ${{ vars.SANDBOX_TUNNEL_ZONE || 'floo.ca' }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
         with:

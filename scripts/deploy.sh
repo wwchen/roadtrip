@@ -52,7 +52,11 @@ NAME_OVERRIDE="${3:-}"
 # touching the pipeline steps below.
 
 # DNS zone used to build the sandbox URL: sb-<name>.<zone>
-SANDBOX_TUNNEL_ZONE="${SANDBOX_TUNNEL_ZONE:-sandbox.roadtrip.floo.ca}"
+# Default is `floo.ca` (one label under the apex) so the free Cloudflare
+# Universal SSL cert `*.floo.ca` covers sandbox hostnames — a deeper zone like
+# `sandbox.roadtrip.floo.ca` is a second-level wildcard the free cert does NOT
+# cover (TLS wildcards match a single label), which needs paid ACM.
+SANDBOX_TUNNEL_ZONE="${SANDBOX_TUNNEL_ZONE:-floo.ca}"
 
 # Directory where per-sandbox Caddy snippet files are written.  This is the
 # HOST side of the caddy container's bind-mount (see docker-compose.yml's caddy

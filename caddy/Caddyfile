@@ -1,7 +1,7 @@
 # Root Caddyfile for the sandbox reverse proxy (see docs/sandbox-deploys.md).
 #
 # This Caddy runs as the `caddy` service in the base `roadtrip` compose project
-# (profile: tunnel) and demuxes `*.sandbox.roadtrip.floo.ca` by Host header to
+# (profile: tunnel) and demuxes `*.floo.ca` by Host header to
 # the per-sandbox backend containers.  It does NOT bind host ports 80/443
 # (pihole owns those on the deploy host); Cloudflare's tunnel reaches it in the
 # Docker network at `http://caddy:80`.

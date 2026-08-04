@@ -2,7 +2,14 @@
 
 A sandbox is a throwaway live environment for a PR or branch: backend +
 Postgres only, no observability, no companion, no Cloudflare tunnel of its
-own. It is reachable at `https://sb-<name>.sandbox.roadtrip.floo.ca`.
+own. It is reachable at `https://sb-<name>.floo.ca`.
+
+The zone is `floo.ca` (one label under the apex) on purpose: the free
+Cloudflare Universal SSL cert `*.floo.ca` covers sandbox hostnames. A deeper
+zone like `*.sandbox.roadtrip.floo.ca` is a second-level wildcard the free
+cert does NOT cover (TLS wildcards match a single label) and would need paid
+Advanced Certificate Manager. The trade-off is a broad `*.floo.ca` DNS +
+tunnel wildcard; existing subdomains with explicit records are unaffected.
 
 Auth is disabled in every sandbox (no `AUTH_<vendor>_ISSUER` is passed, so the
 active provider's issuer is blank, and `ROADTRIP_SANDBOX_ASSUME_USER=true`).
@@ -39,7 +46,7 @@ appear, then SSHes to `mini@mini-ca` over Tailscale and runs
 URL as a PR comment:
 
 ```
-Sandbox live: https://sb-pr<N>.sandbox.roadtrip.floo.ca
+Sandbox live: https://sb-pr<N>.floo.ca
 SHA: <12-char sha>  ·  stop with /sandbox stop
 ```
 
@@ -48,8 +55,7 @@ re-runs of the same PR.
 
 Required secrets (same as `deploy.yml`): `DEPLOY_SSH_KEY`,
 `DEPLOY_KNOWN_HOSTS`, `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET`.
-Optional repo variable: `SANDBOX_TUNNEL_ZONE` (falls back to
-`sandbox.roadtrip.floo.ca`).
+Optional repo variable: `SANDBOX_TUNNEL_ZONE` (falls back to `floo.ca`).
 
 ### Via CLI (on the deploy host)
 
@@ -87,7 +93,7 @@ deploy host.
 
 A **containerized Caddy** (the `caddy` service in the base `roadtrip`
 Compose project, profile `tunnel`, alongside `cloudflared`) holds a
-wildcard virtual-host for `*.sandbox.roadtrip.floo.ca`. It runs
+wildcard virtual-host for `*.floo.ca`. It runs
 `caddy:2-alpine`, publishes **no host ports** (pihole owns 80/443 on the
 deploy host), listens on `:80` inside the Docker network (each vhost uses an
 `http://` site address; a scheme-less one would bind `:443`), and terminates
@@ -122,7 +128,7 @@ but that host-loopback bind is used only by `deploy.sh`'s readiness probe
 and the reaper — it is not the request path and is never reachable from
 outside the host.
 
-Cloudflare terminates TLS for `*.sandbox.roadtrip.floo.ca` and routes the
+Cloudflare terminates TLS for `*.floo.ca` and routes the
 tunnel to the caddy container at `http://caddy:80`.
 
 ### Compose project isolation
@@ -165,7 +171,7 @@ command) re-targets the entire tier with no code change.
 
 | Variable | Default | Notes |
 |---|---|---|
-| `SANDBOX_TUNNEL_ZONE` | `sandbox.roadtrip.floo.ca` | DNS zone; sandbox URLs become `sb-<name>.<zone>` |
+| `SANDBOX_TUNNEL_ZONE` | `floo.ca` | DNS zone; sandbox URLs become `sb-<name>.<zone>`. Kept one label under the apex so the free `*.floo.ca` cert covers it |
 | `SANDBOX_CADDY_DIR` | `<repo>/caddy/sandboxes` | Host side of the caddy container bind-mount; per-sandbox `.caddy` snippet files land here and are imported by `caddy/Caddyfile` |
 | `SANDBOX_CADDY_CONFIG` | `/etc/caddy/Caddyfile` | Root Caddyfile path **inside the container**; passed to `caddy reload --config <path>` |
 | `SANDBOX_CADDY_CONTAINER` | `roadtrip-caddy-1` | Container reloaded via `docker exec <name> caddy reload` — no host `caddy` binary needed |
@@ -230,7 +236,7 @@ sandbox tier off the production box:
 1. Provision the new host with Docker and `docker compose` (v2 plugin). No host `caddy` binary is needed — the proxy is the `caddy` container.
 2. Log in to GHCR on the new host so `docker pull ghcr.io/wwchen/roadtrip/backend:<sha>` succeeds — the same `GHCR_TOKEN` / `GITHUB_TOKEN` already used by the deploy host works.
 3. Bring up the base stack with the `tunnel` profile (`make run env=prod`, or at minimum `docker compose --profile tunnel --profile pois up -d caddy cloudflared`) so the `caddy` container and the `roadtrip-sandbox` network exist.
-4. Route `*.sandbox.roadtrip.floo.ca` to the caddy container (`http://caddy:80`) through the Cloudflare tunnel running on the new host.
+4. Route `*.floo.ca` to the caddy container (`http://caddy:80`) through the Cloudflare tunnel running on the new host.
 5. Update `SANDBOX_HOST` in `.github/workflows/sandbox.yml` to the new host and add its Tailscale address to `DEPLOY_KNOWN_HOSTS`.
 6. Set the `SANDBOX_*` env vars in the host's environment (or export them before the SSH call) for any non-default values.
 
@@ -241,7 +247,8 @@ No script changes are required.
 Checklist for a host that has not previously run sandboxes:
 
 - [ ] **Base stack up with the `tunnel` profile.** The `caddy` container and the `roadtrip-sandbox` network both come from the base `roadtrip` project. Run `make run env=prod` (or `docker compose --profile tunnel --profile pois up -d caddy cloudflared`) once so they exist before the first `/sandbox`. No host `caddy` install and no `/etc/caddy` setup is required — the container carries `caddy/Caddyfile` and imports the bind-mounted `caddy/sandboxes/`.
-- [ ] **Cloudflare tunnel route.** Add `*.sandbox.roadtrip.floo.ca → http://caddy:80` in Zero Trust → Networks → Tunnels → the tunnel's public hostname rules. (If `cloudflared` runs as a container in the same project, `caddy` resolves by service name.)
+- [ ] **Cloudflare tunnel route.** Add `*.floo.ca → http://caddy:80` in Zero Trust → Networks → Tunnels → the tunnel's public hostname rules. (If `cloudflared` runs as a container in the same project, `caddy` resolves by service name.)
+- [ ] **Wildcard DNS record.** Cloudflare does NOT auto-create DNS for wildcard tunnel hostnames. Add a `CNAME` `*` (or `*.<subzone>`) → `<tunnel-id>.cfargotunnel.com`, Proxied ON, in the zone's DNS. Without it the hostname doesn't resolve.
 - [ ] **GHCR login.** Run `docker login ghcr.io` on the host with credentials that can pull from `ghcr.io/wwchen/roadtrip/backend`. A GitHub PAT with `read:packages` scope works; store it so `docker pull` runs unattended (e.g. `~/.docker/config.json`).
 - [ ] **State and snapshot directories.** Create `SANDBOX_STATE_DIR` (`/var/lib/roadtrip-sandboxes` by default) and ensure it is writable by the user running the sandbox scripts.
 - [ ] **Cron entries.** Add the snapshot (nightly) and reaper (hourly) cron entries from the Scheduled jobs section above, pointing to the scripts in the repo checkout.
