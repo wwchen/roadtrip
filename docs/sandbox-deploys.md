@@ -10,20 +10,43 @@ zone like `*.sandbox.roadtrip.floo.ca` is a second-level wildcard the free
 cert does NOT cover (TLS wildcards match a single label) and would need paid
 Advanced Certificate Manager.
 
-Both DNS and the Cloudflare tunnel public-hostname rule only accept a
-single-label `*` wildcard on the free tier — a partial label like
-`roadtrip-sb-*` is rejected by both ("Invalid subdomain format"), and a
-deeper zone needs paid Advanced Certificate Manager. So the wildcard is
-broad at both layers and **narrowing happens at Caddy**:
+### Routing and exposure
 
-- **DNS**: a `*` CNAME (`*.floo.ca`) → the tunnel. Resolves every unclaimed
-  `floo.ca` subdomain to the tunnel.
-- **Tunnel**: a public-hostname rule for `*.floo.ca` → `http://caddy:80`.
-- **Caddy** is the actual filter: it only has vhosts for
-  `roadtrip-sb-<name>.floo.ca`, so only sandbox hosts get a real backend;
-  any other `*.floo.ca` name reaches caddy but matches no vhost (harmless).
-  Existing subdomains with explicit DNS records are unaffected — explicit
-  records win over the wildcard, so they never hit the sandbox proxy.
+Each sandbox is reached through the **main `roadtrip` Cloudflare tunnel** (the
+retired `roadtrip sandbox` tunnel is unused). Three layers, provisioned
+per-sandbox by `scripts/cloudflare_sandbox.sh` except where noted:
+
+- **DNS** — a per-sandbox **explicit proxied CNAME** `roadtrip-sb-<name>.floo.ca
+  → <main-tunnel-id>.cfargotunnel.com`, created on up and deleted on down.
+  There is **no wildcard DNS**, so only sandboxes we created (plus prod records)
+  resolve to the tunnel. (Cloudflare rejects partial-label wildcards like
+  `roadtrip-sb-*` and won't auto-create DNS for wildcards anyway; per-host
+  explicit records sidestep both.)
+- **Tunnel ingress** — a **one-time, hand-added** rule `*.floo.ca →
+  http://caddy:80`, ordered after the explicit `roadtrip.floo.ca` rules and
+  before the `404` catch-all. Automation never mutates the tunnel config, so a
+  sandbox op cannot break the prod site. `roadtrip.floo.ca` matches its own
+  rules first; only the per-sandbox CNAMEs reach the wildcard.
+- **Caddy** — filters to the `roadtrip-sb-<name>` vhost and reverse-proxies to
+  the backend.
+- **Access** — because sandboxes disable app auth and resolve every request to
+  a seeded **admin** user (below), each host sits behind a Cloudflare Access
+  self-hosted application whose policy is `include: everyone` — meaning anyone
+  who **authenticates** via a configured IdP (Google or GitHub), not anonymous
+  access. Created on up, deleted on down. An unauthenticated request gets a 302
+  to the Access login, never the backend.
+
+TLS: the zone is `floo.ca` (one label under the apex) so the free Cloudflare
+`*.floo.ca` cert covers sandbox hostnames; a deeper zone like
+`*.sandbox.roadtrip.floo.ca` is a second-level wildcard the free cert does NOT
+cover and would need paid Advanced Certificate Manager.
+
+Host config for the provisioning scripts lives in
+`/var/lib/roadtrip-sandboxes/cloudflare.env` (`CF_TUNNEL_ID`, `CF_ACCOUNT_ID`,
+optional `CF_ACCESS_IDP_IDS`/`CF_ACCESS_EMAILS` to narrow the policy) plus the
+API token file `cloudflare_api_token` (Zone:DNS:Edit + Account:Access:Apps:Edit).
+Without the token file, provisioning is a logged no-op — the sandbox still comes
+up host-locally, just not publicly reachable.
 
 Auth is disabled in every sandbox (no `AUTH_<vendor>_ISSUER` is passed, so the
 active provider's issuer is blank, and `ROADTRIP_SANDBOX_ASSUME_USER=true`).
@@ -252,7 +275,7 @@ sandbox tier off the production box:
 1. Provision the new host with Docker and `docker compose` (v2 plugin). No host `caddy` binary is needed — the proxy is the `caddy` container.
 2. Log in to GHCR on the new host so `docker pull ghcr.io/wwchen/roadtrip/backend:<sha>` succeeds — the same `GHCR_TOKEN` / `GITHUB_TOKEN` already used by the deploy host works.
 3. Bring up the base stack with the `tunnel` profile (`make run env=prod`, or at minimum `docker compose --profile tunnel --profile pois up -d caddy cloudflared`) so the `caddy` container and the `roadtrip-sandbox` network exist.
-4. Route sandboxes to the caddy container through the Cloudflare tunnel: a public-hostname rule `*.floo.ca → http://caddy:80`, plus a `*` wildcard DNS record → the tunnel. Both must be a single-label `*` (partial labels are rejected); Caddy filters to `roadtrip-sb-*` vhosts. See First-time host setup.
+4. Route sandboxes through the new host's tunnel: the one-time `*.floo.ca → http://caddy:80` ingress rule, the CF API token + `cloudflare.env` (with that host's tunnel id), and an IdP in Zero Trust. Per-sandbox DNS + Access are then automatic. See First-time host setup.
 5. Update `SANDBOX_HOST` in `.github/workflows/sandbox.yml` to the new host and add its Tailscale address to `DEPLOY_KNOWN_HOSTS`.
 6. Set the `SANDBOX_*` env vars in the host's environment (or export them before the SSH call) for any non-default values.
 
@@ -263,8 +286,9 @@ No script changes are required.
 Checklist for a host that has not previously run sandboxes:
 
 - [ ] **Base stack up with the `tunnel` profile.** The `caddy` container and the `roadtrip-sandbox` network both come from the base `roadtrip` project. Run `make run env=prod` (or `docker compose --profile tunnel --profile pois up -d caddy cloudflared`) once so they exist before the first `/sandbox`. No host `caddy` install and no `/etc/caddy` setup is required — the container carries `caddy/Caddyfile` and imports the bind-mounted `caddy/sandboxes/`.
-- [ ] **Cloudflare tunnel route.** Add a public-hostname rule with subdomain `*` (→ `*.floo.ca`) → `http://caddy:80` in Zero Trust → Networks → Tunnels. The subdomain must be a bare `*`; a partial label like `roadtrip-sb-*` is rejected ("Invalid subdomain format"). (If `cloudflared` runs as a container in the same project, `caddy` resolves by service name.)
-- [ ] **Wildcard DNS record.** Cloudflare does NOT auto-create DNS for wildcard tunnel hostnames. Add a `CNAME` named `*` → `<tunnel-id>.cfargotunnel.com`, Proxied ON. This resolves all `*.floo.ca` to the tunnel; **Caddy** is what limits real routing to `roadtrip-sb-*` vhosts (any other host reaches caddy but matches no vhost).
+- [ ] **One-time tunnel ingress rule.** On the main `roadtrip` tunnel, add a public-hostname rule subdomain `*` (→ `*.floo.ca`) → `http://caddy:80`, ordered after the explicit `roadtrip.floo.ca` rules and before the `404` catch-all. This is the ONLY tunnel edit; per-sandbox automation never touches it. (Applying via API: `PUT .../cfd_tunnel/<id>/configurations` with the full ingress list — insert the one rule, preserve the rest.)
+- [ ] **CF API token + config.** Place a token (Zone:DNS:Edit + Account:Access:Apps:Edit, scoped to `floo.ca` + the account) at `/var/lib/roadtrip-sandboxes/cloudflare_api_token` (chmod 600), and write `/var/lib/roadtrip-sandboxes/cloudflare.env` with `CF_TUNNEL_ID` (main tunnel) and `CF_ACCOUNT_ID`. Per-sandbox DNS + Access are then created/deleted automatically by the up/down scripts. No wildcard DNS record is needed — each sandbox gets its own explicit CNAME.
+- [ ] **Identity provider.** A Google and/or GitHub IdP configured in Zero Trust → Settings → Authentication (the Access policy defaults to "everyone", i.e. anyone who authenticates via a configured IdP). Narrow with `CF_ACCESS_IDP_IDS`/`CF_ACCESS_EMAILS` in `cloudflare.env` if desired.
 - [ ] **GHCR login.** Run `docker login ghcr.io` on the host with credentials that can pull from `ghcr.io/wwchen/roadtrip/backend`. A GitHub PAT with `read:packages` scope works; store it so `docker pull` runs unattended (e.g. `~/.docker/config.json`).
 - [ ] **State and snapshot directories.** Create `SANDBOX_STATE_DIR` (`/var/lib/roadtrip-sandboxes` by default) and ensure it is writable by the user running the sandbox scripts.
 - [ ] **Cron entries.** Add the snapshot (nightly) and reaper (hourly) cron entries from the Scheduled jobs section above, pointing to the scripts in the repo checkout.
