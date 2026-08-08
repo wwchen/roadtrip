@@ -1,6 +1,7 @@
 import { StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppProviders } from './AppProviders';
+import './shell.css';
 
 /** The mount point every page shell provides. */
 const ROOT_ELEMENT_ID = 'root';

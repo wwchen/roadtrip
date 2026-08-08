@@ -16,3 +16,38 @@
 // ---------------------------------------------------------------------------
 
 export * from '@lew/lds-react';
+
+// ---------------------------------------------------------------------------
+// Type corrections.
+//
+// Narrow gaps where `@lew/lds-react`'s declarations are stricter than the
+// package's documented runtime behavior. An explicit export here shadows the
+// star export above, so call sites need no casts and there is exactly one place
+// to delete when upstream tightens this up.
+// ---------------------------------------------------------------------------
+import type { ForwardRefExoticComponent, ReactNode, RefAttributes } from 'react';
+import { Table as LdsTable, type TableProps as LdsTableProps } from '@lew/lds-react';
+
+/**
+ * `Table`, with column labels and cell values widened to React nodes.
+ *
+ * `@lew/lds-react`'s own comments say "a column's `label` accepts a React node"
+ * and "every cell value accepts a React node (e.g. a `<Tag>` for a status
+ * column)", but both types are still `Slot` from `@lew/lds/templates`
+ * (`string | number | RawHtml | null | undefined | false`), inherited from the
+ * framework-free package. The runtime flattens nodes through `toSlot`; only the
+ * declaration lags.
+ */
+export interface TableColumn {
+  key: string;
+  label?: ReactNode;
+}
+
+export interface TableProps extends Omit<LdsTableProps, 'columns' | 'rows'> {
+  columns?: TableColumn[];
+  rows?: Record<string, ReactNode>[];
+}
+
+export const Table = LdsTable as unknown as ForwardRefExoticComponent<
+  TableProps & RefAttributes<HTMLTableElement>
+>;

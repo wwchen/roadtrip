@@ -1,0 +1,74 @@
+/* ---------------------------------------------------------------------------
+   Page chrome shared by every migrated page.
+
+   The legacy shells each carried this as an inline <style> block; it lives here
+   once so the three pages cannot drift. Component styling comes from LDS — this
+   is only the frame LDS does not own: the page background, the centred column,
+   and the title/nav row.
+
+   Colors are `--rt-*` tokens from the retained tokens.css, not LDS's `--c-*`.
+   Both cascades are loaded (see @ui/styles.css) and the `--rt-*` set is what
+   scripts/check-color-tokens.mjs validates, so new page CSS composes from it
+   until Phase 5 reconciles the two.
+   --------------------------------------------------------------------------- */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--rt-bg-sunken);
+  color: var(--rt-text);
+  font-family: var(--rt-sans);
+}
+
+body {
+  padding: 20px;
+}
+
+.shell {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.top h1 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 650;
+}
+
+.sub {
+  margin-top: 4px;
+  color: var(--rt-muted);
+  font-size: 13px;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  body {
+    padding: 12px;
+  }
+
+  .top {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
