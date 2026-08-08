@@ -298,9 +298,29 @@ this line is what led to porting it once already.
 >
 > - ✅ `src/lib/settings-errors.ts` — ported + tested.
 > - ✅ `account-api.ts` — already typed in Phase 0.
-> - ⬜ The panels (profile, notifications, account, settings modal, SecretField).
+> - ✅ `ConfirmButton`, `SecretField` in `@ui`; `ProfilePanel`, `AccountPanel`,
+>   `NotificationsPanel`, `SettingsModal` in `src/features/account/`. All tested.
 > - ⬜ The login card, hosted-redirect branch only.
-> - ⬜ The island glue and the topbar hook — last, and the only throwaway part.
+> - ⬜ **The island glue and the topbar hook.** Not started, and it has a problem the
+>   island decision did not anticipate — see below.
+>
+> **⚠️ The island glue has an unsolved bundling constraint.** The seam itself is clean:
+> `web/topbar/auth.js` calls `_mountSettingsModal()` with no arguments, so the vanilla
+> side only needs a global (`window.__rtOpenSettings()`) to call instead. The problem is
+> delivery. The host page is the ROOT `index.html`, which Ktor serves from the repo and
+> which Vite never processes, so it cannot know the island bundle's hashed filename —
+> and `vite build` hashes every entry. Options, none yet chosen:
+>
+> 1. Give this one entry a stable `entryFileNames`, so `index.html` can hardcode
+>    `/assets/settings-island.js`. Simplest; gives up cache-busting for that file.
+> 2. Emit a tiny manifest and have `StaticSiteRoutes` inject the real script tag into
+>    `index.html` — accurate, but puts HTML rewriting in the backend.
+> 3. Do Phase 4a first so the map shell becomes a Vite entry, at which point the island
+>    is just a component and this whole question disappears.
+>
+> Option 3 is worth weighing seriously now that the panels exist: everything built so far
+> is reusable unchanged, and the glue is the only throwaway part — so deferring it may
+> mean never writing it.
 >
 > **A latent bug was fixed in the port**, worth knowing because the same shape appears elsewhere
 > in `web/`: `settings-errors.js` looks up `MESSAGES[code] ?? DEFAULT` on a plain object, so a

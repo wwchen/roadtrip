@@ -113,3 +113,41 @@
   color: var(--rt-muted);
   font-size: 12px;
 }
+
+/* ---- settings modal ---- */
+
+.rt-settings-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* Buttons, not anchors: these tabs are modal-local state with no URL of their own,
+   so unlike the dashboard's tab bar there is nothing to link to. */
+.rt-settings-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rt-settings-tabs button {
+  border: 1px solid var(--rt-border-strong);
+  background: var(--rt-fill-subtle);
+  color: var(--rt-text);
+  border-radius: var(--rt-r-md);
+  height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.rt-settings-tabs button:hover {
+  background: var(--rt-fill-hover);
+}
+
+.rt-settings-tabs button[aria-current='true'] {
+  border-color: var(--rt-brand);
+  background: var(--rt-brand-tint);
+  color: var(--rt-brand);
+}
