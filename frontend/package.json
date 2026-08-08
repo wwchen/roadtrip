@@ -23,6 +23,9 @@
     "@lew/lds-react": "1.0.0",
     "@lew/open-icons": "1.0.0",
     "@tanstack/react-query": "^5.62.0",
+    "chart.js": "^4.5.1",
+    "chartjs-adapter-date-fns": "^3.0.0",
+    "date-fns": "^4.4.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zustand": "^5.0.2"

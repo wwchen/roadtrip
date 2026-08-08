@@ -59,10 +59,18 @@ Their React equivalents import primitives from `@ui` and clients from `@/api`, w
 no-cross-feature rule.
 
 > **Migrating.** `web/` is being replaced by `frontend/` page by page — see
-> [docs/react-migration-plan.md](react-migration-plan.md). Watches has already moved:
-> its components live in `frontend/src/features/watches/` and are built on LDS via `@ui`,
-> and `web/watches/` is deleted. Read the plan before adding to either tree, so new work
-> lands in React rather than extending the tree that is going away.
+> [docs/react-migration-plan.md](react-migration-plan.md). Two pages have moved:
+>
+> - **Watches** → `frontend/src/features/watches/`; `web/watches/` is deleted.
+> - **Availability dashboard** → `frontend/src/features/availability-dashboard/`;
+>   `web/availability.js` and `web/components/availability/` are deleted.
+>
+> Note the near-miss in naming: `web/availability/` (singular, still present) is the
+> **map drawer's** availability UI and belongs to a later phase. It is not the dashboard
+> and must not be deleted with it.
+>
+> Read the plan before adding to either tree, so new work lands in React rather than
+> extending the tree that is going away.
 
 ### Forms on LDS: the controls are uncontrolled
 

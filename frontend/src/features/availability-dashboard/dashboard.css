@@ -1,0 +1,134 @@
+/* ---------------------------------------------------------------------------
+   Availability dashboard layout.
+
+   Ports the layout half of availability.html's inline <style> block. The parts it
+   styled by hand — the table frame, chips, inputs, selects, buttons, the empty
+   state — are LDS's job now and are not restated here. What is left is the panel
+   frame, the tab bar, and the filter grid.
+
+   Colors are `--rt-*` tokens, per shell.css.
+   --------------------------------------------------------------------------- */
+
+/* The dashboard's tables are wide (nine columns on the pollers tab), so this page
+   gets a roomier column than the 1080px shell default. */
+.shell:has(.rt-dash-tabs) {
+  max-width: 1280px;
+}
+
+/* ---- tab bar ----
+   Anchors rather than LDS Tabs — see TabNav.tsx for why. */
+
+.rt-dash-tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.rt-dash-tabs a {
+  border: 1px solid var(--rt-border-strong);
+  background: var(--rt-fill-subtle);
+  color: var(--rt-text);
+  border-radius: var(--rt-r-md);
+  height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.rt-dash-tabs a:hover {
+  background: var(--rt-fill-hover);
+  text-decoration: none;
+}
+
+.rt-dash-tabs a[aria-current='page'] {
+  border-color: var(--rt-brand);
+  background: var(--rt-brand-tint);
+  color: var(--rt-brand);
+}
+
+/* ---- panels ---- */
+
+.rt-dash-panel {
+  background: var(--rt-surface);
+  border: 1px solid var(--rt-border);
+  border-radius: var(--rt-r-sm);
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.rt-dash-panel h2 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--rt-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Wide tables scroll inside their panel rather than widening the page. */
+.rt-dash-panel table {
+  width: 100%;
+}
+
+/* ---- filters ---- */
+
+.rt-dash-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.rt-dash-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ---- counters, status, cells ---- */
+
+.rt-dash-counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rt-dash-status {
+  color: var(--rt-muted);
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+.rt-dash-muted {
+  color: var(--rt-muted);
+}
+
+.rt-dash-row-actions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.rt-dash-feedback {
+  color: var(--rt-muted);
+  font-size: 12px;
+}
+
+/* ---- chart ----
+   Chart.js needs a sized, positioned box: with `responsive` and
+   `maintainAspectRatio: false` it measures the parent, and an unsized parent
+   collapses the canvas to zero height. */
+
+.rt-dash-chart {
+  position: relative;
+  height: 300px;
+}
+
+@media (max-width: 640px) {
+  .rt-dash-filters {
+    grid-template-columns: 1fr;
+  }
+}
