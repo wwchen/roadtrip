@@ -228,8 +228,17 @@ form library was needed — the form is four fields and three toggles, and LDS's
 uncontrolled (see gotchas), which most form libraries assume they are not.
 **Still to ship:** serving (below).
 
-**Phase 2 — Availability admin dashboard** (`availability.html`, `web/availability.js` +
-`web/components/availability/*`). Client-routed tabs (pollers/runs/snapshots), Chart.js via npm.
+**Phase 2 — Availability admin dashboard.** *(COMPLETE)* Tabs (pollers/runs/changes) rebuilt on
+LDS + TanStack Query; Chart.js from npm, tree-shaken, replacing two CDN `<script>` tags; URL
+contract (`?tab=…` plus per-tab params) preserved. `availability.html`, `web/availability.js` and
+`web/components/availability/*` are deleted, and the hand-written `get("/availability")` route
+went with them — `migratedPages` generates both URL forms.
+
+**Scope note, because the file tree misleads.** `wc -l web/availability*` reports ~4,100 lines,
+but only ~640 of those were this phase: the tab router (51) and the three tab modules (585).
+The big files under `web/availability/` — `availability-week.js` (1,226), `site-matrix.js` (627),
+`watch-editor.js` (417), `site-detail.js` (338) — are the MAP DRAWER's availability UI, reached
+from `index.html`, and belong to Phase 4d. They are untouched and must stay until then.
 
 **Phase 3 — Account/settings** (`web/account/*`, 1,362 LOC). Settings modal, SecretField
 write-only pattern, auth port/adapter (`embedded-auth-port.js` + `auth0-embedded.js`), auth0-js
@@ -387,6 +396,21 @@ Consequences worth knowing:
   `columns`/`rows` are the sole named props it touches.
 - **Don't pass a changing `disabled` to a field you want to keep typed text in.** It changes the
   template, which swaps the DOM and resets the value. Disable the buttons instead.
+- **LDS has no component that can drive tab navigation.** `Tabs` renders
+  `<button class="lds-tabs__tab">` with no id, no data attribute and no `onChange` — there is no
+  way to learn which tab was clicked, and it emits no URL. `SegmentedControl` *does* pass the
+  selected value to `onChange`, but its own source says it is "a value picker, not navigation …
+  tabs change what you are looking at; this changes a property of what you are already looking
+  at." Phase 2 uses plain anchors (see `TabNav.tsx`), which is also what the vanilla page did and
+  what URL-addressable tabs want: linkable, copyable, middle-clickable. Don't reach for
+  `SegmentedControl` to dodge this.
+- **A query key built as `key(filters ?? {})` is a LEAF, not a prefix.**
+  `['dashboard','pollers',{}]` does not prefix-match `['dashboard','pollers',{active:'true'}]`, so
+  invalidating the no-arg form silently refetches nothing. Keys used for invalidation need their
+  own prefix entry — `queryKeys.dashboard.pollersAll()` exists for exactly this.
+- **`Omit` is not the only TS trap on LDS props.** An interface cannot satisfy
+  `Record<string, unknown>` (no implicit index signature) while a `type` alias can — so a filter
+  bag passed to a query-key factory has to be declared with `type`, not `interface`.
 - **LDS's `toggle` puts its visible label in a `<span>`**, not a `<label for>`, so `id` alone
   leaves the checkbox with no accessible name — pass `aria-label` too. Its `textField` DOES emit
   `<label for={id}>`, so there an `id` is enough (and required: without one there is no

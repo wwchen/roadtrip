@@ -21,10 +21,14 @@ import java.io.File
  * mounts below go away.
  *
  * A page listed here may or may not still have a vanilla file in `staticDir`:
- * watches' was deleted with the rest of `web/watches/`, so it is served from the
- * build or not at all. See `migratedPageFile`.
+ * watches' and availability's were deleted with the rest of their legacy trees, so
+ * they are served from the build or not at all. See `migratedPageFile`.
+ *
+ * Registering both URL forms from this list is also what retired the hand-written
+ * `/availability` route that used to sit below: the extensionless alias it existed
+ * to provide is exactly what this loop generates.
  */
-private val migratedPages = listOf("watches.html")
+private val migratedPages = listOf("watches.html", "availability.html")
 
 private const val HTML_SUFFIX = ".html"
 private const val LEGACY_WEB_DIR = "web"
@@ -36,7 +40,6 @@ private const val ASSETS_PATH = "/assets"
 private const val FRONTEND_DIR = "frontend/dist"
 private const val ASSETS_DIR = "assets"
 private const val INDEX_FILE = "index.html"
-private const val AVAILABILITY_FILE = "availability.html"
 private const val RAW_DATA_SEGMENT = "/raw/"
 private const val GEOJSON_SUFFIX = ".geojson"
 private val geoJsonContentType = ContentType("application", "geo+json")
@@ -73,10 +76,6 @@ internal fun Route.staticSiteRoutes(
             }.access(RouteAccess.Anonymous)
         }
     }
-
-    get("/${AVAILABILITY_FILE.removeSuffix(HTML_SUFFIX)}") {
-        call.respondFile(File(staticDir, AVAILABILITY_FILE))
-    }.access(RouteAccess.Anonymous)
 
     staticFiles("/", staticDir) {
         default(INDEX_FILE)

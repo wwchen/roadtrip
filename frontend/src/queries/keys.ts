@@ -50,6 +50,16 @@ export const queryKeys = {
 
   dashboard: {
     all: () => ['dashboard'] as const,
+    /**
+     * Prefix over every poller query — each filtered list AND the summary, since
+     * `pollersSummary` sits under this too.
+     *
+     * Needed because `pollers(filters)` is a LEAF key: `['dashboard','pollers',{}]`
+     * does not prefix-match `['dashboard','pollers',{active:'true'}]`, so
+     * invalidating `pollers()` would quietly refetch nothing after a "check now".
+     * Reach for this when invalidating and for `pollers(filters)` when fetching.
+     */
+    pollersAll: () => ['dashboard', 'pollers'] as const,
     pollers: (filters?: Readonly<Record<string, unknown>>) =>
       ['dashboard', 'pollers', filters ?? {}] as const,
     pollersSummary: () => ['dashboard', 'pollers', 'summary'] as const,

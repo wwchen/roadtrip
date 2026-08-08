@@ -33,8 +33,13 @@ const TOKENS_JS = 'web/design-system/tokens.js';
  * `frontend` is the React tree. It is scanned on the same terms as `web` for the
  * duration of the strangler migration — both ship to users, so both are held to
  * the same rule.
+ *
+ * The root shells are named individually because they are files, not directories.
+ * `availability.html` is gone from this list because React replaced it; `index.html`
+ * is the last one left and goes the same way in Phase 4. Note that a name here must
+ * exist — `walk` stats every root — so removing a shell means removing it here too.
  */
-const ROOTS = ['web', 'frontend', 'index.html', 'availability.html'];
+const ROOTS = ['web', 'frontend', 'index.html'];
 const EXTENSIONS = ['.css', '.html', '.js', '.mjs', '.ts', '.tsx'];
 
 /**

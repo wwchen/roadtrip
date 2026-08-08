@@ -31,6 +31,7 @@ class StaticSiteRoutesTest {
     private fun builtTree(): File =
         createTempDirectory("rt-frontend").toFile().apply {
             File(this, "watches.html").writeText(BUILT_WATCHES)
+            File(this, "availability.html").writeText(BUILT_AVAILABILITY)
             File(this, "assets").mkdirs()
             File(this, "assets/watches-abc123.js").writeText(BUNDLE)
         }
@@ -51,6 +52,19 @@ class StaticSiteRoutesTest {
                 val response = client.get(path)
                 assertEquals(HttpStatusCode.OK, response.status, path)
                 assertEquals(BUILT_WATCHES, response.bodyAsText(), path)
+            }
+        }
+
+    // availability is migrated too, and both URL forms come from the one
+    // `migratedPages` entry — which is what retired the hand-written
+    // `get("/availability")` route that used to provide the extensionless alias.
+    @Test
+    fun `the availability dashboard is served from the build on both URL forms`() =
+        serving(legacyTree(), builtTree()) { client ->
+            for (path in listOf("/availability", "/availability.html")) {
+                val response = client.get(path)
+                assertEquals(HttpStatusCode.OK, response.status, path)
+                assertEquals(BUILT_AVAILABILITY, response.bodyAsText(), path)
             }
         }
 
@@ -90,11 +104,13 @@ class StaticSiteRoutesTest {
             }
         }
 
+    // The map is the last page still on the vanilla tree (Phase 4). It is served by
+    // the catch-all's `default`, not by a migrated-page route.
     @Test
-    fun `an unmigrated page is still served from the legacy tree`() =
+    fun `the unmigrated map page is still served from the legacy tree`() =
         serving(legacyTree(), builtTree()) { client ->
             assertEquals(LEGACY_INDEX, client.get("/").bodyAsText())
-            assertEquals(LEGACY_AVAILABILITY, client.get("/availability").bodyAsText())
+            assertEquals(LEGACY_INDEX, client.get("/index.html").bodyAsText())
         }
 
     // frontendDir defaults to frontend/dist under staticDir, which is what makes
@@ -115,7 +131,8 @@ class StaticSiteRoutesTest {
         const val LEGACY_INDEX = "<html><body>legacy map</body></html>"
         const val LEGACY_WATCHES = "<html><body>legacy watches</body></html>"
         const val LEGACY_AVAILABILITY = "<html><body>legacy availability</body></html>"
-        const val BUILT_WATCHES = """<html><body><div id="root"></div></body></html>"""
+        const val BUILT_WATCHES = """<html><body><div id="root">watches</div></body></html>"""
+        const val BUILT_AVAILABILITY = """<html><body><div id="root">availability</div></body></html>"""
         const val BUNDLE = "console.log('bundle')"
     }
 }
