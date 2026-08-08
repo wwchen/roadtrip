@@ -300,27 +300,28 @@ this line is what led to porting it once already.
 > - ✅ `account-api.ts` — already typed in Phase 0.
 > - ✅ `ConfirmButton`, `SecretField` in `@ui`; `ProfilePanel`, `AccountPanel`,
 >   `NotificationsPanel`, `SettingsModal` in `src/features/account/`. All tested.
-> - ⬜ The login card, hosted-redirect branch only.
-> - ⬜ **The island glue and the topbar hook.** Not started, and it has a problem the
->   island decision did not anticipate — see below.
+> - ✅ **The login card needs no port.** `web/topbar/auth.js`'s `startSignIn()` mounts it
+>   only when `me.auth_embedded` is true; otherwise it calls `signIn()`, a plain redirect
+>   already ported in Phase 0. With Clerk active the redirect is the live path, so there is
+>   no "hosted-redirect branch of the login card" — the redirect bypasses the card entirely.
+>   An earlier version of this checklist said otherwise and was wrong.
 >
-> **⚠️ The island glue has an unsolved bundling constraint.** The seam itself is clean:
-> `web/topbar/auth.js` calls `_mountSettingsModal()` with no arguments, so the vanilla
-> side only needs a global (`window.__rtOpenSettings()`) to call instead. The problem is
-> delivery. The host page is the ROOT `index.html`, which Ktor serves from the repo and
-> which Vite never processes, so it cannot know the island bundle's hashed filename —
-> and `vite build` hashes every entry. Options, none yet chosen:
+> **So Phase 3's React work is COMPLETE.** Every component exists and is tested. What is
+> missing is only mounting: nothing yet renders `SettingsModal`, so users still get the
+> vanilla modal from `web/account/settings-modal.js`. That is deliberate and not a
+> regression — the legacy path keeps working untouched.
 >
-> 1. Give this one entry a stable `entryFileNames`, so `index.html` can hardcode
->    `/assets/settings-island.js`. Simplest; gives up cache-busting for that file.
-> 2. Emit a tiny manifest and have `StaticSiteRoutes` inject the real script tag into
->    `index.html` — accurate, but puts HTML rewriting in the backend.
-> 3. Do Phase 4a first so the map shell becomes a Vite entry, at which point the island
->    is just a component and this whole question disappears.
+> **The island glue was deliberately NOT built.** It needed a Vite entry, a stable output
+> filename, a `<script>` tag in the root `index.html`, a `window.__rtOpenSettings()` global
+> and a hook in the vanilla topbar — all of which Phase 4a deletes the moment `index.html`
+> becomes a React entry. With Phase 4 landing immediately after, that is 100% throwaway
+> work, so the decision is to let Phase 4a mount the modal instead. `frontend/index.html`
+> already exists and already builds as a Phase 0 placeholder, so the entry is in place;
+> what it needs is the map app inside it.
 >
-> Option 3 is worth weighing seriously now that the panels exist: everything built so far
-> is reusable unchanged, and the glue is the only throwaway part — so deferring it may
-> mean never writing it.
+> **Phase 4a therefore owns one extra task:** render `<SettingsModal>` from the migrated map
+> shell and delete `web/account/*` plus the `mountSettingsModal` import in
+> `web/topbar/auth.js`.
 >
 > **A latent bug was fixed in the port**, worth knowing because the same shape appears elsewhere
 > in `web/`: `settings-errors.js` looks up `MESSAGES[code] ?? DEFAULT` on a plain object, so a
