@@ -18,7 +18,7 @@ import java.io.File
  * it. When the whole site has moved this becomes the catch-all and the legacy
  * mounts below go away.
  */
-private val MIGRATED_PAGES = listOf("watches.html")
+private val migratedPages = listOf("watches.html")
 
 private const val HTML_SUFFIX = ".html"
 private const val LEGACY_WEB_DIR = "web"
@@ -29,7 +29,7 @@ private const val INDEX_FILE = "index.html"
 private const val AVAILABILITY_FILE = "availability.html"
 private const val RAW_DATA_SEGMENT = "/raw/"
 private const val GEOJSON_SUFFIX = ".geojson"
-private val GEOJSON_CONTENT_TYPE = ContentType("application", "geo+json")
+private val geoJsonContentType = ContentType("application", "geo+json")
 
 // The static site is public — every mount is anonymous. `.access(...)` on each
 // staticFiles root covers the file-serving leaves it registers beneath it.
@@ -49,12 +49,12 @@ internal fun Route.staticSiteRoutes(
     staticFiles("/$DATA_DIR", File(staticDir, DATA_DIR)) {
         exclude { it.path.contains(RAW_DATA_SEGMENT) }
         contentType { f ->
-            if (f.name.endsWith(GEOJSON_SUFFIX)) GEOJSON_CONTENT_TYPE else null
+            if (f.name.endsWith(GEOJSON_SUFFIX)) geoJsonContentType else null
         }
     }.access(RouteAccess.Anonymous)
 
     // Migrated pages, before the catch-all so an exact path wins over it.
-    for (page in MIGRATED_PAGES) {
+    for (page in migratedPages) {
         val extensionless = "/${page.removeSuffix(HTML_SUFFIX)}"
         for (path in listOf("/$page", extensionless)) {
             get(path) {
@@ -76,7 +76,7 @@ internal fun Route.staticSiteRoutes(
             // can serve them: both would otherwise match `/watches.html`, and
             // which one wins would rest on Ktor's resolution scoring rather than
             // on anything stated here.
-            rel.contains(File.separator) || rel in MIGRATED_PAGES
+            rel.contains(File.separator) || rel in migratedPages
         }
     }.access(RouteAccess.Anonymous)
 }
