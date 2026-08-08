@@ -7,6 +7,10 @@
  * override and quietly contradicts the system it sits next to. This check
  * fails the build on one.
  *
+ * Covers both the legacy `web/` tree and the React `frontend/` tree, including
+ * `.ts`/`.tsx` — until this scanned them, a raw hex in a component would have
+ * passed silently.
+ *
  * Also verifies the JS bridge stays honest: every fallback key in
  * `web/design-system/tokens.js` must name a token that tokens.css actually
  * defines, so a renamed token fails loudly here instead of silently
@@ -23,9 +27,28 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TOKENS_CSS = 'web/design-system/tokens.css';
 const TOKENS_JS = 'web/design-system/tokens.js';
 
-/** Directories and files scanned for raw color. */
-const ROOTS = ['web', 'index.html', 'watches.html', 'availability.html'];
-const EXTENSIONS = ['.css', '.html', '.js', '.mjs'];
+/**
+ * Directories and files scanned for raw color.
+ *
+ * `frontend` is the React tree. It is scanned on the same terms as `web` for the
+ * duration of the strangler migration — both ship to users, so both are held to
+ * the same rule.
+ */
+const ROOTS = ['web', 'frontend', 'index.html', 'watches.html', 'availability.html'];
+const EXTENSIONS = ['.css', '.html', '.js', '.mjs', '.ts', '.tsx'];
+
+/**
+ * Never walked. Build output and installed dependencies are not authored source,
+ * and `frontend/dist` in particular contains the bundled LDS cascade, whose every
+ * palette value would read as a violation.
+ */
+const IGNORED_DIRS = new Set(['node_modules', 'dist']);
+
+/**
+ * Test files quote colors in assertions; they describe the source, they do not
+ * ship it.
+ */
+const TEST_SUFFIXES = ['.test.mjs', '.test.js', '.test.ts', '.test.tsx'];
 
 /**
  * Exemptions. Each needs a reason — an entry without one is a TODO wearing a
@@ -38,6 +61,8 @@ const EXEMPT = {
     'demonstrates pre-token colors side by side with their replacements',
   'web/design-system/slack-blockkit-payloads.js':
     "Slack's attachment API takes a literal hex over the wire; each value names the token it mirrors",
+  'frontend/vendor':
+    'vendored LDS (matthewlew/lds) — third-party source with its own APCA palette; the roadtrip theme there is generated FROM tokens.css, so its values are already governed upstream',
 };
 
 /** Line-level escapes for cases a file-level exemption would over-grant. */
@@ -84,11 +109,13 @@ function walk(path, out = []) {
   const abs = join(ROOT, path);
   if (statSync(abs).isDirectory()) {
     for (const entry of readdirSync(abs)) {
-      if (entry === 'node_modules' || entry.startsWith('.')) continue;
+      if (IGNORED_DIRS.has(entry) || entry.startsWith('.')) continue;
       walk(join(path, entry), out);
     }
-  } else if (EXTENSIONS.some((e) => path.endsWith(e)) && !path.endsWith('.test.mjs')) {
-    // Tests quote colors in assertions; they describe the source, not ship it.
+  } else if (
+    EXTENSIONS.some((e) => path.endsWith(e)) &&
+    !TEST_SUFFIXES.some((e) => path.endsWith(e))
+  ) {
     out.push(path);
   }
   return out;
