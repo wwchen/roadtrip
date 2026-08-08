@@ -39,15 +39,15 @@ export interface ConfirmButtonProps extends ButtonProps {
  * inlined into `WatchTable`. Extracted at the third site — deleting a watch,
  * signing out, and disconnecting Slack — rather than written a third time.
  *
- * Two behaviours the inline version lacked, both mattering because the armed state
- * is a promise that the next click destroys something:
+ * **It disarms itself** after `ARM_TIMEOUT_MS`, which the inlined copy did not. That
+ * matters because the armed state is a promise that the next click destroys
+ * something: an armed button left on screen is a trap, and the user's next click on
+ * what looks like an ordinary button deletes.
  *
- *  - **It disarms itself** after `ARM_TIMEOUT_MS`. An armed button left on screen is
- *    a trap: the user's next click on what looks like an ordinary button deletes.
-  * Blur-to-disarm was tried and dropped: LDS wires only the handlers a component
- * declares in its own spec (see `runtime.jsx`), so an `onBlur` passed through props
- * is never attached — and `blur` does not bubble to the wrapper it would be attached
- * to. The timeout is the whole safety net.
+ * Blur-to-disarm was tried and dropped, so the timeout is the whole safety net. LDS
+ * wires only the handlers a component declares in its own spec (see `runtime.jsx`),
+ * so an `onBlur` passed through props is never attached — and `blur` does not bubble
+ * to the wrapper it would be attached to anyway.
  *
  * The accessible name changes with the state, so a screen reader announces the
  * armed step rather than silently re-labelling the same control.
