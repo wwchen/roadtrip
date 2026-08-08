@@ -1,6 +1,5 @@
 import '@ui/styles.css';
-import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
+import { mountPage } from '@/app/mount';
 
 // Phase 0 placeholder. Phase 2 rebuilds the pollers/runs/snapshots dashboard.
 function AvailabilityPage() {
@@ -12,11 +11,4 @@ function AvailabilityPage() {
   );
 }
 
-const el = document.getElementById('root');
-if (el) {
-  createRoot(el).render(
-    <StrictMode>
-      <AvailabilityPage />
-    </StrictMode>,
-  );
-}
+mountPage(<AvailabilityPage />);
