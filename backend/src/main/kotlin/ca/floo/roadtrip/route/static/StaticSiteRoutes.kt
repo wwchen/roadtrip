@@ -30,6 +30,7 @@ private const val HTML_SUFFIX = ".html"
 private const val LEGACY_WEB_DIR = "web"
 private const val DATA_DIR = "data"
 private const val ASSETS_PATH = "/assets"
+
 /** `vite build` output, relative to `staticDir` — `.` on the host and
  *  `/app/static` in a container both resolve, so no profile overrides it. */
 private const val FRONTEND_DIR = "frontend/dist"

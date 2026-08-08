@@ -39,11 +39,10 @@ class StaticSiteRoutesTest {
         staticDir: File,
         frontendDir: File,
         block: suspend (HttpClient) -> Unit,
-    ) =
-        testApplication {
-            application { routing { staticSiteRoutes(staticDir, frontendDir) } }
-            block(client)
-        }
+    ) = testApplication {
+        application { routing { staticSiteRoutes(staticDir, frontendDir) } }
+        block(client)
+    }
 
     @Test
     fun `a migrated page is served from the build, not the legacy tree`() =
