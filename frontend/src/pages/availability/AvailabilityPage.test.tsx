@@ -7,7 +7,7 @@
 // the guard against silent drift rather than a formality.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AppProviders } from '@/app/AppProviders';
 import type {
@@ -17,6 +17,9 @@ import type {
   SnapshotStats,
 } from '@/api/availability-dashboard-api';
 import { AvailabilityPage } from './AvailabilityPage';
+
+/** Mirrors PollersTab's row-message TTL. */
+const FEEDBACK_TTL_MS = 6000;
 
 // Chart.js needs a real 2D context, which jsdom has none of. The data shaping it
 // would draw is tested purely in ChangesChart.test.ts.
@@ -408,6 +411,36 @@ describe('check now', () => {
     await userEvent.click(screen.getByRole('button', { name: 'check now' }));
 
     expect(await screen.findByText('error (500)')).toBeInTheDocument();
+  });
+
+  // The legacy tab's refresh() rebuilt innerHTML, destroying the feedback span
+  // along with the row. Holding it in React state instead means it outlives the
+  // data it described unless something clears it — a permanent "queued" badge
+  // beside a poller whose run happened long ago.
+  test('the queued message clears once the refreshed list arrives', async () => {
+    // shouldAdvanceTime keeps real time moving, so userEvent and waitFor still
+    // work while the TTL timer stays under the test's control.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      stubApi(
+        pollerList(poller({ id: 7 })),
+        forceRoute(() => json({ poller_id: 7, next_run_at: '2026-07-08T15:00:00Z' })),
+      );
+      renderPage();
+      await screen.findByRole('table');
+
+      await userEvent.click(screen.getByRole('button', { name: 'check now' }));
+      // Readable first — clearing it on the invalidation refetch instead would make
+      // the confirmation flash past, which is the legacy tab's own flaw.
+      await screen.findByText('queued');
+
+      await act(async () => {
+        vi.advanceTimersByTime(FEEDBACK_TTL_MS);
+      });
+      expect(screen.queryByText('queued')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('a dormant poller cannot be checked', async () => {

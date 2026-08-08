@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Banner, Button, EmptyState, Select, Skeleton, Table, Tag } from '@ui';
 import type { AvailabilityPoller } from '@/api/availability-dashboard-api';
 import { formatTimestamp } from '@/lib/format';
@@ -14,10 +14,11 @@ import {
 import { TAB_RUNS, type TabRoute } from './useTabRoute';
 import type { ForcePollerCooldown } from '@/api/availability-dashboard-api';
 
+/** Order matches the legacy select: any first, then the two concrete states. */
 const ACTIVE_OPTIONS = [
+  { value: '', label: 'any' },
   { value: 'true', label: 'active' },
   { value: 'false', label: 'dormant' },
-  { value: '', label: 'any' },
 ];
 
 /** The legacy select opened on `active`, not on `any`. */
@@ -46,11 +47,27 @@ export interface PollersTabProps {
  *
  * Per-row rather than one banner because the legacy tab put the message in the
  * row it belonged to, and several rows can be in flight at once.
+ *
+ * **Cleared when fresh list data arrives**, which is what the legacy tab got for
+ * free: its `refresh()` rebuilt `resultsEl.innerHTML`, destroying the feedback
+ * span along with the row. Holding these in React state instead means they
+ * outlive the row unless something clears them — and a permanent "queued" badge
+ * beside a poller whose run happened long ago is worse than no badge, as is a
+ * "try again in 42s" whose number never ticks down and never expires.
  */
 type Feedback = Readonly<Record<string, string>>;
 
 const CHECKING = 'checking…';
 const QUEUED = 'queued';
+
+/**
+ * How long a row message stays up.
+ *
+ * Long enough to read, short enough that it cannot be mistaken for current state
+ * — a "queued" badge beside a poller whose run happened long ago, or a "try again
+ * in 42s" whose number never ticks down, is worse than no badge at all.
+ */
+const FEEDBACK_TTL_MS = 6000;
 
 /**
  * Rebuild of web/components/availability/pollers-tab.js.
@@ -70,6 +87,20 @@ export function PollersTab({ route }: PollersTabProps) {
   const pollers = usePollers(filters);
   const summary = usePollersSummary();
   const force = useForcePoller();
+
+  // Expire row messages a few seconds after the last one, rather than tying them
+  // to the list refetch. Clearing on fresh data was the first attempt and it is
+  // wrong twice over: the invalidation refetch lands almost immediately, so the
+  // confirmation is never readable — which is the legacy tab's own flaw, since its
+  // `refresh()` wiped the span as soon as it returned.
+  //
+  // One timer for the whole map, reset on each new message, so several rows in
+  // flight need no per-key bookkeeping.
+  useEffect(() => {
+    if (Object.keys(feedback).length === 0) return;
+    const timer = setTimeout(() => setFeedback({}), FEEDBACK_TTL_MS);
+    return () => clearTimeout(timer);
+  }, [feedback]);
 
   const setRowFeedback = (pollerId: string, message: string) =>
     setFeedback((prev) => ({ ...prev, [pollerId]: message }));

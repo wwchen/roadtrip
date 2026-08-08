@@ -20,9 +20,14 @@ import '@/features/availability-dashboard/dashboard.css';
  * components and TanStack Query holds the results, so switching away and back is
  * instant and served from cache.
  *
- * Each tab is keyed on the active tab, so switching genuinely remounts it. That
- * matters because the tabs seed their filter state from the URL once, and because
- * LDS's uncontrolled inputs reseed only on remount.
+ * Switching tabs unmounts one component and mounts another, so each tab's state
+ * starts fresh — which is what lets a tab seed its filter state from the URL once
+ * and then own it.
+ *
+ * Note what does NOT remount: a param change within the same tab. `useTabRoute`
+ * updates `route.params` in place, and the active tab keeps its mounted filter
+ * state rather than reseeding from the new URL. That is deliberate — the tab is
+ * what wrote those params — but it means "the URL changed" is not a reseed signal.
  */
 export function AvailabilityPage() {
   const route = useTabRoute();
@@ -42,9 +47,9 @@ export function AvailabilityPage() {
 
       <TabNav route={route} />
 
-      {route.tab === TAB_POLLERS && <PollersTab key={TAB_POLLERS} route={route} />}
-      {route.tab === TAB_RUNS && <RunsTab key={TAB_RUNS} route={route} />}
-      {route.tab === TAB_CHANGES && <ChangesTab key={TAB_CHANGES} route={route} />}
+      {route.tab === TAB_POLLERS && <PollersTab route={route} />}
+      {route.tab === TAB_RUNS && <RunsTab route={route} />}
+      {route.tab === TAB_CHANGES && <ChangesTab route={route} />}
     </main>
   );
 }
