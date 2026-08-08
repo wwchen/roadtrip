@@ -1,0 +1,63 @@
+/* ---------------------------------------------------------------------------
+   Account/settings panel layout.
+
+   Ports the layout half of web/account/{profile,account}-panel.css. Buttons,
+   inputs and the verified badge's shape are LDS's job and are not restated; what
+   is left is the label/value rows and the danger-zone frame.
+
+   Those legacy files were injected at runtime as <link> tags by each panel's
+   `injectStyles()`, guarded by an id so a second mount did not duplicate them.
+   Bundled here instead, so the ordering is the bundler's problem rather than a
+   race between mounts.
+   --------------------------------------------------------------------------- */
+
+.rt-account-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+/* A read-only label/value pair. Stacks on narrow screens so a long email is not
+   forced to share a line with its label. */
+.rt-account-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.rt-account-row-label {
+  color: var(--rt-muted);
+  font-size: 13px;
+}
+
+.rt-account-row-value {
+  color: var(--rt-text);
+  font-size: 14px;
+}
+
+.rt-account-verified {
+  margin-left: 6px;
+  color: var(--rt-success);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Separated by a rule rather than a color wash: the section holds one
+   irreversible action, and the ConfirmButton's own armed state carries the
+   warning. A red panel around an unarmed button overstates it. */
+.rt-account-danger {
+  width: 100%;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--rt-border);
+}
+
+.rt-account-danger-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--rt-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

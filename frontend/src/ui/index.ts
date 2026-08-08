@@ -26,6 +26,7 @@ export * from '@lew/lds-react';
 // ---------------------------------------------------------------------------
 
 export { SeededTextField, type SeededTextFieldProps } from './SeededTextField';
+export { ConfirmButton, type ConfirmButtonProps } from './ConfirmButton';
 
 // ---------------------------------------------------------------------------
 // Type corrections.
