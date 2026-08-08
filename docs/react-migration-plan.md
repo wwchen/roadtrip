@@ -260,9 +260,26 @@ via npm.
 > but pays ~9k LOC first, and the account UI is the smaller, better-understood surface to do next.
 >
 > **Order the work so nothing is wasted:** the pure/logic layers are independent of the mounting
-> decision and go first. `src/lib/settings-errors.ts` is done (ported + tested). `account-api.ts`
-> was already typed in Phase 0. Next is the auth port (`embedded-auth-port.js` +
-> `auth0-embedded.js`) — also mostly non-DOM — then the panels, then the island glue last.
+> decision and go first.
+>
+> - ✅ `src/lib/settings-errors.ts` — ported + tested.
+> - ✅ `account-api.ts` — already typed in Phase 0.
+> - ✅ `src/features/account/embedded-auth-port.ts` — the contract, now with the failure codes as a
+>   union and `EmbeddedAuthError` as a class, so a UI `switch` is exhaustively checked and an
+>   adapter cannot invent a code the UI has no message for.
+> - ✅ `src/features/account/auth0-embedded.ts` — the adapter, with **auth0-js from npm** instead of
+>   a CDN `<script>` read off `globalThis.auth0`. The sign-in path is the worst place to depend on a
+>   third-party fetch succeeding. 22 tests; the legacy adapter had none.
+> - ⬜ The panels (profile, notifications, account, settings modal, login card, SecretField).
+> - ⬜ The island glue and the topbar hook — last, and the only throwaway part.
+>
+> **A real bug was fixed in the adapter port.** Auth0 reports an unverified email as
+> `access_denied` in some tenant configurations, not only as `unauthorized`. The original tested
+> `access_denied` first and mapped it straight to `invalid_credentials`, so those users were told
+> their password was wrong. The description check now runs before the credential codes: a message
+> that says "verify" is about verification whatever code carries it. Pinned by a test that fails
+> under the old ordering. Also: a login "success" carrying no `code` now rejects rather than
+> resolving `undefined` into `/auth/password/complete`.
 >
 > **A latent bug was fixed in the port**, worth knowing because the same shape appears elsewhere
 > in `web/`: `settings-errors.js` looks up `MESSAGES[code] ?? DEFAULT` on a plain object, so a
