@@ -56,7 +56,7 @@ coming, and React is easier to hire/onboard for. TypeScript throughout.
 | Server state | **TanStack Query** (replaces the `roadtrip:*` custom-event refetch bus) |
 | Client state | **Zustand** (replaces `state`/`trip` singletons + `window.__rt*` global RPC bridge) |
 | Components/styling | **LDS** — consume `@lew/lds-react` via a local `@ui` adapter; style with `@lew/lds/css` + `theme-roadtrip` |
-| LDS consumption | **Vendor into the repo now**, switch to a published registry dep later (one-line swap behind `@ui`) |
+| LDS consumption | **Vendor into the repo now**, switch to a registry dep once `@lew/lds*` is published (swap behind `@ui`; still unpublished as of 2026-08-08) |
 | Rollout | **Strangler, page-by-page**: watches → availability → account → map app |
 | Tests | **Vitest 3** + jsdom + React Testing Library (ports the `node --test` `*.test.mjs` suites) |
 
@@ -68,8 +68,9 @@ coming, and React is easier to hire/onboard for. TypeScript throughout.
   `web/design-system`). One-token CSS cascade, four themes × light/dark. Ships `.d.ts` types.
   Exports: `@lew/lds` (templates+controllers), `@lew/lds/templates`, `@lew/lds/controllers`,
   `@lew/lds/css`, `@lew/lds/css/themes/roadtrip`, etc.
-- **`@lew/lds-react`** — on branch **`lds-react-adapter`** (NOT on `main`, NOT on npm). A
-  complete, typed React binding: every template has a PascalCase component (`Button`, `Modal`,
+- **`@lew/lds-react`** — now on **`main`** (merged upstream in PR #7, `214e442`); still NOT
+  published to npm. A complete, typed React binding: every template has a PascalCase
+  component (`Button`, `Modal`,
   `TextField`, `Table`, `Tabs`, `Toggle`, `Banner`, `Select`, `Card`, `Menu`, `Tooltip`,
   `Checkbox`, `Radio`, `Chip`, `Link`, `Nav`, `EmptyState`, `Skeleton`, `Icon`, `Inline`,
   `Avatar`, `ButtonGroup`, `Row`, `Tag`, …). `forwardRef` to the real DOM node; slot props
@@ -87,17 +88,26 @@ coming, and React is easier to hire/onboard for. TypeScript throughout.
 
 ### Inspecting / vendoring LDS
 ```bash
-# Clone to inspect (public repo):
+# Clone to inspect (public repo). All three packages are on main now:
 git clone https://github.com/matthewlew/lds /tmp/lds
 cd /tmp/lds
-git fetch origin lds-react-adapter        # the @lew/lds-react package lives here
-git show FETCH_HEAD:packages/lds-react/src/index.d.ts   # full React API surface
+cat packages/lds-react/src/index.d.ts     # full React API surface
 ```
-Vendor plan (task): copy `packages/lds` + `packages/open-icons` (from `main`) and
-`packages/lds-react` (from `lds-react-adapter`) into `frontend/vendor/` (or an npm workspace),
-depend by path, and point `@ui` at `@lew/lds-react`. **Why vendor:** npm git-deps can't cleanly
-install a single workspace member of a monorepo. Keep it a one-line change to swap for a
-published `@lew/lds*` registry dep later.
+**Vendored revision: `2bdcf68`** (`frontend/vendor/{lds,lds-react,open-icons}`). To check for
+upstream drift:
+```bash
+git diff 2bdcf68 main -- packages/          # upstream changes since we vendored
+for p in lds lds-react open-icons; do       # or byte-compare against the vendored copy
+  git archive main packages/$p | tar -x -C /tmp/cmp-$p --strip-components=2
+  diff -rq /tmp/cmp-$p frontend/vendor/$p
+done
+```
+**Why still vendored, now that it's on `main`:** npm cannot install a single workspace member of
+a git monorepo, and the packages depend on each other by exact version. A git dep therefore
+still does not work — publication to npm is the unblocker, and `@lew/lds*` is not published
+(checked 2026-08-08, all three 404). Swapping to a registry dep means dropping
+`"workspaces": ["vendor/*"]` from `frontend/package.json` and changing the specifiers; `@ui`
+means no call site moves.
 
 ---
 
@@ -244,7 +254,8 @@ final CI/deploy cleanup; remove the `python3 -m http.server` static launch confi
 jsdom, RTL. Multi-page build, dev proxy, three thin shells.
 
 **LDS vendored.** `packages/{lds,open-icons}` are byte-identical between `main` and the
-`lds-react-adapter` branch, so all three packages are vendored from that one tree into
+`lds-react-adapter` branch (since merged to `main`), so all three packages are vendored from
+one tree at `2bdcf68` into
 `frontend/vendor/` and consumed as `vendor/*` npm workspaces. `@ui` re-exports
 `@lew/lds-react`; `@ui/styles.css` loads `@lew/lds/css` then the roadtrip theme; the shells
 carry `class="theme-roadtrip mode-dark"`. The icon sprite needs no config — `@lew/open-icons`
