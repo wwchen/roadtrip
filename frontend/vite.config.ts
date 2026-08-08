@@ -15,6 +15,14 @@ const proxy = Object.fromEntries(
   ]),
 );
 
+// The retained token bridge. `web/design-system/tokens.js` stays the single
+// source of truth for `--rt-*` colors (it holds the fallback table that
+// scripts/check-color-tokens.mjs verifies against tokens.css), so the React app
+// imports that module rather than owning a TS copy. Typed by
+// src/types/tokens.d.ts; dropped in Phase 5 when the bridge is reconciled with
+// LDS's `--c-*` names.
+const LEGACY_WEB_DIR = here('../web');
+
 export default defineConfig({
   root: here('.'),
   plugins: [react()],
@@ -22,6 +30,10 @@ export default defineConfig({
     alias: {
       '@': here('./src'),
       '@ui': here('./src/ui'),
+      '@tokens': `${LEGACY_WEB_DIR}/design-system/tokens.js`,
+      // Transition-only: lets parity tests run a port against the original it
+      // was ported from. Typed by src/types/legacy.d.ts; removed in Phase 5.
+      '@legacy/core': `${LEGACY_WEB_DIR}/core.js`,
     },
   },
   build: {
@@ -40,6 +52,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy,
+    // `@tokens` resolves outside the Vite root, so the dev server has to be
+    // allowed to serve it.
+    fs: { allow: [here('.'), LEGACY_WEB_DIR] },
   },
   test: {
     globals: true,
