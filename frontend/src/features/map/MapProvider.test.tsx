@@ -121,6 +121,23 @@ describe('setup', () => {
     expect(screen.getByTestId('map-canvas')).toBeInTheDocument();
   });
 
+  // MapLibre measures its container, so an unsized ancestor gives a 0x0 canvas: a
+  // map that initialises cleanly, passes every test, and draws nothing. The provider
+  // supplies the sized frame itself so a host page cannot forget to.
+  test('wraps the canvas in its own sized frame', () => {
+    renderMap();
+    expect(screen.getByTestId('map-canvas').parentElement).toHaveClass('rt-map-shell');
+  });
+
+  // Children render above the canvas — that is what lets the drawer and topbar
+  // overlay the map rather than sit below it.
+  test('renders children inside the frame, after the canvas', () => {
+    renderMap();
+    const shell = screen.getByTestId('map-canvas').parentElement!;
+    expect(shell).toContainElement(screen.getByTestId('ready'));
+    expect(shell.firstElementChild).toBe(screen.getByTestId('map-canvas'));
+  });
+
   test('opens on the remembered basemap', () => {
     window.localStorage.setItem(BASEMAP_STORAGE_KEY, 'osm');
     renderMap();

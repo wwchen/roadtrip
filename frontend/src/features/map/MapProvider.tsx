@@ -1,13 +1,16 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { Map as MapLibreMap } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import './map.css';
 import {
   SATELLITE_LAYER_ID,
   SATELLITE_SOURCE_ID,
@@ -66,6 +69,9 @@ export function MapProvider({ children }: { children: ReactNode }) {
   const [map, setMap] = useState<MapLibreMap | null>(null);
   const [styleReady, setStyleReady] = useState(false);
   const [basemapKey, setBasemapKey] = useState(initialBasemapKey);
+  // Read by the create-once effect, which must not depend on `basemapKey` —
+  // the basemap is applied via setStyle, never by recreating the map.
+  const basemapKeyRef = useRef(basemapKey);
   const [satellite, setSatellite] = useState(false);
 
   // Created once. The basemap is applied through setStyle rather than by
@@ -76,7 +82,9 @@ export function MapProvider({ children }: { children: ReactNode }) {
 
     const instance = new MapLibreMap({
       container,
-      style: basemapStyle(initialBasemapKey()),
+      // The state this is seeded from, not a second read of localStorage — two
+      // derivations of one value can only ever drift.
+      style: basemapStyle(basemapKeyRef.current),
       center: INITIAL_CENTER,
       zoom: INITIAL_ZOOM,
     });
@@ -99,8 +107,9 @@ export function MapProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const changeBasemap = (key: string) => {
+  const changeBasemap = useCallback((key: string) => {
     setBasemapKey(key);
+    basemapKeyRef.current = key;
     rememberBasemapKey(key);
     const instance = mapRef.current;
     if (!instance) return;
@@ -108,7 +117,7 @@ export function MapProvider({ children }: { children: ReactNode }) {
     // touching them before the new style announces itself.
     setStyleReady(false);
     instance.setStyle(basemapStyle(key), { diff: false });
-  };
+  }, []);
 
   // Satellite is an underlay, reinstalled on every style load because the reload
   // wipes it along with everything else.
@@ -131,12 +140,22 @@ export function MapProvider({ children }: { children: ReactNode }) {
     );
   }, [map, styleReady, satellite]);
 
+  const value = useMemo<MapContextValue>(
+    () => ({ map, styleReady, basemapKey, setBasemap: changeBasemap, satellite, setSatellite }),
+    [map, styleReady, basemapKey, changeBasemap, satellite],
+  );
+
   return (
-    <MapContext.Provider
-      value={{ map, styleReady, basemapKey, setBasemap: changeBasemap, satellite, setSatellite }}
-    >
-      <div ref={containerRef} className="rt-map-canvas" data-testid="map-canvas" />
-      {children}
+    <MapContext.Provider value={value}>
+      {/* The provider owns its own frame rather than trusting each host page to
+          size one. MapLibre measures its container, so an unsized ancestor yields a
+          0x0 canvas — a map that initialises cleanly, passes every test, and draws
+          nothing. Children render after the canvas and above it, which is what makes
+          the drawer, topbar and controls overlay the map. */}
+      <div className="rt-map-shell">
+        <div ref={containerRef} className="rt-map-canvas" data-testid="map-canvas" />
+        {children}
+      </div>
     </MapContext.Provider>
   );
 }
