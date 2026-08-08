@@ -48,11 +48,46 @@ Generic, reusable across any page. Examples: Banner, ToggleSwitch, DoubleConfirm
 
 These know nothing about watches, POIs, or domain logic. They accept data and callbacks.
 
-### Domain components (`web/<feature>/`)
+### Domain components (`web/<feature>/`, and `frontend/src/features/<feature>/`)
 
-Compose design-system primitives into feature-specific UI. Examples: `web/watches/WatchForm`, `web/watches/WatchTable`.
+Compose design-system primitives into feature-specific UI. Examples:
+`web/account/notifications-panel.js` (vanilla) and
+`frontend/src/features/watches/WatchTable.tsx` (React).
 
 Domain components import from `web/design-system/` and from `web/api/` but never from other feature directories.
+Their React equivalents import primitives from `@ui` and clients from `@/api`, with the same
+no-cross-feature rule.
+
+> **Migrating.** `web/` is being replaced by `frontend/` page by page — see
+> [docs/react-migration-plan.md](react-migration-plan.md). Watches has already moved:
+> its components live in `frontend/src/features/watches/` and are built on LDS via `@ui`,
+> and `web/watches/` is deleted. Read the plan before adding to either tree, so new work
+> lands in React rather than extending the tree that is going away.
+
+### Forms on LDS: the controls are uncontrolled
+
+Non-negotiable, and the plan's Gotchas section has the full detail. The short version
+for anyone adding a React form:
+
+- Seed a field **once** with `defaultValue`/`defaultChecked`, let the DOM own the live
+  value, mirror `onChange` into state for the payload, and make a reseed a **remount**
+  via a React `key`. Passing changing state back in swaps the control's DOM and eats the
+  caret.
+- For a field that is **conditionally rendered** — gated on a toggle, say — use
+  **`SeededTextField`** from `@ui` instead of `defaultValue`. It snapshots at its own
+  mount, so a field that unmounts and comes back shows the current value rather than the
+  one from when the form opened. Seeding those from the parent's snapshot displays one
+  value and submits another.
+- Disable **buttons**, not fields, while a save is in flight. `disabled` changes the
+  template, which swaps the DOM and discards what was typed.
+
+### Page shells
+
+A migrated page's `*.html` is a bare shell: `#root` plus its entry module. `tokens.css`
+and the sandbox banner/user switcher are injected into every entry by the
+`runtimeServedAssets` plugin (`frontend/vite/runtime-served-assets.ts`) — do not hand-write
+them, and do not omit them. They cannot be written in the HTML anyway: Vite treats a module
+script as a build input and fails to resolve one pointing outside its root.
 
 ## Color: tokens only
 

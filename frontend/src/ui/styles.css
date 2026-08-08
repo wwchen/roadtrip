@@ -1,0 +1,19 @@
+/* ---------------------------------------------------------------------------
+   Page-level style entry for the React app.
+
+   Load order matters:
+     1. `@lew/lds/css`             — the APCA palette + LDS component cascade.
+     2. `@lew/lds/css/themes/roadtrip` — the roadtrip theme, whose every value is
+        read from `web/design-system/tokens.css`. Applied by the
+        `theme-roadtrip mode-dark` classes on <html> (roadtrip is dark-native and
+        LDS resolves light at `:root`, so BOTH classes go on the root element).
+
+   `web/design-system/tokens.css` is deliberately NOT imported here. The HTML
+   shells link it absolutely from Ktor at runtime, because the `token()` bridge
+   in `web/design-system/tokens.js` resolves `--rt-*` names through
+   `getComputedStyle` for MapLibre paint and Chart.js, which cannot read
+   `var()`. LDS's theme defines `--c-*`/`--grey-*`, not `--rt-*`, so the two
+   token sets coexist for the duration of the strangler migration.
+   --------------------------------------------------------------------------- */
+@import '@lew/lds/css';
+@import '@lew/lds/css/themes/roadtrip';

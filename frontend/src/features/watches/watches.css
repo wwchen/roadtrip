@@ -1,0 +1,104 @@
+/* ---------------------------------------------------------------------------
+   Watches page layout.
+
+   Ports the layout half of web/watches/watch-form.css and watch-table.css. The
+   parts those files styled by hand — inputs, toggles, buttons, the table frame,
+   status pills — are LDS's job now and are not restated here; what is left is
+   spacing and the two grids.
+   --------------------------------------------------------------------------- */
+
+.rt-watches-form-host {
+  margin-bottom: 16px;
+}
+
+/* ---- form ---- */
+
+.rt-watch-form {
+  background: var(--rt-surface);
+  border: 1px solid var(--rt-border);
+  border-radius: var(--rt-r-sm);
+  padding: 16px;
+}
+
+.rt-watch-form-title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Three narrow fields on one row, stacking before they get cramped. */
+.rt-watch-form-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.rt-watch-form-triggers {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rt-border);
+}
+
+.rt-watch-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.rt-trigger-selector {
+  display: grid;
+  gap: 12px;
+  /* A conditional field belongs to the toggle above it, so cap its width rather
+     than letting it span the whole card and read as a separate section. */
+  max-width: 420px;
+}
+
+/* ---- table ---- */
+
+/* The action column pushes the table past a narrow viewport; scroll the table
+   rather than the page, so the page never scrolls sideways. */
+.rt-watch-table-wrap {
+  overflow-x: auto;
+}
+
+.rt-watch-table-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rt-watch-table-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rt-watch-table-poi {
+  color: var(--rt-brand);
+  text-decoration: none;
+}
+
+.rt-watch-table-poi:hover {
+  color: var(--rt-brand-hover);
+  text-decoration: underline;
+}
+
+.rt-watch-cell-blank {
+  color: var(--rt-faint);
+}
+
+/* A header that sorts is a button, so it needs the surrounding cell's type back. */
+.rt-watch-table-sort {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.rt-watch-table-sort:hover {
+  color: var(--rt-brand);
+}

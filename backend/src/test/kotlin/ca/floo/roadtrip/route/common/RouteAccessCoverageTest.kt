@@ -55,7 +55,11 @@ class RouteAccessCoverageTest {
                 geocodeRoutes(MapboxGeocoder(token = null))
                 authRoutes(wiring = null, userRepo = noopUserRepo)
                 // Static file mounts register serving leaves beneath each root.
-                staticSiteRoutes(createTempDirectory("rt-access").toFile())
+                // Two roots: the legacy tree and the React build (frontend/dist).
+                staticSiteRoutes(
+                    staticDir = createTempDirectory("rt-access-static").toFile(),
+                    frontendDir = createTempDirectory("rt-access-frontend").toFile(),
+                )
             }
         assertEquals(emptyList(), undeclared)
     }

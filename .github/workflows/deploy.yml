@@ -134,8 +134,13 @@ jobs:
               - 'data/**'
               - 'index.html'
               - 'availability.html'
-              - 'watches.html'
               - 'web/**'
+              # The React tree. Compose bind-mounts frontend/dist, which is
+              # generated and gitignored — so the source is what a push can
+              # actually touch, and `make run env=prod` (this workflow's deploy
+              # step) builds dist from it on the host via the `frontend` target.
+              # Without this a frontend-only change would never ship.
+              - 'frontend/**'
               # A vault change is a runtime config change: the host decrypts
               # these on deploy, so a new client id or rotated token has to
               # reach it the same way code does. Without this, `manage.py set`

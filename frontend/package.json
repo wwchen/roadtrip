@@ -1,0 +1,43 @@
+{
+  "name": "roadtrip-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "//": "vendor/* are npm workspaces so the vendored LDS monorepo members resolve each other locally (npm cannot install a single workspace member of a git monorepo, and they depend on each other by exact version). Vendored from matthewlew/lds at 2bdcf68, now on that repo's main branch; see docs/react-migration-plan.md for the drift check. Swapping to published @lew/lds* registry deps later means dropping the workspaces field and changing the specifiers below.",
+  "workspaces": [
+    "vendor/*"
+  ],
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@lew/lds": "1.0.0",
+    "@lew/lds-react": "1.0.0",
+    "@lew/open-icons": "1.0.0",
+    "@tanstack/react-query": "^5.62.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/node": "^22.10.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.3",
+    "vitest": "^3.2.0"
+  }
+}

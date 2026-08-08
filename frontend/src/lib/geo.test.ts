@@ -1,0 +1,172 @@
+import { describe, expect, test } from 'vitest';
+import { distanceKm, formatDistance, geomCenter, zoomForBbox, type Bbox } from './geo';
+
+describe('distanceKm', () => {
+  // One degree of latitude along a meridian is exactly R × 1 rad/deg for
+  // haversine, which pins the earth radius and the radian conversion together.
+  test('one degree of latitude is ~111.195 km', () => {
+    expect(distanceKm(0, 0, 1, 0)).toBeCloseTo(111.19492664455873, 6);
+  });
+
+  test('is zero for the same point', () => {
+    expect(distanceKm(37.7749, -122.4194, 37.7749, -122.4194)).toBe(0);
+  });
+
+  test('is symmetric', () => {
+    const a = distanceKm(37.7749, -122.4194, 34.0522, -118.2437);
+    const b = distanceKm(34.0522, -118.2437, 37.7749, -122.4194);
+    expect(a).toBeCloseTo(b, 10);
+  });
+
+  test('matches the known SF–LA great-circle distance', () => {
+    expect(distanceKm(37.7749, -122.4194, 34.0522, -118.2437)).toBeCloseTo(559, 0);
+  });
+
+  test('shrinks a degree of longitude with latitude', () => {
+    expect(distanceKm(60, 0, 60, 1)).toBeLessThan(distanceKm(0, 0, 0, 1));
+  });
+});
+
+describe('formatDistance', () => {
+  test.each([
+    [0, '0 m away'],
+    [0.5, '500 m away'],
+    [0.9999, '1000 m away'],
+    [1, '1.0 km away'],
+    [2.5, '2.5 km away'],
+    [9.99, '10.0 km away'],
+    [10, '10 km away'],
+    [15.4, '15 km away'],
+    [1234, '1234 km away'],
+  ])('%s km reads as %s', (km, expected) => {
+    expect(formatDistance(km)).toBe(expected);
+  });
+});
+
+describe('geomCenter', () => {
+  test('a Point centres on itself', () => {
+    expect(geomCenter({ type: 'Point', coordinates: [10, 20] })).toEqual([
+      10,
+      20,
+      [
+        [10, 20],
+        [10, 20],
+      ],
+    ]);
+  });
+
+  test('a Polygon centres on its bbox midpoint', () => {
+    expect(
+      geomCenter({
+        type: 'Polygon',
+        coordinates: [
+          [
+            [0, 0],
+            [2, 0],
+            [2, 4],
+            [0, 4],
+            [0, 0],
+          ],
+        ],
+      }),
+    ).toEqual([
+      1,
+      2,
+      [
+        [0, 0],
+        [2, 4],
+      ],
+    ]);
+  });
+
+  test('a MultiPolygon descends through both levels of nesting', () => {
+    expect(
+      geomCenter({
+        type: 'MultiPolygon',
+        coordinates: [
+          [
+            [
+              [0, 0],
+              [1, 1],
+            ],
+          ],
+          [
+            [
+              [3, 3],
+              [5, 5],
+            ],
+          ],
+        ],
+      })[0],
+    ).toBe(2.5);
+  });
+
+  // PAD-US ships some parks as GeometryCollection with mixed polygon parts.
+  test('a GeometryCollection spans all member geometries', () => {
+    expect(
+      geomCenter({
+        type: 'GeometryCollection',
+        geometries: [
+          { type: 'Point', coordinates: [0, 0] },
+          { type: 'Point', coordinates: [4, 8] },
+        ],
+      }),
+    ).toEqual([
+      2,
+      4,
+      [
+        [0, 0],
+        [4, 8],
+      ],
+    ]);
+  });
+
+  test.each([
+    ['null', null],
+    ['undefined', undefined],
+    ['a geometry with no coordinates', { type: 'Point' }],
+    ['empty coordinates', { type: 'Polygon', coordinates: [] }],
+    ['an empty GeometryCollection', { type: 'GeometryCollection', geometries: [] }],
+  ])('falls back to the origin for %s rather than NaN', (_label, geom) => {
+    expect(geomCenter(geom)).toEqual([
+      0,
+      0,
+      [
+        [0, 0],
+        [0, 0],
+      ],
+    ]);
+  });
+});
+
+describe('zoomForBbox', () => {
+  const span = (degrees: number): Bbox => [
+    [0, 0],
+    [degrees, degrees],
+  ];
+
+  test.each([
+    [4, 7],
+    [3.0001, 7],
+    [3, 8.5], // the bucket boundaries are exclusive: `span > 3`, not `>=`
+    [2, 8.5],
+    [1, 10],
+    [0.5, 10],
+    [0.3, 11],
+    [0.2, 11],
+    [0.1, 12],
+    [0.05, 12],
+    [0, 12],
+  ])('a %s degree span maps to zoom %s', (degrees, zoom) => {
+    expect(zoomForBbox(span(degrees))).toBe(zoom);
+  });
+
+  test('uses the larger of the two spans', () => {
+    expect(
+      zoomForBbox([
+        [0, 0],
+        [0.01, 4],
+      ]),
+    ).toBe(7);
+  });
+});

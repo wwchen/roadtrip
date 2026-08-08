@@ -93,7 +93,7 @@ Use `.rt-btn` plus a variant modifier for every clickable action. Classes live i
 `mountDoubleConfirmButton(container, config)` renders at ≥44px by default,
 because it fires destructive actions (Sign out, Disconnect Slack). Pass
 `size: 'compact'` only where the button sits in a dense, fixed-width row —
-today just `web/watches/watch-table.js`, whose action grid is 28px columns.
+today just `frontend/src/features/watches/WatchTable.tsx`, whose action grid is 28px columns.
 
 | `size` | Height | When |
 |---|---|---|

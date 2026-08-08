@@ -259,6 +259,25 @@ if [[ "${ROUTING}" == "caddy-vhost" ]]; then
     fi
 fi
 
+# ── Build the React frontend ──────────────────────────────────────────────────
+# The compose files bind-mount frontend/dist from this checkout (like web/), so
+# the served frontend tracks the reviewed SHA rather than whatever the pre-built
+# image happens to carry. That means the build has to happen here.
+#
+# Fatal, not best-effort. This was a warning while every migrated page still had
+# a vanilla file to fall back to; web/watches/ is now deleted, so a skipped or
+# failed build means /watches serves a 404. A loud deploy failure beats shipping a
+# dead page, and the fix is to install Node on the host.
+if [[ -d "${REPO_ROOT}/frontend" ]]; then
+    if ! command -v npm >/dev/null 2>&1; then
+        echo "ERROR: npm not found, but frontend/ must be built — /watches has no" >&2
+        echo "       legacy fallback since web/watches/ was removed. Install Node." >&2
+        exit 1
+    fi
+    echo "==> building frontend (npm ci && npm run build)"
+    (cd "${REPO_ROOT}/frontend" && npm ci --no-audit --no-fund && npm run build)
+fi
+
 # ── Start Compose services ────────────────────────────────────────────────────
 # Ordering depends on whether a snapshot will be restored:
 #

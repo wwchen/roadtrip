@@ -248,9 +248,9 @@ before import.
 - **Campsite availability + watches.** Reservation-provider availability and
   watch/alert management live in the main app: the API is
   `/api/pois/{id}/campsites`, `/api/pois/{id}/campsites/availability`, and
-  `/api/watches`, and the UI is the topbar alerts panel plus the standalone
-  `/availability` and `/watches` pages (served straight from the repo root as
-  `availability.html` / `watches.html`). See
+  `/api/watches`, and the UI is the topbar alerts panel, the standalone
+  `/availability` page (served from the repo root as `availability.html`), and
+  `/watches`, which is React and served from `frontend/dist`. See
   [docs/reservation-providers.md](docs/reservation-providers.md) for the
   provider abstraction.
 - **Map** — MapLibre GL, vector and raster basemaps, runtime style-swap.

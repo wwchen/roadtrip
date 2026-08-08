@@ -58,8 +58,14 @@ jobs:
               - 'web/**/*.js'
               - 'web/**/*.css'
               - '.github/workflows/ci.yml'
+            # Both frontend trees gate the same job for the duration of the
+            # strangler migration: `web/**` is the vanilla tree, `frontend/**`
+            # the React one. `scripts/check-color-tokens.mjs` runs here too, and
+            # it now scans both.
             web:
               - 'web/**'
+              - 'frontend/**'
+              - 'scripts/check-color-tokens.mjs'
               - '.github/workflows/ci.yml'
             companion:
               - 'companion/**'
@@ -86,9 +92,9 @@ jobs:
               - 'gradlew'
               - 'settings.gradle.kts'
               - 'web/**'
+              - 'frontend/**'
               - 'index.html'
               - 'availability.html'
-              - 'watches.html'
               - '.github/workflows/ci.yml'
             # Everything the fast lint half reads: Grafana dashboards, the
             # secrets registry + vault tooling, and the Python that ruff and
@@ -180,8 +186,11 @@ jobs:
       - name: detekt rule tests
         run: ./gradlew :detekt-rules:test
 
-  # web/ has no package.json: the suites are dependency-free node:test modules
-  # importing the browser sources directly, so there is nothing to install.
+  # Gates both frontend trees while they coexist.
+  #
+  # web/ has no package.json: those suites are dependency-free node:test modules
+  # importing the browser sources directly, so there is nothing to install for
+  # them. frontend/ does, so its steps install first.
   web-tests:
     needs: changes
     if: needs.changes.outputs.web == 'true'
@@ -192,6 +201,8 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       # Enumerated with find and handed to node as an explicit list rather than
       # left to a `web/**/*.test.mjs` pattern. The pattern is correct today
       # (verified: same 153 tests either way), but it only works while quoted —
@@ -211,8 +222,33 @@ jobs:
           fi
           node --test "$@"
 
+      # `npm ci` rather than `npm install` so a lockfile that drifted from
+      # package.json fails here instead of resolving to something CI-only. The
+      # vendored LDS packages are `vendor/*` npm workspaces, so this links them
+      # from the checkout with nothing to fetch.
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Typecheck frontend
+        working-directory: frontend
+        run: npm run typecheck
+
+      - name: Run frontend unit tests
+        working-directory: frontend
+        run: npm run test
+
+      # The build is not redundant with the two steps above: it is the only thing
+      # that exercises bundling — resolving `@lew/lds-react`'s untranspiled .jsx
+      # out of the vendor workspace, the LDS CSS cascade, and the font/sprite
+      # assets. Those fail at bundle time, not typecheck time.
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
       # tokens.css is the only place a raw color may live. A hex that slips in
-      # elsewhere survives every theme override, so this gates the same job.
+      # elsewhere survives every theme override, so this gates the same job. It
+      # scans web/ and frontend/ (including .ts/.tsx).
       - name: Check color tokens
         run: node scripts/check-color-tokens.mjs
 
