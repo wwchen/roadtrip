@@ -13,26 +13,22 @@
   executed as a **strangler migration** (one page at a time; vanilla + React coexist).
 - New app lives in **`frontend/`** (Vite multi-page, 3 entries mirroring today's URLs).
 - **Phase 0 (foundation) is COMPLETE and all green.** All `web/api/*` and the pure
-  `web/utils/*` + `core.js` helpers are ported and typed; LDS is installed from npm and wired
-  behind `@ui`; Zustand stores + a TanStack Query client are standing; CI gates the tree.
-- **Components come from LDS** (`matthewlew/lds` → `@lew-ds/lds-react`), styled by
-  `@lew-ds/lds/css` + the `theme-roadtrip`. **Now an ordinary npm dependency** — published as
-  `@lew-ds/{lds,lds-react,open-icons}@1.0.0` on 2026-08-08. The vendored copy under
-  `frontend/vendor/` is gone.
-- **Phase 1 (watches page) is COMPLETE**, served, and merged (PR #568). The real `Watch` DTO is
-  pinned and `web/watches/` is deleted.
-- **Phase 2 (availability dashboard) is COMPLETE**: pollers/runs/changes on LDS + TanStack Query,
-  Chart.js from npm, `web/availability.js` + `web/components/availability/*` deleted.
-- **Serving is wired**: `tilt up` / `make run` / `make sandbox` build and serve both React pages.
-  Neither has a legacy fallback any more — an unbuilt `frontend/dist` 404s, deliberately and
-  loudly. **Next up: Phase 3 (account/settings).**
+  `web/utils/*` + `core.js` helpers are ported and typed; LDS is vendored and wired behind
+  `@ui`; Zustand stores + a TanStack Query client are standing; CI gates the tree.
+- **Components come from LDS** (`matthewlew/lds` → `@lew/lds-react`), styled by
+  `@lew/lds/css` + the `theme-roadtrip`. **Decision: vendored into `frontend/vendor/` as
+  `vendor/*` npm workspaces**; switch to a published registry dep later.
+- **Phase 1 (watches page) is COMPLETE** and the real `Watch` DTO is pinned. It is built and
+  tested but NOT yet served — see "Serving" below.
+- **Serving is wired**: `tilt up` / `make run` / `make sandbox` build and serve the React
+  watches page, with a per-page fallback to the legacy file. **Next up: Phase 2.**
 
 ### Resume quickstart
 ```bash
 cd frontend
-npm ci              # LDS comes from npm as @lew-ds/*
+npm ci              # vendor/* are workspaces — nothing is fetched for LDS
 npm run typecheck   # tsc --noEmit — must be clean
-npm run test        # vitest run — currently 547 tests green
+npm run test        # vitest run — currently 464 tests green
 npm run build       # vite build — emits dist/{index,availability,watches}.html
 npm run dev         # Vite dev server :5173, proxies /api,/auth,/web,/data → :8765 (Ktor)
 node ../scripts/check-color-tokens.mjs   # from frontend/, or drop the ../ from the repo root
@@ -56,24 +52,25 @@ coming, and React is easier to hire/onboard for. TypeScript throughout.
 
 | Area | Decision |
 |---|---|
-| Framework | **React 18.3 + TypeScript** (18.3 chosen for max compatibility; `@lew-ds/lds-react` peers `^18 \|\| ^19`) |
+| Framework | **React 18.3 + TypeScript** (18.3 chosen for max compatibility; `@lew/lds-react` peers `^18 \|\| ^19`) |
 | Build | **Vite 6**, multi-page: 3 HTML entries mirroring `/`, `/availability`, `/watches` |
 | Server state | **TanStack Query** (replaces the `roadtrip:*` custom-event refetch bus) |
 | Client state | **Zustand** (replaces `state`/`trip` singletons + `window.__rt*` global RPC bridge) |
-| Components/styling | **LDS** — consume `@lew-ds/lds-react` via a local `@ui` adapter; style with `@lew-ds/lds/css` + `theme-roadtrip` |
-| LDS consumption | **Registry dependency** (`@lew-ds/*@^1.0.0`, published 2026-08-08). Vendored in-tree through Phases 0–2; the swap behind `@ui` cost four files. |
+| Components/styling | **LDS** — consume `@lew/lds-react` via a local `@ui` adapter; style with `@lew/lds/css` + `theme-roadtrip` |
+| LDS consumption | **Vendor into the repo now**, switch to a registry dep once `@lew/lds*` is published (swap behind `@ui`; still unpublished as of 2026-08-08) |
 | Rollout | **Strangler, page-by-page**: watches → availability → account → map app |
 | Tests | **Vitest 3** + jsdom + React Testing Library (ports the `node --test` `*.test.mjs` suites) |
 
 ## LDS findings (inspected 2026-08-07)
 
 `matthewlew/lds` is a **public** monorepo — the "Lew Design System".
-- **`@lew-ds/lds`** — 28 framework-free components (`(props) => htmlString`); five stateful ones
+- **`@lew/lds`** — 28 framework-free components (`(props) => htmlString`); five stateful ones
   ship `mountX(el, config) → { update, dispose }` controllers (same contract as our current
   `web/design-system`). One-token CSS cascade, four themes × light/dark. Ships `.d.ts` types.
-  Exports: `@lew-ds/lds` (templates+controllers), `@lew-ds/lds/templates`, `@lew-ds/lds/controllers`,
-  `@lew-ds/lds/css`, `@lew-ds/lds/css/themes/roadtrip`, etc.
-- **`@lew-ds/lds-react`** — published to npm at 1.0.0. A complete, typed React binding: every template has a PascalCase
+  Exports: `@lew/lds` (templates+controllers), `@lew/lds/templates`, `@lew/lds/controllers`,
+  `@lew/lds/css`, `@lew/lds/css/themes/roadtrip`, etc.
+- **`@lew/lds-react`** — now on **`main`** (merged upstream in PR #7, `214e442`); still NOT
+  published to npm. A complete, typed React binding: every template has a PascalCase
   component (`Button`, `Modal`,
   `TextField`, `Table`, `Tabs`, `Toggle`, `Banner`, `Select`, `Card`, `Menu`, `Tooltip`,
   `Checkbox`, `Radio`, `Chip`, `Link`, `Nav`, `EmptyState`, `Skeleton`, `Icon`, `Inline`,
@@ -82,37 +79,36 @@ coming, and React is easier to hire/onboard for. TypeScript throughout.
   controller-backed stateful components (CodeField, SegmentedControl, Textarea, Toast,
   Tooltip); a `ToastProvider`/`useToast()` pair. Peer deps React `^18 || ^19`. `toSlot()`
   helper for one-level-deep nested slot props.
-- **`theme-roadtrip`** (`@lew-ds/lds/css/themes/roadtrip`) exists specifically so this app can
+- **`theme-roadtrip`** (`@lew/lds/css/themes/roadtrip`) exists specifically so this app can
   "wear LDS": every value is read from our current `web/design-system/tokens.css`. Applied via
   `<html class="theme-roadtrip mode-dark">` (roadtrip is dark-native; LDS resolves light at
   `:root`, so both classes go on the root element).
-- **`@lew-ds/open-icons`** — 174-symbol SVG sprite, standalone (no LDS dependency). Used via
+- **`@lew/open-icons`** — 174-symbol SVG sprite, standalone (no LDS dependency). Used via
   `<svg><use href="/icons.svg#name"/></svg>`; LDS's `Icon` wraps this.
 - LDS's README explicitly names **Roadtrip as "the real first consumer"**.
 
-### Installing / inspecting LDS
-LDS is a registry dependency. Nothing special is required:
+### Inspecting / vendoring LDS
 ```bash
-cd frontend && npm install        # @lew-ds/{lds,lds-react,open-icons}@^1.0.0
+# Clone to inspect (public repo). All three packages are on main now:
+git clone https://github.com/matthewlew/lds /tmp/lds
+cd /tmp/lds
+cat packages/lds-react/src/index.d.ts     # full React API surface
 ```
-To read the API surface, the installed package is the source of truth (it ships its own
-declarations, un-transpiled):
+**Vendored revision: `2bdcf68`** (`frontend/vendor/{lds,lds-react,open-icons}`). To check for
+upstream drift:
 ```bash
-less frontend/node_modules/@lew-ds/lds-react/src/index.d.ts   # full React API
-less frontend/node_modules/@lew-ds/lds/src/templates/index.d.ts
+git diff 2bdcf68 main -- packages/          # upstream changes since we vendored
+for p in lds lds-react open-icons; do       # or byte-compare against the vendored copy
+  git archive main packages/$p | tar -x -C /tmp/cmp-$p --strip-components=2
+  diff -rq /tmp/cmp-$p frontend/vendor/$p
+done
 ```
-The upstream repo (`https://github.com/matthewlew/lds`, public) is still worth cloning to read
-component source and commentary, which is where the behavioural contracts are written down.
-
-**History, because it explains some comments.** LDS was vendored into `frontend/vendor/` as
-`vendor/*` npm workspaces through Phases 0–2, because npm cannot install a single workspace
-member of a git monorepo and the packages depend on each other by exact version. Publication was
-the unblocker. On the swap the published tarballs were compared against the vendored revision
-(`2bdcf68`) and every source difference was the `@lew/` → `@lew-ds/` scope rename — no API change
-— so the move was a specifier change in four files plus `package.json`. **No call site moved**,
-which is what `@ui` existed for.
-
-Note the scope: **`@lew-ds/`**, not `@lew/`. Anything still importing `@lew/…` predates the swap.
+**Why still vendored, now that it's on `main`:** npm cannot install a single workspace member of
+a git monorepo, and the packages depend on each other by exact version. A git dep therefore
+still does not work — publication to npm is the unblocker, and `@lew/lds*` is not published
+(checked 2026-08-08, all three 404). Swapping to a registry dep means dropping
+`"workspaces": ["vendor/*"]` from `frontend/package.json` and changing the specifiers; `@ui`
+means no call site moves.
 
 ---
 
@@ -127,12 +123,13 @@ Three HTML entries mirror current URLs so `StaticSiteRoutes.kt` stays nearly unc
 frontend/
   index.html availability.html watches.html   # thin shells; <html class="theme-roadtrip mode-dark">
   vite.config.ts tsconfig.json vitest.setup.ts package.json
+  vendor/{lds,lds-react,open-icons}/          # vendored LDS, consumed as npm workspaces
   src/
     app/mount.tsx  app/AppProviders.tsx        # page mount + query/toast/event-bridge providers
     pages/{map,availability,watches}/main.tsx  # one mountPage() call each
     pages/watches/WatchesPage.tsx              # Phase 1 ✅
     features/watches/*                         # WatchForm, TriggerSelector, WatchTable, hooks
-    ui/index.ts  ui/styles.css                 # @ui → @lew-ds/lds-react; LDS css + roadtrip theme
+    ui/index.ts  ui/styles.css                 # @ui → @lew/lds-react; LDS css + roadtrip theme
     api/*.ts                                   # all 11 clients, typed + tested
     lib/{local-date,availability-status,geo,html,poi,watch-triggers}.ts  # pure, typed + tested
     stores/{authStore,tripStore,mapStore}.ts   # zustand
@@ -148,7 +145,7 @@ frontend/
 | Alias | Resolves to | Notes |
 |---|---|---|
 | `@/*` | `frontend/src/*` | |
-| `@ui` | `@lew-ds/lds-react` via `src/ui/index.ts` | the one-line swap point for a published LDS |
+| `@ui` | `@lew/lds-react` via `src/ui/index.ts` | the one-line swap point for a published LDS |
 | `@tokens` | `web/design-system/tokens.js` | the retained bridge, NOT ported — see Token strategy |
 | `@legacy/core` | `web/core.js` | **transition only**; parity tests. Deleted in Phase 5 |
 
@@ -163,7 +160,7 @@ frontend/
   `flattenHydratedPoi`, `formatPhone`, `callButtonsHTML`) → `src/lib/` as `.ts`.
 
 ### What is replaced
-- `web/design-system/*` primitives → `@lew-ds/lds-react` (via `@ui`).
+- `web/design-system/*` primitives → `@lew/lds-react` (via `@ui`).
 - Page controllers / self-init modules → React roots.
 - Cross-component comms (`state`/`trip` singletons, `window.__rt*` globals, `roadtrip:*` events,
   `layers.js` listener Set) → Zustand stores + TanStack Query invalidation.
@@ -188,7 +185,7 @@ the map instance in a `ref`; React effects call the imperative install functions
 map events into `mapStore`. Call `token()` inside those effects after CSS is applied.
 
 ### Token strategy (settled by the roadtrip theme)
-Adopt **`@lew-ds/lds/css` + `theme-roadtrip` + `mode-dark`** for LDS components. During the
+Adopt **`@lew/lds/css` + `theme-roadtrip` + `mode-dark`** for LDS components. During the
 strangler transition, **keep `web/design-system/tokens.css` loaded alongside** so the map/canvas
 `token()` bridge (reads `--rt-layer-*`, `--rt-map-*`, `--rt-series-*` by name) keeps resolving —
 LDS's theme defines `--c-*`/`--grey-*`, not `--rt-*`. Reconcile later: keep a thin `--rt-*`
@@ -266,9 +263,12 @@ final CI/deploy cleanup; remove the `python3 -m http.server` static launch confi
 **Scaffold.** React 18.3, TanStack Query 5, Zustand 5; Vite 6, **Vitest 3**, TS 5.6 strict,
 jsdom, RTL. Multi-page build, dev proxy, three thin shells.
 
-**LDS from npm.** All three packages install from the registry at `^1.0.0`. `@ui` re-exports
-`@lew-ds/lds-react`; `@ui/styles.css` loads `@lew-ds/lds/css` then the roadtrip theme; the shells
-carry `class="theme-roadtrip mode-dark"`. The icon sprite needs no config — `@lew-ds/open-icons`
+**LDS vendored.** `packages/{lds,open-icons}` are byte-identical between `main` and the
+`lds-react-adapter` branch (since merged to `main`), so all three packages are vendored from
+one tree at `2bdcf68` into
+`frontend/vendor/` and consumed as `vendor/*` npm workspaces. `@ui` re-exports
+`@lew/lds-react`; `@ui/styles.css` loads `@lew/lds/css` then the roadtrip theme; the shells
+carry `class="theme-roadtrip mode-dark"`. The icon sprite needs no config — `@lew/open-icons`
 resolves its URL through `import.meta.url`, so Vite fingerprints and emits it and
 `setIconSprite` stays unused.
 
@@ -417,7 +417,7 @@ Consequences worth knowing:
   association at all).
 - **LDS's `Table` is presentational.** No sort hooks, no per-row class, no row keys. Sorting and
   row-level styling are the consumer's job.
-- **Some `@lew-ds/lds-react` types are narrower than the runtime.** `Table`'s column labels and cell
+- **Some `@lew/lds-react` types are narrower than the runtime.** `Table`'s column labels and cell
   values accept React nodes but are typed `Slot`. Corrected once in `src/ui/index.ts`; put any
   further corrections there rather than casting at call sites.
 - **A `useMemo` dependency array must be a constant size.** A per-item query fan-out
@@ -450,16 +450,13 @@ Consequences worth knowing:
   Bash call demands a "facts, then retry" cycle (and denies the first attempt). Batch writes;
   present importers/purpose/instruction, then retry. (Disable path if ever wanted:
   `ECC_GATEGUARD=off` or `ECC_DISABLED_HOOKS=pre:edit-write:gateguard-fact-force,pre:bash:gateguard-fact-force`.)
-- **npm can't select one workspace member from a git monorepo.** This is why LDS was vendored at
-  all: the members depend on each other by exact version, which only resolved via a
-  `"workspaces": ["vendor/*"]` declaration. Publication to npm retired the whole problem —
-  recorded here because it is the reason a lot of surrounding commentary mentions workspaces.
-- **`@lew-ds/lds-react` ships untranspiled `.jsx`** (`main: ./src/index.jsx`), so a *bundler* has
-  to transform a dependency's source. This worked while it was a symlinked workspace member (Vite
-  treats linked deps as source), and it still works from `node_modules` — esbuild's dep optimizer
-  gives `.jsx` the JSX loader, verified after the registry swap by a clean `npm ci` + `vite build`
-  emitting LDS classes and the icon sprite. It can only fail at *bundle* time, never at typecheck
-  — which is why CI runs
+- **npm can't select one workspace member from a git monorepo** → hence vendoring LDS. The
+  vendored members depend on each other by exact version (`@lew/lds-react` → `@lew/lds` →
+  `@lew/open-icons`), which only resolves because `frontend/package.json` declares
+  `"workspaces": ["vendor/*"]`. Drop that field and `npm ci` goes to the registry and 404s.
+- **`@lew/lds-react` ships untranspiled `.jsx`** (`main: ./src/index.jsx`). It works because
+  workspace members are symlinked and Vite treats linked deps as source, so `plugin-react`
+  transforms them. This only fails at *bundle* time, never at typecheck — which is why CI runs
   `npm run build` and not just `tsc`.
 - **`@tokens`/`@legacy/*` resolve outside the Vite root**, so `server.fs.allow` must list
   `../web` or the dev server refuses to serve them.

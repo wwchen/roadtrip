@@ -1,0 +1,40 @@
+/* LDS theme: product — neutral, dense, dependable. Reference/utility theme
+   for dashboards and internal tools (pickleball-booker, tripblend, etc). */
+.theme-product{
+  --c-50:#EAF1FF;--c-100:#CFE0FF;--c-200:#9DBEFF;--c-300:#6B9BFF;--c-400:#3E79FF;
+  --c-500:#2563EB;--c-600:#1D4FC4;--c-700:#173D97;--c-800:#112C6E;--c-900:#0A1943;--c-950:#050D22;
+
+  /* A true neutral ramp, declared rather than inherited. These are the values
+     core carried before the portfolio brand moved into it; this theme used to
+     get them for free, which is why it never declared them.
+
+     It has to now. .emph-plain resolves all seven object-colour roles from
+     --gray-*, so with core's neutrals set to oat a dashboard rendered on cream
+     paper with warm borders. "Neutral, dense, dependable" is the whole brief
+     for this theme, and neutral is the word that stopped being true. */
+  --gray-50:#F8F8F8;  --gray-100:#F0F0F0; --gray-200:#E2E2E2; --gray-300:#CACACA;
+  --gray-400:#ADADAD; --gray-500:#898989; --gray-600:#6B6B6B; --gray-700:#4E4E4E;
+  --gray-800:#333333; --gray-900:#1C1C1C; --gray-950:#0E0E0E;
+
+  --th-display:'Inter',system-ui,sans-serif;
+  --th-body:'Inter',system-ui,sans-serif;
+  --th-ui:var(--th-display);
+  --th-mono:ui-monospace,monospace;
+
+  --text-caption: var(--size-0);
+  --text-body: var(--size-2);
+  --text-subhead: var(--size-3);
+  --text-title: var(--size-5);
+
+  --radius:10px;--radius-lg:14px;--pill:8px;
+
+  --shadow-sm:0 1px 2px rgba(0,0,0,.08);
+  --shadow-base:0 1px 3px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.08);
+  --shadow-lg:0 8px 24px -4px rgba(0,0,0,.16),0 2px 6px rgba(0,0,0,.08);
+  --card-shadow:var(--shadow-base);
+  --btn-shadow:none;
+
+  --density:0.92;
+
+  --icon-size:18px;--icon-weight:1.75;
+}

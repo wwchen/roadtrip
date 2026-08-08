@@ -1,0 +1,41 @@
+{
+  "name": "@lew/lds-react",
+  "version": "1.0.0",
+  "description": "React bindings for the Lew Design System — wraps @lew/lds's framework-free templates and controllers as React components, for React-based consumers (Claude Design, Claude Code) without changing @lew/lds itself.",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "src"
+  ],
+  "main": "./src/index.jsx",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.jsx"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@lew/lds": "1.0.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "scripts": {
+    "test": "node scripts/smoke-test.mjs && node scripts/browser-test.mjs"
+  },
+  "keywords": [
+    "design-system",
+    "react",
+    "components",
+    "lds"
+  ]
+}

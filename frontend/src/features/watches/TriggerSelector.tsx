@@ -21,7 +21,7 @@ const valueOf = (e: Event): string => (e.target as HTMLInputElement).value;
  * **LDS form controls are uncontrolled.** Their `value`/`checked` is the initial
  * value only: the components render a template string, so a changed prop swaps
  * the whole field's DOM, and feeding React state back in destroys the focused
- * input on every keystroke (`@lew-ds/lds-react`'s README says so outright, and
+ * input on every keystroke (`@lew/lds-react`'s README says so outright, and
  * `attrs.js` maps `defaultValue`/`defaultChecked` onto the `value`/`checked`
  * ATTRIBUTES for exactly this). So each control is seeded once, the DOM owns its
  * own value, and `onChange` mirrors it into React state for the conditional

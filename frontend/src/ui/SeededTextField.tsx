@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { TextField, type TextFieldProps } from '@lew-ds/lds-react';
+import { TextField, type TextFieldProps } from '@lew/lds-react';
 
 /**
  * Note this extends `TextFieldProps` rather than `Omit`-ing `value`/`defaultValue`

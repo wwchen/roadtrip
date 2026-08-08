@@ -1,0 +1,55 @@
+{
+  "name": "@lew/lds",
+  "version": "1.0.0",
+  "description": "Lew Design System — components as plain HTML, over a one-token CSS architecture, with four themes and light/dark.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "files": [
+    "src",
+    "css",
+    "adherence.oxlintrc.json"
+  ],
+  "main": "./src/index.js",
+  "types": "./src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./templates": {
+      "types": "./src/templates/index.d.ts",
+      "default": "./src/templates/index.js"
+    },
+    "./css": "./css/styles.css",
+    "./css/palette": "./css/apca-palette.css",
+    "./css/lds": "./css/lds.css",
+    "./css/themes/palette": "./css/themes/palette.css",
+    "./css/themes/product": "./css/themes/product.css",
+    "./css/themes/roadtrip": "./css/themes/roadtrip.css",
+    "./fonts/*": "./css/fonts/*",
+    "./adherence.oxlintrc.json": "./adherence.oxlintrc.json",
+    "./package.json": "./package.json",
+    "./controllers": {
+      "types": "./src/controllers/index.d.ts",
+      "default": "./src/controllers/index.js"
+    }
+  },
+  "dependencies": {
+    "@lew/open-icons": "1.0.0"
+  },
+  "scripts": {
+    "test": "node ../../scripts/markup-contract-test.mjs"
+  },
+  "keywords": [
+    "design-system",
+    "html",
+    "components",
+    "css",
+    "vanilla",
+    "no-build",
+    "lds"
+  ]
+}

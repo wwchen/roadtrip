@@ -6,7 +6,10 @@
   "engines": {
     "node": ">=22"
   },
-  "//": "LDS comes from the npm registry as @lew-ds/*. It was vendored under vendor/* as npm workspaces until 1.0.0 was published; the published tarballs were verified byte-identical to the vendored revision apart from the @lew/ -> @lew-ds/ scope rename, so the swap was a specifier change only. See docs/react-migration-plan.md.",
+  "//": "vendor/* are npm workspaces so the vendored LDS monorepo members resolve each other locally (npm cannot install a single workspace member of a git monorepo, and they depend on each other by exact version). Vendored from matthewlew/lds at 2bdcf68, now on that repo's main branch; see docs/react-migration-plan.md for the drift check. Swapping to published @lew/lds* registry deps later means dropping the workspaces field and changing the specifiers below.",
+  "workspaces": [
+    "vendor/*"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -16,9 +19,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@lew-ds/lds": "^1.0.0",
-    "@lew-ds/lds-react": "^1.0.0",
-    "@lew-ds/open-icons": "^1.0.0",
+    "@lew/lds": "1.0.0",
+    "@lew/lds-react": "1.0.0",
+    "@lew/open-icons": "1.0.0",
     "@tanstack/react-query": "^5.62.0",
     "chart.js": "^4.5.1",
     "chartjs-adapter-date-fns": "^3.0.0",
