@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
+import { runtimeServedAssets } from './vite/runtime-served-assets';
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
@@ -25,7 +26,7 @@ const LEGACY_WEB_DIR = here('../web');
 
 export default defineConfig({
   root: here('.'),
-  plugins: [react()],
+  plugins: [react(), runtimeServedAssets()],
   resolve: {
     alias: {
       '@': here('./src'),

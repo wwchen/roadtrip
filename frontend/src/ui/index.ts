@@ -18,6 +18,16 @@
 export * from '@lew/lds-react';
 
 // ---------------------------------------------------------------------------
+// Local additions.
+//
+// Components that exist to make an LDS constraint safe to use, rather than to
+// restyle anything. They belong here because the constraint they encode is LDS's,
+// so they disappear if upstream ever ships controlled inputs.
+// ---------------------------------------------------------------------------
+
+export { SeededTextField, type SeededTextFieldProps } from './SeededTextField';
+
+// ---------------------------------------------------------------------------
 // Type corrections.
 //
 // Narrow gaps where `@lew/lds-react`'s declarations are stricter than the
@@ -43,6 +53,15 @@ export interface TableColumn {
   label?: ReactNode;
 }
 
+/**
+ * The `Omit` here is safe only because `columns` and `rows` are the *only* named
+ * props LDS's `TableProps` adds, and both are redeclared below. LDS's `HtmlProps`
+ * has an `[attr: string]: unknown` index signature, and `Omit` over such a type
+ * collapses it to that signature alone — so if upstream ever adds a callback (an
+ * `onSort`, say), this would silently degrade it to `any` rather than fail to
+ * compile. Widen by intersection, not `Omit`, if that day comes. See
+ * `SeededTextField` for the same trap caught the hard way.
+ */
 export interface TableProps extends Omit<LdsTableProps, 'columns' | 'rows'> {
   columns?: TableColumn[];
   rows?: Record<string, ReactNode>[];

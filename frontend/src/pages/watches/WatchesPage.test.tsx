@@ -282,6 +282,31 @@ describe('create', () => {
     });
   });
 
+  // LDS controls are uncontrolled, so a conditional field's seed is read at its
+  // own mount. Seeding it from a snapshot frozen when the FORM opened made the
+  // remounted field show a stale value while the payload carried the live one —
+  // i.e. the address on screen was not the address saved.
+  test('a trigger field toggled off and back on submits the value it displays', async () => {
+    stubApi(watchList(), createOk());
+    renderPage();
+    await screen.findByText('No watches yet');
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Email' }));
+    await userEvent.type(screen.getByLabelText('Email address'), 'new@b.test');
+    // Off unmounts the field, on mounts a fresh one that must reseed from state.
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Email' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Email' }));
+
+    expect(screen.getByLabelText('Email address')).toHaveValue('new@b.test');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+    await waitFor(() => expect(postedTo('/api/watches')).toBeTruthy());
+    expect(postedTo('/api/watches')!.body).toMatchObject({
+      trigger_config: { email_notify: { to: 'new@b.test' } },
+    });
+  });
+
   // createWatch attaches the raw response text as `.body`; it carries the
   // backend's validation detail, which beats the bare status line.
   test('surfaces the backend validation detail in the form', async () => {
@@ -380,6 +405,30 @@ describe('edit', () => {
 
     await waitFor(() => expect(postedTo(MODIFY_WATCH_7)).toBeTruthy());
     expect(postedTo(MODIFY_WATCH_7)!.body).not.toHaveProperty('status');
+  });
+
+  // The same conditional-remount trap as in `create`, but for a field that opened
+  // with a value — the case that sends mail to the wrong place. Editing `#alerts`
+  // to `#new` and then toggling Slack off and on used to redisplay `#alerts` while
+  // the payload still carried `#new`.
+  test('an edited channel survives its toggle being switched off and on', async () => {
+    stubApi(listWith7(), getWatch7(), modifyOk());
+    await openEditor();
+    expect(screen.getByLabelText('Channel')).toHaveValue('#alerts');
+
+    await userEvent.clear(screen.getByLabelText('Channel'));
+    await userEvent.type(screen.getByLabelText('Channel'), '#new');
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Slack' }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Slack' }));
+
+    expect(screen.getByLabelText('Channel')).toHaveValue('#new');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(postedTo(MODIFY_WATCH_7)).toBeTruthy());
+    expect(postedTo(MODIFY_WATCH_7)!.body).toMatchObject({
+      trigger_config: { slack_notify: { channel: '#new' } },
+    });
   });
 
   test('cancel returns to the create form', async () => {
@@ -542,6 +591,44 @@ describe('deep links', () => {
     renderPage();
 
     expect(await screen.findByText('Watch #7 deleted.')).toBeInTheDocument();
+  });
+
+  // A settled 5xx is not permission to act. The page says "Could not load
+  // watches." at the same time, so firing the delete would destroy a watch the
+  // user was never shown.
+  test('a deep-linked delete does not run when the list failed to load', async () => {
+    window.history.replaceState(null, '', '/watches.html?action=delete&id=7');
+    stubApi(watchListFails(500, { error: 'boom' }), route(DELETE_WATCH_7, 'POST', noContent));
+    renderPage();
+
+    await screen.findByText('Could not load watches.');
+    expect(requests.find((r) => r.url.includes('/delete'))).toBeUndefined();
+  });
+
+  // And it stays dropped rather than staying armed: pressing Retry asks to reload
+  // the list, not to delete anything.
+  test('a deep-linked delete does not fire when a later retry succeeds', async () => {
+    window.history.replaceState(null, '', '/watches.html?action=delete&id=7');
+    let failing = true;
+    stubApi(
+      {
+        match: (url, method) => url.startsWith('/api/watches?') && method === 'GET',
+        respond: (url) =>
+          failing
+            ? json({ error: 'boom' }, 500)
+            : watchList(watch({ id: 7 })).respond(url),
+      },
+      route(DELETE_WATCH_7, 'POST', noContent),
+    );
+    renderPage();
+    await screen.findByText('Could not load watches.');
+
+    failing = false;
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    // The table proves the retry succeeded; the action must still be gone.
+    await screen.findByRole('table');
+    expect(requests.find((r) => r.url.includes('/delete'))).toBeUndefined();
   });
 
   // The legacy page skipped applyUrlAction entirely when signed out, so a

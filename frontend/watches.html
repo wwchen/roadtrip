@@ -5,7 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#26272d">
 <title>Watches</title>
-<link rel="stylesheet" href="/web/design-system/tokens.css">
+<!-- tokens.css, the sandbox banner, and the sandbox user switcher are injected by
+     the runtimeServedAssets Vite plugin — they are served by Ktor at runtime
+     rather than bundled, and a module script pointing outside the Vite root
+     cannot be written here at all. See vite/runtime-served-assets.ts. -->
 </head>
 <body>
 <div id="root"></div>

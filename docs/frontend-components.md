@@ -64,6 +64,31 @@ no-cross-feature rule.
 > and `web/watches/` is deleted. Read the plan before adding to either tree, so new work
 > lands in React rather than extending the tree that is going away.
 
+### Forms on LDS: the controls are uncontrolled
+
+Non-negotiable, and the plan's Gotchas section has the full detail. The short version
+for anyone adding a React form:
+
+- Seed a field **once** with `defaultValue`/`defaultChecked`, let the DOM own the live
+  value, mirror `onChange` into state for the payload, and make a reseed a **remount**
+  via a React `key`. Passing changing state back in swaps the control's DOM and eats the
+  caret.
+- For a field that is **conditionally rendered** — gated on a toggle, say — use
+  **`SeededTextField`** from `@ui` instead of `defaultValue`. It snapshots at its own
+  mount, so a field that unmounts and comes back shows the current value rather than the
+  one from when the form opened. Seeding those from the parent's snapshot displays one
+  value and submits another.
+- Disable **buttons**, not fields, while a save is in flight. `disabled` changes the
+  template, which swaps the DOM and discards what was typed.
+
+### Page shells
+
+A migrated page's `*.html` is a bare shell: `#root` plus its entry module. `tokens.css`
+and the sandbox banner/user switcher are injected into every entry by the
+`runtimeServedAssets` plugin (`frontend/vite/runtime-served-assets.ts`) — do not hand-write
+them, and do not omit them. They cannot be written in the HTML anyway: Vite treats a module
+script as a build input and fails to resolve one pointing outside its root.
+
 ## Color: tokens only
 
 `web/design-system/tokens.css` is the only place a raw **hex** may appear.

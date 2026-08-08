@@ -371,6 +371,20 @@ Consequences worth knowing:
   live value, mirror `onChange` into state, and make a reseed a REMOUNT via a React `key`. This
   cost real debugging in Phase 1 — typing "42" posted `poi_id: 4` — and every later phase with a
   form hits it.
+- **Whose mount the snapshot belongs to is the follow-on trap.** "Seed once from a snapshot the
+  parent froze" is right only for a field that lives as long as its parent. A field the parent
+  *conditionally renders* — one gated on a toggle — unmounts and remounts, and the parent's
+  snapshot is stale by then: the remounted input shows the old value while mirrored state, and so
+  the payload, holds the new one. The user sees one thing and a different one is saved. Use
+  **`SeededTextField` from `@ui`**, which snapshots at its OWN mount; reseed by remounting it.
+  Review caught this on the watches trigger fields, where it could email an address other than the
+  one on screen.
+- **Never `Omit<…>` an LDS prop type.** LDS's `HtmlProps` ends in `[attr: string]: unknown` (any
+  extra prop becomes an HTML attribute), and `Omit` over a type with an index signature collapses
+  it to that signature alone — every named prop's type, including `onChange`'s parameter, silently
+  degrades to `any`. Widen by intersection (`extends TextFieldProps`) and override at the call
+  site instead. `@ui`'s `Table` correction predates this lesson and only survives it because
+  `columns`/`rows` are the sole named props it touches.
 - **Don't pass a changing `disabled` to a field you want to keep typed text in.** It changes the
   template, which swaps the DOM and resets the value. Disable the buttons instead.
 - **LDS's `toggle` puts its visible label in a `<span>`**, not a `<label for>`, so `id` alone
@@ -388,10 +402,26 @@ Consequences worth knowing:
 - **Vitest must be v3 for Vite 6.** Vitest 2.x depends on Vite 5 and pulls a *nested* copy,
   causing a `Plugin` type clash with `@vitejs/plugin-react`. Use Vitest 3 and import
   `defineConfig` from `vitest/config` (not `vite`).
-- **`tokens.css` is intentionally not bundled.** Shells link the absolute
-  `/web/design-system/tokens.css`, served by Ktor at runtime. `vite build` prints
-  "…doesn't exist at build time, it will remain unchanged to be resolved at runtime" — expected.
-  Requires the backend (or the dev proxy) to be up for styles to load.
+- **`tokens.css` and the sandbox chrome are intentionally not bundled**, and are injected
+  by the `runtimeServedAssets` Vite plugin (`frontend/vite/runtime-served-assets.ts`)
+  rather than written into each shell. Ktor serves them from the legacy tree at runtime,
+  so the backend (or the dev proxy) has to be up for styles to load.
+
+  A plugin because the tags cannot live in the HTML: Vite treats
+  `<script type="module" src>` in an entry as a build input and **fails** the build on
+  `/web/sandbox-banner.js` with "Failed to resolve … from watches.html", since it is
+  outside the Vite root. (A `<link>` is only warned about — that is where the old
+  "…doesn't exist at build time, it will remain unchanged to be resolved at runtime"
+  warning came from. It is gone; the build is clean now, so a *new* warning is worth
+  reading rather than assuming it is this one.) Injecting with `order: 'post'` runs after
+  Vite's own HTML transform, which is what leaves the references untouched.
+
+  **Every migrated shell needs the sandbox chrome.** An auth-disabled sandbox 401s every
+  API call until an `rt_session=sandbox:<id>` cookie is picked, and the user switcher is
+  the only page-local way to pick one — a page without it just looks signed-out, which is
+  indistinguishable from a real auth failure. The migrated watches page shipped without it
+  once. `vite/runtime-served-assets.test.ts` pins the tag set so a later phase cannot drop
+  it silently.
 - **GateGuard fact-forcing hook is ON** in this environment: every file create/edit and first
   Bash call demands a "facts, then retry" cycle (and denies the first attempt). Batch writes;
   present importers/purpose/instruction, then retry. (Disable path if ever wanted:

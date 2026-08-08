@@ -43,15 +43,20 @@ export function readUrlAction(search: string): WatchUrlAction | null {
  * the original did, not just the params it read.
  *
  * The action is consumed exactly once, on the first settled load, and is dropped
- * for good if the caller was not signed in at that moment — matching the legacy
- * page, which called `applyUrlAction` once at init behind `if (!signedOut)` and
- * never again. That matters because one of these actions deletes a watch: a
- * notification link opened with an expired session must not fire later, silently,
- * when the user signs back in from the still-vanilla topbar. Nothing is cleared
- * in that case either, so the URL still shows what was ignored.
+ * for good if it was not allowed at that moment — matching the legacy page, which
+ * called `applyUrlAction` once at init behind `if (!signedOut)` and never again.
+ * That matters because one of these actions deletes a watch: a notification link
+ * opened with an expired session, or one whose list load failed outright, must not
+ * fire later and silently — not when the user signs back in from the still-vanilla
+ * topbar, and not off the back of a Retry press. Nothing is cleared when an action
+ * is dropped, so the URL still shows what was ignored.
  *
- * @param ready   the watch list has settled, so signed-in state is known
- * @param allowed the caller is signed in and may act
+ * Note the asymmetry this implies: a condition that should DROP the action goes in
+ * `allowed`, while `ready` only decides when to look. A reason-not-to-act placed in
+ * `ready` would keep the action armed indefinitely instead of discarding it.
+ *
+ * @param ready   the watch list has settled, so the caller's state is known
+ * @param allowed nothing prevents acting — signed in, and the list actually loaded
  */
 export function useUrlAction(ready: boolean, allowed: boolean): WatchUrlAction | null {
   const [action, setAction] = useState<WatchUrlAction | null>(null);
