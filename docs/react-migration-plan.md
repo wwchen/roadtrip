@@ -244,6 +244,32 @@ from `index.html`, and belong to Phase 4d. They are untouched and must stay unti
 write-only pattern, auth port/adapter (`embedded-auth-port.js` + `auth0-embedded.js`), auth0-js
 via npm.
 
+> ⚠️ **Account/settings is NOT a page, and the original plan missed that.** There is no
+> `account.html`. `web/topbar/auth.js` mounts `mountLoginCard` and `mountSettingsModal` into
+> `#tb-auth`, and the topbar exists on **`index.html` only** — the map page, which stays vanilla
+> until Phase 4. So Phase 3 cannot be "migrate a page" the way Phases 1 and 2 were.
+>
+> **Decision: a React island inside the vanilla page.** A dedicated Vite entry mounts a React
+> root into its own container, and the vanilla topbar opens it through the `window.__rt*` shim
+> that already exists for cross-tree calls. This is the standard strangler move and keeps Phase 3
+> from being blocked behind Phase 4's ~9k LOC. Every component written this way (SettingsModal,
+> ProfilePanel, NotificationsPanel, LoginCard, SecretField) is reusable as-is in Phase 4 — only
+> the mounting glue and the shim hook are throwaway.
+>
+> The alternative considered and rejected: reorder Phase 4 ahead of Phase 3. It removes the glue
+> but pays ~9k LOC first, and the account UI is the smaller, better-understood surface to do next.
+>
+> **Order the work so nothing is wasted:** the pure/logic layers are independent of the mounting
+> decision and go first. `src/lib/settings-errors.ts` is done (ported + tested). `account-api.ts`
+> was already typed in Phase 0. Next is the auth port (`embedded-auth-port.js` +
+> `auth0-embedded.js`) — also mostly non-DOM — then the panels, then the island glue last.
+>
+> **A latent bug was fixed in the port**, worth knowing because the same shape appears elsewhere
+> in `web/`: `settings-errors.js` looks up `MESSAGES[code] ?? DEFAULT` on a plain object, so a
+> code naming an `Object.prototype` member resolves up the prototype chain —
+> `settingsErrorMessage('toString')` returns the *function*, and `??` never fires because a
+> function is not nullish. The port uses a `Map`, which has no prototype keys to collide with.
+
 **Phase 4 — The map app** (`index.html`, ~9k LOC — largest/hardest). Sub-sequence:
   4a. Map shell + `<MapProvider>` + imperative `map/` layer lifecycle + basemap/style-reload.
   4b. Search + legend/filters + viewport POI fetch loop (debounce + AbortController + ring cache).
