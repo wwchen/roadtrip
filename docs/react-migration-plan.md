@@ -1,6 +1,6 @@
 # Frontend Migration: vanilla JS → React + TypeScript
 
-> **Handoff doc.** Status as of 2026-08-07. This is the source of truth for the
+> **Handoff doc.** Status as of 2026-08-08. This is the source of truth for the
 > React migration; it captures the approved plan, decisions, what's already
 > done (and verified), what remains, and the gotchas discovered along the way so
 > a fresh agent session can continue without re-deriving anything.
@@ -12,21 +12,25 @@
 - We are doing a **full rewrite of `web/` (vanilla ES modules) → React + TypeScript**,
   executed as a **strangler migration** (one page at a time; vanilla + React coexist).
 - New app lives in **`frontend/`** (Vite multi-page, 3 entries mirroring today's URLs).
-- **Phase 0 (foundation) is in progress and all green.** Scaffold builds/tests/typechecks.
-  `web/api/http.js` + `web/api/watches-api.js` are ported to typed `frontend/src/api/*.ts`.
+- **Phase 0 (foundation) is COMPLETE and all green.** All `web/api/*` and the pure
+  `web/utils/*` + `core.js` helpers are ported and typed; LDS is vendored and wired behind
+  `@ui`; Zustand stores + a TanStack Query client are standing; CI gates the tree.
 - **Components come from LDS** (`matthewlew/lds` → `@lew/lds-react`), styled by
-  `@lew/lds/css` + the `theme-roadtrip`. **Decision: vendor LDS into the repo now**, switch to
-  a published registry dep later.
+  `@lew/lds/css` + the `theme-roadtrip`. **Decision: vendored into `frontend/vendor/` as
+  `vendor/*` npm workspaces**; switch to a published registry dep later.
+- **Next up: Phase 1 (watches page).** Pin the real `Watch` DTO there.
 
 ### Resume quickstart
 ```bash
 cd frontend
-npm install
+npm ci              # vendor/* are workspaces — nothing is fetched for LDS
 npm run typecheck   # tsc --noEmit — must be clean
-npm run test        # vitest run — currently 6 tests green
+npm run test        # vitest run — currently 359 tests green
 npm run build       # vite build — emits dist/{index,availability,watches}.html
 npm run dev         # Vite dev server :5173, proxies /api,/auth,/web,/data → :8765 (Ktor)
+node ../scripts/check-color-tokens.mjs   # from frontend/, or drop the ../ from the repo root
 ```
+All four must be green before every commit.
 Run the Ktor backend separately (e.g. `make run` or `tilt up`) so the dev proxy resolves
 `/api`, and so `/web/design-system/tokens.css` is served (see Token strategy).
 
@@ -104,15 +108,31 @@ Three HTML entries mirror current URLs so `StaticSiteRoutes.kt` stays nearly unc
 ### Source tree (in place today)
 ```
 frontend/
-  index.html availability.html watches.html   # thin shells; link /web/design-system/tokens.css
+  index.html availability.html watches.html   # thin shells; <html class="theme-roadtrip mode-dark">
   vite.config.ts tsconfig.json vitest.setup.ts package.json
+  vendor/{lds,lds-react,open-icons}/          # vendored LDS, consumed as npm workspaces
   src/
-    pages/{map,availability,watches}/main.tsx  # React roots (Phase-0 placeholders)
-    pages/watches/WatchesPage.tsx              # + smoke test (RTL harness proof)
-    ui/index.ts                                # @ui adapter seam (empty; LDS lands here)
-    api/http.ts  api/watches-api.ts  api/watches-api.test.ts   # ported, typed, tested
-    # TODO: api/* (rest), lib/ (utils + pure core.js), stores/ (zustand), map/, features/*
+    app/mount.tsx  app/AppProviders.tsx        # page mount + query/toast/event-bridge providers
+    pages/{map,availability,watches}/main.tsx  # one mountPage() call each
+    pages/watches/WatchesPage.tsx              # Phase-1 target
+    ui/index.ts  ui/styles.css                 # @ui → @lew/lds-react; LDS css + roadtrip theme
+    api/*.ts                                   # all 11 clients, typed + tested
+    lib/{local-date,availability-status,geo,html,poi}.ts    # pure helpers, typed + tested
+    stores/{authStore,tripStore,mapStore}.ts   # zustand
+    stores/transition-shim.ts                  # window.__rt* over the stores (transition only)
+    queries/{client,keys,auth,legacy-events}.ts # QueryClient, key table, /api/me, event bridge
+    test/fetch-stub.ts                         # shared fetch stub for api tests
+    types/{tokens,legacy}.d.ts                 # declarations for the @tokens / @legacy aliases
+    # TODO: map/ (imperative layers), features/* (per-page components)
 ```
+
+### Aliases
+| Alias | Resolves to | Notes |
+|---|---|---|
+| `@/*` | `frontend/src/*` | |
+| `@ui` | `@lew/lds-react` via `src/ui/index.ts` | the one-line swap point for a published LDS |
+| `@tokens` | `web/design-system/tokens.js` | the retained bridge, NOT ported — see Token strategy |
+| `@legacy/core` | `web/core.js` | **transition only**; parity tests. Deleted in Phase 5 |
 
 ### What is preserved (do NOT rewrite)
 - **`web/design-system/tokens.css` + `tokens.js` (the `token()` bridge).** MapLibre paint and
@@ -182,9 +202,10 @@ alias layer for the bridge, or repoint the bridge at LDS var names.
 
 ## Execution phases (strangler — each ships independently)
 
-**Phase 0 — Scaffolding & shared foundation.** *(IN PROGRESS)* Vite+React+TS+Vitest scaffold ✅;
-dev proxy ✅; port `api/*` (started) + `lib/` (utils + pure `core.js`); Zustand stores +
-QueryClient; `@ui` adapter; vendor LDS; CI wiring (vitest/tsc/color-check); token bridge setup.
+**Phase 0 — Scaffolding & shared foundation.** *(COMPLETE)* Vite+React+TS+Vitest scaffold ✅;
+dev proxy ✅; all `api/*` ported ✅; `lib/` (utils + pure `core.js`) ✅; Zustand stores +
+QueryClient ✅; `@ui` adapter + vendored LDS ✅; CI wiring (vitest/tsc/build/color-check) ✅;
+token bridge via `@tokens` ✅; `window.__rt*` shim ✅.
 
 **Phase 1 — Watches page** (`watches.html`, `web/watches/*`, 733 LOC — cleanest, already
 component-shaped). Rebuild `WatchForm`/`TriggerSelector`/`WatchTable` on LDS + a form lib +
@@ -212,35 +233,59 @@ final CI/deploy cleanup; remove the `python3 -m http.server` static launch confi
 
 ---
 
-## Done so far (detailed)
+## Phase 0 — what landed
 
-Files created under `frontend/` (all committed on this branch):
-- `package.json` (React 18.3, TanStack Query 5, Zustand 5; dev: Vite 6, **Vitest 3**, TS 5.6,
-  jsdom, RTL, @types/node), `.gitignore`, `tsconfig.json` (strict; `@`/`@ui` path aliases),
-  `vite.config.ts` (multi-page inputs, dev proxy, vitest block), `vitest.setup.ts`.
-- `index.html`, `availability.html`, `watches.html` — thin shells linking
-  `/web/design-system/tokens.css` and loading each page's `main.tsx`.
-- `src/pages/{map,availability,watches}/main.tsx` — placeholder React roots.
-- `src/pages/watches/WatchesPage.tsx` + `WatchesPage.smoke.test.tsx` (RTL harness proof).
-- `src/ui/index.ts` — `@ui` adapter seam (empty; LDS re-exports land here).
-- `src/api/http.ts` — typed `HttpError` + generic `json*` helpers (behavior preserved).
-- `src/api/watches-api.ts` — typed watches client; `Watch` DTO is provisional (pin in Phase 1).
-- `src/api/watches-api.test.ts` — Vitest tests (query-string build, 404-swallow, error code).
+**Scaffold.** React 18.3, TanStack Query 5, Zustand 5; Vite 6, **Vitest 3**, TS 5.6 strict,
+jsdom, RTL. Multi-page build, dev proxy, three thin shells.
 
-**Verified:** `npm run typecheck` clean · `npm run test` → 6 passed · `npm run build` → 3 pages.
+**LDS vendored.** `packages/{lds,open-icons}` are byte-identical between `main` and the
+`lds-react-adapter` branch, so all three packages are vendored from that one tree into
+`frontend/vendor/` and consumed as `vendor/*` npm workspaces. `@ui` re-exports
+`@lew/lds-react`; `@ui/styles.css` loads `@lew/lds/css` then the roadtrip theme; the shells
+carry `class="theme-roadtrip mode-dark"`. The icon sprite needs no config — `@lew/open-icons`
+resolves its URL through `import.meta.url`, so Vite fingerprints and emits it and
+`setIconSprite` stays unused.
 
-## Remaining Phase 0 (all unblocked)
+**API layer.** All eleven clients typed, with response DTOs pinned against the backend's
+`@Serializable` classes rather than guessed. Two shapes stay deliberately open past the fields
+every row carries (`Campsite`, `PoiSearchResult`) because their consumers are the Phase-4
+drawer and campground card. `AvailabilityStatus` is declared once, in `lib/`.
 
-1. Port remaining `web/api/*`: `auth-api`, `account-api`, `poi-api`,
-   `availability-dashboard-api`, `availability-api`, `campsite-api`, `geocode-api`,
-   `directions-api`, `password-auth-api`; port existing tests (`account-api.test.mjs`,
-   `campsite-api.test.mjs`, `password-auth-api.test.mjs`) to Vitest.
-2. Port `web/utils/*` + pure `core.js` helpers → `src/lib/` (typed) with tests.
-3. Zustand `authStore`/`tripStore`/`mapStore` + TanStack Query `QueryClient` provider.
-4. **Vendor LDS** into `frontend/vendor/` and wire `@ui` → `@lew/lds-react`; load
-   `@lew/lds/css` + `theme-roadtrip`; set `<html class="theme-roadtrip mode-dark">`.
-5. Extend `scripts/check-color-tokens.mjs` to `.ts/.tsx`; wire CI `web-tests` to
-   `vitest`/`tsc`; add `frontend/**` to the paths-filter.
+**lib layer.** `local-date`, `availability-status`, `geo`, `html`, `poi`. `flattenHydratedPoi`
+is covered by a **parity suite** that runs the port and `web/core.js` over the same eleven
+fixtures and asserts deep equality, including after re-flattening.
+
+**State.** `authStore`/`tripStore`/`mapStore`, a `QueryClient` with one retry policy, a
+hierarchical `queryKeys` table, `useMe()` as the single writer syncing `/api/me` into
+`authStore`, and a bidirectional bridge between the `roadtrip:*` events and query
+invalidation. `AppProviders` + `mountPage` wrap every page identically.
+
+**CI.** `frontend/**` gates the `web-tests` job, which now runs `npm ci` → typecheck →
+vitest → build alongside the existing `node --test` discovery for `web/`. The color checker
+scans `.ts`/`.tsx`.
+
+**Verified:** typecheck clean · 359 tests green · build emits 3 pages · color check ok.
+
+## Decisions taken during Phase 0 (not in the original plan)
+
+- **`tokens.js` is not ported.** It holds the fallback hex table that
+  `check-color-tokens.mjs` verifies key-by-key against `tokens.css`; a TS copy would be a
+  second source of truth for those colors and would itself trip the raw-hex check. The React
+  app imports the one real module through the `@tokens` alias.
+- **Parity tests against the vanilla tree.** Where a port is meant to be behavior-faithful and
+  the original is still present, a test that runs both over shared fixtures beats hand-written
+  expectations. Reached through `@legacy/*` aliases and marked for deletion in Phase 5.
+- **What the stores deliberately do NOT hold.** The MapLibre map and Popup, the route
+  AbortController, the endpoint Markers, per-layer FeatureCollections, and handler-binding
+  bookkeeping are imperative handles, not state. Each store documents its exclusions.
+- **Only 7 of the 9 `window.__rt*` globals are shimmed.**
+  `__rtUseCurrentLocationForTripStop` and `__rtRouteShareUrl` are defined by `topbar.js` and
+  read by nothing in the repo, so publishing them would invent an API rather than preserve one.
+- **`core.js`'s "Idempotent" comment on `flattenHydratedPoi` was wrong** and is corrected in
+  the port's docs (not its behavior). Fields derived only from `raw` — a park's
+  `Loc_Nm`/`GIS_Acres`/`Mang_Name`, a supercharger's `stallCount`/`powerKilowatt`, Planet
+  Fitness's `opening_hours` — do not survive a second pass, because the first pass consumes and
+  deletes `raw`. Pinned by tests, and the legacy implementation behaves identically.
 
 ---
 
@@ -257,7 +302,18 @@ Files created under `frontend/` (all committed on this branch):
   Bash call demands a "facts, then retry" cycle (and denies the first attempt). Batch writes;
   present importers/purpose/instruction, then retry. (Disable path if ever wanted:
   `ECC_GATEGUARD=off` or `ECC_DISABLED_HOOKS=pre:edit-write:gateguard-fact-force,pre:bash:gateguard-fact-force`.)
-- **npm can't select one workspace member from a git monorepo** → hence vendoring LDS.
+- **npm can't select one workspace member from a git monorepo** → hence vendoring LDS. The
+  vendored members depend on each other by exact version (`@lew/lds-react` → `@lew/lds` →
+  `@lew/open-icons`), which only resolves because `frontend/package.json` declares
+  `"workspaces": ["vendor/*"]`. Drop that field and `npm ci` goes to the registry and 404s.
+- **`@lew/lds-react` ships untranspiled `.jsx`** (`main: ./src/index.jsx`). It works because
+  workspace members are symlinked and Vite treats linked deps as source, so `plugin-react`
+  transforms them. This only fails at *bundle* time, never at typecheck — which is why CI runs
+  `npm run build` and not just `tsc`.
+- **`@tokens`/`@legacy/*` resolve outside the Vite root**, so `server.fs.allow` must list
+  `../web` or the dev server refuses to serve them.
+- **jsdom has no CSS**, so `token()` falls back to its baked table in tests. Assert against
+  `token('--rt-…')` rather than a literal hex — a literal would also trip the color checker.
 - **API faithfulness:** `createWatch`/`updateWatch`/`deleteWatch` use bare `fetch` (no explicit
   `credentials`), relying on the same-origin default — preserved in the port. `deleteWatch`
   swallows 404.
