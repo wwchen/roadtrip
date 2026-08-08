@@ -18,14 +18,16 @@
 - **Components come from LDS** (`matthewlew/lds` → `@lew/lds-react`), styled by
   `@lew/lds/css` + the `theme-roadtrip`. **Decision: vendored into `frontend/vendor/` as
   `vendor/*` npm workspaces**; switch to a published registry dep later.
-- **Next up: Phase 1 (watches page).** Pin the real `Watch` DTO there.
+- **Phase 1 (watches page) is COMPLETE** and the real `Watch` DTO is pinned. It is built and
+  tested but NOT yet served — see "Serving" below.
+- **Next up: switch serving for migrated pages, then Phase 2 (availability dashboard).**
 
 ### Resume quickstart
 ```bash
 cd frontend
 npm ci              # vendor/* are workspaces — nothing is fetched for LDS
 npm run typecheck   # tsc --noEmit — must be clean
-npm run test        # vitest run — currently 359 tests green
+npm run test        # vitest run — currently 464 tests green
 npm run build       # vite build — emits dist/{index,availability,watches}.html
 npm run dev         # Vite dev server :5173, proxies /api,/auth,/web,/data → :8765 (Ktor)
 node ../scripts/check-color-tokens.mjs   # from frontend/, or drop the ../ from the repo root
@@ -114,16 +116,18 @@ frontend/
   src/
     app/mount.tsx  app/AppProviders.tsx        # page mount + query/toast/event-bridge providers
     pages/{map,availability,watches}/main.tsx  # one mountPage() call each
-    pages/watches/WatchesPage.tsx              # Phase-1 target
+    pages/watches/WatchesPage.tsx              # Phase 1 ✅
+    features/watches/*                         # WatchForm, TriggerSelector, WatchTable, hooks
     ui/index.ts  ui/styles.css                 # @ui → @lew/lds-react; LDS css + roadtrip theme
     api/*.ts                                   # all 11 clients, typed + tested
-    lib/{local-date,availability-status,geo,html,poi}.ts    # pure helpers, typed + tested
+    lib/{local-date,availability-status,geo,html,poi,watch-triggers}.ts  # pure, typed + tested
     stores/{authStore,tripStore,mapStore}.ts   # zustand
     stores/transition-shim.ts                  # window.__rt* over the stores (transition only)
     queries/{client,keys,auth,legacy-events}.ts # QueryClient, key table, /api/me, event bridge
     test/fetch-stub.ts                         # shared fetch stub for api tests
     types/{tokens,legacy}.d.ts                 # declarations for the @tokens / @legacy aliases
-    # TODO: map/ (imperative layers), features/* (per-page components)
+    app/shell.css                              # page chrome shared by all three pages
+    # TODO: map/ (imperative layers), features/{availability,account} (Phases 2-4)
 ```
 
 ### Aliases
@@ -207,10 +211,11 @@ dev proxy ✅; all `api/*` ported ✅; `lib/` (utils + pure `core.js`) ✅; Zust
 QueryClient ✅; `@ui` adapter + vendored LDS ✅; CI wiring (vitest/tsc/build/color-check) ✅;
 token bridge via `@tokens` ✅; `window.__rt*` shim ✅.
 
-**Phase 1 — Watches page** (`watches.html`, `web/watches/*`, 733 LOC — cleanest, already
-component-shaped). Rebuild `WatchForm`/`TriggerSelector`/`WatchTable` on LDS + a form lib +
-TanStack Query mutations/invalidation; preserve `?action/id/poi_id/start_date` deep-links.
-First end-to-end proof of the stack. Pin the real `Watch` DTO here (see `watches-api.ts` TODO).
+**Phase 1 — Watches page.** *(COMPLETE)* `WatchForm`/`TriggerSelector`/`WatchTable` rebuilt on
+LDS + TanStack Query mutations/invalidation; deep-links preserved; real `Watch` DTO pinned. No
+form library was needed — the form is four fields and three toggles, and LDS's controls are
+uncontrolled (see gotchas), which most form libraries assume they are not.
+**Still to ship:** serving (below).
 
 **Phase 2 — Availability admin dashboard** (`availability.html`, `web/availability.js` +
 `web/components/availability/*`). Client-routed tabs (pollers/runs/snapshots), Chart.js via npm.
@@ -289,7 +294,38 @@ scans `.ts`/`.tsx`.
 
 ---
 
+## Serving — the one thing between Phase 1 and users
+
+Ktor still serves `web/` for every page, so the React watches page is unreachable. To ship it:
+point `StaticSiteRoutes.kt` + `application-*.yaml` (`static-dir`) at `frontend/dist/` for the
+migrated routes while unmigrated ones keep resolving from `web/`, and update `docker-compose.yml`
+(~lines 101-106), `docker-compose.sandbox.yml`, `Dockerfile`, and `Tiltfile`. With a build step
+now, bake the built assets into the image (`COPY dist`) rather than bind-mounting source. Note
+`/web/design-system/tokens.css` must KEEP being served — the React shells link it absolutely.
+
 ## Gotchas / lessons (save yourself the debugging)
+
+- **LDS form controls are uncontrolled, and this is not optional.** `value`/`checked` is the
+  INITIAL value only. The stateless components render a template string, so changing the prop
+  swaps the control's DOM: a controlled text input loses its caret and every keystroke after the
+  first. `attrs.js` maps `defaultValue`/`defaultChecked` onto the `value`/`checked` attributes
+  precisely so the uncontrolled pattern works. Seed once with `defaultValue`, let the DOM own the
+  live value, mirror `onChange` into state, and make a reseed a REMOUNT via a React `key`. This
+  cost real debugging in Phase 1 — typing "42" posted `poi_id: 4` — and every later phase with a
+  form hits it.
+- **Don't pass a changing `disabled` to a field you want to keep typed text in.** It changes the
+  template, which swaps the DOM and resets the value. Disable the buttons instead.
+- **LDS's `toggle` puts its visible label in a `<span>`**, not a `<label for>`, so `id` alone
+  leaves the checkbox with no accessible name — pass `aria-label` too. Its `textField` DOES emit
+  `<label for={id}>`, so there an `id` is enough (and required: without one there is no
+  association at all).
+- **LDS's `Table` is presentational.** No sort hooks, no per-row class, no row keys. Sorting and
+  row-level styling are the consumer's job.
+- **Some `@lew/lds-react` types are narrower than the runtime.** `Table`'s column labels and cell
+  values accept React nodes but are typed `Slot`. Corrected once in `src/ui/index.ts`; put any
+  further corrections there rather than casting at call sites.
+- **A `useMemo` dependency array must be a constant size.** A per-item query fan-out
+  (`useQueries` over N ids) cannot be spread into deps; collapse it to one scalar.
 
 - **Vitest must be v3 for Vite 6.** Vitest 2.x depends on Vite 5 and pulls a *nested* copy,
   causing a `Plugin` type clash with `@vitejs/plugin-react`. Use Vitest 3 and import
