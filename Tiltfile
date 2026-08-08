@@ -117,6 +117,11 @@ local_resource(
     cmd='cd frontend && npm run build',
     resource_deps=['frontend-deps'],
     deps=[
+        # package.json/lock are here as well as on frontend-deps: resource_deps
+        # only orders, it does not re-trigger, so without these a dependency bump
+        # would reinstall and leave the bundle stale.
+        'frontend/package.json',
+        'frontend/package-lock.json',
         'frontend/src',
         'frontend/vendor',
         'frontend/index.html',

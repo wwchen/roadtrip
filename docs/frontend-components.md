@@ -48,11 +48,21 @@ Generic, reusable across any page. Examples: Banner, ToggleSwitch, DoubleConfirm
 
 These know nothing about watches, POIs, or domain logic. They accept data and callbacks.
 
-### Domain components (`web/<feature>/`)
+### Domain components (`web/<feature>/`, and `frontend/src/features/<feature>/`)
 
-Compose design-system primitives into feature-specific UI. Examples: `web/watches/WatchForm`, `web/watches/WatchTable`.
+Compose design-system primitives into feature-specific UI. Examples:
+`web/account/notifications-panel.js` (vanilla) and
+`frontend/src/features/watches/WatchTable.tsx` (React).
 
 Domain components import from `web/design-system/` and from `web/api/` but never from other feature directories.
+Their React equivalents import primitives from `@ui` and clients from `@/api`, with the same
+no-cross-feature rule.
+
+> **Migrating.** `web/` is being replaced by `frontend/` page by page — see
+> [docs/react-migration-plan.md](react-migration-plan.md). Watches has already moved:
+> its components live in `frontend/src/features/watches/` and are built on LDS via `@ui`,
+> and `web/watches/` is deleted. Read the plan before adding to either tree, so new work
+> lands in React rather than extending the tree that is going away.
 
 ## Color: tokens only
 

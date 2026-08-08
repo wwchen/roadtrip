@@ -92,6 +92,7 @@ jobs:
               - 'gradlew'
               - 'settings.gradle.kts'
               - 'web/**'
+              - 'frontend/**'
               - 'index.html'
               - 'availability.html'
               - '.github/workflows/ci.yml'
