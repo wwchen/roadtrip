@@ -115,14 +115,29 @@ describe('ProfilePanel', () => {
     expect(screen.queryByLabelText('Verified')).not.toBeInTheDocument();
   });
 
-  test('reports edits to its parent', async () => {
-    const onChange = vi.fn();
+  // Wired to real state, not a bare spy. A spy that never re-renders cannot catch
+  // the LDS caret bug: the parent owns the value, so if it were fed back as a
+  // changing `value` prop the input's DOM would be swapped on every keystroke and
+  // only the first character would survive. Typing several characters through a
+  // re-rendering parent is the only way this shows up.
+  test('reports every keystroke to its parent, not just the first', async () => {
     const s = settings({ profile: { display_name: '' } });
-    render(<ProfilePanel profile={s.profile} values={profileValuesOf(s)} onChange={onChange} />);
+    const state = { values: profileValuesOf(s) };
+    const onChange = vi.fn((next: { display_name: string }) => {
+      state.values = next;
+      rerender();
+    });
+    const ui = () => (
+      <ProfilePanel profile={s.profile} values={state.values} onChange={onChange} />
+    );
+    const { rerender: doRerender } = render(ui());
+    function rerender() {
+      doRerender(ui());
+    }
 
     await userEvent.type(screen.getByLabelText('Display name'), 'Grace');
 
-    expect(onChange).toHaveBeenLastCalledWith({ display_name: 'Grace' });
+    expect(state.values).toEqual({ display_name: 'Grace' });
   });
 });
 

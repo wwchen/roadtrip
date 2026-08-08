@@ -1,4 +1,4 @@
-import { TextField } from '@ui';
+import { SeededTextField } from '@ui';
 import type { Profile, SettingsResponse } from '@/api/account-api';
 import './account.css';
 
@@ -53,13 +53,13 @@ export interface ProfilePanelProps {
 export function ProfilePanel({ profile, values, onChange }: ProfilePanelProps) {
   return (
     <div className="rt-account-panel">
-      <TextField
+      <SeededTextField
         id="settings-display-name"
         name="display_name"
         label="Display name"
         type="text"
         placeholder="Your name"
-        defaultValue={values.display_name}
+        seed={values.display_name}
         onChange={(e) => onChange({ display_name: (e.target as HTMLInputElement).value })}
       />
 

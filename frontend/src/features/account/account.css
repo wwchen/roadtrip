@@ -61,3 +61,55 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+/* ---- notifications ----
+   Each field pairs an input with its test button and an inline result. The label
+   column is the input's own; only the row assembly lives here. */
+
+.rt-notif-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  width: 100%;
+}
+
+.rt-notif-status {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.rt-notif-status--ok {
+  color: var(--rt-success);
+}
+
+.rt-notif-status--err {
+  color: var(--rt-error);
+}
+
+/* ---- secret field ---- */
+
+.rt-secret-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  width: 100%;
+}
+
+.rt-secret-field-label {
+  color: var(--rt-muted);
+  font-size: 13px;
+}
+
+/* Monospace so the mask and the hint line up as fixed-width glyphs. */
+.rt-secret-field-mask {
+  font-family: var(--rt-mono);
+  font-size: 14px;
+  color: var(--rt-text);
+}
+
+.rt-secret-field-help {
+  color: var(--rt-muted);
+  font-size: 12px;
+}
