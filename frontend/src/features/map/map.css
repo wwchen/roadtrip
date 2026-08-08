@@ -1,0 +1,33 @@
+/* ---------------------------------------------------------------------------
+   Map canvas.
+
+   MapLibre measures its container and sizes its WebGL canvas to match, so an
+   unsized container yields a 0x0 canvas — a map that initialises without error,
+   passes every test, and draws nothing. This file exists because that failure is
+   invisible to tsc and to jsdom.
+
+   Ports the map's frame from index.html's inline <style>. Everything else about
+   the map — controls, popups, attribution — is MapLibre's own CSS, imported by
+   MapProvider.
+   --------------------------------------------------------------------------- */
+
+.rt-map-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Behind every overlay: the drawer, topbar and controls all sit above it. */
+  z-index: 0;
+}
+
+/* The map fills the viewport, so its host must be a positioning context with a
+   real height rather than the auto height a bare <div> would take. */
+.rt-map-shell {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  /* Dynamic viewport height where supported: on mobile Safari `100vh` includes
+     the retracting toolbars, so the bottom of the map sits under browser chrome. */
+  height: 100dvh;
+  overflow: hidden;
+}
