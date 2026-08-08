@@ -6,6 +6,7 @@ import com.microsoft.playwright.Page
 import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.Route
 import com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat
+import com.microsoft.playwright.options.AriaRole
 import com.microsoft.playwright.options.WaitForSelectorState
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
@@ -852,6 +853,105 @@ class SmokeTest {
                 pageErrors.isEmpty(),
                 "Page errors during route smoke: ${pageErrors.joinToString(" | ")}",
             )
+        } finally {
+            page.close()
+            context.close()
+        }
+    }
+
+    // The migrated React pages. Until now this suite only ever navigated `/` and its
+    // query variants — all the vanilla map — so neither page React owns had any
+    // browser-level coverage at all. Three purely visual bugs reached review during
+    // the migration (uncoloured error text, an input that dropped every keystroke
+    // after the first, and a 0x0 map canvas); every one passed tsc, the unit suite,
+    // the bundle and the colour-token check, because none of those can see a page
+    // that renders wrongly or not at all.
+    //
+    // The assertions are deliberately shallow: the page's own heading, plus a
+    // non-empty #root. A non-empty root is the real signal — it means the hashed
+    // bundle resolved, parsed and mounted. A 404 on `/assets/*`, a broken entry, or a
+    // crash during mount all leave it empty, and those are the failures the strangler
+    // seam can actually produce.
+    //
+    // Nothing here depends on being signed in. Both headings render outside the
+    // signed-out branch, so this passes whether or not the smoke stack has a session.
+    @Test
+    @Timeout(value = 2, unit = TimeUnit.MINUTES)
+    fun `migrated pages mount and render`() {
+        val context =
+            browser.newContext(
+                Browser
+                    .NewContextOptions()
+                    .setBaseURL(baseUrl)
+                    .setViewportSize(1280, 800),
+            )
+        val page = context.newPage()
+        val pageErrors = mutableListOf<String>()
+        page.onPageError { pageErrors.add(it) }
+
+        // path to the heading that page always renders, signed in or not.
+        val migrated =
+            listOf(
+                "/watches" to "Watches",
+                "/availability" to "Availability Dashboard",
+            )
+
+        try {
+            for ((path, heading) in migrated) {
+                page.navigate(path)
+
+                assertThat(page.locator("h1")).hasText(heading)
+
+                val rootHtml = page.locator("#root").innerHTML()
+                assertTrue(
+                    rootHtml.isNotBlank(),
+                    "$path mounted nothing into #root — the bundle did not load or threw during mount",
+                )
+            }
+
+            // The dashboard's tabs are its whole navigation, and they are plain
+            // anchors precisely so they stay linkable.
+            page.navigate("/availability")
+            for (tab in listOf("Pollers", "Runs", "Changes")) {
+                val link = page.getByRole(AriaRole.LINK, Page.GetByRoleOptions().setName(tab))
+                assertThat(link).isVisible()
+            }
+
+            assertTrue(
+                pageErrors.isEmpty(),
+                "Page errors on the migrated pages: ${pageErrors.joinToString(" | ")}",
+            )
+        } finally {
+            page.close()
+            context.close()
+        }
+    }
+
+    // The map container must have real dimensions. MapLibre sizes its WebGL canvas
+    // from the container, so an unsized one yields a 0x0 canvas: a map that
+    // initialises without error, passes every unit test, and draws nothing. Phase 4a
+    // hit exactly that in the React provider, and `/` moves to React in 4b — so this
+    // guards the vanilla container now and the React one the moment it takes over.
+    @Test
+    @Timeout(value = 2, unit = TimeUnit.MINUTES)
+    fun `the map container has non-zero dimensions`() {
+        val context =
+            browser.newContext(
+                Browser
+                    .NewContextOptions()
+                    .setBaseURL(baseUrl)
+                    .setViewportSize(1280, 800),
+            )
+        val page = context.newPage()
+
+        try {
+            page.navigate("/")
+            page.waitForSelector("#map")
+
+            val box = page.locator("#map").boundingBox()
+            assertTrue(box != null, "#map has no bounding box at all")
+            assertTrue(box.width > 0, "#map has zero width — the canvas would render nothing")
+            assertTrue(box.height > 0, "#map has zero height — the canvas would render nothing")
         } finally {
             page.close()
             context.close()
