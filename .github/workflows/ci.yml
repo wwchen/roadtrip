@@ -222,9 +222,9 @@ jobs:
           node --test "$@"
 
       # `npm ci` rather than `npm install` so a lockfile that drifted from
-      # package.json fails here instead of resolving to something CI-only. The
-      # vendored LDS packages are `vendor/*` npm workspaces, so this links them
-      # from the checkout with nothing to fetch.
+      # package.json fails here instead of resolving to something CI-only. LDS is
+      # a registry dependency (`@lew-ds/*`) and is fetched like anything else; it
+      # was vendored in-tree as npm workspaces until 1.0.0 was published.
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci

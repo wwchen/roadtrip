@@ -66,9 +66,10 @@ const EXEMPT = {
     'demonstrates pre-token colors side by side with their replacements',
   'web/design-system/slack-blockkit-payloads.js':
     "Slack's attachment API takes a literal hex over the wire; each value names the token it mirrors",
-  'frontend/vendor':
-    'vendored LDS (matthewlew/lds) — third-party source with its own APCA palette; the roadtrip theme there is generated FROM tokens.css, so its values are already governed upstream',
 };
+// LDS itself needs no entry any more: it is a registry dependency (@lew-ds/*), so
+// it lives under node_modules, which IGNORED_DIRS already skips. The exemption that
+// used to sit here covered `frontend/vendor` while it was vendored in-tree.
 
 /** Line-level escapes for cases a file-level exemption would over-grant. */
 const LINE_EXEMPT = [

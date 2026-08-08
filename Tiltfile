@@ -123,7 +123,6 @@ local_resource(
         'frontend/package.json',
         'frontend/package-lock.json',
         'frontend/src',
-        'frontend/vendor',
         'frontend/index.html',
         'frontend/availability.html',
         'frontend/watches.html',
