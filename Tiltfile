@@ -94,6 +94,44 @@ local_resource(
     labels=['build'],
 )
 
+# The React frontend (frontend/). Built to frontend/dist, which the backend
+# compose service bind-mounts and serves — so a rebuild needs no image rebuild
+# and no container restart, just a browser refresh.
+#
+# Split in two so a source edit does not re-resolve dependencies: `npm ci` is
+# keyed on the lockfile, the build on the sources. `npm run build` is
+# `tsc --noEmit && vite build`, so a type error fails this resource and shows up
+# in the Tilt UI instead of silently serving a stale bundle.
+local_resource(
+    'frontend-deps',
+    cmd='cd frontend && npm ci',
+    deps=[
+        'frontend/package.json',
+        'frontend/package-lock.json',
+    ],
+    labels=['build'],
+)
+
+local_resource(
+    'frontend-dist',
+    cmd='cd frontend && npm run build',
+    resource_deps=['frontend-deps'],
+    deps=[
+        'frontend/src',
+        'frontend/vendor',
+        'frontend/index.html',
+        'frontend/availability.html',
+        'frontend/watches.html',
+        'frontend/vite.config.ts',
+        'frontend/tsconfig.json',
+    ],
+    ignore=[
+        'frontend/dist',
+        'frontend/node_modules',
+    ],
+    labels=['build'],
+)
+
 docker_compose(
     ['docker-compose.yml', 'docker-compose.local.yml', 'docker-compose.secrets.yml'],
     project_name=COMPOSE_PROJECT,
@@ -146,7 +184,7 @@ for service in ['postgres', 'loki', 'tempo', 'prometheus']:
 dc_resource('alloy', resource_deps=['loki', 'tempo', 'prometheus'], labels=['infra'])
 dc_resource(
     'backend',
-    resource_deps=['postgres', 'alloy', 'backend-jar'],
+    resource_deps=['postgres', 'alloy', 'backend-jar', 'frontend-dist'],
     labels=['app'],
     links=['http://127.0.0.1:' + PORT],
 )

@@ -95,6 +95,7 @@ internal fun Application.registerKoinRoutes() {
     val readiness: ReadinessService by inject()
     val schedulerScope: CoroutineScope by inject()
     val staticDir: File by inject(named("staticDir"))
+    val frontendDir: File by inject(named("frontendDir"))
 
     // Resolve the session into a Principal once per request, ambient for every
     // route including anonymous ones. Null wiring (auth not configured) resolves
@@ -148,7 +149,7 @@ internal fun Application.registerKoinRoutes() {
         // /api/settings/notifications/{email,slack}/test endpoints are the
         // supported smoke tests — they bind delivery to the caller's own stored
         // settings and credentials.
-        staticSiteRoutes(staticDir)
+        staticSiteRoutes(staticDir, frontendDir)
     }
 
     // RFC 0010 completeness guard: every route must declare an access level. An

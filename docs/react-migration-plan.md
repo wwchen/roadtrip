@@ -20,7 +20,8 @@
   `vendor/*` npm workspaces**; switch to a published registry dep later.
 - **Phase 1 (watches page) is COMPLETE** and the real `Watch` DTO is pinned. It is built and
   tested but NOT yet served — see "Serving" below.
-- **Next up: switch serving for migrated pages, then Phase 2 (availability dashboard).**
+- **Serving is wired**: `tilt up` / `make run` / `make sandbox` build and serve the React
+  watches page, with a per-page fallback to the legacy file. **Next up: Phase 2.**
 
 ### Resume quickstart
 ```bash
@@ -305,14 +306,41 @@ scans `.ts`/`.tsx`.
 
 ---
 
-## Serving — the one thing between Phase 1 and users
+## Serving (DONE)
 
-Ktor still serves `web/` for every page, so the React watches page is unreachable. To ship it:
-point `StaticSiteRoutes.kt` + `application-*.yaml` (`static-dir`) at `frontend/dist/` for the
-migrated routes while unmigrated ones keep resolving from `web/`, and update `docker-compose.yml`
-(~lines 101-106), `docker-compose.sandbox.yml`, `Dockerfile`, and `Tiltfile`. With a build step
-now, bake the built assets into the image (`COPY dist`) rather than bind-mounting source. Note
-`/web/design-system/tokens.css` must KEEP being served — the React shells link it absolutely.
+Migrated pages are served from the React build; everything else still resolves from
+`web/`. The pieces:
+
+- **`StaticSiteRoutes.kt`** takes a `frontendDir` alongside `staticDir` and registers
+  `/assets/*` (the hashed bundles — the flat catch-all deliberately refuses
+  subdirectories, so without this mount a built page loads its HTML and nothing else).
+  `MIGRATED_PAGES` drives both URL forms per page (`/watches` and `/watches.html`);
+  add one entry per phase. Those names are also **excluded from the catch-all**, so the
+  explicit route is the only thing that can serve them rather than leaving it to Ktor's
+  resolution scoring.
+- **Fallback is load-bearing, not defensive.** A page falls back to its legacy file when
+  the built one is absent. A sandbox pulls a pre-built image but bind-mounts the
+  checkout, so an unbuilt `frontend/dist` would otherwise 404 a page that works fine on
+  the legacy path.
+- **`frontend-dir` config** (`InfraModule`), default `frontend/dist`, resolved under
+  `static-dir` when relative — so `.` on the host and `/app/static` in a container both
+  work with no per-profile override.
+- **Bind-mounted, not baked into the image**, exactly like `web/` already is:
+  `./frontend/dist:/app/static/frontend/dist:ro` in `docker-compose.yml` and
+  `docker-compose.sandbox.yml`. A rebuild therefore needs no image rebuild and no
+  container restart — just a browser refresh. The Dockerfile is unchanged, which also
+  keeps CI's `docker-build` job from needing Node.
+- **`tilt up`** builds it: `frontend-deps` (keyed on the lockfile) → `frontend-dist`
+  (keyed on sources), and `backend` waits on `frontend-dist` so the first bring-up has a
+  build ready. A type error fails the resource in the Tilt UI.
+- **`make frontend`** builds it standalone; `make run` (dev and prod) calls it.
+- **`make test`** now runs the frontend gates — it claimed to "run everything CI runs"
+  and did not.
+- **Sandbox**: `scripts/deploy.sh` builds the frontend before `compose up`, guarded on
+  `npm` being present and non-fatal on failure, so a host without Node serves the legacy
+  site instead of failing the deploy.
+
+Still legacy-served: `/` (map, Phase 4) and `/availability` (Phase 2).
 
 ## Gotchas / lessons (save yourself the debugging)
 

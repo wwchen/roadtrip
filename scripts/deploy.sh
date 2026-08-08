@@ -259,6 +259,25 @@ if [[ "${ROUTING}" == "caddy-vhost" ]]; then
     fi
 fi
 
+# ── Build the React frontend ──────────────────────────────────────────────────
+# The compose files bind-mount frontend/dist from this checkout (like web/), so
+# the served frontend tracks the reviewed SHA rather than whatever the pre-built
+# image happens to carry. That means the build has to happen here.
+#
+# Skipped without npm rather than aborting: the backend serves the legacy page
+# per file when a build is absent, so a host without Node gets the vanilla site
+# instead of a failed deploy. Non-fatal on failure for the same reason.
+if [[ -d "${REPO_ROOT}/frontend" ]]; then
+    if command -v npm >/dev/null 2>&1; then
+        echo "==> building frontend (npm ci && npm run build)"
+        if ! (cd "${REPO_ROOT}/frontend" && npm ci --no-audit --no-fund && npm run build); then
+            echo "WARNING: frontend build failed; migrated pages will fall back to web/" >&2
+        fi
+    else
+        echo "WARNING: npm not found; skipping frontend build (serving legacy pages)" >&2
+    fi
+fi
+
 # ── Start Compose services ────────────────────────────────────────────────────
 # Ordering depends on whether a snapshot will be restored:
 #

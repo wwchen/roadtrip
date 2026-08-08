@@ -1,4 +1,4 @@
-.PHONY: help run test data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop
+.PHONY: help run test data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop frontend
 
 PORT       ?= 8765
 BACKEND_IMAGE ?= roadtrip/backend
@@ -41,11 +41,12 @@ help:
 	@echo "  make recgov-login     Open companion Chromium and verify Recreation.gov login"
 	@echo "  make recgov-refresh   Force-refresh the companion Recreation.gov session"
 	@echo "  make recgov-atc       Run one Rec.gov add-to-cart attempt (PAYLOAD=/path/to/atc.json)"
-	@echo "  make test             Run everything CI runs: backend + lint + web + companion + scripts + secrets/dashboards checks"
+	@echo "  make test             Run everything CI runs: backend + lint + web + frontend + companion + scripts + secrets/dashboards checks"
 	@echo "  make data-fetch       Fetch upstream data on the host (TARGET=<data_source slug> for one)."
 	@echo "  make data-import      Import data/ files into Postgres (TARGET=<row name> for one). Routes by YAML section (poi_data / campsite_data)."
 	@echo "  make reset-db         Drop/recreate the local schema and Flyway history for a full migration replay."
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
+	@echo "  make frontend         Build the React frontend into frontend/dist (tilt up does this too)"
 	@echo "  make grafana-export   Snapshot UI-edited dashboards and apply shared links"
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (host backend + Rec.gov companion)."
@@ -55,6 +56,7 @@ help:
 # stack on the deploy host.
 run: _ensure-hooks
 ifeq ($(RUN_ENV),prod)
+	$(MAKE) frontend
 	./gradlew :backend:buildFatJar
 	docker build -t $(BACKEND_IMAGE) --target backend .
 	$(PROD_COMPOSE) build recgov-companion
@@ -73,6 +75,7 @@ ifeq ($(RUN_ENV),prod)
 	# datasource, telemetry pipeline, trace, and metric config need restarts.
 	$(PROD_COMPOSE) restart $(OBSERVABILITY_SERVICES)
 else ifeq ($(RUN_ENV),dev)
+	$(MAKE) frontend
 	$(LOCAL_COMPOSE) up -d --build postgres recgov-companion
 	ROADTRIP_PROFILE=local $(SECRETS) exec local -- ./gradlew :backend:run
 else
@@ -115,6 +118,10 @@ test: _ensure-hooks
 	echo "discovered $$# web test files"; \
 	if [ "$$#" -eq 0 ]; then echo "no web test files found - discovery is broken"; exit 1; fi; \
 	node --test "$$@"
+	# Same steps, same order as CI's web-tests job. The build is not redundant
+	# with the typecheck: it is the only thing that exercises bundling (the
+	# vendored LDS ships untranspiled .jsx), which fails at bundle time only.
+	cd frontend && npm ci && npm run typecheck && npm run test && npm run build
 	node scripts/check-color-tokens.mjs
 	cd companion && npm test
 	python3 -m unittest discover -s scripts -p 'test_*.py'
@@ -180,6 +187,12 @@ _ensure-hooks:
 # Workflow: edit in the UI (allowUiUpdates=true in dev), then
 # `make grafana-export` before committing. UID, password, and UID list
 # overridable via env vars; see scripts/export_grafana_dashboards.py.
+# Build the React frontend into frontend/dist, which the backend serves through
+# a bind-mount. `tilt up` does this for you; this target is for `make run` and
+# for a deploy host that has no Tilt.
+frontend:
+	cd frontend && npm ci && npm run build
+
 grafana-export:
 	./scripts/export_grafana_dashboards.py
 	./scripts/sync_grafana_dashboard_links.py
