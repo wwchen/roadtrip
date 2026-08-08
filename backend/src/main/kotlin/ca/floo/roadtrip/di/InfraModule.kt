@@ -41,12 +41,6 @@ import javax.sql.DataSource
 
 private const val STATIC_DIR_KEY = "static-dir"
 private const val DEFAULT_STATIC_DIR = "."
-
-// Where `vite build` output is served from. Relative paths resolve under
-// `static-dir`, which is what every profile wants: `.` on the host, `/app/static`
-// in a container. Configured rather than hardcoded because the two differ.
-private const val FRONTEND_DIR_KEY = "frontend-dir"
-private const val DEFAULT_FRONTEND_DIR = "frontend/dist"
 private const val POI_REGISTRY_RESOURCE_KEY = "resource"
 private const val POI_REGISTRY_PATH_KEY = "path"
 private const val MAPBOX_TOKEN_KEY = "token"
@@ -76,15 +70,6 @@ fun infraModule(baseConfig: ApplicationConfig) =
             val properties: Map<String, String> = get()
             val roadtripConfig = ConfigSection(properties).section("roadtrip")
             File(roadtripConfig.valueOrDefault(STATIC_DIR_KEY, DEFAULT_STATIC_DIR))
-        }
-
-        single(named("frontendDir")) {
-            val properties: Map<String, String> = get()
-            val roadtripConfig = ConfigSection(properties).section("roadtrip")
-            val staticDir: File = get(named("staticDir"))
-            staticDir.resolveConfiguredPath(
-                roadtripConfig.valueOrDefault(FRONTEND_DIR_KEY, DEFAULT_FRONTEND_DIR),
-            )
         }
 
         single<PoiRegistry> {

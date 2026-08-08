@@ -24,6 +24,9 @@ private const val HTML_SUFFIX = ".html"
 private const val LEGACY_WEB_DIR = "web"
 private const val DATA_DIR = "data"
 private const val ASSETS_PATH = "/assets"
+/** `vite build` output, relative to `staticDir` — `.` on the host and
+ *  `/app/static` in a container both resolve, so no profile overrides it. */
+private const val FRONTEND_DIR = "frontend/dist"
 private const val ASSETS_DIR = "assets"
 private const val INDEX_FILE = "index.html"
 private const val AVAILABILITY_FILE = "availability.html"
@@ -35,7 +38,7 @@ private val geoJsonContentType = ContentType("application", "geo+json")
 // staticFiles root covers the file-serving leaves it registers beneath it.
 internal fun Route.staticSiteRoutes(
     staticDir: File,
-    frontendDir: File,
+    frontendDir: File = File(staticDir, FRONTEND_DIR),
 ) {
     // Hashed bundles, fonts, and the icon sprite emitted by `vite build`. This
     // mount is what makes a built page loadable at all: the catch-all at the
