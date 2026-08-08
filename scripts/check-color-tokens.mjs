@@ -34,7 +34,7 @@ const TOKENS_JS = 'web/design-system/tokens.js';
  * duration of the strangler migration — both ship to users, so both are held to
  * the same rule.
  */
-const ROOTS = ['web', 'frontend', 'index.html', 'watches.html', 'availability.html'];
+const ROOTS = ['web', 'frontend', 'index.html', 'availability.html'];
 const EXTENSIONS = ['.css', '.html', '.js', '.mjs', '.ts', '.tsx'];
 
 /**

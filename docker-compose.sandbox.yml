@@ -116,7 +116,6 @@ services:
       # being reviewed; the image carries the compiled backend jar only.
       - ./index.html:/app/static/index.html:ro
       - ./availability.html:/app/static/availability.html:ro
-      - ./watches.html:/app/static/watches.html:ro
       - ./web:/app/static/web:ro
       - ./data:/app/static/data:ro
       # The React build (Phase 1+). Bind-mounted rather than baked into the image,

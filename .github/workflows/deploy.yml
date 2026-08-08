@@ -134,7 +134,6 @@ jobs:
               - 'data/**'
               - 'index.html'
               - 'availability.html'
-              - 'watches.html'
               - 'web/**'
               # The React tree. Compose bind-mounts frontend/dist, which is
               # generated and gitignored — so the source is what a push can

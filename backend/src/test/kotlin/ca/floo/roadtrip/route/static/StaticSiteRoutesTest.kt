@@ -39,10 +39,11 @@ class StaticSiteRoutesTest {
         staticDir: File,
         frontendDir: File,
         block: suspend (HttpClient) -> Unit,
-    ) = testApplication {
-        application { routing { staticSiteRoutes(staticDir, frontendDir) } }
-        block(client)
-    }
+    ) =
+        testApplication {
+            application { routing { staticSiteRoutes(staticDir, frontendDir) } }
+            block(client)
+        }
 
     @Test
     fun `a migrated page is served from the build, not the legacy tree`() =
@@ -73,6 +74,20 @@ class StaticSiteRoutesTest {
                 val response = client.get(path)
                 assertEquals(HttpStatusCode.OK, response.status, path)
                 assertEquals(LEGACY_WATCHES, response.bodyAsText(), path)
+            }
+        }
+
+    // watches' legacy file was deleted along with web/watches/, so an unbuilt
+    // frontend leaves nothing to serve. respondFile on a missing path throws,
+    // which would surface as a 500; a 404 is the honest answer.
+    @Test
+    fun `a migrated page with neither a build nor a legacy file is a 404`() =
+        serving(
+            createTempDirectory("rt-static-bare").toFile(),
+            createTempDirectory("rt-frontend-bare").toFile(),
+        ) { client ->
+            for (path in listOf("/watches", "/watches.html")) {
+                assertEquals(HttpStatusCode.NotFound, client.get(path).status, path)
             }
         }
 

@@ -264,18 +264,18 @@ fi
 # the served frontend tracks the reviewed SHA rather than whatever the pre-built
 # image happens to carry. That means the build has to happen here.
 #
-# Skipped without npm rather than aborting: the backend serves the legacy page
-# per file when a build is absent, so a host without Node gets the vanilla site
-# instead of a failed deploy. Non-fatal on failure for the same reason.
+# Fatal, not best-effort. This was a warning while every migrated page still had
+# a vanilla file to fall back to; web/watches/ is now deleted, so a skipped or
+# failed build means /watches serves a 404. A loud deploy failure beats shipping a
+# dead page, and the fix is to install Node on the host.
 if [[ -d "${REPO_ROOT}/frontend" ]]; then
-    if command -v npm >/dev/null 2>&1; then
-        echo "==> building frontend (npm ci && npm run build)"
-        if ! (cd "${REPO_ROOT}/frontend" && npm ci --no-audit --no-fund && npm run build); then
-            echo "WARNING: frontend build failed; migrated pages will fall back to web/" >&2
-        fi
-    else
-        echo "WARNING: npm not found; skipping frontend build (serving legacy pages)" >&2
+    if ! command -v npm >/dev/null 2>&1; then
+        echo "ERROR: npm not found, but frontend/ must be built — /watches has no" >&2
+        echo "       legacy fallback since web/watches/ was removed. Install Node." >&2
+        exit 1
     fi
+    echo "==> building frontend (npm ci && npm run build)"
+    (cd "${REPO_ROOT}/frontend" && npm ci --no-audit --no-fund && npm run build)
 fi
 
 # ── Start Compose services ────────────────────────────────────────────────────

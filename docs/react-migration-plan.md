@@ -342,6 +342,25 @@ Migrated pages are served from the React build; everything else still resolves f
 
 Still legacy-served: `/` (map, Phase 4) and `/availability` (Phase 2).
 
+### Watches is decommissioned (Phase 5, for this page only)
+
+`web/watches/` and the root `watches.html` are **deleted** — React owns the page.
+Consequences worth knowing:
+
+- **`/watches` has no fallback.** `migratedPageFile` still prefers the build and
+  still falls back to a legacy file, but watches no longer has one, so an unbuilt
+  `frontend/dist` means `/watches` is a 404 (not a 500 — the helper returns null
+  and the route answers 404 rather than calling `respondFile` on a missing path).
+- **The deploy therefore requires Node.** `scripts/deploy.sh` now *fails* if npm
+  is missing or the build fails, where it used to warn and continue. Shipping a
+  dead page silently is worse than a loud deploy failure.
+- Removed with it: the `watches.html` compose bind-mounts, its `deploy.yml` and
+  `ci.yml` path-filter entries, and its entry in the color checker's `ROOTS`
+  (which `statSync`-walks and would have thrown ENOENT).
+- **Kept on purpose:** `web/availability/watch-editor.js` and `web/api/watches-api.js`.
+  Neither lives under `web/watches/`, and `availability-week.js` plus the vanilla
+  topbar alerts panel still import them until Phases 2 and 4d.
+
 ## Gotchas / lessons (save yourself the debugging)
 
 - **LDS form controls are uncontrolled, and this is not optional.** `value`/`checked` is the

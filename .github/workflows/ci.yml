@@ -94,7 +94,6 @@ jobs:
               - 'web/**'
               - 'index.html'
               - 'availability.html'
-              - 'watches.html'
               - '.github/workflows/ci.yml'
             # Everything the fast lint half reads: Grafana dashboards, the
             # secrets registry + vault tooling, and the Python that ruff and

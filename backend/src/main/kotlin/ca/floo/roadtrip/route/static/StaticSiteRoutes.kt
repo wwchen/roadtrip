@@ -3,8 +3,10 @@ package ca.floo.roadtrip.route.static
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.access
 import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
 import io.ktor.server.http.content.staticFiles
+import io.ktor.server.response.respond
 import io.ktor.server.response.respondFile
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
@@ -17,6 +19,10 @@ import java.io.File
  * both URL forms for a page (`/watches` and `/watches.html`) are registered from
  * it. When the whole site has moved this becomes the catch-all and the legacy
  * mounts below go away.
+ *
+ * A page listed here may or may not still have a vanilla file in `staticDir`:
+ * watches' was deleted with the rest of `web/watches/`, so it is served from the
+ * build or not at all. See `migratedPageFile`.
  */
 private val migratedPages = listOf("watches.html")
 
@@ -61,7 +67,8 @@ internal fun Route.staticSiteRoutes(
         val extensionless = "/${page.removeSuffix(HTML_SUFFIX)}"
         for (path in listOf("/$page", extensionless)) {
             get(path) {
-                call.respondFile(migratedPageFile(frontendDir, staticDir, page))
+                val file = migratedPageFile(frontendDir, staticDir, page)
+                if (file == null) call.respond(HttpStatusCode.NotFound) else call.respondFile(file)
             }.access(RouteAccess.Anonymous)
         }
     }
@@ -85,19 +92,19 @@ internal fun Route.staticSiteRoutes(
 }
 
 /**
- * The built page when the frontend has been built, else the legacy one.
+ * The built page, else the legacy one, else null.
  *
- * The fallback is load-bearing rather than defensive. A sandbox pulls a
- * pre-built backend image but bind-mounts the source tree, so a checkout whose
- * `frontend/dist` was never built would otherwise serve a 404 for a page that
- * works fine on the legacy path. Degrading to the vanilla page keeps a missing
- * or failed build from taking the route down.
+ * The legacy fallback covers a checkout whose `frontend/dist` was never built —
+ * a sandbox bind-mounts the source tree but pulls a pre-built image, so the
+ * build can legitimately be missing. It only helps while a page still HAS a
+ * vanilla file, though: watches' was deleted once React replaced it, so an
+ * unbuilt frontend now means `/watches` is genuinely unavailable.
+ *
+ * Hence the null: respondFile on a path that does not exist throws, which would
+ * surface as a 500. A 404 is the honest answer for a page with nothing to serve.
  */
 private fun migratedPageFile(
     frontendDir: File,
     staticDir: File,
     page: String,
-): File {
-    val built = File(frontendDir, page)
-    return if (built.isFile) built else File(staticDir, page)
-}
+): File? = File(frontendDir, page).takeIf { it.isFile } ?: File(staticDir, page).takeIf { it.isFile }

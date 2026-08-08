@@ -1,7 +1,7 @@
 import { escapeHtml } from '../core.js';
 
 // `size` defaults to comfortable (>=44px). Pass 'compact' only where the button
-// sits in a dense, fixed-width row — see web/watches/watch-table.js.
+// sits in a dense, fixed-width row — see frontend/src/features/watches/WatchTable.tsx.
 export function doubleConfirmButtonTemplate({ label, armed, confirmLabel, size }) {
   const text = armed ? (confirmLabel || 'Confirm?') : label;
   const cls = ['rt-dbl-btn'];
