@@ -43,5 +43,8 @@ const DEFAULT_MESSAGE = 'Something went wrong. Please try again.';
  * call sites can write `settingsErrorMessage(err.code)` directly.
  */
 export function settingsErrorMessage(code: string | undefined | null): string {
-  return (code != null && MESSAGES.get(code)) || DEFAULT_MESSAGE;
+  // `??`, not `||`: a mapped message is shown as written, including one deliberately
+  // set to the empty string. `||` would silently substitute the default for it,
+  // which is the kind of difference that only shows up the day someone adds one.
+  return (code == null ? undefined : MESSAGES.get(code)) ?? DEFAULT_MESSAGE;
 }

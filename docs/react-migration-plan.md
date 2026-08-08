@@ -18,10 +18,19 @@
 - **Components come from LDS** (`matthewlew/lds` → `@lew/lds-react`), styled by
   `@lew/lds/css` + the `theme-roadtrip`. **Decision: vendored into `frontend/vendor/` as
   `vendor/*` npm workspaces**; switch to a published registry dep later.
-- **Phase 1 (watches page) is COMPLETE** and the real `Watch` DTO is pinned. It is built and
-  tested but NOT yet served — see "Serving" below.
-- **Serving is wired**: `tilt up` / `make run` / `make sandbox` build and serve the React
-  watches page, with a per-page fallback to the legacy file. **Next up: Phase 2.**
+- **Phase 1 (watches page) is COMPLETE, served, and merged** (#568). The real `Watch` DTO is
+  pinned and `web/watches/` is deleted.
+- **Phase 2 (availability dashboard) is COMPLETE, served, and merged** (#569). Chart.js comes from
+  npm; `web/availability.js` + `web/components/availability/*` and the root `availability.html`
+  are deleted.
+- **Serving is wired**: `tilt up` / `make run` / `make sandbox` build and serve both React pages.
+  Neither has a legacy fallback any more — an unbuilt `frontend/dist` 404s, deliberately and
+  loudly, and the prod deploy health check probes both paths.
+- **Next up: Phase 3 (account/settings)** — read its note in "Execution phases" first: it is not a
+  page, and part of its written scope is dead code.
+- **Nothing has been verified in a browser by CI.** `SmokeTest.kt` only navigates `/`, `/?poi=…`
+  and `/?route=…`, so neither migrated page is ever loaded. Green CI does not mean either page
+  renders.
 
 ### Resume quickstart
 ```bash
@@ -241,8 +250,12 @@ The big files under `web/availability/` — `availability-week.js` (1,226), `sit
 from `index.html`, and belong to Phase 4d. They are untouched and must stay until then.
 
 **Phase 3 — Account/settings** (`web/account/*`, 1,362 LOC). Settings modal, SecretField
-write-only pattern, auth port/adapter (`embedded-auth-port.js` + `auth0-embedded.js`), auth0-js
-via npm.
+write-only pattern, the account/profile/notifications panels, and the login card's
+hosted-redirect branch.
+
+~~auth port/adapter (`embedded-auth-port.js` + `auth0-embedded.js`), auth0-js via npm~~ — struck
+because Auth0 is not the live provider and the embedded flow is dormant. See the note below;
+this line is what led to porting it once already.
 
 > ⚠️ **Account/settings is NOT a page, and the original plan missed that.** There is no
 > `account.html`. `web/topbar/auth.js` mounts `mountLoginCard` and `mountSettingsModal` into
