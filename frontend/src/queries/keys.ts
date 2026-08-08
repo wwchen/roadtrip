@@ -25,6 +25,14 @@ export const queryKeys = {
     onRoute: (waypoints: unknown, radiusMiles: number, categories: readonly string[]) =>
       ['pois', 'on-route', waypoints, radiusMiles, categories] as const,
     detail: (id: string | number) => ['pois', 'detail', String(id)] as const,
+    /**
+     * A POI's display name only.
+     *
+     * Deliberately NOT `detail(id)`: that key holds the whole POI object, and a
+     * query caching a bare string under it would hand the wrong type to whoever
+     * reads it next. Same request, different cached value, so different key.
+     */
+    name: (id: string | number) => ['pois', 'name', String(id)] as const,
     search: (q: string, limit: number, categories?: readonly string[] | string) =>
       ['pois', 'search', q, limit, categories ?? null] as const,
   },

@@ -12,7 +12,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Watch } from '@/api/watches-api';
 import { AppProviders } from '@/app/AppProviders';
-import { WATCHES_CHANGED_EVENT } from '@/queries/legacy-events';
+import { AUTH_CHANGED_EVENT, WATCHES_CHANGED_EVENT } from '@/queries/legacy-events';
 import { WatchesPage } from './WatchesPage';
 
 const watch = (fields: Partial<Watch> = {}): Watch => ({
@@ -80,6 +80,19 @@ function watchListFails(status: number, body: unknown = {}): Responder {
   return {
     match: (url, method) => url.startsWith('/api/watches?') && method === 'GET',
     respond: () => json(body, status),
+  };
+}
+
+/**
+ * A list whose session can die: answers normally until `expired()` goes true,
+ * then 401s. Delegates to `watchList` so the per-status filtering stays in one
+ * place — a responder that ignores `status` triples every row.
+ */
+function watchListUntilExpired(expired: () => boolean, ...watches: Watch[]): Responder {
+  const live = watchList(...watches);
+  return {
+    match: live.match,
+    respond: (url) => (expired() ? json({ error: 'unauthenticated' }, 401) : live.respond(url)),
   };
 }
 
@@ -429,6 +442,41 @@ describe('pause and delete', () => {
     expect(await screen.findByText('Watch #7 deleted.')).toBeInTheDocument();
   });
 
+  // A session that expires between load and click used to fail silently: the
+  // lists had already succeeded, so nothing re-derived the signed-out state.
+  test('a 401 on delete surfaces the sign-in prompt instead of failing silently', async () => {
+    let sessionValid = true;
+    stubApi(
+      watchListUntilExpired(() => !sessionValid, watch({ id: 7 })),
+      route(DELETE_WATCH_7, 'POST', () => {
+        sessionValid = false;
+        return json({ error: 'unauthenticated' }, 401);
+      }),
+    );
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm delete' }));
+
+    expect(await screen.findByText('Sign in to manage your alerts')).toBeInTheDocument();
+  });
+
+  test('a 401 on pause surfaces the sign-in prompt', async () => {
+    let sessionValid = true;
+    stubApi(
+      watchListUntilExpired(() => !sessionValid, watch({ id: 7 })),
+      route(MODIFY_WATCH_7, 'POST', () => {
+        sessionValid = false;
+        return json({ error: 'unauthenticated' }, 401);
+      }),
+    );
+    renderPage();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Pause' }));
+
+    expect(await screen.findByText('Sign in to manage your alerts')).toBeInTheDocument();
+  });
+
   test('reports a failed delete', async () => {
     stubApi(
       watchList(watch({ id: 7 })),
@@ -504,6 +552,26 @@ describe('deep links', () => {
     renderPage();
 
     await screen.findByText('Sign in to manage your alerts');
+    expect(requests.find((r) => r.url.includes('/delete'))).toBeUndefined();
+  });
+
+  // And it stays dropped: signing in from the still-vanilla topbar refetches the
+  // lists, and the destructive action from the stale URL must NOT fire then.
+  test('a dropped deep-linked delete does not fire after signing in later', async () => {
+    window.history.replaceState(null, '', '/watches.html?action=delete&id=7');
+    let signedIn = false;
+    stubApi(
+      watchListUntilExpired(() => !signedIn, watch({ id: 7 })),
+      route(DELETE_WATCH_7, 'POST', noContent),
+    );
+    renderPage();
+    await screen.findByText('Sign in to manage your alerts');
+
+    signedIn = true;
+    window.dispatchEvent(new CustomEvent(AUTH_CHANGED_EVENT));
+
+    // The table appears, proving the lists refetched and we are signed in now.
+    await screen.findByRole('table');
     expect(requests.find((r) => r.url.includes('/delete'))).toBeUndefined();
   });
 

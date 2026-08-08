@@ -3,6 +3,9 @@
 import { describe, expect, test } from 'vitest';
 import { readUrlAction } from './useUrlAction';
 
+// The hook's ready/allowed gating is covered at the page level, where the
+// signed-out and sign-in-later paths are observable.
+
 describe('readUrlAction', () => {
   test.each([[''], ['?'], ['?id=7'], ['?poi_id=42']])(
     'returns null when %j carries no action',

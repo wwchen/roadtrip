@@ -55,5 +55,8 @@ export const selectIsAuthEnabled = (s: AuthState): boolean => s.me?.auth_enabled
 /** True → mount the embedded email/password card; false → redirect to /auth/login. */
 export const selectIsEmbeddedLogin = (s: AuthState): boolean => s.me?.auth_embedded === true;
 
+/** The role the backend grants admin-only routes to (see RoadtripAuthorization). */
+const ADMIN_ROLE = 'admin';
+
 export const selectIsAdmin = (s: AuthState): boolean =>
-  s.me?.user?.roles?.includes('admin') === true;
+  s.me?.user?.roles?.includes(ADMIN_ROLE) === true;

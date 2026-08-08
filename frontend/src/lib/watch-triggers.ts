@@ -4,7 +4,7 @@
 // Lives in lib/ rather than features/watches/ because two features read it: the
 // watches page (Phase 1) and the availability week's inline watch editor
 // (Phase 4d). Pure — no React, no fetch.
-import type { UpdateWatchRequest, Watch } from '@/api/watches-api';
+import type { Watch } from '@/api/watches-api';
 
 export const TRIGGER_KIND_SLACK_NOTIFY = 'slack_notify';
 export const TRIGGER_KIND_EMAIL_NOTIFY = 'email_notify';
@@ -123,9 +123,3 @@ export function buildTriggerPayload(state: TriggerState): TriggerPayload {
     stop_when_triggered: state.stopWhenTriggered,
   };
 }
-
-/** Narrowing helper for the update payload the selector produces. */
-export type TriggerUpdate = Pick<
-  UpdateWatchRequest,
-  'trigger_kinds' | 'trigger_config' | 'stop_when_triggered'
->;

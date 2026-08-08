@@ -110,7 +110,7 @@ export function WatchesPage() {
 
   // Deep links run only once the list has loaded and the caller is signed in,
   // matching the legacy `if (!signedOut) applyUrlAction(...)` guard.
-  const urlAction = useUrlAction(!isPending && !isSignedOut);
+  const urlAction = useUrlAction(!isPending, !isSignedOut);
   useEffect(() => {
     if (!urlAction) return;
     if (urlAction.kind === ACTION_CREATE) {

@@ -39,28 +39,35 @@ export function readUrlAction(search: string): WatchUrlAction | null {
  *
  * Clearing it matters: `?action=delete&id=7` must not re-fire on a refresh or a
  * back-navigation. `replaceState` rather than `pushState` so Back still leaves
- * the page instead of walking through cleared URLs. Preserves the whole search
- * being dropped, as the original did, not just the params it read.
+ * the page instead of walking through cleared URLs. Drops the whole search, as
+ * the original did, not just the params it read.
  *
- * `enabled` defers the read until the page knows the caller is signed in — the
- * legacy page skipped `applyUrlAction` entirely when signed out, so a
- * notification link followed by an expired session does not silently delete a
- * watch after the user signs back in.
+ * The action is consumed exactly once, on the first settled load, and is dropped
+ * for good if the caller was not signed in at that moment — matching the legacy
+ * page, which called `applyUrlAction` once at init behind `if (!signedOut)` and
+ * never again. That matters because one of these actions deletes a watch: a
+ * notification link opened with an expired session must not fire later, silently,
+ * when the user signs back in from the still-vanilla topbar. Nothing is cleared
+ * in that case either, so the URL still shows what was ignored.
+ *
+ * @param ready   the watch list has settled, so signed-in state is known
+ * @param allowed the caller is signed in and may act
  */
-export function useUrlAction(enabled: boolean): WatchUrlAction | null {
+export function useUrlAction(ready: boolean, allowed: boolean): WatchUrlAction | null {
   const [action, setAction] = useState<WatchUrlAction | null>(null);
   const consumed = useRef(false);
 
   useEffect(() => {
-    if (!enabled || consumed.current) return;
+    if (!ready || consumed.current) return;
     consumed.current = true;
+    if (!allowed) return;
     const found = readUrlAction(window.location.search);
     if (!found) return;
     const url = new URL(window.location.href);
     url.search = '';
     window.history.replaceState(null, '', `${url.pathname}${url.hash}`);
     setAction(found);
-  }, [enabled]);
+  }, [ready, allowed]);
 
   return action;
 }
