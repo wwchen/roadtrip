@@ -18,10 +18,19 @@
 - **Components come from LDS** (`matthewlew/lds` → `@lew/lds-react`), styled by
   `@lew/lds/css` + the `theme-roadtrip`. **Decision: vendored into `frontend/vendor/` as
   `vendor/*` npm workspaces**; switch to a published registry dep later.
-- **Phase 1 (watches page) is COMPLETE** and the real `Watch` DTO is pinned. It is built and
-  tested but NOT yet served — see "Serving" below.
-- **Serving is wired**: `tilt up` / `make run` / `make sandbox` build and serve the React
-  watches page, with a per-page fallback to the legacy file. **Next up: Phase 2.**
+- **Phase 1 (watches page) is COMPLETE, served, and merged** (#568). The real `Watch` DTO is
+  pinned and `web/watches/` is deleted.
+- **Phase 2 (availability dashboard) is COMPLETE, served, and merged** (#569). Chart.js comes from
+  npm; `web/availability.js` + `web/components/availability/*` and the root `availability.html`
+  are deleted.
+- **Serving is wired**: `tilt up` / `make run` / `make sandbox` build and serve both React pages.
+  Neither has a legacy fallback any more — an unbuilt `frontend/dist` 404s, deliberately and
+  loudly, and the prod deploy health check probes both paths.
+- **Next up: Phase 3 (account/settings)** — read its note in "Execution phases" first: it is not a
+  page, and part of its written scope is dead code.
+- **Nothing has been verified in a browser by CI.** `SmokeTest.kt` only navigates `/`, `/?poi=…`
+  and `/?route=…`, so neither migrated page is ever loaded. Green CI does not mean either page
+  renders.
 
 ### Resume quickstart
 ```bash
@@ -241,8 +250,84 @@ The big files under `web/availability/` — `availability-week.js` (1,226), `sit
 from `index.html`, and belong to Phase 4d. They are untouched and must stay until then.
 
 **Phase 3 — Account/settings** (`web/account/*`, 1,362 LOC). Settings modal, SecretField
-write-only pattern, auth port/adapter (`embedded-auth-port.js` + `auth0-embedded.js`), auth0-js
-via npm.
+write-only pattern, the account/profile/notifications panels, and the login card's
+hosted-redirect branch.
+
+~~auth port/adapter (`embedded-auth-port.js` + `auth0-embedded.js`), auth0-js via npm~~ — struck
+because Auth0 is not the live provider and the embedded flow is dormant. See the note below;
+this line is what led to porting it once already.
+
+> ⚠️ **Account/settings is NOT a page, and the original plan missed that.** There is no
+> `account.html`. `web/topbar/auth.js` mounts `mountLoginCard` and `mountSettingsModal` into
+> `#tb-auth`, and the topbar exists on **`index.html` only** — the map page, which stays vanilla
+> until Phase 4. So Phase 3 cannot be "migrate a page" the way Phases 1 and 2 were.
+>
+> **Decision: a React island inside the vanilla page.** A dedicated Vite entry mounts a React
+> root into its own container, and the vanilla topbar opens it through the `window.__rt*` shim
+> that already exists for cross-tree calls. This is the standard strangler move and keeps Phase 3
+> from being blocked behind Phase 4's ~9k LOC. Every component written this way (SettingsModal,
+> ProfilePanel, NotificationsPanel, LoginCard, SecretField) is reusable as-is in Phase 4 — only
+> the mounting glue and the shim hook are throwaway.
+>
+> The alternative considered and rejected: reorder Phase 4 ahead of Phase 3. It removes the glue
+> but pays ~9k LOC first, and the account UI is the smaller, better-understood surface to do next.
+>
+> **The embedded (Auth0) login path is deliberately NOT ported.** It is dead in the current
+> configuration, and briefly porting it was a mistake caught in review:
+>
+> - `docker-compose.yml` sets `AUTH_PROVIDER=${AUTH_PROVIDER:-clerk}`. Auth0 is the RFC 0009
+>   rollback path, not the live vendor.
+> - `/api/me` gates the surface at runtime through `auth_embedded` — "True → mount the embedded
+>   email/password card; false → redirect to `/auth/login`" (`src/api/auth-api.ts`). With Clerk
+>   active the hosted redirect is what runs, and `signIn()` already covers it from Phase 0.
+>
+> So `web/account/{embedded-auth-port,auth0-embedded}.js` get no React counterpart, and `auth0-js`
+> is not a frontend dependency. **When the login card is ported, implement the
+> `auth_embedded: false` branch only.** Do not port the port either: an interface whose only
+> implementation is a test double is speculative generality, and it would drag the vendor SDK into
+> the bundle on the one path where a failed third-party fetch stops anyone signing in.
+>
+> If Auth0 is ever reactivated the legacy modules are still in `web/` and still the reference — and
+> two bugs found while briefly porting them are worth carrying over then: Auth0 reports an
+> unverified email as `access_denied` in some tenant configurations, and the legacy mapper tests
+> `access_denied` first, so those users are told their password is wrong; and a login callback
+> reporting success with no `code` resolves `undefined` as the artifact.
+>
+> **Order the work so nothing is wasted:** the pure/logic layers are independent of the mounting
+> decision and go first.
+>
+> - ✅ `src/lib/settings-errors.ts` — ported + tested.
+> - ✅ `account-api.ts` — already typed in Phase 0.
+> - ✅ `ConfirmButton`, `SecretField` in `@ui`; `ProfilePanel`, `AccountPanel`,
+>   `NotificationsPanel`, `SettingsModal` in `src/features/account/`. All tested.
+> - ✅ **The login card needs no port.** `web/topbar/auth.js`'s `startSignIn()` mounts it
+>   only when `me.auth_embedded` is true; otherwise it calls `signIn()`, a plain redirect
+>   already ported in Phase 0. With Clerk active the redirect is the live path, so there is
+>   no "hosted-redirect branch of the login card" — the redirect bypasses the card entirely.
+>   An earlier version of this checklist said otherwise and was wrong.
+>
+> **So Phase 3's React work is COMPLETE.** Every component exists and is tested. What is
+> missing is only mounting: nothing yet renders `SettingsModal`, so users still get the
+> vanilla modal from `web/account/settings-modal.js`. That is deliberate and not a
+> regression — the legacy path keeps working untouched.
+>
+> **The island glue was deliberately NOT built.** It needed a Vite entry, a stable output
+> filename, a `<script>` tag in the root `index.html`, a `window.__rtOpenSettings()` global
+> and a hook in the vanilla topbar — all of which Phase 4a deletes the moment `index.html`
+> becomes a React entry. With Phase 4 landing immediately after, that is 100% throwaway
+> work, so the decision is to let Phase 4a mount the modal instead. `frontend/index.html`
+> already exists and already builds as a Phase 0 placeholder, so the entry is in place;
+> what it needs is the map app inside it.
+>
+> **Phase 4a therefore owns one extra task:** render `<SettingsModal>` from the migrated map
+> shell and delete `web/account/*` plus the `mountSettingsModal` import in
+> `web/topbar/auth.js`.
+>
+> **A latent bug was fixed in the port**, worth knowing because the same shape appears elsewhere
+> in `web/`: `settings-errors.js` looks up `MESSAGES[code] ?? DEFAULT` on a plain object, so a
+> code naming an `Object.prototype` member resolves up the prototype chain —
+> `settingsErrorMessage('toString')` returns the *function*, and `??` never fires because a
+> function is not nullish. The port uses a `Map`, which has no prototype keys to collide with.
 
 **Phase 4 — The map app** (`index.html`, ~9k LOC — largest/hardest). Sub-sequence:
   4a. Map shell + `<MapProvider>` + imperative `map/` layer lifecycle + basemap/style-reload.
