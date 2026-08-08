@@ -6,6 +6,10 @@
   "engines": {
     "node": ">=22"
   },
+  "//": "vendor/* are npm workspaces so the vendored LDS monorepo members resolve each other locally (npm cannot install a single workspace member of a git monorepo). Swapping to published @lew/lds* registry deps later means dropping the workspaces field and changing the specifiers below.",
+  "workspaces": [
+    "vendor/*"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
@@ -15,6 +19,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@lew/lds": "1.0.0",
+    "@lew/lds-react": "1.0.0",
+    "@lew/open-icons": "1.0.0",
     "@tanstack/react-query": "^5.62.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

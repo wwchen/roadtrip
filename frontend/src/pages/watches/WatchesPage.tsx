@@ -1,5 +1,11 @@
-// Phase 0 placeholder. Phase 1 rebuilds this on LDS components + React Hook
-// Form + TanStack Query, replacing web/watches/watches-page.js.
+import { Link } from '@ui';
+
+// Phase 0 placeholder. Phase 1 rebuilds this on LDS components + a form library
+// + TanStack Query, replacing web/watches/watches-page.js.
+//
+// The nav links already come from LDS through the `@ui` seam, so the vendored
+// package, the theme cascade, and the typed React bindings are exercised by the
+// build and the smoke test rather than only at Phase 1.
 export function WatchesPage() {
   return (
     <main className="shell">
@@ -11,8 +17,8 @@ export function WatchesPage() {
           </div>
         </div>
         <nav className="nav">
-          <a className="outside-link" href="/">Map</a>
-          <a className="outside-link" href="/availability.html">Dashboard</a>
+          <Link href="/">Map</Link>
+          <Link href="/availability.html">Dashboard</Link>
         </nav>
       </header>
       <p>React migration scaffold — Phase 0.</p>
