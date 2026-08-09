@@ -268,7 +268,8 @@ went with them — `migratedPages` generates both URL forms.
 but only ~640 of those were this phase: the tab router (51) and the three tab modules (585).
 The big files under `web/availability/` — `availability-week.js` (1,226), `site-matrix.js` (627),
 `watch-editor.js` (417), `site-detail.js` (338) — are the MAP DRAWER's availability UI, reached
-from `index.html`, and belong to Phase 4d. They are untouched and must stay until then.
+from `index.html`. **Phase 4d ports them** (see below); they stay on disk until Phase 5 deletes
+`web/`, because the vanilla map page and the vanilla topbar still import them.
 
 **Phase 3 — Account/settings** (`web/account/*`, 1,362 LOC). Settings modal, SecretField
 write-only pattern, the account/profile/notifications panels, and the login card's
@@ -679,6 +680,132 @@ without a loaded style `styleReady` never flips — the overlays and the flyTo t
 broken for a reason that has nothing to do with the code; and **drive touch through CDP**
 (`Input.dispatchTouchEvent`), since Playwright's mouse API cannot exercise a touch-only
 gesture.
+
+## Phase 4d — what landed (branch `claude/react-migration-4d-availability`)
+
+The map-side availability tree: `web/availability/`'s 3,298 lines across twelve modules,
+mounted where 4c left an `rt-cg-availability-pending` notice in the campground drawer.
+Gated on the backend's own provider-capability flag, so it only appears for pins that
+genuinely have availability to show.
+
+**Nothing in `web/availability/` is deleted.** The vanilla map page still mounts it, and
+`watch-editor.js` is imported by the vanilla topbar's alerts panel as well. Phase 5 removes
+them with the rest of `web/`.
+
+**What is where.** The split is deliberate: everything a reviewer needs to check is a pure
+function, and the components only draw.
+
+| Piece | File |
+|---|---|
+| One envelope per campsite → one status per day | `fuse.ts` |
+| Which rows, in which order, and what a cell means | `matrix-rows.ts` |
+| Watch windows and the provider capability gates | `watch-windows.ts` |
+| Booking deep links from a per-campsite template | `booking-links.ts` |
+| Campsite facts, features, capacity, image search | `site-detail-facts.ts` |
+| Selected-day list rows | `site-list-rows.ts` |
+| Date labels (all UTC — see below) | `week-labels.ts` |
+| Persisted Site-column width | `site-column.ts` |
+| Provider-fault copy | `availability-errors.ts` |
+| Week fetch, catalog fetch, watch list + mutations | `useWeekAvailability.ts`, `useCampsites.ts`, `useWatches.ts` |
+| Skeleton delay | `useDelayedFlag.ts` |
+| Components | `AvailabilityWeek.tsx`, `SiteMatrix.tsx`, `SiteList.tsx`, `SiteDetail.tsx`, `DayDetail.tsx`, `WeekNav.tsx`, `CalendarPopover.tsx`, `WatchPopover.tsx`, `WatchEditor.tsx` |
+| Styles | `availability.css` |
+
+**Three pieces of the vanilla controller are absent rather than translated**, and the
+absences are the point of the port:
+
+- **The scroll capture/restore dance is gone.** `captureMatrixScroll` /
+  `restoreMatrixScroll` / `restoreMatrixScrollAfterTap` existed because an `innerHTML`
+  re-render replaced the scrolling element and lost `scrollLeft` — twice over for a booking
+  tap, which needed a `requestAnimationFrame` double-restore. React keeps the node.
+- **`weekRequestSeq` / `sitesRequestSeq` are gone.** They were compared at every await point
+  so a slow response for last week could not paint over this one. Query keys do that
+  structurally.
+- **`restoreMatrixFilterFocus` is gone.** It re-focused the search box and restored its caret
+  after every keystroke, because the input was destroyed on each re-render. A controlled
+  input keeps both.
+
+**What is NOT simplified**, because each is a product decision:
+
+- **Booking takes two taps.** The first arms the cell (its label becomes "Book"), the second
+  opens the provider. These are 66px cells in a horizontally scrolling grid on a phone; one
+  tap would open a booking tab every time a thumb brushed the wrong column. Arming is
+  exclusive, so the label itself says which night is about to be booked — which is why
+  changing week *or* changing a filter disarms it. Both are pinned by tests.
+- **The rollup puts `unknown` ahead of `reserved`.** A stream we could not read must not
+  render as a confident "full": "?" sends the user to check, "R" sends them away.
+- **`empty` and `closed_for_season` stay separate states.** One is permanent, one is a date.
+- **The day panel's four-way message.** Watch toggle / "sign in" / "not available for this
+  campground" / "no online openings to watch" — each of the other three would be a lie in
+  the cases the others cover.
+
+**Two deviations from the original, both noted at the site:**
+
+- `rollupStatus` normalises before comparing. The original compared provider strings
+  verbatim, so `"Available"` fell through every branch and rolled up as `unknown` — the one
+  place in either tree where casing changed the answer.
+- The watch editor's add-to-cart toggle is **enabled** for a watch that already uses it, so
+  it can be turned off. The original wrote `disabled: busy || (!canAtc && !state.addToCart)`,
+  whose second clause is exactly the case where the row is not rendered at all.
+
+**Verified:** typecheck clean, 1,090 tests green, build ok, colour check ok, and driven in
+headless Chromium at 1280×900 and 420×900 against a stubbed 30-site campground — the sticky
+Site column holds at 128px through a 200px horizontal scroll, the page itself never scrolls
+sideways, the two-tap arm/open flow works, the watch popover escapes the matrix's scroll box
+at 240px, the calendar disables the 15 out-of-range days in the opening month, selecting a
+day lists its five openings with per-night booking links, and a site row expands to seven
+facts. No console errors on either viewport.
+
+**The bug that mattered, and the guardrail it earned.** The watch editor rendered 1061px
+wide instead of 240. Two causes, stacked:
+
+1. Its rules were the one part of the availability CSS that never lived in a stylesheet —
+   `watch-editor.js` built ~150 lines as a template string and injected a `<style>` tag into
+   `document.head`, so lifting the `cg-*` block out of `index.html` missed all of them. (They
+   are also now under the colour guardrail for the first time; two literal colours needed
+   tokenising.)
+2. The `cg-btn` family, which the day panel's toggle uses, lost its closing brace on the way
+   in — so every rule after it became a descendant of `.cg-btn[disabled]` and silently
+   stopped matching.
+
+A rule without its closing brace is still **valid CSS**, which is why nothing caught it: the
+build succeeded, the colour checker passed, and jsdom does no layout so 1,090 unit tests
+passed too. `scripts/check-css-blocks.mjs` now checks brace balance and rejects a selector
+appearing inside a rule body, and runs in `make test` and CI. It is not a parser check — a
+parser accepts the broken file, since nesting is legal CSS now; we simply do not use nesting,
+so its appearance means a brace went missing.
+
+**Five more defects, from an adversarial review after the port was "done".** Worth
+reading as a set, because four of the five are shapes that will recur:
+
+- **The calendar popover opened off-screen.** `.cg-cal-host` positions itself with
+  `position: absolute; top: 100%`, so it needs a positioned ancestor — the vanilla
+  appended it to the clicked button's `parentElement`, which is `.cg-week-nav`
+  (`position: relative` for exactly that reason). Rendered at the section root it
+  resolved against the drawer instead: 906px top in a 900px viewport, 619px below the
+  button. **The first browser pass reported the calendar "working"** because
+  `waitForSelector` found it in the DOM — a lesson about what a smoke assertion is
+  worth. It is a `calendar` slot on `<WeekNav>` now.
+- **A 401 on a watch mutation said "Could not save. Try again."** Retrying is exactly
+  what cannot help. Mutations map a 401 to `WatchAuthError` and refetch the list, which
+  collapses the grid to "Sign in to set availability alerts."
+  Two things fell out of testing it, both worth knowing: **a throw inside a mutation's
+  `onError` is discarded** (`mutateAsync` still rejects with the original), so the
+  mapping belongs in `mutationFn`; and the message **cannot live in the editor**,
+  because withdrawing the affordance unmounts the anchor cell and closes the popover.
+  It is a toast — one surface, and one that outlives the clicked control.
+- **`console.warn` in a render body** (`usePoiWatches`), which re-fires on every
+  re-render while the error is cached. A render must have no side effects.
+- **`setState` inside another setter's updater** (`onSelectDate`). Updaters must be
+  pure; StrictMode double-invokes them, and both setters batch identically outside one.
+- **An armed booking cell survived expanding a site row**, which pushes rows down. The
+  vanilla disarmed on any non-booking click in the grid.
+
+**One parity observation for design, not a regression.** At the default 128px, the Site column
+truncates to "Upper Loop / Site …" for two-digit site numbers, because the loop prefix eats
+the width. The markup, the CSS and the 128px default are all straight lifts, so the vanilla
+grid does the same; the full name is in the `title` attribute and the column is drag-resizable.
+Worth a look, but widening the default is a design change rather than part of the port.
 
 ## Serving (DONE)
 

@@ -1,4 +1,5 @@
 import { Button } from '@ui';
+import { AvailabilityWeek } from '@/features/availability/AvailabilityWeek';
 import { descriptionHtml, upstreamDecorations } from '@/lib/upstream-html';
 import {
   amenityList,
@@ -36,17 +37,15 @@ import type { DrawerContentProps } from './registry';
  * agency → region and distance → season verdict → availability → actions. On a phone
  * that is about 310px of headroom, so anything below "More details" is collapsed.
  *
- * **The availability grid is Phase 4d and is not here yet.** The gate is the backend's
- * own capability flag, and where the 7-day grid and its day-detail panel will mount is
- * marked below — `web/availability/availability-week.js` and its eleven siblings are
- * 3,298 lines, which is its own phase. Until then a supported pin says the grid is
- * coming rather than silently omitting it, because "no availability shown" and "this
- * provider has no availability" are different facts.
+ * The availability grid (`features/availability/AvailabilityWeek`) mounts below the
+ * actions, gated on the backend's own provider-capability flag: "no availability
+ * shown" and "this provider has no availability" are different facts, and only the
+ * flag can tell them apart.
  *
- * Watch capture deliberately has no top-level button: it lives inside the day-detail
- * panel (so 4d), and the reserve CTA stays neutral ("View on recreation.gov") because
- * our availability is more permissive than the vendor's booking flow — routing intent
- * through watches avoids implying a guarantee we cannot keep.
+ * Watch capture deliberately has no top-level button: it lives inside the grid's
+ * cells and day panel, and the reserve CTA stays neutral ("View on recreation.gov")
+ * because our availability is more permissive than the vendor's booking flow —
+ * routing intent through watches avoids implying a guarantee we cannot keep.
  */
 export function CampgroundDrawer({ feature, onClose }: DrawerContentProps) {
   const p = feature.properties;
@@ -120,12 +119,11 @@ export function CampgroundDrawer({ feature, onClose }: DrawerContentProps) {
       </div>
 
       {availabilitySupported(p) ? (
-        // Phase 4d mounts the week grid here. The flag is the backend's provider
-        // capability check, so this only appears for pins that genuinely have
-        // availability to show.
-        <div className="rt-drawer-section rt-cg-availability-pending">
-          Availability for this campground is coming with the next phase of the map
-          rebuild. The booking link above is live.
+        // Gated on the backend's own provider-capability flag, so the grid only
+        // appears for pins that genuinely have availability to show — rather than
+        // rendering an empty week for a campground nobody can book through us.
+        <div className="rt-drawer-section">
+          <AvailabilityWeek feature={feature} />
         </div>
       ) : null}
 
