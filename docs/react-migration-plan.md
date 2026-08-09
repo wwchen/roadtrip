@@ -1064,6 +1064,13 @@ form instead of the `/index` that stripping `.html` produces; and the catch-all'
 the only page they ever carried — which also took out `SandboxConfig`'s field, the
 `application.yaml` key, the sandbox compose env var and the secret-registry entry.
 
+**The deploy health check now asserts `/` is the React shell**, not merely that it 200s.
+`/` is the one page that still has a legacy file, so a deploy whose frontend build was
+skipped degrades it to the vanilla map *with a 200* — `/watches` and `/availability` 404
+instead, which the existing probe already catches. The check greps for `id="root"`.
+`scripts/deploy.sh`'s "npm not found" error says the same thing for a sandbox, where the
+failure mode is a reviewer looking at the wrong app.
+
 **A P0 in 4c that graduation would have shipped.** `flattenHydratedPoi` rewrites a
 campground's `category` to its `subcategory` (a `core.js` behaviour its parity suite pins
 byte for byte), and `drawerFor` keyed on `category` — so every campground carrying a
