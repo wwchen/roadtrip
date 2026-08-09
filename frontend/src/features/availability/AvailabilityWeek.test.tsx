@@ -216,6 +216,52 @@ describe('the week"s states', () => {
   });
 });
 
+describe('the calendar popover', () => {
+  // The bug this pins: `.cg-cal-host` positions itself with `position: absolute; top:
+  // 100%`, so it must be a child of `.cg-week-nav` — the one positioned ancestor in
+  // the grid. Rendered at the section root instead, it resolved against the drawer and
+  // opened ~620px below the viewport: present in the DOM, invisible to the user. jsdom
+  // does no layout, so the assertion is structural.
+  test('renders inside the week nav, which is what anchors it', async () => {
+    await mount();
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Pick a date' }).click();
+    });
+
+    const calendar = screen.getByRole('dialog', { name: 'Pick a week' });
+    expect(calendar.closest('.cg-week-nav')).not.toBeNull();
+  });
+
+  test('jumps the visible week to the day picked', async () => {
+    await mount();
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Pick a date' }).click();
+    });
+    await act(async () => {
+      screen.getByRole('button', { name: '24' }).click();
+    });
+
+    await waitFor(() =>
+      expect(requests.some((url) => url.includes('start_date=2026-08-24'))).toBe(true),
+    );
+    expect(screen.queryByRole('dialog', { name: 'Pick a week' })).toBeNull();
+  });
+
+  // The provider will not quote before the earliest date, so those days are inert.
+  test('disables days before the earliest bookable date', async () => {
+    await mount();
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Pick a date' }).click();
+    });
+
+    expect(screen.getByRole('button', { name: '9' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '11' })).not.toBeDisabled();
+  });
+});
+
 describe('paging weeks', () => {
   test('asks for the next seven days', async () => {
     await mount();
@@ -314,6 +360,24 @@ describe('booking a cell', () => {
       // A controlled input: setting value and firing input is how RTL types here.
       Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(search, 'Site');
       search.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    expect(cell('Site 1', WEEK[0])).toHaveTextContent('A');
+  });
+
+  // The vanilla controller disarmed on any click in the grid that was not a booking
+  // cell. Expanding a site row pushes the rows down, so an armed cell would be left
+  // showing "Book" under the user's finger somewhere they are no longer looking.
+  test('expanding a site row disarms the cell', async () => {
+    await mount();
+
+    await act(async () => {
+      cell('Site 1', WEEK[0]).click();
+    });
+    expect(cell('Site 1', WEEK[0])).toHaveTextContent('Book');
+
+    await act(async () => {
+      screen.getByRole('button', { name: /View details for/ }).click();
     });
 
     expect(cell('Site 1', WEEK[0])).toHaveTextContent('A');
@@ -429,6 +493,70 @@ describe('watches', () => {
     expect(
       screen.getByText('Watches are not available for this campground.'),
     ).toBeInTheDocument();
+  });
+
+  // A dead session mid-session has to withdraw the control, not leave a button that
+  // cannot work. The vanilla cleared its watch state here; this is the same outcome —
+  // and note what it implies: the affordance disappearing takes the popover's anchor
+  // cell with it, so the popover closes too.
+  test('a session that expires mid-save withdraws the affordance', async () => {
+    await mount();
+    await act(async () => {
+      screen.getAllByRole('columnheader')[2]!.querySelector('button')!.click();
+    });
+    expect(screen.getByRole('button', { name: 'Set watch' })).toBeInTheDocument();
+
+    // 200 on the first load and 401 afterwards is what an expiring session looks like.
+    stubs.watches = () => json({ error: 'unauthorized' }, 401);
+    await act(async () => {
+      screen.getByRole('button', { name: 'Set watch' }).click();
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText('Sign in to set availability alerts.')).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('button', { name: 'Set watch' })).toBeNull();
+  });
+
+  // The withdrawal above unmounts whatever control was clicked, so an inline message
+  // would be raised into a component that is about to disappear. A toast outlives it,
+  // and "sign in" is the only useful thing to say — retrying fails identically.
+  test('raises a toast naming the expired session', async () => {
+    stubs.watches = () =>
+      json({
+        watches: [
+          {
+            id: 9,
+            targets: [{ poi_id: POI_ID }],
+            poi_id: POI_ID,
+            campsite_filters: {},
+            start_date: WEEK[1],
+            end_date: WEEK[2],
+            trigger_kinds: ['slack_notify'],
+            trigger_config: {},
+            stop_when_triggered: true,
+            status: 'active',
+            created_at: '2026-08-01T00:00:00Z',
+            updated_at: '2026-08-01T00:00:00Z',
+          },
+        ],
+        total: 1,
+      });
+    await mount();
+
+    await act(async () => {
+      cell('Site 1', WEEK[1]).click();
+    });
+    const editor = within(screen.getByRole('group', { name: 'Availability watch editor' }));
+
+    // The session dies between opening the editor and saving.
+    stubs.watches = () => json({ error: 'unauthorized' }, 401);
+    await act(async () => {
+      editor.getByRole('button', { name: 'Save' }).click();
+    });
+
+    await waitFor(() => expect(screen.getByText('Your session expired.')).toBeInTheDocument());
+    expect(screen.getByText('Sign in to set watches')).toBeInTheDocument();
   });
 
   test('a reserved cell opens the watch editor', async () => {

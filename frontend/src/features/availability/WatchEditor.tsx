@@ -266,10 +266,15 @@ function initialState(
 /**
  * Turn a save failure into copy.
  *
- * The two recognised codes are the ones a user can act on; everything else is
- * "try again", because a raw server message here is noise in a 240px popover.
+ * The recognised cases are the ones a user can act on; everything else is "try
+ * again", because a raw server message here is noise in a 240px popover.
  */
 function saveErrorMessage(caught: unknown): string {
+  // Deliberately says nothing about an expired session, even though that is a failure
+  // mode here: a 401 withdraws every watch affordance, which unmounts the cell this
+  // popover is anchored to and therefore closes the popover. A message in here would
+  // be raised into a component that is about to disappear. `AvailabilityWeek` raises a
+  // toast instead — one surface, and one that outlives the popover.
   const body = caught instanceof HttpError && typeof caught.body === 'string' ? caught.body : '';
   if (body.includes('unsupported_trigger')) return 'Add to cart is not available for this watch.';
   if (body.includes('invalid_trigger_config')) return 'Check the trigger settings and try again.';

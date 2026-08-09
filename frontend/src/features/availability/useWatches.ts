@@ -14,7 +14,7 @@
 // Any other error is quieter still — the badges just do not render — because a
 // campground's availability is worth reading even when we cannot say whether the
 // user is watching it.
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createWatch,
@@ -83,15 +83,20 @@ export function usePoiWatches(poiId: string | number | null | undefined): PoiWat
       listWatches({ status: WATCH_LIST_STATUS, poiId: poiId!, signal }),
   });
 
+  // In an effect, not in the render body. A `console.warn` while rendering fires
+  // again on every re-render for as long as the error is cached — and a render must
+  // have no side effects at all, since React may discard and replay one.
+  const { error } = query;
+  useEffect(() => {
+    // A 401 is the expected answer for an anonymous visitor, so it is not logged;
+    // anything else is a real fault that only shows up as missing badges.
+    if (error && !isUnauthorized(error)) console.warn('watch list fetch failed', error);
+  }, [error]);
+
   if (poiId == null) return NO_WATCHES;
-  if (query.error) {
-    // Both branches land in the same place — no affordances — but only the
-    // non-401 case is worth a line in the console.
-    if (!isUnauthorized(query.error)) {
-      console.warn('watch list fetch failed', query.error);
-    }
-    return NO_WATCHES;
-  }
+  // Both an auth failure and a real one land here — no watch affordances — because
+  // a campground's availability is worth reading either way.
+  if (error) return NO_WATCHES;
   if (!query.data) return { ...NO_WATCHES, loading: query.isLoading };
 
   return {
@@ -107,6 +112,21 @@ export interface WatchMutations {
   /** Remove the watch on `date`, if there is one. */
   remove: (existing: Watch) => Promise<void>;
   saving: boolean;
+}
+
+/**
+ * A watch mutation that failed because the session is gone.
+ *
+ * Distinct from every other failure so the editor can say "sign in" instead of "try
+ * again" — retrying is exactly what will not help. The vanilla handled this by
+ * clearing its watch state and closing the popover; here the list refetch does the
+ * first (it 401s in turn, so `canManage` goes false) and this type does the second.
+ */
+export class WatchAuthError extends Error {
+  constructor() {
+    super('Your session expired.');
+    this.name = 'WatchAuthError';
+  }
 }
 
 /**
@@ -126,8 +146,34 @@ export function useWatchMutations(poiId: string | number | null | undefined): Wa
     notifyLegacyWatchesChanged();
   }, [queryClient]);
 
+  /**
+   * Run a mutation, mapping a 401 to `WatchAuthError` and refetching the list.
+   *
+   * The refetch is what collapses the UI to its signed-out state: the list request
+   * 401s too, `canManage` goes false, and every watch affordance in the grid becomes
+   * "Sign in to set availability alerts." Without it the user would keep being
+   * offered a control that cannot work.
+   *
+   * Wrapped around the `mutationFn` rather than handled in `onError`, which was the
+   * first attempt and does not work: `onError` is a notification callback, so what it
+   * throws is discarded and `mutateAsync` still rejects with the original error — the
+   * editor would go on saying "Could not save. Try again." for a dead session.
+   */
+  const withAuthMapping = useCallback(
+    async <T,>(run: () => Promise<T>): Promise<T> => {
+      try {
+        return await run();
+      } catch (caught) {
+        if (!isUnauthorized(caught)) throw caught;
+        void queryClient.invalidateQueries({ queryKey: queryKeys.watches.all() });
+        throw new WatchAuthError();
+      }
+    },
+    [queryClient],
+  );
+
   const saveMutation = useMutation({
-    mutationFn: async ({
+    mutationFn: ({
       date,
       payload,
       existing,
@@ -135,25 +181,26 @@ export function useWatchMutations(poiId: string | number | null | undefined): Wa
       date: string;
       payload: TriggerPayload;
       existing?: Watch;
-    }) => {
-      if (existing) {
-        await updateWatch(existing.id, payload);
-        return;
-      }
-      await createWatch({
-        poi_id: Number(poiId),
-        campsite_filters: {},
-        start_date: date,
-        end_date: stayEndDate(date),
-        cadence_sec: DEFAULT_WATCH_CADENCE_SEC,
-        ...payload,
-      });
-    },
+    }) =>
+      withAuthMapping(async () => {
+        if (existing) {
+          await updateWatch(existing.id, payload);
+          return;
+        }
+        await createWatch({
+          poi_id: Number(poiId),
+          campsite_filters: {},
+          start_date: date,
+          end_date: stayEndDate(date),
+          cadence_sec: DEFAULT_WATCH_CADENCE_SEC,
+          ...payload,
+        });
+      }),
     onSuccess: settled,
   });
 
   const removeMutation = useMutation({
-    mutationFn: (existing: Watch) => deleteWatch(existing.id),
+    mutationFn: (existing: Watch) => withAuthMapping(() => deleteWatch(existing.id)),
     onSuccess: settled,
   });
 

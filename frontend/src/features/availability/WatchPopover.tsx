@@ -66,7 +66,13 @@ export function WatchPopover({
       return;
     }
     const host = hostRef.current;
-    setPosition(positionFor(anchor, host?.getBoundingClientRect().height ?? 0));
+    const next = positionFor(anchor, host?.getBoundingClientRect().height ?? 0);
+    // Compared by value, not replaced wholesale: this runs on every parent render as
+    // well as on scroll, and a fresh object would re-render the popover each time
+    // even when it has not moved a pixel.
+    setPosition((current) =>
+      current && current.top === next.top && current.left === next.left ? current : next,
+    );
   }, [anchor, onClose]);
 
   // Before paint, so the popover never renders at the wrong place for a frame.

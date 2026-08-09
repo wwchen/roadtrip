@@ -23,6 +23,7 @@
 // resets on week change — those are product decisions, and they are carried over
 // exactly. See the notes at each.
 import { useCallback, useMemo, useState } from 'react';
+import { useToast } from '@ui';
 import type { PoiFeature } from '@/lib/poi';
 import { availableCount } from '@/lib/day-fields';
 import { addLocalDays, localToday, localYmd, parseLocalYmd, sameLocalDay } from '@/lib/local-date';
@@ -46,8 +47,9 @@ import {
   cacheAgeMinutes,
   useWeekAvailability,
 } from './useWeekAvailability';
-import { usePoiWatches, useWatchMutations, watchForDate } from './useWatches';
+import { WatchAuthError, usePoiWatches, useWatchMutations, watchForDate } from './useWatches';
 import {
+  NO_WATCH_CAPABILITIES,
   stayEndDate,
   supportsAddToCart,
   supportsWatchAlerts,
@@ -80,9 +82,10 @@ export function AvailabilityWeek({ feature }: AvailabilityWeekProps) {
   const [armedBook, setArmedBook] = useState<ArmedBook | null>(null);
   const [filters, setFilters] = useState<MatrixFilters>(DEFAULT_MATRIX_FILTERS);
   const [siteColumnWidth, setSiteColumnWidth] = useState(() => loadSiteColumnWidth());
-  const [calendarAnchor, setCalendarAnchor] = useState<HTMLElement | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [watchTarget, setWatchTarget] = useState<{ anchor: HTMLElement; date: string } | null>(null);
 
+  const { toast } = useToast();
   const week = useWeekAvailability(poiId, weekStart);
   const catalog = useCampsites(poiId);
   const watches = usePoiWatches(poiId);
@@ -110,7 +113,7 @@ export function AvailabilityWeek({ feature }: AvailabilityWeekProps) {
   const goToWeek = useCallback(
     (next: Date) => {
       resetWeekView();
-      setCalendarAnchor(null);
+      setCalendarOpen(false);
       setWeekStart(next < earliestDate ? earliestDate : next);
     },
     [earliestDate, resetWeekView],
@@ -118,7 +121,10 @@ export function AvailabilityWeek({ feature }: AvailabilityWeekProps) {
 
   const days: FusedDay[] = week.data?.state === 'success' ? week.data.days : [];
   const selectedDay = days.find((day) => day.date === selectedDate) ?? null;
-  const capabilities = week.data?.watchCapabilities ?? { triggerKinds: new Set(), bookingActions: new Set() };
+  // The shared empty value, not a fresh object per render: it is the identity every
+  // capability gate below compares against, and a new `Set` each time would make the
+  // memoised callbacks that read it churn for no reason.
+  const capabilities = week.data?.watchCapabilities ?? NO_WATCH_CAPABILITIES;
 
   // Provider first, user second: "this campground cannot do alerts" and "sign in to
   // set one" are different sentences, and only the second is actionable.
@@ -128,16 +134,19 @@ export function AvailabilityWeek({ feature }: AvailabilityWeekProps) {
 
   const onSelectDate = useCallback(
     (date: string) => {
+      // Derived from the current value rather than from inside a `setSelectedDate`
+      // updater. An updater must be pure — React double-invokes it under StrictMode
+      // and may replay it — so calling another setter in there is not a supported
+      // pattern even though it happens to work today. Both setters are in one event
+      // handler, so React batches them into a single render either way.
+      const selecting = selectedDate !== date;
       setArmedBook(null);
-      setSelectedDate((current) => {
-        const selecting = current !== date;
-        // The site list opens with a fresh selection and closes when it is cleared —
-        // selecting a date is a request to see what is open on it.
-        setSitesExpanded(selecting);
-        return selecting ? date : null;
-      });
+      setSelectedDate(selecting ? date : null);
+      // Selecting a date is a request to see what is open on it; clearing it closes
+      // the list again.
+      setSitesExpanded(selecting);
     },
-    [],
+    [selectedDate],
   );
 
   const openBooking = useCallback(
@@ -161,19 +170,47 @@ export function AvailabilityWeek({ feature }: AvailabilityWeekProps) {
     [catalog.data],
   );
 
+  /**
+   * Report a watch failure where the user will still be looking.
+   *
+   * An expired session is the case that needs this: it withdraws every watch
+   * affordance, which unmounts the control that was clicked — a day-panel button, or
+   * the cell a popover is anchored to — so an inline message would be raised into a
+   * component that is about to disappear. A toast outlives both, and
+   * `<ToastProvider>` is already mounted app-wide.
+   */
+  const reportWatchFailure = useCallback(
+    (caught: unknown) => {
+      if (caught instanceof WatchAuthError) {
+        toast({ status: 'warning', title: 'Sign in to set watches', children: 'Your session expired.' });
+        return;
+      }
+      // Every other failure is reported by whichever control is still on screen —
+      // the editor's own error line — so it is not duplicated here.
+      console.warn('watch change failed', caught);
+    },
+    [toast],
+  );
+
   const toggleDayWatch = useCallback(async () => {
     if (!selectedDate) return;
-    const existing = watchForDate(watches, selectedDate);
-    if (existing) {
-      await mutations.remove(existing);
-      return;
+    try {
+      const existing = watchForDate(watches, selectedDate);
+      if (existing) {
+        await mutations.remove(existing);
+        return;
+      }
+      // The grid's own toggle creates a Slack watch, which is the default the popover
+      // would also open with. A provider that cannot Slack has no toggle at all — see
+      // `DayDetail` — so reaching here without the capability is not possible.
+      if (!capabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY)) return;
+      await mutations.save(selectedDate, buildTriggerPayload(triggerStateOf(null)));
+    } catch (caught) {
+      // The day panel has no error line of its own, and the vanilla toggle only
+      // restored its label and logged — so this is the one report the user gets.
+      reportWatchFailure(caught);
     }
-    // The grid's own toggle creates a Slack watch, which is the default the popover
-    // would also open with. A provider that cannot Slack has no toggle at all — see
-    // `DayDetail` — so reaching here without the capability is not possible.
-    if (!capabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY)) return;
-    await mutations.save(selectedDate, buildTriggerPayload(triggerStateOf(null)));
-  }, [capabilities, mutations, selectedDate, watches]);
+  }, [capabilities, mutations, reportWatchFailure, selectedDate, watches]);
 
   const weekNav = (
     <WeekNav
@@ -184,23 +221,24 @@ export function AvailabilityWeek({ feature }: AvailabilityWeekProps) {
       onPrev={() => goToWeek(addLocalDays(weekStart, -WEEK_DAYS))}
       onNext={() => goToWeek(addLocalDays(weekStart, WEEK_DAYS))}
       onEarliest={() => goToWeek(earliestDate)}
-      onPickDate={setCalendarAnchor}
+      onPickDate={() => setCalendarOpen(true)}
+      calendar={
+        calendarOpen ? (
+          <CalendarPopover
+            viewMonth={weekStart}
+            today={earliestDate}
+            selectedDate={weekStart}
+            maxDate={addLocalDays(earliestDate, CALENDAR_MAX_DAYS_OUT)}
+            onPick={goToWeek}
+            onClose={() => setCalendarOpen(false)}
+          />
+        ) : null
+      }
     />
   );
 
   return (
     <section className="cg-availability">
-      {calendarAnchor ? (
-        <CalendarPopover
-          viewMonth={weekStart}
-          today={earliestDate}
-          selectedDate={weekStart}
-          maxDate={addLocalDays(earliestDate, CALENDAR_MAX_DAYS_OUT)}
-          onPick={goToWeek}
-          onClose={() => setCalendarAnchor(null)}
-        />
-      ) : null}
-
       <WeekSurface
         week={week}
         showSkeleton={showSkeleton}
@@ -225,7 +263,14 @@ export function AvailabilityWeek({ feature }: AvailabilityWeekProps) {
             siteColumnWidth={siteColumnWidth}
             onSiteColumnWidthChange={setSiteColumnWidth}
             selectedSiteId={selectedSiteId}
-            onSelectSite={setSelectedSiteId}
+            onSelectSite={(id) => {
+              // The vanilla controller disarmed on *any* click in the grid that was
+              // not a booking cell. Expanding a site row is the only other in-grid
+              // control, and it pushes rows down — so an armed cell would be left
+              // showing "Book" somewhere the user is no longer looking.
+              setArmedBook(null);
+              setSelectedSiteId(id);
+            }}
             armedBook={armedBook}
             onArmBook={setArmedBook}
             onOpenBooking={openBooking}
@@ -275,12 +320,26 @@ export function AvailabilityWeek({ feature }: AvailabilityWeekProps) {
           watch={watchForDate(watches, watchTarget.date)}
           capabilities={capabilities}
           supportsAddToCart={supportsAddToCart(capabilities)}
-          onSave={(payload) =>
-            mutations.save(watchTarget.date, payload, watchForDate(watches, watchTarget.date))
-          }
+          onSave={async (payload) => {
+            try {
+              await mutations.save(watchTarget.date, payload, watchForDate(watches, watchTarget.date));
+            } catch (caught) {
+              // Rethrown so the editor can still show its own inline message for the
+              // failures it can explain; the toast covers the one it cannot, because
+              // that one closes the editor.
+              reportWatchFailure(caught);
+              throw caught;
+            }
+          }}
           onRemove={async () => {
             const existing = watchForDate(watches, watchTarget.date);
-            if (existing) await mutations.remove(existing);
+            if (!existing) return;
+            try {
+              await mutations.remove(existing);
+            } catch (caught) {
+              reportWatchFailure(caught);
+              throw caught;
+            }
           }}
           onClose={() => setWatchTarget(null)}
         />

@@ -6,6 +6,7 @@
 // permanent "today" button that does nothing most of the time trains people to
 // ignore it, and the grid layout shifts to a three-column grid without it (see the
 // `.has-today` / `.no-today` rules in availability.css).
+import type { ReactNode } from 'react';
 import { formatWeekLabel } from './week-labels';
 
 export interface WeekNavProps {
@@ -20,8 +21,20 @@ export interface WeekNavProps {
   onPrev: () => void;
   onNext: () => void;
   onEarliest: () => void;
-  /** Opens the month calendar. Receives the label element so it can be anchored. */
-  onPickDate: (anchor: HTMLElement) => void;
+  /** Opens the month calendar. */
+  onPickDate: () => void;
+  /**
+   * The month calendar, when it is open.
+   *
+   * Rendered as a child of this nav rather than beside it, and that placement is
+   * load-bearing: `.cg-cal-host` positions itself with `position: absolute; top:
+   * 100%`, so it needs a positioned ancestor that is *this row* — `.cg-week-nav` is
+   * `position: relative` for exactly that reason. Rendered anywhere else it resolves
+   * against the drawer instead and lands hundreds of pixels below the viewport,
+   * which is what it did before this slot existed. The vanilla appended it to the
+   * clicked button's `parentElement`, which is the same element.
+   */
+  calendar?: ReactNode;
 }
 
 export function WeekNav({
@@ -33,6 +46,7 @@ export function WeekNav({
   onNext,
   onEarliest,
   onPickDate,
+  calendar,
 }: WeekNavProps) {
   return (
     <div
@@ -63,13 +77,14 @@ export function WeekNav({
         type="button"
         className="cg-week-label"
         aria-label="Pick a date"
-        onClick={(event) => onPickDate(event.currentTarget)}
+        onClick={onPickDate}
       >
         {formatWeekLabel(startIso, endIso)}
       </button>
       <button type="button" className="cg-week-next" aria-label="Next week" onClick={onNext}>
         ›
       </button>
+      {calendar}
     </div>
   );
 }
