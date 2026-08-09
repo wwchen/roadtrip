@@ -527,3 +527,100 @@ describe('the smoke suite"s seams', () => {
     expect(document.querySelector('#tb-corridor-range')).toBeNull();
   });
 });
+
+// Regressions an adversarial review of 4e found. Each was wrong in a way the rest of
+// this suite did not notice.
+describe('review regressions', () => {
+  test('an empty endpoint in a two-row trip offers no X at all', async () => {
+    useTripStore.setState({
+      mode: 'directions',
+      stops: [{ name: 'Seattle', lng: -122.33, lat: 47.6 }, null],
+    });
+    mount();
+
+    // The X on that row was rendered because the row is draggable, and labelled
+    // "Remove destination" — but `removeStopAt` deliberately no-ops there, since
+    // directions mode has no state with fewer than two rows. A button that cannot do
+    // anything is worse than no button.
+    expect(screen.queryByLabelText('Remove destination')).toBeNull();
+    expect(screen.getByLabelText('Clear origin')).toBeInTheDocument();
+  });
+
+  test('a via keeps its X in a three-row trip', async () => {
+    useTripStore.setState({
+      mode: 'directions',
+      stops: [{ name: 'A', lng: -122, lat: 47 }, null, { name: 'B', lng: -121, lat: 48 }],
+    });
+    mount();
+
+    expect(screen.getByLabelText('Remove stop 1')).toBeInTheDocument();
+  });
+
+  // `Number('')` is 0, so a drag carrying no `text/plain` — a file, an image, a text
+  // selection from another window — moved row 0 onto whichever row it landed on.
+  test('a drop with no row payload moves nothing', async () => {
+    useTripStore.setState({
+      mode: 'directions',
+      stops: [
+        { name: 'A', lng: -122, lat: 47 },
+        { name: 'B', lng: -121, lat: 48 },
+      ],
+    });
+    mount();
+    const rows = document.querySelectorAll('.tb-row');
+
+    await act(async () => {
+      const event = new Event('drop', { bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'dataTransfer', {
+        value: { getData: () => '', dropEffect: 'move' },
+      });
+      rows[1]!.dispatchEvent(event);
+    });
+
+    expect(useTripStore.getState().stops.map((s) => s?.name)).toEqual(['A', 'B']);
+  });
+
+  // The writer's first pass sees the pre-restore store, so it used to DELETE the
+  // parameter it was mounted with and put it back on the next render.
+  test('a shared link is not briefly stripped from the address bar', async () => {
+    const encoded = encodeRouteState(
+      [
+        { name: 'Seattle', lng: -122.33, lat: 47.6, kind: 'PLACE' },
+        { name: 'Bowman Bay', lng: -122.65, lat: 48.41, kind: 'CG' },
+      ],
+      25,
+    );
+    window.history.replaceState(null, '', `/?route=${encoded}`);
+    const seen: string[] = [];
+    const replaceState = vi.spyOn(window.history, 'replaceState').mockImplementation(
+      ((state: unknown, title: string, url: string) => {
+        seen.push(url);
+        return History.prototype.replaceState.call(window.history, state, title, url);
+      }) as typeof window.history.replaceState,
+    );
+
+    mount();
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Origin' })).toHaveValue('Seattle'),
+    );
+
+    // Whatever was written, none of it dropped the parameter.
+    expect(seen.filter((url) => !url.includes('route='))).toEqual([]);
+    expect(window.location.search).toContain('route=');
+    replaceState.mockRestore();
+    window.history.replaceState(null, '', '/');
+  });
+
+  // An invalid link is worth keeping in the address bar: the user may want to look at
+  // what they pasted, and a reload should not silently become a blank map.
+  test('an unreadable link is left in the address bar', async () => {
+    window.history.replaceState(null, '', '/?route=not-a-real-payload');
+    mount();
+
+    await waitFor(() =>
+      expect(screen.getByText('Shared route link is invalid.')).toBeInTheDocument(),
+    );
+    expect(window.location.search).toContain('route=not-a-real-payload');
+    window.history.replaceState(null, '', '/');
+  });
+});

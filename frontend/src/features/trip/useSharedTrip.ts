@@ -41,6 +41,16 @@ export function useSharedTrip(): SharedTrip {
    * property of how React happens to schedule effects.
    */
   const restored = useRef(false);
+  /**
+   * Whether this hook has ever written the parameter.
+   *
+   * Without it the writer's first run would DELETE the `?route=` it was mounted
+   * with: effects run in order, and the writer's first pass still sees the empty
+   * store from before the restore effect's `setStops` was observable. The link
+   * survived only because the next render put it back — two `replaceState` calls and
+   * a window in which a reload would have lost the trip.
+   */
+  const written = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -71,11 +81,13 @@ export function useSharedTrip(): SharedTrip {
    * `?poi=` alive — see `setVisibleRouteParam`.
    */
   useEffect(() => {
-    if (!allStopsFilled(stops)) {
-      setVisibleRouteParam([], null);
-      return;
-    }
-    setVisibleRouteParam(stops, corridorMiles);
+    const shareable = allStopsFilled(stops);
+    // Nothing to write and nothing written yet: leave the address bar exactly as the
+    // user opened it, including a `?route=` that is still being restored — or one
+    // that failed to decode, which they may want to keep to look at.
+    if (!shareable && !written.current) return;
+    written.current = shareable;
+    setVisibleRouteParam(shareable ? stops : [], corridorMiles);
   }, [stops, corridorMiles]);
 
   return { error };

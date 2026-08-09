@@ -90,6 +90,15 @@ export interface TripState {
   routePois: TripPoiFeature[];
   /** The single dropped pin in browse mode. */
   browsePin: TripStop | null;
+  /**
+   * The row that should take keyboard focus, once.
+   *
+   * In the store rather than in the topbar's own state because it has two
+   * producers: the topbar's own edits, and the drawer's Directions button (which
+   * enters directions mode and wants the empty origin focused). The consumer —
+   * `StopRow` — clears it through `clearFocus`, so it is a request, not a mode.
+   */
+  focusRow: number | null;
 
   setMode: (mode: TripMode) => void;
   setStops: (stops: (TripStop | null)[]) => void;
@@ -108,6 +117,8 @@ export interface TripState {
   setRoutePois: (features: TripPoiFeature[]) => void;
   setBrowsePin: (pin: TripStop | null) => void;
   clearBrowsePin: () => void;
+  requestFocus: (row: number | null) => void;
+  clearFocus: () => void;
   /** Invalidate any in-flight route response. Returns the new generation. */
   bumpGeneration: () => number;
   reset: () => void;
@@ -122,6 +133,7 @@ const INITIAL_TRIP = {
   generation: 0,
   routePois: [],
   browsePin: null,
+  focusRow: null,
 } satisfies Omit<
   TripState,
   | 'setMode'
@@ -135,6 +147,8 @@ const INITIAL_TRIP = {
   | 'setRoutePois'
   | 'setBrowsePin'
   | 'clearBrowsePin'
+  | 'requestFocus'
+  | 'clearFocus'
   | 'bumpGeneration'
   | 'reset'
 >;
@@ -176,6 +190,8 @@ export const useTripStore = create<TripState>()((set, get) => ({
   setRoutePois: (routePois) => set({ routePois }),
   setBrowsePin: (browsePin) => set({ browsePin }),
   clearBrowsePin: () => set({ browsePin: null }),
+  requestFocus: (focusRow) => set({ focusRow }),
+  clearFocus: () => set({ focusRow: null }),
 
   bumpGeneration: () => {
     const generation = get().generation + 1;

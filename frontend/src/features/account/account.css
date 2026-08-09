@@ -11,6 +11,26 @@
    race between mounts.
    --------------------------------------------------------------------------- */
 
+/* The overlay LDS does not supply.
+ *
+ * `.lds-modal-scrim` ships a background, `display: flex` and centring, but no
+ * position — so without this the settings form renders as a block wherever it was
+ * mounted. Scoped by `:has()` to the settings modal's own body so it cannot restyle
+ * a future modal that arrives with its own layout, and z-indexed above the drawer
+ * (999) since a modal is the top plane by definition. */
+.lds-modal-scrim:has(.rt-settings-modal) {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow-y: auto;
+}
+
+/* A tall form on a short window has to scroll rather than overflow off-screen. */
+.lds-modal-scrim:has(.rt-settings-modal) .lds-modal {
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
+}
+
 .rt-account-panel {
   display: flex;
   flex-direction: column;

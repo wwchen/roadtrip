@@ -294,3 +294,13 @@ describe('a stop added from the drawer', () => {
     expect(addExternalStop(full, 'directions', C, { autoFocusOrigin: true }).stops).toHaveLength(25);
   });
 });
+
+// Regressions from an adversarial review of 4e. Each of these was wrong in a way no
+// existing test noticed.
+describe('review regressions', () => {
+  test('a pending stop cannot be shared, even though (0, 0) is finite', () => {
+    // Covered end to end in share-links.test.ts; asserted here because `isLocated` is
+    // the predicate the planner gates on and the encoder now mirrors it.
+    expect(isLocated(locating())).toBe(false);
+  });
+});

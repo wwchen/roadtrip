@@ -104,7 +104,6 @@ export function TopBar() {
               stop={stop}
               mode={planner.mode}
               value={draft?.row === index ? draft.text : (stop?.name ?? '')}
-              locating={planner.locating && stop?.pending === true}
               // Rows only reorder in directions mode, and only when there is
               // something to reorder them against.
               draggable={isDirections && rowCount >= 2}

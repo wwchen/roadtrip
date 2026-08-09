@@ -2,22 +2,17 @@
 //
 // The React half of `drawRoute` / `updateCorridor` / `fitMapToRoute` / `syncMarkers`
 // from web/topbar.js — the imperative halves live in `map/route-overlay.ts` and
-// `map/trip-markers.ts`. Four effects, and the split between them is the point:
-// each watches exactly what it has to reinstall for.
+// `map/trip-markers.ts`.
 //
-//   install  — the route changed, or the style reloaded under it.
-//   fit      — a NEW route arrived. Deliberately not the style reload: a basemap
-//              change must not throw the camera back to the whole route when the
-//              user has zoomed into one campground.
-//   radius   — the slider moved; repaint the fill in place, do not reinstall.
-//   markers  — the stops changed, which includes a reorder relabelling them.
+// The corridor is ONE derived value (`corridor` below) rather than something two
+// effects each compute, and that is the fix for a bug an adversarial review of 4e
+// found: the install effect preferred the server's polygon and then recorded the
+// current radius as installed, so after a basemap change — which re-runs the install
+// — the fill silently reverted to the radius the route was fetched at while the
+// slider and the campground count said something else, with no path back until the
+// route itself changed. A single memo cannot disagree with itself.
 import { useEffect, useMemo, useRef } from 'react';
-import {
-  computeCorridor,
-  routeLine,
-  serverCorridor,
-  type CorridorGeometry,
-} from '@/features/trip/corridor';
+import { computeCorridor, routeLine, serverCorridor } from '@/features/trip/corridor';
 import {
   ROUTE_FIT_DURATION_MS,
   ROUTE_FIT_PADDING_PX,
@@ -43,51 +38,72 @@ export function useTripOverlay(): void {
   const setCorridor = useTripStore((s) => s.setCorridor);
 
   const line = useMemo(() => routeLine(route), [route]);
-  /**
-   * The server's own corridor polygon, when the response carried one.
-   *
-   * Preferred for the first paint because it is the exact polygon
-   * /api/pois/on-route filtered by — ours is a local approximation of the same
-   * buffer, and a fill that disagrees with the list beside it looks like a bug.
-   */
   const server = useMemo(() => serverCorridor(route), [route]);
 
-  const registryRef = useRef<TripMarkerRegistry>();
-  registryRef.current ??= createTripMarkerRegistry();
+  /**
+   * The radius the current route was requested with.
+   *
+   * `useRoute` sends the radius that was set when it fetched, so the server's
+   * polygon describes THAT radius — it is only the right thing to draw while the
+   * slider has not moved since. Recorded on each new route, in render rather than in
+   * an effect, so the memo below can read it on the same pass.
+   */
+  const routeIdentity = useRef<unknown>(null);
+  const radiusAtRoute = useRef(corridorMiles);
+  if (routeIdentity.current !== route) {
+    routeIdentity.current = route;
+    radiusAtRoute.current = corridorMiles;
+  }
 
   /**
-   * The radius the installed fill was built for.
+   * The corridor to draw: the server's polygon at the radius it was built for,
+   * otherwise our own buffer at the radius the slider is on now.
    *
-   * Without it the radius effect would fire once on mount and immediately replace a
-   * server-supplied corridor with our own local buffer — the one polygon we
-   * deliberately did not compute.
+   * The server's is preferred where it applies because it is the exact polygon
+   * `/api/pois/on-route` filtered by, and a fill that disagrees with the list beside
+   * it reads as a bug.
    */
-  const installedMiles = useRef<number | null>(null);
+  const corridor = useMemo(() => {
+    if (!line) return null;
+    if (server && corridorMiles === radiusAtRoute.current) return server;
+    return computeCorridor(line, corridorMiles);
+  }, [line, server, corridorMiles]);
 
-  // Install. `styleReady` is in the deps because a basemap change wipes every app
-  // layer and flips it false→true; without that the route would vanish on a
-  // basemap switch, which is the one behaviour `styleReady` exists for.
+  /**
+   * The newest corridor, readable from the install effect.
+   *
+   * Assigned during render, so an install triggered by a style reload paints the
+   * corridor the slider is currently on — 4b's lesson about effects running in
+   * declaration order, in its smallest form.
+   */
+  const corridorRef = useRef(corridor);
+  corridorRef.current = corridor;
+
+  // Install: the route changed, or the style reloaded under it. `styleReady` is in
+  // the deps because a basemap change wipes every app layer and flips it false→true;
+  // without that the route would vanish on a basemap switch, which is the one
+  // behaviour `styleReady` exists for.
   useEffect(() => {
     if (!map || !styleReady) return;
     if (!line) {
       removeRouteOverlay(map);
-      setCorridor(null);
       return;
     }
-    const corridor: CorridorGeometry | null = server ?? computeCorridor(line, corridorMiles);
-    installRouteOverlay(map, line, corridor);
-    setCorridor(corridor);
-    installedMiles.current = corridorMiles;
+    installRouteOverlay(map, line, corridorRef.current);
     return () => {
-      // Not conditional on `line`: the cleanup runs when the route changes as well
+      // Not conditional on `line`: this cleanup runs when the route changes as well
       // as on unmount, and leaving the previous line up while the next installs
       // would double-draw for a frame.
       removeRouteOverlay(map);
     };
-    // `corridorMiles` is deliberately absent: a radius change is the third effect's
-    // job, and reinstalling here would restart the camera fit as well.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, styleReady, line, server, setCorridor]);
+  }, [map, styleReady, line]);
+
+  // Keep the fill and the store in step with the derived value. `setData` rather
+  // than a reinstall, because this runs on every tick of the radius slider.
+  useEffect(() => {
+    setCorridor(corridor);
+    if (map) setCorridorData(map, corridor);
+  }, [map, corridor, setCorridor]);
 
   // Fit, once per route. The ref is the "have I already framed this one" flag: a
   // style reload re-runs the install effect, and refitting there would undo the
@@ -102,18 +118,9 @@ export function useTripOverlay(): void {
     map.fitBounds(bounds, { padding: ROUTE_FIT_PADDING_PX, duration: ROUTE_FIT_DURATION_MS });
   }, [map, styleReady, line]);
 
-  // The radius. Local recompute per tick — the server is not asked again, which is
-  // why `useRoute` leaves the radius out of its key.
-  useEffect(() => {
-    if (!map || !line) return;
-    if (installedMiles.current === corridorMiles) return;
-    installedMiles.current = corridorMiles;
-    const corridor = computeCorridor(line, corridorMiles);
-    setCorridor(corridor);
-    setCorridorData(map, corridor);
-  }, [map, line, corridorMiles, setCorridor]);
-
-  // Markers.
+  // Markers: the stops changed, which includes a reorder relabelling them.
+  const registryRef = useRef<TripMarkerRegistry>();
+  registryRef.current ??= createTripMarkerRegistry();
   useEffect(() => {
     const registry = registryRef.current;
     if (!map || !registry) return;

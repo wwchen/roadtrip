@@ -227,7 +227,9 @@ describe('the campground drawer', () => {
     expect(screen.getByText(/check before booking/)).toBeInTheDocument();
   });
 
-  test('adds the campground to a trip and closes', async () => {
+  // The POI is the destination of a new two-row trip, not a first stop — see
+  // `add-poi-to-trip.ts` and the matching case in PoiDrawer.test.tsx.
+  test('adds the campground to a trip as its destination, and closes', async () => {
     await openCampground();
 
     await act(async () => {
@@ -235,8 +237,10 @@ describe('the campground drawer', () => {
     });
 
     expect(useTripStore.getState().stops).toEqual([
+      null,
       { name: 'Bowman Bay', lng: -121.7, lat: 47.4, kind: 'CG' },
     ]);
+    expect(useTripStore.getState().mode).toBe('directions');
     expect(useMapStore.getState().selectedPoiId).toBeNull();
   });
 

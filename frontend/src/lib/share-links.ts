@@ -28,6 +28,16 @@ export interface ShareableStop {
   lng: number;
   lat: number;
   kind?: string;
+  /**
+   * True while the browser is still resolving this stop's location.
+   *
+   * Declared here so the encoder can reject it: a pending stop's coordinates are
+   * (0, 0), which is finite, so the coordinate check alone lets it through — and
+   * `__rtRouteShareUrl` reads the store's stops directly, without the
+   * `allStopsFilled` gate the address-bar writer has. A link whose origin is null
+   * island is worse than no link.
+   */
+  pending?: boolean;
 }
 
 export interface DecodedRouteState {
@@ -74,6 +84,7 @@ const roundCoord = (value: unknown): number =>
  * in a shared trip.
  */
 function normalizeStop(stop: Partial<ShareableStop> | null | undefined): ShareableStop | null {
+  if (stop?.pending) return null;
   const lng = roundCoord(stop?.lng);
   const lat = roundCoord(stop?.lat);
   if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;

@@ -24,8 +24,6 @@ export interface StopRowProps {
   mode: TripMode;
   /** The text in the box, which is not the stop: a half-typed query is neither. */
   value: string;
-  /** True while this row's location is being resolved. */
-  locating: boolean;
   draggable: boolean;
   /** Take focus on this render, then call `onFocusHandled`. */
   autoFocus: boolean;
@@ -44,7 +42,6 @@ export function StopRow({
   stop,
   mode,
   value,
-  locating,
   draggable,
   autoFocus,
   onFocusHandled,
@@ -71,6 +68,19 @@ export function StopRow({
   const placeholder = stopPlaceholder(index, count, mode);
   const role = mode === 'directions' ? stopRole(index, count) : 'origin';
   const filled = stop != null;
+  // Read off the stop rather than taken as a prop: the placeholder IS the loading
+  // state, and a second flag beside it could disagree with the row it describes
+  // after a drag.
+  const locating = stop?.pending === true;
+  /**
+   * Whether this row can go, as opposed to just be emptied.
+   *
+   * The vanilla's `canRemove`. It is not the same as `draggable`, which is what an
+   * earlier version of this component used: in a two-row directions trip every row
+   * is draggable but neither can be removed, so an empty endpoint was showing an X
+   * that `removeStopAt` deliberately no-ops.
+   */
+  const removable = mode !== 'directions' || count >= 3;
 
   return (
     <div
@@ -97,7 +107,11 @@ export function StopRow({
       onDrop={(event) => {
         event.preventDefault();
         setDropTarget(false);
-        const from = Number(event.dataTransfer.getData('text/plain'));
+        // `parseInt`, not `Number`: an external drag (a file, an image, a selection)
+        // carries no `text/plain` payload, and `Number('')` is 0 — which would
+        // silently move row 0 onto whichever row was dropped on. NaN is ignored by
+        // `reorderStops`.
+        const from = Number.parseInt(event.dataTransfer.getData('text/plain'), 10);
         onReorder(from, index);
       }}
     >
@@ -131,7 +145,7 @@ export function StopRow({
           The label names the row, where the vanilla labelled every X simply "Clear":
           a screen reader on a three-stop trip announced four identical "Clear"
           buttons, counting the one that clears the whole trip. */}
-      {filled || draggable ? (
+      {filled || removable ? (
         <button
           type="button"
           className="tb-x"

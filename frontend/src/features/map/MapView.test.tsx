@@ -102,6 +102,14 @@ let poiResponses: unknown[] = [];
  * so a test about route mode has to drive this one.
  */
 let onRouteResponse: unknown = null;
+/**
+ * What `GET /api/route` answers with.
+ *
+ * The trip overlay cannot be driven by writing `tripStore.route` directly: `useRoute`
+ * is that field's single writer, so a hand-set route is overwritten by whatever the
+ * endpoint says as soon as the stops make a complete trip.
+ */
+let routeResponse: unknown = null;
 /** Status per POI response, for the failure paths. */
 let poiStatuses: number[] = [];
 /**
@@ -137,6 +145,9 @@ function stubApi() {
 
       if (url === '/api/pois/on-route') {
         return json(onRouteResponse ?? collection([]));
+      }
+      if (url.startsWith('/api/route')) {
+        return json(routeResponse ?? { type: 'FeatureCollection', features: [] });
       }
       if (url === '/api/pois') {
         const nth = poiRequests().length;
@@ -207,6 +218,7 @@ const pinIdsIn = (id: string) => (sourceData(id)?.features ?? []).map((f) => f.i
 beforeEach(() => {
   poiResponses = [collection([])];
   onRouteResponse = null;
+  routeResponse = null;
   poiStatuses = [];
   hold = null;
   stubApi();
@@ -650,5 +662,143 @@ describe('the transition shim', () => {
     });
 
     expect(window.__rtRouteShareUrl?.()).toContain('route=');
+  });
+});
+
+// The route's own layers, and the bug an adversarial review of 4e found in them.
+describe('the trip overlay', () => {
+  /** A route response whose second feature is the server's corridor polygon. */
+  const routeWithServerCorridor = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [-122, 47],
+            [-121, 48],
+          ],
+        },
+        properties: { distance_m: 100_000, duration_s: 4_000 },
+      },
+      {
+        type: 'Feature',
+        properties: { role: 'corridor' },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [-123, 46],
+              [-120, 46],
+              [-120, 49],
+              [-123, 46],
+            ],
+          ],
+        },
+      },
+    ],
+  };
+
+  const corridorRings = () =>
+    JSON.stringify(instance.sources.get('trip-corridor')?.data ?? null);
+
+  /**
+   * Fill a two-stop trip, which is what asks `useRoute` for the route — the field's
+   * single writer, so the response is what lands in the store.
+   */
+  const withRoute = async () => {
+    await act(async () => {
+      const trip = useTripStore.getState();
+      trip.setMode('directions');
+      trip.setStops([
+        { name: 'A', lng: -122, lat: 47 },
+        { name: 'B', lng: -121, lat: 48 },
+      ]);
+    });
+    await waitFor(() => expect(useTripStore.getState().route).not.toBeNull());
+  };
+
+  test('installs the line and the corridor fill', async () => {
+    routeResponse = routeWithServerCorridor;
+    await renderMap();
+
+    await withRoute();
+
+    expect(instance.getLayer('trip-route-line')).toBeDefined();
+    expect(instance.getLayer('trip-corridor-fill')).toBeDefined();
+    // The server's polygon is what /api/pois/on-route filtered by, so it is what the
+    // first paint shows.
+    expect(corridorRings()).toContain('-123');
+    // And the camera frames the whole route, once.
+    expect(instance.fitBoundsCalls).toHaveLength(1);
+    expect(instance.fitBoundsCalls[0]?.bounds).toEqual([
+      [-122, 47],
+      [-121, 48],
+    ]);
+  });
+
+  // A basemap change must not throw the camera back to the whole route when the user
+  // has zoomed into one campground.
+  test('a basemap change does not refit the camera', async () => {
+    routeResponse = routeWithServerCorridor;
+    await renderMap();
+    await withRoute();
+    expect(instance.fitBoundsCalls).toHaveLength(1);
+
+    await act(async () => {
+      await userEvent.selectOptions(screen.getByLabelText('Basemap'), 'osm');
+    });
+    instance.wipeAppLayers();
+    await act(async () => {
+      instance.fire('style.load');
+    });
+
+    expect(instance.fitBoundsCalls).toHaveLength(1);
+  });
+
+  // The bug: the install effect re-preferred the server's polygon on a style reload
+  // and then recorded the current radius as installed, so the radius effect had
+  // nothing to repair — the fill stayed at the radius the route was fetched at while
+  // the slider said something else, permanently.
+  test('a basemap change keeps the corridor at the radius the slider is on', async () => {
+    routeResponse = routeWithServerCorridor;
+    await renderMap();
+    await withRoute();
+
+    await act(async () => {
+      useTripStore.getState().setCorridorMiles(100);
+    });
+    const draggedFill = corridorRings();
+    // The slider's own value now drives the fill, not the server's polygon.
+    expect(draggedFill).not.toContain('"role"');
+
+    await act(async () => {
+      await userEvent.selectOptions(screen.getByLabelText('Basemap'), 'osm');
+    });
+    instance.wipeAppLayers();
+    await act(async () => {
+      instance.fire('style.load');
+    });
+
+    expect(instance.getLayer('trip-corridor-fill')).toBeDefined();
+    expect(corridorRings()).toBe(draggedFill);
+    expect(useTripStore.getState().corridorMiles).toBe(100);
+  });
+
+  test('clearing the trip takes the layers down', async () => {
+    routeResponse = routeWithServerCorridor;
+    await renderMap();
+    await withRoute();
+
+    // Emptying a stop is what clears the route: `useRoute` publishes null for a trip
+    // it cannot request, which is the port of `removeRouteLayer()`.
+    await act(async () => {
+      useTripStore.getState().setStopAt(1, null);
+    });
+
+    expect(instance.getLayer('trip-route-line')).toBeUndefined();
+    expect(instance.getLayer('trip-corridor-fill')).toBeUndefined();
+    expect(useTripStore.getState().corridor).toBeNull();
   });
 });
