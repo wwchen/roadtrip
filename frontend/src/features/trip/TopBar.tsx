@@ -12,6 +12,7 @@
 // failure) are three components now, which is what makes the "computing route…"
 // state distinguishable from the "no route" state without reading a CSS class.
 import { useEffect, useMemo, useState } from 'react';
+import { AlertsPanel } from '@/features/alerts/AlertsPanel';
 import { AuthRow } from './AuthRow';
 import { RouteStatus } from './RouteStatus';
 import { SearchDropdown } from './SearchDropdown';
@@ -144,6 +145,10 @@ export function TopBar() {
           );
         })}
       </div>
+
+      {/* `#tb-alerts` sat here in the vanilla DOM too: under the rows, above the
+          actions. It renders nothing at all for a user with no watches. */}
+      <AlertsPanel />
 
       {/* Where the vanilla topbar kept `#tb-auth`: sign-in, who you are, and the
           trigger for the settings modal Phase 3 built and nothing mounted. */}
