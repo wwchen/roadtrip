@@ -1,0 +1,371 @@
+/* The trip planner's panel.
+ *
+ * Lifted out of `injectStyles()` in web/topbar.js, which built ~330 lines of CSS as
+ * a template string and appended a <style> tag at init. Two consequences of moving
+ * it here, both wanted: the rules are under the colour-token checker for the first
+ * time, and they are under `scripts/check-css-blocks.mjs` — which exists because a
+ * rule that loses its closing brace is still valid CSS, and that is exactly how the
+ * 4d watch editor rendered 1061px wide.
+ *
+ * Ids became classes (`#topbar` -> `.tb-panel`, `#tb-stops` -> `.tb-stops`, …): the
+ * vanilla needed ids because `document.getElementById` was its only handle on the
+ * DOM, and React needs no handle at all. The one id kept is `topbar` itself, which
+ * `SmokeTest.kt` locates the panel by.
+ */
+
+.tb-panel {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  left: 10px;
+  z-index: 5;
+  width: min(420px, calc(100vw - 80px));
+  background: var(--rt-surface);
+  border: 1px solid var(--rt-border);
+  border-radius: 10px;
+  box-shadow: var(--rt-e3);
+  -webkit-font-smoothing: antialiased;
+  font-family: inherit;
+}
+
+/* Stops list */
+.tb-stops {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+}
+
+.tb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--rt-fill-subtle);
+  border: 1px solid var(--rt-border-strong);
+  border-radius: 8px;
+  padding: 0 6px 0 10px;
+  transition: border-color 100ms ease, background 100ms ease, opacity 120ms ease;
+}
+
+.tb-row:focus-within {
+  border-color: var(--rt-brand);
+  background: var(--rt-fill-hover);
+}
+
+.tb-row.dragging {
+  opacity: 0.4;
+}
+
+.tb-row.drop-target {
+  border-color: var(--rt-brand);
+  border-style: dashed;
+}
+
+.tb-row[draggable='true'] {
+  cursor: grab;
+}
+
+.tb-row[draggable='true']:active {
+  cursor: grabbing;
+}
+
+/* The row is the drag handle, but the input is still a text field. */
+.tb-row[draggable='true'] .tb-input {
+  cursor: text;
+}
+
+.tb-icon {
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--rt-brand);
+  box-shadow: 0 0 0 2px var(--rt-fill-subtle);
+}
+
+.tb-icon.via {
+  background: var(--rt-map-waypoint);
+  border-radius: 2px;
+}
+
+.tb-icon.last {
+  background: var(--rt-map-route);
+  border-radius: 2px;
+}
+
+.tb-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  color: var(--rt-text);
+  border: 0;
+  outline: none;
+  padding: 9px 0;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.tb-input::placeholder {
+  color: var(--rt-faint);
+}
+
+.tb-x,
+.tb-locate {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: 0;
+  color: var(--rt-faint);
+  border-radius: 4px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.tb-x:hover {
+  color: var(--rt-error);
+  background: var(--rt-fill-hover);
+}
+
+.tb-locate:hover {
+  color: var(--rt-brand);
+  background: var(--rt-fill-hover);
+}
+
+.tb-locate:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+/* Action row */
+.tb-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px 6px;
+}
+
+.tb-add {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px dashed var(--rt-border-strong);
+  color: var(--rt-muted);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: color 100ms, border-color 100ms;
+}
+
+.tb-add:hover {
+  color: var(--rt-brand);
+  border-color: var(--rt-brand);
+}
+
+.tb-route-summary {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--rt-text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tb-stat-sep {
+  color: var(--rt-faint);
+  margin: 0 6px;
+}
+
+.tb-actions-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tb-icon-btn {
+  width: 36px;
+  height: 36px;
+  background: var(--rt-fill-subtle);
+  border: 1px solid var(--rt-border-strong);
+  color: var(--rt-text);
+  border-radius: 8px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 100ms, border-color 100ms;
+}
+
+.tb-icon-btn:hover {
+  background: var(--rt-fill-hover);
+  border-color: var(--rt-brand);
+}
+
+.tb-icon-btn.primary {
+  background: var(--rt-map-route);
+  border-color: var(--rt-map-route);
+  color: var(--rt-on-accent);
+}
+
+.tb-icon-btn.primary:hover {
+  background: var(--rt-brand-hover);
+}
+
+/* Dropdown */
+.tb-dropdown {
+  max-height: 320px;
+  overflow-y: auto;
+  border-top: 1px solid var(--rt-border);
+  padding: 4px;
+  display: none;
+}
+
+.tb-dropdown.open {
+  display: block;
+}
+
+.tb-section {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--rt-faint);
+  padding: 6px 8px 2px;
+}
+
+.tb-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  cursor: pointer;
+  color: var(--rt-text);
+  font-size: 12px;
+  border-radius: 6px;
+}
+
+.tb-result:hover,
+.tb-result.active {
+  background: var(--rt-fill-hover);
+}
+
+.tb-kind {
+  flex-shrink: 0;
+  font-size: 9px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--rt-on-accent);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  min-width: 28px;
+  text-align: center;
+}
+
+.tb-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tb-sub {
+  color: var(--rt-muted);
+  font-size: 11px;
+}
+
+/* Status */
+.tb-status {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--rt-muted);
+  border-top: 1px solid var(--rt-border);
+  display: none;
+}
+
+.tb-status.visible {
+  display: block;
+}
+
+.tb-status.error {
+  color: var(--rt-error);
+}
+
+.tb-legs {
+  font-size: 10px;
+  color: var(--rt-faint);
+}
+
+/* Corridor radius */
+.tb-corridor-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--rt-border);
+}
+
+.tb-corridor {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--rt-muted);
+}
+
+.tb-corridor.visible {
+  display: flex;
+}
+
+.tb-corridor label {
+  white-space: nowrap;
+}
+
+.tb-corridor-value {
+  color: var(--rt-text);
+  font-variant-numeric: tabular-nums;
+  min-width: 44px;
+  text-align: right;
+}
+
+.tb-corridor input[type='range'] {
+  flex: 1;
+  accent-color: var(--rt-map-route);
+  cursor: pointer;
+  margin: 0;
+}
+
+.tb-corridor-count {
+  font-size: 11px;
+  color: var(--rt-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 768px) {
+  /* Reserve room on the right for the layers panel's hamburger: without this the
+     panel spans the full width and covers the toggle. */
+  .tb-panel {
+    left: 8px;
+    right: 56px;
+    width: auto;
+    max-width: none;
+  }
+
+  .tb-actions {
+    gap: 8px;
+  }
+
+  .tb-route-summary {
+    font-size: 10px;
+  }
+
+  .tb-corridor {
+    gap: 6px;
+  }
+
+  /* The label is the first thing to go at this width; the value still says "mi". */
+  .tb-corridor label {
+    display: none;
+  }
+}

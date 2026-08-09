@@ -114,7 +114,6 @@ describe('entering directions', () => {
     expect(enterDirections([A])).toEqual({
       stops: [A, null],
       mode: 'directions',
-      shouldRoute: false,
       focusRow: 1,
     });
   });
@@ -123,11 +122,12 @@ describe('entering directions', () => {
     expect(enterDirections([]).focusRow).toBe(0);
   });
 
-  // Reached from a shared link, which arrives with both ends already set.
-  test('routes immediately when both ends are already filled', () => {
+  // Reached from a shared link, which arrives with both ends already set. Nothing
+  // asks for the route: the trip is complete, and `useRoute` is keyed on the stops.
+  test('leaves a complete trip alone, with nothing to focus', () => {
     const result = enterDirections([A, B]);
 
-    expect(result.shouldRoute).toBe(true);
+    expect(allStopsFilled(result.stops)).toBe(true);
     expect(result.focusRow).toBeNull();
   });
 });
@@ -137,7 +137,6 @@ describe('adding an empty stop', () => {
     expect(addEmptyStop([A, B], 'directions')).toEqual({
       stops: [A, B, null],
       mode: 'directions',
-      shouldRoute: false,
       focusRow: 2,
     });
   });
@@ -157,7 +156,6 @@ describe('removing a stop', () => {
     expect(removeStopAt([A, B], 1, 'directions')).toEqual({
       stops: [A, null],
       mode: 'directions',
-      shouldRoute: false,
       focusRow: 1,
     });
   });
@@ -170,14 +168,15 @@ describe('removing a stop', () => {
     expect(removeStopAt([A, C, B], 1, 'directions').stops).toEqual([A, B]);
   });
 
-  // Removing a via from a complete trip leaves a complete trip, which should
-  // re-route: the itinerary changed.
-  test('re-routes after removing a via from a complete trip', () => {
-    expect(removeStopAt([A, C, B], 1, 'directions').shouldRoute).toBe(true);
+  // Removing a via from a complete trip leaves a complete trip — a different one,
+  // so a different route. Nothing here says "re-route": the stops are the query
+  // key, so the new list is the new request.
+  test('leaves a complete trip complete after removing a via', () => {
+    expect(allStopsFilled(removeStopAt([A, C, B], 1, 'directions').stops)).toBe(true);
   });
 
-  test('does not re-route when a slot is still empty', () => {
-    expect(removeStopAt([A, C, null], 1, 'directions').shouldRoute).toBe(false);
+  test('leaves an incomplete trip incomplete', () => {
+    expect(allStopsFilled(removeStopAt([A, C, null], 1, 'directions').stops)).toBe(false);
   });
 
   // Browse mode's row is the search box, so its X clears the text and the box
@@ -186,7 +185,6 @@ describe('removing a stop', () => {
     expect(removeStopAt([A], 0, 'browse')).toEqual({
       stops: [null],
       mode: 'browse',
-      shouldRoute: false,
       focusRow: 0,
     });
   });
@@ -195,7 +193,6 @@ describe('removing a stop', () => {
     expect(removeStopAt([null], 0, 'browse')).toEqual({
       stops: [],
       mode: 'browse',
-      shouldRoute: false,
       focusRow: null,
     });
   });
@@ -206,7 +203,6 @@ describe('removing a stop', () => {
     expect(removeStopAt([A, null], 1, 'browse')).toEqual({
       stops: [A],
       mode: 'browse',
-      shouldRoute: false,
       focusRow: null,
     });
   });
@@ -218,7 +214,6 @@ describe('removing a stop', () => {
     expect(removeStopAt([null, B], 0, 'directions')).toEqual({
       stops: [null, B],
       mode: 'directions',
-      shouldRoute: false,
       focusRow: null,
     });
   });
@@ -233,16 +228,16 @@ describe('reordering', () => {
     expect(reorderStops([A, B, C], 2, 0).stops).toEqual([C, A, B]);
   });
 
-  test('re-routes when the reordered trip is complete', () => {
-    expect(reorderStops([A, B, C], 0, 2).shouldRoute).toBe(true);
-    expect(reorderStops([A, null, C], 0, 2).shouldRoute).toBe(false);
+  test('a reordered complete trip is still complete', () => {
+    expect(allStopsFilled(reorderStops([A, B, C], 0, 2).stops)).toBe(true);
+    expect(allStopsFilled(reorderStops([A, null, C], 0, 2).stops)).toBe(false);
   });
 
   test('a drop on itself is a no-op', () => {
     const result = reorderStops([A, B], 1, 1);
 
     expect(result.stops).toEqual([A, B]);
-    expect(result.shouldRoute).toBe(false);
+    expect(result.focusRow).toBeNull();
   });
 
   // A drop can carry a stale index — the row that started the drag may have been
@@ -264,7 +259,6 @@ describe('a stop added from the drawer', () => {
     expect(addExternalStop([A], 'browse', B, { autoFocusOrigin: true })).toEqual({
       stops: [null, B],
       mode: 'directions',
-      shouldRoute: false,
       focusRow: 0,
       fillOrigin: false,
     });
@@ -280,9 +274,10 @@ describe('a stop added from the drawer', () => {
   test('fills an empty destination in directions mode', () => {
     const result = addExternalStop([A, null], 'directions', B, { autoFocusOrigin: true });
 
+    // Both ends are now filled, so the route fires without another action — the
+    // stops are the query key.
     expect(result.stops).toEqual([A, B]);
-    // Both ends are now filled, so the route fires without another action.
-    expect(result.shouldRoute).toBe(true);
+    expect(allStopsFilled(result.stops)).toBe(true);
   });
 
   // The endpoint the user chose stays the endpoint.
@@ -290,7 +285,7 @@ describe('a stop added from the drawer', () => {
     const result = addExternalStop([A, B], 'directions', C, { autoFocusOrigin: true });
 
     expect(result.stops).toEqual([A, C, B]);
-    expect(result.shouldRoute).toBe(true);
+    expect(allStopsFilled(result.stops)).toBe(true);
   });
 
   test('refuses past the cap', () => {

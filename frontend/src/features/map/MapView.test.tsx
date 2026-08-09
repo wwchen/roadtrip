@@ -29,7 +29,26 @@ class TestMap extends FakeMap {
   }
 }
 
-vi.mock('maplibre-gl', () => ({ Map: TestMap }));
+/**
+ * The trip's stop markers, which `useTripOverlay` creates once a route is up.
+ *
+ * A stub rather than the real `Marker`: the real one attaches itself to a live map's
+ * container and reads its transform. What the markers *say* is covered by
+ * `map/trip-markers.test.ts`; here they only have to not throw.
+ */
+class TestMarker {
+  setLngLat() {
+    return this;
+  }
+  addTo() {
+    return this;
+  }
+  remove() {
+    return this;
+  }
+}
+
+vi.mock('maplibre-gl', () => ({ Map: TestMap, Marker: TestMarker }));
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
 
 const { MapProvider } = await import('./MapProvider');
@@ -75,6 +94,14 @@ interface Recorded {
 const requests: Recorded[] = [];
 /** Queued POI responses; the last one repeats once they run out. */
 let poiResponses: unknown[] = [];
+/**
+ * What `/api/pois/on-route` answers with.
+ *
+ * Separate from `poiResponses` because the corridor and the viewport are different
+ * questions — and because with a route up the corridor is the ONLY source of pins,
+ * so a test about route mode has to drive this one.
+ */
+let onRouteResponse: unknown = null;
 /** Status per POI response, for the failure paths. */
 let poiStatuses: number[] = [];
 /**
@@ -108,6 +135,9 @@ function stubApi() {
       const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
       requests.push({ url, method, body });
 
+      if (url === '/api/pois/on-route') {
+        return json(onRouteResponse ?? collection([]));
+      }
       if (url === '/api/pois') {
         const nth = poiRequests().length;
         if (hold?.request === nth) await hold.held;
@@ -176,6 +206,7 @@ const pinIdsIn = (id: string) => (sourceData(id)?.features ?? []).map((f) => f.i
 
 beforeEach(() => {
   poiResponses = [collection([])];
+  onRouteResponse = null;
   poiStatuses = [];
   hold = null;
   stubApi();
@@ -536,6 +567,7 @@ describe('route mode', () => {
   // publishes them and the viewport query stands down, so a late bbox response
   // cannot repaint over the route's POIs.
   test('paints the corridor POIs and stops requesting viewports', async () => {
+    onRouteResponse = collection([pin(9, 'campground', 'BC Parks')]);
     await renderMap();
     await waitFor(() => expect(poiRequests()).toHaveLength(1));
 
@@ -547,9 +579,10 @@ describe('route mode', () => {
         { name: 'B', lng: -118, lat: 34 },
       ]);
       trip.setRoute({ type: 'FeatureCollection', features: [] });
-      trip.setRoutePois([pin(9, 'campground', 'BC Parks')]);
     });
 
+    // The corridor query publishes them, after its debounce — which is also what
+    // proves the topbar's hook is what owns `routePois` now.
     await waitFor(() => expect(pinIdsIn('cg')).toEqual([9]));
 
     await panTo(BAY_AREA, 8);
@@ -566,6 +599,7 @@ describe('route mode', () => {
     await renderMap();
     expect(screen.getByText('(zoom in to load)')).toBeInTheDocument();
 
+    onRouteResponse = collection([pin(9, 'campground', 'BC Parks')]);
     act(() => {
       const trip = useTripStore.getState();
       trip.setMode('directions');
@@ -574,10 +608,11 @@ describe('route mode', () => {
         { name: 'B', lng: -118, lat: 34 },
       ]);
       trip.setRoute({ type: 'FeatureCollection', features: [] });
-      trip.setRoutePois([pin(9, 'campground', 'BC Parks')]);
     });
 
+    // The hint goes as soon as a route is active; the agency row appears when the
+    // corridor's own request lands, which is a debounce later.
     await waitFor(() => expect(screen.queryByText('(zoom in to load)')).toBeNull());
-    expect(screen.getByLabelText(/BC Parks \(1\)/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText(/BC Parks \(1\)/)).toBeInTheDocument());
   });
 });

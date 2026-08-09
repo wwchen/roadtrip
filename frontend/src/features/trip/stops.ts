@@ -18,18 +18,17 @@ import { MAX_STOPS, type TripMode, type TripStop } from '@/stores/tripStore';
 export type StopSlot = TripStop | null;
 
 /**
- * What a transition answers: the next list, the next mode, and whether the
- * caller should route.
+ * What a transition answers: the next list, the next mode, and where focus goes.
  *
- * `shouldRoute` is returned rather than derived by the caller because "did this
- * edit produce a routable trip" is exactly the question the vanilla answered
- * inconsistently — `onAddStop` never re-routed, the drop handler always did.
+ * Notably absent is "should this re-route", which every one of the vanilla's
+ * handlers had to decide for itself — inconsistently, since `onAddStop` never
+ * re-routed and the drop handler always did. Here the route is a query keyed on
+ * the stops, so producing a complete trip *is* requesting its route: see
+ * `useRoute`. A transition cannot forget to ask, and cannot ask twice.
  */
 export interface StopsTransition {
   stops: StopSlot[];
   mode: TripMode;
-  /** True when the result is a complete trip whose route should be fetched. */
-  shouldRoute: boolean;
   /**
    * The row to focus after the edit, or null to leave focus alone.
    *
@@ -123,7 +122,6 @@ export function enterDirections(stops: readonly StopSlot[]): StopsTransition {
   return {
     stops: next,
     mode: 'directions',
-    shouldRoute: allStopsFilled(next),
     focusRow: firstEmpty === -1 ? null : firstEmpty,
   };
 }
@@ -131,10 +129,21 @@ export function enterDirections(stops: readonly StopSlot[]): StopsTransition {
 /** Append an empty via, up to the cap. */
 export function addEmptyStop(stops: readonly StopSlot[], mode: TripMode): StopsTransition {
   if (stops.length >= MAX_STOPS) {
-    return { stops: stops.slice(), mode, shouldRoute: false, focusRow: null };
+    return { stops: stops.slice(), mode, focusRow: null };
   }
   const next = [...stops, null];
-  return { stops: next, mode, shouldRoute: false, focusRow: next.length - 1 };
+  return { stops: next, mode, focusRow: next.length - 1 };
+}
+
+/**
+ * Whether a row is one the list always has.
+ *
+ * Origin and destination in directions mode, and browse mode's single search box.
+ * Exported because it decides two things that must agree: what the X button *does*
+ * (clear the slot, or remove the row) and what it is *called*.
+ */
+export function isStructuralRow(index: number, count: number, mode: TripMode): boolean {
+  return mode !== 'directions' || index === 0 || index === count - 1;
 }
 
 /**
@@ -159,12 +168,12 @@ export function removeStopAt(
 ): StopsTransition {
   // Browse mode's single row counts as structural for the same reason the
   // endpoints do: it is the search box, and the page always has one.
-  const structural = mode !== 'directions' || index === 0 || index === stops.length - 1;
+  const structural = isStructuralRow(index, stops.length, mode);
   const filled = stops[index] != null;
 
   if (filled && structural) {
     const next = withStopAt(stops, index, null);
-    return { stops: next, mode, shouldRoute: false, focusRow: index };
+    return { stops: next, mode, focusRow: index };
   }
 
   // An empty endpoint in a two-row trip: there is nothing to clear and the row
@@ -174,17 +183,17 @@ export function removeStopAt(
   // which cannot fire: in a two-row trip every row is structural, so a filled
   // one returned above. Dropped rather than translated.
   if (mode === 'directions' && stops.length <= 2) {
-    return { stops: stops.slice(), mode, shouldRoute: false, focusRow: null };
+    return { stops: stops.slice(), mode, focusRow: null };
   }
 
   const next = stops.filter((_, i) => i !== index);
-  if (next.length === 0) return { stops: [], mode: 'browse', shouldRoute: false, focusRow: null };
+  if (next.length === 0) return { stops: [], mode: 'browse', focusRow: null };
   // One waypoint is not a route. The survivor becomes the browse selection,
   // which is what the vanilla did — and it is why this returns a mode at all.
   if (next.length === 1) {
-    return { stops: next, mode: 'browse', shouldRoute: false, focusRow: null };
+    return { stops: next, mode: 'browse', focusRow: null };
   }
-  return { stops: next, mode, shouldRoute: allStopsFilled(next), focusRow: null };
+  return { stops: next, mode, focusRow: null };
 }
 
 /**
@@ -202,7 +211,6 @@ export function reorderStops(
   const unchanged = (): StopsTransition => ({
     stops: stops.slice(),
     mode: 'directions',
-    shouldRoute: false,
     focusRow: null,
   });
   if (!Number.isInteger(from) || !Number.isInteger(to)) return unchanged();
@@ -212,7 +220,7 @@ export function reorderStops(
   const [moved] = next.splice(from, 1);
   if (to >= next.length) next.push(moved ?? null);
   else next.splice(Math.max(to, 0), 0, moved ?? null);
-  return { stops: next, mode: 'directions', shouldRoute: allStopsFilled(next), focusRow: null };
+  return { stops: next, mode: 'directions', focusRow: null };
 }
 
 /**
@@ -243,7 +251,6 @@ export function addExternalStop(
     return {
       stops: next,
       mode: 'directions',
-      shouldRoute: false,
       focusRow: autoFocusOrigin ? 0 : null,
       fillOrigin: !autoFocusOrigin,
     };
@@ -257,20 +264,19 @@ export function addExternalStop(
     return {
       stops: next,
       mode,
-      shouldRoute: allStopsFilled(next),
       focusRow: null,
       fillOrigin: false,
     };
   }
 
   if (stops.length >= MAX_STOPS) {
-    return { stops: stops.slice(), mode, shouldRoute: false, focusRow: null, fillOrigin: false };
+    return { stops: stops.slice(), mode, focusRow: null, fillOrigin: false };
   }
   // Insert as a via *before* the destination, so the endpoint the user chose
   // stays the endpoint.
   const next = stops.slice();
   next.splice(last, 0, stop);
-  return { stops: next, mode, shouldRoute: allStopsFilled(next), focusRow: null, fillOrigin: false };
+  return { stops: next, mode, focusRow: null, fillOrigin: false };
 }
 
 /**

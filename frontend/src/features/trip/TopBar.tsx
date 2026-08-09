@@ -1,0 +1,243 @@
+// The trip planner's top-left panel.
+//
+// Port of `injectDom` + `renderRows`' button visibility + `bindEvents` +
+// `onInputKey`'s pick half from web/topbar.js. The controller is
+// `useTripPlanner`, the data comes from `useRoute` / `useOnRoutePois` /
+// `useSearchResults`, and this file is the composition — which is why it holds only
+// the state that is genuinely about *this* panel: which row is being typed in, what
+// has been typed, and which dropdown row the keyboard has selected.
+//
+// One piece of the vanilla is deliberately absent: the `#tb-status` element's
+// `innerHTML`. Its three contents (a leg breakdown, a routing error, a geolocation
+// failure) are three components now, which is what makes the "computing route…"
+// state distinguishable from the "no route" state without reading a CSS class.
+import { useState } from 'react';
+import { CorridorSlider } from './CorridorSlider';
+import { RouteStatus } from './RouteStatus';
+import { SearchDropdown } from './SearchDropdown';
+import { StopRow } from './StopRow';
+import { MAX_SEARCH_RESULTS, type SearchResult } from './search-results';
+import { allStopsFilled, isLocated } from './stops';
+import { useOnRoutePois } from './useOnRoutePois';
+import { useRoute } from './useRoute';
+import { useSearchResults } from './useSearchResults';
+import { useTripPlanner } from './useTripPlanner';
+import { MAX_STOPS } from '@/stores/tripStore';
+import './topbar.css';
+
+/** What the keyboard has selected before any arrow key is pressed. */
+const NO_ACTIVE_RESULT = -1;
+
+export function TopBar() {
+  const planner = useTripPlanner();
+  const route = useRoute();
+  const corridor = useOnRoutePois();
+
+  /**
+   * The row being typed in, and what is in it.
+   *
+   * One draft, not one per row: the vanilla re-rendered every row from
+   * `trip.stops`, so only the focused input could hold text that was not a stop's
+   * name — moving focus discarded it. Keeping that means a half-typed query cannot
+   * linger in a row the user has left.
+   */
+  const [draft, setDraft] = useState<{ row: number; text: string } | null>(null);
+  const [activeResult, setActiveResult] = useState(NO_ACTIVE_RESULT);
+
+  const search = useSearchResults(draft?.text ?? '');
+  const results = search.results;
+  const isDirections = planner.mode === 'directions';
+  const rowCount = Math.max(planner.stops.length, 1);
+
+  const pick = (result: SearchResult) => {
+    planner.pickResult(draft?.row ?? 0, result);
+    setDraft(null);
+    setActiveResult(NO_ACTIVE_RESULT);
+  };
+
+  const onKeyDown = (event: React.KeyboardEvent<HTMLInputElement>, row: number) => {
+    if (results.length === 0) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setActiveResult((current) => Math.min(current + 1, results.length - 1));
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setActiveResult((current) => Math.max(current - 1, 0));
+      return;
+    }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      // Enter with nothing selected takes the first row, which is what a user who
+      // typed a full name and hit Enter expects — and what the vanilla did.
+      const chosen = results[activeResult >= 0 ? activeResult : 0];
+      if (chosen) {
+        planner.pickResult(row, chosen);
+        setDraft(null);
+        setActiveResult(NO_ACTIVE_RESULT);
+      }
+      return;
+    }
+    if (event.key === 'Escape') {
+      setDraft(null);
+      setActiveResult(NO_ACTIVE_RESULT);
+      event.currentTarget.blur();
+    }
+  };
+
+  return (
+    <div className="tb-panel" id="topbar">
+      <div className="tb-stops">
+        {Array.from({ length: rowCount }, (_, index) => {
+          const stop = planner.stops[index] ?? null;
+          return (
+            <StopRow
+              key={index}
+              index={index}
+              count={rowCount}
+              stop={stop}
+              mode={planner.mode}
+              value={draft?.row === index ? draft.text : (stop?.name ?? '')}
+              locating={planner.locating && stop?.pending === true}
+              // Rows only reorder in directions mode, and only when there is
+              // something to reorder them against.
+              draggable={isDirections && rowCount >= 2}
+              autoFocus={planner.focusRow === index}
+              onFocusHandled={planner.focusHandled}
+              onChange={(text) => {
+                setDraft({ row: index, text });
+                setActiveResult(NO_ACTIVE_RESULT);
+              }}
+              onFocus={() => {
+                // Focusing a row that is still locating drops the placeholder: the
+                // user has decided to type their own origin, and the geolocation
+                // callback must not overwrite it (it checks `pending` first).
+                if (stop?.pending) planner.removeStop(index);
+                if (draft && draft.row !== index) setDraft(null);
+              }}
+              onKeyDown={(event) => onKeyDown(event, index)}
+              onRemove={() => {
+                planner.removeStop(index);
+                if (draft?.row === index) setDraft(null);
+              }}
+              onUseCurrentLocation={() => planner.useCurrentLocation(index)}
+              onReorder={planner.reorder}
+            />
+          );
+        })}
+      </div>
+
+      <div className="tb-actions">
+        {isDirections && planner.stops.length < MAX_STOPS ? (
+          <button type="button" className="tb-add" onClick={planner.addStop}>
+            + Add stop
+          </button>
+        ) : null}
+
+        {route.summary ? (
+          <span className="tb-route-summary" aria-live="polite">
+            <strong>{route.summary.distance}</strong>
+            <span className="tb-stat-sep">·</span>
+            {route.summary.duration}
+          </span>
+        ) : null}
+
+        <div className="tb-actions-spacer" />
+
+        {/* The entry point into directions mode from the search bar. It is the only
+            path for a geocoded pick, which has no drawer button to press. */}
+        {!isDirections && isLocated(planner.stops[0] ?? null) ? (
+          <button
+            type="button"
+            className="tb-icon-btn primary"
+            title="Get directions"
+            aria-label="Get directions"
+            onClick={planner.startDirections}
+          >
+            <DirectionsIcon />
+          </button>
+        ) : null}
+
+        {planner.stops.length > 0 ? (
+          <button
+            type="button"
+            className="tb-icon-btn"
+            title="Clear trip"
+            aria-label="Clear trip"
+            onClick={() => {
+              planner.clearAll();
+              setDraft(null);
+            }}
+          >
+            <CloseIcon />
+          </button>
+        ) : null}
+      </div>
+
+      <SearchDropdown
+        results={results.slice(0, MAX_SEARCH_RESULTS)}
+        activeIndex={activeResult}
+        onPick={pick}
+      />
+
+      <RouteStatus
+        computing={route.isFetching}
+        error={route.error}
+        legs={route.legs}
+        locationError={planner.locationError}
+      />
+
+      {/* The corridor controls belong to a live route: without one there is nothing
+          for a radius to be a radius of. */}
+      {allStopsFilled(planner.stops) && route.route ? (
+        <div className="tb-corridor-row">
+          <CorridorSlider miles={planner.corridorMiles} onChange={planner.setCorridorMiles} />
+          <span className="tb-corridor-count">
+            {corridor.isFetching
+              ? 'Finding campgrounds…'
+              : `${corridor.features.length} campground${corridor.features.length === 1 ? '' : 's'} along the route`}
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function DirectionsIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 10l-7 7-3-3-9 9" />
+      <path d="M14 10h7v7" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  );
+}
