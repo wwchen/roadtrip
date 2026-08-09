@@ -189,7 +189,15 @@ export function SiteMatrix(props: SiteMatrixProps) {
                 row={row}
                 visibleDays={visibleDays}
                 availabilityByDate={availabilityByDate}
-                {...props}
+                selectedSiteId={props.selectedSiteId}
+                onSelectSite={props.onSelectSite}
+                reservationUrlTemplates={props.reservationUrlTemplates}
+                armedBook={props.armedBook}
+                onArmBook={props.onArmBook}
+                onOpenBooking={props.onOpenBooking}
+                watchedDates={props.watchedDates}
+                canWatch={props.canWatch}
+                onOpenWatch={props.onOpenWatch}
               />
             ))}
           </tbody>
@@ -519,6 +527,15 @@ function FilterSelect({
   );
 }
 
+/** The row's own inputs, plus the cell inputs it forwards unchanged. */
+type MatrixRowProps = Omit<MatrixCellProps, 'row' | 'day' | 'availableIds' | 'siteLabel'> & {
+  row: Partial<Campsite>;
+  visibleDays: readonly FusedDay[];
+  availabilityByDate: Map<string, Set<string>>;
+  selectedSiteId: string | null;
+  onSelectSite: (campsiteId: string | null) => void;
+};
+
 function MatrixRow({
   row,
   visibleDays,
@@ -526,12 +543,13 @@ function MatrixRow({
   selectedSiteId,
   onSelectSite,
   reservationUrlTemplates,
-  ...props
-}: SiteMatrixProps & {
-  row: Partial<Campsite>;
-  visibleDays: readonly FusedDay[];
-  availabilityByDate: Map<string, Set<string>>;
-}) {
+  armedBook,
+  onArmBook,
+  onOpenBooking,
+  watchedDates,
+  canWatch,
+  onOpenWatch,
+}: MatrixRowProps) {
   const id = rowId(row);
   const label = siteName(row);
   const title = siteTitleText(row, label);
@@ -564,7 +582,12 @@ function MatrixRow({
             availableIds={availabilityByDate.get(day.date)}
             siteLabel={label}
             reservationUrlTemplates={reservationUrlTemplates}
-            {...props}
+            armedBook={armedBook}
+            onArmBook={onArmBook}
+            onOpenBooking={onOpenBooking}
+            watchedDates={watchedDates}
+            canWatch={canWatch}
+            onOpenWatch={onOpenWatch}
           />
         ))}
       </tr>
@@ -579,6 +602,29 @@ function MatrixRow({
   );
 }
 
+/**
+ * Exactly what one cell needs, named.
+ *
+ * Not `Omit<SiteMatrixProps, …>` plus a spread, which is what this was: the spread sat
+ * *after* the explicit props, so adding a `row` or `siteLabel` to the grid's own props
+ * would silently have overridden the per-cell value with the whole-grid one. It also
+ * handed every cell the week-nav element and eight grid-level callbacks it never reads
+ * — 210 of them in a 30-site week.
+ */
+interface MatrixCellProps {
+  row: Partial<Campsite>;
+  day: FusedDay;
+  availableIds: Set<string> | undefined;
+  siteLabel: string;
+  reservationUrlTemplates: ReservationUrlTemplates;
+  armedBook: ArmedBook | null;
+  onArmBook: (armed: ArmedBook | null) => void;
+  onOpenBooking: (campsiteId: string, date: string) => void;
+  watchedDates: ReadonlySet<string>;
+  canWatch: boolean;
+  onOpenWatch: (anchor: HTMLElement, date: string) => void;
+}
+
 function MatrixCell({
   row,
   day,
@@ -591,12 +637,7 @@ function MatrixCell({
   watchedDates,
   canWatch,
   onOpenWatch,
-}: Omit<SiteMatrixProps, 'actions' | 'selectedSiteId' | 'onSelectSite'> & {
-  row: Partial<Campsite>;
-  day: FusedDay;
-  availableIds: Set<string> | undefined;
-  siteLabel: string;
-}) {
+}: MatrixCellProps) {
   const state = cellState(row, day, availableIds);
   const id = rowId(row);
   const aria = `${siteLabel} ${day.date}: ${state.aria}`;

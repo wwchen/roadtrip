@@ -70,6 +70,15 @@ export function AvailabilityWeek({ feature }: AvailabilityWeekProps) {
   const poiId = feature.id;
   const poiName = (feature.properties?.name as string | undefined) || 'this campground';
 
+  // No id, no availability — and specifically not a skeleton. Every request here is
+  // keyed on the POI id, so without one the queries stay `enabled: false`, which reads
+  // as permanently pending: the grid would show a loading skeleton that can never
+  // resolve. The drawer's own gate is `properties.availability_supported`, which says
+  // nothing about the id, so the two can disagree — a body with the flag set and no
+  // top-level `id` is exactly the case this catches. Rendering nothing is the honest
+  // answer, and matches what the section looks like for an unsupported provider.
+  if (poiId == null) return null;
+
   // The first date this provider will quote. Everything paginates forward from here,
   // and "Earliest" returns to it — which is not the same as "today" for a campground
   // that only opens a booking window months out.

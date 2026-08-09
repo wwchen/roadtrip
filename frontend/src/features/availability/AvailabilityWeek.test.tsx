@@ -129,6 +129,26 @@ const cell = (siteLabel: string, date: string) =>
   screen.getByRole('button', { name: new RegExp(`^${siteLabel} ${date}:`) });
 
 describe('the week grid', () => {
+  // Every request here is keyed on the POI id, so without one the queries stay
+  // `enabled: false` — which reads as permanently pending. Before the guard this
+  // rendered a skeleton that could never resolve, and the drawer's own gate
+  // (`properties.availability_supported`) says nothing about the id, so the two can
+  // disagree on a body that carries the flag and no top-level `id`.
+  test('renders nothing at all for a feature with no id, rather than a skeleton', async () => {
+    render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek
+          feature={{ type: 'Feature', properties: { category: 'campground', name: 'X' } } as never}
+        />
+      </AppProviders>,
+    );
+
+    expect(screen.queryByText(/Sites by date/)).toBeNull();
+    expect(document.querySelector('.cg-site-matrix-skeleton')).toBeNull();
+    expect(document.querySelector('.cg-availability')).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   test('renders a column per day and a row per site', async () => {
     stubs.campsites = () => json(catalogBody([catalogRow(1), catalogRow(2)], {}));
     stubs.availability = () =>
