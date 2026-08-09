@@ -360,8 +360,17 @@ this line is what led to porting it once already.
   4b. *(COMPLETE, unserved)* Legend/filters + viewport POI fetch loop (debounce + abort + ring
       cache) + the imperative overlay module 4a left. "Search" is struck: see below.
   4c. Drawer (session/hydration AbortController guard, mobile drag-dismiss) — 4 POI drawer types.
-  4d. `availability/availability-week.js` (1,226 LOC, ~30-field ctx) → components + hooks,
-      preserving seq-guarded staleness, state machine, drag-resize, popovers.
+  4d. The map-side availability tree → components + hooks, preserving seq-guarded
+      staleness, the state machine, drag-resize and the popovers. **Scope corrected:
+      this is 3,298 LOC across 12 files, not the 1,226 of `availability-week.js`
+      alone** — that file is the biggest, not the whole phase. Measured:
+      `availability-week.js` 1226, `site-matrix.js` 627, `watch-editor.js` 417,
+      `site-detail.js` 338, `site-list.js` 202, `calendar-popover.js` 147,
+      `watch-popover.js` 110, `booking-links.js` 88, `day-detail.js` 73,
+      plus `day-fields.js`/`watch-events.js`/`auth-events.js` at ~70 together.
+      It mounts inside the campground drawer (`campground.js:48`), so 4c must land
+      first, and a sane sub-sequence is: the week grid + its fetch/staleness guard,
+      then the day detail and site matrix, then the watch editor and popovers.
   4e. Topbar/trip planner (drag-reorder, turf corridor, route + share-link encode/restore);
       replace remaining `window.__rt*` with `tripStore`.
 
@@ -562,6 +571,114 @@ response, unticking an overlay hides its pins, unticking an agency filters them,
 survive a basemap change** — the one behaviour `styleReady` exists for. The dev-server harness is
 not committed; `scripts/` has no browser tooling and the real home for this is `SmokeTest.kt`, once
 Ktor serves the page.
+
+## Phase 4c — what landed (branch `claude/react-migration-4c-drawer`)
+
+**4b is merged** (#573, squash-merged as `4c061332`). 4c is branched off master and is
+**complete**: all four drawer types, the shell, the gesture, the category dispatch, and
+the `?poi=` deep link in both directions.
+
+**What is done, and where:**
+
+| Piece | File |
+|---|---|
+| Hydration by id | `features/drawer/usePoiDetail.ts` |
+| Shell: sheet / panel, snap states, drag-dismiss | `Drawer.tsx`, `useDrawerDrag.ts`, `drawer.css` |
+| Shared header / subline / distance / directions / pills / upstream / call buttons | `parts.tsx` |
+| `?poi=<id>` deep link (write) | `poi-url.ts` |
+| Category dispatch | `registry.ts` |
+| Composition (loading, error+retry, unknown category) | `PoiDrawer.tsx`, rendered from `MapView` |
+| Park (both kinds), Planet Fitness, Supercharger | `ParkDrawer.tsx`, `PlanetFitnessDrawer.tsx`, `SuperchargerDrawer.tsx` + `supercharger-detail.ts` |
+| Campground | `CampgroundDrawer.tsx` + `campground-detail.ts` |
+| `?poi=<id>` **restore** (select, reveal the overlay, fly to it) | `features/map/useDeepLinkedPoi.ts` |
+
+**The campground drawer ships everything except availability.** `web/drawer/campground.js`
+(275 lines) plus `web/campground-card.js` (589) are ported, and the one hole is by design:
+`campground.js:48` imports `mountAvailabilityWeek` from `web/availability/availability-week.js`,
+and that 1,226-line component is **4d, not 4c**. So there is no 7-day grid and no day-detail
+panel; a pin whose provider supports availability renders an `rt-cg-availability-pending`
+notice instead, and **that notice is where 4d mounts**. Everything else in the card (parent
+park name, rating/reviews, amenities, cell coverage, season verdict, CTAs, structured details,
+last-verified and booking-system footers) is in.
+
+One shape change worth knowing, because 4d will touch the same file: the legacy detail rows
+carried `{__html}` descriptors, so every consumer had to trust its producer. They are now a
+`DetailValue` union (`text` / `link` / `chips`) that React renders, and the descriptors carry
+no markup at all. The only `dangerouslySetInnerHTML` left in the drawer is `ProviderHtml`,
+fed solely by `lib/upstream-html.ts`'s whitelist sanitiser — do not add a second one.
+
+**Three decisions already made that the campground port has to honour:**
+
+- **Hydration is the query key, not a session guard.** `beginSession` /
+  `isActiveFeature` / the per-id promise `Map` all collapse into
+  `queryKeys.pois.detail(id)`: a late response for a superseded selection cannot
+  reach the component, Query cancels what it started, and repeat clicks on one pin do
+  not refetch. Do not reintroduce a staleness check.
+- **A failed hydration is an error state with a retry**, not a permanent "Loading…".
+  That legacy bug (`openHydratedDrawer` had no `.catch`) is fixed in `PoiDrawer`, and
+  the campground drawer's own `restartController` "Retry" affordance is therefore
+  already covered.
+- **Dispatch is the registry.** Add `['campground', CampgroundDrawer]` to
+  `registry.ts`; until then campground pins open the drawer and say there is no panel
+  yet, which is deliberate and visible rather than a dead click.
+
+**Verified:** typecheck clean, 876 tests green, build ok, colour check ok — and, unlike every
+earlier phase's claim, **driven in a real browser**: headless Chromium against the built
+`dist` with `/api/pois` and `/api/pois/{id}` stubbed, at 420×900 and 1280×820, exercising
+deep link → drawer → accordion → dismiss for a campground and a charger.
+
+**Three bugs only the browser could find.** Worth reading before 4d, because two of them are
+about jsdom's blind spots rather than about the drawer:
+
+- **The drag gesture was bound to nothing.** `useDrawerDrag` read its elements from refs
+  inside an effect whose deps were those (stable) ref objects — and `<Drawer>` returns null
+  until its `mounted` state flips, so on the first commit the refs were empty, the effect
+  bailed, and it never re-ran once the panel existed. Every unit test passed; no drawer on a
+  phone could be dismissed. **The elements are now nodes held in state** (callback refs), so
+  the effect has a dependency that changes when they mount. `useDrawerDrag.test.tsx` covers
+  it — six of its fifteen tests fail if the refs come back. Any hook that reaches for a DOM
+  node a *later* render creates has this bug; prefer a node in state over `ref.current` in a
+  dep array.
+- **The mobile grab pill computed to 0px tall.** The panel is a `max-height`-capped flex
+  column and the pill is its only empty child; a flex item's automatic minimum size is its
+  content, which for an empty box is zero, so the pill was the one thing flex could shrink
+  once the content overflowed — which for a campground is always. It vanished exactly when
+  the sheet was fullest, and on mobile it is the *only* dismiss affordance (the × is
+  `display: none` there, and the backdrop takes no pointer events by design). Fixed with
+  `flex: 0 0 auto`. **jsdom does no layout, so no unit test can hold this** — the comment in
+  `drawer.css` says so at the site.
+- **The `?poi=` deep link only worked in one direction.** `poi-url.ts` wrote the parameter
+  and nothing read it, so clicking pins updated the URL correctly and every shared link
+  opened a bare map. `useDeepLinkedPoi.ts` is the read half, ported from
+  `restoreSharedLinkFromUrl` / `openSharedPoiFeature`: it selects the POI, reveals its
+  overlay (and, for a campground, its agency — a shared link can point at a layer the
+  recipient switched off), and flies the camera once, gated on `styleReady` because a
+  `flyTo` before the style is up is silently dropped. `SmokeTest.kt` loads `/?poi=…`
+  directly, so this was also a live contract.
+
+While fixing that last one: **`geomCenter` answers `[0, 0]` for a geometry it could not
+read**, and `[0, 0]` is a coordinate in the Gulf of Guinea that passes every
+`Number.isFinite` check. The vanilla `flyTo` paths guarded on exactly that, so a POI whose
+geometry failed to load flew the map to null island. `lib/geo.ts` now exports
+**`hasCoordinates`** for camera-moving callers; `geomCenter`'s own contract is unchanged
+(it is parity-pinned).
+
+**Two things that are faithful, not broken, if you go looking:** the dismiss gesture is
+touch-only in both trees (`chrome.js` binds `touchstart`/`touchmove` and nothing else), so a
+*mouse* drag on a narrow desktop window cannot dismiss the sheet — and on that width the ×
+is hidden, so the only exits are a map click that hits no pin or widening the window. And
+the geolocate control is still unported, so `useDistanceTo` returns `''` and no drawer shows
+a distance yet; that is 4e.
+
+**The harness, if it is wanted again:** a ~120-line Node static server (serve
+`frontend/dist` at `/`, the repo's `web/` at `/web` for the runtime-injected `tokens.css`,
+canned `/api/pois*`) plus `playwright-core` against `/opt/pw-browsers/chromium`. Two notes
+that cost time: **pick a raster basemap** via `localStorage.setItem('basemap', 'carto-dark')`
+in an init script, because the default vector styles fetch style JSON from openfreemap and
+without a loaded style `styleReady` never flips — the overlays and the flyTo then look
+broken for a reason that has nothing to do with the code; and **drive touch through CDP**
+(`Input.dispatchTouchEvent`), since Playwright's mouse API cannot exercise a touch-only
+gesture.
 
 ## Serving (DONE)
 

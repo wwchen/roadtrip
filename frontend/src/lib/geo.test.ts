@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'vitest';
-import { distanceKm, formatDistance, geomCenter, zoomForBbox, type Bbox } from './geo';
+import {
+  distanceKm,
+  formatDistance,
+  geomCenter,
+  hasCoordinates,
+  zoomForBbox,
+  type Bbox,
+} from './geo';
 
 describe('distanceKm', () => {
   // One degree of latitude along a meridian is exactly R × 1 rad/deg for
@@ -136,6 +143,52 @@ describe('geomCenter', () => {
         [0, 0],
       ],
     ]);
+  });
+});
+
+// The guard that tells the origin fallback apart from a real point at [0, 0] —
+// which matters because the fallback passes every finite check a camera-moving
+// caller would otherwise make.
+describe('hasCoordinates', () => {
+  test.each([
+    ['a Point', { type: 'Point', coordinates: [10, 20] }],
+    ['a point at the origin', { type: 'Point', coordinates: [0, 0] }],
+    ['a Polygon', { type: 'Polygon', coordinates: [[[0, 1], [2, 3], [4, 5]]] }],
+    [
+      'a GeometryCollection with one non-empty part',
+      {
+        type: 'GeometryCollection',
+        geometries: [{ type: 'Polygon', coordinates: [] }, { type: 'Point', coordinates: [1, 2] }],
+      },
+    ],
+  ])('is true for %s', (_label, geom) => {
+    expect(hasCoordinates(geom)).toBe(true);
+  });
+
+  test.each([
+    ['null', null],
+    ['undefined', undefined],
+    ['a geometry with no coordinates', { type: 'Point' }],
+    ['empty coordinates', { type: 'Polygon', coordinates: [] }],
+    ['nested empties', { type: 'MultiPolygon', coordinates: [[[]]] }],
+    ['an empty GeometryCollection', { type: 'GeometryCollection', geometries: [] }],
+    ['a GeometryCollection of empties', {
+      type: 'GeometryCollection',
+      geometries: [{ type: 'Point', coordinates: [] }],
+    }],
+    // A provider that ships nulls where numbers belong reads as "no geometry",
+    // not as a coordinate — geomCenter would answer [0, 0] for it.
+    ['null coordinates', { type: 'Point', coordinates: [null, null] }],
+  ])('is false for %s', (_label, geom) => {
+    expect(hasCoordinates(geom as Parameters<typeof hasCoordinates>[0])).toBe(false);
+  });
+
+  // Exactly the inputs the geomCenter fallback covers, so the two stay aligned.
+  test('is false for everything geomCenter answers with the origin for', () => {
+    for (const geom of [null, undefined, { type: 'Point' }, { type: 'Polygon', coordinates: [] }]) {
+      expect(hasCoordinates(geom)).toBe(false);
+      expect(geomCenter(geom)[0]).toBe(0);
+    }
   });
 });
 

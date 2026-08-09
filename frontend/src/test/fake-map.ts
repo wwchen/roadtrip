@@ -52,6 +52,16 @@ export class FakeMap {
   /** What `queryRenderedFeatures` answers with. Empty means "the click missed". */
   renderedFeatures: unknown[] = [];
 
+  /**
+   * Camera moves, in order.
+   *
+   * Recorded rather than applied: nothing in the app reads the camera back from the
+   * map (`readMapViewport` is driven by `setViewport` here), and a fake that moved
+   * itself would invite tests to assert on a simulation of MapLibre's easing instead
+   * of on the request the app made.
+   */
+  flyToCalls: Array<Record<string, unknown>> = [];
+
   private canvas = document.createElement('canvas');
   private bounds: [number, number, number, number] = [-124, 32, -114, 42];
   private zoom = 7;
@@ -169,6 +179,10 @@ export class FakeMap {
 
   getStyle() {
     return { layers: [...this.styleLayers, ...this.layers] };
+  }
+
+  flyTo(options: Record<string, unknown>) {
+    this.flyToCalls.push(options);
   }
 
   getBounds() {

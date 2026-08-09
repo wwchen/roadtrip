@@ -183,6 +183,17 @@ const OVERLAY_BY_CATEGORY = new Map<string, PointOverlaySpec>(
   POINT_OVERLAYS.flatMap((spec) => spec.categories.map((category) => [category, spec] as const)),
 );
 
+/**
+ * The overlay that paints a category, or null when nothing does.
+ *
+ * Null is a real answer, not a failure: park polygons are a category the map does
+ * not paint in this build (see `viewport.ts`), so a caller resolving one has to
+ * cope rather than assume.
+ */
+export function overlayForCategory(category: unknown): PointOverlaySpec | null {
+  return typeof category === 'string' ? OVERLAY_BY_CATEGORY.get(category) ?? null : null;
+}
+
 export const sourceIdOf = (spec: PointOverlaySpec): string => spec.key;
 export const pinLayerIdOf = (spec: PointOverlaySpec): string => `${spec.key}${PIN_LAYER_SUFFIX}`;
 export const hitLayerIdOf = (spec: PointOverlaySpec): string => `${spec.key}${HIT_LAYER_SUFFIX}`;

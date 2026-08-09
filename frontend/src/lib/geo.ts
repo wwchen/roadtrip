@@ -61,9 +61,36 @@ export function formatDistance(km: number): string {
  * Handles Point/LineString/Polygon/MultiPolygon/MultiLineString/MultiPoint by
  * recursive coordinate descent, and GeometryCollection via its `geometries`
  * array (PAD-US ships some parks as GeometryCollection with mixed polygon
- * parts). An empty or missing geometry yields the origin rather than NaNs, so a
- * caller never flies the map to nowhere.
+ * parts).
+ *
+ * An empty or missing geometry yields the origin rather than NaNs — carried over
+ * from `web/core.js`. Note what that means: `[0, 0]` is a *coordinate*, in the
+ * Gulf of Guinea, and it passes every `Number.isFinite` check a caller might
+ * make. The vanilla `flyTo` paths guarded on exactly that and so flew to null
+ * island for a POI whose geometry failed to load. Callers that move the camera
+ * should gate on `hasCoordinates` first; this function's contract is unchanged.
  */
+/**
+ * Whether a geometry carries any coordinate at all.
+ *
+ * The companion guard to `geomCenter`'s origin fallback: it answers the question
+ * "did this geometry have anything in it", which the centroid cannot, because its
+ * fallback is indistinguishable from a real point at `[0, 0]`. Tests the input
+ * rather than the output for that reason.
+ */
+export function hasCoordinates(geom: GeoJsonGeometry | null | undefined): boolean {
+  if (!geom || typeof geom !== 'object') return false;
+  const hasAny = (c: unknown): boolean => {
+    if (typeof c === 'number') return Number.isFinite(c);
+    return Array.isArray(c) && c.some(hasAny);
+  };
+  if (geom.type === 'GeometryCollection') {
+    const parts = (geom as { geometries?: unknown }).geometries;
+    return Array.isArray(parts) && parts.some((part) => hasCoordinates(part as GeoJsonGeometry));
+  }
+  return hasAny((geom as { coordinates?: unknown }).coordinates);
+}
+
 export function geomCenter(geom: GeoJsonGeometry | null | undefined): GeomCenter {
   let minX = Infinity;
   let minY = Infinity;

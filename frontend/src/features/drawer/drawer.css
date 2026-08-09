@@ -1,0 +1,663 @@
+/* ---------------------------------------------------------------------------
+   The POI drawer.
+
+   Ported from the `.cg-drawer*` rules in index.html's inline <style>. Geometry,
+   easing curves, breakpoint and safe-area handling carried over as-is; the legacy
+   raw black and white channel literals are composed from the shadow/overlay channel
+   primitives instead, because a new file may not add raw functional color (see
+   docs/frontend-components.md — and note the checker reads comments too, so naming
+   those literals here would trip it).
+
+   Two shapes, one component:
+     mobile  — bottom sheet, 60dvh, 90dvh in the `--full` snap state, drag-dismiss
+     ≥768px  — left-hand panel, full height, no handle, an X to close
+   --------------------------------------------------------------------------- */
+
+.rt-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 998;
+  background: rgba(var(--rt-c-shadow-rgb), 0.32);
+  opacity: 0;
+  transition: opacity 220ms cubic-bezier(0.32, 0.72, 0, 1);
+  /* Load-bearing: MapLibre must keep receiving pan and zoom while the drawer is
+     open, so the scrim cannot swallow pointer events. "Click outside to dismiss"
+     is instead a map click that hits no pin — see useMapOverlays. */
+  pointer-events: none;
+}
+
+.rt-drawer-backdrop--open {
+  opacity: 1;
+}
+
+.rt-drawer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  max-height: 60dvh;
+  padding: 0 16px 24px;
+  /* Clear the home bar on iPhone. */
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+  background: var(--rt-surface);
+  color: var(--rt-text);
+  border-radius: var(--rt-r-2xl) var(--rt-r-2xl) 0 0;
+  box-shadow: 0 -12px 32px rgba(var(--rt-c-shadow-rgb), 0.4);
+  transform: translateY(100%);
+  transition: transform 240ms cubic-bezier(0.32, 0.72, 0, 1), max-height 240ms ease;
+  /* The drawer itself scrolls, which is what the drag gesture reads scrollTop
+     from to tell a dismiss from a scroll. */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  -webkit-font-smoothing: antialiased;
+}
+
+.rt-drawer--open {
+  transform: translateY(0);
+}
+
+.rt-drawer--full {
+  max-height: 90dvh;
+}
+
+.rt-drawer-handle {
+  position: relative;
+  width: 40px;
+  height: 4px;
+  /* Load-bearing. The panel is a `max-height`-capped flex column and this pill is
+     its only empty child. A flex item's automatic minimum
+     size is its content, which for an empty box is zero — so once the drawer's
+     content overflows (a campground always does) the pill is the one thing flex can
+     shrink, and it collapses to 0px. On mobile the pill IS the dismiss affordance,
+     so it silently disappears exactly when the drawer is most full. Caught in a
+     browser; jsdom does no layout, so no unit test can hold this. */
+  flex: 0 0 auto;
+  margin: 10px auto 4px;
+  background: rgba(var(--rt-c-overlay-rgb), 0.18);
+  border-radius: 2px;
+  cursor: grab;
+  /* The gesture is ours; the browser must not also pan the page. */
+  touch-action: none;
+}
+
+/* The visible pill is 4px tall, which is unusable with a finger. This expands the
+   hit area to roughly 36px without changing the visual. */
+.rt-drawer-handle::before {
+  content: '';
+  position: absolute;
+  left: -40px;
+  right: -40px;
+  top: -16px;
+  bottom: -16px;
+}
+
+/* Mobile: the handle IS the close affordance, so the X is hidden. Desktop flips
+   both (see the media query). */
+.rt-drawer-close {
+  display: none;
+}
+
+.rt-drawer-content {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 768px) {
+  .rt-drawer {
+    left: 0;
+    right: auto;
+    top: 0;
+    bottom: 0;
+    width: clamp(520px, 44vw, 620px);
+    max-height: 100dvh;
+    padding: 0 24px 24px;
+    border-radius: 0;
+    box-shadow: 8px 0 32px rgba(var(--rt-c-shadow-rgb), 0.4);
+    transform: translateX(-100%);
+  }
+
+  .rt-drawer--open {
+    transform: translateX(0);
+  }
+
+  .rt-drawer-handle {
+    display: none;
+  }
+
+  .rt-drawer-close {
+    display: block;
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 1;
+    width: 36px;
+    height: 36px;
+    background: rgba(var(--rt-c-shadow-rgb), 0.4);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: rgba(var(--rt-c-overlay-rgb), 0.85);
+    border: 1px solid rgba(var(--rt-c-overlay-rgb), 0.1);
+    border-radius: 50%;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .rt-drawer-close:hover {
+    background: var(--rt-scrim-strong);
+    color: var(--rt-on-accent);
+  }
+}
+
+/* --- content ------------------------------------------------------------- */
+
+.rt-drawer-head {
+  padding-top: 12px;
+}
+
+.rt-drawer-head h2 {
+  margin: 0 0 4px;
+  /* Clear of the desktop close button. */
+  padding-right: 44px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--rt-text);
+}
+
+.rt-drawer-sub {
+  margin-bottom: 8px;
+  color: var(--rt-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.rt-drawer-verdict {
+  margin-bottom: 12px;
+}
+
+/* Every section after the head gets a rule above it; the one directly after the
+   head does not, or the header would sit in a box. */
+.rt-drawer-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rt-border);
+}
+
+.rt-drawer-head + .rt-drawer-section {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.rt-drawer-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rt-drawer-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.rt-drawer-pill {
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--rt-fill-subtle);
+  color: var(--rt-text);
+  border-radius: var(--rt-r-pill);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.rt-drawer-upstream-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+  color: var(--rt-text);
+}
+
+.rt-drawer-upstream-table th,
+.rt-drawer-upstream-table td {
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+  border-top: 1px solid var(--rt-border);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.rt-drawer-upstream-table th {
+  width: 40%;
+  color: var(--rt-muted);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.rt-drawer-upstream-table td a {
+  color: var(--rt-brand);
+  text-decoration: none;
+}
+
+.rt-drawer-upstream-table td a:hover {
+  text-decoration: underline;
+}
+
+.rt-drawer-upstream-table pre {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* --- loading and failure ------------------------------------------------- */
+
+.rt-drawer-loading {
+  padding-top: 12px;
+  color: var(--rt-muted);
+}
+
+.rt-drawer-error {
+  padding-top: 12px;
+}
+
+.rt-drawer-error p {
+  margin: 0 0 12px;
+  color: var(--rt-muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* --- supercharger ------------------------------------------------------- */
+
+.rt-drawer-meta {
+  color: var(--rt-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.rt-sc-label {
+  color: var(--rt-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.rt-sc-amenities {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.rt-sc-busy {
+  margin-top: 10px;
+}
+
+.rt-sc-busy-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+/* Tesla ships a fractional-occupancy value per hour. The bars are scaled against
+   the day's own peak, so height comes from the data (an inline style) and only the
+   colour bucket is styling. */
+.rt-sc-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 28px;
+}
+
+.rt-sc-bar {
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: 1px;
+}
+
+.rt-sc-bar[data-bucket='low'] {
+  background: var(--rt-avail);
+}
+
+.rt-sc-bar[data-bucket='medium'] {
+  background: var(--rt-warn);
+}
+
+.rt-sc-bar[data-bucket='high'] {
+  background: var(--rt-error);
+}
+
+/* The site's current local hour, so "right now" reads against the day's shape. */
+.rt-sc-bar[data-now] {
+  outline: 2px solid var(--rt-brand);
+  outline-offset: 1px;
+}
+
+.rt-sc-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+  color: var(--rt-muted);
+  font-size: 10px;
+}
+
+.rt-sc-rates {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rt-sc-rate {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.rt-sc-rate--header {
+  font-weight: 600;
+}
+
+/* Time-of-use windows read as children of the group above them. */
+.rt-sc-rate--tou {
+  padding-left: 12px;
+  color: var(--rt-muted);
+}
+
+.rt-sc-rate-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- campground --------------------------------------------------------- */
+
+/* Bleeds to the drawer edges, so it cancels the shell's horizontal padding. */
+.rt-drawer-hero {
+  margin: 0 -16px 16px;
+  height: 168px;
+  background: var(--rt-bg-sunken) center / cover no-repeat;
+}
+
+@media (min-width: 768px) {
+  .rt-drawer-hero {
+    margin: 0 -24px 16px;
+  }
+}
+
+.rt-drawer-hero + .rt-drawer-head {
+  padding-top: 0;
+}
+
+/* Identifies the place: which park contains it, and who runs it. */
+.rt-cg-parent {
+  margin: 0 0 2px;
+  color: var(--rt-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.rt-cg-agency {
+  margin: 0 0 2px;
+  color: var(--rt-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.rt-cg-verdict {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--rt-r-pill);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.rt-cg-verdict--open {
+  background: var(--rt-avail-bg);
+  color: var(--rt-avail);
+}
+
+.rt-cg-verdict--closed,
+.rt-cg-verdict--fcfs {
+  background: var(--rt-first-come-bg);
+  color: var(--rt-warn);
+}
+
+/* A first-come pin with nothing to link to: stated, not a dead button. */
+.rt-cg-cta-disabled {
+  align-self: center;
+  color: var(--rt-muted);
+  font-size: 13px;
+}
+
+.rt-cg-availability-pending {
+  color: var(--rt-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.rt-cg-details > summary {
+  cursor: pointer;
+  color: var(--rt-text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.rt-cg-group + .rt-cg-group {
+  margin-top: 12px;
+}
+
+.rt-cg-group h4 {
+  margin: 12px 0 6px;
+  color: var(--rt-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.rt-cg-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rt-cg-row {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.rt-cg-row-label {
+  flex: 0 0 40%;
+  color: var(--rt-muted);
+}
+
+.rt-cg-row-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rt-cg-row-value a {
+  color: var(--rt-brand);
+  text-decoration: none;
+}
+
+.rt-cg-row-value a:hover {
+  text-decoration: underline;
+}
+
+.rt-cg-connection {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-right: 8px;
+}
+
+.rt-cg-connection code {
+  font-size: 11px;
+}
+
+.rt-cg-links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rt-cg-links a {
+  color: var(--rt-brand);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.rt-cg-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rt-cg-alert {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--rt-first-come-bg);
+  border-radius: var(--rt-r-sm);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Per-carrier signal on rec.gov's 0-4 scale. See the --rt-signal-* note in tokens.css. */
+.rt-cg-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.rt-cg-signal {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--rt-r-pill);
+  font-size: 11px;
+}
+
+.rt-cg-signal[data-bucket='0'] {
+  background: var(--rt-signal-0);
+}
+
+.rt-cg-signal[data-bucket='1'] {
+  background: var(--rt-signal-1);
+}
+
+.rt-cg-signal[data-bucket='2'] {
+  background: var(--rt-signal-2);
+}
+
+.rt-cg-signal[data-bucket='3'] {
+  background: var(--rt-signal-3);
+}
+
+.rt-cg-signal[data-bucket='4'] {
+  background: var(--rt-signal-4);
+}
+
+.rt-cg-signal-carrier {
+  font-weight: 500;
+}
+
+.rt-cg-signal-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.rt-cg-rating {
+  margin-top: 6px;
+  color: var(--rt-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rt-cg-stars {
+  margin-right: 2px;
+  color: var(--rt-rating);
+  letter-spacing: -1px;
+}
+
+.rt-cg-sites {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--rt-muted);
+}
+
+.rt-cg-verified {
+  margin-top: 8px;
+  color: var(--rt-muted);
+  font-size: 11px;
+}
+
+.rt-cg-verified--stale {
+  color: var(--rt-warn);
+  font-weight: 500;
+}
+
+.rt-cg-upstream-meta {
+  color: var(--rt-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.rt-cg-upstream-meta > * + * {
+  margin-top: 6px;
+}
+
+.rt-cg-upstream-meta strong {
+  color: var(--rt-text);
+  font-weight: 500;
+}
+
+/* Sanitised provider markup — structural tags only, so this just needs rhythm. */
+.rt-drawer-html {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.rt-drawer-html--inline {
+  display: inline;
+}
+
+.rt-drawer-html p {
+  margin: 0 0 8px;
+}
+
+.rt-drawer-html ul,
+.rt-drawer-html ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.rt-drawer-html a {
+  color: var(--rt-brand);
+}
