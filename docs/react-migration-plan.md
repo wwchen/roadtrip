@@ -807,6 +807,52 @@ the width. The markup, the CSS and the 128px default are all straight lifts, so 
 grid does the same; the full name is in the `title` attribute and the column is drag-resizable.
 Worth a look, but widening the default is a design change rather than part of the port.
 
+### Phase 4d follow-ups (branch `claude/availability-state-bugs-l2jp54`)
+
+Three defects a second review of the merged 4d found, all in `AvailabilityWeek`'s wiring
+rather than in the pure layers, and all three worth reading as shapes that recur:
+
+- **Availability state survived switching campgrounds.** The drawer does not unmount the
+  grid when a second pin is clicked — it re-renders with the new feature, in one commit,
+  because Query usually has it cached. So the new campground inherited the old one's
+  visible week, selected day, expanded site row, armed booking cell and filter text.
+  `weekStart` was the one that could not recover: it is seeded from the feature's
+  earliest date by `useState` once and never again, so a campground whose booking window
+  opens in October was shown a week its provider will not quote for. Fixed by splitting
+  the component in two — an outer gate that returns null without an id and renders the
+  inner view **keyed on the POI id**, so the whole reset is a remount. The split also
+  removes a latent rules-of-hooks violation: the old `if (poiId == null) return null`
+  sat *after* the id gate but *before* the hooks, so a feature arriving with an id after
+  one without would have changed the component's hook count. **Any component holding
+  state scoped to a prop that can change under it wants a key, not a reset effect** — a
+  reset effect has to be extended for every new piece of state, and this one had seven.
+- **Email-only providers got a dead "Set watch" button.** `supportsWatchAlerts` accepts
+  Slack *or* email (deliberately), so the day panel offered its toggle — but the toggle's
+  one-tap default is a Slack watch, and the handler `return`ed silently when the provider
+  had no Slack. The button now opens the watch editor anchored to itself, which is where
+  an email watch's address goes, and `WatchEditor` pre-ticks email when it is the only
+  channel the provider has (Slack stays preferred when both exist: it needs no further
+  input). A form whose single toggle starts off can only fail its own "select at least
+  one trigger" check.
+- **Watch loading and server failures were presented as signed-out sessions.**
+  `usePoiWatches` returned `canManage: false` for the in-flight first load *and* for every
+  error, and the grid read any `!canManage` as anonymous — so a slow request told a
+  signed-in user to sign in, and a 500 told them so permanently. `PoiWatches` now carries
+  a four-state `WatchAccess` (`loading` / `ready` / `unauthorized` / `error`), and
+  `DayDetail` takes a `WatchUnavailableReason` instead of a `signedOut` boolean:
+  "Checking your availability alerts…", "Couldn't check your availability alerts" with a
+  retry, "Sign in…", "not available for this campground". `usePoiWatches` also tightened
+  to a non-null `poiId` — the disabled-query branch was unreachable once the outer gate
+  existed, and it would have been a fifth thing for `access` to mean.
+
+**Verified:** typecheck clean, 1,104 tests green, build ok, colour check ok, CSS-block
+check ok — and driven in headless Chromium at 1280×900 and 420×900 against a stubbed
+email-only campground: the day panel renders "Set watch", the tap opens the editor at
+240px fully inside the viewport (top 354 / 484, no clipping) with Email pre-ticked and no
+Slack row, and saving posts `trigger_kinds: ["email_notify"]` with the address in
+`trigger_config`. The one anchor worth checking in a browser was the day-panel button:
+4d only ever anchored the popover to a matrix cell.
+
 ## Serving (DONE)
 
 Migrated pages are served from the React build; everything else still resolves from

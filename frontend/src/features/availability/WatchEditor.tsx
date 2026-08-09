@@ -247,12 +247,18 @@ function ToggleRow({ name, title, help, checked, disabled, onChange }: ToggleRow
 /**
  * The form's opening state.
  *
- * Editing an existing watch reflects it exactly. Creating one pre-ticks Slack *only
- * when the provider supports it* — a watch with no trigger is the one configuration
- * that cannot work, so the form should not open empty, but pre-ticking a channel the
- * provider cannot use would just fail on save. `triggerStateOf` defaults Slack on
- * unconditionally for the watches page, which has no per-provider capabilities to
- * consult; this narrows that default rather than restating the rest of the state.
+ * Editing an existing watch reflects it exactly. Creating one opens with a channel
+ * already ticked, because a watch with no trigger is the one configuration that
+ * cannot work — but only a channel the provider actually has, since pre-ticking one
+ * it cannot use would just fail on save. Slack is preferred when both are possible:
+ * it needs no further input, where email needs an address.
+ *
+ * Email carries that default on a provider with no Slack, which is how the day
+ * panel's "Set watch" reaches a working form there: it opens this editor, and an
+ * editor whose single toggle starts off can only fail its own "select at least one
+ * trigger" check. `triggerStateOf` defaults Slack on unconditionally for the watches
+ * page, which has no per-provider capabilities to consult; this narrows that default
+ * rather than restating the rest of the state.
  */
 function initialState(
   watch: Watch | Partial<Watch> | null,
@@ -260,7 +266,9 @@ function initialState(
 ): TriggerState {
   const state = triggerStateOf(watch);
   if (watch) return state;
-  return { ...state, slackNotify: capabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY) };
+  const slackNotify = capabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY);
+  const emailNotify = !slackNotify && capabilities.triggerKinds.has(TRIGGER_KIND_EMAIL_NOTIFY);
+  return { ...state, slackNotify, emailNotify };
 }
 
 /**
