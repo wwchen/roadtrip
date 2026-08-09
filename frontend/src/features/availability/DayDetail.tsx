@@ -4,10 +4,12 @@
 // openings — a day with availability gets the site list instead, which is a more
 // useful thing to look at than a sentence saying there is availability.
 //
-// The four-way message below is the whole point of the component, and each branch
-// exists because the other three would be a lie:
+// The message below is the whole point of the component, and each branch exists
+// because every other one would be a lie:
 //   - a watch toggle, when there is inventory to monitor and someone to notify;
 //   - "sign in", when the campground *could* alert this user but does not know them;
+//   - "checking", while we do not yet know which of those two it is;
+//   - "couldn't check", when asking failed — with the retry that implies;
 //   - "not available for this campground", when the provider cannot alert anyone;
 //   - "no online openings to watch", when the day itself has nothing to wait for.
 import { availabilityStatusMeta, normalizeAvailabilityStatus } from '@/lib/availability-status';
@@ -15,30 +17,48 @@ import { availableCount, campsiteCount } from '@/lib/day-fields';
 import type { FusedDay } from './fuse';
 import { longDayLabel } from './week-labels';
 
+/**
+ * Why no watch can be set right now, when none can.
+ *
+ * One value per cause, because the copy differs per cause and only two of them are
+ * actionable. Collapsing them onto a boolean is what made a slow request and a
+ * failed one both read as "sign in" — to users who were already signed in.
+ */
+export type WatchUnavailableReason =
+  /** This provider cannot notify anyone, by any channel. */
+  | 'unsupported'
+  /** The provider can, but we do not know who this visitor is. */
+  | 'signed-out'
+  /** The watch list is still in flight. */
+  | 'loading'
+  /** Asking for the watch list failed for some other reason. */
+  | 'failed';
+
 export interface DayDetailProps {
   day: FusedDay;
   /** Whether the user already has a watch on this day. */
   watching: boolean;
-  /** Whether a watch could be created: provider supports it AND the user is known. */
-  canWatch: boolean;
   /**
-   * The provider supports alerts but the user is anonymous.
+   * Why a watch cannot be set, or null when one can.
    *
-   * Distinct from `!canWatch` so the copy can say "sign in" rather than "this
-   * campground cannot do that" — only one of those is worth acting on.
+   * Null *is* "can watch" — the two cannot disagree, which is why there is no
+   * separate boolean beside it.
    */
-  signedOut: boolean;
+  unavailable: WatchUnavailableReason | null;
   busy: boolean;
-  onToggleWatch: () => void;
+  /** Takes the clicked button so the watch editor can anchor to it. */
+  onToggleWatch: (anchor: HTMLElement) => void;
+  /** Re-ask for the watch list, offered with the `failed` message. */
+  onRetryWatches: () => void;
 }
 
 export function DayDetail({
   day,
   watching,
-  canWatch,
-  signedOut,
+  unavailable,
   busy,
   onToggleWatch,
+  onRetryWatches,
 }: DayDetailProps) {
   return (
     <div className="cg-day-detail">
@@ -52,10 +72,10 @@ export function DayDetail({
         <DayAction
           day={day}
           watching={watching}
-          canWatch={canWatch}
-          signedOut={signedOut}
+          unavailable={unavailable}
           busy={busy}
           onToggleWatch={onToggleWatch}
+          onRetryWatches={onRetryWatches}
         />
       </div>
     </div>
@@ -73,13 +93,20 @@ function StatusLine({ day }: { day: FusedDay }) {
   );
 }
 
-function DayAction({ day, watching, canWatch, signedOut, busy, onToggleWatch }: DayDetailProps) {
+function DayAction({
+  day,
+  watching,
+  unavailable,
+  busy,
+  onToggleWatch,
+  onRetryWatches,
+}: DayDetailProps) {
   const status = normalizeAvailabilityStatus(day.status);
   // Closed and unknown days are excluded: there is no inventory state to monitor
   // on a closed day, and on an unknown one we would be promising to notice a
   // change we cannot currently see. An existing watch always keeps its control,
   // so a watch set on a day that has since gone closed can still be removed.
-  const canAlert = status !== 'closed' && status !== 'unknown' && (canWatch || watching);
+  const canAlert = status !== 'closed' && status !== 'unknown' && (unavailable === null || watching);
 
   if (canAlert) {
     return (
@@ -88,17 +115,33 @@ function DayAction({ day, watching, canWatch, signedOut, busy, onToggleWatch }: 
         className={`cg-btn ${watching ? 'cg-btn-secondary' : 'cg-btn-primary'} cg-day-alert`}
         data-state={watching ? 'watching' : 'set'}
         disabled={busy}
-        onClick={onToggleWatch}
+        onClick={(event) => onToggleWatch(event.currentTarget)}
       >
         {busy ? 'Working…' : watching ? 'Watching - tap to remove' : 'Set watch'}
       </button>
     );
   }
-  if (signedOut) {
-    return <span className="cg-day-detail-meta">Sign in to set availability alerts.</span>;
+
+  switch (unavailable) {
+    case 'signed-out':
+      return <span className="cg-day-detail-meta">Sign in to set availability alerts.</span>;
+    case 'loading':
+      return <span className="cg-day-detail-meta">Checking your availability alerts…</span>;
+    case 'failed':
+      return (
+        <span className="cg-day-detail-meta">
+          Couldn&apos;t check your availability alerts.{' '}
+          <button type="button" className="cg-retry cg-link-button" onClick={onRetryWatches}>
+            Retry
+          </button>
+        </span>
+      );
+    case 'unsupported':
+      return (
+        <span className="cg-day-detail-meta">Watches are not available for this campground.</span>
+      );
+    // Nothing is in the way: the day itself has nothing to wait for.
+    case null:
+      return <span className="cg-day-detail-meta">No online openings to watch for this day.</span>;
   }
-  if (!canWatch) {
-    return <span className="cg-day-detail-meta">Watches are not available for this campground.</span>;
-  }
-  return <span className="cg-day-detail-meta">No online openings to watch for this day.</span>;
 }

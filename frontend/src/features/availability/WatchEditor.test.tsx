@@ -85,11 +85,25 @@ describe('what the form offers', () => {
   });
 
   // ...but only when Slack is actually possible, or the default would fail on save.
-  test('a provider without Slack does not pre-tick it', () => {
+  // Email takes the default instead on a provider that has no Slack: this form is what
+  // the day panel's "Set watch" opens there, and a single toggle that starts off can
+  // only fail its own "select at least one trigger" check.
+  test('a provider without Slack pre-ticks its only channel instead', () => {
     open({ capabilities: caps(['email_notify']) });
 
-    expect(toggle('Email')).not.toBeChecked();
     expect(screen.queryByRole('checkbox', { name: /Slack/ })).toBeNull();
+    expect(toggle('Email')).toBeChecked();
+    // Ticked, but not yet valid — the address is the next thing to fill in.
+    expect(screen.getByRole('textbox')).toHaveValue('');
+  });
+
+  // Slack when both are possible: it needs no further input, where email needs an
+  // address, so it is the one default that can be saved as it opens.
+  test('prefers Slack when the provider has both', () => {
+    open({ capabilities: caps(['slack_notify', 'email_notify']) });
+
+    expect(toggle('Slack')).toBeChecked();
+    expect(toggle('Email')).not.toBeChecked();
   });
 
   test('reflects an existing watch exactly', () => {
@@ -155,12 +169,12 @@ describe('saving', () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
+  // Email opens pre-ticked on an email-only provider, so this is what saving straight
+  // away looks like there.
   test('refuses email with no address', async () => {
     const { onSave } = open({ capabilities: caps(['email_notify']) });
 
-    await act(async () => {
-      toggle('Email').click();
-    });
+    expect(toggle('Email')).toBeChecked();
     await act(async () => {
       save().click();
     });
