@@ -57,6 +57,10 @@ jobs:
               - '*.html'
               - 'web/**/*.js'
               - 'web/**/*.css'
+              # The React tree. This job now builds frontend/dist and navigates the
+              # migrated pages, so a frontend-only change must trigger it — without
+              # this, a broken bundle would ship with smoke skipped and green.
+              - 'frontend/**'
               - '.github/workflows/ci.yml'
             # Both frontend trees gate the same job for the duration of the
             # strangler migration: `web/**` is the vanilla tree, `frontend/**`
@@ -470,6 +474,17 @@ jobs:
 
       - name: Build backend fat-jar
         run: ./gradlew :backend:buildFatJar
+
+      # The migrated React pages are served ONLY from frontend/dist — Phases 1 and 2
+      # deleted their vanilla files, so `migratedPageFile` finds nothing and answers
+      # 404 without a build. This job had no build step, so /watches and /availability
+      # have been 404ing here since #568; nothing noticed because nothing navigated to
+      # them until the migrated-page smoke test was added.
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
 
       - name: Start backend
         run: |
