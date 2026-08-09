@@ -16,19 +16,35 @@ export const STATE_LINES_URL = '/data/us-states.geojson';
 export const STATE_LINES_SOURCE_ID = 'states';
 export const STATE_LINES_LAYER_ID = 'state-lines';
 
-export function installStateLines(map: MapLibreMap, states: FeatureCollection): void {
+/**
+ * Install the boundaries, beneath `below` when it is given.
+ *
+ * `below` is load-bearing rather than cosmetic. The vanilla `style.load` handler
+ * installed state lines FIRST and the pin overlays after, so pins drew on top.
+ * Here the boundaries arrive whenever their fetch resolves — usually after the
+ * overlays are already installed — so without an explicit anchor they would be
+ * appended last and draw over every pin.
+ */
+export function installStateLines(
+  map: MapLibreMap,
+  states: FeatureCollection,
+  below?: string,
+): void {
   if (map.getLayer(STATE_LINES_LAYER_ID)) map.removeLayer(STATE_LINES_LAYER_ID);
   if (map.getSource(STATE_LINES_SOURCE_ID)) map.removeSource(STATE_LINES_SOURCE_ID);
 
   map.addSource(STATE_LINES_SOURCE_ID, { type: 'geojson', data: states });
-  map.addLayer({
-    id: STATE_LINES_LAYER_ID,
-    type: 'line',
-    source: STATE_LINES_SOURCE_ID,
-    paint: {
-      'line-color': token('--rt-map-route-alt'),
-      'line-width': ['interpolate', ['linear'], ['zoom'], 3, 0.6, 6, 1.0, 10, 1.4],
-      'line-opacity': 0.55,
+  map.addLayer(
+    {
+      id: STATE_LINES_LAYER_ID,
+      type: 'line',
+      source: STATE_LINES_SOURCE_ID,
+      paint: {
+        'line-color': token('--rt-map-route-alt'),
+        'line-width': ['interpolate', ['linear'], ['zoom'], 3, 0.6, 6, 1.0, 10, 1.4],
+        'line-opacity': 0.55,
+      },
     },
-  });
+    below,
+  );
 }

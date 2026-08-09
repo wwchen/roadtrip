@@ -644,6 +644,15 @@ Consequences worth knowing:
   `--control-xl` (44px, the touch floor). In a 50-row agency legend that is 2,200px of scrolling, so
   `legend.css` sets `--control-xl: 26px` on the list container and restores 40px under the mobile
   breakpoint. The control, its box and its focus ring stay LDS's.
+- **A new bbox is a new query key, and a new key has no data yet.** Painting `query.data` straight
+  through therefore blanks every overlay for the length of each round trip, and leaves it blank on a
+  failed fetch — where `refreshBbox` logged and returned, keeping the pins already on screen.
+  `useViewportPois` holds the last successfully fetched features and repaints from them until the
+  next success. An empty *successful* response still clears the map, because that is a real answer.
+- **An overlay installed on its own schedule needs an explicit insertion anchor.** MapLibre appends,
+  and the vanilla paint order was implicit in one `style.load` handler installing everything in
+  sequence. The state boundaries arrive when their fetch resolves — usually after the pins — so they
+  pass `firstInstalledPinLayerId(map)` as `beforeId` or they draw over every dot.
 - **The install effect must be able to see the newest data, and effects run in declaration order.**
   `useMapOverlays` keeps the current buckets in a ref synced by an effect declared BEFORE the
   install effect. Without that, a basemap change installs empty layers and the paint effect fills

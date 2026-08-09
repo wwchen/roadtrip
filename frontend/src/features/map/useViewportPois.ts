@@ -33,7 +33,7 @@ import { queryKeys } from '@/queries/keys';
 import { agencyCounts } from '@/map/agencies';
 import { POINT_OVERLAYS, bucketPins, type OverlayKey } from '@/map/overlays';
 import type { PinCollection, PinFeature } from '@/map/pins';
-import { createViewportCache } from '@/map/viewport-cache';
+import { createViewportCache, type ViewportCache } from '@/map/viewport-cache';
 import {
   VIEWPORT_DEBOUNCE_MS,
   readMapViewport,
@@ -100,7 +100,12 @@ export function useViewportPois(): ViewportPois {
    * that crosses the zoom gate.
    */
   const campgroundsUnlocked = useRef(false);
-  const cache = useRef(createViewportCache<ViewportPoiCollection>()).current;
+
+  // Lazily, because `useRef(createViewportCache())` would build a fresh cache on
+  // every render and throw all but the first away.
+  const cacheRef = useRef<ViewportCache<ViewportPoiCollection>>();
+  cacheRef.current ??= createViewportCache<ViewportPoiCollection>();
+  const cache = cacheRef.current;
 
   useEffect(() => {
     if (!map || !styleReady) return;
@@ -160,6 +165,27 @@ export function useViewportPois(): ViewportPois {
   });
 
   /**
+   * The last pins a viewport fetch actually returned.
+   *
+   * **Repaint on success only, which is what the vanilla loop did.** `useQuery`
+   * has no data for a key it has not fetched yet, so without this every pan would
+   * blank the map for the duration of the round trip (a new bbox is a new key),
+   * and a failed fetch would blank it and leave it blank — where `refreshBbox`
+   * logged the error and returned, keeping the pins already on screen. An empty
+   * *successful* response still clears them, because that is a real answer.
+   */
+  const lastFetched = useRef<PinFeature[]>(NO_FEATURES);
+  useEffect(() => {
+    if (query.data) lastFetched.current = query.data.features as PinFeature[];
+  }, [query.data]);
+
+  // The only signal a failure has: nothing renders it, and the pins stay as they
+  // were. Same as the vanilla loop's console.error.
+  useEffect(() => {
+    if (query.error) console.error('viewport POI fetch failed:', query.error);
+  }, [query.error]);
+
+  /**
    * While a route is up, the corridor owns which POIs exist.
    *
    * `routePois` is whatever the trip planner last published (through
@@ -170,9 +196,9 @@ export function useViewportPois(): ViewportPois {
    */
   const features = routeActive
     ? (routePois as unknown as PinFeature[])
-    : (query.data?.features as PinFeature[] | undefined);
+    : ((query.data?.features as PinFeature[] | undefined) ?? lastFetched.current);
 
-  const buckets = useMemo(() => bucketPins(features ?? NO_FEATURES), [features]);
+  const buckets = useMemo(() => bucketPins(features), [features]);
   const counts = useMemo(() => countPins(buckets), [buckets]);
   const agencies = useMemo(() => agencyCounts(buckets.cg.features), [buckets]);
 
@@ -180,6 +206,10 @@ export function useViewportPois(): ViewportPois {
     buckets,
     counts,
     agencies,
-    campgroundsRequested: request?.campgroundsRequested ?? false,
+    // A route supplies campgrounds whatever the zoom, so the hint would otherwise
+    // tell the user to zoom in while the legend lists the corridor's agencies
+    // right below it. The vanilla equivalent was `__rtSetRoutePois` painting with
+    // `wantCG: true`, which removed the hint element.
+    campgroundsRequested: routeActive || (request?.campgroundsRequested ?? false),
   };
 }

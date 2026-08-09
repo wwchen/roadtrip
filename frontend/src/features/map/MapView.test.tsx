@@ -75,11 +75,28 @@ interface Recorded {
 const requests: Recorded[] = [];
 /** Queued POI responses; the last one repeats once they run out. */
 let poiResponses: unknown[] = [];
+/** Status per POI response, for the failure paths. */
+let poiStatuses: number[] = [];
+/**
+ * Held POI request numbers (1-based) and their release handles, so a test can
+ * assert what is on the map WHILE a fetch is still in flight.
+ */
+let hold: { request: number; release: () => void; held: Promise<void> } | null = null;
 
-const json = (body: unknown): Response =>
-  new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
+const json = (body: unknown, status = 200): Response =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 const poiRequests = () => requests.filter((r) => r.url === '/api/pois');
+
+/** Make the Nth POI request hang until the returned `release` is called. */
+function holdPoiRequest(n: number) {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  hold = { request: n, release, held };
+  return () => hold?.release();
+}
 
 function stubApi() {
   requests.length = 0;
@@ -92,8 +109,11 @@ function stubApi() {
       requests.push({ url, method, body });
 
       if (url === '/api/pois') {
-        const index = Math.min(poiRequests().length - 1, poiResponses.length - 1);
-        return json(poiResponses[index] ?? collection([]));
+        const nth = poiRequests().length;
+        if (hold?.request === nth) await hold.held;
+        const index = Math.min(nth - 1, poiResponses.length - 1);
+        const status = poiStatuses[nth - 1] ?? 200;
+        return json(poiResponses[index] ?? collection([]), status);
       }
       // State lines: shape does not matter here, only that the request resolves.
       return json({ type: 'FeatureCollection', features: [] });
@@ -156,13 +176,17 @@ const pinIdsIn = (id: string) => (sourceData(id)?.features ?? []).map((f) => f.i
 
 beforeEach(() => {
   poiResponses = [collection([])];
+  poiStatuses = [];
+  hold = null;
   stubApi();
   useMapStore.getState().reset();
   useTripStore.getState().reset();
 });
 
 afterEach(() => {
+  hold?.release();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 // ---------------------------------------------------------------------------
@@ -260,6 +284,52 @@ describe('the viewport request', () => {
 });
 
 describe('painting', () => {
+  // Repaint on success only. A new bbox is a new query key, so `useQuery` has no
+  // data for it yet — painting that would blank the map for the length of every
+  // round trip. The vanilla loop awaited the response and only then called
+  // paintPois.
+  test('the pins already on the map survive while the next viewport loads', async () => {
+    poiResponses = [collection([pin(1, 'tesla_supercharger')]), collection([pin(2, 'tesla_supercharger')])];
+    await renderMap();
+    await waitFor(() => expect(pinIdsIn('sc')).toEqual([1]));
+
+    const release = holdPoiRequest(2);
+    // Out of the cached bbox, so this really does go to the network.
+    await panTo([-100, 30, -90, 40], 8);
+    await waitFor(() => expect(poiRequests()).toHaveLength(2));
+
+    expect(pinIdsIn('sc')).toEqual([1]);
+
+    release();
+    await waitFor(() => expect(pinIdsIn('sc')).toEqual([2]));
+  });
+
+  // Vanilla logged the failure and returned, leaving the previous pins up. The
+  // failure mode to avoid is a map that silently empties itself.
+  test('a failed viewport fetch leaves the pins alone', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    poiResponses = [collection([pin(1, 'tesla_supercharger')]), { error: 'boom' }];
+    poiStatuses = [200, 500];
+    await renderMap();
+    await waitFor(() => expect(pinIdsIn('sc')).toEqual([1]));
+
+    await panTo([-100, 30, -90, 40], 8);
+    await waitFor(() => expect(logged).toHaveBeenCalled());
+
+    expect(pinIdsIn('sc')).toEqual([1]);
+  });
+
+  // An empty response is an answer, not a failure: the viewport really has no pins.
+  test('an empty response does clear the pins', async () => {
+    poiResponses = [collection([pin(1, 'tesla_supercharger')]), collection([])];
+    await renderMap();
+    await waitFor(() => expect(pinIdsIn('sc')).toEqual([1]));
+
+    await panTo([-100, 30, -90, 40], 8);
+
+    await waitFor(() => expect(pinIdsIn('sc')).toEqual([]));
+  });
+
   test('routes each category into its own source', async () => {
     poiResponses = [
       collection([
@@ -310,6 +380,16 @@ describe('painting', () => {
 
     await waitFor(() => expect(instance.getLayer('state-lines')).toBeDefined());
     expect(requests.some((r) => r.url === '/data/us-states.geojson')).toBe(true);
+  });
+
+  // They arrive after the overlays are installed, so without an explicit anchor a
+  // line layer would be appended last and drawn over every pin. Vanilla installed
+  // the boundaries first and the pins on top of them.
+  test('the boundaries go beneath the pins, not over them', async () => {
+    await renderMap();
+
+    await waitFor(() => expect(instance.getLayer('state-lines')).toBeDefined());
+    expect(instance.layer('state-lines')?.before).toBe('cg-points');
   });
 });
 
@@ -478,5 +558,26 @@ describe('route mode', () => {
 
     expect(poiRequests()).toHaveLength(1);
     expect(pinIdsIn('cg')).toEqual([9]);
+  });
+
+  // The corridor supplies campgrounds at any zoom, so telling the user to zoom in
+  // while listing the corridor's agencies right below it is a contradiction.
+  test('the zoom hint is gone while a route supplies campgrounds', async () => {
+    await renderMap();
+    expect(screen.getByText('(zoom in to load)')).toBeInTheDocument();
+
+    act(() => {
+      const trip = useTripStore.getState();
+      trip.setMode('directions');
+      trip.setStops([
+        { name: 'A', lng: -122, lat: 37 },
+        { name: 'B', lng: -118, lat: 34 },
+      ]);
+      trip.setRoute({ type: 'FeatureCollection', features: [] });
+      trip.setRoutePois([pin(9, 'campground', 'BC Parks') as unknown as Record<string, unknown>]);
+    });
+
+    await waitFor(() => expect(screen.queryByText('(zoom in to load)')).toBeNull());
+    expect(screen.getByLabelText(/BC Parks \(1\)/)).toBeInTheDocument();
   });
 });

@@ -27,6 +27,7 @@ import { queryKeys } from '@/queries/keys';
 import { hiddenAgencyFilter } from '@/map/agencies';
 import {
   POINT_OVERLAYS,
+  firstInstalledPinLayerId,
   hitLayerIdOf,
   installPointOverlay,
   installedHitLayerIds,
@@ -169,6 +170,9 @@ export function useStateLines(): void {
 
   useEffect(() => {
     if (!map || !styleReady || !data) return;
-    installStateLines(map, data);
+    // Under the pins. The boundaries land whenever their fetch resolves, which is
+    // normally after the overlays are installed, so the anchor is what keeps a
+    // line layer from drawing over every dot.
+    installStateLines(map, data, firstInstalledPinLayerId(map));
   }, [map, styleReady, data]);
 }

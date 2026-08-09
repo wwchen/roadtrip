@@ -314,3 +314,14 @@ export function setOverlayFilter(
 export function installedHitLayerIds(map: MapLibreMap): string[] {
   return POINT_OVERLAYS.map(hitLayerIdOf).filter((id) => map.getLayer(id));
 }
+
+/**
+ * The bottom-most installed pin layer, as an insertion anchor.
+ *
+ * For overlays that must sit UNDER the pins (state boundaries) but are installed
+ * on their own schedule. Undefined when no overlay is up yet, which is a valid
+ * "append" for MapLibre — the pins install above it afterwards anyway.
+ */
+export function firstInstalledPinLayerId(map: MapLibreMap): string | undefined {
+  return POINT_OVERLAYS.map(pinLayerIdOf).find((id) => map.getLayer(id));
+}
