@@ -54,9 +54,10 @@ services:
       retries: 10
 
   # Kotlin/Ktor backend. Serves the entire site:
-  #   - GET /                       → index.html (map, still vanilla)
-  #   - GET /watches, /availability → React build (frontend/dist)
-  #   - GET /web/*, /data/*         → static files
+  #   - GET /, /watches, /availability → React build (frontend/dist)
+  #   - GET /web/*                     → tokens.css + the sandbox chrome, all that
+  #                                      is left of the vanilla tree
+  #   - GET /data/*                    → the GeoJSON layers
   #   - GET /api/pois               → bbox query against postgres
   #   - GET /api/health             → liveness/readiness probe
   # Static files come from the repo bind-mount so deploys are git-pull +
@@ -99,17 +100,17 @@ services:
       # is an environment variable here, so `docker inspect` shows none of it.
       # Which secrets this service receives is declared in secrets/registry.yaml.
     volumes:
-      - ./index.html:/app/static/index.html:ro
       - ./web:/app/static/web:ro
       - ./data:/app/static/data
-      # The React build (Phase 1+). Bind-mounted rather than baked into the image,
-      # exactly like web/ above, so the served frontend tracks the checkout.
+      # The React build — the whole site as of Phase 5. Bind-mounted rather than
+      # baked into the image, exactly like web/ above, so the served frontend tracks
+      # the checkout.
       #
-      # Both migrated pages (/watches, /availability) are served ONLY from here —
-      # their vanilla files were deleted, so there is no per-file fallback left and
-      # an unbuilt tree 404s rather than degrading. `tilt up` and `make run` build
-      # it for you, `scripts/deploy.sh` fails if it cannot, and the deploy health
-      # check probes both paths.
+      # Every page (/, /watches, /availability) is served ONLY from here: the vanilla
+      # files were all deleted, so there is no per-file fallback left and an unbuilt
+      # tree 404s rather than degrading. `tilt up` and `make run` build it for you,
+      # `scripts/deploy.sh` fails if it cannot, and the deploy health check probes
+      # every path and greps `/` for the React shell.
       - ./frontend/dist:/app/static/frontend/dist:ro
     healthcheck:
       test: ["CMD", "java", "-Xmx32m", "-cp", "/app/app.jar", "ca.floo.roadtrip.HealthProbe"]

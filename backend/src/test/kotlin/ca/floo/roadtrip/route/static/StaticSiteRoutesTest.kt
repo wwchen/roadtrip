@@ -21,12 +21,20 @@ import kotlin.test.assertNotEquals
  * that works fine on the legacy path.
  */
 class StaticSiteRoutesTest {
-    private fun legacyTree(): File =
-        createTempDirectory("rt-static").toFile().apply {
-            File(this, "index.html").writeText(LEGACY_INDEX)
-            File(this, "watches.html").writeText(LEGACY_WATCHES)
-            File(this, "availability.html").writeText(LEGACY_AVAILABILITY)
-        }
+    /**
+     * A static root as a deploy has it: no page files of its own.
+     *
+     * Phase 5 deleted the vanilla app, so `watches.html` is the only legacy page any
+     * of these tests writes — and it writes it purely to prove the fallback still
+     * fires for a file that IS there. No page ships one in the repo today.
+     */
+    private fun legacyTree(): File = createTempDirectory("rt-static").toFile()
+
+    /** A static root with one legacy page left, for the fallback test. */
+    private fun legacyTreeWith(
+        page: String,
+        body: String,
+    ): File = legacyTree().apply { File(this, page).writeText(body) }
 
     /** A built frontend, as `vite build` leaves it. */
     private fun builtTree(): File =
@@ -47,9 +55,11 @@ class StaticSiteRoutesTest {
         block(client)
     }
 
+    // The legacy file is written here deliberately: with an empty static root the
+    // assertion would pass whether or not the build takes precedence.
     @Test
     fun `a migrated page is served from the build, not the legacy tree`() =
-        serving(legacyTree(), builtTree()) { client ->
+        serving(legacyTreeWith("watches.html", LEGACY_WATCHES), builtTree()) { client ->
             for (path in listOf("/watches", "/watches.html")) {
                 val response = client.get(path)
                 assertEquals(HttpStatusCode.OK, response.status, path)
@@ -83,8 +93,11 @@ class StaticSiteRoutesTest {
     // A sandbox bind-mounts the checkout but pulls a pre-built image, so an
     // unbuilt frontend/dist has to degrade rather than 404.
     @Test
-    fun `a migrated page falls back to the legacy file when the build is absent`() =
-        serving(legacyTree(), createTempDirectory("rt-frontend-empty").toFile()) { client ->
+    fun `a migrated page falls back to a legacy file when one is there`() =
+        serving(
+            legacyTreeWith("watches.html", LEGACY_WATCHES),
+            createTempDirectory("rt-frontend-empty").toFile(),
+        ) { client ->
             for (path in listOf("/watches", "/watches.html")) {
                 val response = client.get(path)
                 assertEquals(HttpStatusCode.OK, response.status, path)
@@ -92,16 +105,18 @@ class StaticSiteRoutesTest {
             }
         }
 
-    // watches' legacy file was deleted along with web/watches/, so an unbuilt
-    // frontend leaves nothing to serve. respondFile on a missing path throws,
-    // which would surface as a 500; a 404 is the honest answer.
+    // Every page is in this state as of Phase 5: no vanilla file anywhere, so an
+    // unbuilt frontend leaves nothing to serve. respondFile on a missing path throws,
+    // which would surface as a 500; a 404 is the honest answer. `/` is in the list
+    // because it is the page that most recently had a fallback and no longer does —
+    // its own legacy file went with the vanilla app.
     @Test
     fun `a migrated page with neither a build nor a legacy file is a 404`() =
         serving(
             createTempDirectory("rt-static-bare").toFile(),
             createTempDirectory("rt-frontend-bare").toFile(),
         ) { client ->
-            for (path in listOf("/watches", "/watches.html")) {
+            for (path in listOf("/watches", "/watches.html", "/", "/index.html")) {
                 assertEquals(HttpStatusCode.NotFound, client.get(path).status, path)
             }
         }
@@ -121,10 +136,15 @@ class StaticSiteRoutesTest {
     // The root page's explicit route has to outrank the catch-all that used to serve
     // it, which is why `default(index.html)` came off that mount: with both claiming
     // `/`, which one answered would rest on Ktor's resolution scoring rather than on
-    // anything stated in the file.
+    // anything stated in the file. Pinned through the fallback, because that is the
+    // path where the catch-all could still win — the explicit route answers from
+    // `staticDir` there, which is the catch-all's own root.
     @Test
-    fun `the root page falls back to the legacy map when the build is absent`() =
-        serving(legacyTree(), createTempDirectory("rt-frontend-empty").toFile()) { client ->
+    fun `the root page's explicit route outranks the catch-all`() =
+        serving(
+            legacyTreeWith(INDEX_FILE, LEGACY_INDEX),
+            createTempDirectory("rt-frontend-empty").toFile(),
+        ) { client ->
             for (path in listOf("/", "/index.html")) {
                 val response = client.get(path)
                 assertEquals(HttpStatusCode.OK, response.status, path)
@@ -158,9 +178,9 @@ class StaticSiteRoutesTest {
     }
 
     private companion object {
+        const val INDEX_FILE = "index.html"
         const val LEGACY_INDEX = "<html><body>legacy map</body></html>"
         const val LEGACY_WATCHES = "<html><body>legacy watches</body></html>"
-        const val LEGACY_AVAILABILITY = "<html><body>legacy availability</body></html>"
         const val BUILT_MAP = """<html><body><div id="root">react map</div></body></html>"""
         const val BUILT_WATCHES = """<html><body><div id="root">watches</div></body></html>"""
         const val BUILT_AVAILABILITY = """<html><body><div id="root">availability</div></body></html>"""

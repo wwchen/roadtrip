@@ -1,89 +1,69 @@
 # Frontend Component Architecture
 
-## Before you build: open the gallery
+The frontend is **React + TypeScript in `frontend/`**, built by Vite, with components
+from the vendored LDS design system behind `@ui`. Phase 5 of the migration deleted the
+vanilla `web/` app; three things survive there and are described under "What is left of
+`web/`" below.
 
-`web/design-system/gallery.html` is the living catalog. **Check it first** — if a
-primitive covers what you need, compose it rather than writing page-specific
-markup or CSS.
+Read [docs/react-migration-plan.md](react-migration-plan.md) alongside this. That doc is
+the long form — how each surface was ported, and a Gotchas section that is the accumulated
+cost of getting LDS, MapLibre and TanStack Query wrong at least once each. This doc is the
+short version: where a component goes and what it may import.
 
-```bash
-# .claude/launch.json → "static"
-python3 -m http.server 8766
-open http://localhost:8766/web/design-system/gallery.html
-```
+## Before you build: check `@ui`
 
-Every component there is mounted from its real module and styled by its real
-stylesheet, so the page always reflects what ships. Adding a primitive means
-adding its live section to the gallery — see `web/design-system/README.md`.
+`frontend/src/ui/index.ts` re-exports every LDS component the app uses, plus the few
+corrections and local additions (`SeededTextField`, `ConfirmButton`, `SecretField`). If a
+component covers what you need, compose it rather than writing page-specific markup or
+CSS. The vendored source is `frontend/vendor/lds*/` — read it when a prop's behaviour is
+unclear, because the types are occasionally narrower than the runtime.
 
-## Component pattern
-
-All frontend UI is vanilla JS — no framework. Components follow this contract:
-
-```js
-mountComponent(container, config) → { dispose(), update?(), ... }
-```
-
-- `container`: the DOM element the component renders into
-- `config`: static options, callbacks, initial state
-- Returns a controller with `dispose()` (cleanup listeners/children) and optional methods like `update()`, `getValue()`, etc.
-
-## File structure
-
-Every component has up to 3 files:
-
-| File | Responsibility |
-|------|---------------|
-| `component.js` | DOM mounting, event delegation, lifecycle (the controller) |
-| `component-template.js` | Pure functions returning HTML strings — no DOM access, no side effects |
-| `component.css` | Styles using `--rt-*` design tokens |
-
-**Rule: no HTML fragments in `.js` files.** Templates belong in `*-template.js` files. The component `.js` file imports them and handles DOM/events only.
+There is no living gallery any more; `web/design-system/gallery.html` went with the
+vanilla primitives it demonstrated. LDS's own source is the catalog.
 
 ## Two layers
 
-### Design-system primitives (`web/design-system/`)
+### Primitives (`@ui`)
 
-Generic, reusable across any page. Examples: Banner, ToggleSwitch, DoubleConfirmButton, DataTable, FormSection.
+Generic, reusable across any page: `Button`, `Banner`, `Table`, `Modal`, `Checkbox`,
+`TextField`, `Toggle`, `Tabs`, `SegmentedControl`, and the three local ones above. They
+know nothing about watches, POIs or trips — they take data and callbacks.
 
-These know nothing about watches, POIs, or domain logic. They accept data and callbacks.
+Never `Omit<…>` an LDS prop type: `HtmlProps` ends in an index signature, and `Omit` over
+one collapses every named prop to `any`. Widen by intersection instead.
 
-### Domain components (`web/<feature>/`, and `frontend/src/features/<feature>/`)
+### Domain components (`frontend/src/features/<feature>/`)
 
-Compose design-system primitives into feature-specific UI. Examples:
-`web/account/notifications-panel.js` (vanilla) and
-`frontend/src/features/watches/WatchTable.tsx` (React).
+Compose primitives into feature-specific UI — `features/watches/WatchTable.tsx`,
+`features/trip/TopBar.tsx`, `features/drawer/CampgroundDrawer.tsx`. They import
+primitives from `@ui`, clients from `@/api`, stores from `@/stores`, and **never from
+another feature directory**. A thing two features need moves to `@/lib`, `@/ui` or a
+store.
 
-Domain components import from `web/design-system/` and from `web/api/` but never from other feature directories.
-Their React equivalents import primitives from `@ui` and clients from `@/api`, with the same
-no-cross-feature rule.
+`frontend/src/map/` is the exception to "components all the way down": MapLibre owns its
+own DOM and layer list, so those modules are imperative functions that take a map and act
+on it. React effects in `features/map/` drive them. Do not try to express a layer or a
+marker as JSX.
 
-> **Migrating.** `web/` is being replaced by `frontend/` page by page — see
-> [docs/react-migration-plan.md](react-migration-plan.md). Two pages have moved:
->
-> - **Watches** → `frontend/src/features/watches/`; `web/watches/` is deleted.
-> - **Availability dashboard** → `frontend/src/features/availability-dashboard/`;
->   `web/availability.js` and `web/components/availability/` are deleted.
->
-> Note the near-miss in naming: `web/availability/` (singular, still present) is the
-> **map drawer's** availability UI and belongs to a later phase. It is not the dashboard
-> and must not be deleted with it.
->
-> The **map page is mid-move and still served from `web/`**. Its React half — the map shell,
-> the viewport POI loop, the pin overlays and the legend — lives in
-> `frontend/src/features/map/` (React) and `frontend/src/map/` (the imperative MapLibre
-> module React effects drive). Its vanilla half (`web/app.js`, `web/layers.js`,
-> `web/drawer/*`, `web/topbar*`, `web/availability/*`) is what users get until Phases
-> 4c-4e land. Work on the map goes in the React tree; touch the vanilla tree only for a
-> production bug.
->
-> Read the plan before adding to either tree, so new work lands in React rather than
-> extending the tree that is going away.
+## File structure
 
-### Forms on LDS: the controls are uncontrolled
+| Path | Holds |
+|---|---|
+| `frontend/src/features/<feature>/` | components, hooks and pure logic for one surface |
+| `frontend/src/map/` | imperative MapLibre modules (layers, markers, overlays) |
+| `frontend/src/api/` | one typed client per endpoint group |
+| `frontend/src/queries/` | query keys and cache invalidation |
+| `frontend/src/stores/` | Zustand stores for cross-surface UI state |
+| `frontend/src/lib/` | pure helpers shared across features |
+| `frontend/src/ui/` | the `@ui` barrel over vendored LDS |
 
-Non-negotiable, and the plan's Gotchas section has the full detail. The short version
-for anyone adding a React form:
+Pure logic belongs in its own module beside the component that uses it — the ordering
+rules, the copy, the state machine — because that is the half worth testing directly.
+`features/trip/stops.ts` next to `StopRow.tsx` is the pattern.
+
+## Forms on LDS: the controls are uncontrolled
+
+Non-negotiable, and the plan's Gotchas section has the full detail. The short version:
 
 - Seed a field **once** with `defaultValue`/`defaultChecked`, let the DOM own the live
   value, mirror `onChange` into state for the payload, and make a reseed a **remount**
@@ -96,173 +76,116 @@ for anyone adding a React form:
   value and submits another.
 - Disable **buttons**, not fields, while a save is in flight. `disabled` changes the
   template, which swaps the DOM and discards what was typed.
+- An LDS checkbox's real `<input>` is `opacity: 0` with no size and `pointer-events:
+  none`. Read state from it; click the **label**. Browser drivers time out on the input.
 
-### Page shells
+## Page shells
 
-A migrated page's `*.html` is a bare shell: `#root` plus its entry module. `tokens.css`
-and the sandbox banner/user switcher are injected into every entry by the
-`runtimeServedAssets` plugin (`frontend/vite/runtime-served-assets.ts`) — do not hand-write
-them, and do not omit them. They cannot be written in the HTML anyway: Vite treats a module
-script as a build input and fails to resolve one pointing outside its root.
+A page's `*.html` is a bare shell: `#root` plus its entry module. `tokens.css` and the
+sandbox banner/user switcher are injected into every entry by the `runtimeServedAssets`
+plugin (`frontend/vite/runtime-served-assets.ts`) — do not hand-write them, and do not
+omit them. They cannot be written in the HTML anyway: Vite treats a module script as a
+build input and fails to resolve one pointing outside its root.
+
+Three entries exist, mirroring the three URLs: `index.html` (map), `availability.html`,
+`watches.html`. Ktor serves each from `frontend/dist` and there is no vanilla fallback
+left, so an unbuilt tree 404s the whole site rather than degrading.
+
+## What is left of `web/`
+
+| Path | Why it survived |
+|---|---|
+| `web/design-system/tokens.css` | the colour source of truth, **served** rather than bundled so a token change needs no frontend rebuild |
+| `web/design-system/tokens.js` | the JS bridge (`@tokens`) for values `var()` cannot reach |
+| `web/sandbox-banner.*`, `web/sandbox-user-switcher.*` | environment-gated no-ops outside a sandbox; the switcher is the only way to pick a seed user on an auth-disabled sandbox |
+
+Everything else — the map app, the drawer, the topbar, the account panels, the vanilla
+design-system primitives and their gallery — was deleted once React owned every page.
+Nothing new should be added there; `tokens.css` is the only file in it a feature change
+normally touches.
 
 ## Color: tokens only
 
 `web/design-system/tokens.css` is the only place a raw **hex** may appear.
-`node scripts/check-color-tokens.mjs` fails the build on one anywhere else, and
-it runs in `make test` and in CI's web-test job.
+`node scripts/check-color-tokens.mjs` fails the build on one anywhere else, and it runs in
+`make test` and in CI's web-test job.
 
-Functional notation — `rgba()`, `hsl()` — is **ratcheted, not banned**. 51
-occurrences predate the rule, nearly all overlays at one-off alphas with no
-role to map onto; converting them would mean inventing a token per alpha or
-rounding onto the nearest one, which is a silent visual change. The checker
-holds a per-file high-water mark instead: new raw `rgba()` fails the build,
-existing debt can only shrink. Tokenize some, lower the file's number, delete
-the entry at zero. Compose new ones from a channel primitive:
+Functional notation — `rgba()`, `hsl()` — is **ratcheted, not banned**. The remaining
+occurrences are overlays at one-off alphas with no role to map onto; converting them would
+mean inventing a token per alpha or rounding onto the nearest one, which is a silent visual
+change. The checker holds a per-file high-water mark instead: new raw `rgba()` fails the
+build, existing debt can only shrink. Compose new ones from a channel primitive:
 `rgba(var(--rt-c-overlay-rgb), 0.06)`.
 
-It is two tiers. Primitives (`--rt-c-*`) hold the raw values and are named for
-what they *are* (`--rt-c-blue-500`). Semantic roles (`--rt-brand`,
-`--rt-surface`, `--rt-avail`) alias a primitive and are named for what they
-*do*. **Components use semantic roles, never primitives** — a primitive at a
-call site is the same drift as a hex, one indirection later.
+It is two tiers. Primitives (`--rt-c-*`) hold the raw values and are named for what they
+*are* (`--rt-c-blue-500`). Semantic roles (`--rt-brand`, `--rt-surface`, `--rt-avail`)
+alias a primitive and are named for what they *do*. **Components use semantic roles, never
+primitives** — a primitive at a call site is the same drift as a hex, one indirection
+later.
 
-Need a color no role covers? Add the role to `tokens.css` rather than reaching
-for a primitive or a literal.
+Need a color no role covers? Add the role to `tokens.css` rather than reaching for a
+primitive or a literal.
 
 ### From JS
 
-MapLibre paint properties, canvas charts and inline style strings can't resolve
-`var()`. They go through the bridge, which reads the live computed value off the
-document root — so `tokens.css` stays the single source and a theme reaches the
-map too:
+MapLibre paint properties, canvas charts and inline style strings can't resolve `var()`.
+They go through the bridge, which reads the live computed value off the document root — so
+`tokens.css` stays the single source and a theme reaches the map too:
 
-```js
-import { token, seriesColor, cgClassColors } from '/web/design-system/tokens.js';
+```ts
+import { token } from '@tokens';
 
 paint: { 'circle-color': token('--rt-layer-np') }
 ```
 
-`tokens.js` carries a fallback table for early boot and for jsdom tests, where
-no stylesheet has loaded. The checker verifies every fallback key names a token
-`tokens.css` actually defines, so a rename fails loudly instead of pinning a
-stale value at runtime.
+A DOM element you build by hand is **not** one of these cases: `var()` resolves in an
+inline style, so `map/trip-markers.ts` uses `background: var(--rt-brand)` and gets theme
+changes for free. Reach for `token()` only where the consumer parses colour itself.
 
-Two exceptions, both enforced by name in the checker rather than by convention:
-Slack's attachment API takes a literal hex over the wire, and `<meta
-name="theme-color">` is read by browser chrome before any stylesheet loads. Both
-sites name the token they mirror.
+`tokens.js` carries a fallback table for early boot and for jsdom tests, where no
+stylesheet has loaded — which is why a unit test asserts `token('--rt-…')` rather than a
+literal hex. The checker verifies every fallback key names a token `tokens.css` actually
+defines, so a rename fails loudly instead of pinning a stale value at runtime.
 
 ### Theming
 
-Because every role resolves through a primitive, a theme is an override block —
-redefine `--rt-c-*` under a scope like `[data-rt-theme="light"]`, plus only the
-roles that genuinely diverge. Custom properties inherit downward only, so the
-scope attribute belongs on `<html>`. Call `resetTokenCache()` from `tokens.js`
-after a runtime swap so the map and charts re-resolve.
+Because every role resolves through a primitive, a theme is an override block — redefine
+`--rt-c-*` under a scope like `[data-rt-theme="light"]`, plus only the roles that genuinely
+diverge. Custom properties inherit downward only, so the scope attribute belongs on
+`<html>`. Call `resetTokenCache()` from `tokens.js` after a runtime swap so the map and
+charts re-resolve.
 
 ## CSS rules
 
-- All custom properties come from `web/design-system/tokens.css` (`--rt-*` prefix)
-- Components inject their own stylesheet via `<link>` (not inline `<style>` tags)
-- Use the style injection pattern:
+- Custom properties come from `web/design-system/tokens.css` (`--rt-*` prefix).
+- A component imports its own stylesheet: `import './topbar.css'` beside the component
+  that owns it. Vite bundles and hashes it; there is no runtime `<link>` injection any
+  more.
+- Prefer LDS's own classes and layout primitives before writing new CSS, and prefer
+  extending an existing feature stylesheet before adding another one.
+- `node frontend/scripts/check-css-blocks.mjs` fails on an unbalanced brace — cheap
+  insurance for a file no test renders.
 
-```js
-function injectStyles() {
-  if (document.getElementById(STYLE_ID)) return;
-  const link = document.createElement('link');
-  link.id = STYLE_ID;
-  link.rel = 'stylesheet';
-  link.href = '/web/design-system/component-name.css';
-  document.head.appendChild(link);
-}
-```
+## Testing
 
-## Template rules
+- **Vitest + jsdom + Testing Library** for everything in `frontend/src`. Assert on what a
+  user sees: roles, labels, text. `data-testid` is a last resort.
+- Pure modules get their own suites; components get behaviour tests through their real
+  hooks against a stubbed `fetch`.
+- **jsdom cannot see layout, and cannot see a page that fails to mount.** Three purely
+  visual bugs reached review during the migration with every gate green. What catches
+  those is `backend/src/smokeTest/.../SmokeTest.kt` — Playwright against a live stack via
+  `make qa` — and, for anything jsdom structurally cannot answer, driving the built page
+  in headless Chromium by hand.
+- The map's fake (`frontend/src/test/fake-map.ts`) is a recorder, not a simulator: it
+  answers what the app *asked* the map to do. Add to it rather than reaching for a real
+  MapLibre instance, which needs WebGL.
 
-Template functions are pure — they take data, return an HTML string:
+## Reference
 
-```js
-import { escapeHtml } from '../core.js';
-
-export function myTemplate({ title, items }) {
-  return `
-    <div class="rt-my-component">
-      <h2>${escapeHtml(title)}</h2>
-      ${items.map(item => `<span>${escapeHtml(item)}</span>`).join('')}
-    </div>
-  `;
-}
-```
-
-- Always use `escapeHtml()` for user-provided text
-- Templates never access the DOM or hold state
-- Templates never import anything except `escapeHtml` from `core.js`
-
-## Composing components
-
-Parent components mount children into DOM elements created during their own render:
-
-```js
-function render() {
-  container.innerHTML = parentTemplate({ ... });
-  const childHost = container.querySelector('[data-child-host]');
-  children.push(mountChildComponent(childHost, { ... }));
-}
-```
-
-Always dispose children before re-rendering:
-
-```js
-function render() {
-  children.forEach(c => c.dispose());
-  children.length = 0;
-  // ... render and mount new children
-}
-```
-
-## Event delegation
-
-Attach listeners on the container, not on individual elements. This survives re-renders without re-binding:
-
-```js
-function onClick(e) {
-  const btn = e.target.closest('[data-action]');
-  if (!btn) return;
-  // handle action
-}
-
-container.addEventListener('click', onClick);
-```
-
-## Page controllers
-
-Each page has a `*-page.js` entry point that:
-1. Mounts top-level components into DOM host elements (defined in the HTML shell)
-2. Handles URL params for deep-linking
-3. Wires callbacks between components (form → table refresh, etc.)
-4. Calls API functions from `web/api/`
-
-Page controllers are self-initializing (`init()` runs at module load) and have no exports.
-
-## Existing design-system components
-
-| Component | Import | Purpose |
-|-----------|--------|---------|
-| Banner | `web/design-system/banner.js` | Dismissible success/error/info message |
-| ToggleSwitch | `web/design-system/toggle-switch.js` | On/off toggle with label + help text |
-| DoubleConfirmButton | `web/design-system/double-confirm-button.js` | Two-click destructive action (≥44px; `size: 'compact'` for dense rows) |
-| DataTable | `web/design-system/data-table.js` | Table from column defs + row data |
-| FormSection | `web/design-system/form-section.js` | Label + input + help text group |
-| Modal | `web/design-system/modal.js` | Blocking overlay; bottom-sheet on ≤560px |
-| Tabs | `web/design-system/tabs.js` | Section nav; left rail, segmented control on ≤560px |
-| SecretField | `web/design-system/secret-field.js` | Write-only credential input (masked → replace) |
-
-Shared styles that are not components:
-
-| Sheet | Purpose |
-|-------|---------|
-| `web/design-system/tokens.css` | All `--rt-*` design tokens — the source of truth |
-| `web/design-system/buttons.css` | `.rt-btn` + `--primary` / `--secondary` / `--tertiary` variants |
-
-See `web/design-system/README.md` for each component's config contract and
-anatomy.
+- [docs/react-migration-plan.md](react-migration-plan.md) — the migration's full history,
+  every locked decision, and the Gotchas list. Read the Gotchas before your first LDS
+  form, MapLibre effect or query key.
+- [docs/backend-architecture.md](backend-architecture.md) — the API these clients call.
+- [docs/reservation-providers.md](reservation-providers.md) — required reading before
+  anything touching availability, watches or a provider integration.

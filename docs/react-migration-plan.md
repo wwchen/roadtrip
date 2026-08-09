@@ -37,6 +37,11 @@
 - **Phase 4d is merged** (#576), and so are the three P2 defects a later review of it found
   (#577) — read "Phase 4d follow-ups" before touching `AvailabilityWeek`, `DayDetail` or
   `useWatches`, because that fix reshaped all three.
+- **Phase 5 is COMPLETE**: the strangled `web/` app and the root `index.html` are
+  deleted (116 files), the parity suite and `@legacy/core` are retired, and
+  `docs/frontend-components.md` is rewritten for the React tree. What survives of `web/`
+  is `tokens.css`, its JS bridge, and the sandbox chrome — all three served at runtime.
+  **The migration is done**; read "Phase 5 — COMPLETE" for what stayed and why.
 - **Phase 4e is COMPLETE**, across `claude/react-migration-4e-topbar` (PR #578) and
   `claude/react-migration-4e-results` stacked on it: the pure layers, the route/corridor
   overlay and markers, the fetch hooks, the panel (search, directions, drag-reorder), the
@@ -1109,27 +1114,78 @@ tiles.
 
 ### What remains
 
-1. **Phase 5 — delete the strangled vanilla.** `web/topbar*`, `web/account/*`,
-   `web/search.js`, `web/share-links.js`, `web/drawer/*`, `web/layers.js`, `web/app.js`,
-   `web/core.js` and the root `index.html` are all unreachable now that `/` is React. Two
-   things must be kept or replaced first, because a React page loads them at runtime:
-   `web/design-system/tokens.css` (the colour source of truth, and what
-   `scripts/check-color-tokens.mjs` checks against) and the two `web/sandbox-*` modules.
-   `@legacy/core` and `@tokens` in `vite.config.ts` are the aliases that go with them, and
-   `lib/poi.test.ts`'s parity suite imports the legacy flattener — retire that suite in the
-   same change, or the deletion breaks the build.
-2. **The `window.__rt*` shim can go too**, once `SmokeTest.kt` no longer reads it. It is a
+1. **The `window.__rt*` shim can go**, once `SmokeTest.kt` no longer reads it. It is a
    transition seam, and the transition is over; the smoke could drive the same steps
    through the UI, at the cost of a slower and flakier suite. Worth a decision rather than
-   a default.
+   a default — the shim is 60 lines and buys the suite deterministic access to trip state.
+2. **`@tokens` is the last legacy import**, and it survives on purpose: `tokens.css` is
+   served rather than bundled so a colour change needs no frontend build. Retiring it means
+   reconciling `--rt-*` with LDS's `--c-*`, which is a design decision, not a port.
 3. **One design question, not a regression.** On desktop an open drawer covers the topbar
    (drawer `z-index: 999`, topbar 5). The vanilla did exactly the same above 768px, so it
    is a lift — but it matters more now that the topbar is the only search surface.
 
+## Phase 5 — COMPLETE (branch `claude/react-migration-5-delete-vanilla`)
+
+**116 files deleted**, plus the root `index.html`: the whole strangled app (`app.js`,
+`layers.js`, `core.js`, `basemap.js`, `search.js`, `share-links.js`, `topbar*`, `drawer/`,
+`account/`, `availability/`, `api/`, `utils/`, `components/`, `campground-card.js`,
+`upstream-html.js`), its seven `node:test` suites, and the vanilla design-system
+primitives with their gallery and docs — all of it unreachable once `/` became React.
+
+**Three things stayed, and they are not leftovers.** `web/design-system/tokens.css` is the
+colour source of truth and is **served rather than bundled**, so a token change takes
+effect without a frontend build; `tokens.js` is the `@tokens` bridge for the values
+`var()` cannot reach (MapLibre paint, canvas charts); and the two `sandbox-*` pairs are
+what let a reviewer pick a seed user on an auth-disabled sandbox. Every React page loads
+all three at runtime — `vite/runtime-served-assets.ts` injects them, and
+`runtime-served-assets.test.ts` pins the tag set so a later change cannot drop one
+silently.
+
+**What the deletion touched beyond `web/`:**
+
+- **`lib/poi.test.ts`'s parity suite is retired** with the `@legacy/core` alias and
+  `src/types/legacy.d.ts`. It ran the port and `web/core.js`'s original over eleven
+  fixtures and compared output — the strongest check available while both existed, and
+  meaningless with one gone. The fixtures stay: they are exhaustive *because* they were
+  built for that comparison, and the behaviour tests over them are now the contract.
+- **`/`'s legacy fallback is gone**, because the file it fell back to is. All three pages
+  are served from the build or 404 — `migratedPageFile` keeps its "built, else legacy, else
+  nothing" shape, but the middle branch can no longer fire. `StaticSiteRoutesTest` says so:
+  the fallback test now writes the legacy file it needs, so it proves precedence rather
+  than passing over an empty directory.
+- **The colour checker lost its root shell and four budget entries.** `ROOTS` stats every
+  entry, so a deleted shell must leave the list too — that is twice this list has shrunk
+  for that reason. The legacy `rgba()` high-water mark went from **51 to 7** by deleting
+  files rather than tokenizing anything; the remaining 7 are the sandbox switcher's.
+- **The `web/**` CI filters stay**, narrowed in intent rather than in path: three asset
+  pairs that every page loads at runtime can still break every page, so they still gate
+  `smoke` and `web-tests`. The `index.html` filter entries went with the file.
+- **`docs/frontend-components.md` was rewritten**, not patched. `AGENTS.md` makes it
+  mandatory reading before a frontend change, and it described the vanilla mount contract,
+  the `*-template.js` rule, event delegation and a table of eight deleted primitives. A
+  mandatory doc describing a deleted tree is worse than no doc.
+- Compose no longer bind-mounts `./index.html`; `deploy.sh`'s "npm not found" error says
+  the whole site is unavailable rather than one page; `CachePolicyTest`'s example path is a
+  file that exists.
+
+**The `#root` probe in the deploy health check outlived its original reason.** It was added
+in 4e because `/` could silently degrade to the vanilla map with a 200; with `index.html`
+deleted, an unbuilt frontend 404s and the plain probe catches it. It stays as the cheaper
+half of the same guarantee — it asserts the page served at `/` IS the React shell, so a
+stray file at the static root cannot pass for a working deploy.
+
+**Verified:** frontend typecheck, **1,382 tests** (down from 1,394: the parity suite's
+twelve went with it), build,
+colour check (7 legacy occurrences, down from 51), CSS-block check, the 24 surviving
+`web/` node tests (down from 153), `ktlintCheck` and `detekt`. The Kotlin unit suites
+remain unrunnable here — `:backend:generateJooq` needs Docker — so `StaticSiteRoutesTest`'s
+rewritten cases are CI's to confirm.
+
 ## Serving (DONE)
 
-Migrated pages are served from the React build; everything else still resolves from
-`web/`. The pieces:
+Every page is served from the React build; `web/` and `data/` remain mounted for the
+assets a React page loads at runtime. The pieces:
 
 - **`StaticSiteRoutes.kt`** takes a `frontendDir` alongside `staticDir` and registers
   `/assets/*` (the hashed bundles — the flat catch-all deliberately refuses
