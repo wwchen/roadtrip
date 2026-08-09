@@ -76,7 +76,6 @@ export function useTripPlanner(): TripPlanner {
   const setMode = useTripStore((s) => s.setMode);
   const setCorridorMilesInStore = useTripStore((s) => s.setCorridorMiles);
   const reset = useTripStore((s) => s.reset);
-  const userLocation = useMapStore((s) => s.userLocation);
   const setUserLocation = useMapStore((s) => s.setUserLocation);
   // The camera is an imperative handle rather than state, which is why the map
   // instance is not in the store — the same arrangement 4c's deep-link restore uses.
@@ -109,9 +108,11 @@ export function useTripPlanner(): TripPlanner {
    * `silent` is the phone path from the drawer, where a denied permission is not an
    * error to report: the destination is set and the user can type an origin.
    *
-   * Every read of the stop list inside the callbacks goes through
-   * `useTripStore.getState()` rather than the `stops` closed over here, because the
-   * browser can take seconds to answer and the list will have moved on.
+   * Every read inside the callbacks goes through `getState()` rather than the values
+   * closed over here — the stop list because the browser can take seconds to answer
+   * and the list will have moved on, and the known location because
+   * `__rtUseCurrentLocationForTripStop` seeds it and then calls this in the same
+   * tick, before any render could refresh a closure.
    */
   const fillWithCurrentLocation = useCallback(
     (index: number, { silent = false }: { silent?: boolean } = {}) => {
@@ -129,8 +130,9 @@ export function useTripPlanner(): TripPlanner {
         setLocating(false);
       };
 
-      if (userLocation) {
-        fill(userLocation.lng, userLocation.lat);
+      const known = useMapStore.getState().userLocation;
+      if (known) {
+        fill(known.lng, known.lat);
         return;
       }
       if (!navigator.geolocation) {
@@ -171,7 +173,7 @@ export function useTripPlanner(): TripPlanner {
         },
       );
     },
-    [setStops, setUserLocation, userLocation],
+    [setStops, setUserLocation],
   );
 
   const pickResult = useCallback(

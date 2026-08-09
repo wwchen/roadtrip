@@ -35,9 +35,27 @@ describe('installation', () => {
 
   // Both are defined by topbar.js and read by nothing in the repo, so shimming
   // them would invent an API rather than preserve one.
-  test('does not publish the two defined-only globals', () => {
+  // A test seam, not dead API: SmokeTest.kt reads it (~line 662) to assert that
+  // copying a shared route produces a link with a `route=` parameter.
+  test('publishes the route share URL from the store', () => {
+    useTripStore.setState({
+      stops: [
+        { name: 'Seattle', lng: -122.33, lat: 47.6 },
+        { name: 'Bowman Bay', lng: -122.65, lat: 48.41 },
+      ],
+    });
+
+    expect(window.__rtRouteShareUrl?.()).toContain('route=');
+  });
+
+  test('answers an empty share URL for a trip that cannot be shared', () => {
+    expect(window.__rtRouteShareUrl?.()).toBe('');
+  });
+
+  // The other seam needs the planner (it fills a row, with geolocation), so the
+  // topbar publishes it — see `usePublishedLocationFiller` in TopBar.tsx.
+  test('leaves the current-location filler to the topbar', () => {
     expect(window).not.toHaveProperty('__rtUseCurrentLocationForTripStop');
-    expect(window).not.toHaveProperty('__rtRouteShareUrl');
   });
 
   test('dispose removes the globals it added', () => {

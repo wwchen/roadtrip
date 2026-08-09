@@ -11,7 +11,7 @@
 // `innerHTML`. Its three contents (a leg breakdown, a routing error, a geolocation
 // failure) are three components now, which is what makes the "computing route…"
 // state distinguishable from the "no route" state without reading a CSS class.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CorridorSlider } from './CorridorSlider';
 import { RouteStatus } from './RouteStatus';
 import { SearchDropdown } from './SearchDropdown';
@@ -21,7 +21,9 @@ import { allStopsFilled, isLocated } from './stops';
 import { useOnRoutePois } from './useOnRoutePois';
 import { useRoute } from './useRoute';
 import { useSearchResults } from './useSearchResults';
+import { useSharedTrip } from './useSharedTrip';
 import { useTripPlanner } from './useTripPlanner';
+import { useMapStore } from '@/stores/mapStore';
 import { MAX_STOPS } from '@/stores/tripStore';
 import './topbar.css';
 
@@ -32,6 +34,8 @@ export function TopBar() {
   const planner = useTripPlanner();
   const route = useRoute();
   const corridor = useOnRoutePois();
+  const shared = useSharedTrip();
+  usePublishedLocationFiller(planner.useCurrentLocation);
 
   /**
    * The row being typed in, and what is in it.
@@ -128,7 +132,11 @@ export function TopBar() {
         })}
       </div>
 
-      <div className="tb-actions">
+      {/* The ids on this row and the controls below it are the smoke suite's
+          selectors (`#tb-actions`, `#tb-directions`, `#tb-route-summary`,
+          `#tb-dropdown`, `#tb-corridor*`). Kept so `SmokeTest.kt` addresses one
+          DOM contract while both trees exist. */}
+      <div className="tb-actions" id="tb-actions">
         {isDirections && planner.stops.length < MAX_STOPS ? (
           <button type="button" className="tb-add" onClick={planner.addStop}>
             + Add stop
@@ -136,7 +144,7 @@ export function TopBar() {
         ) : null}
 
         {route.summary ? (
-          <span className="tb-route-summary" aria-live="polite">
+          <span className="tb-route-summary" id="tb-route-summary" aria-live="polite">
             <strong>{route.summary.distance}</strong>
             <span className="tb-stat-sep">·</span>
             {route.summary.duration}
@@ -151,6 +159,7 @@ export function TopBar() {
           <button
             type="button"
             className="tb-icon-btn primary"
+            id="tb-directions"
             title="Get directions"
             aria-label="Get directions"
             onClick={planner.startDirections}
@@ -181,11 +190,13 @@ export function TopBar() {
         onPick={pick}
       />
 
+      {/* Precedence, stated once: a routing failure is about the trip the user just
+          asked for, so it outranks a geolocation failure about one row, which in
+          turn outranks a bad link they cannot do anything about. */}
       <RouteStatus
         computing={route.isFetching}
-        error={route.error}
+        error={route.error ?? planner.locationError ?? shared.error}
         legs={route.legs}
-        locationError={planner.locationError}
       />
 
       {/* The corridor controls belong to a live route: without one there is nothing
@@ -202,6 +213,33 @@ export function TopBar() {
       ) : null}
     </div>
   );
+}
+
+/**
+ * Publish `window.__rtUseCurrentLocationForTripStop`.
+ *
+ * A test seam, not dead API: `SmokeTest.kt` (~line 803) calls it with a seeded
+ * location to drive the "from my location" path without a real permission prompt,
+ * then asserts row 0 reads "Current location". The Phase 0 audit recorded this
+ * global as read by nothing and left it out of the transition shim; that was wrong,
+ * and a React `/` without it fails that smoke step against a page that works.
+ *
+ * It lives here rather than in the shim because filling a row needs the planner,
+ * and the shim has no hooks. Removed on unmount, so a remounted topbar cannot leave
+ * a stale closure behind.
+ */
+function usePublishedLocationFiller(useCurrentLocation: (index: number) => void): void {
+  useEffect(() => {
+    window.__rtUseCurrentLocationForTripStop = (index, location) => {
+      if (location && Number.isFinite(location.lng) && Number.isFinite(location.lat)) {
+        useMapStore.getState().setUserLocation({ lng: location.lng, lat: location.lat });
+      }
+      useCurrentLocation(index);
+    };
+    return () => {
+      delete window.__rtUseCurrentLocationForTripStop;
+    };
+  }, [useCurrentLocation]);
 }
 
 function DirectionsIcon() {

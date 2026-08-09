@@ -17,7 +17,7 @@ export interface CorridorSliderProps {
 
 export function CorridorSlider({ miles, onChange }: CorridorSliderProps) {
   return (
-    <div className="tb-corridor visible">
+    <div className="tb-corridor visible" id="tb-corridor">
       <label htmlFor="tb-corridor-range">Corridor</label>
       <input
         type="range"
@@ -32,7 +32,9 @@ export function CorridorSlider({ miles, onChange }: CorridorSliderProps) {
         // it is debounced in `useOnRoutePois`.
         onChange={(event) => onChange(Number(event.target.value))}
       />
-      <span className="tb-corridor-value">{miles} mi</span>
+      <span className="tb-corridor-value" id="tb-corridor-value">
+        {miles} mi
+      </span>
     </div>
   );
 }

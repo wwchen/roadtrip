@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
+import { encodeRouteState } from '@/lib/share-links';
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore } from '@/stores/tripStore';
 import { FakeMap } from '@/test/fake-map';
@@ -417,5 +418,112 @@ describe('the status line', () => {
     await waitFor(() =>
       expect(within(status).getByText(/Seattle → Bowman: 120 km · 1h 30m/)).toBeInTheDocument(),
     );
+  });
+});
+
+describe('a shared link', () => {
+  const at = (url: string) => window.history.replaceState(null, '', url);
+
+  afterEach(() => at('/'));
+
+  test('restores the trip from ?route= and fetches it', async () => {
+    const encoded = encodeRouteState(
+      [
+        { name: 'Seattle', lng: -122.33, lat: 47.6, kind: 'PLACE' },
+        { name: 'Bowman Bay', lng: -122.65, lat: 48.41, kind: 'CG' },
+      ],
+      25,
+    );
+    at(`/?route=${encoded}`);
+    mount();
+
+    await waitFor(() =>
+      expect(screen.getByRole('textbox', { name: 'Origin' })).toHaveValue('Seattle'),
+    );
+    expect(screen.getByRole('textbox', { name: 'Destination' })).toHaveValue('Bowman Bay');
+    // The radius rides along, and the route request follows from the stops alone.
+    await waitFor(() => expect(screen.getByText('25 mi')).toBeInTheDocument());
+    await waitFor(() => expect(urls.some((u) => u.startsWith('/api/route'))).toBe(true));
+  });
+
+  test('says so when the link cannot be read', async () => {
+    at('/?route=not-a-real-payload');
+    mount();
+
+    await waitFor(() =>
+      expect(screen.getByText('Shared route link is invalid.')).toBeInTheDocument(),
+    );
+  });
+
+  // The writer preserves other parameters, so a drawer opened over a trip stays
+  // shareable — the vanilla's whole-URL replace dropped `?poi=`.
+  test('writes the trip into the URL without dropping an open drawer', async () => {
+    at('/?poi=99');
+    useTripStore.setState({
+      mode: 'directions',
+      stops: [
+        { name: 'Seattle', lng: -122.33, lat: 47.6 },
+        { name: 'Bowman Bay', lng: -122.65, lat: 48.41 },
+      ],
+    });
+    mount();
+
+    await waitFor(() => expect(window.location.search).toContain('route='));
+    expect(window.location.search).toContain('poi=99');
+  });
+
+  test('drops the parameter when the trip is cleared', async () => {
+    useTripStore.setState({
+      mode: 'directions',
+      stops: [
+        { name: 'Seattle', lng: -122.33, lat: 47.6 },
+        { name: 'Bowman Bay', lng: -122.65, lat: 48.41 },
+      ],
+    });
+    mount();
+    await waitFor(() => expect(window.location.search).toContain('route='));
+
+    await act(async () => {
+      screen.getByLabelText('Clear trip').click();
+    });
+
+    expect(window.location.search).not.toContain('route=');
+  });
+});
+
+describe('the smoke suite"s seams', () => {
+  // SmokeTest.kt (~line 803) seeds a location and asserts row 0 reads "Current
+  // location" straight afterwards — so the seed has to be visible to the fill in the
+  // same tick, which is why the fill reads the store rather than a closure.
+  test('__rtUseCurrentLocationForTripStop fills a row from a seeded location', async () => {
+    mount();
+
+    await act(async () => {
+      window.__rtUseCurrentLocationForTripStop?.(0, { lng: -122.33, lat: 47.61 });
+    });
+
+    expect(searchBox()).toHaveValue('Current location');
+    expect(useMapStore.getState().userLocation).toEqual({ lng: -122.33, lat: 47.61 });
+  });
+
+  test('and is removed when the topbar unmounts', () => {
+    const view = mount();
+    expect(window.__rtUseCurrentLocationForTripStop).toBeTypeOf('function');
+
+    view.unmount();
+
+    expect(window.__rtUseCurrentLocationForTripStop).toBeUndefined();
+  });
+
+  // The rows keep `data-i`, which is how the smoke suite addresses them.
+  test('rows carry the index the smoke selectors use', () => {
+    useTripStore.setState({
+      mode: 'directions',
+      stops: [{ name: 'Seattle', lng: -122.33, lat: 47.6 }, null],
+    });
+    mount();
+
+    expect(document.querySelector('.tb-row[data-i="0"] .tb-input')).toHaveValue('Seattle');
+    expect(document.querySelector('#tb-corridor-range')).toBeNull();
   });
 });

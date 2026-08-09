@@ -43,7 +43,13 @@ export function SearchDropdown({ results, activeIndex, onPick }: SearchDropdownP
   if (results.length === 0) return null;
 
   return (
-    <div className="tb-dropdown open" ref={listRef} role="listbox" aria-label="Search results">
+    <div
+      className="tb-dropdown open"
+      id="tb-dropdown"
+      ref={listRef}
+      role="listbox"
+      aria-label="Search results"
+    >
       {results.map((result, index) => (
         <div key={`${result.source}-${result.poiId ?? result.name}-${index}`}>
           {headers[index] ? <div className="tb-section">{headers[index]}</div> : null}

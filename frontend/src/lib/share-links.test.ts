@@ -11,6 +11,7 @@ import {
   poiShareUrl,
   replaceVisibleUrl,
   routeShareUrl,
+  setVisibleRouteParam,
 } from './share-links';
 
 const STOPS = [
@@ -273,5 +274,36 @@ describe('copyShareUrl', () => {
 
     await expect(copyShareUrl('')).resolves.toBe(false);
     expect(writeText).not.toHaveBeenCalled();
+  });
+});
+
+describe('setVisibleRouteParam', () => {
+  test('writes the trip without disturbing other parameters', () => {
+    at('/?poi=5&basemap=carto-dark');
+
+    setVisibleRouteParam(STOPS, 25);
+
+    const url = new URL(window.location.href);
+    expect(url.searchParams.get('poi')).toBe('5');
+    expect(url.searchParams.get('basemap')).toBe('carto-dark');
+    expect(decodeRouteState(url.searchParams.get('route'))?.corridorMiles).toBe(25);
+  });
+
+  // The vanilla wrote `replaceVisibleUrl(routeShareUrl(...))`, which builds from
+  // `pathname` — so editing a trip with a drawer open dropped the shared POI.
+  test('keeps an open drawer shareable', () => {
+    at('/?poi=5');
+
+    setVisibleRouteParam(STOPS, 5);
+
+    expect(window.location.search).toContain('poi=5');
+  });
+
+  test('removes the parameter for a trip that cannot be shared', () => {
+    at('/?poi=5&route=stale');
+
+    setVisibleRouteParam([STOPS[0]!], 5);
+
+    expect(window.location.search).toBe('?poi=5');
   });
 });

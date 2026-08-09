@@ -7,7 +7,7 @@
 // keep publishing the same globals, backed by the stores instead of the `trip`
 // singleton. That is what this installs.
 //
-// It is a strict re-implementation of the seven globals that have a consumer:
+// It is a strict re-implementation of the globals that have a consumer:
 //
 //   defined by topbar.js, read by drawer/* and app.js
 //     __rtTripMode()          -> tripStore.mode
@@ -18,14 +18,21 @@
 //   defined by app.js, read by topbar.js
 //     __rtSetRoutePois(fs)    -> tripStore.setRoutePois
 //     __rtRefreshBbox()       -> invalidate the viewport POI query
+//   defined by topbar.js, read by SmokeTest.kt
+//     __rtRouteShareUrl()     -> routeShareUrl(tripStore.stops, corridorMiles)
 //
-// `__rtUseCurrentLocationForTripStop` and `__rtRouteShareUrl` are deliberately
-// NOT shimmed: both are defined by topbar.js and read by nothing in the repo, so
-// re-publishing them would be inventing an API rather than preserving one. If a
-// consumer ever appears, add it here with a test.
+// Phase 0 recorded `__rtRouteShareUrl` and `__rtUseCurrentLocationForTripStop` as
+// read by nothing and left both out. That was wrong: `SmokeTest.kt` calls the first
+// at ~line 662 and the second at ~line 803, so they are a TEST seam rather than dead
+// API, and a React `/` without them fails those steps against a page that works.
+// The first is a pure store read and lives here. The second needs the planner (it
+// fills a row, with geolocation), so `TopBar` publishes it — see
+// `usePublishedLocationFiller` there. Both are declared here so there is one
+// declaration site for the whole `window.__rt*` surface.
 //
 // Phase 5 deletes web/ and this file with it.
 import type { QueryClient } from '@tanstack/react-query';
+import { routeShareUrl } from '@/lib/share-links';
 import { queryKeys } from '@/queries/keys';
 import { useMapStore } from './mapStore';
 import {
@@ -45,6 +52,12 @@ export interface TransitionShim {
   __rtOpenPoiById: (id: string | number) => void;
   __rtSetRoutePois: (features: Record<string, unknown>[]) => void;
   __rtRefreshBbox: () => void;
+  __rtRouteShareUrl: () => string;
+  /** Published by `TopBar`, not by this module: filling a row needs the planner. */
+  __rtUseCurrentLocationForTripStop: (
+    index: number,
+    location?: { lng: number; lat: number } | null,
+  ) => void;
 }
 
 declare global {
@@ -60,12 +73,20 @@ declare global {
  * broken when a React root unmounts, and tests do not leak globals.
  */
 export function installTransitionShim(queryClient: QueryClient): () => void {
-  const shim: TransitionShim = {
+  // Everything except `__rtUseCurrentLocationForTripStop`, which needs the planner
+  // and is published by `TopBar`. Spelled as an `Omit` rather than a `Partial` so
+  // adding a global to the interface still fails to compile until it is implemented
+  // somewhere.
+  const shim: Omit<TransitionShim, '__rtUseCurrentLocationForTripStop'> = {
     __rtTripMode: () => useTripStore.getState().mode,
     __rtRouteActive: () => selectRouteActive(useTripStore.getState()),
     __rtAddTripStop: (stop) => useTripStore.getState().addStop(stop),
     __rtClearBrowsePin: () => useTripStore.getState().clearBrowsePin(),
     __rtOpenPoiById: (id) => useMapStore.getState().selectPoi(id),
+    __rtRouteShareUrl: () => {
+      const trip = useTripStore.getState();
+      return routeShareUrl(trip.stops, trip.corridorMiles);
+    },
     // Cast at the boundary, deliberately: this argument comes from the still-vanilla
     // topbar, which hands over whatever /api/pois/on-route returned. The store's
     // field is GeoJSON-typed for the migrated planner's sake, and the shim is the
@@ -81,8 +102,9 @@ export function installTransitionShim(queryClient: QueryClient): () => void {
     },
   };
 
-  const keys = Object.keys(shim) as (keyof TransitionShim)[];
-  const previous = new Map<keyof TransitionShim, unknown>();
+  type ShimKey = keyof typeof shim;
+  const keys = Object.keys(shim) as ShimKey[];
+  const previous = new Map<ShimKey, unknown>();
   for (const key of keys) {
     previous.set(key, window[key]);
     Object.assign(window, { [key]: shim[key] });

@@ -75,6 +75,10 @@ export function StopRow({
   return (
     <div
       className={`tb-row${dragging ? ' dragging' : ''}${dropTarget ? ' drop-target' : ''}`}
+      // `data-i` is a test seam, not state: `SmokeTest.kt` addresses rows as
+      // `.tb-row[data-i="0"] .tb-input`, and keeping the attribute means the smoke
+      // suite does not need a different selector per tree while both exist.
+      data-i={index}
       draggable={draggable}
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = 'move';
@@ -101,6 +105,7 @@ export function StopRow({
       <input
         ref={inputRef}
         className="tb-input"
+        data-i={index}
         type="text"
         autoComplete="off"
         placeholder={placeholder}
