@@ -70,6 +70,7 @@ jobs:
               - 'web/**'
               - 'frontend/**'
               - 'scripts/check-color-tokens.mjs'
+              - 'scripts/check-css-blocks.mjs'
               - '.github/workflows/ci.yml'
             companion:
               - 'companion/**'
@@ -254,6 +255,12 @@ jobs:
       # scans web/ and frontend/ (including .ts/.tsx).
       - name: Check color tokens
         run: node scripts/check-color-tokens.mjs
+
+      # A rule that loses its closing brace is still valid CSS: everything after it
+      # becomes a descendant of it and silently stops matching. Nothing else here
+      # catches that — the build succeeds and jsdom does no layout.
+      - name: Check CSS block structure
+        run: node scripts/check-css-blocks.mjs
 
   companion-tests:
     needs: changes

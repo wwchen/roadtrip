@@ -123,6 +123,7 @@ test: _ensure-hooks
 	# vendored LDS ships untranspiled .jsx), which fails at bundle time only.
 	cd frontend && npm ci && npm run typecheck && npm run test && npm run build
 	node scripts/check-color-tokens.mjs
+	node scripts/check-css-blocks.mjs
 	cd companion && npm test
 	python3 -m unittest discover -s scripts -p 'test_*.py'
 	python3 secrets/manage.py generate --check
