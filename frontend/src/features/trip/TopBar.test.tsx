@@ -51,7 +51,15 @@ beforeEach(() => {
   urls = [];
   fakeMap = new FakeMap();
   useTripStore.getState().reset();
-  useMapStore.setState({ userLocation: null, viewport: null, selectedPoiId: null });
+  // `hiddenAgencies`/`hiddenOverlays` too: the legend's state is app-wide, and the
+  // results-list tests below hide agencies that would otherwise leak into the next test.
+  useMapStore.setState({
+    userLocation: null,
+    viewport: null,
+    selectedPoiId: null,
+    hiddenAgencies: [],
+    hiddenOverlays: [],
+  });
   poiResults = [
     { id: 7, name: 'Bowman Bay', category: 'campground', region: 'WA', lng: -122.65, lat: 48.41 },
   ];
@@ -622,5 +630,160 @@ describe('review regressions', () => {
     );
     expect(window.location.search).toContain('route=not-a-real-payload');
     window.history.replaceState(null, '', '/');
+  });
+});
+
+// The campgrounds-along-route list. Driven through the topbar because the corridor
+// response, the route index and the hydration all have to line up for a card to exist.
+describe('the results list', () => {
+  const CORRIDOR = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        id: 11,
+        geometry: { type: 'Point', coordinates: [-122.64, 48.4] },
+        properties: { category: 'campground', agency: 'WA Parks' },
+      },
+      {
+        type: 'Feature',
+        id: 22,
+        geometry: { type: 'Point', coordinates: [-122.35, 47.7] },
+        properties: { category: 'campground', agency: 'USFS' },
+      },
+    ],
+  };
+
+  const DETAILS: Record<string, unknown> = {
+    11: {
+      type: 'Feature',
+      id: 11,
+      geometry: { type: 'Point', coordinates: [-122.64, 48.4] },
+      properties: { name: 'Bowman Bay', state: 'WA', sites: 20, rating_reviews: [4.6, 812] },
+    },
+    22: {
+      type: 'Feature',
+      id: 22,
+      geometry: { type: 'Point', coordinates: [-122.35, 47.7] },
+      properties: { name: 'Denny Creek', state: 'WA', season: 'Open through October 25' },
+    },
+  };
+
+  /** A trip whose route and corridor both answer, which is what makes a list. */
+  const withCorridor = () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        urls.push(url);
+        if (url.startsWith('/api/route')) return json(ROUTE_BODY);
+        if (url.startsWith('/api/pois/on-route')) return json(CORRIDOR);
+        const detail = /\/api\/pois\/(\d+)$/.exec(url);
+        if (detail) return json(DETAILS[detail[1]!]);
+        return json({ results: [] });
+      }),
+    );
+    useTripStore.setState({
+      mode: 'directions',
+      stops: [
+        { name: 'Seattle', lng: -122.33, lat: 47.6 },
+        { name: 'Bowman Bay', lng: -122.65, lat: 48.41 },
+      ],
+    });
+  };
+
+  test('lists the corridor"s campgrounds in the order they are passed', async () => {
+    withCorridor();
+    mount();
+
+    // Denny Creek is nearer the origin along the route, so it comes first — even
+    // though both hydrate independently.
+    await waitFor(() => expect(screen.getByText('Denny Creek')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Bowman Bay')).toBeInTheDocument());
+    const names = screen.getAllByRole('button', { name: /Denny Creek|Bowman Bay/ });
+    expect(names[0]).toHaveTextContent('Denny Creek');
+  });
+
+  test('shows what each card knows once hydrated', async () => {
+    withCorridor();
+    mount();
+
+    await waitFor(() => expect(screen.getByText('Bowman Bay')).toBeInTheDocument());
+    expect(screen.getByText('★ 4.6')).toBeInTheDocument();
+    expect(screen.getByText('20 sites')).toBeInTheDocument();
+    expect(screen.getByText('Open through October 25')).toBeInTheDocument();
+    // "N km in", not "away": the number is how far into the drive it sits.
+    expect(screen.getAllByText(/km in$/).length).toBe(2);
+  });
+
+  test('counts the list, and says how many are filtered out', async () => {
+    withCorridor();
+    mount();
+    await waitFor(() => expect(screen.getByText('Denny Creek')).toBeInTheDocument());
+    expect(screen.getByText('· 2')).toBeInTheDocument();
+
+    await act(async () => {
+      useMapStore.getState().setAgencyHidden('USFS', true);
+    });
+
+    expect(screen.getByText('· 1 of 2')).toBeInTheDocument();
+    expect(screen.queryByText('Denny Creek')).toBeNull();
+  });
+
+  // The list has to agree with the map: clicking a card flies to its pin.
+  test('says so when the legend has hidden everything', async () => {
+    withCorridor();
+    mount();
+    await waitFor(() => expect(screen.getByText('Denny Creek')).toBeInTheDocument());
+
+    await act(async () => {
+      useMapStore.getState().setOverlayHidden('cg', true);
+    });
+
+    expect(
+      screen.getByText('All campgrounds hidden — re-enable a category in the legend.'),
+    ).toBeInTheDocument();
+  });
+
+  test('a card click flies to it and opens its drawer', async () => {
+    withCorridor();
+    mount();
+    await waitFor(() => expect(screen.getByText('Bowman Bay')).toBeInTheDocument());
+
+    await act(async () => {
+      screen.getByRole('button', { name: /Bowman Bay/ }).click();
+    });
+
+    // The vanilla synthesised a map click to get here, and needed a suppression flag
+    // so that synthetic click did not also rewrite the destination input.
+    expect(fakeMap.flyToCalls.at(-1)).toMatchObject({ center: [-122.64, 48.4], zoom: 13 });
+    expect(useMapStore.getState().selectedPoiId).toBe(11);
+  });
+
+  test('collapses and expands from its header', async () => {
+    withCorridor();
+    mount();
+    const header = await waitFor(() => screen.getByRole('button', { expanded: true }));
+
+    await act(async () => header.click());
+
+    expect(screen.getByRole('button', { expanded: false })).toBeInTheDocument();
+  });
+
+  // The corridor slider belongs to this list, and `SmokeTest.kt` asserts that nesting:
+  // `#tb-results .tb-results-body #tb-corridor` must be visible.
+  test('holds the corridor slider inside its body', async () => {
+    withCorridor();
+    mount();
+
+    await waitFor(() =>
+      expect(document.querySelector('#tb-results .tb-results-body #tb-corridor')).not.toBeNull(),
+    );
+  });
+
+  test('and says nothing at all without a route', async () => {
+    mount();
+
+    expect(document.querySelector('#tb-results')).toBeNull();
   });
 });

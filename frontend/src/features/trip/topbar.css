@@ -297,15 +297,205 @@
   color: var(--rt-faint);
 }
 
-/* Corridor radius */
-.tb-corridor-row {
-  display: flex;
+/* Campground results — the list that appears with a live route.
+   The corridor slider lives inside it, because the radius is what decides which
+   campgrounds are in the list. */
+.tb-results {
+  display: none;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 12px;
   border-top: 1px solid var(--rt-border);
+  max-height: min(50vh, 480px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
+.tb-results.visible {
+  display: flex;
+}
+
+.tb-results-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 12px;
+  background: var(--rt-surface);
+  border-bottom: 1px solid var(--rt-border);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--rt-muted);
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tb-results-head:hover {
+  color: var(--rt-text);
+}
+
+.tb-results-count {
+  color: var(--rt-faint);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 11px;
+  flex: 1;
+}
+
+.tb-results-chevron {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  transition: transform 150ms ease;
+}
+
+/* Down when collapsed, up when expanded. */
+.tb-results.collapsed .tb-results-chevron {
+  transform: rotate(180deg);
+}
+
+.tb-results.collapsed .tb-results-body {
+  display: none;
+}
+
+.tb-results-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.tb-results-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--rt-border);
+  background: var(--rt-surface);
+}
+
+.tb-results-cards {
+  display: flex;
+  flex-direction: column;
+}
+
+.tb-card {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--rt-border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+
+.tb-card:last-child {
+  border-bottom: 0;
+}
+
+.tb-card:hover {
+  background: var(--rt-fill-hover);
+}
+
+.tb-card:focus-visible {
+  outline: 2px solid var(--rt-brand);
+  outline-offset: -2px;
+}
+
+.tb-card-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--rt-border-strong);
+}
+
+.tb-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tb-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tb-card-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--rt-text);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tb-card-location {
+  flex-shrink: 0;
+  color: var(--rt-muted);
+  font-size: 11px;
+  line-height: 1.3;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.tb-card-sub {
+  color: var(--rt-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tb-card-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--rt-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.tb-card-dist {
+  color: var(--rt-map-route);
+  font-weight: 500;
+}
+
+.tb-card-rating {
+  color: var(--rt-rating);
+  font-weight: 500;
+}
+
+.tb-card-sites,
+.tb-card-season {
+  color: var(--rt-muted);
+}
+
+.tb-card-empty {
+  padding: 14px 12px;
+  color: var(--rt-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Corridor radius */
 .tb-corridor {
   display: none;
   align-items: center;
@@ -336,12 +526,6 @@
   margin: 0;
 }
 
-.tb-corridor-count {
-  font-size: 11px;
-  color: var(--rt-faint);
-  font-variant-numeric: tabular-nums;
-}
-
 @media (max-width: 768px) {
   /* Reserve room on the right for the layers panel's hamburger: without this the
      panel spans the full width and covers the toggle. */
@@ -362,6 +546,19 @@
 
   .tb-corridor {
     gap: 6px;
+  }
+
+  .tb-results {
+    max-height: 40vh;
+  }
+
+  /* Collapsed, the header is all there is — so it does not need the cap. */
+  .tb-results.collapsed {
+    max-height: none;
+  }
+
+  .tb-results-controls {
+    padding: 8px 10px;
   }
 
   /* The label is the first thing to go at this width; the value still says "mi". */
