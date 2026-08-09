@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Banner, Button, Modal, Skeleton } from '@ui';
 import { signOut } from '@/api/auth-api';
 import { settingsErrorMessage } from '@/lib/settings-errors';
@@ -134,7 +135,13 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     }
   };
 
-  return (
+  // Through a portal to `document.body`, and only here: LDS's `.lds-modal-scrim` has
+  // a background and centres its child but sets NO position, so rendered in place it
+  // is an in-flow block. Mounted from the topbar — its only trigger — that put the
+  // whole settings form inside a 420px panel with no overlay and nothing blocked.
+  // The positioning lives in `account.css` beside this component; upstream is where
+  // it belongs, but the vendored copy does not have it.
+  return createPortal(
     <Modal
       title="Settings"
       onClose={onClose}
@@ -207,6 +214,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           </>
         )}
       </div>
-    </Modal>
+    </Modal>,
+    document.body,
   );
 }

@@ -208,8 +208,12 @@ describe('dismissal', () => {
   });
 
   // The vanilla delegated handler added the stop and closed, so the map and the new
-  // trip row are both visible immediately.
-  test('adding a trip stop records it and closes', async () => {
+  // trip row are both visible immediately — and the POI became the DESTINATION of a
+  // two-row trip, not a first stop. This asserted the latter until an adversarial
+  // review of 4e caught it: the button was calling `tripStore.addStop`, which
+  // appends, so in browse mode it left the POI as the search row and the planner in
+  // browse mode. `addPoiToTrip` is the rule the vanilla had.
+  test('adding a trip stop makes it the destination and closes', async () => {
     renderDrawer();
     await select(PARK_ID);
     await waitFor(() => expect(screen.getByRole('heading', { level: 2 })).toBeInTheDocument());
@@ -219,8 +223,13 @@ describe('dismissal', () => {
     });
 
     expect(useTripStore.getState().stops).toEqual([
+      null,
       { name: 'Yosemite National Park', lng: -119.5, lat: 37.8, kind: 'NP' },
     ]);
+    expect(useTripStore.getState().mode).toBe('directions');
+    // The empty origin is what the user fills next, so it asks for focus. On a phone
+    // the planner resolves it from the device instead — see `add-poi-to-trip.ts`.
+    expect(useTripStore.getState().focusRow).toBe(0);
     expect(useMapStore.getState().selectedPoiId).toBeNull();
   });
 

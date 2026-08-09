@@ -1,0 +1,43 @@
+/* The topbar's auth row.
+ *
+ * Lifted out of `injectAuthStyles()` in web/topbar/auth.js, which built these rules
+ * as a template string and injected a <style> tag guarded by an id check — the same
+ * pattern the 4d watch editor used, and the same reason it is now a stylesheet: only
+ * here are the rules under the colour-token and CSS-block checkers.
+ */
+
+.tb-auth {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 4px 8px 0;
+  font-size: 13px;
+}
+
+.tb-auth-btn {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  color: var(--rt-brand-text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.tb-auth-btn:hover {
+  text-decoration: underline;
+}
+
+.tb-auth-btn:focus-visible {
+  outline: 2px solid var(--rt-brand);
+  outline-offset: 2px;
+}
+
+/* The signed-in label is the settings trigger, and an email can be long. */
+.tb-auth-who {
+  color: var(--rt-muted);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

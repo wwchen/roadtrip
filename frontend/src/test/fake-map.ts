@@ -62,6 +62,15 @@ export class FakeMap {
    */
   flyToCalls: Array<Record<string, unknown>> = [];
 
+  /**
+   * Bounds fits, in order. Recorded for the same reason as `flyToCalls`.
+   *
+   * Added when the trip overlay's route fit turned out to be unreachable in jsdom:
+   * the fake had no `fitBounds`, and every earlier route-mode test set a route with
+   * no line feature, so nothing had ever called it.
+   */
+  fitBoundsCalls: Array<{ bounds: unknown; options: unknown }> = [];
+
   private canvas = document.createElement('canvas');
   private bounds: [number, number, number, number] = [-124, 32, -114, 42];
   private zoom = 7;
@@ -183,6 +192,10 @@ export class FakeMap {
 
   flyTo(options: Record<string, unknown>) {
     this.flyToCalls.push(options);
+  }
+
+  fitBounds(bounds: unknown, options: unknown) {
+    this.fitBoundsCalls.push({ bounds, options });
   }
 
   getBounds() {

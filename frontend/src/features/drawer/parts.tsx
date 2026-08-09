@@ -10,6 +10,7 @@ import { distanceKm, formatDistance } from '@/lib/geo';
 import type { PoiFeature } from '@/lib/poi';
 import { formatPhone, phoneNumbers, telHref } from '@/lib/html';
 import { useMapStore } from '@/stores/mapStore';
+import { addPoiToTrip } from '@/features/trip/add-poi-to-trip';
 import { useTripStore } from '@/stores/tripStore';
 
 /**
@@ -108,7 +109,6 @@ export interface DirectionsButtonProps {
  */
 export function DirectionsButton({ name, lng, lat, kind = 'PLACE', onAdded }: DirectionsButtonProps) {
   const mode = useTripStore((s) => s.mode);
-  const addStop = useTripStore((s) => s.addStop);
   if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
 
   const label = mode === 'directions' ? 'Add stop' : 'Directions';
@@ -119,7 +119,12 @@ export function DirectionsButton({ name, lng, lat, kind = 'PLACE', onAdded }: Di
       aria-label={label}
       title={label}
       onClick={() => {
-        addStop({ name: name || 'Selected place', lng: lng as number, lat: lat as number, kind });
+        // `addPoiToTrip`, not `tripStore.addStop`: the POI is the DESTINATION and
+        // the mode becomes directions, which a bare append does not do. Pressing
+        // this in browse mode with `addStop` left the POI as the search row and the
+        // planner in browse mode — a parity break against the vanilla's
+        // `addTripStopFromExternal`, invisible until 4e mounted the topbar.
+        addPoiToTrip({ name: name || 'Selected place', lng: lng as number, lat: lat as number, kind });
         // The vanilla handler closed the drawer after adding, so the map and the
         // trip row are both visible immediately.
         onAdded();

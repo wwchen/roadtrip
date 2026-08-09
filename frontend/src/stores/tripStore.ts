@@ -11,6 +11,7 @@
 //                      handles belong in the imperative `src/map/` module's refs,
 //                      the same reason the map instance itself stays out of here.
 import { create } from 'zustand';
+import type { Feature, FeatureCollection, MultiPolygon, Polygon } from 'geojson';
 
 /** Constants ported from web/topbar/state.js. */
 export const MAX_STOPS = 25;
@@ -42,19 +43,42 @@ export interface TripStop {
   kind?: string;
   /** The originating search-result row, when the stop came from one. */
   pinItem?: unknown;
+  /**
+   * A placeholder while the browser resolves the user's location.
+   *
+   * Ported from the legacy `_pending` flag, and it has to be a property of the
+   * stop rather than a separate loading flag because the row it belongs to can
+   * move: the coordinates are (0, 0) until geolocation answers, so routing and
+   * marker placement both have to skip it — see `isLocated` in
+   * features/trip/stops.ts. Null island is a real coordinate that passes every
+   * finite check.
+   */
+  pending?: boolean;
 }
 
-/** GeoJSON, kept structurally loose — it is passed through to MapLibre. */
-export type GeoJson = Record<string, unknown>;
+/**
+ * The trip's geometries, typed as GeoJSON now that Phase 4e consumes them.
+ *
+ * Phase 0 declared these as `Record<string, unknown>` on the grounds that they
+ * were "passed through to MapLibre" — true of the map, but the planner also reads
+ * the route's `properties` for its summary and its line for the corridor buffer,
+ * and an untyped bag made every one of those reads a cast. Narrowed here for the
+ * same reason the filter fields were reshaped in 4b: a store shape is a guess
+ * until something consumes it.
+ */
+export type TripRouteCollection = FeatureCollection;
+export type TripCorridor = Polygon | MultiPolygon;
+/** A slim POI pin from /api/pois/on-route. Painted, never read field-by-field. */
+export type TripPoiFeature = Feature;
 
 export interface TripState {
   mode: TripMode;
   /** `null` marks an empty slot, so slot position is stable while editing. */
   stops: (TripStop | null)[];
   /** FeatureCollection from /api/route. */
-  route: GeoJson | null;
+  route: TripRouteCollection | null;
   /** Polygon from turf.buffer(route, corridorMiles). */
-  corridor: GeoJson | null;
+  corridor: TripCorridor | null;
   corridorMiles: number;
   /**
    * Bumped on every change that invalidates an in-flight route response.
@@ -63,9 +87,18 @@ export interface TripState {
    */
   generation: number;
   /** POI features found along the active route (the __rtSetRoutePois payload). */
-  routePois: GeoJson[];
+  routePois: TripPoiFeature[];
   /** The single dropped pin in browse mode. */
   browsePin: TripStop | null;
+  /**
+   * The row that should take keyboard focus, once.
+   *
+   * In the store rather than in the topbar's own state because it has two
+   * producers: the topbar's own edits, and the drawer's Directions button (which
+   * enters directions mode and wants the empty origin focused). The consumer —
+   * `StopRow` — clears it through `clearFocus`, so it is a request, not a mode.
+   */
+  focusRow: number | null;
 
   setMode: (mode: TripMode) => void;
   setStops: (stops: (TripStop | null)[]) => void;
@@ -78,12 +111,14 @@ export interface TripState {
    */
   addStop: (stop: TripStop) => void;
   removeStopAt: (index: number) => void;
-  setRoute: (route: GeoJson | null) => void;
-  setCorridor: (corridor: GeoJson | null) => void;
+  setRoute: (route: TripRouteCollection | null) => void;
+  setCorridor: (corridor: TripCorridor | null) => void;
   setCorridorMiles: (miles: number) => void;
-  setRoutePois: (features: GeoJson[]) => void;
+  setRoutePois: (features: TripPoiFeature[]) => void;
   setBrowsePin: (pin: TripStop | null) => void;
   clearBrowsePin: () => void;
+  requestFocus: (row: number | null) => void;
+  clearFocus: () => void;
   /** Invalidate any in-flight route response. Returns the new generation. */
   bumpGeneration: () => number;
   reset: () => void;
@@ -98,6 +133,7 @@ const INITIAL_TRIP = {
   generation: 0,
   routePois: [],
   browsePin: null,
+  focusRow: null,
 } satisfies Omit<
   TripState,
   | 'setMode'
@@ -111,6 +147,8 @@ const INITIAL_TRIP = {
   | 'setRoutePois'
   | 'setBrowsePin'
   | 'clearBrowsePin'
+  | 'requestFocus'
+  | 'clearFocus'
   | 'bumpGeneration'
   | 'reset'
 >;
@@ -152,6 +190,8 @@ export const useTripStore = create<TripState>()((set, get) => ({
   setRoutePois: (routePois) => set({ routePois }),
   setBrowsePin: (browsePin) => set({ browsePin }),
   clearBrowsePin: () => set({ browsePin: null }),
+  requestFocus: (focusRow) => set({ focusRow }),
+  clearFocus: () => set({ focusRow: null }),
 
   bumpGeneration: () => {
     const generation = get().generation + 1;
@@ -166,6 +206,16 @@ export const useTripStore = create<TripState>()((set, get) => ({
 // Selectors
 // ---------------------------------------------------------------------------
 
+/**
+ * Whether every slot holds something.
+ *
+ * Deliberately NOT the routing gate: it counts a `pending` "Locating you…" stop as
+ * filled, because for the store's purposes the slot is occupied. The predicate that
+ * decides whether a route may be requested is `allStopsFilled` in
+ * features/trip/stops.ts, which also requires every stop to be located. The two
+ * cannot disagree about a live route — `selectRouteActive` needs a fetched route as
+ * well, and only that stricter gate can produce one.
+ */
 export const selectAllStopsFilled = (s: TripState): boolean =>
   s.stops.length > 0 && s.stops.every((stop) => stop != null);
 
