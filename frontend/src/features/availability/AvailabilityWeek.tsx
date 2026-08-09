@@ -1,0 +1,391 @@
+// The availability grid, mounted inside the campground drawer.
+//
+// Port of `mountAvailabilityWeek` in web/availability/availability-week.js — the 1,226
+// line controller that owned a mutable `ctx` object, six delegated event listeners on
+// a host element, and `innerHTML` re-renders that had to capture and restore the
+// matrix's scroll position around every state change.
+//
+// Most of that machinery is gone rather than translated, and it is worth saying which
+// parts and why, because the absences are the point:
+//
+//   - **The scroll capture/restore dance is gone.** It existed because re-rendering
+//     replaced the scrolling element, losing `scrollLeft` — twice over for a booking
+//     tap, which needed a `requestAnimationFrame` double-restore. React keeps the
+//     node, so the scroll position simply persists.
+//   - **The request sequence counters are gone.** `weekRequestSeq` / `sitesRequestSeq`
+//     were compared at every await point so a stale response could not paint. Query
+//     keys do that structurally.
+//   - **The filter focus restoration is gone.** `restoreMatrixFilterFocus` re-focused
+//     the search box and restored its caret after each re-render, because the input
+//     was destroyed on every keystroke. A controlled input keeps both.
+//
+// What is NOT simplified is the arming behaviour, the capability gates, and the state
+// resets on week change — those are product decisions, and they are carried over
+// exactly. See the notes at each.
+import { useCallback, useMemo, useState } from 'react';
+import type { PoiFeature } from '@/lib/poi';
+import { availableCount } from '@/lib/day-fields';
+import { addLocalDays, localToday, localYmd, parseLocalYmd, sameLocalDay } from '@/lib/local-date';
+import { DayDetail } from './DayDetail';
+import { CalendarPopover } from './CalendarPopover';
+import { SiteList } from './SiteList';
+import { SiteMatrix, SiteMatrixSkeleton, type ArmedBook } from './SiteMatrix';
+import { WatchPopover } from './WatchPopover';
+import { WeekNav } from './WeekNav';
+import { GENERIC_AVAILABILITY_ERROR } from './availability-errors';
+import { reservationUrlFromTemplate } from './booking-links';
+import type { FusedDay } from './fuse';
+import { DEFAULT_MATRIX_FILTERS, type MatrixFilters } from './matrix-rows';
+import { DEFAULT_SITE_COLUMN_WIDTH, loadSiteColumnWidth } from './site-column';
+import { useCampsites } from './useCampsites';
+import { useDelayedFlag } from './useDelayedFlag';
+import {
+  SKELETON_RENDER_DELAY_MS,
+  STALE_THRESHOLD_MIN,
+  WEEK_DAYS,
+  cacheAgeMinutes,
+  useWeekAvailability,
+} from './useWeekAvailability';
+import { usePoiWatches, useWatchMutations, watchForDate } from './useWatches';
+import {
+  stayEndDate,
+  supportsAddToCart,
+  supportsWatchAlerts,
+  watchedDates as watchedDatesOf,
+} from './watch-windows';
+import { TRIGGER_KIND_SLACK_NOTIFY, buildTriggerPayload, triggerStateOf } from '@/lib/watch-triggers';
+import './availability.css';
+
+/** How far ahead the calendar lets someone jump — every provider's horizon or less. */
+const CALENDAR_MAX_DAYS_OUT = 365;
+
+export interface AvailabilityWeekProps {
+  /** The hydrated campground feature: supplies the POI id, name and earliest date. */
+  feature: PoiFeature;
+}
+
+export function AvailabilityWeek({ feature }: AvailabilityWeekProps) {
+  const poiId = feature.id;
+  const poiName = (feature.properties?.name as string | undefined) || 'this campground';
+
+  // The first date this provider will quote. Everything paginates forward from here,
+  // and "Earliest" returns to it — which is not the same as "today" for a campground
+  // that only opens a booking window months out.
+  const earliestDate = useMemo(() => featureEarliestDate(feature), [feature]);
+  const [weekStart, setWeekStart] = useState(earliestDate);
+
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
+  const [sitesExpanded, setSitesExpanded] = useState(false);
+  const [armedBook, setArmedBook] = useState<ArmedBook | null>(null);
+  const [filters, setFilters] = useState<MatrixFilters>(DEFAULT_MATRIX_FILTERS);
+  const [siteColumnWidth, setSiteColumnWidth] = useState(() => loadSiteColumnWidth());
+  const [calendarAnchor, setCalendarAnchor] = useState<HTMLElement | null>(null);
+  const [watchTarget, setWatchTarget] = useState<{ anchor: HTMLElement; date: string } | null>(null);
+
+  const week = useWeekAvailability(poiId, weekStart);
+  const catalog = useCampsites(poiId);
+  const watches = usePoiWatches(poiId);
+  const mutations = useWatchMutations(poiId);
+
+  const showSkeleton = useDelayedFlag(week.isPending, SKELETON_RENDER_DELAY_MS);
+
+  /**
+   * Changing week clears every selection made against the old one.
+   *
+   * Carried over from `resetWeekViewState`, and each part earns its place: a selected
+   * date that is no longer on screen would keep a day-detail panel open for an
+   * invisible column, and — the one that matters — an armed booking cell surviving a
+   * week change would mean the second tap opens a booking page for a different night
+   * than the one the user is looking at.
+   */
+  const resetWeekView = useCallback(() => {
+    setSelectedDate(null);
+    setSelectedSiteId(null);
+    setSitesExpanded(false);
+    setArmedBook(null);
+    setWatchTarget(null);
+  }, []);
+
+  const goToWeek = useCallback(
+    (next: Date) => {
+      resetWeekView();
+      setCalendarAnchor(null);
+      setWeekStart(next < earliestDate ? earliestDate : next);
+    },
+    [earliestDate, resetWeekView],
+  );
+
+  const days: FusedDay[] = week.data?.state === 'success' ? week.data.days : [];
+  const selectedDay = days.find((day) => day.date === selectedDate) ?? null;
+  const capabilities = week.data?.watchCapabilities ?? { triggerKinds: new Set(), bookingActions: new Set() };
+
+  // Provider first, user second: "this campground cannot do alerts" and "sign in to
+  // set one" are different sentences, and only the second is actionable.
+  const providerSupportsWatch = poiId != null && supportsWatchAlerts(capabilities);
+  const canWatch = providerSupportsWatch && watches.canManage;
+  const signedOutOfWatches = providerSupportsWatch && !watches.canManage;
+
+  const onSelectDate = useCallback(
+    (date: string) => {
+      setArmedBook(null);
+      setSelectedDate((current) => {
+        const selecting = current !== date;
+        // The site list opens with a fresh selection and closes when it is cleared —
+        // selecting a date is a request to see what is open on it.
+        setSitesExpanded(selecting);
+        return selecting ? date : null;
+      });
+    },
+    [],
+  );
+
+  const openBooking = useCallback(
+    (campsiteId: string, date: string) => {
+      const site = catalog.data?.campsites.find((row) => String(row.id) === campsiteId);
+      const url = site
+        ? reservationUrlFromTemplate(site, {
+            startDate: date,
+            endDate: stayEndDate(date),
+            reservationUrlTemplates: catalog.data?.reservation_url_templates,
+          })
+        : '';
+      // No URL means the template could not be filled. Disarm rather than open a
+      // blank tab: the cell returns to "A" and the user can try again.
+      if (!url) {
+        setArmedBook(null);
+        return;
+      }
+      window.open(url, '_blank', 'noreferrer');
+    },
+    [catalog.data],
+  );
+
+  const toggleDayWatch = useCallback(async () => {
+    if (!selectedDate) return;
+    const existing = watchForDate(watches, selectedDate);
+    if (existing) {
+      await mutations.remove(existing);
+      return;
+    }
+    // The grid's own toggle creates a Slack watch, which is the default the popover
+    // would also open with. A provider that cannot Slack has no toggle at all — see
+    // `DayDetail` — so reaching here without the capability is not possible.
+    if (!capabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY)) return;
+    await mutations.save(selectedDate, buildTriggerPayload(triggerStateOf(null)));
+  }, [capabilities, mutations, selectedDate, watches]);
+
+  const weekNav = (
+    <WeekNav
+      startIso={localYmd(weekStart)}
+      endIso={localYmd(addLocalDays(weekStart, WEEK_DAYS - 1))}
+      showEarliest={!sameLocalDay(weekStart, earliestDate)}
+      canGoBack={!sameLocalDay(weekStart, earliestDate)}
+      onPrev={() => goToWeek(addLocalDays(weekStart, -WEEK_DAYS))}
+      onNext={() => goToWeek(addLocalDays(weekStart, WEEK_DAYS))}
+      onEarliest={() => goToWeek(earliestDate)}
+      onPickDate={setCalendarAnchor}
+    />
+  );
+
+  return (
+    <section className="cg-availability">
+      {calendarAnchor ? (
+        <CalendarPopover
+          viewMonth={weekStart}
+          today={earliestDate}
+          selectedDate={weekStart}
+          maxDate={addLocalDays(earliestDate, CALENDAR_MAX_DAYS_OUT)}
+          onPick={goToWeek}
+          onClose={() => setCalendarAnchor(null)}
+        />
+      ) : null}
+
+      <WeekSurface
+        week={week}
+        showSkeleton={showSkeleton}
+        siteColumnWidth={siteColumnWidth}
+        weekNav={weekNav}
+        matrix={
+          <SiteMatrix
+            days={days}
+            campsites={catalog.data?.campsites ?? []}
+            reservationUrlTemplates={catalog.data?.reservation_url_templates}
+            sitesState={catalog.isPending ? 'loading' : catalog.error ? 'error' : 'success'}
+            sitesError={catalog.error?.message ?? null}
+            onRetrySites={() => void catalog.refetch()}
+            filters={filters}
+            onFiltersChange={(next) => {
+              // Any filter change moves the rows, so an armed cell would end up
+              // under a different site. Disarm rather than let the second tap land
+              // somewhere the user did not aim.
+              setArmedBook(null);
+              setFilters(next);
+            }}
+            siteColumnWidth={siteColumnWidth}
+            onSiteColumnWidthChange={setSiteColumnWidth}
+            selectedSiteId={selectedSiteId}
+            onSelectSite={setSelectedSiteId}
+            armedBook={armedBook}
+            onArmBook={setArmedBook}
+            onOpenBooking={openBooking}
+            onSelectDate={onSelectDate}
+            watchedDates={watchedDatesOf(watches.byWindow)}
+            canWatch={canWatch}
+            onOpenWatch={(anchor, date) => setWatchTarget({ anchor, date })}
+            actions={weekNav}
+          />
+        }
+      />
+
+      <div className="cg-freshness">
+        <Freshness week={week} onRefresh={() => void week.refetch()} />
+      </div>
+
+      {/* The day panel is for a day with nothing open; a day with openings gets the
+          site list below, which is more useful than a sentence. */}
+      {selectedDay && availableCount(selectedDay) === 0 ? (
+        <DayDetail
+          day={selectedDay}
+          watching={watchForDate(watches, selectedDate) != null}
+          canWatch={canWatch}
+          signedOut={signedOutOfWatches}
+          busy={mutations.saving}
+          onToggleWatch={() => void toggleDayWatch()}
+        />
+      ) : null}
+
+      <SiteList
+        state={catalog.isPending ? 'loading' : catalog.error ? 'error' : 'success'}
+        campsites={catalog.data?.campsites ?? []}
+        reservationUrlTemplates={catalog.data?.reservation_url_templates}
+        error={catalog.error?.message ?? null}
+        expanded={sitesExpanded}
+        onToggle={() => setSitesExpanded((current) => !current)}
+        onRetry={() => void catalog.refetch()}
+        selectedDay={selectedDay && availableCount(selectedDay) > 0 ? selectedDay : null}
+        selectedEndDate={selectedDay ? stayEndDate(selectedDay.date) : null}
+      />
+
+      {watchTarget ? (
+        <WatchPopover
+          anchor={watchTarget.anchor}
+          poiName={poiName}
+          date={watchTarget.date}
+          watch={watchForDate(watches, watchTarget.date)}
+          capabilities={capabilities}
+          supportsAddToCart={supportsAddToCart(capabilities)}
+          onSave={(payload) =>
+            mutations.save(watchTarget.date, payload, watchForDate(watches, watchTarget.date))
+          }
+          onRemove={async () => {
+            const existing = watchForDate(watches, watchTarget.date);
+            if (existing) await mutations.remove(existing);
+          }}
+          onClose={() => setWatchTarget(null)}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+/**
+ * The grid, or the banner that replaces it.
+ *
+ * `empty` and `closed_for_season` are separate branches with separate copy, which is
+ * the distinction `fuse.ts` preserves: one is permanent, one is a date.
+ */
+function WeekSurface({
+  week,
+  showSkeleton,
+  siteColumnWidth,
+  weekNav,
+  matrix,
+}: {
+  week: ReturnType<typeof useWeekAvailability>;
+  showSkeleton: boolean;
+  siteColumnWidth: number;
+  weekNav: React.ReactNode;
+  matrix: React.ReactNode;
+}) {
+  if (week.isPending) {
+    // Before the delay elapses: the nav only, so a cache hit does not flash a
+    // skeleton table on its way to real data.
+    return showSkeleton ? (
+      <SiteMatrixSkeleton siteColumnWidth={siteColumnWidth} actions={weekNav} />
+    ) : (
+      <div className="cg-site-matrix-head">
+        <div className="cg-site-matrix-actions">{weekNav}</div>
+      </div>
+    );
+  }
+
+  if (week.error) {
+    return (
+      <div className="cg-summary">
+        <span className="cg-error">{week.error.message || GENERIC_AVAILABILITY_ERROR}</span> ·{' '}
+        <button type="button" className="cg-retry cg-link-button" onClick={() => void week.refetch()}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (week.data?.state === 'empty') {
+    return <div className="cg-closed-banner">No availability data for this campground.</div>;
+  }
+
+  if (week.data?.state === 'closed_for_season') {
+    const reopens = week.data.season?.reopens_on;
+    return (
+      <div className="cg-closed-banner">⛰️ {reopens ? `Reopens ${reopens}` : 'Closed for season'}</div>
+    );
+  }
+
+  return <>{matrix}</>;
+}
+
+/**
+ * "checked 4m ago · refresh".
+ *
+ * The age is the *backend's* cache age, so it is the age of the data the provider
+ * gave us rather than of our own request — which is why it can read "12m ago" on a
+ * page you just opened, and why the refresh link exists.
+ */
+function Freshness({
+  week,
+  onRefresh,
+}: {
+  week: ReturnType<typeof useWeekAvailability>;
+  onRefresh: () => void;
+}) {
+  const cache = week.data?.state === 'success' ? week.data.cacheBlock : null;
+  // A non-breaking space, so the row keeps its height and the grid does not jump
+  // when the pill appears.
+  if (!cache) return <>&nbsp;</>;
+  const ageMin = cacheAgeMinutes(cache.age_seconds);
+  return (
+    <span className={ageMin >= STALE_THRESHOLD_MIN ? 'cg-stale' : undefined}>
+      checked {ageMin}m ago ·{' '}
+      <button type="button" className="cg-refresh cg-link-button" onClick={onRefresh}>
+        refresh
+      </button>
+    </span>
+  );
+}
+
+/**
+ * The first date this provider will quote for, or today.
+ *
+ * Not the same as today: a campground whose booking window opens six months out has
+ * no availability to show before then, and opening the grid on today's date would
+ * show a week of blanks and imply the campground is full.
+ */
+function featureEarliestDate(feature: PoiFeature): Date {
+  const properties = feature.properties ?? {};
+  const raw = properties.earliest_date ?? properties.earliestDate;
+  const parsed = parseLocalYmd(raw);
+  return Number.isFinite(parsed.getTime()) ? parsed : localToday();
+}
+
+export { DEFAULT_SITE_COLUMN_WIDTH };

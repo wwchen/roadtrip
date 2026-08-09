@@ -41,6 +41,29 @@ let respond: () => Response;
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
+/**
+ * The availability grid mounts inside this drawer and fetches on its own, so the stub
+ * routes its endpoints too. They answer emptily on purpose: what the grid does with
+ * real data is `AvailabilityWeek.test.tsx`'s subject, and what this suite needs is that
+ * the drawer mounts it for a supported pin and not for an unsupported one.
+ */
+const respondFor = (url: string): Response => {
+  if (url.includes('/campsites/availability')) {
+    return json({
+      poi_id: ID,
+      start_date: '2026-08-09',
+      end_date: '2026-08-16',
+      watch_capabilities: { trigger_kinds: [], booking_actions: [] },
+      campsites: [],
+    });
+  }
+  if (url.includes('/campsites')) {
+    return json({ poi_id: ID, type: 'campground', campsites: [], reservation_url_templates: {} });
+  }
+  if (url.includes('/api/watches')) return json({ watches: [], total: 0 });
+  return respond();
+};
+
 const testClient = () =>
   new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
 
@@ -61,7 +84,7 @@ const panel = () => screen.getByRole('dialog');
 
 beforeEach(() => {
   respond = () => json(campground());
-  vi.stubGlobal('fetch', vi.fn(async () => respond()));
+  vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => respondFor(String(input))));
   useMapStore.getState().reset();
   useTripStore.getState().reset();
   window.history.replaceState(null, '', '/');
@@ -114,17 +137,25 @@ describe('the campground drawer', () => {
   });
 
   // "No availability shown" and "this provider has no availability" are different
-  // facts, so a supported pin says the grid is coming rather than omitting it.
-  test('a pin with availability support says the grid is coming (4d)', async () => {
+  // facts, and only the backend's capability flag can tell them apart — so the grid
+  // is mounted from that flag rather than from whether a week happened to come back.
+  test('a pin with availability support mounts the grid', async () => {
     await openCampground();
 
-    expect(screen.getByText(/Availability for this campground is coming/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Pick a date' })).toBeInTheDocument(),
+    );
   });
 
-  test('a pin without availability support says nothing about it', async () => {
+  test('a pin without availability support does not fetch availability at all', async () => {
     await openCampground({ availability_supported: false });
 
-    expect(screen.queryByText(/Availability for this campground is coming/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Pick a date' })).toBeNull();
+    expect(
+      (fetch as ReturnType<typeof vi.fn>).mock.calls.some(([url]) =>
+        String(url).includes('/campsites/availability'),
+      ),
+    ).toBe(false);
   });
 
   test('shows the details a booker reads, inside the accordion', async () => {
