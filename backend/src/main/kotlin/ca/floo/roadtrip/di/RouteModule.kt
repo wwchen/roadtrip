@@ -148,7 +148,7 @@ internal fun Application.registerKoinRoutes() {
         // /api/settings/notifications/{email,slack}/test endpoints are the
         // supported smoke tests — they bind delivery to the caller's own stored
         // settings and credentials.
-        staticSiteRoutes(staticDir)
+        staticSiteRoutes(staticDir, previewPagesEnabled = config.sandbox.previewPagesEnabled)
     }
 
     // RFC 0010 completeness guard: every route must declare an access level. An

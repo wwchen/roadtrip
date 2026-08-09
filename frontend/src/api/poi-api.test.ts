@@ -151,12 +151,11 @@ describe('POI detail', () => {
 });
 
 describe('POST search paths', () => {
+  // Flat [west, south, east, north], which is what PoisRequestSchema takes — the
+  // nested pair this test used to send never matched the wire.
   test('fetchViewportPois posts bbox, zoom, and categories', async () => {
-    const fetchStub = stubFetch(jsonResponse({ results: [] }));
-    const bbox = [
-      [-122, 40],
-      [-121, 41],
-    ];
+    const fetchStub = stubFetch(jsonResponse({ type: 'FeatureCollection', truncated: false, features: [] }));
+    const bbox = [-122, 40, -121, 41];
 
     await fetchViewportPois({ bbox, zoom: 9, categories: ['campground'] });
 

@@ -10,6 +10,7 @@ import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 
 /**
  * The strangler seam: which tree a page is served from.
@@ -30,6 +31,7 @@ class StaticSiteRoutesTest {
     /** A built frontend, as `vite build` leaves it. */
     private fun builtTree(): File =
         createTempDirectory("rt-frontend").toFile().apply {
+            File(this, "index.html").writeText(BUILT_MAP)
             File(this, "watches.html").writeText(BUILT_WATCHES)
             File(this, "availability.html").writeText(BUILT_AVAILABILITY)
             File(this, "assets").mkdirs()
@@ -39,9 +41,10 @@ class StaticSiteRoutesTest {
     private fun serving(
         staticDir: File,
         frontendDir: File,
+        previewPagesEnabled: Boolean = false,
         block: suspend (HttpClient) -> Unit,
     ) = testApplication {
-        application { routing { staticSiteRoutes(staticDir, frontendDir) } }
+        application { routing { staticSiteRoutes(staticDir, frontendDir, previewPagesEnabled) } }
         block(client)
     }
 
@@ -113,6 +116,46 @@ class StaticSiteRoutesTest {
             assertEquals(LEGACY_INDEX, client.get("/index.html").bodyAsText())
         }
 
+    // A preview URL is a SECOND url for a page still mid-migration, never a
+    // replacement: the vanilla map is the only one with a drawer and a topbar, and
+    // is what QA of everything else on a sandbox runs against.
+    @Test
+    fun `a preview page is served alongside the vanilla one when previews are on`() =
+        serving(legacyTree(), builtTree(), previewPagesEnabled = true) { client ->
+            val preview = client.get("/preview/map")
+            assertEquals(HttpStatusCode.OK, preview.status)
+            assertEquals(BUILT_MAP, preview.bodyAsText())
+            assertEquals(LEGACY_INDEX, client.get("/").bodyAsText())
+        }
+
+    // Off by default, because the page it exposes is half-built by definition. A
+    // production deployment must not be able to reach it at all.
+    //
+    // Forbidden rather than Not Found, and not because of anything this route does:
+    // with no preview route registered, the path falls through to the catch-all,
+    // whose `exclude` refuses everything in a subdirectory. Any `/a/b` URL on the
+    // legacy site answers the same way. What matters is that the built page is not
+    // what comes back.
+    @Test
+    fun `a preview page is not reachable when previews are off`() =
+        serving(legacyTree(), builtTree()) { client ->
+            val response = client.get("/preview/map")
+            assertEquals(HttpStatusCode.Forbidden, response.status)
+            assertNotEquals(BUILT_MAP, response.bodyAsText())
+        }
+
+    // No legacy fallback for a preview URL: the vanilla page is at its own url, so
+    // an unbuilt frontend means there is genuinely nothing to serve here.
+    @Test
+    fun `a preview page with no build is a 404 rather than the legacy page`() =
+        serving(
+            legacyTree(),
+            createTempDirectory("rt-frontend-empty").toFile(),
+            previewPagesEnabled = true,
+        ) { client ->
+            assertEquals(HttpStatusCode.NotFound, client.get("/preview/map").status)
+        }
+
     // frontendDir defaults to frontend/dist under staticDir, which is what makes
     // one default work for both `.` on the host and /app/static in a container.
     @Test
@@ -131,6 +174,7 @@ class StaticSiteRoutesTest {
         const val LEGACY_INDEX = "<html><body>legacy map</body></html>"
         const val LEGACY_WATCHES = "<html><body>legacy watches</body></html>"
         const val LEGACY_AVAILABILITY = "<html><body>legacy availability</body></html>"
+        const val BUILT_MAP = """<html><body><div id="root">react map</div></body></html>"""
         const val BUILT_WATCHES = """<html><body><div id="root">watches</div></body></html>"""
         const val BUILT_AVAILABILITY = """<html><body><div id="root">availability</div></body></html>"""
         const val BUNDLE = "console.log('bundle')"

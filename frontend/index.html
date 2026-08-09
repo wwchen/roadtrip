@@ -2,7 +2,14 @@
 <html lang="en" class="theme-roadtrip mode-dark">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- `viewport-fit=cover` is load-bearing, not decoration: without it iOS reports
+     every env(safe-area-inset-*) as 0, and the panel and its buttons — which
+     position themselves with max(10px, env(safe-area-inset-top)) — slide under the
+     notch. `maximum-scale=1` matches the vanilla map page: the map owns pinch
+     zoom, so a page-level pinch fights it. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <!-- theme-color is read by browser chrome before any stylesheet loads, so it
      cannot be a token reference. Mirrors --rt-surface. -->
 <meta name="theme-color" content="#26272d">

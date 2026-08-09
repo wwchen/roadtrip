@@ -69,6 +69,14 @@ no-cross-feature rule.
 > **map drawer's** availability UI and belongs to a later phase. It is not the dashboard
 > and must not be deleted with it.
 >
+> The **map page is mid-move and still served from `web/`**. Its React half — the map shell,
+> the viewport POI loop, the pin overlays and the legend — lives in
+> `frontend/src/features/map/` (React) and `frontend/src/map/` (the imperative MapLibre
+> module React effects drive). Its vanilla half (`web/app.js`, `web/layers.js`,
+> `web/drawer/*`, `web/topbar*`, `web/availability/*`) is what users get until Phases
+> 4c-4e land. Work on the map goes in the React tree; touch the vanilla tree only for a
+> production bug.
+>
 > Read the plan before adding to either tree, so new work lands in React rather than
 > extending the tree that is going away.
 

@@ -21,13 +21,18 @@
 }
 
 /* The map fills the viewport, so its host must be a positioning context with a
-   real height rather than the auto height a bare <div> would take. */
+   real height rather than the auto height a bare <div> would take.
+
+   `fixed` rather than `relative` + `100dvh`, because the map is an app surface
+   inside a document-flow shell: `app/shell.css` pads `body` by 20px for the two
+   list pages, and a `100dvh` box inside that padding renders inset on all four
+   sides AND overflows the bottom by the padding, which scrolls the whole page by
+   20px and hides MapLibre's attribution under the fold. Taking the shell out of
+   flow makes it full-bleed regardless of what the host page's chrome does — the
+   same thing `#map { position: absolute; inset: 0 }` achieved on the unpadded
+   vanilla page. Caught in a browser; no unit test can see it. */
 .rt-map-shell {
-  position: relative;
-  width: 100%;
-  height: 100vh;
-  /* Dynamic viewport height where supported: on mobile Safari `100vh` includes
-     the retracting toolbars, so the bottom of the map sits under browser chrome. */
-  height: 100dvh;
+  position: fixed;
+  inset: 0;
   overflow: hidden;
 }

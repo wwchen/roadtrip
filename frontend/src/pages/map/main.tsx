@@ -1,15 +1,17 @@
 import '@ui/styles.css';
 import { mountPage } from '@/app/mount';
+import { MapProvider } from '@/features/map/MapProvider';
+import { MapView } from '@/features/map/MapView';
 
-// Phase 0 placeholder. Phase 4 rebuilds the map app (MapProvider + imperative
-// layer lifecycle, search, drawer, topbar/trip planner).
-function MapPage() {
-  return (
-    <main>
-      <h1>Roadtrip</h1>
-      <p>React migration scaffold — Phase 0.</p>
-    </main>
-  );
-}
-
-mountPage(<MapPage />);
+// The map app, mid-migration. The shell, the basemap lifecycle, the viewport POI
+// loop, the pin overlays and the legend are here; the drawer, the map-side
+// availability UI and the topbar/trip planner are still Phase 4c-4e.
+//
+// Ktor does NOT serve this page yet — `migratedPages` in StaticSiteRoutes.kt still
+// resolves `/` from the legacy tree, so users keep the vanilla map until the phases
+// above land. Reach it with `npm run dev` (:5173) against a running backend.
+mountPage(
+  <MapProvider>
+    <MapView />
+  </MapProvider>,
+);

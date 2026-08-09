@@ -1,0 +1,219 @@
+/* ---------------------------------------------------------------------------
+   The layers panel: legend, filters and basemap picker.
+
+   Ported from index.html's inline <style> for `#panel` and its buttons. The
+   geometry, breakpoint and safe-area handling are carried over as-is; what
+   changed is that the rows are LDS `Checkbox` components now, so the box, the
+   focus ring and the touch target come from the design system instead of from
+   `accent-color` on a bare input.
+   --------------------------------------------------------------------------- */
+
+.rt-legend {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 20;
+  max-width: 260px;
+  max-height: calc(100vh - 20px);
+  overflow-y: auto;
+  padding: 12px 14px;
+  background: var(--rt-surface);
+  color: var(--rt-text);
+  border: 1px solid var(--rt-border);
+  border-radius: var(--rt-r-lg);
+  box-shadow: var(--rt-e3);
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  transition: transform 180ms ease, opacity 180ms ease;
+}
+
+.rt-legend--collapsed {
+  display: none;
+}
+
+.rt-legend__title {
+  margin: 0 0 8px;
+  /* Room for the hide button, which is positioned over this corner. */
+  padding-right: 28px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--rt-text);
+  letter-spacing: -0.005em;
+}
+
+.rt-legend__section {
+  margin: 12px 0 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--rt-muted);
+}
+
+.rt-legend__section:first-of-type {
+  margin-top: 4px;
+}
+
+/* Sentence-case, un-tracked aside inside an uppercase section label. */
+.rt-legend__hint {
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--rt-hint);
+}
+
+.rt-legend__count {
+  color: var(--rt-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rt-legend__dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+  /* A hairline ring so a dark pin color still reads against the panel. */
+  box-shadow: 0 0 0 1px rgba(var(--rt-c-overlay-rgb), 0.16);
+}
+
+.rt-legend__row-label {
+  /* Long agency names wrap rather than widening the panel. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* One row per agency in the current viewport, so this list can be long. LDS's
+   checkbox pads itself to the 44px touch floor via --control-xl; turning that
+   knob down here keeps the control and its focus ring intact while making a
+   50-agency legend scannable. Mobile gets the full target back below. */
+.rt-legend__agencies {
+  --control-xl: 26px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.rt-legend__basemap {
+  margin-bottom: 6px;
+}
+
+/* Hide (desktop) / close (mobile), over the panel's top-right corner. */
+.rt-legend__hide {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  color: var(--rt-muted);
+  border: 0;
+  border-radius: 4px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.rt-legend__hide:hover {
+  background: var(--rt-fill-hover);
+  color: var(--rt-text);
+}
+
+/* Brings the panel back once hidden. Desktop only — on mobile the hamburger is
+   the only affordance, and two floating buttons in one corner is one too many. */
+.rt-legend-show {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  right: 10px;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: var(--rt-surface);
+  color: var(--rt-text);
+  border: 1px solid var(--rt-border-strong);
+  border-radius: var(--rt-r-md);
+  box-shadow: var(--rt-e2);
+  cursor: pointer;
+}
+
+.rt-legend-show svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* The mobile drawer handle. Hidden on desktop, where the panel is always up. */
+.rt-legend-toggle {
+  display: none;
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  right: 10px;
+  z-index: 20;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: var(--rt-surface);
+  color: var(--rt-text);
+  border: 1px solid var(--rt-border-strong);
+  border-radius: var(--rt-r-md);
+  box-shadow: var(--rt-e2);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .rt-legend-toggle {
+    display: block;
+  }
+
+  .rt-legend-show {
+    display: none;
+  }
+
+  /* A top sheet: full width, slid out of view until opened. */
+  .rt-legend {
+    top: max(10px, env(safe-area-inset-top));
+    right: 10px;
+    left: 10px;
+    max-width: none;
+    max-height: 75vh;
+    font-size: 14px;
+    line-height: 1.5;
+    transform: translateY(-110%);
+    transition: transform 0.2s ease;
+  }
+
+  .rt-legend--open {
+    transform: translateY(0);
+  }
+
+  .rt-legend__title {
+    padding-right: 48px;
+  }
+
+  .rt-legend__hide {
+    top: 8px;
+    right: 10px;
+    width: 40px;
+    height: 40px;
+    background: var(--rt-fill-subtle);
+    border: 1px solid var(--rt-border-strong);
+    font-size: 22px;
+  }
+
+  /* Back to the touch floor: a thumb needs the height a mouse does not. */
+  .rt-legend__agencies {
+    --control-xl: 40px;
+  }
+
+  .rt-legend__dot {
+    width: 12px;
+    height: 12px;
+  }
+}

@@ -1,6 +1,6 @@
 # Frontend Migration: vanilla JS → React + TypeScript
 
-> **Handoff doc.** Status as of 2026-08-08. This is the source of truth for the
+> **Handoff doc.** Status as of 2026-08-09. This is the source of truth for the
 > React migration; it captures the approved plan, decisions, what's already
 > done (and verified), what remains, and the gotchas discovered along the way so
 > a fresh agent session can continue without re-deriving anything.
@@ -26,18 +26,27 @@
 - **Serving is wired**: `tilt up` / `make run` / `make sandbox` build and serve both React pages.
   Neither has a legacy fallback any more — an unbuilt `frontend/dist` 404s, deliberately and
   loudly, and the prod deploy health check probes both paths.
-- **Next up: Phase 3 (account/settings)** — read its note in "Execution phases" first: it is not a
-  page, and part of its written scope is dead code.
-- **Nothing has been verified in a browser by CI.** `SmokeTest.kt` only navigates `/`, `/?poi=…`
-  and `/?route=…`, so neither migrated page is ever loaded. Green CI does not mean either page
-  renders.
+- **Phase 3 (account/settings) is COMPLETE as React work** (#570) — every component exists and is
+  tested. Nothing mounts `SettingsModal` yet; read its note in "Execution phases" for why that is
+  deliberate, and note the mounting task has moved to **4e**, not 4a.
+- **Phase 4a is merged** (#571): `maplibre-gl` from npm, the basemap registry, and `MapProvider`
+  with the style-reload lifecycle. It shipped the map instance only — no layers, no fetch loop.
+- **Phase 4b is COMPLETE and NOT served** (this branch): the imperative overlay module, the
+  viewport POI fetch loop, and the legend/filter panel. `/` still resolves to the vanilla map, so
+  users see no change; reach the React map with `npm run dev`. Read "Phase 4b — what landed" for
+  the two scoping corrections it makes (the panel's search box is dead code; park layers are
+  deliberately absent).
+- **Browser coverage is partial.** `SmokeTest.kt` now loads `/watches` and `/availability` and
+  asserts each renders (#572), so those two are covered. The React map page cannot be smoke-tested
+  yet — Ktor does not serve it — so **everything in 4a/4b is verified by unit tests and by hand,
+  not by CI in a browser.**
 
 ### Resume quickstart
 ```bash
 cd frontend
 npm ci              # vendor/* are workspaces — nothing is fetched for LDS
 npm run typecheck   # tsc --noEmit — must be clean
-npm run test        # vitest run — currently 464 tests green
+npm run test        # vitest run — currently 701 tests green
 npm run build       # vite build — emits dist/{index,availability,watches}.html
 npm run dev         # Vite dev server :5173, proxies /api,/auth,/web,/data → :8765 (Ktor)
 node ../scripts/check-color-tokens.mjs   # from frontend/, or drop the ../ from the repo root
@@ -138,6 +147,18 @@ frontend/
     pages/{map,availability,watches}/main.tsx  # one mountPage() call each
     pages/watches/WatchesPage.tsx              # Phase 1 ✅
     features/watches/*                         # WatchForm, TriggerSelector, WatchTable, hooks
+    features/availability-dashboard/*          # Phase 2 ✅
+    features/account/*                         # Phase 3 ✅ (built, not mounted — see below)
+    features/map/                              # Phase 4a-4b ✅
+      MapProvider.tsx basemaps.ts map.css      #   4a: instance + style lifecycle
+      MapView.tsx                              #   4b: composes the three hooks below
+      useViewportPois.ts useMapOverlays.ts     #   4b: fetch loop / install+paint+filter
+      LegendPanel.tsx BasemapPicker.tsx legend.css
+    map/                                       # imperative, non-React map internals
+      overlays.ts                              #   the pin-overlay registry + install calls
+      pins.ts agencies.ts state-lines.ts
+      viewport.ts viewport-cache.ts            #   request shaping / containment cache
+    test/fake-map.ts                           # recorder fake for the map suites
     ui/index.ts  ui/styles.css                 # @ui → @lew/lds-react; LDS css + roadtrip theme
     api/*.ts                                   # all 11 clients, typed + tested
     lib/{local-date,availability-status,geo,html,poi,watch-triggers}.ts  # pure, typed + tested
@@ -147,7 +168,7 @@ frontend/
     test/fetch-stub.ts                         # shared fetch stub for api tests
     types/{tokens,legacy}.d.ts                 # declarations for the @tokens / @legacy aliases
     app/shell.css                              # page chrome shared by all three pages
-    # TODO: map/ (imperative layers), features/{availability,account} (Phases 2-4)
+    # TODO: features/map/{Drawer,availability,topbar} (Phases 4c-4e)
 ```
 
 ### Aliases
@@ -319,9 +340,13 @@ this line is what led to porting it once already.
 > already exists and already builds as a Phase 0 placeholder, so the entry is in place;
 > what it needs is the map app inside it.
 >
-> **Phase 4a therefore owns one extra task:** render `<SettingsModal>` from the migrated map
-> shell and delete `web/account/*` plus the `mountSettingsModal` import in
-> `web/topbar/auth.js`.
+> **That task now belongs to 4e, not 4a.** 4a shipped the map instance and 4b the overlays and
+> legend, and neither has anywhere to open the modal FROM: the settings modal's only trigger is
+> the topbar's account button (`web/topbar/auth.js` mounts it into `#tb-auth`), and the topbar is
+> 4e. Mounting it earlier would mean inventing a second entry point and then deleting it — the
+> same throwaway work the island glue was rejected for. So: **4e renders `<SettingsModal>` from
+> the migrated topbar and deletes `web/account/*` plus the `mountSettingsModal` import in
+> `web/topbar/auth.js`.**
 >
 > **A latent bug was fixed in the port**, worth knowing because the same shape appears elsewhere
 > in `web/`: `settings-errors.js` looks up `MESSAGES[code] ?? DEFAULT` on a plain object, so a
@@ -330,8 +355,10 @@ this line is what led to porting it once already.
 > function is not nullish. The port uses a `Map`, which has no prototype keys to collide with.
 
 **Phase 4 — The map app** (`index.html`, ~9k LOC — largest/hardest). Sub-sequence:
-  4a. Map shell + `<MapProvider>` + imperative `map/` layer lifecycle + basemap/style-reload.
-  4b. Search + legend/filters + viewport POI fetch loop (debounce + AbortController + ring cache).
+  4a. *(MERGED, #571)* Map shell + `<MapProvider>` + basemap/style-reload. The imperative
+      layer lifecycle written into this line was **not** in it — 4b did that.
+  4b. *(COMPLETE, unserved)* Legend/filters + viewport POI fetch loop (debounce + abort + ring
+      cache) + the imperative overlay module 4a left. "Search" is struck: see below.
   4c. Drawer (session/hydration AbortController guard, mobile drag-dismiss) — 4 POI drawer types.
   4d. `availability/availability-week.js` (1,226 LOC, ~30-field ctx) → components + hooks,
       preserving seq-guarded staleness, state machine, drag-resize, popovers.
@@ -389,9 +416,14 @@ scans `.ts`/`.tsx`.
 - **What the stores deliberately do NOT hold.** The MapLibre map and Popup, the route
   AbortController, the endpoint Markers, per-layer FeatureCollections, and handler-binding
   bookkeeping are imperative handles, not state. Each store documents its exclusions.
-- **Only 7 of the 9 `window.__rt*` globals are shimmed.**
-  `__rtUseCurrentLocationForTripStop` and `__rtRouteShareUrl` are defined by `topbar.js` and
-  read by nothing in the repo, so publishing them would invent an API rather than preserve one.
+- **Only 7 of the 9 `window.__rt*` globals are shimmed** — and the stated reason was **wrong**.
+  Phase 0 held that `__rtUseCurrentLocationForTripStop` and `__rtRouteShareUrl` are "read by
+  nothing in the repo". `SmokeTest.kt` reads both (`__rtRouteShareUrl` at ~line 662,
+  `__rtUseCurrentLocationForTripStop` at ~803). They are a TEST seam, not dead API. The shim
+  itself is unchanged for now — the topbar that defines them is still vanilla — but **4e cannot
+  finish without publishing them**, or those smoke steps fail against a working page. The same
+  audit found the smoke also drives `__rtMap.jumpTo` and asserts on `__rtState.mapReady` and
+  `__rtState.overlayData.{cg,sc}.features[].id`; those are published now, see below.
 - **`core.js`'s "Idempotent" comment on `flattenHydratedPoi` was wrong** and is corrected in
   the port's docs (not its behavior). Fields derived only from `raw` — a park's
   `Loc_Nm`/`GIS_Acres`/`Mang_Name`, a supercharger's `stallCount`/`powerKilowatt`, Planet
@@ -399,6 +431,137 @@ scans `.ts`/`.tsx`.
   deletes `raw`. Pinned by tests, and the legacy implementation behaves identically.
 
 ---
+
+## Phase 4b — what landed
+
+**The map page now renders for real in dev** (`npm run dev`, `/`): basemap, pins, viewport
+fetching, and the legend. Ktor still serves `/` from `web/`, so this is invisible in a deployed
+build — deliberately, because the drawer (4c) and topbar (4e) are not there yet and a served page
+without them would be a regression.
+
+**`src/map/` — the imperative layer module 4a's line promised.**
+`installCGLayer`/`installPFLayer`/`installSCLayer` were three copies of the same six steps
+differing only in ids, paint and categories, so `overlays.ts` holds a **registry** —
+`POINT_OVERLAYS` — and one `installPointOverlay`. Layer ids are derived (`cg` → `cg-points`,
+`cg-points-hit`), so a fourth overlay is a registry entry rather than a fourth install function,
+and `bucketPins` dispatches categories from the same table instead of restating them in a
+`paintPois` if-chain. Two pieces of vanilla bookkeeping are simply gone, because React effect
+cleanup replaces them: `state.bound` (the "have I bound these handlers" flags) and
+`rebindLayerHandler` (an off-then-on pair to survive style reloads).
+
+**The fetch loop, mechanism by mechanism** (`features/map/useViewportPois.ts` documents this at
+the call site too):
+
+| Vanilla | React |
+|---|---|
+| 250ms `moveend` debounce | still hand-rolled — it is a property of the gesture, not the fetch |
+| `AbortController` per refresh | TanStack Query's `signal`; a pan changes the key, the old query loses its observer and query-core cancels it (it cancels only if the `queryFn` consumed the signal — passing it to `fetchViewportPois` is what makes this work) |
+| 8-entry viewport ring cache | `map/viewport-cache.ts`, consulted **inside** the `queryFn` |
+| `routePoiModeActive()` + two manual aborts | `enabled: !routeActive`, painting `tripStore.routePois` instead |
+
+The ring cache is **not** redundant with Query's cache: a query key matches exactly, so a
+one-pixel pan is a miss, while the ring answers "I already fetched a bbox that *contains* this
+one". Both tiers are needed and each is tested. The cache key still folds in whether campgrounds
+will actually come back (`|cg=1`), because the server strips them below zoom 6 — without that a
+cached low-zoom response would satisfy a contained high-zoom view and campgrounds would stay
+invisible.
+
+**Scope correction 1: the panel's search box is dead code and was NOT ported.** `web/search.js`
+filters `searchIndex`, and **nothing has called `registerSearchItems` since the slim `/api/pois`
+response stopped shipping names** — `web/app.js` says so in a comment. So the box cannot return a
+result, "sort by nearest" sorts nothing, and `topbar.js`'s `pinSearch` (which reads the same index
+through `getSearchIndex`) is dead for the same reason. Its one live effect was that focusing
+`#search` unlocked campgrounds at low zoom *so that search results could include them* — the
+purpose disappears with the search, so both go together. The sticky unlock itself is preserved for
+the zoom path. **Real cross-viewport search is `GET /api/pois/search`, driven by the topbar
+(4e).** Do not "restore" the panel search box on the assumption it worked.
+
+**Scope correction 2: no park layers, and no park toggles.** The vanilla map stopped requesting
+`national-park`/`state-park` (see the category list in `refreshBbox`) and left `f-np`/`f-sp` behind
+as `display:none` DOM stubs feeding always-empty sources. Porting that would reproduce ~100 lines
+of paint for data that never arrives. `map/viewport.ts` documents what reintroducing parks needs:
+a tile-rendered path plus a polygon overlay — adding the category alone would fetch data nothing
+paints.
+
+**`mapStore`'s filter state was reshaped, and 4b is its first consumer.** Phase 0 guessed at
+`categories: string[]` ("empty means unfiltered") and `agencies: string[] | null`, which cannot
+express the legacy behaviour: an all-on legend with per-row opt-out. Both are **hidden sets** now
+(`hiddenOverlays`, `hiddenAgencies`), which is what `web/layers.js` actually kept
+(`cgHiddenAgencies`) and why it works: the legend is viewport-scoped, so an agency appearing for
+the first time must default to visible. With a visible-set, panning into a new region would show
+nothing until the user ticked every new row. `mapReady` is also gone from the store — `MapProvider`
+owns that as `styleReady`, and two sources of truth for "may I install layers" is exactly how an
+overlay ends up attached to a style that no longer describes it.
+
+**Two API types were lying.** `fetchViewportPois` and `fetchOnRoutePois` were typed
+`PoiSearchResponse` (`{ results }`) when both POST paths return GeoJSON FeatureCollections. It
+typechecked because nothing read the result yet. Now `ViewportPoiCollection` / `PoiPinCollection`,
+pinned against `PoiFeatureCollectionSchema` and `PoisOnRouteResponseSchema`, and the api test's
+nested `[[w,s],[e,n]]` bbox is flat, which is what `PoisRequestSchema` takes.
+
+**MapLibre is its own build chunk.** `manualChunks: { maplibre: [...] }` in `vite.config.ts`: it is
+~800kB and changes only when we bump it, so bundling it with the map page's own code would
+invalidate all of it on every deploy. It still trips Rollup's 500kB warning and that is expected —
+the warning names `maplibre`, so a new warning naming something else is worth reading.
+
+**The QA globals are published** (`features/map/useQaHooks.ts`). `web/app.js` publishes
+`__rtMap`/`__rtState` for the smoke suite, and the React page has to as well or every map step in
+`SmokeTest.kt` fails on a page that renders perfectly. Two deliberate differences: `overlayData`
+carries only the overlays that exist (`cg`/`pf`/`sc` — publishing empty `np`/`sp` would invent a
+fact), and `selectedPoiId` is added, because a pin click records a selection that nothing renders
+until 4c and this is the only way to observe the click path. Still missing for a React `/`: the two
+topbar globals above.
+
+**The drawer's hydration path is verified, ahead of 4c.** The drawer fetches
+`GET /api/pois/{id}` from the id a pin click carries, and that id has only one source: MapLibre's
+top-level feature `id`. Driven in Chromium against the dev server, a click on a rendered pin yields
+`id` intact for a large numeric id **and for `0`**, which is falsy but a legitimate POI id — the
+case `pinFeatureId` and `selectIsDrawerOpen` were written for. The same run confirms
+`properties.id` is absent from the slim response, so **the fallback never fires and numeric feature
+ids are a hard dependency**: if `/api/pois` ever ships non-numeric string ids, MapLibre drops them
+and every drawer silently stops opening.
+
+**Not in 4b, and not owned by anything yet:** the `NavigationControl`/`GeolocateControl` pair and
+the custom user-location puck from `web/app.js` (the store has `userLocation` with no writer), and
+`core.js`'s single-popup `openPopup` helper. Their consumers are the drawer (4c) and the topbar's
+proximity search (4e), so they should land with whichever gets there first.
+
+### Seeing it
+
+`/` still serves the vanilla map, so the React map has its own URL where preview pages are
+switched on:
+
+| Where | URL |
+|---|---|
+| Sandbox (`ROADTRIP_SANDBOX_PREVIEW_PAGES=true`, set in `docker-compose.sandbox.yml`) | `/preview/map` |
+| Dev server | `npm run dev` → `http://localhost:5173/` (with the backend up for `/api` and `tokens.css`) |
+
+The preview URL is a **second** page, not a replacement, and that is the point: the vanilla map
+is still the only one with a drawer and a topbar, and it is what QA of everything else on a
+sandbox runs against. `previewPages` in `StaticSiteRoutes.kt` is the list; a page graduates by
+moving to `migratedPages`, and the flag goes away with the last one. Production never has it on.
+
+**Three things were only findable in a browser**, which is worth repeating given how much of
+this migration is otherwise unit-tested. Driving the dev server in headless Chromium (POI
+responses stubbed at the network layer) turned up:
+
+1. **The map rendered inset by 20px and scrolled the page.** `app/shell.css` pads `body` for the
+   two list pages, and a `100dvh` map inside that padding overflows by the padding — MapLibre's
+   attribution ended up under the fold. `.rt-map-shell` is `position: fixed; inset: 0` now.
+2. **`viewport-fit=cover` was missing from `frontend/index.html`.** Without it iOS reports every
+   `env(safe-area-inset-*)` as 0, and the panel and its buttons — which position with
+   `max(10px, env(safe-area-inset-top))` — would sit under the notch.
+3. **Phase 4a's opening view did not match the vanilla map** despite a comment saying it did:
+   `[-119.5, 37.5] @ z5` (California) instead of `[-98.5, 39.5] @ z3.6` (continental US). Fixed;
+   it also changed what the first POI request asks for.
+
+**Verified:** typecheck clean · 701 tests green · build emits 3 pages · color check ok · and in
+headless Chromium: the page mounts, the canvas fills the viewport (1280×800, no page scroll), all
+three pin overlays paint in their token colors, the legend counts and agency rows match the
+response, unticking an overlay hides its pins, unticking an agency filters them, and **the overlays
+survive a basemap change** — the one behaviour `styleReady` exists for. The dev-server harness is
+not committed; `scripts/` has no browser tooling and the real home for this is `SmokeTest.kt`, once
+Ktor serves the page.
 
 ## Serving (DONE)
 
@@ -508,6 +671,41 @@ Consequences worth knowing:
 - **A `useMemo` dependency array must be a constant size.** A per-item query fan-out
   (`useQueries` over N ids) cannot be spread into deps; collapse it to one scalar.
 
+- **LDS's `Checkbox` IS safe to drive from state — the uncontrolled rule is about the caret.**
+  A repaint replaces the control's DOM, which is fatal for a text field mid-typing and harmless for
+  a checkbox, so pass `checked` from the store and mirror `onChange` back. Better still: a React
+  node passed as the `label` slot renders through a portal into a stable placeholder, so the
+  template string does not change when only the label does — a legend row's count can tick without
+  repainting its input at all.
+- **Turn LDS's own knob down rather than restyling its controls.** `.lds-check` pads itself to
+  `--control-xl` (44px, the touch floor). In a 50-row agency legend that is 2,200px of scrolling, so
+  `legend.css` sets `--control-xl: 26px` on the list container and restores 40px under the mobile
+  breakpoint. The control, its box and its focus ring stay LDS's.
+- **A new bbox is a new query key, and a new key has no data yet.** Painting `query.data` straight
+  through therefore blanks every overlay for the length of each round trip, and leaves it blank on a
+  failed fetch — where `refreshBbox` logged and returned, keeping the pins already on screen.
+  `useViewportPois` holds the last successfully fetched features and repaints from them until the
+  next success. An empty *successful* response still clears the map, because that is a real answer.
+- **An overlay installed on its own schedule needs an explicit insertion anchor.** MapLibre appends,
+  and the vanilla paint order was implicit in one `style.load` handler installing everything in
+  sequence. The state boundaries arrive when their fetch resolves — usually after the pins — so they
+  pass `firstInstalledPinLayerId(map)` as `beforeId` or they draw over every dot.
+- **The install effect must be able to see the newest data, and effects run in declaration order.**
+  `useMapOverlays` keeps the current buckets in a ref synced by an effect declared BEFORE the
+  install effect. Without that, a basemap change installs empty layers and the paint effect fills
+  them one frame later — a visible flash of a map with no pins, which is exactly what the vanilla
+  reinstall-from-cache avoided.
+- **MapLibre throws on a missing layer id**, and between a basemap change and the reinstall there
+  are no app layers at all. `setLayoutProperty`, `setFilter` and `queryRenderedFeatures` are all
+  guarded by `getLayer` (`installedHitLayerIds` exists for the third one). A guard here is not
+  defensive padding; the window is real and it is hit on every basemap switch.
+- **Do not trust a Phase-0 store shape until something consumes it.** `mapStore`'s filter fields
+  were designed before the legend existed and could not express its behaviour (all-on with per-row
+  opt-out); `mapReady` was declared and never written. Both were corrected in 4b. Check the rest of
+  the stores against their first real consumer rather than assuming they fit.
+- **An app-shell page must escape `app/shell.css`'s `body` padding.** That padding exists for the
+  document-flow pages; a full-bleed surface inside it renders inset and overflows. `.rt-map-shell`
+  uses `position: fixed; inset: 0`.
 - **Vitest must be v3 for Vite 6.** Vitest 2.x depends on Vite 5 and pulls a *nested* copy,
   causing a `Plugin` type clash with `@vitejs/plugin-react`. Use Vitest 3 and import
   `defineConfig` from `vitest/config` (not `vite`).

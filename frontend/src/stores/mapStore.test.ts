@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from 'vitest';
 import {
   selectIsAgencyVisible,
   selectIsDrawerOpen,
+  selectIsOverlayVisible,
   useMapStore,
   type Viewport,
 } from './mapStore';
@@ -13,31 +14,22 @@ const VIEWPORT: Viewport = { bbox: [-122, 40, -121, 41], zoom: 9 };
 beforeEach(() => map().reset());
 
 describe('initial state', () => {
-  test('starts unfiltered, unready, and with no selection', () => {
+  test('starts unfiltered and with no selection', () => {
     expect(map()).toMatchObject({
-      mapReady: false,
       viewport: null,
       userLocation: null,
-      categories: [],
-      agencies: null,
+      hiddenOverlays: [],
+      hiddenAgencies: [],
       selectedPoiId: null,
     });
   });
 });
 
-describe('viewport and readiness', () => {
+describe('viewport', () => {
   test('records the viewport', () => {
     map().setViewport(VIEWPORT);
 
     expect(map().viewport).toEqual(VIEWPORT);
-  });
-
-  test('mapReady gates layer installation', () => {
-    map().setMapReady(true);
-    expect(map().mapReady).toBe(true);
-
-    map().setMapReady(false);
-    expect(map().mapReady).toBe(false);
   });
 
   test('records the user location with its accuracy', () => {
@@ -47,52 +39,59 @@ describe('viewport and readiness', () => {
   });
 });
 
-describe('category filter', () => {
-  // Empty means "no category filter", matching the legend's all-on state — NOT
-  // "show nothing".
-  test('an empty list is the unfiltered state', () => {
-    expect(map().categories).toEqual([]);
+describe('overlay filter', () => {
+  // The hidden set is empty by default, which is the legend's all-on state — an
+  // overlay nothing has said anything about is visible.
+  test('an overlay is visible until it is hidden', () => {
+    expect(selectIsOverlayVisible('sc')(map())).toBe(true);
+
+    map().setOverlayHidden('sc', true);
+
+    expect(selectIsOverlayVisible('sc')(map())).toBe(false);
   });
 
-  test('toggleCategory adds then removes', () => {
-    map().toggleCategory('campground');
-    expect(map().categories).toEqual(['campground']);
+  test('toggleOverlay flips one overlay and leaves the others alone', () => {
+    map().setOverlayHidden('pf', true);
+    map().toggleOverlay('sc');
 
-    map().toggleCategory('campground');
-    expect(map().categories).toEqual([]);
+    expect(map().hiddenOverlays).toEqual(['pf', 'sc']);
+
+    map().toggleOverlay('sc');
+
+    expect(map().hiddenOverlays).toEqual(['pf']);
   });
 
-  test('toggleCategory keeps the other selections', () => {
-    map().setCategories(['campground', 'state-park']);
-    map().toggleCategory('campground');
+  // Filter effects key off array identity, so a no-op write must not produce a
+  // new array — otherwise every unrelated store write re-runs setFilter.
+  test('a redundant write keeps the same array', () => {
+    map().setOverlayHidden('sc', true);
+    const first = map().hiddenOverlays;
 
-    expect(map().categories).toEqual(['state-park']);
-  });
+    map().setOverlayHidden('sc', true);
 
-  test('setCategories replaces wholesale', () => {
-    map().setCategories(['a']);
-    map().setCategories(['b', 'c']);
-
-    expect(map().categories).toEqual(['b', 'c']);
+    expect(map().hiddenOverlays).toBe(first);
   });
 });
 
 describe('agency filter', () => {
-  test('null means unfiltered, so every agency is visible', () => {
-    expect(selectIsAgencyVisible('nps')(map())).toBe(true);
+  test('every agency is visible until it is hidden', () => {
+    expect(selectIsAgencyVisible('US Forest Service')(map())).toBe(true);
   });
 
-  test('an empty array means every agency was switched off', () => {
-    map().setAgencies([]);
+  // The legend is viewport-scoped: its rows come and go as the user pans, so an
+  // agency seen for the first time has to default to visible.
+  test('an agency nobody has switched off is visible', () => {
+    map().setAgencyHidden('US Forest Service', true);
 
-    expect(selectIsAgencyVisible('nps')(map())).toBe(false);
+    expect(selectIsAgencyVisible('US Forest Service')(map())).toBe(false);
+    expect(selectIsAgencyVisible('BC Parks')(map())).toBe(true);
   });
 
-  test('only listed agencies are visible', () => {
-    map().setAgencies(['nps', 'usfs']);
+  test('un-hiding removes it from the set', () => {
+    map().setAgencyHidden('BC Parks', true);
+    map().setAgencyHidden('BC Parks', false);
 
-    expect(selectIsAgencyVisible('nps')(map())).toBe(true);
-    expect(selectIsAgencyVisible('state')(map())).toBe(false);
+    expect(map().hiddenAgencies).toEqual([]);
   });
 });
 
@@ -128,21 +127,19 @@ describe('selection and drawer', () => {
 
 describe('reset', () => {
   test('returns everything to the defaults', () => {
-    map().setMapReady(true);
     map().setViewport(VIEWPORT);
     map().setUserLocation({ lng: 0, lat: 0 });
-    map().setCategories(['campground']);
-    map().setAgencies(['nps']);
+    map().setOverlayHidden('pf', true);
+    map().setAgencyHidden('BC Parks', true);
     map().selectPoi(42);
 
     map().reset();
 
     expect(map()).toMatchObject({
-      mapReady: false,
       viewport: null,
       userLocation: null,
-      categories: [],
-      agencies: null,
+      hiddenOverlays: [],
+      hiddenAgencies: [],
       selectedPoiId: null,
     });
   });

@@ -48,6 +48,16 @@ export default defineConfig({
         availability: here('./availability.html'),
         watches: here('./watches.html'),
       },
+      output: {
+        // MapLibre is ~800kB minified and changes only when we bump it, while the
+        // map page's own code changes constantly. In one chunk together, every app
+        // deploy would invalidate the whole 800kB for every returning user.
+        //
+        // It still trips Rollup's 500kB chunk-size warning, and that is expected:
+        // the warning names `maplibre` rather than an app chunk, which is the
+        // point. A NEW warning naming something else is worth reading.
+        manualChunks: { maplibre: ['maplibre-gl'] },
+      },
     },
   },
   server: {

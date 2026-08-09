@@ -73,6 +73,14 @@ export const queryKeys = {
       ['dashboard', 'changes', 'summary', String(poiId), dates ?? null] as const,
   },
 
+  /**
+   * A static GeoJSON asset served out of the legacy `web/` tree (state lines).
+   *
+   * Its own namespace rather than a `pois` entry: it is a file, not an API
+   * resource, and it must not be swept up by a `['pois']` invalidation.
+   */
+  staticGeoJson: (url: string) => ['static-geojson', url] as const,
+
   geocode: (q: string, autocomplete: boolean, limit: number, proximity?: string | null) =>
     ['geocode', q, autocomplete, limit, proximity ?? null] as const,
 
