@@ -409,7 +409,11 @@ class SmokeTest {
             assertTrue(nps.isChecked())
             assertFalse(forestService.isChecked())
 
-            // Re-checking the agency shows its pins again.
+            // Re-checking the agency shows its pins again — and the expected set is all
+            // THREE agencies, where the vanilla expected two. That is a consequence of
+            // the repaint above being a refetch: `__rtRefreshBbox` re-serves the stubbed
+            // three-feature response, while the vanilla's `__rtSetRoutePois` had
+            // replaced the painted set with two features and dropped WA State Parks.
             agencyRow(page, "US Forest Service").click()
             assertTrue(forestService.isChecked())
             page.waitForFunction(
@@ -423,7 +427,9 @@ class SmokeTest {
                     .map(f => f.properties.agency)
                     .filter(Boolean)
                     .sort();
-                  return JSON.stringify(agencies) === JSON.stringify(['National Park Service', 'US Forest Service']);
+                  return JSON.stringify(agencies) === JSON.stringify(
+                    ['National Park Service', 'US Forest Service', 'WA State Parks'],
+                  );
                 }
                 """.trimIndent(),
                 null,
