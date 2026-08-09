@@ -360,8 +360,17 @@ this line is what led to porting it once already.
   4b. *(COMPLETE, unserved)* Legend/filters + viewport POI fetch loop (debounce + abort + ring
       cache) + the imperative overlay module 4a left. "Search" is struck: see below.
   4c. Drawer (session/hydration AbortController guard, mobile drag-dismiss) — 4 POI drawer types.
-  4d. `availability/availability-week.js` (1,226 LOC, ~30-field ctx) → components + hooks,
-      preserving seq-guarded staleness, state machine, drag-resize, popovers.
+  4d. The map-side availability tree → components + hooks, preserving seq-guarded
+      staleness, the state machine, drag-resize and the popovers. **Scope corrected:
+      this is 3,298 LOC across 12 files, not the 1,226 of `availability-week.js`
+      alone** — that file is the biggest, not the whole phase. Measured:
+      `availability-week.js` 1226, `site-matrix.js` 627, `watch-editor.js` 417,
+      `site-detail.js` 338, `site-list.js` 202, `calendar-popover.js` 147,
+      `watch-popover.js` 110, `booking-links.js` 88, `day-detail.js` 73,
+      plus `day-fields.js`/`watch-events.js`/`auth-events.js` at ~70 together.
+      It mounts inside the campground drawer (`campground.js:48`), so 4c must land
+      first, and a sane sub-sequence is: the week grid + its fetch/staleness guard,
+      then the day detail and site matrix, then the watch editor and popovers.
   4e. Topbar/trip planner (drag-reorder, turf corridor, route + share-link encode/restore);
       replace remaining `window.__rt*` with `tripStore`.
 

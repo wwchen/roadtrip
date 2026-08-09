@@ -374,3 +374,282 @@
 .rt-sc-rate-value {
   font-variant-numeric: tabular-nums;
 }
+
+/* --- campground --------------------------------------------------------- */
+
+/* Bleeds to the drawer edges, so it cancels the shell's horizontal padding. */
+.rt-drawer-hero {
+  margin: 0 -16px 16px;
+  height: 168px;
+  background: var(--rt-bg-sunken) center / cover no-repeat;
+}
+
+@media (min-width: 768px) {
+  .rt-drawer-hero {
+    margin: 0 -24px 16px;
+  }
+}
+
+.rt-drawer-hero + .rt-drawer-head {
+  padding-top: 0;
+}
+
+/* Identifies the place: which park contains it, and who runs it. */
+.rt-cg-parent {
+  margin: 0 0 2px;
+  color: var(--rt-text);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.rt-cg-agency {
+  margin: 0 0 2px;
+  color: var(--rt-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.rt-cg-verdict {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--rt-r-pill);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.rt-cg-verdict--open {
+  background: var(--rt-avail-bg);
+  color: var(--rt-avail);
+}
+
+.rt-cg-verdict--closed,
+.rt-cg-verdict--fcfs {
+  background: var(--rt-first-come-bg);
+  color: var(--rt-warn);
+}
+
+/* A first-come pin with nothing to link to: stated, not a dead button. */
+.rt-cg-cta-disabled {
+  align-self: center;
+  color: var(--rt-muted);
+  font-size: 13px;
+}
+
+.rt-cg-availability-pending {
+  color: var(--rt-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.rt-cg-details > summary {
+  cursor: pointer;
+  color: var(--rt-text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.rt-cg-group + .rt-cg-group {
+  margin-top: 12px;
+}
+
+.rt-cg-group h4 {
+  margin: 12px 0 6px;
+  color: var(--rt-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.rt-cg-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rt-cg-row {
+  display: flex;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.rt-cg-row-label {
+  flex: 0 0 40%;
+  color: var(--rt-muted);
+}
+
+.rt-cg-row-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rt-cg-row-value a {
+  color: var(--rt-brand);
+  text-decoration: none;
+}
+
+.rt-cg-row-value a:hover {
+  text-decoration: underline;
+}
+
+.rt-cg-connection {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-right: 8px;
+}
+
+.rt-cg-connection code {
+  font-size: 11px;
+}
+
+.rt-cg-links {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rt-cg-links a {
+  color: var(--rt-brand);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.rt-cg-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.rt-cg-alert {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--rt-first-come-bg);
+  border-radius: var(--rt-r-sm);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Per-carrier signal on rec.gov's 0-4 scale. See the --rt-signal-* note in tokens.css. */
+.rt-cg-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.rt-cg-signal {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--rt-r-pill);
+  font-size: 11px;
+}
+
+.rt-cg-signal[data-bucket='0'] {
+  background: var(--rt-signal-0);
+}
+
+.rt-cg-signal[data-bucket='1'] {
+  background: var(--rt-signal-1);
+}
+
+.rt-cg-signal[data-bucket='2'] {
+  background: var(--rt-signal-2);
+}
+
+.rt-cg-signal[data-bucket='3'] {
+  background: var(--rt-signal-3);
+}
+
+.rt-cg-signal[data-bucket='4'] {
+  background: var(--rt-signal-4);
+}
+
+.rt-cg-signal-carrier {
+  font-weight: 500;
+}
+
+.rt-cg-signal-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.rt-cg-rating {
+  margin-top: 6px;
+  color: var(--rt-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rt-cg-stars {
+  margin-right: 2px;
+  color: var(--rt-rating);
+  letter-spacing: -1px;
+}
+
+.rt-cg-sites {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--rt-muted);
+}
+
+.rt-cg-verified {
+  margin-top: 8px;
+  color: var(--rt-muted);
+  font-size: 11px;
+}
+
+.rt-cg-verified--stale {
+  color: var(--rt-warn);
+  font-weight: 500;
+}
+
+.rt-cg-upstream-meta {
+  color: var(--rt-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.rt-cg-upstream-meta > * + * {
+  margin-top: 6px;
+}
+
+.rt-cg-upstream-meta strong {
+  color: var(--rt-text);
+  font-weight: 500;
+}
+
+/* Sanitised provider markup — structural tags only, so this just needs rhythm. */
+.rt-drawer-html {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.rt-drawer-html--inline {
+  display: inline;
+}
+
+.rt-drawer-html p {
+  margin: 0 0 8px;
+}
+
+.rt-drawer-html ul,
+.rt-drawer-html ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.rt-drawer-html a {
+  color: var(--rt-brand);
+}

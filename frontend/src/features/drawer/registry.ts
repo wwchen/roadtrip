@@ -12,6 +12,7 @@
 // `Object.prototype` members (the bug documented in `lib/settings-errors.ts`).
 import type { ComponentType } from 'react';
 import type { FlatPoiFeature } from '@/lib/poi';
+import { CampgroundDrawer } from './CampgroundDrawer';
 import { ParkDrawer } from './ParkDrawer';
 import { PlanetFitnessDrawer } from './PlanetFitnessDrawer';
 import { SuperchargerDrawer } from './SuperchargerDrawer';
@@ -29,16 +30,15 @@ export type DrawerContent = ComponentType<DrawerContentProps>;
  * endpoint answered, exactly as in the overlay registry.
  */
 const BY_CATEGORY = new Map<string, DrawerContent>([
+  ['campground', CampgroundDrawer],
   ['national-park', ParkDrawer],
   ['state-park', ParkDrawer],
   ['planet_fitness_location', PlanetFitnessDrawer],
   ['planet-fitness', PlanetFitnessDrawer],
   ['tesla_supercharger', SuperchargerDrawer],
   ['supercharger', SuperchargerDrawer],
-  // Still to come in 4c: `campground` — 275 lines plus a 589-line detail card whose
-  // availability section is the 4d boundary. Until it lands, campground pins open the
-  // drawer and say there is no panel yet (`PoiDrawer`'s banner), which is a visible,
-  // truthful gap rather than a click that appears to do nothing.
+  // Complete for every category the map paints. A category with no entry still opens
+  // the drawer and says so — see `PoiDrawer` — rather than swallowing the click.
 ]);
 
 /**

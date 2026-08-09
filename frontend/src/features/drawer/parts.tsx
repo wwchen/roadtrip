@@ -52,18 +52,38 @@ export function useDistanceTo(lng: number | undefined, lat: number | undefined):
 export interface DrawerHeaderProps {
   name: string;
   sub?: string;
-  /** The campground drawer's availability verdict row. */
+  /**
+   * Rows between the title and the subline — the campground's containing park and
+   * managing agency. They sit above `sub` because they identify the place, where the
+   * subline only locates it.
+   */
+  above?: ReactNode;
+  /** The campground drawer's season verdict. */
   verdict?: ReactNode;
 }
 
-export function DrawerHeader({ name, sub, verdict }: DrawerHeaderProps) {
+export function DrawerHeader({ name, sub, above, verdict }: DrawerHeaderProps) {
   return (
     <header className="rt-drawer-head">
       <h2>{name}</h2>
+      {above}
       {sub ? <div className="rt-drawer-sub">{sub}</div> : null}
       {verdict ? <div className="rt-drawer-verdict">{verdict}</div> : null}
     </header>
   );
+}
+
+/**
+ * Sanitised provider markup.
+ *
+ * The only `dangerouslySetInnerHTML` in the drawer, and it is only safe because of
+ * what produces the string: `lib/upstream-html.ts` parses provider HTML with
+ * DOMParser and walks it against a tag/attribute whitelist. Never pass anything else
+ * to this — if a value did not come out of that module, it is not sanitised.
+ */
+export function ProviderHtml({ html, inline = false }: { html: string; inline?: boolean }) {
+  const className = inline ? 'rt-drawer-html rt-drawer-html--inline' : 'rt-drawer-html';
+  return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 export interface DirectionsButtonProps {
