@@ -1,23 +1,23 @@
-// Phone/text formatting helpers. Typed port of the string section of
-// web/core.js — behavior preserved exactly.
+// Phone parsing and formatting. Typed port of the phone section of web/core.js —
+// behaviour preserved exactly. `features/drawer/parts.tsx`'s `CallButtons` is the
+// consumer; these three are the shared rule it renders from.
 //
-// `escapeHtml` stays because escaping is still needed outside React's own: the
-// only `dangerouslySetInnerHTML` left in the tree is fed by
-// `lib/upstream-html.ts`, whose whitelist sanitiser is built on it.
+// Was `lib/html.ts`, and carried two markup builders that Phase 5 took with `web/`:
 //
-// `callButtonsHTML` is gone. It built `<a class="cg-btn …">Call …</a>` strings for
-// the vanilla drawer; the React drawer renders `CallButtons` in
-// `features/drawer/parts.tsx` from `phoneNumbers`/`telHref`/`formatPhone` below,
-// so with `web/` deleted the string builder had no caller left. The three helpers
-// are the shared rule both renderers were written against.
-
-const HTML_ESCAPES: Readonly<Record<string, string>> = Object.freeze({
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;',
-});
+//   - `callButtonsHTML` built `<a class="cg-btn …">Call …</a>` strings for the
+//     vanilla drawer. `CallButtons` renders the same thing as components, so once
+//     the vanilla tree was gone the string builder had no caller.
+//   - `escapeHtml` never had one at all: `git log -S` finds no non-test importer in
+//     `frontend/src` since Phase 0 ported it. It was ported for the MapLibre popups
+//     and the campground card, and 4b/4c built both as components instead. Meanwhile
+//     `format.ts` recorded why it should not exist ("React escapes text nodes itself.
+//     Porting it would invite double-escaping"), and the one place markup IS built by
+//     hand — `descriptionHtml` in `upstream-html.ts` — escapes *by construction*,
+//     setting text nodes and reading back `outerHTML` precisely so there is no
+//     hand-rolled escaper to get wrong. Its tests went with it; `upstream-html`'s own
+//     suite covers the sanitiser that actually guards `dangerouslySetInnerHTML`.
+//
+// Which left a file named `html.ts` containing no HTML. Hence the rename.
 
 /** Phone fields arrive single, or slash/comma/semicolon-delimited. */
 const PHONE_SEPARATORS = /[/,;]/;
@@ -27,10 +27,6 @@ const NON_DIAL_CHARS = /[^\d+]/g;
 const US_NATIONAL_DIGITS = 10;
 const US_COUNTRY_CODE_DIGITS = 11;
 const US_COUNTRY_CODE = '1';
-
-export function escapeHtml(s: unknown): string {
-  return String(s).replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]!);
-}
 
 /** US 10-digit numbers → `(XXX) XXX-XXXX`; everything else passes through. */
 export function formatPhone(s: string): string {

@@ -206,9 +206,16 @@ swap so the map and charts re-resolve.
 ## Escaping
 
 React escapes what it renders, so the vanilla tree's `escapeHtml`-at-every-
-interpolation discipline is gone. The **only** `dangerouslySetInnerHTML` in the tree
-is `ProviderHtml` in `features/drawer/parts.tsx`, fed solely by
-`lib/upstream-html.ts`'s whitelist sanitiser. Do not add a second one.
+interpolation discipline is gone — and so is the helper. **There is no `escapeHtml` in
+this tree, deliberately**; if you find yourself wanting one, you are building a markup
+string, which is the thing to stop doing.
+
+The **only** `dangerouslySetInnerHTML` in the tree is `ProviderHtml` in
+`features/drawer/parts.tsx`, fed solely by `lib/upstream-html.ts`'s whitelist
+sanitiser — `DOMParser` builds an inert document, the tree is walked, and anything not
+allowed is replaced by its own text content. **Do not add a second one.** The one place
+that does build markup by hand, `descriptionHtml`, escapes by construction: it sets
+text nodes and reads back `outerHTML`, so there is no escaper to get wrong.
 
 ## The map: an imperative escape hatch
 

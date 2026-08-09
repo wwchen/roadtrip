@@ -218,11 +218,21 @@ is a normal tsconfig `paths` entry now.
 - **`web/api/*`** — pure same-origin fetch wrappers over `http.js`/`HttpError`, ported to typed
   `.ts` and wrapped in TanStack Query hooks. Logic unchanged.
 - **`web/utils/*`** (`local-date.js`, `availability-status.js`) + pure `core.js` helpers
-  (`escapeHtml`, `distanceKm`, `formatDistance`, `geomCenter`, `zoomForBbox`,
-  `flattenHydratedPoi`, `formatPhone`) → `src/lib/` as `.ts`. `callButtonsHTML` was on this list
-  and is gone: it built markup strings for the vanilla drawer, the React drawer renders
-  `CallButtons` from the same `phoneNumbers`/`telHref` rules, and with `web/` deleted the string
-  builder had no caller. Its tests moved onto those two helpers, which had none of their own.
+  (`distanceKm`, `formatDistance`, `geomCenter`, `zoomForBbox`, `flattenHydratedPoi`,
+  `formatPhone`) → `src/lib/` as `.ts`.
+
+  **Two markup helpers were on that list and are gone.** `callButtonsHTML` built
+  `<a class="cg-btn …">Call …</a>` strings for the vanilla drawer; `CallButtons` renders the same
+  thing as components, so once the vanilla tree went the string builder had no caller.
+  `escapeHtml` **never had one** — `git log -S` finds no non-test importer in `frontend/src` since
+  Phase 0 ported it, because it was ported for the MapLibre popups and the campground card and
+  4b/4c built both as components. Meanwhile `format.ts` had already recorded why it should not
+  exist ("React escapes text nodes itself. Porting it would invite double-escaping"), and the one
+  place markup is hand-built (`descriptionHtml` in `upstream-html.ts`) escapes *by construction*,
+  setting text nodes and reading back `outerHTML` so there is no escaper to get wrong. What
+  remained was a `lib/html.ts` containing no HTML, so it is **`lib/phone.ts`** now.
+  `callButtonsHTML`'s tests moved onto the `phoneNumbers`/`telHref` rules they were really
+  exercising, which had none of their own.
 
 ### What is replaced
 - `web/design-system/*` primitives → `@lew/lds-react` (via `@ui`).
@@ -1147,7 +1157,7 @@ tiles.
    is a lift — but it matters more now that the topbar is the only search surface. Still
    outstanding.
 
-## Phase 5 — what landed (branch `claude/phase-5-web-deletion`)
+## Phase 5 — what landed (branch `claude/phase-5-web-deletion-8b3euo`)
 
 `web/` is deleted: 14.6k LOC across ~100 files, plus the root `index.html`. `frontend/` is the
 whole of the site, and the only other static tree Ktor serves is `data/`.
@@ -1269,7 +1279,20 @@ the line Phase 5 drew rather than deleting everything with "legacy" in its name.
   behaviour risk, and not part of removing the vanilla tree. The module's comment says this now,
   in place of "drop this module then".
 
-`callButtonsHTML` is the counter-example: no consumer at all, so it went. See "What was preserved".
+`callButtonsHTML` and `escapeHtml` are the counter-examples: no consumer at all, so they went, and
+`lib/html.ts` became `lib/phone.ts`. See "What was preserved".
+
+**One of those two was found by reviewing this change rather than while making it**, which is worth
+recording as a shape. The first pass kept `escapeHtml` and wrote a comment justifying it —
+"the only `dangerouslySetInnerHTML` left is fed by `lib/upstream-html.ts`, whose whitelist sanitiser
+is built on it". That sentence was plausible, load-bearing-sounding, and false: `upstream-html.ts`
+never imported it, and the sanitiser is a `DOMParser` tree walk with no escaper in it at all.
+Nothing failed, because **an exported function with no importer is invisible to `tsc`, to
+`noUnusedLocals`, and to a test suite that imports it itself** — the three gates that would
+otherwise catch dead code. A `lib/` export's only real check is a grep for its importers, and a
+comment asserting a caller is worth exactly as much as the grep behind it. Phase 0 ported it for the
+MapLibre popups and the campground card; 4b and 4c built both as components, and nothing went back
+to remove it.
 
 ### Verified
 
