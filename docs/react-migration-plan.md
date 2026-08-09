@@ -39,9 +39,13 @@
 - **Phase 4d is merged** (#576). Three P2 defects found reviewing it afterwards are fixed on
   branch `claude/availability-state-bugs-l2jp54` — read "Phase 4d follow-ups" before touching
   `AvailabilityWeek`, `DayDetail` or `useWatches`, because that branch reshapes all three.
-- **Phase 4e is IN PROGRESS** on branch `claude/react-migration-4e-topbar`: the pure layers,
-  the route overlay and the stop markers have landed; the hooks, the components, the alerts
-  panel and the graduation of `/` have not. Its own section below is the handoff.
+- **Phase 4e is IN PROGRESS** on branch `claude/react-migration-4e-topbar`, and most of it
+  has landed: the pure layers, the route/corridor overlay and markers, the three fetch
+  hooks, the panel itself (search, directions, drag-reorder, corridor slider), `?route=` in
+  both directions, the auth row that finally mounts Phase 3's `<SettingsModal>`, and the
+  `window.__rt*` shim — which Phase 0 wrote and **nothing had ever installed**. Still out:
+  the trip-results card list, the alerts panel, the geolocate control, and the graduation of
+  `/`. Its own section below is the handoff.
 - **Browser coverage is partial.** `SmokeTest.kt` now loads `/watches` and `/availability` and
   asserts each renders (#572), so those two are covered. The React map page cannot be smoke-tested
   yet — Ktor does not serve it — so **everything in 4a/4b is verified by unit tests and by hand,
@@ -824,18 +828,36 @@ vanilla map.
 
 | Piece | File | Notes |
 |---|---|---|
-| Share links (both writers, the `?route=` reader, clipboard) | `lib/share-links.ts` | 4c already ported the `?poi=` reader |
+| Share links: both writers, the `?route=` reader, clipboard | `lib/share-links.ts` | 4c already ported the `?poi=` reader |
 | The stop list as algebra | `features/trip/stops.ts` | every rule from `onRowX`/`onAddStop`/`addTripStopFromExternal`/the drop handler |
 | Corridor buffer + radius clamp | `features/trip/corridor.ts` | turf from npm |
 | Summary copy, leg lines, routing errors | `features/trip/route-summary.ts` | |
+| Dropdown data: kinds, ordering, sections | `features/trip/search-results.ts` | |
+| Route fetch (single writer of `tripStore.route`) | `features/trip/useRoute.ts` | key replaces `generation` + `routeAbort` |
+| Corridor POI fetch | `features/trip/useOnRoutePois.ts` | 250ms debounce, publishes on success only |
+| Search-as-you-type | `features/trip/useSearchResults.ts` | two sources in parallel |
+| `?route=` in both directions | `features/trip/useSharedTrip.ts` | |
+| The controller | `features/trip/useTripPlanner.ts` | transitions + focus + geolocation + camera |
+| The panel | `TopBar`, `StopRow`, `SearchDropdown`, `RouteStatus`, `CorridorSlider`, `topbar.css` | mounted from `MapView` |
+| Auth row + `<SettingsModal>` trigger | `features/trip/AuthRow.tsx`, `auth-row.css` | Phase 3's mounting task, done |
 | Route line + corridor fill, bounds | `map/route-overlay.ts` | imperative, `FakeMap`-tested |
 | Stop markers | `map/trip-markers.ts` | positional registry |
+| The four map effects | `features/map/useTripOverlay.ts` | install / fit / radius / markers |
+| The `window.__rt*` seams | `stores/transition-shim.ts` (`useTransitionShim`) + `TopBar` | installed for the first time — see below |
 
-`TripStop` gained `pending` (the legacy `_pending`), and turf arrived as
-`@turf/buffer` + `@turf/simplify`, replacing the CDN `@turf/turf@7` global — the same
-swap Phase 2 made for Chart.js.
+`TripStop` gained `pending` (the legacy `_pending`); `tripStore`'s geometry fields are
+GeoJSON-typed rather than `Record<string, unknown>`; and turf arrived as `@turf/buffer` +
+`@turf/simplify`, replacing the CDN `@turf/turf@7` global — the same swap Phase 2 made for
+Chart.js.
 
-**Four things worth knowing before continuing:**
+**What the query key replaced, and what it did not.** As in 4b, three pieces of hand-rolled
+bookkeeping are gone because the key does the job: `trip.generation` (a stale response has
+no observer to reach), `trip.routeAbort` (Query's signal), and the vanilla's inconsistent
+"should this re-route" decision per handler — producing a complete trip *is* requesting its
+route. The two debounces stayed hand-rolled, because both are properties of a gesture
+rather than of a fetch: 250ms on the corridor slider, 220ms on typing.
+
+**Six things worth knowing before continuing:**
 
 - **The share format is a contract.** `share-links.test.ts` pins a literal string the
   vanilla encoder produced, in both directions — decoded, and re-encoded byte for byte.
@@ -845,50 +867,77 @@ swap Phase 2 made for Chart.js.
   `/api/pois/on-route`, where the backend caps a request polygon at 2000 vertices, and an
   unsimplified 100-mile buffer of a cross-country line exceeds it. Pinned by a
   vertex-count test.
-- **One legacy branch is unreachable and was dropped**, not translated: `onRowX`'s
-  `if (wasFilled) { clear in place }` inside its `stops.length <= 2` guard cannot fire,
-  because every row in a two-row trip is structural and a filled structural row returned
-  earlier. Noted at the site in `stops.ts`.
+- **The corridor radius is deliberately NOT in the route key** (`queryKeys.route` says so
+  at the definition): the road does not depend on it, only the corridor polygon the
+  response carries does, and the slider recomputes that locally. Keying on it would fire a
+  routing request per slider settle.
 - **`pending` has to live on the stop.** The row can move while geolocation resolves, and
   both routing and marker placement must skip a stop whose coordinates are still (0, 0) —
   null island passes every finite check, which is the same trap `hasCoordinates` exists
-  for in 4c.
+  for in 4c. The `Number(null) === 0` variant of it bit the search-result coordinate guard
+  too, and is fixed there.
+- **Two legacy branches are unreachable and were dropped**, not translated: `onRowX`'s
+  `if (wasFilled) { clear in place }` inside its `stops.length <= 2` guard (every row in a
+  two-row trip is structural, so a filled one returned earlier), and the transitions'
+  `shouldRoute` field, which nothing can consume now that the stops are the key. Both
+  noted at the site.
+- **The DOM contract the smoke suite addresses is preserved on purpose**: `data-i` on rows,
+  and the ids `#topbar`, `#tb-actions`, `#tb-directions`, `#tb-route-summary`,
+  `#tb-dropdown`, `#tb-corridor`, `#tb-corridor-range`, `#tb-corridor-value`. Cheap, and it
+  means `SmokeTest.kt` needs one selector set rather than one per tree while both exist.
+  The ones it uses that do NOT exist yet all belong to the results list: `#tb-results`,
+  `.tb-results-*`, `.tb-card*`, plus `#tb-trip-dates` and `#tb-share-route` — two features
+  the unread `topbar.js:1736-2054` region evidently holds.
+
+**A latent Phase 0 defect, found in a browser rather than by a test.**
+`installTransitionShim` had existed since Phase 0 with **no caller**, so every
+`window.__rt*` global was absent from the React tree. Unit tests could not see it — they
+call the installer directly. Driving the built page in Chromium and asking for
+`__rtRouteShareUrl()` returned `undefined`, which is what surfaced it. It is now mounted by
+the map page (`useTransitionShim`), not by `AppProviders`: the watches and availability
+pages have no business publishing a trip API. The two globals the Phase 0 audit recorded as
+"read by nothing" are published — `SmokeTest.kt` reads both — with `__rtRouteShareUrl` in
+the shim and `__rtUseCurrentLocationForTripStop` in `TopBar`, because filling a row needs
+the planner.
+
+**Verified** (each commit re-ran all four gates): typecheck clean, 1,295 tests green, build
+ok — only `maplibre` trips the 500kB chunk warning, as before — colour and CSS-block checks
+ok. And driven in headless Chromium at 1280×900 and 420×900 against stubbed
+`/api/pois/search`, `/api/geocode`, `/api/route` and `/api/pois/on-route`: the panel fits
+both viewports and clears the legend control, typing lists both sources under POIS/PLACES
+headers with the dropdown above the fold, a pick fills the row, Directions adds the second
+row, the route lands ("132 km · 2h 5m", `trip-route-line` + `trip-corridor-fill` installed,
+two stop markers, `?route=` in the address bar, a non-empty `__rtRouteShareUrl()`), and the
+corridor slider is draggable at both widths, reads "2 campgrounds along the route" and does
+not re-request the route.
+
+**One parity observation for design, not a regression.** On desktop an open drawer covers
+the topbar: the drawer is a left panel at `z-index: 999` and the topbar sits at 5. The
+vanilla's `.cg-drawer` does exactly the same above `min-width: 768px`, so this is a lift,
+not something the port introduced — but it now matters more, because the topbar is the
+only search surface. Worth a look.
 
 ### What remains, in dependency order
 
-1. **Data hooks.** `useRoute` (Query keyed on stops + radius — the key replaces
-   `trip.generation` and the `routeAbort`, exactly as 4b's viewport key replaced its
-   AbortController; map failures through `routeErrorMessage`). `useOnRoutePois` (250ms
-   debounce, `enabled` on a complete trip, writes `tripStore.routePois`).
-   `useSearchResults` (220ms debounce; merges the local pin index, `POST /api/pois/search`
-   and `/api/geocode`, deduping backend hits already in the pin index, POI-first ordering).
-2. **The topbar itself.** `TopBar` + `StopRow` (drag-reorder via HTML5 DnD, the locate
-   button, the X whose behaviour is already in `stops.ts`), `SearchDropdown` (sections,
-   arrow-key navigation), the actions row, the summary/status lines, the corridor slider.
-   CSS lifts out of `injectStyles` into a stylesheet — note 4d's lesson: a rule that
-   loses its closing brace is still valid CSS, and `scripts/check-css-blocks.mjs` is what
-   catches it.
-3. **Trip results** (`web/topbar.js:1736-2054`, not yet read): the campground card list,
-   its route-distance index, hydration, collapse state and per-agency filtering.
-4. **The alerts panel** (`web/topbar/alerts.js`, 655 lines, not yet read). It imports
+1. **Trip results** (`web/topbar.js:1736-2054`, still not read): the campground card list,
+   its route-distance index (`indexRoute` / `distanceAlongRouteKm` — `formatDistanceAlongRoute`
+   is already ported for it), hydration, collapse state, per-agency filtering, and the two
+   features the smoke selectors imply, `#tb-trip-dates` and `#tb-share-route`.
+2. **The alerts panel** (`web/topbar/alerts.js`, 655 lines, still not read). It imports
    `web/availability/watch-editor.js`, which 4d has already ported as `WatchEditor` — so
    this is the second consumer that port was written for.
-5. **Auth row + `<SettingsModal>`.** Phase 3's components exist and are tested; this is
-   the mounting task, and it is where `web/account/*` and the `mountSettingsModal` import
-   in `web/topbar/auth.js` get deleted. Implement the `auth_embedded: false` branch only
-   (see the Phase 3 note).
-6. **Geolocation.** `NavigationControl`/`GeolocateControl`, the user-location puck, and a
-   writer for `mapStore.userLocation` — which has had no writer since Phase 0, and until
-   it does the drawer's `useDistanceTo` returns `''` and no drawer shows a distance.
-   `core.js`'s single-popup `openPopup` belongs here too.
-7. **The `window.__rt*` seams.** `__rtTripMode`, `__rtRouteActive`, `__rtAddTripStop`,
-   `__rtClearBrowsePin`, `__rtOpenPoiById`, `__rtSetRoutePois`, and the two the Phase 0
-   audit got wrong — `__rtRouteShareUrl` and `__rtUseCurrentLocationForTripStop` are read
-   by `SmokeTest.kt` (~lines 662 and 803), so 4e cannot finish without publishing them.
-8. **Graduation.** `?route=` restore on load, then move `/` from `previewPages` to
-   `migratedPages` in `StaticSiteRoutes.kt` and extend `SmokeTest.kt`. Only after 1-7:
-   a served map page without the topbar is a regression, which is why 4b and 4c stayed
-   behind the preview flag.
+3. **Geolocation.** `NavigationControl`/`GeolocateControl` and the user-location puck.
+   `mapStore.userLocation` now has two writers (the topbar's locate button and the
+   `__rtUseCurrentLocationForTripStop` seam), but nothing yet writes it from a map control,
+   and the drawer's `useDistanceTo` stays `''` until something does. `core.js`'s
+   single-popup `openPopup` belongs here too.
+4. **Graduation.** Move `/` from `previewPages` to `migratedPages` in
+   `StaticSiteRoutes.kt`, then work through `SmokeTest.kt`: its topbar selectors are
+   already satisfied except the results-list ones above, and the availability/drawer steps
+   should pass as-is. Only after 1-3 — a served map page missing the card list and the
+   alerts panel is a regression, which is why 4b and 4c stayed behind the preview flag.
+5. **Then Phase 5** can delete `web/topbar*`, `web/account/*`, `web/search.js`,
+   `web/share-links.js` and the rest.
 
 ## Serving (DONE)
 
