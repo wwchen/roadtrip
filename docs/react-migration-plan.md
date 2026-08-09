@@ -504,6 +504,21 @@ the custom user-location puck from `web/app.js` (the store has `userLocation` wi
 `core.js`'s single-popup `openPopup` helper. Their consumers are the drawer (4c) and the topbar's
 proximity search (4e), so they should land with whichever gets there first.
 
+### Seeing it
+
+`/` still serves the vanilla map, so the React map has its own URL where preview pages are
+switched on:
+
+| Where | URL |
+|---|---|
+| Sandbox (`ROADTRIP_SANDBOX_PREVIEW_PAGES=true`, set in `docker-compose.sandbox.yml`) | `/preview/map` |
+| Dev server | `npm run dev` → `http://localhost:5173/` (with the backend up for `/api` and `tokens.css`) |
+
+The preview URL is a **second** page, not a replacement, and that is the point: the vanilla map
+is still the only one with a drawer and a topbar, and it is what QA of everything else on a
+sandbox runs against. `previewPages` in `StaticSiteRoutes.kt` is the list; a page graduates by
+moving to `migratedPages`, and the flag goes away with the last one. Production never has it on.
+
 **Three things were only findable in a browser**, which is worth repeating given how much of
 this migration is otherwise unit-tested. Driving the dev server in headless Chromium (POI
 responses stubbed at the network layer) turned up:

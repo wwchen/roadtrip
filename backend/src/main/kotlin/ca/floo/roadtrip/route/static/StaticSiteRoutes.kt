@@ -30,6 +30,22 @@ import java.io.File
  */
 private val migratedPages = listOf("watches.html", "availability.html")
 
+/**
+ * In-progress React pages, by the URL name they get under `/preview`.
+ *
+ * A page belongs here when the React build produces it but `migratedPages` does
+ * not own it yet — the map, mid-Phase-4. It is a SECOND url, not a replacement:
+ * `/` keeps serving the vanilla page, which matters because the vanilla map is
+ * still the only one with a drawer and a topbar, and is what QA of everything
+ * else runs against. Flipping `/` on a sandbox would take that away.
+ *
+ * Gated on `roadtrip.sandbox.preview-pages`, off by default, so production never
+ * exposes a half-built page. A page graduates by moving to `migratedPages`, and
+ * this list (with the flag) goes away when the last one does.
+ */
+private val previewPages = mapOf("map" to INDEX_FILE)
+
+private const val PREVIEW_PREFIX = "/preview"
 private const val HTML_SUFFIX = ".html"
 private const val LEGACY_WEB_DIR = "web"
 private const val DATA_DIR = "data"
@@ -49,6 +65,7 @@ private val geoJsonContentType = ContentType("application", "geo+json")
 internal fun Route.staticSiteRoutes(
     staticDir: File,
     frontendDir: File = File(staticDir, FRONTEND_DIR),
+    previewPagesEnabled: Boolean = false,
 ) {
     // Hashed bundles, fonts, and the icon sprite emitted by `vite build`. This
     // mount is what makes a built page loadable at all: the catch-all at the
@@ -72,6 +89,18 @@ internal fun Route.staticSiteRoutes(
         for (path in listOf("/$page", extensionless)) {
             get(path) {
                 val file = migratedPageFile(frontendDir, staticDir, page)
+                if (file == null) call.respond(HttpStatusCode.NotFound) else call.respondFile(file)
+            }.access(RouteAccess.Anonymous)
+        }
+    }
+
+    // In-progress pages, where they are switched on. No legacy fallback: a
+    // preview URL has no vanilla counterpart (the vanilla page is still at its own
+    // URL), so an unbuilt frontend means there is genuinely nothing to serve here.
+    if (previewPagesEnabled) {
+        for ((name, page) in previewPages) {
+            get("$PREVIEW_PREFIX/$name") {
+                val file = File(frontendDir, page).takeIf { it.isFile }
                 if (file == null) call.respond(HttpStatusCode.NotFound) else call.respondFile(file)
             }.access(RouteAccess.Anonymous)
         }

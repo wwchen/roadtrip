@@ -61,7 +61,10 @@ class SandboxRoutesTest {
         testApplication {
             application {
                 routing {
-                    sandboxRoutes(SandboxConfig(assumeUserEnabled = true), stubUserRepo(listOf(willAdmin, mattUser)))
+                    sandboxRoutes(
+                        SandboxConfig(assumeUserEnabled = true, previewPagesEnabled = false),
+                        stubUserRepo(listOf(willAdmin, mattUser)),
+                    )
                 }
             }
             val resp = client.get("/api/sandbox/users")
@@ -78,7 +81,10 @@ class SandboxRoutesTest {
         testApplication {
             application {
                 routing {
-                    sandboxRoutes(SandboxConfig(assumeUserEnabled = false), stubUserRepo(emptyList()))
+                    sandboxRoutes(
+                        SandboxConfig(assumeUserEnabled = false, previewPagesEnabled = false),
+                        stubUserRepo(emptyList()),
+                    )
                 }
             }
             assertEquals(HttpStatusCode.NotFound, client.get("/api/sandbox/users").status)
