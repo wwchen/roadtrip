@@ -10,6 +10,7 @@ import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 
 /**
  * The strangler seam: which tree a page is served from.
@@ -129,10 +130,18 @@ class StaticSiteRoutesTest {
 
     // Off by default, because the page it exposes is half-built by definition. A
     // production deployment must not be able to reach it at all.
+    //
+    // Forbidden rather than Not Found, and not because of anything this route does:
+    // with no preview route registered, the path falls through to the catch-all,
+    // whose `exclude` refuses everything in a subdirectory. Any `/a/b` URL on the
+    // legacy site answers the same way. What matters is that the built page is not
+    // what comes back.
     @Test
     fun `a preview page is not reachable when previews are off`() =
         serving(legacyTree(), builtTree()) { client ->
-            assertEquals(HttpStatusCode.NotFound, client.get("/preview/map").status)
+            val response = client.get("/preview/map")
+            assertEquals(HttpStatusCode.Forbidden, response.status)
+            assertNotEquals(BUILT_MAP, response.bodyAsText())
         }
 
     // No legacy fallback for a preview URL: the vanilla page is at its own url, so

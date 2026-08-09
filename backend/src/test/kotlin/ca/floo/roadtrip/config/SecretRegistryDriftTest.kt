@@ -43,6 +43,7 @@ class SecretRegistryDriftTest {
             "ROADTRIP_BUILD_SHA",
             "ROADTRIP_BUILD_BRANCH",
             "ROADTRIP_SANDBOX_ASSUME_USER",
+            "ROADTRIP_SANDBOX_PREVIEW_PAGES",
         )
 
     @Test
