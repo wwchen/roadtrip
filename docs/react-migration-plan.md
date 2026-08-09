@@ -1,6 +1,6 @@
 # Frontend Migration: vanilla JS → React + TypeScript
 
-> **Handoff doc.** Status as of 2026-08-09. This is the source of truth for the
+> **Handoff doc.** Status as of 2026-08-09 (Phase 4e complete). This is the source of truth for the
 > React migration; it captures the approved plan, decisions, what's already
 > done (and verified), what remains, and the gotchas discovered along the way so
 > a fresh agent session can continue without re-deriving anything.
@@ -31,32 +31,37 @@
   deliberate, and note the mounting task has moved to **4e**, not 4a.
 - **Phase 4a is merged** (#571): `maplibre-gl` from npm, the basemap registry, and `MapProvider`
   with the style-reload lifecycle. It shipped the map instance only — no layers, no fetch loop.
-- **Phase 4b is COMPLETE and NOT served** (this branch): the imperative overlay module, the
-  viewport POI fetch loop, and the legend/filter panel. `/` still resolves to the vanilla map, so
-  users see no change; reach the React map with `npm run dev`. Read "Phase 4b — what landed" for
-  the two scoping corrections it makes (the panel's search box is dead code; park layers are
-  deliberately absent).
+- **Phase 4b is merged**: the imperative overlay module, the viewport POI fetch loop, and the
+  legend/filter panel. Read "Phase 4b — what landed" for the two scoping corrections it makes
+  (the panel's search box is dead code; park layers are deliberately absent).
 - **Phase 4d is merged** (#576), and so are the three P2 defects a later review of it found
   (#577) — read "Phase 4d follow-ups" before touching `AvailabilityWeek`, `DayDetail` or
   `useWatches`, because that fix reshaped all three.
-- **Phase 4e is IN PROGRESS** on branch `claude/react-migration-4e-topbar`, and most of it
-  has landed: the pure layers, the route/corridor overlay and markers, the three fetch
-  hooks, the panel itself (search, directions, drag-reorder, corridor slider), `?route=` in
-  both directions, the auth row that finally mounts Phase 3's `<SettingsModal>`, and the
-  `window.__rt*` shim — which Phase 0 wrote and **nothing had ever installed**. Still out:
-  the trip-results card list, the alerts panel, the geolocate control, and the graduation of
-  `/`. Its own section below is the handoff.
-- **Browser coverage is partial.** `SmokeTest.kt` now loads `/watches` and `/availability` and
-  asserts each renders (#572), so those two are covered. The React map page cannot be smoke-tested
-  yet — Ktor does not serve it — so **everything in 4a/4b is verified by unit tests and by hand,
-  not by CI in a browser.**
+- **Phase 4e is COMPLETE**, across `claude/react-migration-4e-topbar` (PR #578) and
+  `claude/react-migration-4e-results` stacked on it: the pure layers, the route/corridor
+  overlay and markers, the fetch hooks, the panel (search, directions, drag-reorder), the
+  campgrounds-along-route card list with the corridor slider inside it, the alerts panel with
+  its Slack deep link, `?route=` in both directions, the auth row that finally mounts Phase
+  3's `<SettingsModal>`, the map's zoom/locate-me controls and the user-location puck, and
+  the `window.__rt*` shim — which Phase 0 wrote and **nothing had ever installed**. Its own
+  section below is the handoff.
+- **`/` is React.** `index.html` is in `migratedPages`, the `/preview/*` mount and its sandbox
+  flag are deleted, and `SmokeTest.kt` drives the React DOM. **Phase 5 — deleting `web/` — is
+  what's left**; read "What remains" in the 4e section for the two runtime dependencies that
+  have to move first.
+- **Browser coverage is real now.** `SmokeTest.kt` covers all three pages, and its seven map
+  tests drive the React app: the cold load, the mobile layers sheet, the agency filter, two
+  shared-link paths, the shared route, and route mode from the current location. It needs a live
+  stack (`make qa` with `QA_BASE_URL`), so it does not run where there is no Postgres — the
+  selectors were verified against `frontend/dist` in headless Chromium instead, which is how the
+  drawer-registry P0 in "Graduating `/`" was found.
 
 ### Resume quickstart
 ```bash
 cd frontend
 npm ci              # vendor/* are workspaces — nothing is fetched for LDS
 npm run typecheck   # tsc --noEmit — must be clean
-npm run test        # vitest run — currently 701 tests green
+npm run test        # vitest run — currently 1,394 tests green
 npm run build       # vite build — emits dist/{index,availability,watches}.html
 npm run dev         # Vite dev server :5173, proxies /api,/auth,/web,/data → :8765 (Ktor)
 node ../scripts/check-color-tokens.mjs   # from frontend/, or drop the ../ from the repo root
@@ -541,25 +546,19 @@ case `pinFeatureId` and `selectIsDrawerOpen` were written for. The same run conf
 ids are a hard dependency**: if `/api/pois` ever ships non-numeric string ids, MapLibre drops them
 and every drawer silently stops opening.
 
-**Not in 4b, and not owned by anything yet:** the `NavigationControl`/`GeolocateControl` pair and
-the custom user-location puck from `web/app.js` (the store has `userLocation` with no writer), and
-`core.js`'s single-popup `openPopup` helper. Their consumers are the drawer (4c) and the topbar's
-proximity search (4e), so they should land with whichever gets there first.
+**Not in 4b, and landed in 4e instead:** the `NavigationControl`/`GeolocateControl` pair and the
+custom user-location puck from `web/app.js` — `map/controls.ts`, `map/user-location.ts` and
+`features/map/useUserLocation.ts` now. `core.js`'s single-popup `openPopup` was on this list too
+and is **deliberately not ported**: nothing in `web/` imports it (the drawer replaced popups long
+ago), so porting it would have added dead code to the new tree.
 
 ### Seeing it
 
-`/` still serves the vanilla map, so the React map has its own URL where preview pages are
-switched on:
-
-| Where | URL |
-|---|---|
-| Sandbox (`ROADTRIP_SANDBOX_PREVIEW_PAGES=true`, set in `docker-compose.sandbox.yml`) | `/preview/map` |
-| Dev server | `npm run dev` → `http://localhost:5173/` (with the backend up for `/api` and `tokens.css`) |
-
-The preview URL is a **second** page, not a replacement, and that is the point: the vanilla map
-is still the only one with a drawer and a topbar, and it is what QA of everything else on a
-sandbox runs against. `previewPages` in `StaticSiteRoutes.kt` is the list; a page graduates by
-moving to `migratedPages`, and the flag goes away with the last one. Production never has it on.
+Historical, as of 4e: while 4b–4d were in flight the React map lived at `/preview/map` behind
+`ROADTRIP_SANDBOX_PREVIEW_PAGES`, because `/` still served the vanilla page and that was what QA
+of everything else ran against. **4e graduated `/`, and the preview mount and its flag are gone**
+— every URL is the React one. `npm run dev` → `http://localhost:5173/` is still the fastest way
+to see it (with the backend up for `/api` and `tokens.css`).
 
 **Three things were only findable in a browser**, which is worth repeating given how much of
 this migration is otherwise unit-tested. Driving the dev server in headless Chromium (POI
@@ -863,14 +862,19 @@ Slack row, and saving posts `trigger_kinds: ["email_notify"]` with the address i
 `trigger_config`. The one anchor worth checking in a browser was the day-panel button:
 4d only ever anchored the popover to a matrix cell.
 
-## Phase 4e — IN PROGRESS (branch `claude/react-migration-4e-topbar`)
+## Phase 4e — COMPLETE (branches `claude/react-migration-4e-topbar`, `…-4e-results`)
 
 The topbar and trip planner: `web/topbar.js` (2,054) + `web/topbar/alerts.js` (655) +
-`web/topbar/auth.js` (167) + `web/topbar/state.js` (46) + `web/share-links.js`. Branched
-off master after 4d; **nothing is served differently yet**, and `/` still resolves to the
-vanilla map.
+`web/topbar/auth.js` (167) + `web/topbar/state.js` (46) + `web/share-links.js` — plus the
+map's own controls, and **the graduation of `/`**. The React map is what every visitor
+gets now; `web/` is still on disk and still serves `tokens.css`, the sandbox modules and
+the GeoJSON layers, but no page resolves to it.
 
-### What landed so far
+Landed across two branches: the panel itself on `claude/react-migration-4e-topbar`
+(PR #578), and the results list, the alerts panel, the map controls and the graduation on
+`claude/react-migration-4e-results`, which is stacked on it.
+
+### What landed
 
 | Piece | File | Notes |
 |---|---|---|
@@ -890,6 +894,16 @@ vanilla map.
 | Stop markers | `map/trip-markers.ts` | positional registry |
 | The four map effects | `features/map/useTripOverlay.ts` | install / fit / radius / markers |
 | The `window.__rt*` seams | `stores/transition-shim.ts` (`useTransitionShim`) + `TopBar` | installed for the first time — see below |
+| Distance along the route | `features/trip/route-index.ts` | `indexRoute` / `distanceAlongRouteKm`, a cumulative table |
+| The card list's data | `features/trip/trip-cards.ts`, `useTripCards.ts` | sort, hydrate, agency/campground filtering |
+| The card list | `features/trip/TripResults.tsx` + results CSS | collapsible; **owns the corridor slider** |
+| Alerts: the rules | `features/alerts/alert-rows.ts` | ordering, counts, copy, the Slack deep-link contract |
+| Alerts: the data | `features/alerts/useAlerts.ts` | three statuses via `useQueries`; 401 = anonymous |
+| Alerts: the panel | `features/alerts/AlertsPanel.tsx`, `alerts.css` | row actions + 4d's `WatchEditor` as the edit row |
+| Watch formatting, shared | `lib/watch-format.ts` | lifted out of `WatchTable.tsx`, two consumers now |
+| Zoom + locate-me controls | `map/controls.ts` | bottom-right, one low-accuracy fix |
+| The user-location puck | `map/user-location.ts`, `features/map/useUserLocation.ts` | follows the STORE, not the control event |
+| Graduation of `/` | `StaticSiteRoutes.kt`, `SmokeTest.kt` | `previewPages` and its flag deleted |
 
 `TripStop` gained `pending` (the legacy `_pending`); `tripStore`'s geometry fields are
 GeoJSON-typed rather than `Record<string, unknown>`; and turf arrived as `@turf/buffer` +
@@ -929,11 +943,12 @@ rather than of a fetch: 250ms on the corridor slider, 220ms on typing.
   noted at the site.
 - **The DOM contract the smoke suite addresses is preserved on purpose**: `data-i` on rows,
   and the ids `#topbar`, `#tb-actions`, `#tb-directions`, `#tb-route-summary`,
-  `#tb-dropdown`, `#tb-corridor`, `#tb-corridor-range`, `#tb-corridor-value`. Cheap, and it
-  means `SmokeTest.kt` needs one selector set rather than one per tree while both exist.
-  The ones it uses that do NOT exist yet all belong to the results list: `#tb-results`,
-  `.tb-results-*`, `.tb-card*`, plus `#tb-trip-dates` and `#tb-share-route` — two features
-  the unread `topbar.js:1736-2054` region evidently holds.
+  `#tb-dropdown`, `#tb-results`, `.tb-results-*`, `.tb-card*`, `#tb-corridor`,
+  `#tb-corridor-range`, `#tb-corridor-value`. Cheap, and it is why graduating `/` left the
+  smoke's topbar assertions untouched. Two selectors it names are **`hasCount(0)`
+  assertions, not features**: `#tb-share-route` and `#tb-trip-dates` were dropped, and the
+  smoke pins their absence. And the corridor slider lives *inside*
+  `#tb-results .tb-results-body`, which is also what the vanilla did.
 
 **A latent Phase 0 defect, found in a browser rather than by a test.**
 `installTransitionShim` had existed since Phase 0 with **no caller**, so every
@@ -946,9 +961,12 @@ pages have no business publishing a trip API. The two globals the Phase 0 audit 
 the shim and `__rtUseCurrentLocationForTripStop` in `TopBar`, because filling a row needs
 the planner.
 
-**Verified** (each commit re-ran all four gates): typecheck clean, 1,295 tests green, build
-ok — only `maplibre` trips the 500kB chunk warning, as before — colour and CSS-block checks
-ok. And driven in headless Chromium at 1280×900 and 420×900 against stubbed
+**Verified** (each commit re-ran all four gates): typecheck clean, **1,394 tests green**,
+build ok — only `maplibre` trips the 500kB chunk warning, as before — colour and CSS-block
+checks ok. Kotlin's own gates could NOT run here: `:backend:generateJooq` needs Docker for
+its testcontainer Postgres, so `StaticSiteRoutesTest` and the rest are unverified in this
+environment (detekt passes, and the touched files compile far enough to resolve). And driven
+in headless Chromium at 1280×900 and 420×900 against stubbed
 `/api/pois/search`, `/api/geocode`, `/api/route` and `/api/pois/on-route`: the panel fits
 both viewports and clears the legend control, typing lists both sources under POIS/PLACES
 headers with the dropdown above the fold, a pick fills the row, Directions adds the second
@@ -997,27 +1015,109 @@ vanilla's `.cg-drawer` does exactly the same above `min-width: 768px`, so this i
 not something the port introduced — but it now matters more, because the topbar is the
 only search surface. Worth a look.
 
-### What remains, in dependency order
+### The results list, the alerts panel and geolocation — what they turned out to be
 
-1. **Trip results** (`web/topbar.js:1736-2054`, still not read): the campground card list,
-   its route-distance index (`indexRoute` / `distanceAlongRouteKm` — `formatDistanceAlongRoute`
-   is already ported for it), hydration, collapse state, per-agency filtering, and the two
-   features the smoke selectors imply, `#tb-trip-dates` and `#tb-share-route`.
-2. **The alerts panel** (`web/topbar/alerts.js`, 655 lines, still not read). It imports
-   `web/availability/watch-editor.js`, which 4d has already ported as `WatchEditor` — so
-   this is the second consumer that port was written for.
-3. **Geolocation.** `NavigationControl`/`GeolocateControl` and the user-location puck.
-   `mapStore.userLocation` now has two writers (the topbar's locate button and the
-   `__rtUseCurrentLocationForTripStop` seam), but nothing yet writes it from a map control,
-   and the drawer's `useDistanceTo` stays `''` until something does. `core.js`'s
-   single-popup `openPopup` belongs here too.
-4. **Graduation.** Move `/` from `previewPages` to `migratedPages` in
-   `StaticSiteRoutes.kt`, then work through `SmokeTest.kt`: its topbar selectors are
-   already satisfied except the results-list ones above, and the availability/drawer steps
-   should pass as-is. Only after 1-3 — a served map page missing the card list and the
-   alerts panel is a regression, which is why 4b and 4c stayed behind the preview flag.
-5. **Then Phase 5** can delete `web/topbar*`, `web/account/*`, `web/search.js`,
-   `web/share-links.js` and the rest.
+**Trip results** (`web/topbar.js:1736-2054`, read for this). The card list is a projection
+of the corridor response, sorted by distance along the route, each card hydrated from
+`/api/pois/{id}` through the same query key the drawer uses — so a card and a drawer for
+the same campground share one round trip. `route-index.ts` is the only new algorithm: a
+cumulative-distance table over the route line, and a closest-segment lookup in degree
+space, which is what turns a POI into "33 km in". Two features the smoke's selectors
+implied do NOT exist and are asserted absent: `#tb-share-route` and `#tb-trip-dates`.
+
+**The alerts panel** (`web/topbar/alerts.js`). Three status lists through `useQueries`, POI
+names under `queryKeys.pois.name`, and a 401 read as "this visitor is anonymous" rather
+than as a fault — so the panel is *absent* rather than showing an error, the same call 4d's
+availability grid makes. A Slack deep link (`?alert=<id>&alert_action=<action>`) expands the
+panel, scrolls the row into view and **pulses the named control without pressing it**: a
+stale or forwarded card must not be able to change a watch, so the app stays the only
+writer. The edit row is 4d's `WatchEditor`, which is the second consumer that port was
+written for. `relativeTime` / `formatWatchDate` / `watchFallbackName` moved out of
+`WatchTable.tsx` into `lib/watch-format.ts` now that two surfaces say the same things.
+
+**Geolocation**, with three deliberate departures from `web/app.js`:
+
+- **the puck follows the store, not the control event.** `mapStore.userLocation` has three
+  writers (the map control, the topbar's locate button, the
+  `__rtUseCurrentLocationForTripStop` seam) and the vanilla drew a puck for the first of
+  them only — so locating yourself from the topbar left the map with no "you are here" at
+  all. One effect on one field covers every writer, and makes the store's "single source of
+  truth for where am I" comment true rather than aspirational.
+- **a failed fix reports through a toast.** The vanilla appended a `div.geo-banner` to the
+  body and **`web/` has no `.geo-banner` rule anywhere** — that message has been rendering
+  as unstyled text at the top of the document. `<ToastProvider>` is already app-wide.
+- **`showUserLocation: false` on the control**, because we draw the puck. The vanilla asked
+  for `showUserHeading: false`, which this version of MapLibre has no option for at all, so
+  that line was doing nothing.
+
+`rerenderSearchResults()` has no counterpart: `useSearchResults` subscribes to
+`userLocation` for its proximity bias, so React re-renders it by subscription. And
+`core.js`'s `openPopup` is **not ported on purpose** — nothing in `web/` imports it, so it
+is dead code there and would have been dead code here.
+
+### Graduating `/` — what it cost
+
+`index.html` joined `migratedPages`; `urlFormsOf` gives the root page `/` as its second URL
+form instead of the `/index` that stripping `.html` produces; and the catch-all's
+`default(index.html)` came off so the explicit route is the only claimant on `/`. The
+`/preview/*` mount and `roadtrip.sandbox.preview-pages` were deleted with it — the map was
+the only page they ever carried — which also took out `SandboxConfig`'s field, the
+`application.yaml` key, the sandbox compose env var and the secret-registry entry.
+
+**A P0 in 4c that graduation would have shipped.** `flattenHydratedPoi` rewrites a
+campground's `category` to its `subcategory` (a `core.js` behaviour its parity suite pins
+byte for byte), and `drawerFor` keyed on `category` — so every campground carrying a
+subcategory, which is nearly all of them, opened *"No detail view for this place yet"*. The
+vanilla never had to answer the question: it dispatched on which layer was clicked
+(`layers.js` called `openCampgroundDrawer` directly). `drawerFor` now takes the flattened
+properties and recognises the rewrite (`category === subcategory` ⟹ campground, and only
+campgrounds are rewritten). Every drawer test until then used a park, which is not
+rewritten — so the suite was green. **Found by driving the built page in Chromium**, which
+is now three phases in a row where the browser found what the tests could not.
+
+**`SmokeTest.kt` moved onto the React DOM.** The topbar assertions are unchanged (that is
+what the preserved ids bought); the drawer and legend are addressed by role and accessible
+name instead of `#cg-drawer.open` / `#panel` / `#cg-agency-legend input[data-cg-agency]`.
+Every selector in the rewritten suite was verified against `frontend/dist` in headless
+Chromium with a stub API, because the Kotlin suite needs a live stack (Postgres, the
+geocoder, tiles) and **could not be run in this environment** — nor could the Kotlin unit
+tests, since `:backend:generateJooq` needs Docker. Three findings from that pass, all of
+which would have failed CI:
+
+1. **The agency rows have to be clicked by their label.** LDS renders the real input at
+   `opacity: 0` with no size and `pointer-events: none` and draws `.lds-check__box` in its
+   place, so `check()`/`uncheck()` on the input times out with "element is not visible".
+   The input is still what reports state.
+2. **The corridor slider is not in the DOM until a route is live**, because it lives inside
+   the results list now. The vanilla built the row up front and hid it, so the old
+   assertion passed against a `display: none` control. The assertion moved to after the
+   route lands.
+3. **`__rtSetRoutePois` can no longer drive a repaint** — React paints route POIs only
+   while a route is *active* — so the agency filter's "the un-check survives a repaint"
+   step drives `__rtRefreshBbox` instead.
+
+`/` also joined the mount-and-render test, probing the legend's heading: it renders whether
+or not MapLibre ever gets a style, which makes it a test of the bundle rather than of the
+tiles.
+
+### What remains
+
+1. **Phase 5 — delete the strangled vanilla.** `web/topbar*`, `web/account/*`,
+   `web/search.js`, `web/share-links.js`, `web/drawer/*`, `web/layers.js`, `web/app.js`,
+   `web/core.js` and the root `index.html` are all unreachable now that `/` is React. Two
+   things must be kept or replaced first, because a React page loads them at runtime:
+   `web/design-system/tokens.css` (the colour source of truth, and what
+   `scripts/check-color-tokens.mjs` checks against) and the two `web/sandbox-*` modules.
+   `@legacy/core` and `@tokens` in `vite.config.ts` are the aliases that go with them, and
+   `lib/poi.test.ts`'s parity suite imports the legacy flattener — retire that suite in the
+   same change, or the deletion breaks the build.
+2. **The `window.__rt*` shim can go too**, once `SmokeTest.kt` no longer reads it. It is a
+   transition seam, and the transition is over; the smoke could drive the same steps
+   through the UI, at the cost of a slower and flakier suite. Worth a decision rather than
+   a default.
+3. **One design question, not a regression.** On desktop an open drawer covers the topbar
+   (drawer `z-index: 999`, topbar 5). The vanilla did exactly the same above 768px, so it
+   is a lift — but it matters more now that the topbar is the only search surface.
 
 ## Serving (DONE)
 
@@ -1053,7 +1153,12 @@ Migrated pages are served from the React build; everything else still resolves f
   `npm` being present and non-fatal on failure, so a host without Node serves the legacy
   site instead of failing the deploy.
 
-Still legacy-served: `/` (map, Phase 4) and `/availability` (Phase 2).
+**Nothing is legacy-served any more.** 4e added `index.html` to `migratedPages`, so all three
+pages come from `frontend/dist`; `web/` and `data/` stay mounted for the assets a React page still
+loads at runtime (`tokens.css`, the two sandbox modules) and for the GeoJSON layers. The root
+page's second URL form is `/` rather than the `/index` that stripping `.html` would give —
+`urlFormsOf` — and the catch-all's `default(index.html)` came off, so the explicit route is the
+only thing that can answer `/`.
 
 ### Watches is decommissioned (Phase 5, for this page only)
 
@@ -1162,6 +1267,32 @@ Consequences worth knowing:
 - **An app-shell page must escape `app/shell.css`'s `body` padding.** That padding exists for the
   document-flow pages; a full-bleed surface inside it renders inset and overflows. `.rt-map-shell`
   uses `position: fixed; inset: 0`.
+- **A dispatch table keyed on a value something else rewrites is a bug waiting for its first
+  real payload.** `flattenHydratedPoi` replaces a campground's `category` with its
+  `subcategory` — faithful to `core.js`, and pinned there byte for byte — and the drawer
+  registry looked up `category`. Result: nearly every campground opened "No detail view for
+  this place yet", with a green test suite, because every drawer test used a park (parks are
+  not rewritten). If a normaliser rewrites a field, nothing downstream may key on it without
+  saying so at the lookup.
+- **The vanilla's ids are not always its contract.** `#cg-drawer.open`, `#panel` and
+  `#cg-agency-legend input[data-cg-agency]` were hand-built DOM hooks; the ports have real
+  roles and accessible names, and `SmokeTest.kt` asks for those instead. The topbar is the
+  exception — its `tb-*` ids were preserved on purpose, and that is what let `/` graduate
+  without touching a single topbar assertion.
+- **An LDS checkbox cannot be clicked through its input.** `.lds-check input` is
+  `opacity: 0; width: 0; height: 0; pointer-events: none` — Playwright's `check()` times out
+  with "element is not visible". Click the label; read state from the input. (Testing Library
+  is unaffected: `userEvent.click` on the label, or `fireEvent` on the input, both work.)
+- **In a browser test suite, the URL is shared state like a store.** `MapView.test.tsx`'s
+  route-mode tests left `?route=` behind (the topbar writes it), so the NEXT mount restored
+  that trip, `useRoute` fetched it, and whether an assertion saw a route came down to
+  microtask timing — the suite's only flake, for two phases. Reset `window.history` in
+  `beforeEach` alongside `reset()` on every store.
+- **Playwright's JS binding evaluates a string as an EXPRESSION.** `waitForFunction('() => x')`
+  polls a *function object*, which is truthy, so it resolves immediately and the assertion
+  never runs. Java has no function literals, so the Kotlin smoke's string form is the
+  supported one there — but a JS harness mirroring it must pass real functions. Half a
+  verification pass silently "passed" this way before it was noticed.
 - **Vitest must be v3 for Vite 6.** Vitest 2.x depends on Vite 5 and pulls a *nested* copy,
   causing a `Plugin` type clash with `@vitejs/plugin-react`. Use Vitest 3 and import
   `defineConfig` from `vitest/config` (not `vite`).
