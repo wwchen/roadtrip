@@ -28,7 +28,13 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/queries/keys';
 import { useMapStore } from './mapStore';
-import { selectRouteActive, useTripStore, type TripMode, type TripStop } from './tripStore';
+import {
+  selectRouteActive,
+  useTripStore,
+  type TripMode,
+  type TripPoiFeature,
+  type TripStop,
+} from './tripStore';
 
 /** The shape the shim publishes. Mirrors what the vanilla consumers call. */
 export interface TransitionShim {
@@ -60,7 +66,12 @@ export function installTransitionShim(queryClient: QueryClient): () => void {
     __rtAddTripStop: (stop) => useTripStore.getState().addStop(stop),
     __rtClearBrowsePin: () => useTripStore.getState().clearBrowsePin(),
     __rtOpenPoiById: (id) => useMapStore.getState().selectPoi(id),
-    __rtSetRoutePois: (features) => useTripStore.getState().setRoutePois(features ?? []),
+    // Cast at the boundary, deliberately: this argument comes from the still-vanilla
+    // topbar, which hands over whatever /api/pois/on-route returned. The store's
+    // field is GeoJSON-typed for the migrated planner's sake, and the shim is the
+    // one place where the value has genuinely not been through a typed client.
+    __rtSetRoutePois: (features) =>
+      useTripStore.getState().setRoutePois((features ?? []) as unknown as TripPoiFeature[]),
     // The vanilla call is a debounced imperative refetch; the React equivalent is
     // invalidating the viewport query, which the map's fetch loop is subscribed
     // to. TanStack Query supplies the debounce-and-abort behaviour app.js hand

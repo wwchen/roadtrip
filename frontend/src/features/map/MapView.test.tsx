@@ -547,7 +547,7 @@ describe('route mode', () => {
         { name: 'B', lng: -118, lat: 34 },
       ]);
       trip.setRoute({ type: 'FeatureCollection', features: [] });
-      trip.setRoutePois([pin(9, 'campground', 'BC Parks') as unknown as Record<string, unknown>]);
+      trip.setRoutePois([pin(9, 'campground', 'BC Parks')]);
     });
 
     await waitFor(() => expect(pinIdsIn('cg')).toEqual([9]));
@@ -574,7 +574,7 @@ describe('route mode', () => {
         { name: 'B', lng: -118, lat: 34 },
       ]);
       trip.setRoute({ type: 'FeatureCollection', features: [] });
-      trip.setRoutePois([pin(9, 'campground', 'BC Parks') as unknown as Record<string, unknown>]);
+      trip.setRoutePois([pin(9, 'campground', 'BC Parks')]);
     });
 
     await waitFor(() => expect(screen.queryByText('(zoom in to load)')).toBeNull());

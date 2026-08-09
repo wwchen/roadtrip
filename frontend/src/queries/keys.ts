@@ -84,5 +84,14 @@ export const queryKeys = {
   geocode: (q: string, autocomplete: boolean, limit: number, proximity?: string | null) =>
     ['geocode', q, autocomplete, limit, proximity ?? null] as const,
 
-  route: (stops: unknown, radiusMiles: number) => ['route', stops, radiusMiles] as const,
+  /**
+   * A computed route, keyed on its stops alone.
+   *
+   * The corridor radius is deliberately NOT part of the key, even though
+   * `requestRoute` sends it: the road geometry does not depend on it, only the
+   * corridor polygon the response carries does — and the slider recomputes that
+   * locally with turf. Keying on the radius would fire a routing request per
+   * slider settle for a route that cannot have changed.
+   */
+  route: (stops: unknown) => ['route', stops] as const,
 } as const;

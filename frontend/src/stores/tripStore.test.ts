@@ -8,10 +8,18 @@ import {
   selectFilledStops,
   selectRouteActive,
   useTripStore,
+  type TripPoiFeature,
   type TripStop,
 } from './tripStore';
 
 const stop = (name: string): TripStop => ({ name, lng: -121.6, lat: 40.35, kind: 'PLACE' });
+/** A slim on-route pin, in the shape the endpoint actually returns. */
+const poiFeature = (id: number): TripPoiFeature => ({
+  type: 'Feature',
+  id,
+  geometry: { type: 'Point', coordinates: [-121.6, 40.35] },
+  properties: { category: 'campground' },
+});
 
 const trip = () => useTripStore.getState();
 
@@ -138,7 +146,7 @@ describe('browse pin', () => {
 
 describe('route POIs', () => {
   test('replaces the list', () => {
-    trip().setRoutePois([{ id: 1 }, { id: 2 }]);
+    trip().setRoutePois([poiFeature(1), poiFeature(2)]);
     expect(trip().routePois).toHaveLength(2);
 
     trip().setRoutePois([]);
@@ -201,10 +209,10 @@ describe('reset', () => {
   test('returns everything to the defaults', () => {
     trip().setMode('directions');
     trip().setStops([stop('a')]);
-    trip().setRoute({ type: 'FeatureCollection' });
+    trip().setRoute({ type: 'FeatureCollection', features: [] });
     trip().setCorridorMiles(50);
     trip().bumpGeneration();
-    trip().setRoutePois([{ id: 1 }]);
+    trip().setRoutePois([poiFeature(1)]);
     trip().setBrowsePin(stop('pin'));
 
     trip().reset();
