@@ -8,6 +8,7 @@
 //   fetchPoiDetail    — throws HttpError (caller just wants the POI)
 // All four are kept: the map page uses the Response form for its hydration
 // AbortController guard, and the drawer uses the throwing form.
+import type { Feature, FeatureCollection, Point } from 'geojson';
 import { HttpError, jsonGetOk, jsonPostOk, type RequestOptions } from './http';
 
 const POIS_URL = '/api/pois';
@@ -51,8 +52,38 @@ export interface SearchPoisOptions extends RequestOptions {
   categories?: string[] | string;
 }
 
+/**
+ * The properties a pin carries on the two FeatureCollection endpoints
+ * (`SlimPoiPropertiesSchema` / `PoisOnRouteFeaturePropertiesSchema` — identical
+ * today, deliberately so).
+ *
+ * This is the whole payload: no name, no address, nothing per-provider. Those are
+ * fetched on click through `GET /api/pois/{id}`, which is why the map's drawer
+ * hydrates by id rather than reading what it was handed.
+ */
+export interface PoiPinProperties {
+  category: string;
+  subcategory?: string;
+  agency?: string;
+}
+
+export type PoiPinFeature = Feature<Point, PoiPinProperties>;
+export type PoiPinCollection = FeatureCollection<Point, PoiPinProperties>;
+
+/**
+ * `POST /api/pois` — a pin collection plus the overflow flag.
+ *
+ * `truncated: true` means features past the server's per-category budget were
+ * dropped, so the response describes less than the bbox actually holds. The
+ * viewport cache refuses to store one for exactly that reason.
+ */
+export interface ViewportPoiCollection extends PoiPinCollection {
+  truncated: boolean;
+}
+
 export interface ViewportPoisParams extends RequestOptions {
-  bbox: unknown;
+  /** `[west, south, east, north]`. */
+  bbox: readonly number[];
   zoom: number;
   categories?: string[] | string;
 }
@@ -133,22 +164,31 @@ export async function fetchPoiDetail(
   return response.json();
 }
 
+/**
+ * The map's per-pan fetch.
+ *
+ * Both POST paths return GeoJSON FeatureCollections, not the `{ results }`
+ * envelope the search paths use — they were typed as `PoiSearchResponse` when
+ * this module was ported ahead of its consumers, which typechecked only because
+ * nothing read the result yet.
+ */
 export function fetchViewportPois({
   bbox,
   zoom,
   categories,
   signal,
-}: ViewportPoisParams): Promise<PoiSearchResponse> {
-  return jsonPostOk<PoiSearchResponse>(POIS_URL, { bbox, zoom, categories }, { signal });
+}: ViewportPoisParams): Promise<ViewportPoiCollection> {
+  return jsonPostOk<ViewportPoiCollection>(POIS_URL, { bbox, zoom, categories }, { signal });
 }
 
+/** Corridor fetch. No `truncated`: the trip planner needs the full set, not a sample. */
 export function fetchOnRoutePois({
   waypoints,
   radiusMiles,
   categories,
   signal,
-}: OnRoutePoisParams): Promise<PoiSearchResponse> {
-  return jsonPostOk<PoiSearchResponse>(
+}: OnRoutePoisParams): Promise<PoiPinCollection> {
+  return jsonPostOk<PoiPinCollection>(
     ON_ROUTE_URL,
     {
       waypoints,
