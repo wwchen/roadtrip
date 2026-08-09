@@ -911,6 +911,40 @@ two stop markers, `?route=` in the address bar, a non-empty `__rtRouteShareUrl()
 corridor slider is draggable at both widths, reads "2 campgrounds along the route" and does
 not re-request the route.
 
+**Seven defects an adversarial review of 4e found, all in its own code and none caught by
+its tests.** Worth reading as a set, because four of the seven are shapes that recur:
+
+- **A derived value computed in two places disagreed with itself.** The corridor was built
+  by the install effect *and* by the radius effect, with a `installedMiles` ref meant to
+  keep them in step; a basemap change re-ran the install, which re-preferred the server's
+  polygon and then stamped the current radius as installed, leaving the fill permanently at
+  the radius the route was fetched at. It is one memo now. **If two effects compute the same
+  thing and a ref arbitrates, the ref is the bug.**
+- **LDS's `Modal` needs the consumer to position its scrim.** `.lds-modal-scrim` has a
+  background, `display: flex` and centring, but no `position` — so `<SettingsModal>` mounted
+  inside the topbar rendered as a block in a 420px panel. It is portalled to `document.body`
+  now, with the positioning in `account.css` scoped by `:has()`. Nothing had ever mounted a
+  Modal before, which is why Phase 3's tests were all green.
+- **A store action whose name fit was the wrong action.** The drawer's Directions button
+  called `tripStore.addStop` (appends to the first empty slot) where the vanilla made the
+  POI the *destination* of a new two-row trip. Invisible until the topbar existed to show
+  the difference.
+- **`(0, 0)` again.** `__rtRouteShareUrl` reads the store directly, without the
+  `allStopsFilled` gate, so a "Locating you…" placeholder's finite coordinates were encoded
+  into a shareable link. Third time this trap has been paid for (4c's `hasCoordinates`, 4e's
+  search-result guard, this).
+- An X button rendered on a row whose removal is a deliberate no-op (`draggable` used as a
+  proxy for the vanilla's `canRemove`).
+- `Number('')` is 0, so a file dropped on a stop row reordered row 0.
+- The `?route=` writer's first pass ran before the restore was observable, deleting the
+  parameter it was mounted with and re-adding it on the next render.
+
+`FakeMap` had no `fitBounds`, which is why the first of those was reachable at all: every
+route-mode test until then set a route with no line feature, so the camera fit had never
+run in jsdom. It has one now, and the trip overlay has coverage for the install, the fit
+happening once per route and not on a basemap change, and the corridor surviving a style
+reload at the dragged radius.
+
 **One parity observation for design, not a regression.** On desktop an open drawer covers
 the topbar: the drawer is a left panel at `z-index: 999` and the topbar sits at 5. The
 vanilla's `.cg-drawer` does exactly the same above `min-width: 768px`, so this is a lift,
