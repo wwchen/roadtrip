@@ -18,7 +18,7 @@ import { AppProviders } from '@/app/AppProviders';
 import { UNCATEGORIZED_AGENCY } from '@/map/agencies';
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore } from '@/stores/tripStore';
-import { FakeMap } from '@/test/fake-map';
+import { FakeGeolocateControl, FakeMap, FakeNavigationControl } from '@/test/fake-map';
 
 // MapLibre needs WebGL, which jsdom has none of, so the map is the fake recorder.
 let instance: FakeMap;
@@ -48,7 +48,14 @@ class TestMarker {
   }
 }
 
-vi.mock('maplibre-gl', () => ({ Map: TestMap, Marker: TestMarker }));
+vi.mock('maplibre-gl', () => ({
+  Map: TestMap,
+  Marker: TestMarker,
+  // The map's own controls. What they do with a fix is `useUserLocation.test.tsx`;
+  // here they only have to exist, because `MapView` installs them.
+  GeolocateControl: FakeGeolocateControl,
+  NavigationControl: FakeNavigationControl,
+}));
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
 
 const { MapProvider } = await import('./MapProvider');

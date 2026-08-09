@@ -71,6 +71,9 @@ export class FakeMap {
    */
   fitBoundsCalls: Array<{ bounds: unknown; options: unknown }> = [];
 
+  /** Controls currently attached, in the order they were added, with their corner. */
+  controls: Array<{ control: unknown; position: unknown }> = [];
+
   private canvas = document.createElement('canvas');
   private bounds: [number, number, number, number] = [-124, 32, -114, 42];
   private zoom = 7;
@@ -198,6 +201,18 @@ export class FakeMap {
     this.fitBoundsCalls.push({ bounds, options });
   }
 
+  addControl(control: unknown, position?: unknown) {
+    this.controls.push({ control, position });
+  }
+
+  removeControl(control: unknown) {
+    this.controls = this.controls.filter((c) => c.control !== control);
+  }
+
+  hasControl(control: unknown) {
+    return this.controls.some((c) => c.control === control);
+  }
+
   getBounds() {
     const [west, south, east, north] = this.bounds;
     return {
@@ -234,3 +249,42 @@ export class FakeMap {
 
 /** The fake, as the map modules' parameter type. */
 export const asMapLibre = (fake: FakeMap): MapLibreMap => fake as unknown as MapLibreMap;
+
+/**
+ * MapLibre's `GeolocateControl`, as an `Evented` stub a test can fire by hand.
+ *
+ * The real one asks the browser for a position, and jsdom has no geolocation to
+ * grant or deny — so what a suite can actually pin is what the app does with a
+ * `geolocate` or an `error` once one arrives.
+ */
+export class FakeGeolocateControl {
+  constructor(readonly options: unknown = {}) {}
+
+  private handlers = new Map<string, Set<(payload: unknown) => void>>();
+
+  on(type: string, fn: (payload: unknown) => void) {
+    const set = this.handlers.get(type) ?? new Set();
+    set.add(fn);
+    this.handlers.set(type, set);
+    return this;
+  }
+
+  off(type: string, fn: (payload: unknown) => void) {
+    this.handlers.get(type)?.delete(fn);
+    return this;
+  }
+
+  fire(type: string, payload: unknown = {}) {
+    for (const fn of this.handlers.get(type) ?? []) fn(payload);
+  }
+
+  /** Whether anything is still listening — the assertion an unmount test needs. */
+  listenerCount(type: string): number {
+    return this.handlers.get(type)?.size ?? 0;
+  }
+}
+
+/** MapLibre's `NavigationControl`. It has no behaviour we drive, only options. */
+export class FakeNavigationControl {
+  constructor(readonly options: unknown = {}) {}
+}

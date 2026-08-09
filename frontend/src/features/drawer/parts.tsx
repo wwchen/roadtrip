@@ -39,10 +39,10 @@ export const subline = (parts: (string | null | undefined | false)[]): string =>
 /**
  * Distance from the user to a point, or '' when location is off.
  *
- * Empty until something writes `mapStore.userLocation` — the geolocate control is
- * still unported (it belongs with 4c/4e, see the plan). The vanilla drawer shows
- * nothing without a location either, so an empty string here is the same UI, not a
- * regression.
+ * `mapStore.userLocation` is written by the map's locate-me control
+ * (`useUserLocation`), by the topbar's locate button, and by the
+ * `__rtUseCurrentLocationForTripStop` seam. Until one of them has a fix this is
+ * empty, which is what the vanilla drawer shows without a location too.
  */
 export function useDistanceTo(lng: number | undefined, lat: number | undefined): string {
   const userLocation = useMapStore((s) => s.userLocation);

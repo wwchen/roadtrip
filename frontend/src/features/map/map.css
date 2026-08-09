@@ -36,3 +36,41 @@
   inset: 0;
   overflow: hidden;
 }
+
+/* ---------------------------------------------------------------------------
+   The user-location puck.
+
+   Ports the inline styles `web/app.js` built by hand into a stylesheet, because
+   there is only ever one puck and nothing about it varies per instance. The
+   element itself is built by `src/map/user-location.ts` — MapLibre owns the
+   marker's transform, so its wrapper cannot be a React node.
+   --------------------------------------------------------------------------- */
+
+.rt-user-location {
+  position: relative;
+  width: 28px;
+  height: 28px;
+  /* A location is not a target: clicks belong to the pins underneath it. */
+  pointer-events: none;
+}
+
+.rt-user-location__halo {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--rt-map-locate);
+  opacity: 0.18;
+}
+
+.rt-user-location__dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: var(--rt-map-locate);
+  border: 3px solid var(--rt-map-pin-stroke);
+  box-shadow: var(--rt-e2);
+}
