@@ -11,9 +11,11 @@
 // 401 here is not a failure to report: watches are per-user, so an anonymous visitor
 // gets one on every load, and surfacing it as an error would put a red banner on a
 // perfectly good availability grid. It means "no watch affordances", nothing more.
-// Any other error is quieter still — the badges just do not render — because a
-// campground's availability is worth reading even when we cannot say whether the
-// user is watching it.
+//
+// Every *other* outcome is a distinct answer rather than the same one — see
+// `WatchAccess`. In all of them the grid itself still renders: a campground's
+// availability is worth reading even when we cannot say whether the user is
+// watching it.
 import { useCallback, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -52,57 +54,84 @@ const listFilters = (poiId: string | number): WatchListFilters => ({
   poiId: String(poiId),
 });
 
+/**
+ * Why the watch affordances are, or are not, available.
+ *
+ * Four states rather than one boolean, because three of them are different
+ * sentences and only one of those is "sign in". A `canManage: false` that meant
+ * *any* of "still loading", "anonymous" and "the request failed" told a signed-in
+ * user on a slow connection to sign in for as long as the request took, and told a
+ * user whose request 500'd to sign in permanently — while they were signed in.
+ * Whoever renders this has to be able to tell them apart.
+ */
+export type WatchAccess =
+  /** The first load is in flight; nothing is known yet either way. */
+  | 'loading'
+  /** The list is here: watches can be created and removed. */
+  | 'ready'
+  /** A 401 — an expected answer for an anonymous visitor, not a fault. */
+  | 'unauthorized'
+  /** Any other failure. Retryable, and worth offering the retry. */
+  | 'error';
+
 export interface PoiWatches {
   /** `"start|end" → watch`, for the windows this POI has active watches on. */
   byWindow: ReadonlyMap<string, Watch>;
-  /**
-   * Whether the user can create or remove watches at all.
-   *
-   * False for an anonymous visitor, and the grid uses it to tell "sign in to set
-   * alerts" apart from "this provider cannot do alerts" — different sentences,
-   * because only one of them is worth acting on.
-   */
+  access: WatchAccess;
+  /** `access === 'ready'`: the user can create or remove watches. */
   canManage: boolean;
-  /** True while the first load is in flight, so cells do not flicker into place. */
-  loading: boolean;
+  /** Refetch the list, for the `error` state's retry. */
+  retry: () => void;
 }
 
-/** The signed-out answer: no watches, no affordances. */
-const NO_WATCHES: PoiWatches = { byWindow: new Map(), canManage: false, loading: false };
+/** No watches to mark, whatever the reason. Shared, so identity does not churn. */
+const NO_WINDOWS: ReadonlyMap<string, Watch> = new Map();
 
 const isUnauthorized = (error: unknown): boolean =>
   error instanceof HttpError && error.status === HTTP_UNAUTHORIZED;
 
-export function usePoiWatches(poiId: string | number | null | undefined): PoiWatches {
+/**
+ * The user's active watches for one POI.
+ *
+ * Takes a definite id: the caller has to have one to render availability at all
+ * (`AvailabilityWeek` returns null without it), so a disabled-query branch here
+ * would be a state nothing can reach and a fourth thing for `access` to mean.
+ */
+export function usePoiWatches(poiId: string | number): PoiWatches {
   const query = useQuery({
-    queryKey: queryKeys.watches.list(listFilters(poiId ?? '')),
-    enabled: poiId != null,
+    queryKey: queryKeys.watches.list(listFilters(poiId)),
     // A 401 is an answer, not a fault, so retrying it just delays the same answer.
     retry: false,
-    queryFn: ({ signal }) =>
-      listWatches({ status: WATCH_LIST_STATUS, poiId: poiId!, signal }),
+    queryFn: ({ signal }) => listWatches({ status: WATCH_LIST_STATUS, poiId, signal }),
   });
 
   // In an effect, not in the render body. A `console.warn` while rendering fires
   // again on every re-render for as long as the error is cached — and a render must
   // have no side effects at all, since React may discard and replay one.
-  const { error } = query;
+  const { error, refetch } = query;
   useEffect(() => {
     // A 401 is the expected answer for an anonymous visitor, so it is not logged;
-    // anything else is a real fault that only shows up as missing badges.
+    // anything else is a real fault the user is now being told about.
     if (error && !isUnauthorized(error)) console.warn('watch list fetch failed', error);
   }, [error]);
 
-  if (poiId == null) return NO_WATCHES;
-  // Both an auth failure and a real one land here — no watch affordances — because
-  // a campground's availability is worth reading either way.
-  if (error) return NO_WATCHES;
-  if (!query.data) return { ...NO_WATCHES, loading: query.isLoading };
+  const retry = useCallback(() => {
+    void refetch();
+  }, [refetch]);
+
+  const access: WatchAccess = error
+    ? isUnauthorized(error)
+      ? 'unauthorized'
+      : 'error'
+    : query.data
+      ? 'ready'
+      : 'loading';
 
   return {
-    byWindow: indexWatchesByWindow(query.data.watches, poiId),
-    canManage: true,
-    loading: false,
+    byWindow: query.data ? indexWatchesByWindow(query.data.watches, poiId) : NO_WINDOWS,
+    access,
+    canManage: access === 'ready',
+    retry,
   };
 }
 

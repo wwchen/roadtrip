@@ -25,9 +25,9 @@ const WEEK = [
   '2026-08-16',
 ];
 
-const feature = (properties: Record<string, unknown> = {}): PoiFeature => ({
+const feature = (properties: Record<string, unknown> = {}, id: number = POI_ID): PoiFeature => ({
   type: 'Feature',
-  id: POI_ID,
+  id,
   geometry: { type: 'Point', coordinates: [-122.6, 48.4] },
   properties: {
     category: 'campground',
@@ -65,7 +65,8 @@ const catalogRow = (id: number, extra: Record<string, unknown> = {}) => ({
 interface Stubs {
   availability: (url: string) => Response;
   campsites: () => Response;
-  watches: () => Response;
+  /** May return a pending promise, which is how the loading state is exercised. */
+  watches: () => Response | Promise<Response>;
 }
 
 let stubs: Stubs;
@@ -115,14 +116,17 @@ const testClient = () =>
   new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
 
 async function mount(props: Record<string, unknown> = {}) {
+  // The client is returned so a test can re-render into the same cache, which is what
+  // the drawer does when the user clicks a second pin.
+  const client = testClient();
   const view = render(
-    <AppProviders client={testClient()}>
+    <AppProviders client={client}>
       <AvailabilityWeek feature={feature(props)} />
     </AppProviders>,
   );
   // The grid title only appears once both the week and the catalog have landed.
   await waitFor(() => expect(screen.getByText(/Sites by date/)).toBeInTheDocument());
-  return view;
+  return { ...view, client };
 }
 
 const cell = (siteLabel: string, date: string) =>
@@ -184,6 +188,110 @@ describe('the week grid', () => {
     await mount();
 
     expect(screen.getByText(/checked 60m ago/).closest('.cg-stale')).not.toBeNull();
+  });
+});
+
+// Clicking a second campground pin does not unmount the grid — the drawer re-renders
+// with the new feature, and React Query usually has it cached, so it happens in one
+// commit. Every piece of state here is scoped to one POI, and `weekStart` is the one
+// that cannot recover on its own: it is seeded from the feature's earliest date once
+// and never again, so an inherited week can be one the new provider will not quote.
+describe('switching campgrounds', () => {
+  const OTHER_POI = 998877;
+  const OTHER_EARLIEST = '2026-09-14';
+
+  /**
+   * Re-render in place with a different POI, as the drawer does on a second pin click.
+   *
+   * `earliest` is a parameter because the fused columns are the *requested* week's
+   * dates: a campground opening in September renders September columns against the
+   * stub's August fixture, so a test comparing a specific cell has to keep the week
+   * where it was and let the other tests cover the week moving.
+   */
+  const rerenderOther = (view: Awaited<ReturnType<typeof mount>>, earliest = OTHER_EARLIEST) =>
+    view.rerender(
+      <AppProviders client={view.client}>
+        <AvailabilityWeek feature={feature({ earliest_date: earliest }, OTHER_POI)} />
+      </AppProviders>,
+    );
+
+  test('asks for the new campground"s own earliest week', async () => {
+    const view = await mount();
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Next week' }).click();
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Pick a date' })).toHaveTextContent(
+        'Aug 17 – 23, 2026',
+      ),
+    );
+
+    await act(async () => rerenderOther(view));
+
+    await waitFor(() =>
+      expect(
+        requests.some(
+          (url) =>
+            url.includes(`/pois/${OTHER_POI}/campsites/availability`) &&
+            url.includes(`start_date=${OTHER_EARLIEST}`),
+        ),
+      ).toBe(true),
+    );
+    expect(screen.getByRole('button', { name: 'Pick a date' })).toHaveTextContent(
+      'Sep 14 – 20, 2026',
+    );
+    // Nothing to jump back to on a freshly opened campground.
+    expect(screen.queryByRole('button', { name: 'Jump to earliest date' })).toBeNull();
+  });
+
+  test('drops the previous campground"s selections', async () => {
+    const view = await mount();
+
+    // Arm a booking cell, select a day, expand a site row: three pieces of state that
+    // all describe the campground being replaced.
+    await act(async () => {
+      cell('Site 1', WEEK[0]).click();
+    });
+    await act(async () => {
+      screen.getByRole('button', { name: /View details for/ }).click();
+    });
+    await act(async () => {
+      screen.getAllByRole('columnheader')[2]!.querySelector('button')!.click();
+    });
+    expect(screen.getByRole('region', { name: 'Site details' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Set watch' })).toBeInTheDocument();
+
+    // Same earliest date, so the columns are the ones just interacted with.
+    await act(async () => rerenderOther(view, EARLIEST));
+    await waitFor(() => expect(screen.getByText(/Sites by date/)).toBeInTheDocument());
+
+    expect(cell('Site 1', WEEK[0])).toHaveTextContent('A');
+    expect(screen.queryByRole('region', { name: 'Site details' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Set watch' })).toBeNull();
+    expect(window.open).not.toHaveBeenCalled();
+  });
+
+  // The filter is POI-scoped for the same reason: site names do not carry over, so an
+  // inherited "Site 1" filter can hide every row the new campground has.
+  test('drops the previous campground"s site filter', async () => {
+    const view = await mount();
+
+    const search = screen.getByRole('searchbox', { name: 'Filter sites' });
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+        search,
+        'nothing matches this',
+      );
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(screen.queryByRole('button', { name: /View details for/ })).toBeNull();
+
+    await act(async () => rerenderOther(view));
+    await waitFor(() => expect(screen.getByText(/Sites by date/)).toBeInTheDocument());
+
+    expect(screen.getByRole('searchbox', { name: 'Filter sites' })).toHaveValue('');
+    expect(screen.getByRole('button', { name: /View details for/ })).toBeInTheDocument();
   });
 });
 
@@ -494,6 +602,97 @@ describe('watches', () => {
     expect(screen.queryByRole('button', { name: 'Set watch' })).toBeNull();
     // The grid itself is unaffected.
     expect(screen.getByText(/Sites by date/)).toBeInTheDocument();
+  });
+
+  // A request in flight is not an anonymous visitor. Both used to read as `canManage:
+  // false`, so every slow watch list showed a signed-in user "Sign in" until it landed.
+  test('says it is still checking while the watch list is in flight', async () => {
+    stubs.watches = () => new Promise<Response>(() => {});
+    await mount();
+    await act(async () => {
+      screen.getAllByRole('columnheader')[2]!.querySelector('button')!.click();
+    });
+
+    expect(screen.getByText('Checking your availability alerts…')).toBeInTheDocument();
+    expect(screen.queryByText('Sign in to set availability alerts.')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Set watch' })).toBeNull();
+  });
+
+  // Nor is a 500 an anonymous visitor — and that one never resolves on its own, so
+  // before this it showed a signed-in user "Sign in" permanently.
+  test('a failed watch list says so, and the retry recovers', async () => {
+    stubs.watches = () => json({ error: 'boom' }, 500);
+    await mount();
+    await act(async () => {
+      screen.getAllByRole('columnheader')[2]!.querySelector('button')!.click();
+    });
+
+    expect(screen.getByText(/Couldn't check your availability alerts/)).toBeInTheDocument();
+    expect(screen.queryByText('Sign in to set availability alerts.')).toBeNull();
+
+    stubs.watches = () => json({ watches: [], total: 0 });
+    await act(async () => {
+      screen.getByRole('button', { name: 'Retry' }).click();
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Set watch' })).toBeInTheDocument(),
+    );
+  });
+
+  // Email-only providers pass `supportsWatchAlerts`, so the day panel offers the
+  // toggle — and the toggle's one-tap default is a Slack watch, which this provider
+  // cannot service. It used to return silently: a button that did nothing, forever.
+  test('an email-only provider opens the editor instead of doing nothing', async () => {
+    stubs.availability = () =>
+      json(
+        availabilityBody([stream(1, ['available', 'reserved'])], {
+          trigger_kinds: ['email_notify'],
+          booking_actions: [],
+        }),
+      );
+    await mount();
+    await act(async () => {
+      screen.getAllByRole('columnheader')[2]!.querySelector('button')!.click();
+    });
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Set watch' }).click();
+    });
+
+    const editor = within(screen.getByRole('group', { name: 'Availability watch editor' }));
+    // Nothing was posted by the tap itself — the editor is where the address goes.
+    expect(
+      (fetch as ReturnType<typeof vi.fn>).mock.calls.some(
+        ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
+      ),
+    ).toBe(false);
+    // Slack is not on offer, and email — the only channel there is — starts ticked.
+    expect(editor.queryByRole('checkbox', { name: /Slack/ })).toBeNull();
+    expect(editor.getByRole('checkbox', { name: /Email/ })).toBeChecked();
+
+    const address = editor.getByRole('textbox');
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+        address,
+        'camp@example.com',
+      );
+      address.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      editor.getByRole('button', { name: 'Set watch' }).click();
+    });
+
+    const posted = (fetch as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([, init]) => (init as RequestInit | undefined)?.method === 'POST',
+    );
+    expect(posted).toBeDefined();
+    expect(JSON.parse(String((posted![1] as RequestInit).body))).toMatchObject({
+      poi_id: POI_ID,
+      start_date: '2026-08-11',
+      trigger_kinds: ['email_notify'],
+      trigger_config: { email_notify: { to: 'camp@example.com' } },
+    });
   });
 
   // Different sentence, different cause: this provider cannot notify anyone at all.

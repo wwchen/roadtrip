@@ -27,7 +27,7 @@ import { useToast } from '@ui';
 import type { PoiFeature } from '@/lib/poi';
 import { availableCount } from '@/lib/day-fields';
 import { addLocalDays, localToday, localYmd, parseLocalYmd, sameLocalDay } from '@/lib/local-date';
-import { DayDetail } from './DayDetail';
+import { DayDetail, type WatchUnavailableReason } from './DayDetail';
 import { CalendarPopover } from './CalendarPopover';
 import { SiteList } from './SiteList';
 import { SiteMatrix, SiteMatrixSkeleton, type ArmedBook } from './SiteMatrix';
@@ -68,16 +68,43 @@ export interface AvailabilityWeekProps {
 
 export function AvailabilityWeek({ feature }: AvailabilityWeekProps) {
   const poiId = feature.id;
-  const poiName = (feature.properties?.name as string | undefined) || 'this campground';
 
-  // No id, no availability — and specifically not a skeleton. Every request here is
-  // keyed on the POI id, so without one the queries stay `enabled: false`, which reads
-  // as permanently pending: the grid would show a loading skeleton that can never
-  // resolve. The drawer's own gate is `properties.availability_supported`, which says
-  // nothing about the id, so the two can disagree — a body with the flag set and no
+  // No id, no availability — and specifically not a skeleton. Every request below is
+  // keyed on the POI id, so without one there is nothing to fetch and no week to
+  // show: the grid would render a loading skeleton that can never resolve. The
+  // drawer's own gate is `properties.availability_supported`, which says nothing
+  // about the id, so the two can disagree — a body with the flag set and no
   // top-level `id` is exactly the case this catches. Rendering nothing is the honest
   // answer, and matches what the section looks like for an unsupported provider.
+  //
+  // The gate lives out here, ahead of every hook, because a component that returns
+  // early *after* calling some of its hooks changes its own hook count the moment
+  // the id arrives — which React rejects outright.
   if (poiId == null) return null;
+
+  // Keyed on the POI id, which is what makes all of the state below POI-scoped.
+  // Clicking a second campground pin does not unmount this: the drawer stays
+  // mounted and re-renders with the new feature, immediately, because React Query
+  // usually has it cached. Without the key the new campground would inherit the
+  // previous one's visible week, selected day, expanded site, armed booking cell and
+  // filter text — `weekStart` in particular is seeded from `earliestDate` once and
+  // never again, so a campground that opens in October would be shown a week its
+  // provider will not quote for. A remount resets all of it at once and cannot be
+  // forgotten the way a per-field reset effect can. The one piece that deliberately
+  // survives is the Site column width, and it survives because it is persisted: it
+  // is a preference about the grid, not a fact about one campground, so re-reading
+  // it from storage on remount is the same value the user dragged it to.
+  return <AvailabilityWeekView key={String(poiId)} poiId={poiId} feature={feature} />;
+}
+
+function AvailabilityWeekView({
+  poiId,
+  feature,
+}: {
+  poiId: string | number;
+  feature: PoiFeature;
+}) {
+  const poiName = (feature.properties?.name as string | undefined) || 'this campground';
 
   // The first date this provider will quote. Everything paginates forward from here,
   // and "Earliest" returns to it — which is not the same as "today" for a campground
@@ -136,10 +163,20 @@ export function AvailabilityWeek({ feature }: AvailabilityWeekProps) {
   const capabilities = week.data?.watchCapabilities ?? NO_WATCH_CAPABILITIES;
 
   // Provider first, user second: "this campground cannot do alerts" and "sign in to
-  // set one" are different sentences, and only the second is actionable.
-  const providerSupportsWatch = poiId != null && supportsWatchAlerts(capabilities);
-  const canWatch = providerSupportsWatch && watches.canManage;
-  const signedOutOfWatches = providerSupportsWatch && !watches.canManage;
+  // set one" are different sentences, and only the second is actionable — as are
+  // "we are still asking" and "asking failed", which is why this is a reason rather
+  // than a boolean. `watches.canManage` alone reported all three of loading,
+  // anonymous and failed as anonymous.
+  const watchUnavailable: WatchUnavailableReason | null = !supportsWatchAlerts(capabilities)
+    ? 'unsupported'
+    : watches.access === 'unauthorized'
+      ? 'signed-out'
+      : watches.access === 'loading'
+        ? 'loading'
+        : watches.access === 'error'
+          ? 'failed'
+          : null;
+  const canWatch = watchUnavailable === null;
 
   const onSelectDate = useCallback(
     (date: string) => {
@@ -201,25 +238,36 @@ export function AvailabilityWeek({ feature }: AvailabilityWeekProps) {
     [toast],
   );
 
-  const toggleDayWatch = useCallback(async () => {
-    if (!selectedDate) return;
-    try {
+  const toggleDayWatch = useCallback(
+    async (anchor: HTMLElement) => {
+      if (!selectedDate) return;
       const existing = watchForDate(watches, selectedDate);
-      if (existing) {
-        await mutations.remove(existing);
+      // No existing watch and no Slack: there is no one-tap default to create, so the
+      // button opens the editor anchored to itself instead of doing nothing. The
+      // toggle is only rendered when the provider supports *some* channel, so this
+      // branch is the email-only provider, and the editor is where an email watch
+      // gets its address. Returning silently here — which is what this did — left
+      // those providers with a button that could not be made to work.
+      if (!existing && !capabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY)) {
+        setWatchTarget({ anchor, date: selectedDate });
         return;
       }
-      // The grid's own toggle creates a Slack watch, which is the default the popover
-      // would also open with. A provider that cannot Slack has no toggle at all — see
-      // `DayDetail` — so reaching here without the capability is not possible.
-      if (!capabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY)) return;
-      await mutations.save(selectedDate, buildTriggerPayload(triggerStateOf(null)));
-    } catch (caught) {
-      // The day panel has no error line of its own, and the vanilla toggle only
-      // restored its label and logged — so this is the one report the user gets.
-      reportWatchFailure(caught);
-    }
-  }, [capabilities, mutations, reportWatchFailure, selectedDate, watches]);
+      try {
+        if (existing) {
+          await mutations.remove(existing);
+          return;
+        }
+        // Slack is the grid's one-tap default, and the same one the editor would open
+        // with — so for a Slack provider the extra step buys nothing.
+        await mutations.save(selectedDate, buildTriggerPayload(triggerStateOf(null)));
+      } catch (caught) {
+        // The day panel has no error line of its own, and the vanilla toggle only
+        // restored its label and logged — so this is the one report the user gets.
+        reportWatchFailure(caught);
+      }
+    },
+    [capabilities, mutations, reportWatchFailure, selectedDate, watches],
+  );
 
   const weekNav = (
     <WeekNav
@@ -302,10 +350,10 @@ export function AvailabilityWeek({ feature }: AvailabilityWeekProps) {
         <DayDetail
           day={selectedDay}
           watching={watchForDate(watches, selectedDate) != null}
-          canWatch={canWatch}
-          signedOut={signedOutOfWatches}
+          unavailable={watchUnavailable}
           busy={mutations.saving}
-          onToggleWatch={() => void toggleDayWatch()}
+          onToggleWatch={(anchor) => void toggleDayWatch(anchor)}
+          onRetryWatches={watches.retry}
         />
       ) : null}
 
