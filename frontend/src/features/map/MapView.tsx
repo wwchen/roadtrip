@@ -1,5 +1,6 @@
 import { LegendPanel } from './LegendPanel';
 import { useMapOverlays, useStateLines } from './useMapOverlays';
+import { useQaHooks } from './useQaHooks';
 import { useViewportPois } from './useViewportPois';
 
 /**
@@ -19,6 +20,7 @@ export function MapView() {
   const pois = useViewportPois();
   useMapOverlays(pois);
   useStateLines();
+  useQaHooks(pois);
 
   return <LegendPanel pois={pois} />;
 }

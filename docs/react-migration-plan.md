@@ -416,9 +416,14 @@ scans `.ts`/`.tsx`.
 - **What the stores deliberately do NOT hold.** The MapLibre map and Popup, the route
   AbortController, the endpoint Markers, per-layer FeatureCollections, and handler-binding
   bookkeeping are imperative handles, not state. Each store documents its exclusions.
-- **Only 7 of the 9 `window.__rt*` globals are shimmed.**
-  `__rtUseCurrentLocationForTripStop` and `__rtRouteShareUrl` are defined by `topbar.js` and
-  read by nothing in the repo, so publishing them would invent an API rather than preserve one.
+- **Only 7 of the 9 `window.__rt*` globals are shimmed** — and the stated reason was **wrong**.
+  Phase 0 held that `__rtUseCurrentLocationForTripStop` and `__rtRouteShareUrl` are "read by
+  nothing in the repo". `SmokeTest.kt` reads both (`__rtRouteShareUrl` at ~line 662,
+  `__rtUseCurrentLocationForTripStop` at ~803). They are a TEST seam, not dead API. The shim
+  itself is unchanged for now — the topbar that defines them is still vanilla — but **4e cannot
+  finish without publishing them**, or those smoke steps fail against a working page. The same
+  audit found the smoke also drives `__rtMap.jumpTo` and asserts on `__rtState.mapReady` and
+  `__rtState.overlayData.{cg,sc}.features[].id`; those are published now, see below.
 - **`core.js`'s "Idempotent" comment on `flattenHydratedPoi` was wrong** and is corrected in
   the port's docs (not its behavior). Fields derived only from `raw` — a park's
   `Loc_Nm`/`GIS_Acres`/`Mang_Name`, a supercharger's `stallCount`/`powerKilowatt`, Planet
@@ -498,6 +503,23 @@ nested `[[w,s],[e,n]]` bbox is flat, which is what `PoisRequestSchema` takes.
 ~800kB and changes only when we bump it, so bundling it with the map page's own code would
 invalidate all of it on every deploy. It still trips Rollup's 500kB warning and that is expected —
 the warning names `maplibre`, so a new warning naming something else is worth reading.
+
+**The QA globals are published** (`features/map/useQaHooks.ts`). `web/app.js` publishes
+`__rtMap`/`__rtState` for the smoke suite, and the React page has to as well or every map step in
+`SmokeTest.kt` fails on a page that renders perfectly. Two deliberate differences: `overlayData`
+carries only the overlays that exist (`cg`/`pf`/`sc` — publishing empty `np`/`sp` would invent a
+fact), and `selectedPoiId` is added, because a pin click records a selection that nothing renders
+until 4c and this is the only way to observe the click path. Still missing for a React `/`: the two
+topbar globals above.
+
+**The drawer's hydration path is verified, ahead of 4c.** The drawer fetches
+`GET /api/pois/{id}` from the id a pin click carries, and that id has only one source: MapLibre's
+top-level feature `id`. Driven in Chromium against the dev server, a click on a rendered pin yields
+`id` intact for a large numeric id **and for `0`**, which is falsy but a legitimate POI id — the
+case `pinFeatureId` and `selectIsDrawerOpen` were written for. The same run confirms
+`properties.id` is absent from the slim response, so **the fallback never fires and numeric feature
+ids are a hard dependency**: if `/api/pois` ever ships non-numeric string ids, MapLibre drops them
+and every drawer silently stops opening.
 
 **Not in 4b, and not owned by anything yet:** the `NavigationControl`/`GeolocateControl` pair and
 the custom user-location puck from `web/app.js` (the store has `userLocation` with no writer), and
