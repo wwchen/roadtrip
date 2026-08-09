@@ -775,6 +775,32 @@ appearing inside a rule body, and runs in `make test` and CI. It is not a parser
 parser accepts the broken file, since nesting is legal CSS now; we simply do not use nesting,
 so its appearance means a brace went missing.
 
+**Five more defects, from an adversarial review after the port was "done".** Worth
+reading as a set, because four of the five are shapes that will recur:
+
+- **The calendar popover opened off-screen.** `.cg-cal-host` positions itself with
+  `position: absolute; top: 100%`, so it needs a positioned ancestor — the vanilla
+  appended it to the clicked button's `parentElement`, which is `.cg-week-nav`
+  (`position: relative` for exactly that reason). Rendered at the section root it
+  resolved against the drawer instead: 906px top in a 900px viewport, 619px below the
+  button. **The first browser pass reported the calendar "working"** because
+  `waitForSelector` found it in the DOM — a lesson about what a smoke assertion is
+  worth. It is a `calendar` slot on `<WeekNav>` now.
+- **A 401 on a watch mutation said "Could not save. Try again."** Retrying is exactly
+  what cannot help. Mutations map a 401 to `WatchAuthError` and refetch the list, which
+  collapses the grid to "Sign in to set availability alerts."
+  Two things fell out of testing it, both worth knowing: **a throw inside a mutation's
+  `onError` is discarded** (`mutateAsync` still rejects with the original), so the
+  mapping belongs in `mutationFn`; and the message **cannot live in the editor**,
+  because withdrawing the affordance unmounts the anchor cell and closes the popover.
+  It is a toast — one surface, and one that outlives the clicked control.
+- **`console.warn` in a render body** (`usePoiWatches`), which re-fires on every
+  re-render while the error is cached. A render must have no side effects.
+- **`setState` inside another setter's updater** (`onSelectDate`). Updaters must be
+  pure; StrictMode double-invokes them, and both setters batch identically outside one.
+- **An armed booking cell survived expanding a site row**, which pushes rows down. The
+  vanilla disarmed on any non-booking click in the grid.
+
 **One parity observation for design, not a regression.** At the default 128px, the Site column
 truncates to "Upper Loop / Site …" for two-digit site numbers, because the loop prefix eats
 the width. The markup, the CSS and the 128px default are all straight lifts, so the vanilla
