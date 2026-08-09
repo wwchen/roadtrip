@@ -17,7 +17,14 @@
 // React `onTouchMove` prop: claiming the gesture from iOS's rubber-band scroll
 // needs `preventDefault`, and React's delegated listener cannot promise a
 // non-passive one.
-import { useEffect, useState, type RefObject } from 'react';
+//
+// The elements arrive as nodes, not as refs, and that is deliberate. With refs this
+// hook bound nothing at all: `<Drawer>` returns null until its `mounted` state flips,
+// so on the first commit `rootRef.current` was null, the effect bailed — and its
+// deps were two stable ref objects, so it never re-ran once the panel did exist. A
+// node held in state changes identity when the element appears, which is what makes
+// the effect fire at the right time. Callers pass callback refs; see `Drawer.tsx`.
+import { useEffect, useState } from 'react';
 
 /** Travel before a body touch commits to being a drag. */
 const SLOP_PX = 8;
@@ -38,14 +45,13 @@ export interface DrawerDrag {
 }
 
 export function useDrawerDrag(
-  rootRef: RefObject<HTMLElement>,
-  handleRef: RefObject<HTMLElement>,
+  root: HTMLElement | null,
+  handle: HTMLElement | null,
   onDismiss: () => void,
 ): DrawerDrag {
   const [full, setFull] = useState(false);
 
   useEffect(() => {
-    const root = rootRef.current;
     if (!root) return;
 
     let startX = 0;
@@ -131,12 +137,11 @@ export function useDrawerDrag(
 
     const onHandleStart = (event: TouchEvent) => start(event, true);
     const onRootStart = (event: TouchEvent) => {
-      const handle = handleRef.current;
+      // The handle's own listener already claimed it as a drag.
       if (handle?.contains(event.target as Node)) return;
       start(event, false);
     };
 
-    const handle = handleRef.current;
     handle?.addEventListener('touchstart', onHandleStart, { passive: true });
     root.addEventListener('touchstart', onRootStart, { passive: true });
     root.addEventListener('touchmove', move, { passive: false });
@@ -150,7 +155,7 @@ export function useDrawerDrag(
       root.removeEventListener('touchend', end);
       root.removeEventListener('touchcancel', end);
     };
-  }, [rootRef, handleRef, onDismiss]);
+  }, [root, handle, onDismiss]);
 
   return { full, setFull };
 }

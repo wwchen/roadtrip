@@ -20,8 +20,17 @@ export const UNCATEGORIZED_AGENCY = 'Uncategorized';
 
 const CAMPGROUND_CATEGORY = 'campground';
 
-/** An agency name, or the sentinel when the pin carries none. */
-export function featureAgency(feature: PinFeature | null | undefined): string {
+/**
+ * An agency name, or the sentinel when the pin carries none.
+ *
+ * Typed on `properties` rather than on `PinFeature`: the legend passes viewport
+ * pins, but the shared-link restore passes a hydrated `/api/pois/{id}` feature,
+ * and this reads no geometry — requiring the full pin shape would make callers
+ * cast to satisfy a field the function never touches.
+ */
+export function featureAgency(
+  feature: { properties?: { agency?: unknown } | null } | null | undefined,
+): string {
   const agency = feature?.properties?.agency;
   return (typeof agency === 'string' ? agency.trim() : '') || UNCATEGORIZED_AGENCY;
 }

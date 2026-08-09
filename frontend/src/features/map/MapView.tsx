@@ -1,5 +1,6 @@
 import { PoiDrawer } from '@/features/drawer/PoiDrawer';
 import { LegendPanel } from './LegendPanel';
+import { useDeepLinkedPoi } from './useDeepLinkedPoi';
 import { useMapOverlays, useStateLines } from './useMapOverlays';
 import { useQaHooks } from './useQaHooks';
 import { useViewportPois } from './useViewportPois';
@@ -13,15 +14,16 @@ import { useViewportPois } from './useViewportPois';
  * legend — and threading it through a context would hide that while buying
  * nothing: this is the only place either is used.
  *
- * Still to come: the drawer (4c), the map-side availability UI (4d), and the
- * topbar/trip planner (4e), which is also what will render `<SettingsModal>` and
- * retire the vanilla account modal.
+ * Still to come: the map-side availability UI (4d) and the topbar/trip planner (4e),
+ * which is also what will render `<SettingsModal>`, retire the vanilla account modal,
+ * and restore the `?route=` half of a shared link.
  */
 export function MapView() {
   const pois = useViewportPois();
   useMapOverlays(pois);
   useStateLines();
   useQaHooks(pois);
+  useDeepLinkedPoi();
 
   return (
     <>

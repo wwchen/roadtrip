@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useDrawerDrag } from './useDrawerDrag';
 import './drawer.css';
 
@@ -28,9 +28,13 @@ export interface DrawerProps {
  * is precisely what this must not do.
  */
 export function Drawer({ open, onClose, children }: DrawerProps) {
-  const rootRef = useRef<HTMLElement>(null);
-  const handleRef = useRef<HTMLDivElement>(null);
-  const { full } = useDrawerDrag(rootRef, handleRef, onClose);
+  // State, not refs: this component returns null until `mounted` flips, so a ref
+  // read inside the drag hook's effect would be null on the first commit and the
+  // effect would never re-run to catch the element appearing. Holding the nodes in
+  // state gives the effect a dependency that actually changes when they mount.
+  const [root, setRoot] = useState<HTMLElement | null>(null);
+  const [handle, setHandle] = useState<HTMLElement | null>(null);
+  const { full } = useDrawerDrag(root, handle, onClose);
 
   // Stay mounted through the exit transition, then leave. The vanilla version kept
   // one drawer element alive for the life of the page and toggled classes; here the
@@ -58,13 +62,13 @@ export function Drawer({ open, onClose, children }: DrawerProps) {
     <>
       <div className={`rt-drawer-backdrop ${entered ? 'rt-drawer-backdrop--open' : ''}`} />
       <aside
-        ref={rootRef}
+        ref={setRoot}
         className={`rt-drawer ${state}`}
         role="dialog"
         aria-label="Pin details"
       >
         {/* Grab bar: always drag-eligible, and sized for a thumb in CSS. */}
-        <div className="rt-drawer-handle" ref={handleRef} aria-hidden="true" />
+        <div className="rt-drawer-handle" ref={setHandle} aria-hidden="true" />
         <button type="button" className="rt-drawer-close" aria-label="Close" onClick={onClose}>
           ×
         </button>

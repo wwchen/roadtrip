@@ -69,6 +69,14 @@
   position: relative;
   width: 40px;
   height: 4px;
+  /* Load-bearing. The panel is a `max-height`-capped flex column and this pill is
+     its only empty child. A flex item's automatic minimum
+     size is its content, which for an empty box is zero — so once the drawer's
+     content overflows (a campground always does) the pill is the one thing flex can
+     shrink, and it collapses to 0px. On mobile the pill IS the dismiss affordance,
+     so it silently disappears exactly when the drawer is most full. Caught in a
+     browser; jsdom does no layout, so no unit test can hold this. */
+  flex: 0 0 auto;
   margin: 10px auto 4px;
   background: rgba(var(--rt-c-overlay-rgb), 0.18);
   border-radius: 2px;
