@@ -42,6 +42,17 @@ export interface TripStop {
   kind?: string;
   /** The originating search-result row, when the stop came from one. */
   pinItem?: unknown;
+  /**
+   * A placeholder while the browser resolves the user's location.
+   *
+   * Ported from the legacy `_pending` flag, and it has to be a property of the
+   * stop rather than a separate loading flag because the row it belongs to can
+   * move: the coordinates are (0, 0) until geolocation answers, so routing and
+   * marker placement both have to skip it — see `isLocated` in
+   * features/trip/stops.ts. Null island is a real coordinate that passes every
+   * finite check.
+   */
+  pending?: boolean;
 }
 
 /** GeoJSON, kept structurally loose — it is passed through to MapLibre. */
