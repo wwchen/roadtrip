@@ -36,6 +36,12 @@
   users see no change; reach the React map with `npm run dev`. Read "Phase 4b — what landed" for
   the two scoping corrections it makes (the panel's search box is dead code; park layers are
   deliberately absent).
+- **Phase 4d is merged** (#576). Three P2 defects found reviewing it afterwards are fixed on
+  branch `claude/availability-state-bugs-l2jp54` — read "Phase 4d follow-ups" before touching
+  `AvailabilityWeek`, `DayDetail` or `useWatches`, because that branch reshapes all three.
+- **Phase 4e is IN PROGRESS** on branch `claude/react-migration-4e-topbar`: the pure layers,
+  the route overlay and the stop markers have landed; the hooks, the components, the alerts
+  panel and the graduation of `/` have not. Its own section below is the handoff.
 - **Browser coverage is partial.** `SmokeTest.kt` now loads `/watches` and `/availability` and
   asserts each renders (#572), so those two are covered. The React map page cannot be smoke-tested
   yet — Ktor does not serve it — so **everything in 4a/4b is verified by unit tests and by hand,
@@ -806,6 +812,83 @@ truncates to "Upper Loop / Site …" for two-digit site numbers, because the loo
 the width. The markup, the CSS and the 128px default are all straight lifts, so the vanilla
 grid does the same; the full name is in the `title` attribute and the column is drag-resizable.
 Worth a look, but widening the default is a design change rather than part of the port.
+
+## Phase 4e — IN PROGRESS (branch `claude/react-migration-4e-topbar`)
+
+The topbar and trip planner: `web/topbar.js` (2,054) + `web/topbar/alerts.js` (655) +
+`web/topbar/auth.js` (167) + `web/topbar/state.js` (46) + `web/share-links.js`. Branched
+off master after 4d; **nothing is served differently yet**, and `/` still resolves to the
+vanilla map.
+
+### What landed so far
+
+| Piece | File | Notes |
+|---|---|---|
+| Share links (both writers, the `?route=` reader, clipboard) | `lib/share-links.ts` | 4c already ported the `?poi=` reader |
+| The stop list as algebra | `features/trip/stops.ts` | every rule from `onRowX`/`onAddStop`/`addTripStopFromExternal`/the drop handler |
+| Corridor buffer + radius clamp | `features/trip/corridor.ts` | turf from npm |
+| Summary copy, leg lines, routing errors | `features/trip/route-summary.ts` | |
+| Route line + corridor fill, bounds | `map/route-overlay.ts` | imperative, `FakeMap`-tested |
+| Stop markers | `map/trip-markers.ts` | positional registry |
+
+`TripStop` gained `pending` (the legacy `_pending`), and turf arrived as
+`@turf/buffer` + `@turf/simplify`, replacing the CDN `@turf/turf@7` global — the same
+swap Phase 2 made for Chart.js.
+
+**Four things worth knowing before continuing:**
+
+- **The share format is a contract.** `share-links.test.ts` pins a literal string the
+  vanilla encoder produced, in both directions — decoded, and re-encoded byte for byte.
+  A link already in circulation has to keep working, so treat those two tests as the
+  spec rather than as characterisation.
+- **The corridor's simplification is not cosmetic.** The same polygon is POSTed to
+  `/api/pois/on-route`, where the backend caps a request polygon at 2000 vertices, and an
+  unsimplified 100-mile buffer of a cross-country line exceeds it. Pinned by a
+  vertex-count test.
+- **One legacy branch is unreachable and was dropped**, not translated: `onRowX`'s
+  `if (wasFilled) { clear in place }` inside its `stops.length <= 2` guard cannot fire,
+  because every row in a two-row trip is structural and a filled structural row returned
+  earlier. Noted at the site in `stops.ts`.
+- **`pending` has to live on the stop.** The row can move while geolocation resolves, and
+  both routing and marker placement must skip a stop whose coordinates are still (0, 0) —
+  null island passes every finite check, which is the same trap `hasCoordinates` exists
+  for in 4c.
+
+### What remains, in dependency order
+
+1. **Data hooks.** `useRoute` (Query keyed on stops + radius — the key replaces
+   `trip.generation` and the `routeAbort`, exactly as 4b's viewport key replaced its
+   AbortController; map failures through `routeErrorMessage`). `useOnRoutePois` (250ms
+   debounce, `enabled` on a complete trip, writes `tripStore.routePois`).
+   `useSearchResults` (220ms debounce; merges the local pin index, `POST /api/pois/search`
+   and `/api/geocode`, deduping backend hits already in the pin index, POI-first ordering).
+2. **The topbar itself.** `TopBar` + `StopRow` (drag-reorder via HTML5 DnD, the locate
+   button, the X whose behaviour is already in `stops.ts`), `SearchDropdown` (sections,
+   arrow-key navigation), the actions row, the summary/status lines, the corridor slider.
+   CSS lifts out of `injectStyles` into a stylesheet — note 4d's lesson: a rule that
+   loses its closing brace is still valid CSS, and `scripts/check-css-blocks.mjs` is what
+   catches it.
+3. **Trip results** (`web/topbar.js:1736-2054`, not yet read): the campground card list,
+   its route-distance index, hydration, collapse state and per-agency filtering.
+4. **The alerts panel** (`web/topbar/alerts.js`, 655 lines, not yet read). It imports
+   `web/availability/watch-editor.js`, which 4d has already ported as `WatchEditor` — so
+   this is the second consumer that port was written for.
+5. **Auth row + `<SettingsModal>`.** Phase 3's components exist and are tested; this is
+   the mounting task, and it is where `web/account/*` and the `mountSettingsModal` import
+   in `web/topbar/auth.js` get deleted. Implement the `auth_embedded: false` branch only
+   (see the Phase 3 note).
+6. **Geolocation.** `NavigationControl`/`GeolocateControl`, the user-location puck, and a
+   writer for `mapStore.userLocation` — which has had no writer since Phase 0, and until
+   it does the drawer's `useDistanceTo` returns `''` and no drawer shows a distance.
+   `core.js`'s single-popup `openPopup` belongs here too.
+7. **The `window.__rt*` seams.** `__rtTripMode`, `__rtRouteActive`, `__rtAddTripStop`,
+   `__rtClearBrowsePin`, `__rtOpenPoiById`, `__rtSetRoutePois`, and the two the Phase 0
+   audit got wrong — `__rtRouteShareUrl` and `__rtUseCurrentLocationForTripStop` are read
+   by `SmokeTest.kt` (~lines 662 and 803), so 4e cannot finish without publishing them.
+8. **Graduation.** `?route=` restore on load, then move `/` from `previewPages` to
+   `migratedPages` in `StaticSiteRoutes.kt` and extend `SmokeTest.kt`. Only after 1-7:
+   a served map page without the topbar is a regression, which is why 4b and 4c stayed
+   behind the preview flag.
 
 ## Serving (DONE)
 
