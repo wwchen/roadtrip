@@ -12,6 +12,7 @@
 // failure) are three components now, which is what makes the "computing route…"
 // state distinguishable from the "no route" state without reading a CSS class.
 import { useEffect, useState } from 'react';
+import { AuthRow } from './AuthRow';
 import { CorridorSlider } from './CorridorSlider';
 import { RouteStatus } from './RouteStatus';
 import { SearchDropdown } from './SearchDropdown';
@@ -131,6 +132,10 @@ export function TopBar() {
           );
         })}
       </div>
+
+      {/* Where the vanilla topbar kept `#tb-auth`: sign-in, who you are, and the
+          trigger for the settings modal Phase 3 built and nothing mounted. */}
+      <AuthRow />
 
       {/* The ids on this row and the controls below it are the smoke suite's
           selectors (`#tb-actions`, `#tb-directions`, `#tb-route-summary`,
