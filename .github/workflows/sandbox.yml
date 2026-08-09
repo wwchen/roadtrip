@@ -21,8 +21,16 @@ permissions:
   pull-requests: write
 
 # Serialize per-PR so a rapid /sandbox then /sandbox stop don't race.
+#
+# A workflow_run payload does not always carry pull_requests (the resolver has a
+# lookup fallback for exactly that), and the concurrency key is evaluated long
+# before the resolver runs — so the last fallback is the head BRANCH, which at
+# least serializes automatic updates of the same branch with each other. It is
+# still a different key space from the comment path's PR number, so a
+# `/sandbox stop` and an automatic update for one PR can overlap; the
+# "Re-check sandbox state" step below is what actually makes that safe.
 concurrency:
-  group: sandbox-pr-${{ github.event.issue.number || github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_sha }}
+  group: sandbox-pr-${{ github.event.issue.number || github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_branch }}
   cancel-in-progress: false
 
 jobs:
@@ -30,6 +38,14 @@ jobs:
     # Comment commands retain their OWNER/COLLABORATOR security gate. Completed
     # pull-request CI runs may enter too, but the resolver below only continues
     # when a bot-owned status comment says the sandbox is active.
+    #
+    # `conclusion == 'success'` is load-bearing, not hygiene: the automatic path
+    # skips the GHCR image wait because a finished CI run is supposed to have
+    # already published backend:<head_sha>. A failed run may have died before
+    # the publish, and the host then silently falls back to an ancestor image
+    # while the status comment reports the new SHA — a rollback disguised as an
+    # update. Only a successful run proves the image question is settled (either
+    # the image exists, or the docker job was filtered out and never will).
     if: >
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request != null &&
@@ -37,7 +53,8 @@ jobs:
         github.event.comment.author_association == 'COLLABORATOR') &&
        startsWith(github.event.comment.body, '/sandbox')) ||
       (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.event == 'pull_request')
+       github.event.workflow_run.event == 'pull_request' &&
+       github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -50,6 +67,7 @@ jobs:
       #   * the PR is still open and its head SHA matches the completed CI run;
       #   * the branch lives in this repository (the deploy host fetches origin);
       #   * the bot-owned status comment records an active sandbox;
+      #   * that activation is still inside SANDBOX_AUTO_UPDATE_TTL_HOURS;
       #   * that exact SHA is not already live.
       # The head-SHA comparison prevents an older queued CI completion from
       # rolling a sandbox back after a newer commit has arrived.
@@ -58,33 +76,62 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           COMMENT_BODY: ${{ github.event.comment.body }}
+          # Must track scripts/sandbox_reap.sh's SANDBOX_TTL_HOURS: the reaper
+          # tears sandboxes down on the host without being able to edit the PR
+          # comment, so the comment alone would keep re-creating what the reaper
+          # removed — and each re-create resets START_EPOCH, so the host TTL
+          # would never bound an active PR. Expiring the activation record on the
+          # same clock lets automatic updates stop when the reaper takes over.
+          SANDBOX_AUTO_UPDATE_TTL_HOURS: ${{ vars.SANDBOX_TTL_HOURS || '24' }}
         with:
           script: |
-            const marker = `<!-- sandbox-status:pr`;
-            const activeMarker = '<!-- sandbox-state:active -->';
+            const STATUS_MARKER_PREFIX = '<!-- sandbox-status:pr';
+            const ACTIVE_MARKER = '<!-- sandbox-state:active -->';
+            const LIVE_HEADING = '### ✅ Sandbox live';
+            const ACTIVATED_AT_PATTERN = /<!-- sandbox-activated-at:([^ ]+) -->/;
+            const MS_PER_HOUR = 60 * 60 * 1000;
+            const autoUpdateTtlHours = Number(process.env.SANDBOX_AUTO_UPDATE_TTL_HOURS);
             const isComment = context.eventName === 'issue_comment';
             let action = 'noop';
             let prNumber;
 
             if (isComment) {
               prNumber = context.issue.number;
-              const command = (process.env.COMMENT_BODY || '').replace(/\r/g, '').trim();
+              // Collapse all whitespace runs (including newlines) to single
+              // spaces before matching, so "/sandbox  stop" and a "/sandbox"
+              // followed by "stop" on the next line behave like the canonical
+              // form. A bare .trim() would reject both as unknown commands.
+              const command = (process.env.COMMENT_BODY || '').replace(/\s+/g, ' ').trim();
               if (command === '/sandbox') action = 'up';
               else if (command === '/sandbox stop') action = 'stop';
               else action = 'unknown';
             } else {
               const run = context.payload.workflow_run;
-              prNumber = run.pull_requests?.[0]?.number;
-              if (!prNumber) {
+              // Never trust pull_requests[0]: when one head SHA belongs to
+              // several open PRs, the array order is arbitrary and picking
+              // blindly can skip the PR that actually holds the sandbox. Match
+              // on head SHA and pick deterministically when several remain.
+              const runSha = run.head_sha;
+              let candidates = (run.pull_requests || [])
+                .filter(candidate => !candidate.head?.sha || candidate.head.sha === runSha)
+                .map(candidate => candidate.number);
+              if (candidates.length === 0) {
                 const { data: associated } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
                   owner: context.repo.owner, repo: context.repo.repo,
-                  commit_sha: run.head_sha,
+                  commit_sha: runSha,
                 });
-                prNumber = associated.find(candidate =>
-                  candidate.state === 'open' &&
-                  (candidate.head.sha === run.head_sha || candidate.merge_commit_sha === run.head_sha)
-                )?.number;
+                // Only a head-SHA match is usable here: the checks below require
+                // pr.head.sha === the completed SHA, so a merge-commit match
+                // could never survive them.
+                candidates = associated
+                  .filter(candidate => candidate.state === 'open' && candidate.head.sha === runSha)
+                  .map(candidate => candidate.number);
               }
+              if (candidates.length > 1) {
+                core.warning(`Head SHA ${runSha} maps to open PRs ${candidates.join(', ')}; ` +
+                  `updating the lowest-numbered one. Others must be refreshed with /sandbox.`);
+              }
+              prNumber = candidates.sort((a, b) => a - b)[0];
               if (!prNumber) {
                 core.info('Completed CI run is not associated with an open PR; nothing to update.');
                 core.setOutput('action', action);
@@ -100,10 +147,8 @@ jobs:
 
             if (!isComment) {
               const runSha = context.payload.workflow_run.head_sha;
-              const completedHeadSha = context.payload.workflow_run.pull_requests
-                ?.find(candidate => candidate.number === prNumber)?.head?.sha || runSha;
-              if (pr.state !== 'open' || pr.head.sha !== completedHeadSha) {
-                core.info(`Ignoring stale CI completion ${completedHeadSha}; current PR head is ${pr.head.sha}.`);
+              if (pr.state !== 'open' || pr.head.sha !== runSha) {
+                core.info(`Ignoring stale CI completion ${runSha}; current PR head is ${pr.head.sha}.`);
                 action = 'noop';
               } else if (pr.head.repo?.full_name !== context.payload.repository.full_name) {
                 core.info('Automatic sandbox updates are disabled for fork PRs.');
@@ -115,17 +160,30 @@ jobs:
                 });
                 const status = comments.find(comment =>
                   comment.user?.login === 'github-actions[bot]' &&
-                  comment.body?.includes(`${marker}${prNumber} -->`)
+                  comment.body?.includes(`${STATUS_MARKER_PREFIX}${prNumber} -->`)
                 );
                 const body = status?.body || '';
-                const active = body.includes(activeMarker) || body.includes('### ✅ Sandbox live');
-                // A manual /sandbox can time out waiting for the head image and
-                // temporarily use an ancestor. Only a prior post-CI deployment
-                // proves this CI completion has already been reconciled.
-                const alreadyLive = body.includes('### ✅ Sandbox live') &&
+                const active = body.includes(ACTIVE_MARKER) || body.includes(LIVE_HEADING);
+                // The job gate already requires a successful CI run, so the
+                // head-SHA image either exists or was never going to (the docker
+                // path filter skipped it). Either way this SHA is reconciled
+                // once a post-CI deploy has recorded it.
+                const alreadyLive = body.includes(LIVE_HEADING) &&
                   body.includes(`<!-- sandbox-ci-sha:${pr.head.sha} -->`);
+                const activatedAt = body.match(ACTIVATED_AT_PATTERN)?.[1];
+                const activationAgeHours = activatedAt
+                  ? (Date.now() - Date.parse(activatedAt)) / MS_PER_HOUR
+                  : null;
+                const expired = activationAgeHours !== null &&
+                  Number.isFinite(autoUpdateTtlHours) &&
+                  activationAgeHours > autoUpdateTtlHours;
                 if (!active) {
                   core.info(`PR #${prNumber} has no active sandbox; nothing to update.`);
+                  action = 'noop';
+                } else if (expired) {
+                  core.info(`PR #${prNumber} was activated ${activationAgeHours.toFixed(1)}h ago, ` +
+                    `past the ${autoUpdateTtlHours}h auto-update TTL; the host reaper owns it now. ` +
+                    `Re-issue /sandbox to resume automatic updates.`);
                   action = 'noop';
                 } else if (alreadyLive) {
                   core.info(`Sandbox is already live at ${runSha}; skipping duplicate deployment.`);
@@ -134,6 +192,9 @@ jobs:
                   core.info(`Active sandbox found; updating PR #${prNumber} to ${runSha}.`);
                   action = 'up';
                 }
+                // Carry the original activation stamp forward so an automatic
+                // update does not extend its own TTL; only /sandbox renews it.
+                core.setOutput('activated_at', activatedAt || '');
               }
             }
 
@@ -158,18 +219,38 @@ jobs:
           AUTOMATIC: ${{ steps.pr.outputs.automatic }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          ACTIVATED_AT: ${{ steps.pr.outputs.activated_at }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         with:
           script: |
             const pr = Number(process.env.PR_NUMBER);
+            const isStop = process.env.ACTION === 'stop';
             const marker = `<!-- sandbox-status:pr${pr} -->`;
-            const state = '<!-- sandbox-state:active -->';
+            // A teardown must NOT claim the sandbox is active, not even
+            // mid-flight: if the teardown then fails or times out, an `active`
+            // record would let the next CI completion resurrect the sandbox the
+            // user explicitly stopped. Recording `inactive` up front fails in
+            // the safe direction — the host reaper still collects a sandbox that
+            // survived a failed teardown.
+            const state = isStop
+              ? '<!-- sandbox-state:inactive -->'
+              : '<!-- sandbox-state:active -->';
             const shaMarker = `<!-- sandbox-sha:${process.env.HEAD_SHA} -->`;
+            // An explicit /sandbox (re)starts the auto-update TTL clock; an
+            // automatic update inherits the stamp so it cannot extend its own
+            // lease indefinitely.
+            const activatedAt = process.env.AUTOMATIC === 'true'
+              ? (process.env.ACTIVATED_AT || new Date().toISOString())
+              : new Date().toISOString();
+            const activatedMarker = isStop
+              ? ''
+              : `\n<!-- sandbox-activated-at:${activatedAt} -->`;
+            core.setOutput('activated_at', isStop ? '' : activatedAt);
             const sha = (process.env.HEAD_SHA || '').slice(0, 12);
-            const verb = process.env.ACTION === 'stop'
+            const verb = isStop
               ? 'Tearing down'
               : process.env.AUTOMATIC === 'true' ? 'Updating for a new commit' : 'Spinning up';
-            const body = `${marker}\n${state}\n${shaMarker}\n### 🔄 Sandbox: ${verb}…\n` +
+            const body = `${marker}\n${state}\n${shaMarker}${activatedMarker}\n### 🔄 Sandbox: ${verb}…\n` +
               `- **Commit:** \`${sha}\`\n` +
               `- **Status:** triggered — [live logs](${process.env.RUN_URL})`;
             // Reuse an existing status comment for this PR if present.
@@ -335,33 +416,137 @@ jobs:
       #       inside the remote heredoc.  The heredoc body is quoted (<<'REMOTE')
       #       so it is literal on the runner; values reach the remote shell only as
       #       positional args or via safe-character base64.
-      # ── 6a. Status: deploying ────────────────────────────────────────────────
+      # ── 6a. Last-moment state re-check ───────────────────────────────────────
+      # The concurrency key cannot cover both event types (see the `concurrency`
+      # block), so a `/sandbox stop` can land while an automatic update is
+      # mid-flight and the two would stomp each other on the host. Re-read the
+      # activation record as late as possible — after the tailnet/SSH setup, just
+      # before the host mutation — and stand down if the sandbox was stopped in
+      # the meantime. An explicit command is the user's latest instruction, so it
+      # is never second-guessed here.
+      - name: Re-check sandbox state
+        id: recheck
+        if: steps.pr.outputs.action == 'up' && steps.pr.outputs.automatic == 'true'
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          COMMENT_ID: ${{ steps.status.outputs.comment_id }}
+        with:
+          script: |
+            const pr = Number(process.env.PR_NUMBER);
+            const INACTIVE_MARKER = '<!-- sandbox-state:inactive -->';
+            const { data: pull } = await github.rest.pulls.get({
+              owner: context.repo.owner, repo: context.repo.repo, pull_number: pr,
+            });
+            if (pull.state !== 'open' || pull.head.sha !== process.env.HEAD_SHA) {
+              core.info(`PR #${pr} moved on (state=${pull.state}, head=${pull.head.sha}); standing down.`);
+              // The sandbox itself is untouched and a newer CI completion will
+              // reconcile it, so the activation record must stay as it is.
+              core.setOutput('reason', 'superseded');
+              core.setOutput('proceed', 'false');
+              return;
+            }
+            // Our own status comment is the record; a concurrent stop rewrites it
+            // to `inactive` before it touches the host.
+            const { data: comment } = await github.rest.issues.getComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              comment_id: Number(process.env.COMMENT_ID),
+            });
+            if ((comment.body || '').includes(INACTIVE_MARKER)) {
+              core.info(`PR #${pr} was stopped while this update was in flight; standing down.`);
+              core.setOutput('reason', 'stopped');
+              core.setOutput('proceed', 'false');
+              return;
+            }
+            core.setOutput('proceed', 'true');
+
+      # A stood-down update must not leave the comment reading "Updating…" with
+      # an `active` record — that would both mislead the reviewer and re-arm
+      # automatic updates for a sandbox the user stopped.
+      - name: Status stood down
+        if: steps.recheck.outputs.proceed == 'false' && steps.status.outputs.comment_id != ''
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          REASON: ${{ steps.recheck.outputs.reason }}
+          ACTIVATED_AT: ${{ steps.status.outputs.activated_at }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMENT_ID: ${{ steps.status.outputs.comment_id }}
+        with:
+          script: |
+            const pr = process.env.PR_NUMBER;
+            const stopped = process.env.REASON === 'stopped';
+            const marker = `<!-- sandbox-status:pr${pr} -->`;
+            const sha = (process.env.HEAD_SHA || '').slice(0, 12);
+            if (stopped) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: Number(process.env.COMMENT_ID),
+                body: `${marker}\n<!-- sandbox-state:inactive -->\n### 🛑 Sandbox torn down\n` +
+                  `- **Was:** \`roadtrip-sb-pr${pr}\`\n` +
+                  `- An automatic update for \`${sha}\` stood down because the sandbox was stopped.\n` +
+                  `- Re-create with \`/sandbox\`  ·  [logs](${process.env.RUN_URL})`,
+              });
+              return;
+            }
+            // Superseded: the sandbox is still active and a newer CI completion
+            // will reconcile it, so preserve the activation record verbatim.
+            const activatedMarker = process.env.ACTIVATED_AT
+              ? `\n<!-- sandbox-activated-at:${process.env.ACTIVATED_AT} -->`
+              : '';
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              comment_id: Number(process.env.COMMENT_ID),
+              body: `${marker}\n<!-- sandbox-state:active -->${activatedMarker}\n` +
+                `### ⏭️ Sandbox update superseded\n` +
+                `- **Skipped commit:** \`${sha}\` — the PR has already moved on.\n` +
+                `- The sandbox stays up; the newer commit's CI run will update it.\n` +
+                `- [logs](${process.env.RUN_URL})`,
+            });
+
+      # ── 6b. Status: deploying ────────────────────────────────────────────────
       - name: Status deploying
-        if: (steps.pr.outputs.action == 'up' || steps.pr.outputs.action == 'stop') && steps.status.outputs.comment_id != ''
+        if: >
+          (steps.pr.outputs.action == 'up' || steps.pr.outputs.action == 'stop') &&
+          steps.status.outputs.comment_id != '' &&
+          (steps.pr.outputs.automatic != 'true' || steps.recheck.outputs.proceed == 'true')
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           ACTION: ${{ steps.pr.outputs.action }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          ACTIVATED_AT: ${{ steps.status.outputs.activated_at }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           COMMENT_ID: ${{ steps.status.outputs.comment_id }}
         with:
           script: |
+            const isStop = process.env.ACTION === 'stop';
             const marker = `<!-- sandbox-status:pr${process.env.PR_NUMBER} -->`;
-            const state = '<!-- sandbox-state:active -->';
+            // See "Init status comment": a teardown records `inactive` for its
+            // whole duration so a failed stop cannot be auto-resurrected.
+            const state = isStop
+              ? '<!-- sandbox-state:inactive -->'
+              : '<!-- sandbox-state:active -->';
             const shaMarker = `<!-- sandbox-sha:${process.env.HEAD_SHA} -->`;
+            const activatedMarker = process.env.ACTIVATED_AT
+              ? `\n<!-- sandbox-activated-at:${process.env.ACTIVATED_AT} -->`
+              : '';
             const sha = (process.env.HEAD_SHA || '').slice(0, 12);
-            const verb = process.env.ACTION === 'stop' ? 'Tearing down' : 'Deploying to the host';
+            const verb = isStop ? 'Tearing down' : 'Deploying to the host';
             await github.rest.issues.updateComment({
               owner: context.repo.owner, repo: context.repo.repo,
               comment_id: Number(process.env.COMMENT_ID),
-              body: `${marker}\n${state}\n${shaMarker}\n### 🔄 Sandbox: ${verb}…\n` +
+              body: `${marker}\n${state}\n${shaMarker}${activatedMarker}\n### 🔄 Sandbox: ${verb}…\n` +
                 `- **Commit:** \`${sha}\`\n` +
                 `- **Status:** deploying — [live logs](${process.env.RUN_URL})`,
             });
 
       - name: Run on host (up)
-        if: steps.pr.outputs.action == 'up'
+        if: >
+          steps.pr.outputs.action == 'up' &&
+          (steps.pr.outputs.automatic != 'true' || steps.recheck.outputs.proceed == 'true')
         env:
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           HEAD_REF: ${{ steps.pr.outputs.head_ref }}
@@ -442,13 +627,17 @@ jobs:
       # if the zone is ever renamed.  floo.ca (one label under the apex) is
       # required for the free *.floo.ca TLS cert to cover sandbox hostnames.
       - name: Status live
-        if: steps.pr.outputs.action == 'up' && steps.status.outputs.comment_id != ''
+        if: >
+          steps.pr.outputs.action == 'up' &&
+          steps.status.outputs.comment_id != '' &&
+          (steps.pr.outputs.automatic != 'true' || steps.recheck.outputs.proceed == 'true')
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           SANDBOX_TUNNEL_ZONE: ${{ vars.SANDBOX_TUNNEL_ZONE || 'floo.ca' }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           AUTOMATIC: ${{ steps.pr.outputs.automatic }}
+          ACTIVATED_AT: ${{ steps.status.outputs.activated_at }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           COMMENT_ID: ${{ steps.status.outputs.comment_id }}
         with:
@@ -458,6 +647,9 @@ jobs:
             const marker = `<!-- sandbox-status:pr${pr} -->`;
             const state = '<!-- sandbox-state:active -->';
             const shaMarker = `<!-- sandbox-sha:${process.env.HEAD_SHA} -->`;
+            const activatedMarker = process.env.ACTIVATED_AT
+              ? `\n<!-- sandbox-activated-at:${process.env.ACTIVATED_AT} -->`
+              : '';
             const ciMarker = process.env.AUTOMATIC === 'true'
               ? `\n<!-- sandbox-ci-sha:${process.env.HEAD_SHA} -->`
               : '';
@@ -468,7 +660,7 @@ jobs:
             await github.rest.issues.updateComment({
               owner: context.repo.owner, repo: context.repo.repo,
               comment_id: Number(process.env.COMMENT_ID),
-              body: `${marker}\n${state}\n${shaMarker}${ciMarker}\n### ✅ Sandbox live\n` +
+              body: `${marker}\n${state}\n${shaMarker}${activatedMarker}${ciMarker}\n### ✅ Sandbox live\n` +
                 `- **URL:** ${url}\n` +
                 `- **Commit:** \`${sha}\`\n` +
                 `- **Stop:** comment \`/sandbox stop\`  ·  [logs](${process.env.RUN_URL})`,
@@ -503,22 +695,37 @@ jobs:
       # comment stuck on "deploying…".  Edits the existing comment, or posts a
       # new one if the failure predated the status comment.
       - name: Status failed
-        if: failure() && (steps.pr.outputs.action == 'up' || steps.pr.outputs.action == 'stop')
+        if: >
+          failure() &&
+          (steps.pr.outputs.action == 'up' || steps.pr.outputs.action == 'stop') &&
+          steps.recheck.outputs.proceed != 'false'
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         env:
           ACTION: ${{ steps.pr.outputs.action }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+          ACTIVATED_AT: ${{ steps.status.outputs.activated_at }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           COMMENT_ID: ${{ steps.status.outputs.comment_id }}
         with:
           script: |
+            const isStop = process.env.ACTION === 'stop';
             const marker = `<!-- sandbox-status:pr${process.env.PR_NUMBER} -->`;
-            const state = '<!-- sandbox-state:active -->';
+            // A failed teardown stays `inactive`: the user asked for the sandbox
+            // to go away, so automatic updates must not resume just because the
+            // stop errored. A failed deploy keeps `active` — the sandbox is
+            // still there (possibly on the previous commit) and the next CI
+            // completion should retry.
+            const state = isStop
+              ? '<!-- sandbox-state:inactive -->'
+              : '<!-- sandbox-state:active -->';
             const shaMarker = `<!-- sandbox-sha:${process.env.HEAD_SHA} -->`;
+            const activatedMarker = !isStop && process.env.ACTIVATED_AT
+              ? `\n<!-- sandbox-activated-at:${process.env.ACTIVATED_AT} -->`
+              : '';
             const sha = (process.env.HEAD_SHA || '').slice(0, 12);
-            const verb = process.env.ACTION === 'stop' ? 'teardown' : 'deploy';
-            const body = `${marker}\n${state}\n${shaMarker}\n### ❌ Sandbox ${verb} failed\n` +
+            const verb = isStop ? 'teardown' : 'deploy';
+            const body = `${marker}\n${state}\n${shaMarker}${activatedMarker}\n### ❌ Sandbox ${verb} failed\n` +
               `- **Commit:** \`${sha}\`\n` +
               `- See the [workflow run](${process.env.RUN_URL}) for details.`;
             const id = process.env.COMMENT_ID;

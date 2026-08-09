@@ -89,21 +89,40 @@ workflow; comments from other identities are silently ignored before any
 step runs.
 
 Once `/sandbox` succeeds, the sandbox remains active for that PR. Every later
-commit is deployed automatically after its `CI` workflow finishes. The update
-reuses the stable `pr<N>` Compose project and its database volume; it does not
-create a second sandbox. Stale CI completions are ignored, and a completion for
-the SHA that is already live is a no-op. `/sandbox stop` tears the sandbox down
-and disables automatic updates until `/sandbox` is issued again.
+commit is deployed automatically after its `CI` workflow finishes
+**successfully** — a failed CI run never redeploys, because the automatic path
+skips the GHCR image wait and would otherwise fall back to an ancestor image
+while reporting the new SHA. The update reuses the stable `pr<N>` Compose
+project and its database volume; it does not create a second sandbox. Stale CI
+completions are ignored, and a completion for a SHA whose post-CI deployment is
+already recorded is a no-op. `/sandbox stop` tears the sandbox down and disables
+automatic updates until `/sandbox` is issued again — including when the teardown
+itself fails, so a botched stop cannot be silently resurrected.
 
 Issuing `/sandbox` more than once is also safe: it explicitly reconciles the
-same `pr<N>` sandbox to the PR's current head SHA. Automatic updates are limited
-to branches in this repository because the deploy host only fetches this
-repository's `origin`; fork PRs are not automatically redeployed.
+same `pr<N>` sandbox to the PR's current head SHA, and restarts the auto-update
+lease described below. Automatic updates are limited to branches in this
+repository because the deploy host only fetches this repository's `origin`;
+fork PRs are not automatically redeployed.
+
+Automatic updates also expire. `scripts/sandbox_reap.sh` collects sandboxes on
+the host once they exceed `SANDBOX_TTL_HOURS`, but it cannot edit the PR comment
+that records activation — so without a matching expiry every later CI completion
+would re-create the reaped sandbox and reset its age, and the host TTL would
+never bound a PR that keeps getting commits. The workflow therefore stamps
+`sandbox-activated-at` when `/sandbox` runs and stops updating automatically
+once that stamp is older than the same TTL (repo variable `SANDBOX_TTL_HOURS`,
+default 24h). Automatic updates inherit the stamp rather than renewing it, so
+only an explicit `/sandbox` extends the lease.
 
 The workflow (`sandbox.yml`) resolves the PR head SHA via the GitHub API. For
 automatic updates it waits for the PR's `CI` workflow to complete; explicit
 commands briefly wait for the GHCR image (`ghcr.io/wwchen/roadtrip/backend:<sha>`)
-to appear. It then SSHes to `mini@mini-ca` over Tailscale and runs
+to appear. Immediately before touching the host, an automatic update re-reads
+the activation record and stands down if a `/sandbox stop` landed while it was
+in flight — the GitHub concurrency key cannot cover both event types, so this
+late check is what keeps the two from stomping each other. It then SSHes to
+`mini@mini-ca` over Tailscale and runs
 `scripts/sandbox_up.sh <pr_number>` (with `SANDBOX_SHA` set) or
 `scripts/sandbox_down.sh pr<pr_number>`. On success it posts the sandbox
 URL as a PR comment:
