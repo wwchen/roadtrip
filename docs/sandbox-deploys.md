@@ -88,9 +88,22 @@ Only **OWNER** or **COLLABORATOR** accounts on the repo can trigger the
 workflow; comments from other identities are silently ignored before any
 step runs.
 
-The workflow (`sandbox.yml`) resolves the PR head SHA via the GitHub API,
-waits for the GHCR image (`ghcr.io/wwchen/roadtrip/backend:<sha>`) to
-appear, then SSHes to `mini@mini-ca` over Tailscale and runs
+Once `/sandbox` succeeds, the sandbox remains active for that PR. Every later
+commit is deployed automatically after its `CI` workflow finishes. The update
+reuses the stable `pr<N>` Compose project and its database volume; it does not
+create a second sandbox. Stale CI completions are ignored, and a completion for
+the SHA that is already live is a no-op. `/sandbox stop` tears the sandbox down
+and disables automatic updates until `/sandbox` is issued again.
+
+Issuing `/sandbox` more than once is also safe: it explicitly reconciles the
+same `pr<N>` sandbox to the PR's current head SHA. Automatic updates are limited
+to branches in this repository because the deploy host only fetches this
+repository's `origin`; fork PRs are not automatically redeployed.
+
+The workflow (`sandbox.yml`) resolves the PR head SHA via the GitHub API. For
+automatic updates it waits for the PR's `CI` workflow to complete; explicit
+commands briefly wait for the GHCR image (`ghcr.io/wwchen/roadtrip/backend:<sha>`)
+to appear. It then SSHes to `mini@mini-ca` over Tailscale and runs
 `scripts/sandbox_up.sh <pr_number>` (with `SANDBOX_SHA` set) or
 `scripts/sandbox_down.sh pr<pr_number>`. On success it posts the sandbox
 URL as a PR comment:
