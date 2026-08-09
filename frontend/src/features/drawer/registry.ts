@@ -14,6 +14,7 @@ import type { ComponentType } from 'react';
 import type { FlatPoiFeature } from '@/lib/poi';
 import { ParkDrawer } from './ParkDrawer';
 import { PlanetFitnessDrawer } from './PlanetFitnessDrawer';
+import { SuperchargerDrawer } from './SuperchargerDrawer';
 
 export interface DrawerContentProps {
   feature: FlatPoiFeature;
@@ -32,10 +33,11 @@ const BY_CATEGORY = new Map<string, DrawerContent>([
   ['state-park', ParkDrawer],
   ['planet_fitness_location', PlanetFitnessDrawer],
   ['planet-fitness', PlanetFitnessDrawer],
-  // Still to come in 4c: `tesla_supercharger`/`supercharger` (a 288-line port) and
-  // `campground` (275 lines plus the 589-line detail card, whose availability
-  // section is the 4d boundary). Until they land, those pins open the drawer and
-  // say so — `PoiDrawer`'s "no detail view yet" banner — which is a visible,
+  ['tesla_supercharger', SuperchargerDrawer],
+  ['supercharger', SuperchargerDrawer],
+  // Still to come in 4c: `campground` — 275 lines plus a 589-line detail card whose
+  // availability section is the 4d boundary. Until it lands, campground pins open the
+  // drawer and say there is no panel yet (`PoiDrawer`'s banner), which is a visible,
   // truthful gap rather than a click that appears to do nothing.
 ]);
 

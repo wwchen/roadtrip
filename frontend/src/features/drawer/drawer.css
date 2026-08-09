@@ -270,3 +270,107 @@
   font-size: 13px;
   line-height: 1.4;
 }
+
+/* --- supercharger ------------------------------------------------------- */
+
+.rt-drawer-meta {
+  color: var(--rt-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.rt-sc-label {
+  color: var(--rt-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.rt-sc-amenities {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.rt-sc-busy {
+  margin-top: 10px;
+}
+
+.rt-sc-busy-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+/* Tesla ships a fractional-occupancy value per hour. The bars are scaled against
+   the day's own peak, so height comes from the data (an inline style) and only the
+   colour bucket is styling. */
+.rt-sc-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 28px;
+}
+
+.rt-sc-bar {
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: 1px;
+}
+
+.rt-sc-bar[data-bucket='low'] {
+  background: var(--rt-avail);
+}
+
+.rt-sc-bar[data-bucket='medium'] {
+  background: var(--rt-warn);
+}
+
+.rt-sc-bar[data-bucket='high'] {
+  background: var(--rt-error);
+}
+
+/* The site's current local hour, so "right now" reads against the day's shape. */
+.rt-sc-bar[data-now] {
+  outline: 2px solid var(--rt-brand);
+  outline-offset: 1px;
+}
+
+.rt-sc-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+  color: var(--rt-muted);
+  font-size: 10px;
+}
+
+.rt-sc-rates {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rt-sc-rate {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.rt-sc-rate--header {
+  font-weight: 600;
+}
+
+/* Time-of-use windows read as children of the group above them. */
+.rt-sc-rate--tou {
+  padding-left: 12px;
+  color: var(--rt-muted);
+}
+
+.rt-sc-rate-value {
+  font-variant-numeric: tabular-nums;
+}
