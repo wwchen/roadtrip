@@ -11,16 +11,20 @@
 // `innerHTML`. Its three contents (a leg breakdown, a routing error, a geolocation
 // failure) are three components now, which is what makes the "computing route…"
 // state distinguishable from the "no route" state without reading a CSS class.
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertsPanel } from '@/features/alerts/AlertsPanel';
 import { AuthRow } from './AuthRow';
-import { CorridorSlider } from './CorridorSlider';
 import { RouteStatus } from './RouteStatus';
 import { SearchDropdown } from './SearchDropdown';
 import { StopRow } from './StopRow';
+import { TripResults } from './TripResults';
 import { MAX_SEARCH_RESULTS, type SearchResult } from './search-results';
 import { allStopsFilled, isLocated } from './stops';
+import { buildRouteIndex } from './route-index';
+import { tripCardsFromFeatures } from './trip-cards';
 import { useOnRoutePois } from './useOnRoutePois';
 import { useRoute } from './useRoute';
+import { useTripCards } from './useTripCards';
 import { useSearchResults } from './useSearchResults';
 import { useSharedTrip } from './useSharedTrip';
 import { useTripPlanner } from './useTripPlanner';
@@ -37,6 +41,16 @@ export function TopBar() {
   const corridor = useOnRoutePois();
   const shared = useSharedTrip();
   usePublishedLocationFiller(planner.useCurrentLocation);
+
+  // Placeholder cards from the corridor response, then hydrated per card. Both steps
+  // are cheap enough to run per render: the index is one pass over the route's
+  // vertices, and the hydration is a cache read once each id has landed.
+  const routeIndex = useMemo(() => buildRouteIndex(route.line), [route.line]);
+  const placeholders = useMemo(
+    () => tripCardsFromFeatures(corridor.features, planner.stops[0] ?? null, routeIndex),
+    [corridor.features, planner.stops, routeIndex],
+  );
+  const cards = useTripCards(placeholders);
 
   /**
    * The row being typed in, and what is in it.
@@ -132,6 +146,10 @@ export function TopBar() {
         })}
       </div>
 
+      {/* `#tb-alerts` sat here in the vanilla DOM too: under the rows, above the
+          actions. It renders nothing at all for a user with no watches. */}
+      <AlertsPanel />
+
       {/* Where the vanilla topbar kept `#tb-auth`: sign-in, who you are, and the
           trigger for the settings modal Phase 3 built and nothing mounted. */}
       <AuthRow />
@@ -203,17 +221,20 @@ export function TopBar() {
         legs={route.legs}
       />
 
-      {/* The corridor controls belong to a live route: without one there is nothing
-          for a radius to be a radius of. */}
+      {/* The results section owns the corridor slider, because the radius is a property
+          of this list: it is what decides which campgrounds are in it. That nesting is
+          also the DOM contract `SmokeTest.kt` asserts —
+          `#tb-results .tb-results-body #tb-corridor` must be visible.
+
+          It appears only with a live route: without one there is nothing for a radius
+          to be a radius of, and nothing to be "along". */}
       {allStopsFilled(planner.stops) && route.route ? (
-        <div className="tb-corridor-row">
-          <CorridorSlider miles={planner.corridorMiles} onChange={planner.setCorridorMiles} />
-          <span className="tb-corridor-count">
-            {corridor.isFetching
-              ? 'Finding campgrounds…'
-              : `${corridor.features.length} campground${corridor.features.length === 1 ? '' : 's'} along the route`}
-          </span>
-        </div>
+        <TripResults
+          cards={cards}
+          loading={corridor.isFetching}
+          corridorMiles={planner.corridorMiles}
+          onCorridorMilesChange={planner.setCorridorMiles}
+        />
       ) : null}
     </div>
   );

@@ -2,6 +2,7 @@ package ca.floo.roadtrip
 
 import com.microsoft.playwright.Browser
 import com.microsoft.playwright.BrowserType
+import com.microsoft.playwright.Locator
 import com.microsoft.playwright.Page
 import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.Route
@@ -22,8 +23,28 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 // Trip-critical smoke. Mirrors the deleted qa/smoke.spec.mjs: cold load →
-// /api/pois → Banff popup. Gated on QA_BASE_URL so `gradle test` skips it
+// /api/pois → Banff drawer. Gated on QA_BASE_URL so `gradle test` skips it
 // unless a stack is already up. Run via `make qa`.
+//
+// **`/` is the React app as of Phase 4e.** Three kinds of selector appear below, and
+// which one a step uses is deliberate:
+//
+//   the `window.__rt*` globals — `__rtMap`, `__rtState`, `__rtRouteActive`,
+//       `__rtAddTripStop`, `__rtRefreshBbox`, `__rtUseCurrentLocationForTripStop`,
+//       `__rtRouteShareUrl`. React publishes every one of them from
+//       `stores/transition-shim.ts` and
+//       `features/map/useQaHooks.ts`, precisely so this suite kept working across
+//       the port;
+//   the topbar's `tb-*` ids and classes, which the React components reproduce
+//       verbatim (see the notes in `StopRow.tsx` and `TopBar.tsx`) — the topbar is
+//       the one surface whose DOM contract was worth preserving, because these
+//       assertions are what proves the rewritten planner behaves;
+//   roles and accessible names for everything React reshaped — the drawer
+//       (`aside.rt-drawer`, `role=dialog`) and the legend (`.rt-legend*`). Where the
+//       vanilla's hooks were ids on hand-built DOM (`#cg-drawer`, `#panel`,
+//       `#cg-agency-legend input[data-cg-agency]`), the port has real roles and
+//       names, so the smoke asks for those rather than pinning class names that only
+//       exist for CSS.
 @EnabledIfEnvironmentVariable(named = "QA_BASE_URL", matches = ".+")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SmokeTest {
@@ -46,8 +67,53 @@ class SmokeTest {
         playwright.close()
     }
 
+    /**
+     * The POI drawer, once it has finished sliding in.
+     *
+     * The vanilla's `#cg-drawer.open` has no counterpart: React's drawer
+     * (`features/drawer/Drawer.tsx`) unmounts when it closes rather than keeping one
+     * element alive and toggling a class, so "open" is a dialog being present at all.
+     * `--open` is still in the selector because that class lands a frame later, and an
+     * assertion that fires mid-animation reads a half-positioned panel.
+     */
+    private fun drawerOf(page: Page): Locator = page.locator("aside.rt-drawer.rt-drawer--open[role='dialog']")
+
+    /**
+     * A legend agency row's clickable control.
+     *
+     * The label, not the checkbox: LDS renders the real input at `opacity: 0` with no
+     * size and `pointer-events: none` and draws `.lds-check__box` in its place, so the
+     * input can be READ but never clicked. Verified in Chromium — clicking it times out
+     * with "element is not visible".
+     *
+     * Matched on the label's text, which also carries the count ("US Forest Service
+     * (1)"), hence a substring match.
+     */
+    private fun agencyRow(
+        page: Page,
+        agency: String,
+    ): Locator =
+        page
+            .locator(".rt-legend__agencies label")
+            .filter(Locator.FilterOptions().setHasText(Pattern.compile(agency)))
+
+    /** The same row's checkbox, which is what reports the filter's state. */
+    private fun agencyBox(
+        page: Page,
+        agency: String,
+    ): Locator = agencyRow(page, agency).locator("input[type='checkbox']")
+
+    /** Wait for the style to resolve, which is when overlays exist and pins can land. */
+    private fun awaitMapReady(page: Page) {
+        page.waitForFunction(
+            "() => globalThis.__rtState?.mapReady === true",
+            null,
+            Page.WaitForFunctionOptions().setTimeout(MAP_READY_TIMEOUT_MS),
+        )
+    }
+
     @Test
-    fun `cold load - api pois - Banff campground popup`() {
+    fun `cold load - api pois - Banff campground drawer`() {
         val context =
             browser.newContext(
                 Browser
@@ -65,14 +131,12 @@ class SmokeTest {
             // is enough; the next step polls __rtState.mapReady directly.
             page.navigate("/")
 
-            // 2. Wait for map to be ready — state.mapReady is set inside the
-            // style.load handler in app.js after maplibregl resolves the style.
+            // 2. Wait for the map to be ready. `__rtState.mapReady` is React's
+            // `styleReady` (features/map/useQaHooks.ts) — the same fact the vanilla's
+            // `state.mapReady` recorded: the style has resolved, so the overlays are
+            // installed and the first viewport fetch has gone out.
             try {
-                page.waitForFunction(
-                    "() => globalThis.__rtState?.mapReady === true",
-                    null,
-                    Page.WaitForFunctionOptions().setTimeout(15_000.0),
-                )
+                awaitMapReady(page)
             } catch (e: Exception) {
                 val diag =
                     page.evaluate(
@@ -96,13 +160,14 @@ class SmokeTest {
                 Page.WaitForFunctionOptions().setTimeout(15_000.0),
             )
 
-            // 5. Drive search → result click → synthesizeClick (deterministic
-            // popup render, dodges pixel-rounding issues from clicking the dot).
-            // The Google-Maps-style top bar (web/topbar.js) puts the search input
-            // at .tb-row[data-i="0"] .tb-input; pin rows in the dropdown are
-            // .tb-result rows whose .tb-kind chip contains "CG" (campgrounds).
-            // Mapbox geocoder also surfaces "ADDR" rows for the same query,
-            // so filter on the kind chip to avoid clicking an address.
+            // 5. Drive search → result click, rather than clicking the dot on the
+            // map: a picked POI result opens its drawer by id (`useTripPlanner`'s
+            // `pickResult`), which dodges the pixel-rounding of hitting a 6px circle.
+            // The topbar keeps the vanilla's DOM: the search input is
+            // `.tb-row[data-i="0"] .tb-input`, and dropdown rows are `.tb-result`
+            // whose `.tb-kind` chip says what they are. The geocoder also answers
+            // "ADDR" rows for this query, so filter on the chip to avoid picking an
+            // address.
             page.fill(".tb-row[data-i=\"0\"] .tb-input", "tunnel mountain village")
             val pinResult =
                 page.locator("#tb-dropdown .tb-result").filter(
@@ -127,9 +192,8 @@ class SmokeTest {
 
             // 6. Drawer renders with name + reserve link. (Tunnel Mountain is
             // a Parks Canada pin — no recgov_id — so the drawer skips the
-            // availability section and shows reserveButtonHTML's parks_canada
-            // branch.)
-            val drawer = page.locator("#cg-drawer.open")
+            // availability grid and shows the provider CTA the backend promoted.)
+            val drawer = drawerOf(page)
             assertThat(drawer).isVisible(
                 com.microsoft.playwright.assertions.LocatorAssertions
                     .IsVisibleOptions()
@@ -142,7 +206,9 @@ class SmokeTest {
             assertThat(drawer.locator("h2")).containsText("Tunnel Mountain")
             assertTrue(page.url().contains("poi="), "opening a POI should update the visible URL")
 
-            val reserveBtn = drawer.locator("a.cg-btn-primary")
+            // The CTAs are LDS buttons rendered as anchors, in the actions row —
+            // `a.cg-btn-primary` was the vanilla's hand-built equivalent.
+            val reserveBtn = drawer.locator(".rt-drawer-actions a[href]").first()
             assertThat(reserveBtn).isVisible()
             val href = reserveBtn.getAttribute("href") ?: ""
             assertTrue(
@@ -169,6 +235,10 @@ class SmokeTest {
         }
     }
 
+    // The legend is a sheet on a phone and a panel on a desktop, and one button means
+    // "close" in the first case and "collapse" in the second (`LegendPanel.hide`). What
+    // this pins is the phone half: a sheet that opens and cannot be closed again covers
+    // the map for the rest of the session.
     @Test
     fun `mobile layers panel can close after opening`() {
         val context =
@@ -184,26 +254,26 @@ class SmokeTest {
 
         try {
             page.navigate("/")
-            page.waitForFunction(
-                "() => globalThis.__rtState?.mapReady === true",
-                null,
-                Page.WaitForFunctionOptions().setTimeout(15_000.0),
-            )
-            assertThat(page.locator("#panel #status")).hasCount(0)
+            awaitMapReady(page)
+            // The legend's search box is deliberately absent: it filtered a client-side
+            // index nothing has populated since `/api/pois` went slim, so it could not
+            // return a result. Cross-viewport search is the topbar's, above.
+            assertThat(page.locator(".rt-legend input[type='search']")).hasCount(0)
 
-            page.locator("#panel-toggle").click()
+            page.getByLabel("Toggle layers panel").click()
             page.waitForFunction(
-                "() => document.getElementById('panel')?.classList.contains('open') === true",
+                "() => document.querySelector('.rt-legend')?.classList.contains('rt-legend--open') === true",
                 null,
-                Page.WaitForFunctionOptions().setTimeout(5_000.0),
+                Page.WaitForFunctionOptions().setTimeout(PANEL_TIMEOUT_MS),
             )
-            assertThat(page.locator("#panel-collapse")).isVisible()
+            val close = page.getByLabel("Hide layers panel")
+            assertThat(close).isVisible()
 
-            page.locator("#panel-collapse").click()
+            close.click()
             page.waitForFunction(
-                "() => document.getElementById('panel')?.classList.contains('open') === false",
+                "() => document.querySelector('.rt-legend')?.classList.contains('rt-legend--open') === false",
                 null,
-                Page.WaitForFunctionOptions().setTimeout(5_000.0),
+                Page.WaitForFunctionOptions().setTimeout(PANEL_TIMEOUT_MS),
             )
             assertTrue(
                 pageErrors.isEmpty(),
@@ -279,32 +349,30 @@ class SmokeTest {
 
         try {
             page.navigate("/")
-            page.waitForFunction(
-                "() => globalThis.__rtState?.mapReady === true",
-                null,
-                Page.WaitForFunctionOptions().setTimeout(15_000.0),
-            )
+            awaitMapReady(page)
             page.evaluate(
                 "() => { globalThis.__rtMap.jumpTo({ center: [-123.02, 49.02], zoom: 10 }); return true; }",
             )
             // Flat legend: one checkbox per agency present in the viewport.
             page.waitForFunction(
-                "() => document.querySelectorAll('#cg-agency-legend input[data-cg-agency]').length >= 3",
+                "() => document.querySelectorAll('.rt-legend__agencies input[type=\"checkbox\"]').length >= 3",
                 null,
-                Page.WaitForFunctionOptions().setTimeout(15_000.0),
+                Page.WaitForFunctionOptions().setTimeout(MAP_READY_TIMEOUT_MS),
             )
 
-            val nps = page.locator("""#cg-agency-legend input[data-cg-agency="National Park Service"]""")
-            val forestService =
-                page.locator("""#cg-agency-legend input[data-cg-agency="US Forest Service"]""")
-            val stateParks = page.locator("""#cg-agency-legend input[data-cg-agency="WA State Parks"]""")
+            // By label text, not by a `data-cg-agency` attribute: the React rows are
+            // real labelled checkboxes, and an agency name is not a safe source for an
+            // element id (see `LegendPanel.AgencyRow`).
+            val nps = agencyBox(page, "National Park Service")
+            val forestService = agencyBox(page, "US Forest Service")
+            val stateParks = agencyBox(page, "WA State Parks")
             // Every agency present defaults to shown (checked).
             assertTrue(nps.isChecked())
             assertTrue(forestService.isChecked())
             assertTrue(stateParks.isChecked())
 
             // Un-checking one agency hides only its pins from the map.
-            forestService.uncheck()
+            agencyRow(page, "US Forest Service").click()
             assertFalse(forestService.isChecked())
             assertTrue(nps.isChecked())
             assertTrue(stateParks.isChecked())
@@ -326,39 +394,27 @@ class SmokeTest {
                 Page.WaitForFunctionOptions().setTimeout(5_000.0),
             )
 
-            // The un-check persists across a re-render (route-scoped repaint),
-            // even though the agency is still present in the data.
-            page.evaluate(
-                """
-                () => {
-                  globalThis.__rtSetRoutePois([
-                    {
-                      type: 'Feature',
-                      id: 8101,
-                      geometry: { type: 'Point', coordinates: [-123.00, 49.00] },
-                      properties: { category: 'campground', agency: 'National Park Service' }
-                    },
-                    {
-                      type: 'Feature',
-                      id: 8102,
-                      geometry: { type: 'Point', coordinates: [-123.02, 49.02] },
-                      properties: { category: 'campground', agency: 'US Forest Service' }
-                    }
-                  ]);
-                  return true;
-                }
-                """.trimIndent(),
-            )
+            // The un-check persists across a repaint. `__rtRefreshBbox()` is the
+            // React seam for one: it invalidates the viewport query, so the pins are
+            // re-fetched, re-bucketed and re-painted, and the legend rows are rebuilt
+            // from the new response. (The vanilla drove this with `__rtSetRoutePois`,
+            // which cannot be used here any more — React only paints route POIs while
+            // a route is actually active, and this test has no route.)
+            page.evaluate("() => { globalThis.__rtRefreshBbox(); return true; }")
             page.waitForFunction(
-                "() => document.querySelectorAll('#cg-agency-legend input[data-cg-agency]').length >= 2",
+                "() => document.querySelectorAll('.rt-legend__agencies input[type=\"checkbox\"]').length >= 3",
                 null,
-                Page.WaitForFunctionOptions().setTimeout(5_000.0),
+                Page.WaitForFunctionOptions().setTimeout(PANEL_TIMEOUT_MS),
             )
             assertTrue(nps.isChecked())
             assertFalse(forestService.isChecked())
 
-            // Re-checking the agency shows its pins again.
-            forestService.check()
+            // Re-checking the agency shows its pins again — and the expected set is all
+            // THREE agencies, where the vanilla expected two. That is a consequence of
+            // the repaint above being a refetch: `__rtRefreshBbox` re-serves the stubbed
+            // three-feature response, while the vanilla's `__rtSetRoutePois` had
+            // replaced the painted set with two features and dropped WA State Parks.
+            agencyRow(page, "US Forest Service").click()
             assertTrue(forestService.isChecked())
             page.waitForFunction(
                 """
@@ -371,7 +427,9 @@ class SmokeTest {
                     .map(f => f.properties.agency)
                     .filter(Boolean)
                     .sort();
-                  return JSON.stringify(agencies) === JSON.stringify(['National Park Service', 'US Forest Service']);
+                  return JSON.stringify(agencies) === JSON.stringify(
+                    ['National Park Service', 'US Forest Service', 'WA State Parks'],
+                  );
                 }
                 """.trimIndent(),
                 null,
@@ -434,7 +492,7 @@ class SmokeTest {
 
         try {
             page.navigate("/?poi=4242")
-            val drawer = page.locator("#cg-drawer.open")
+            val drawer = drawerOf(page)
             assertThat(drawer).isVisible(
                 com.microsoft.playwright.assertions.LocatorAssertions
                     .IsVisibleOptions()
@@ -531,20 +589,24 @@ class SmokeTest {
         }
         try {
             page.navigate("/?poi=45626")
-            val drawer = page.locator("#cg-drawer.open")
+            val drawer = drawerOf(page)
             assertThat(drawer).isVisible(
                 com.microsoft.playwright.assertions.LocatorAssertions
                     .IsVisibleOptions()
                     .setTimeout(15_000.0),
             )
             assertThat(drawer.locator("h2")).containsText("Clear Lake SP Cabins")
-            assertThat(drawer.locator("h2 + .cg-agency-subtitle")).containsText("California State Parks")
-            assertThat(drawer.locator(".cg-about")).containsText("Clear Lake State Park offers rental cabins")
+            // The agency sits above the name in the header, which is `DrawerHeader`'s
+            // `above` slot — the vanilla's `h2 + .cg-agency-subtitle` was the same line
+            // below it.
+            assertThat(drawer.locator(".rt-cg-agency")).containsText("California State Parks")
+            val about = drawer.locator("section:has(> h3:text-is('About'))")
+            assertThat(about).containsText("Clear Lake State Park offers rental cabins")
             assertFalse(
-                drawer.locator(".cg-about").textContent().contains("Raw-only description"),
+                about.textContent().contains("Raw-only description"),
                 "drawer About should render DTO description, not raw upstream description",
             )
-            val details = drawer.locator(".cg-details")
+            val details = drawer.locator(".rt-cg-details")
             assertThat(details).hasCount(1)
             assertThat(details).containsText("Source metadata")
             assertThat(details).containsText("rc-629")
@@ -559,7 +621,7 @@ class SmokeTest {
             val heroImage =
                 page.evaluate(
                     """
-                    () => getComputedStyle(document.querySelector('.cg-hero')).backgroundImage
+                    () => getComputedStyle(document.querySelector('.rt-drawer-hero')).backgroundImage
                     """.trimIndent(),
                 ) as String
             assertTrue(heroImage.contains("/Place/629.jpg"), "drawer should use DTO photo_url as hero image")
@@ -806,8 +868,12 @@ class SmokeTest {
 
             page.locator("#tb-directions").click()
             page.waitForSelector(".tb-row[data-i=\"1\"] .tb-input")
-            assertThat(page.locator("#tb-corridor-range")).hasValue("5")
-            assertThat(page.locator("#tb-corridor-value")).containsText("5 mi")
+            // The corridor slider is NOT here yet, and that is the port's doing: it
+            // lives inside the results list now, which appears with a live route,
+            // because without one there is nothing for a radius to be a radius of.
+            // The vanilla built the row up front and hid it, so this assertion used to
+            // pass against a `display: none` control.
+            assertThat(page.locator("#tb-corridor-range")).hasCount(0)
             page.evaluate(
                 "() => globalThis.__rtAddTripStop({ name: 'Route Destination', lng: -121.5, lat: 48.1, kind: 'PLACE' })",
             )
@@ -823,6 +889,11 @@ class SmokeTest {
                 null,
                 Page.WaitForFunctionOptions().setTimeout(10_000.0),
             )
+            // Now that the list is up, so is its radius control, at its default.
+            assertThat(page.locator("#tb-corridor-range")).hasValue("5")
+            assertThat(page.locator("#tb-corridor-value")).containsText("5 mi")
+            // The card lands with the pin's fallback name and takes its real one from
+            // its own hydration, so this is a retrying assertion by necessity.
             val firstCard = page.locator(".tb-card").first()
             assertThat(firstCard.locator(".tb-card-head")).containsText("On-route Campground")
             assertThat(firstCard.locator(".tb-card-location")).containsText("WA")
@@ -859,13 +930,11 @@ class SmokeTest {
         }
     }
 
-    // The migrated React pages. Until now this suite only ever navigated `/` and its
-    // query variants — all the vanilla map — so neither page React owns had any
-    // browser-level coverage at all. Three purely visual bugs reached review during
-    // the migration (uncoloured error text, an input that dropped every keystroke
-    // after the first, and a 0x0 map canvas); every one passed tsc, the unit suite,
-    // the bundle and the colour-token check, because none of those can see a page
-    // that renders wrongly or not at all.
+    // The migrated React pages — which, as of Phase 4e, is all three of them. Three
+    // purely visual bugs reached review during the migration (uncoloured error text, an
+    // input that dropped every keystroke after the first, and a 0x0 map canvas); every
+    // one passed tsc, the unit suite, the bundle and the colour-token check, because
+    // none of those can see a page that renders wrongly or not at all.
     //
     // The assertions are deliberately shallow: the page's own heading, plus a
     // non-empty #root. A non-empty root is the real signal — it means the hashed
@@ -894,6 +963,10 @@ class SmokeTest {
             listOf(
                 "/watches" to "Watches",
                 "/availability" to "Availability Dashboard",
+                // The map's only heading is the legend's title. It renders whether or
+                // not the style ever loads, which is what makes it the right probe
+                // here: this test is about the bundle mounting, not about MapLibre.
+                "/" to "Roadtrip Map",
             )
 
         try {
@@ -930,8 +1003,8 @@ class SmokeTest {
     // The map container must have real dimensions. MapLibre sizes its WebGL canvas
     // from the container, so an unsized one yields a 0x0 canvas: a map that
     // initialises without error, passes every unit test, and draws nothing. Phase 4a
-    // hit exactly that in the React provider, and `/` moves to React in 4b — so this
-    // guards the vanilla container now and the React one the moment it takes over.
+    // hit exactly that in the React provider, and 4b hit it again through the shell's
+    // body padding — neither is visible to tsc, to jsdom or to the bundle.
     @Test
     @Timeout(value = 2, unit = TimeUnit.MINUTES)
     fun `the map container has non-zero dimensions`() {
@@ -946,15 +1019,23 @@ class SmokeTest {
 
         try {
             page.navigate("/")
-            page.waitForSelector("#map")
+            page.waitForSelector(".rt-map-canvas")
 
-            val box = page.locator("#map").boundingBox()
-            assertTrue(box != null, "#map has no bounding box at all")
-            assertTrue(box.width > 0, "#map has zero width — the canvas would render nothing")
-            assertTrue(box.height > 0, "#map has zero height — the canvas would render nothing")
+            val box = page.locator(".rt-map-canvas").boundingBox()
+            assertTrue(box != null, "the map container has no bounding box at all")
+            assertTrue(box.width > 0, "the map container has zero width — the canvas would render nothing")
+            assertTrue(box.height > 0, "the map container has zero height — the canvas would render nothing")
         } finally {
             page.close()
             context.close()
         }
+    }
+
+    private companion object {
+        /** A cold load has to fetch the bundle, the style and its first tiles. */
+        const val MAP_READY_TIMEOUT_MS = 15_000.0
+
+        /** A panel toggle is a local state change: it is either immediate or broken. */
+        const val PANEL_TIMEOUT_MS = 5_000.0
     }
 }

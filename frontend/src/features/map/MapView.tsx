@@ -6,6 +6,7 @@ import { useDeepLinkedPoi } from './useDeepLinkedPoi';
 import { useMapOverlays, useStateLines } from './useMapOverlays';
 import { useQaHooks } from './useQaHooks';
 import { useTripOverlay } from './useTripOverlay';
+import { useUserLocation } from './useUserLocation';
 import { useViewportPois } from './useViewportPois';
 
 /**
@@ -17,9 +18,9 @@ import { useViewportPois } from './useViewportPois';
  * legend — and threading it through a context would hide that while buying
  * nothing: this is the only place either is used.
  *
- * Still to come in 4e: the trip-results card list, the alerts panel,
- * `<SettingsModal>` mounted from the topbar (which retires the vanilla account
- * modal), the geolocate control, and the `?route=` half of a shared link.
+ * Everything 4e listed as still to come is here now: the topbar (search,
+ * directions, the corridor slider, the results list and the alerts panel), the
+ * trip overlay, and the map's own controls.
  */
 export function MapView() {
   const pois = useViewportPois();
@@ -28,6 +29,8 @@ export function MapView() {
   useQaHooks(pois);
   useDeepLinkedPoi();
   useTripOverlay();
+  // Zoom + locate-me, and the puck for whatever fix the app is holding.
+  useUserLocation();
   // The `window.__rt*` seams. Phase 0 wrote the installer and nothing called it, so
   // they were absent from the React tree until 4e — including the two `SmokeTest.kt`
   // reads.

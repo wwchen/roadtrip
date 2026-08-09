@@ -42,12 +42,30 @@ const BY_CATEGORY = new Map<string, DrawerContent>([
 ]);
 
 /**
- * The drawer for a category, or null when nothing renders it.
+ * The drawer for a hydrated POI, or null when nothing renders it.
+ *
+ * Takes the flattened properties rather than a category string, because for a
+ * campground the category is not what came off the wire: `flattenHydratedPoi`
+ * rewrites `category` to the campground's `subcategory` (a core.js behaviour its
+ * parity suite pins), so `'federal'`, `'state'` and `'provincial'` arrive here where
+ * `'campground'` went in — and a campground with a subcategory is the common case,
+ * not the exception. Hence the second lookup: a POI whose category IS its
+ * subcategory has been through that rewrite, and only campgrounds are rewritten.
+ *
+ * The vanilla never had to answer this question. It dispatched by which layer was
+ * clicked (`layers.js` called `openCampgroundDrawer` directly), so the rewritten
+ * category was only ever read for display.
  *
  * Null rather than a fallback drawer: a category with no renderer is a gap in this
  * table, and an "unknown POI" panel would hide it behind something that looks
  * deliberate.
  */
-export function drawerFor(category: unknown): DrawerContent | null {
-  return typeof category === 'string' ? BY_CATEGORY.get(category) ?? null : null;
+export function drawerFor(
+  properties: Readonly<Record<string, unknown>> | null | undefined,
+): DrawerContent | null {
+  const category = properties?.category;
+  if (typeof category !== 'string') return null;
+  const direct = BY_CATEGORY.get(category);
+  if (direct) return direct;
+  return category === properties?.subcategory ? CampgroundDrawer : null;
 }

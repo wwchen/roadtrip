@@ -99,11 +99,6 @@ services:
       # passed here, so the active provider's issuer is blank and OIDC routes are
       # never registered.
       - ROADTRIP_SANDBOX_ASSUME_USER=true
-      # Exposes the mid-migration React pages at /preview/* — /preview/map is the
-      # React map app while `/` still serves the vanilla one. A sandbox is the only
-      # place a reviewer can see an in-progress page against real data; production
-      # leaves this off, so a half-built page is never reachable there.
-      - ROADTRIP_SANDBOX_PREVIEW_PAGES=true
       # DB connection — application-compose-local.yaml reads these via
       # ${POSTGRES_URL:...}, ${POSTGRES_USER}, ${POSTGRES_PASSWORD}.
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}

@@ -284,10 +284,22 @@ jobs:
           # not the LAN-side container.
           for _ in $(seq 1 30); do
             if curl -fsS "$DEPLOY_HEALTH" >/dev/null; then
-              for path in /pois /reservables /watches /availability; do
+              for path in / /pois /reservables /watches /availability; do
                 curl -fsS "$DEPLOY_BASE$path" >/dev/null
                 echo "health: $DEPLOY_BASE$path OK"
               done
+              # A 200 on `/` is not enough, and it is the only page where that is
+              # true: since the map graduated to React it is served by the
+              # migrated-page route, which falls back to the legacy `index.html`
+              # when `frontend/dist` is missing. That fallback 200s, so only the
+              # React shell distinguishes a real deploy from a silently degraded
+              # one. (`/watches` and `/availability` have no legacy file left, so
+              # the 404 above is enough for them.)
+              if ! curl -fsS "$DEPLOY_BASE/" | grep -q 'id="root"'; then
+                echo "health: / served the legacy map — frontend/dist missing from the deploy"
+                exit 1
+              fi
+              echo "health: / is the React shell OK"
               echo "health: $DEPLOY_HEALTH OK"
               exit 0
             fi

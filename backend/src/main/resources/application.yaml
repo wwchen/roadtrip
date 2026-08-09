@@ -73,9 +73,6 @@ roadtrip:
     branch: "${ROADTRIP_BUILD_BRANCH:unknown}"
   sandbox:
     assume-user: "${ROADTRIP_SANDBOX_ASSUME_USER:false}"
-    # Exposes the mid-migration React pages at /preview/*. Sandboxes set this so a
-    # PR's in-progress page can be reviewed against real data; `/` is unaffected.
-    preview-pages: "${ROADTRIP_SANDBOX_PREVIEW_PAGES:false}"
   poi-registry:
     resource: poi-registry.yaml
     path:

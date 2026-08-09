@@ -41,10 +41,9 @@ class StaticSiteRoutesTest {
     private fun serving(
         staticDir: File,
         frontendDir: File,
-        previewPagesEnabled: Boolean = false,
         block: suspend (HttpClient) -> Unit,
     ) = testApplication {
-        application { routing { staticSiteRoutes(staticDir, frontendDir, previewPagesEnabled) } }
+        application { routing { staticSiteRoutes(staticDir, frontendDir) } }
         block(client)
     }
 
@@ -107,53 +106,41 @@ class StaticSiteRoutesTest {
             }
         }
 
-    // The map is the last page still on the vanilla tree (Phase 4). It is served by
-    // the catch-all's `default`, not by a migrated-page route.
+    // Phase 4e graduated the map, and `/` is the URL form the root page gets instead
+    // of the `/index` that stripping `.html` would produce.
     @Test
-    fun `the unmigrated map page is still served from the legacy tree`() =
+    fun `the map page is served from the build on both URL forms`() =
         serving(legacyTree(), builtTree()) { client ->
-            assertEquals(LEGACY_INDEX, client.get("/").bodyAsText())
-            assertEquals(LEGACY_INDEX, client.get("/index.html").bodyAsText())
+            for (path in listOf("/", "/index.html")) {
+                val response = client.get(path)
+                assertEquals(HttpStatusCode.OK, response.status, path)
+                assertEquals(BUILT_MAP, response.bodyAsText(), path)
+            }
         }
 
-    // A preview URL is a SECOND url for a page still mid-migration, never a
-    // replacement: the vanilla map is the only one with a drawer and a topbar, and
-    // is what QA of everything else on a sandbox runs against.
+    // The root page's explicit route has to outrank the catch-all that used to serve
+    // it, which is why `default(index.html)` came off that mount: with both claiming
+    // `/`, which one answered would rest on Ktor's resolution scoring rather than on
+    // anything stated in the file.
     @Test
-    fun `a preview page is served alongside the vanilla one when previews are on`() =
-        serving(legacyTree(), builtTree(), previewPagesEnabled = true) { client ->
-            val preview = client.get("/preview/map")
-            assertEquals(HttpStatusCode.OK, preview.status)
-            assertEquals(BUILT_MAP, preview.bodyAsText())
-            assertEquals(LEGACY_INDEX, client.get("/").bodyAsText())
+    fun `the root page falls back to the legacy map when the build is absent`() =
+        serving(legacyTree(), createTempDirectory("rt-frontend-empty").toFile()) { client ->
+            for (path in listOf("/", "/index.html")) {
+                val response = client.get(path)
+                assertEquals(HttpStatusCode.OK, response.status, path)
+                assertEquals(LEGACY_INDEX, response.bodyAsText(), path)
+            }
         }
 
-    // Off by default, because the page it exposes is half-built by definition. A
-    // production deployment must not be able to reach it at all.
-    //
-    // Forbidden rather than Not Found, and not because of anything this route does:
-    // with no preview route registered, the path falls through to the catch-all,
-    // whose `exclude` refuses everything in a subdirectory. Any `/a/b` URL on the
-    // legacy site answers the same way. What matters is that the built page is not
-    // what comes back.
+    // The `/preview/*` mount went with the map's graduation — it was the only page it
+    // ever carried. Nothing answers there now, and the catch-all refuses anything in a
+    // subdirectory, so a stale preview link is a plain 403 like any other `/a/b` URL.
     @Test
-    fun `a preview page is not reachable when previews are off`() =
+    fun `a preview URL is no longer served`() =
         serving(legacyTree(), builtTree()) { client ->
             val response = client.get("/preview/map")
             assertEquals(HttpStatusCode.Forbidden, response.status)
             assertNotEquals(BUILT_MAP, response.bodyAsText())
-        }
-
-    // No legacy fallback for a preview URL: the vanilla page is at its own url, so
-    // an unbuilt frontend means there is genuinely nothing to serve here.
-    @Test
-    fun `a preview page with no build is a 404 rather than the legacy page`() =
-        serving(
-            legacyTree(),
-            createTempDirectory("rt-frontend-empty").toFile(),
-            previewPagesEnabled = true,
-        ) { client ->
-            assertEquals(HttpStatusCode.NotFound, client.get("/preview/map").status)
         }
 
     // frontendDir defaults to frontend/dist under staticDir, which is what makes

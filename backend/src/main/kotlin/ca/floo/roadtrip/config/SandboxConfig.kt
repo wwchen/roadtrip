@@ -5,25 +5,22 @@ package ca.floo.roadtrip.config
  *
  * @property assumeUserEnabled resolve every request to a seed user through the
  *   `rt_session=sandbox:<id>` cookie sentinel, with no OIDC flow.
- * @property previewPagesEnabled serve the React pages that are still
- *   mid-migration under `/preview` (see `StaticSiteRoutes`), so a reviewer can look
- *   at an in-progress page against real data. Off everywhere else, because the
- *   pages it exposes are half-built by definition; it goes away when the last page
- *   migrates.
+ *
+ * There used to be a `previewPagesEnabled` here, which served the mid-migration React
+ * pages under `/preview` so a reviewer could look at one against real data. The map
+ * was the only page it ever carried, and Phase 4e graduated it to `/` — so the flag
+ * went with it rather than staying on as config nothing reads.
  */
 data class SandboxConfig(
     val assumeUserEnabled: Boolean,
-    val previewPagesEnabled: Boolean,
 ) {
     companion object {
         private const val ASSUME_USER_KEY = "assume-user"
-        private const val PREVIEW_PAGES_KEY = "preview-pages"
         private const val DEFAULT = "false"
 
         fun fromConfig(config: ConfigSection): SandboxConfig =
             SandboxConfig(
                 assumeUserEnabled = config.valueOrDefault(ASSUME_USER_KEY, DEFAULT).toBoolean(),
-                previewPagesEnabled = config.valueOrDefault(PREVIEW_PAGES_KEY, DEFAULT).toBoolean(),
             )
     }
 }

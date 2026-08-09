@@ -18,7 +18,7 @@ import { AppProviders } from '@/app/AppProviders';
 import { UNCATEGORIZED_AGENCY } from '@/map/agencies';
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore } from '@/stores/tripStore';
-import { FakeMap } from '@/test/fake-map';
+import { FakeGeolocateControl, FakeMap, FakeNavigationControl } from '@/test/fake-map';
 
 // MapLibre needs WebGL, which jsdom has none of, so the map is the fake recorder.
 let instance: FakeMap;
@@ -48,7 +48,14 @@ class TestMarker {
   }
 }
 
-vi.mock('maplibre-gl', () => ({ Map: TestMap, Marker: TestMarker }));
+vi.mock('maplibre-gl', () => ({
+  Map: TestMap,
+  Marker: TestMarker,
+  // The map's own controls. What they do with a fix is `useUserLocation.test.tsx`;
+  // here they only have to exist, because `MapView` installs them.
+  GeolocateControl: FakeGeolocateControl,
+  NavigationControl: FakeNavigationControl,
+}));
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
 
 const { MapProvider } = await import('./MapProvider');
@@ -224,6 +231,13 @@ beforeEach(() => {
   stubApi();
   useMapStore.getState().reset();
   useTripStore.getState().reset();
+  // The address bar is shared state too, and this page both reads and writes it: a
+  // test that completes a trip leaves `?route=` behind (`useSharedTrip`'s writer),
+  // and a test that opens a drawer leaves `?poi=`. Without this, the NEXT mount
+  // restores that trip, `useRoute` fetches it, and whether the store has a route by
+  // the time an assertion runs comes down to how many microtasks the mount happened
+  // to take — which is exactly how the legend's zoom hint became the suite's flake.
+  window.history.replaceState(null, '', '/');
 });
 
 afterEach(() => {
@@ -622,10 +636,10 @@ describe('route mode', () => {
       trip.setRoute({ type: 'FeatureCollection', features: [] });
     });
 
-    // The hint goes as soon as a route is active; the agency row appears when the
-    // corridor's own request lands, which is a 250ms debounce plus a round trip
-    // later — hence the raised timeout, which a loaded full-suite run needs.
+    // The hint goes as soon as a route is active, so that assertion is immediate.
     await waitFor(() => expect(screen.queryByText('(zoom in to load)')).toBeNull());
+    // The agency row waits on the corridor's own request: a 250ms debounce, a round
+    // trip and a re-render, which is past the default 1s budget on a loaded machine.
     await waitFor(() => expect(screen.getByLabelText(/BC Parks \(1\)/)).toBeInTheDocument(), {
       timeout: 3000,
     });
