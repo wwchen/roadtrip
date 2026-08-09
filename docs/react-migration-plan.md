@@ -563,6 +563,55 @@ survive a basemap change** — the one behaviour `styleReady` exists for. The de
 not committed; `scripts/` has no browser tooling and the real home for this is `SmokeTest.kt`, once
 Ktor serves the page.
 
+## Phase 4c — in progress (branch `claude/react-migration-4c-drawer`, no PR yet)
+
+**4b is merged** (#573, squash-merged as `4c061332`). 4c is branched off master and is
+**three of four drawer types in**. Read this before resuming — it is written so a
+fresh session needs nothing else.
+
+**What is done, and where:**
+
+| Piece | File |
+|---|---|
+| Hydration by id | `features/drawer/usePoiDetail.ts` |
+| Shell: sheet / panel, snap states, drag-dismiss | `Drawer.tsx`, `useDrawerDrag.ts`, `drawer.css` |
+| Shared header / subline / distance / directions / pills / upstream / call buttons | `parts.tsx` |
+| `?poi=<id>` deep link | `poi-url.ts` |
+| Category dispatch | `registry.ts` |
+| Composition (loading, error+retry, unknown category) | `PoiDrawer.tsx`, rendered from `MapView` |
+| Park (both kinds), Planet Fitness, Supercharger | `ParkDrawer.tsx`, `PlanetFitnessDrawer.tsx`, `SuperchargerDrawer.tsx` + `supercharger-detail.ts` |
+
+**What is left: the campground drawer.** `web/drawer/campground.js` (275 lines) plus
+`web/campground-card.js` (589), and it is the only type whose port has a hole in it
+by design — `campground.js:48` imports `mountAvailabilityWeek` from
+`web/availability/availability-week.js`, and that 1,226-line component is **4d, not
+4c**. So the 4c campground drawer ships everything except the 7-day availability grid
+and its day-detail panel, with the seam documented at the call site. The card's other
+sections (parent park name, rating/reviews, amenities, cell coverage, season verdict,
+CTAs, structured details, last-verified and booking-system footers) are 4c.
+
+**Three decisions already made that the campground port has to honour:**
+
+- **Hydration is the query key, not a session guard.** `beginSession` /
+  `isActiveFeature` / the per-id promise `Map` all collapse into
+  `queryKeys.pois.detail(id)`: a late response for a superseded selection cannot
+  reach the component, Query cancels what it started, and repeat clicks on one pin do
+  not refetch. Do not reintroduce a staleness check.
+- **A failed hydration is an error state with a retry**, not a permanent "Loading…".
+  That legacy bug (`openHydratedDrawer` had no `.catch`) is fixed in `PoiDrawer`, and
+  the campground drawer's own `restartController` "Retry" affordance is therefore
+  already covered.
+- **Dispatch is the registry.** Add `['campground', CampgroundDrawer]` to
+  `registry.ts`; until then campground pins open the drawer and say there is no panel
+  yet, which is deliberate and visible rather than a dead click.
+
+**Verified so far:** typecheck clean, 746 tests green, build ok, colour check ok.
+Nothing in 4c has been driven in a browser yet — the drawer has never been opened
+against real data, only in jsdom. The dev-server + headless-Chromium harness used for
+4b is the way to do it (`npm run dev`, then Playwright with `/api/pois` and
+`/api/pois/{id}` stubbed), and `__rtState.selectedPoiId` from `useQaHooks` is how to
+confirm a click landed.
+
 ## Serving (DONE)
 
 Migrated pages are served from the React build; everything else still resolves from
