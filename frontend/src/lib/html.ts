@@ -43,28 +43,44 @@ export function formatPhone(s: string): string {
 }
 
 /**
- * Render one or more `Call …` tertiary buttons from a phone field that may be a
- * single number, slash-delimited, or comma-delimited (e.g.
- * `"530.336.5521/530.257.2151"` → two buttons).
+ * Split a phone field into individual numbers.
+ *
+ * Provider data puts several numbers in one string, delimited by a slash, comma or
+ * semicolon (`"530.336.5521/530.257.2151"` → two). Exported because both renderers
+ * need the same rule: the HTML-string builder below and the React `CallButtons` in
+ * `features/drawer/parts.tsx`.
+ */
+export function phoneNumbers(phoneRaw: string | null | undefined): string[] {
+  if (!phoneRaw) return [];
+  return String(phoneRaw)
+    .split(PHONE_SEPARATORS)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** The `tel:` target for a number — digits and a leading `+` only. */
+export function telHref(number: string): string {
+  return `tel:${number.replace(NON_DIAL_CHARS, '')}`;
+}
+
+/**
+ * Render one or more `Call …` tertiary buttons from a phone field.
  *
  * `btnClass` is interpolated unescaped, matching the original: it is a
  * call-site constant, never user or upstream data. Both the visible number and
  * the `tel:` href ARE escaped, because those come from provider data.
+ *
+ * The React drawer builds the same buttons as components instead; this stays for
+ * the vanilla tree and goes with it in Phase 5.
  */
 export function callButtonsHTML(
   phoneRaw: string | null | undefined,
   btnClass: string = DEFAULT_CALL_BUTTON_CLASS,
 ): string {
-  if (!phoneRaw) return '';
-  const numbers = String(phoneRaw)
-    .split(PHONE_SEPARATORS)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return numbers
+  return phoneNumbers(phoneRaw)
     .map((n) => {
-      const digits = n.replace(NON_DIAL_CHARS, '');
       const safe = escapeHtml(formatPhone(n));
-      return `<a class="${btnClass}" href="tel:${escapeHtml(digits)}">Call ${safe}</a>`;
+      return `<a class="${btnClass}" href="${escapeHtml(telHref(n))}">Call ${safe}</a>`;
     })
     .join('');
 }

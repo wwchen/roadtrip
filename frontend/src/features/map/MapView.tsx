@@ -1,3 +1,4 @@
+import { PoiDrawer } from '@/features/drawer/PoiDrawer';
 import { LegendPanel } from './LegendPanel';
 import { useMapOverlays, useStateLines } from './useMapOverlays';
 import { useQaHooks } from './useQaHooks';
@@ -22,5 +23,12 @@ export function MapView() {
   useStateLines();
   useQaHooks(pois);
 
-  return <LegendPanel pois={pois} />;
+  return (
+    <>
+      <LegendPanel pois={pois} />
+      {/* Reads `mapStore.selectedPoiId`, which 4b's layer click handlers write and
+          the empty-map click clears — so the drawer needs no wiring of its own. */}
+      <PoiDrawer />
+    </>
+  );
 }
