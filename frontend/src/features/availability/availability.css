@@ -1059,3 +1059,208 @@
   text-decoration: underline;
   cursor: pointer;
 }
+
+/* --- day-detail action buttons ------------------------------------------- */
+
+/* The `cg-btn` family, lifted from the vanilla index.html. Only the primary and
+   secondary variants are used here (the day panel's watch toggle); the tertiary and
+   disabled variants belong to the drawer's own CTAs, which are LDS `Button`s in the
+   React tree and do not need them. */
+.cg-btn {
+  padding: 0 16px;
+  height: 40px;
+  border-radius: 8px;
+  font-size: 14px; font-weight: 500;
+  text-align: center; text-decoration: none;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+  letter-spacing: -0.005em;
+  border: 1px solid transparent;
+}
+@media (max-width: 767px) {
+  .cg-btn { height: 44px; font-size: 15px; }
+}
+
+.cg-btn-primary {
+  background: var(--rt-brand); color: var(--rt-on-accent); border: 0;
+  font-weight: 600;
+}
+.cg-btn-primary:hover { background: var(--rt-brand-hover); }
+.cg-btn-primary:active { background: var(--rt-brand-press); }
+
+.cg-btn-secondary {
+  background: var(--rt-fill-subtle); color: var(--rt-text);
+  border: 1px solid var(--rt-border-strong);
+}
+.cg-btn-secondary:hover { background: var(--rt-fill-hover); }
+.cg-btn-secondary:active { background: var(--rt-fill-active); }
+.cg-btn.copied,
+.tb-icon-btn.copied {
+  border-color: var(--rt-success);
+  color: var(--rt-success);
+}
+
+.cg-btn-tertiary {
+  background: transparent; color: var(--rt-muted);
+  border: 0;
+}
+.cg-btn-tertiary:hover { background: var(--rt-fill-subtle); color: var(--rt-text); }
+.cg-btn-tertiary:active { background: var(--rt-fill-hover); }
+
+.cg-btn-disabled {
+  background: var(--rt-fill-subtle); color: var(--rt-faint);
+  border: 1px solid var(--rt-border);
+  cursor: not-allowed;
+}
+.cg-btn[disabled] {
+  opacity: 0.56;
+  cursor: wait;
+}
+
+/* --- watch editor -------------------------------------------------------- */
+
+/* These rules did not live in a stylesheet at all: `web/availability/watch-editor.js`
+   built them as a template string and injected a `<style>` tag into `document.head`
+   on first mount, guarded by an element-id check. That is why they were invisible to
+   the colour guardrail, and why two of their literal colours needed tokenising on the
+   way in. Otherwise verbatim.
+
+   `--rt-watch-editor-width` is the number `WatchPopover` positions against, so the
+   two must agree — see POPOVER_WIDTH_PX there. */
+.rt-watch-editor {
+  --rt-watch-editor-width: 240px;
+  --rt-watch-editor-mobile-margin: 16px;
+  width: var(--rt-watch-editor-width);
+  box-sizing: border-box;
+  color: var(--rt-text);
+  background: var(--rt-surface);
+  border: 1px solid var(--rt-border-strong);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(var(--rt-c-shadow-rgb),0.18);
+  padding: 12px;
+  font-size: 12px;
+}
+.rt-watch-editor-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.rt-watch-editor-title { font-weight: 700; font-size: 13px; }
+.rt-watch-editor-subtitle { color: var(--rt-muted); margin-top: 2px; }
+.rt-watch-editor-icon {
+  width: 24px; height: 24px;
+  border: 0; background: transparent; color: var(--rt-muted);
+  border-radius: 4px; cursor: pointer;
+}
+.rt-watch-editor-icon:hover { background: var(--rt-fill-hover); color: var(--rt-text); }
+.rt-watch-editor-body { display: grid; gap: 8px; }
+.rt-watch-editor-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rt-watch-editor-toggle-text { display: grid; gap: 2px; min-width: 0; }
+.rt-watch-editor-toggle-title { font-weight: 600; }
+.rt-watch-editor-toggle-help { color: var(--rt-muted); font-size: 11px; line-height: 1.25; }
+.rt-watch-editor-switch { position: relative; display: inline-grid; flex: 0 0 auto; }
+.rt-watch-editor-switch input { position: absolute; opacity: 0; pointer-events: none; }
+.rt-watch-editor-switch-track {
+  width: 34px; height: 18px; border-radius: 999px;
+  background: var(--rt-border-strong); transition: background 120ms ease;
+}
+.rt-watch-editor-switch-track::after {
+  content: "";
+  display: block;
+  width: 14px; height: 14px; margin: 2px;
+  border-radius: 50%;
+  background: var(--rt-on-accent);
+  box-shadow: 0 1px 2px rgba(var(--rt-c-shadow-rgb),0.2);
+  transition: transform 120ms ease;
+}
+.rt-watch-editor-switch input:checked + .rt-watch-editor-switch-track { background: var(--rt-brand); }
+.rt-watch-editor-switch input:checked + .rt-watch-editor-switch-track::after { transform: translateX(16px); }
+.rt-watch-editor-switch input:disabled + .rt-watch-editor-switch-track { opacity: 0.55; }
+.rt-watch-editor-field {
+  display: grid;
+  gap: 4px;
+  color: var(--rt-muted);
+  font-size: 11px;
+}
+.rt-watch-editor-field input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--rt-border-strong);
+  border-radius: 6px;
+  padding: 7px 8px;
+  color: var(--rt-text);
+  background: var(--rt-bg-sunken);
+  font: inherit;
+}
+.rt-watch-editor-error {
+  margin-top: 8px;
+  color: var(--rt-error);
+  font-size: 11px;
+}
+.rt-watch-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.rt-watch-editor-save,
+.rt-watch-editor-remove {
+  border-radius: 6px;
+  padding: 7px 10px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.rt-watch-editor-save {
+  border: 1px solid var(--rt-brand);
+  background: var(--rt-brand);
+  color: var(--rt-on-accent);
+}
+.rt-watch-editor-remove {
+  border: 1px solid var(--rt-border-strong);
+  background: transparent;
+  color: var(--rt-error);
+}
+.rt-watch-editor-save:disabled,
+.rt-watch-editor-remove:disabled { opacity: 0.6; cursor: wait; }
+@media (max-width: 768px) {
+  .rt-watch-editor {
+    width: min(var(--rt-watch-editor-width), calc(100vw - var(--rt-watch-editor-mobile-margin)));
+  }
+  .rt-watch-editor-field input {
+    min-height: 40px;
+    font-size: 16px;
+  }
+}
+
+/* The fixed-position host `WatchPopover` portals into. It carries no size of its own:
+   the editor inside it is what has a width, and the host is positioned around that. */
+.cg-watch-pop-host {
+  /* `position` and coordinates are set inline from the measured anchor rect. */
+  z-index: 1200;
+}
+
+/* --- containers ---------------------------------------------------------- */
+
+/* The grid's own wrapper inside the drawer section. The drawer supplies the section
+   rule (padding and the top border), so this only needs to not collapse. */
+.cg-availability {
+  display: block;
+}
+
+/* Non-semantic wrappers the JS renderers needed and React still emits. */
+.cg-sites-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
