@@ -7,7 +7,8 @@ import java.time.temporal.ChronoUnit
  * The reservation-URL template vocabulary shared by every provider adapter and
  * the campsites API. A template is a booking URL that may embed the
  * placeholders below; the web app fills them client-side for the user's chosen
- * window ([reservationUrlFromTemplate] in `web/availability/booking-links.js`),
+ * window (`reservationUrlFromTemplate` in
+ * `frontend/src/features/availability/booking-links.ts`),
  * and [fill] fills them server-side for a concrete window (e.g. an alert's
  * single night). A template with no placeholders is a static URL and passes
  * through [fill] unchanged — the same contract the web app honors.

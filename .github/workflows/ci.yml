@@ -26,7 +26,7 @@ jobs:
     outputs:
       backend_tests: ${{ steps.filter.outputs.backend_tests }}
       smoke: ${{ steps.filter.outputs.smoke }}
-      web: ${{ steps.filter.outputs.web }}
+      frontend: ${{ steps.filter.outputs.frontend }}
       companion: ${{ steps.filter.outputs.companion }}
       companion_image: ${{ steps.filter.outputs.companion_image }}
       docker: ${{ steps.filter.outputs.docker }}
@@ -54,20 +54,12 @@ jobs:
               - 'gradlew'
               - 'gradlew.bat'
               - 'settings.gradle.kts'
-              - '*.html'
-              - 'web/**/*.js'
-              - 'web/**/*.css'
-              # The React tree. This job now builds frontend/dist and navigates the
-              # migrated pages, so a frontend-only change must trigger it — without
-              # this, a broken bundle would ship with smoke skipped and green.
+              # The React tree is the whole site: this job builds frontend/dist and
+              # navigates every page, so a frontend-only change must trigger it —
+              # without this, a broken bundle would ship with smoke skipped and green.
               - 'frontend/**'
               - '.github/workflows/ci.yml'
-            # Both frontend trees gate the same job for the duration of the
-            # strangler migration: `web/**` is the vanilla tree, `frontend/**`
-            # the React one. `scripts/check-color-tokens.mjs` runs here too, and
-            # it now scans both.
-            web:
-              - 'web/**'
+            frontend:
               - 'frontend/**'
               - 'scripts/check-color-tokens.mjs'
               - 'scripts/check-css-blocks.mjs'
@@ -96,9 +88,7 @@ jobs:
               - 'gradle.properties'
               - 'gradlew'
               - 'settings.gradle.kts'
-              - 'web/**'
               - 'frontend/**'
-              - 'index.html'
               - '.github/workflows/ci.yml'
             # Everything the fast lint half reads: Grafana dashboards, the
             # secrets registry + vault tooling, and the Python that ruff and
@@ -190,14 +180,10 @@ jobs:
       - name: detekt rule tests
         run: ./gradlew :detekt-rules:test
 
-  # Gates both frontend trees while they coexist.
-  #
-  # web/ has no package.json: those suites are dependency-free node:test modules
-  # importing the browser sources directly, so there is nothing to install for
-  # them. frontend/ does, so its steps install first.
-  web-tests:
+  # Gates the frontend, which since Phase 5 is the whole of the site.
+  frontend-tests:
     needs: changes
-    if: needs.changes.outputs.web == 'true'
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -207,24 +193,6 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      # Enumerated with find and handed to node as an explicit list rather than
-      # left to a `web/**/*.test.mjs` pattern. The pattern is correct today
-      # (verified: same 153 tests either way), but it only works while quoted —
-      # unquoted, a shell without globstar collapses `**` to one directory level
-      # and silently runs a subset. A job that goes green having tested a
-      # fraction of the suite is worse than no job, so discovery is asserted
-      # rather than trusted.
-      - name: Run web unit tests
-        run: |
-          set --
-          while IFS= read -r f; do set -- "$@" "$f"; done \
-            < <(find web -name '*.test.mjs' | sort)
-          echo "discovered $# web test files"
-          if [ "$#" -eq 0 ]; then
-            echo "no web test files found - discovery is broken"
-            exit 1
-          fi
-          node --test "$@"
 
       # `npm ci` rather than `npm install` so a lockfile that drifted from
       # package.json fails here instead of resolving to something CI-only. The
@@ -250,9 +218,9 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      # tokens.css is the only place a raw color may live. A hex that slips in
-      # elsewhere survives every theme override, so this gates the same job. It
-      # scans web/ and frontend/ (including .ts/.tsx).
+      # frontend/src/tokens/tokens.css is the only place a raw color may live. A hex
+      # that slips in elsewhere survives every theme override, so this gates the
+      # same job. It scans frontend/, including .ts/.tsx.
       - name: Check color tokens
         run: node scripts/check-color-tokens.mjs
 
@@ -482,11 +450,9 @@ jobs:
       - name: Build backend fat-jar
         run: ./gradlew :backend:buildFatJar
 
-      # The migrated React pages are served ONLY from frontend/dist — Phases 1 and 2
-      # deleted their vanilla files, so `migratedPageFile` finds nothing and answers
-      # 404 without a build. This job had no build step, so /watches and /availability
-      # have been 404ing here since #568; nothing noticed because nothing navigated to
-      # them until the migrated-page smoke test was added.
+      # Every page is served ONLY from frontend/dist — Phase 5 deleted the last
+      # vanilla file, so without a build the static routes answer 404 and every
+      # navigation in the suite fails. Not optional for this job.
       - name: Build frontend
         working-directory: frontend
         run: |
@@ -601,7 +567,7 @@ jobs:
       - changes
       - lint
       - gradle-lint
-      - web-tests
+      - frontend-tests
       - companion-tests
       - companion-image
       - docker-build

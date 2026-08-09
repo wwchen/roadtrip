@@ -62,20 +62,23 @@ to add your age public key to `secrets/.sops.yaml` and run
 
 Plenty of work needs no vault at all, though:
 
-- **Design-system components.** The gallery runs standalone against the real
-  stylesheets and component modules — see
-  [web/design-system/README.md](web/design-system/README.md#start-here-the-living-gallery):
+- **Frontend work.** The Vite dev server runs standalone; it proxies `/api`,
+  `/auth` and `/data` to Ktor on :8765, so anything that does not need real data
+  works with the backend down (see
+  [docs/frontend-components.md](docs/frontend-components.md)):
 
   ```sh
-  python3 -m http.server 8766
-  open http://localhost:8766/web/design-system/gallery.html
+  npm --prefix frontend ci
+  npm --prefix frontend run dev     # :5173
   ```
 
-- **Frontend unit tests.** `web/` has no package.json and no install step; the
-  suites import the browser sources directly:
+- **Frontend unit tests + gates.** Vitest, `tsc`, the bundle, and the two CSS
+  guardrails:
 
   ```sh
-  node --test $(find web -name '*.test.mjs')
+  npm --prefix frontend run typecheck && npm --prefix frontend run test
+  npm --prefix frontend run build
+  node scripts/check-color-tokens.mjs && node scripts/check-css-blocks.mjs
   ```
 
 - **Python script + tooling tests** (fetchers, secrets tooling, CI-shape
@@ -113,8 +116,10 @@ That covers, in order (mirroring `.github/workflows/ci.yml`):
 - `./gradlew :backend:ktlintCheck` + `:backend:detekt` — Kotlin formatting and
   static analysis
 - `./gradlew :detekt-rules:test` — the repo's custom detekt rules
-- `node --test` over every `web/**/*.test.mjs` — frontend map/UI modules
-  (discovery is asserted, so zero found files fails loudly)
+- `npm ci && npm run typecheck && npm run test && npm run build` in `frontend/` —
+  the React app, plus `scripts/check-color-tokens.mjs` and
+  `scripts/check-css-blocks.mjs`. The build is not redundant with the typecheck:
+  the vendored LDS ships untranspiled `.jsx`, which fails at bundle time only
 - `cd companion && npm test` — Rec.gov companion (Node `--test`; needs
   `companion/` deps, which `make install` provides)
 - `python3 -m unittest discover -s scripts -p 'test_*.py'` — Python fetchers,
@@ -137,7 +142,7 @@ against a running stack (see [SMOKE.md](SMOKE.md)).
   staged.
 - **pre-push** — runs `./gradlew :backend:test` before a push whose range
   touches backend source or Gradle build inputs; pushes that only change
-  web/docs/data skip it automatically. For the rare "yes I know, just push
+  frontend/docs/data skip it automatically. For the rare "yes I know, just push
   it" case: `SKIP_PREPUSH=1 git push` (use sparingly — CI still runs the
   tests).
 
@@ -171,7 +176,7 @@ self-merge and no auto-approval from CI passing alone.
 - [docs/installation.md](docs/installation.md) — dev machine vs. deploy host setup.
 - [docs/secrets.md](docs/secrets.md) — the `secrets/` vault, rotation, what's deliberately not in it.
 - [docs/backend-architecture.md](docs/backend-architecture.md) — Kotlin/Ktor layering rules.
-- [docs/frontend-components.md](docs/frontend-components.md) — frontend component/design-system rules.
+- [docs/frontend-components.md](docs/frontend-components.md) — the React tree, LDS, and token discipline.
 - [docs/touch-scroll-interactions.md](docs/touch-scroll-interactions.md) — touch/scroll interaction rules for the map UI.
 - [docs/observability.md](docs/observability.md) — the Grafana/Loki/Tempo/Prometheus/Alloy stack.
 - [docs/reservation-providers.md](docs/reservation-providers.md) — the availability-provider abstraction.
@@ -180,5 +185,4 @@ self-merge and no auto-approval from CI passing alone.
 - [docs/adding-a-data-source.md](docs/adding-a-data-source.md) — step-by-step for a new POI data source.
 - [DATA_SOURCES.md](DATA_SOURCES.md) — per-category data source research and refresh plan.
 - [SMOKE.md](SMOKE.md) — real-device smoke checklist.
-- [web/design-system/README.md](web/design-system/README.md) — the design system and its living gallery.
 - [rfcs/](rfcs/) — accepted architecture/process decisions, including [0002-pr-process.md](rfcs/0002-pr-process.md).

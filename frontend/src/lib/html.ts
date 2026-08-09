@@ -1,11 +1,15 @@
-// HTML/text formatting helpers. Typed port of the string section of
+// Phone/text formatting helpers. Typed port of the string section of
 // web/core.js — behavior preserved exactly.
 //
-// `escapeHtml` and `callButtonsHTML` build markup strings, which React normally
-// makes unnecessary. They are ported rather than dropped because the Phase-4
-// map still renders MapLibre popups and the campground card through
-// `setHTML`/`innerHTML`, which are outside React's escaping. Phase 4 replaces
-// `callButtonsHTML` with a component; until then this is the escaped path.
+// `escapeHtml` stays because escaping is still needed outside React's own: the
+// only `dangerouslySetInnerHTML` left in the tree is fed by
+// `lib/upstream-html.ts`, whose whitelist sanitiser is built on it.
+//
+// `callButtonsHTML` is gone. It built `<a class="cg-btn …">Call …</a>` strings for
+// the vanilla drawer; the React drawer renders `CallButtons` in
+// `features/drawer/parts.tsx` from `phoneNumbers`/`telHref`/`formatPhone` below,
+// so with `web/` deleted the string builder had no caller left. The three helpers
+// are the shared rule both renderers were written against.
 
 const HTML_ESCAPES: Readonly<Record<string, string>> = Object.freeze({
   '&': '&amp;',
@@ -14,8 +18,6 @@ const HTML_ESCAPES: Readonly<Record<string, string>> = Object.freeze({
   '"': '&quot;',
   "'": '&#39;',
 });
-
-const DEFAULT_CALL_BUTTON_CLASS = 'cg-btn cg-btn-tertiary';
 
 /** Phone fields arrive single, or slash/comma/semicolon-delimited. */
 const PHONE_SEPARATORS = /[/,;]/;
@@ -46,9 +48,8 @@ export function formatPhone(s: string): string {
  * Split a phone field into individual numbers.
  *
  * Provider data puts several numbers in one string, delimited by a slash, comma or
- * semicolon (`"530.336.5521/530.257.2151"` → two). Exported because both renderers
- * need the same rule: the HTML-string builder below and the React `CallButtons` in
- * `features/drawer/parts.tsx`.
+ * semicolon (`"530.336.5521/530.257.2151"` → two). Read by the React `CallButtons`
+ * in `features/drawer/parts.tsx`, and by `telHref` below for each result.
  */
 export function phoneNumbers(phoneRaw: string | null | undefined): string[] {
   if (!phoneRaw) return [];
@@ -61,26 +62,4 @@ export function phoneNumbers(phoneRaw: string | null | undefined): string[] {
 /** The `tel:` target for a number — digits and a leading `+` only. */
 export function telHref(number: string): string {
   return `tel:${number.replace(NON_DIAL_CHARS, '')}`;
-}
-
-/**
- * Render one or more `Call …` tertiary buttons from a phone field.
- *
- * `btnClass` is interpolated unescaped, matching the original: it is a
- * call-site constant, never user or upstream data. Both the visible number and
- * the `tel:` href ARE escaped, because those come from provider data.
- *
- * The React drawer builds the same buttons as components instead; this stays for
- * the vanilla tree and goes with it in Phase 5.
- */
-export function callButtonsHTML(
-  phoneRaw: string | null | undefined,
-  btnClass: string = DEFAULT_CALL_BUTTON_CLASS,
-): string {
-  return phoneNumbers(phoneRaw)
-    .map((n) => {
-      const safe = escapeHtml(formatPhone(n));
-      return `<a class="${btnClass}" href="${escapeHtml(telHref(n))}">Call ${safe}</a>`;
-    })
-    .join('');
 }

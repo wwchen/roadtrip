@@ -1,13 +1,16 @@
 import { describe, expect, test } from 'vitest';
 import { token } from '@tokens';
-// Transition-only import: the legacy implementation this module was ported from.
-// It drives the parity suite at the bottom and goes away with `web/` in Phase 5.
-import { flattenHydratedPoi as legacyFlatten } from '@legacy/core';
 import { flattenHydratedPoi, type PoiFeature } from './poi';
 
 // ---------------------------------------------------------------------------
-// Fixtures. Shared by the behavior tests and the parity suite so both cover the
-// same shapes — one per branch of the flattener, plus the awkward inputs.
+// Fixtures. One per branch of the flattener, plus the awkward inputs.
+//
+// They were shared with a parity suite that ran this port and `web/core.js` over
+// the same inputs and asserted deep equality, in both a single and a double pass.
+// Phase 5 deleted `web/`, so the suite went with it and the behaviour tests below
+// are the contract — which is what the parity suite was there to establish: it
+// held while the two implementations coexisted and both served users, and every
+// case it covered is a case one of these fixtures still covers.
 // ---------------------------------------------------------------------------
 
 const FIXTURES: Readonly<Record<string, PoiFeature>> = {
@@ -120,8 +123,7 @@ const flatten = (key: keyof typeof FIXTURES) =>
   flattenHydratedPoi(structuredClone(FIXTURES[key]!)).properties;
 
 // ---------------------------------------------------------------------------
-// Behavior. These pin the contract the popups and drawer depend on, and survive
-// the deletion of web/.
+// Behavior. These pin the contract the drawer and the trip cards depend on.
 // ---------------------------------------------------------------------------
 
 describe('campground promotion', () => {
@@ -306,8 +308,9 @@ describe('re-flattening', () => {
   // The general rule: a field derived ONLY from `raw`, with no flat fallback,
   // does not survive a second pass, because the first pass consumes `raw` and
   // deletes it. Pinned per branch so the limitation is explicit rather than
-  // discovered in Phase 4. The legacy implementation behaves identically — the
-  // parity suite below runs re-flattening through both.
+  // discovered by a caller. `core.js`'s "Idempotent" comment on this function
+  // claimed otherwise and was wrong; its implementation behaved exactly as below,
+  // which the parity suite confirmed before `web/` was deleted.
   test.each([
     ['nationalPark', 'GIS_Acres', 106589, null],
     ['nationalPark', 'Mang_Name', 'NPS', ''],
@@ -330,30 +333,15 @@ describe('re-flattening', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Parity against web/core.js.
-//
-// This port is meant to be behavior-faithful, so the strongest available check
-// is running both implementations over the same fixtures and comparing output.
-// DELETE THIS SUITE WITH web/ IN PHASE 5 — by then the legacy module is gone and
-// the behavior tests above are the contract.
-// ---------------------------------------------------------------------------
-
-describe('parity with the legacy web/core.js implementation', () => {
-  test.each(Object.keys(FIXTURES))('produces identical output for %s', (key) => {
-    const fixture = FIXTURES[key]!;
-    const legacy = legacyFlatten(structuredClone(fixture));
-    const ported = flattenHydratedPoi(structuredClone(fixture));
-    expect(ported).toEqual(legacy);
-  });
-
-  test('agrees on re-flattened output too', () => {
-    for (const fixture of Object.values(FIXTURES)) {
-      const legacyOnce = legacyFlatten(structuredClone(fixture));
-      const portedOnce = flattenHydratedPoi(structuredClone(fixture));
-      expect(flattenHydratedPoi(structuredClone(portedOnce))).toEqual(
-        legacyFlatten(structuredClone(legacyOnce)),
-      );
-    }
+// Every fixture is exercised, not just the ones a named test above reaches for:
+// the parity suite ran the whole table through both implementations, and dropping
+// it must not quietly stop covering a shape. This is the cheap replacement —
+// flattening is total, so "does not throw and is stable under a second pass" is a
+// real assertion for the fixtures no branch test names.
+describe('every fixture flattens', () => {
+  test.each(Object.keys(FIXTURES))('%s survives two passes without throwing', (key) => {
+    const once = flattenHydratedPoi(structuredClone(FIXTURES[key]!));
+    expect(() => flattenHydratedPoi(structuredClone(once))).not.toThrow();
+    expect(once.properties).toBeTypeOf('object');
   });
 });

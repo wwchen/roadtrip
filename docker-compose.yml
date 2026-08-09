@@ -54,13 +54,13 @@ services:
       retries: 10
 
   # Kotlin/Ktor backend. Serves the entire site:
-  #   - GET /                       → index.html (map, still vanilla)
-  #   - GET /watches, /availability → React build (frontend/dist)
-  #   - GET /web/*, /data/*         → static files
-  #   - GET /api/pois               → bbox query against postgres
-  #   - GET /api/health             → liveness/readiness probe
-  # Static files come from the repo bind-mount so deploys are git-pull +
-  # docker compose up — no Dockerfile rebuild needed for HTML/JS/data changes.
+  #   - GET /, /watches, /availability → React build (frontend/dist)
+  #   - GET /assets/*                  → the build's hashed bundles
+  #   - GET /data/*                    → GeoJSON overlays + imported source data
+  #   - GET /api/pois                  → bbox query against postgres
+  #   - GET /api/health                → liveness/readiness probe
+  # Static files come from the repo bind-mounts below so deploys are git-pull +
+  # docker compose up — no Dockerfile rebuild needed for frontend or data changes.
   backend:
     profiles: [pois]
     image: roadtrip/backend
@@ -99,17 +99,17 @@ services:
       # is an environment variable here, so `docker inspect` shows none of it.
       # Which secrets this service receives is declared in secrets/registry.yaml.
     volumes:
-      - ./index.html:/app/static/index.html:ro
-      - ./web:/app/static/web:ro
+      # GeoJSON overlays and imported source data. Repo data rather than build
+      # output, which is why it is the only static tree left besides the build.
       - ./data:/app/static/data
-      # The React build (Phase 1+). Bind-mounted rather than baked into the image,
-      # exactly like web/ above, so the served frontend tracks the checkout.
+      # The React build — the whole site. Bind-mounted rather than baked into the
+      # image so the served frontend tracks the checkout: a rebuild needs no image
+      # rebuild and no container restart, just a browser refresh.
       #
-      # Both migrated pages (/watches, /availability) are served ONLY from here —
-      # their vanilla files were deleted, so there is no per-file fallback left and
-      # an unbuilt tree 404s rather than degrading. `tilt up` and `make run` build
-      # it for you, `scripts/deploy.sh` fails if it cannot, and the deploy health
-      # check probes both paths.
+      # There is no fallback behind it. `web/` was deleted in Phase 5, so an
+      # unbuilt tree 404s every page rather than degrading to a stale vanilla one.
+      # `tilt up` and `make run` build it for you, `scripts/deploy.sh` fails if it
+      # cannot, and the deploy health check probes all three pages.
       - ./frontend/dist:/app/static/frontend/dist:ro
     healthcheck:
       test: ["CMD", "java", "-Xmx32m", "-cp", "/app/app.jar", "ca.floo.roadtrip.HealthProbe"]

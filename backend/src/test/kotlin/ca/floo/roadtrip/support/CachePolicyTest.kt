@@ -27,7 +27,7 @@ class CachePolicyTest {
     fun `static assets keep deploy-friendly cache policy`() {
         assertEquals(
             "no-cache",
-            cacheOptionsFor("/web/app.js", ContentType.Text.JavaScript)?.cacheControl.toString(),
+            cacheOptionsFor("/assets/map-DTclrEz9.js", ContentType.Text.JavaScript)?.cacheControl.toString(),
         )
         assertEquals(
             "max-age=86400",

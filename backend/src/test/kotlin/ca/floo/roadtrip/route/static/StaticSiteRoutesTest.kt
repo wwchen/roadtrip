@@ -10,22 +10,28 @@ import java.io.File
 import kotlin.io.path.createTempDirectory
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNotEquals
 
 /**
- * The strangler seam: which tree a page is served from.
+ * Which files the static site will serve, and which it will not.
  *
  * Worth testing directly because the failure modes are silent. A missing
- * `/assets` mount serves a page whose HTML loads and whose bundles 404, and a
- * fallback that stops working turns an unbuilt checkout into a 404 for a page
- * that works fine on the legacy path.
+ * `/assets` mount serves a page whose HTML loads and whose bundles 404; a
+ * catch-all left in place after Phase 5 would serve the repo's own flat files to
+ * anyone who guessed a name.
  */
 class StaticSiteRoutesTest {
-    private fun legacyTree(): File =
+    /**
+     * The repo root as Ktor sees it: `data/` plus whatever else happens to sit
+     * beside it. `README.md` stands in for "a flat file that is not a page" — on
+     * the host `staticDir` really is the checkout.
+     */
+    private fun staticTree(): File =
         createTempDirectory("rt-static").toFile().apply {
-            File(this, "index.html").writeText(LEGACY_INDEX)
-            File(this, "watches.html").writeText(LEGACY_WATCHES)
-            File(this, "availability.html").writeText(LEGACY_AVAILABILITY)
+            File(this, "README.md").writeText(NOT_A_PAGE)
+            File(this, "data").mkdirs()
+            File(this, "data/us-states.geojson").writeText(GEOJSON)
+            File(this, "data/raw").mkdirs()
+            File(this, "data/raw/dump.json").writeText(RAW_DUMP)
         }
 
     /** A built frontend, as `vite build` leaves it. */
@@ -47,107 +53,75 @@ class StaticSiteRoutesTest {
         block(client)
     }
 
+    // Both URL forms come from one `pages` entry — which is what retired the
+    // hand-written `get("/availability")` route that used to provide the
+    // extensionless alias.
     @Test
-    fun `a migrated page is served from the build, not the legacy tree`() =
-        serving(legacyTree(), builtTree()) { client ->
-            for (path in listOf("/watches", "/watches.html")) {
+    fun `every page is served from the build on both URL forms`() =
+        serving(staticTree(), builtTree()) { client ->
+            val expected =
+                mapOf(
+                    "/watches" to BUILT_WATCHES,
+                    "/watches.html" to BUILT_WATCHES,
+                    "/availability" to BUILT_AVAILABILITY,
+                    "/availability.html" to BUILT_AVAILABILITY,
+                    // The root page's second form is `/`, not the `/index` that
+                    // stripping `.html` would produce.
+                    "/" to BUILT_MAP,
+                    "/index.html" to BUILT_MAP,
+                )
+            for ((path, body) in expected) {
                 val response = client.get(path)
                 assertEquals(HttpStatusCode.OK, response.status, path)
-                assertEquals(BUILT_WATCHES, response.bodyAsText(), path)
+                assertEquals(body, response.bodyAsText(), path)
             }
         }
 
-    // availability is migrated too, and both URL forms come from the one
-    // `migratedPages` entry — which is what retired the hand-written
-    // `get("/availability")` route that used to provide the extensionless alias.
-    @Test
-    fun `the availability dashboard is served from the build on both URL forms`() =
-        serving(legacyTree(), builtTree()) { client ->
-            for (path in listOf("/availability", "/availability.html")) {
-                val response = client.get(path)
-                assertEquals(HttpStatusCode.OK, response.status, path)
-                assertEquals(BUILT_AVAILABILITY, response.bodyAsText(), path)
-            }
-        }
-
-    // The catch-all refuses subdirectories, so without its own mount a built page
-    // would load its HTML and none of its bundles.
+    // The `/assets` mount is what makes a built page loadable at all.
     @Test
     fun `the built assets directory is served`() =
-        serving(legacyTree(), builtTree()) { client ->
+        serving(staticTree(), builtTree()) { client ->
             val response = client.get("/assets/watches-abc123.js")
             assertEquals(HttpStatusCode.OK, response.status)
             assertEquals(BUNDLE, response.bodyAsText())
         }
 
-    // A sandbox bind-mounts the checkout but pulls a pre-built image, so an
-    // unbuilt frontend/dist has to degrade rather than 404.
+    // Phase 5 deleted `web/`, so there is no vanilla file left to degrade to. An
+    // unbuilt frontend is a 404 — not a 500, which is what respondFile on a missing
+    // path would produce, and not a 200 serving something stale.
     @Test
-    fun `a migrated page falls back to the legacy file when the build is absent`() =
-        serving(legacyTree(), createTempDirectory("rt-frontend-empty").toFile()) { client ->
-            for (path in listOf("/watches", "/watches.html")) {
-                val response = client.get(path)
-                assertEquals(HttpStatusCode.OK, response.status, path)
-                assertEquals(LEGACY_WATCHES, response.bodyAsText(), path)
-            }
-        }
-
-    // watches' legacy file was deleted along with web/watches/, so an unbuilt
-    // frontend leaves nothing to serve. respondFile on a missing path throws,
-    // which would surface as a 500; a 404 is the honest answer.
-    @Test
-    fun `a migrated page with neither a build nor a legacy file is a 404`() =
-        serving(
-            createTempDirectory("rt-static-bare").toFile(),
-            createTempDirectory("rt-frontend-bare").toFile(),
-        ) { client ->
-            for (path in listOf("/watches", "/watches.html")) {
+    fun `a page with no build is a 404`() =
+        serving(staticTree(), createTempDirectory("rt-frontend-empty").toFile()) { client ->
+            for (path in listOf("/", "/index.html", "/watches", "/availability")) {
                 assertEquals(HttpStatusCode.NotFound, client.get(path).status, path)
             }
         }
 
-    // Phase 4e graduated the map, and `/` is the URL form the root page gets instead
-    // of the `/index` that stripping `.html` would produce.
+    // The flat catch-all went with `web/` and the root `index.html`. It is what used
+    // to answer `/README.md` on a host where staticDir is the checkout itself, so its
+    // absence is a property worth pinning rather than an implementation detail.
     @Test
-    fun `the map page is served from the build on both URL forms`() =
-        serving(legacyTree(), builtTree()) { client ->
-            for (path in listOf("/", "/index.html")) {
-                val response = client.get(path)
-                assertEquals(HttpStatusCode.OK, response.status, path)
-                assertEquals(BUILT_MAP, response.bodyAsText(), path)
+    fun `nothing outside the declared mounts is served`() =
+        serving(staticTree(), builtTree()) { client ->
+            for (path in listOf("/README.md", "/preview/map", "/backend/build.gradle.kts")) {
+                assertEquals(HttpStatusCode.NotFound, client.get(path).status, path)
             }
         }
 
-    // The root page's explicit route has to outrank the catch-all that used to serve
-    // it, which is why `default(index.html)` came off that mount: with both claiming
-    // `/`, which one answered would rest on Ktor's resolution scoring rather than on
-    // anything stated in the file.
     @Test
-    fun `the root page falls back to the legacy map when the build is absent`() =
-        serving(legacyTree(), createTempDirectory("rt-frontend-empty").toFile()) { client ->
-            for (path in listOf("/", "/index.html")) {
-                val response = client.get(path)
-                assertEquals(HttpStatusCode.OK, response.status, path)
-                assertEquals(LEGACY_INDEX, response.bodyAsText(), path)
-            }
-        }
-
-    // The `/preview/*` mount went with the map's graduation — it was the only page it
-    // ever carried. Nothing answers there now, and the catch-all refuses anything in a
-    // subdirectory, so a stale preview link is a plain 403 like any other `/a/b` URL.
-    @Test
-    fun `a preview URL is no longer served`() =
-        serving(legacyTree(), builtTree()) { client ->
-            val response = client.get("/preview/map")
-            assertEquals(HttpStatusCode.Forbidden, response.status)
-            assertNotEquals(BUILT_MAP, response.bodyAsText())
+    fun `data files are served and raw dumps are not`() =
+        serving(staticTree(), builtTree()) { client ->
+            val geoJson = client.get("/data/us-states.geojson")
+            assertEquals(HttpStatusCode.OK, geoJson.status)
+            assertEquals(GEOJSON, geoJson.bodyAsText())
+            assertEquals(HttpStatusCode.NotFound, client.get("/data/raw/dump.json").status)
         }
 
     // frontendDir defaults to frontend/dist under staticDir, which is what makes
     // one default work for both `.` on the host and /app/static in a container.
     @Test
     fun `the frontend directory defaults to frontend-dist under the static dir`() {
-        val staticDir = legacyTree()
+        val staticDir = staticTree()
         File(staticDir, "frontend/dist").mkdirs()
         File(staticDir, "frontend/dist/watches.html").writeText(BUILT_WATCHES)
 
@@ -158,9 +132,9 @@ class StaticSiteRoutesTest {
     }
 
     private companion object {
-        const val LEGACY_INDEX = "<html><body>legacy map</body></html>"
-        const val LEGACY_WATCHES = "<html><body>legacy watches</body></html>"
-        const val LEGACY_AVAILABILITY = "<html><body>legacy availability</body></html>"
+        const val NOT_A_PAGE = "# Roadtrip"
+        const val GEOJSON = """{"type":"FeatureCollection","features":[]}"""
+        const val RAW_DUMP = """{"secret":"upstream dump"}"""
         const val BUILT_MAP = """<html><body><div id="root">react map</div></body></html>"""
         const val BUILT_WATCHES = """<html><body><div id="root">watches</div></body></html>"""
         const val BUILT_AVAILABILITY = """<html><body><div id="root">availability</div></body></html>"""

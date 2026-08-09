@@ -1,16 +1,28 @@
 # Frontend Migration: vanilla JS → React + TypeScript
 
-> **Handoff doc.** Status as of 2026-08-09 (Phase 4e complete). This is the source of truth for the
-> React migration; it captures the approved plan, decisions, what's already
-> done (and verified), what remains, and the gotchas discovered along the way so
-> a fresh agent session can continue without re-deriving anything.
+> **Handoff doc.** Status as of 2026-08-09: **the migration is COMPLETE.** Phase 5 deleted `web/`,
+> so `frontend/` is the whole of the site. This stays the record of the plan, the decisions, what
+> was verified, and the gotchas discovered along the way — most of which are still live rules for
+> anyone working in the React tree. For the day-to-day rules of that tree, read
+> [frontend-components.md](frontend-components.md), which is now the maintained doc; this one is
+> history plus the gotchas that outlived it.
 
 ---
 
 ## TL;DR for the next session
 
-- We are doing a **full rewrite of `web/` (vanilla ES modules) → React + TypeScript**,
-  executed as a **strangler migration** (one page at a time; vanilla + React coexist).
+- **`web/` is gone. Every page is React, served from `frontend/dist`, with no fallback behind it.**
+  Phase 5's own section below is the handoff; the short version is that the two runtime
+  dependencies moved into the React tree (`tokens.css` is bundled, the sandbox chrome starts from
+  `mountPage`), the `web/core.js` parity suite retired with the module it compared against, and the
+  `/web` mount plus the flat catch-all came off the backend.
+- **Two transition seams deliberately survived**, both because deleting them is a separate
+  decision with its own cost, not a consequence of `web/` going away: the `window.__rt*` globals
+  (`SmokeTest.kt` reads five of them) and the `roadtrip:*` event bridge (three React hooks depend
+  on it for cross-feature invalidation). Both say so at their definition.
+- What follows is the record of the rewrite: **a full rewrite of `web/` (vanilla ES modules) →
+  React + TypeScript**, executed as a **strangler migration** (one page at a time; vanilla + React
+  coexisted).
 - New app lives in **`frontend/`** (Vite multi-page, 3 entries mirroring today's URLs).
 - **Phase 0 (foundation) is COMPLETE and all green.** All `web/api/*` and the pure
   `web/utils/*` + `core.js` helpers are ported and typed; LDS is vendored and wired behind
@@ -45,10 +57,10 @@
   3's `<SettingsModal>`, the map's zoom/locate-me controls and the user-location puck, and
   the `window.__rt*` shim — which Phase 0 wrote and **nothing had ever installed**. Its own
   section below is the handoff.
-- **`/` is React.** `index.html` is in `migratedPages`, the `/preview/*` mount and its sandbox
-  flag are deleted, and `SmokeTest.kt` drives the React DOM. **Phase 5 — deleting `web/` — is
-  what's left**; read "What remains" in the 4e section for the two runtime dependencies that
-  have to move first.
+- **`/` is React.** `index.html` is in the page list, the `/preview/*` mount and its sandbox
+  flag are deleted, and `SmokeTest.kt` drives the React DOM.
+- **Phase 5 is COMPLETE** — see its section for what moved, what was deleted, and the two
+  seams that stayed.
 - **Browser coverage is real now.** `SmokeTest.kt` covers all three pages, and its seven map
   tests drive the React app: the cold load, the mobile layers sheet, the agency filter, two
   shared-link paths, the shared route, and route mode from the current location. It needs a live
@@ -61,24 +73,25 @@
 cd frontend
 npm ci              # vendor/* are workspaces — nothing is fetched for LDS
 npm run typecheck   # tsc --noEmit — must be clean
-npm run test        # vitest run — currently 1,394 tests green
+npm run test        # vitest run — currently 1,409 tests green
 npm run build       # vite build — emits dist/{index,availability,watches}.html
-npm run dev         # Vite dev server :5173, proxies /api,/auth,/web,/data → :8765 (Ktor)
+npm run dev         # Vite dev server :5173, proxies /api,/auth,/data → :8765 (Ktor)
 node ../scripts/check-color-tokens.mjs   # from frontend/, or drop the ../ from the repo root
+node ../scripts/check-css-blocks.mjs
 ```
-All four must be green before every commit.
-Run the Ktor backend separately (e.g. `make run` or `tilt up`) so the dev proxy resolves
-`/api`, and so `/web/design-system/tokens.css` is served (see Token strategy).
+All five must be green before every commit.
+Run the Ktor backend separately (e.g. `make run` or `tilt up`) so the dev proxy resolves `/api`
+and `/data`. Styles no longer need it — `tokens.css` is bundled since Phase 5.
 
 ---
 
 ## Context & motivation
 
-`web/` is ~14,600 LOC of hand-authored vanilla ES modules with **no build step** — Ktor
-serves the files straight from disk (bind-mounted in Docker). It's deliberately architected
+`web/` was ~14,600 LOC of hand-authored vanilla ES modules with **no build step** — Ktor
+served the files straight from disk (bind-mounted in Docker). It was deliberately architected
 (a design system with a `mount(container, config) → { dispose() }` contract, a CSS-token
-source of truth, a color-token CI checker, ~28 `node --test` suites). The team is moving to
-React because: manual DOM/state re-render bookkeeping is error-prone, complex new UI is
+source of truth, a color-token CI checker, ~28 `node --test` suites). The move to
+React was because: manual DOM/state re-render bookkeeping is error-prone, complex new UI is
 coming, and React is easier to hire/onboard for. TypeScript throughout.
 
 ## Locked decisions
@@ -191,18 +204,25 @@ frontend/
 |---|---|---|
 | `@/*` | `frontend/src/*` | |
 | `@ui` | `@lew/lds-react` via `src/ui/index.ts` | the one-line swap point for a published LDS |
-| `@tokens` | `web/design-system/tokens.js` | the retained bridge, NOT ported — see Token strategy |
-| `@legacy/core` | `web/core.js` | **transition only**; parity tests. Deleted in Phase 5 |
+| `@tokens` | `src/tokens/tokens.ts` | the `--rt-*` bridge; aliased so the specifier says "not ordinary source" |
 
-### What is preserved (do NOT rewrite)
-- **`web/design-system/tokens.css` + `tokens.js` (the `token()` bridge).** MapLibre paint and
-  Chart.js can't resolve `var(--rt-*)`, so `token(name)` reading `getComputedStyle` stays the
-  runtime color source. Works identically under React.
-- **`web/api/*`** — pure same-origin fetch wrappers over `http.js`/`HttpError`. Port to typed
-  `.ts`, wrap in TanStack Query hooks. Logic unchanged.
+`@legacy/core` (→ `web/core.js`) existed for the parity tests and went with Phase 5, along with
+the hand-written `src/types/{tokens,legacy}.d.ts` that typed both cross-tree aliases. `@tokens`
+is a normal tsconfig `paths` entry now.
+
+### What was preserved (ported, not rewritten)
+- **`tokens.css` + `tokens.js` (the `token()` bridge).** MapLibre paint and Chart.js can't
+  resolve `var(--rt-*)`, so `token(name)` reading `getComputedStyle` is still the runtime color
+  source. Phase 5 moved both into `src/tokens/` — `tokens.css` bundled, `tokens.js` converted to
+  TS — with the values untouched.
+- **`web/api/*`** — pure same-origin fetch wrappers over `http.js`/`HttpError`, ported to typed
+  `.ts` and wrapped in TanStack Query hooks. Logic unchanged.
 - **`web/utils/*`** (`local-date.js`, `availability-status.js`) + pure `core.js` helpers
   (`escapeHtml`, `distanceKm`, `formatDistance`, `geomCenter`, `zoomForBbox`,
-  `flattenHydratedPoi`, `formatPhone`, `callButtonsHTML`) → `src/lib/` as `.ts`.
+  `flattenHydratedPoi`, `formatPhone`) → `src/lib/` as `.ts`. `callButtonsHTML` was on this list
+  and is gone: it built markup strings for the vanilla drawer, the React drawer renders
+  `CallButtons` from the same `phoneNumbers`/`telHref` rules, and with `web/` deleted the string
+  builder had no caller. Its tests moved onto those two helpers, which had none of their own.
 
 ### What is replaced
 - `web/design-system/*` primitives → `@lew/lds-react` (via `@ui`).
@@ -230,33 +250,42 @@ the map instance in a `ref`; React effects call the imperative install functions
 map events into `mapStore`. Call `token()` inside those effects after CSS is applied.
 
 ### Token strategy (settled by the roadtrip theme)
-Adopt **`@lew/lds/css` + `theme-roadtrip` + `mode-dark`** for LDS components. During the
-strangler transition, **keep `web/design-system/tokens.css` loaded alongside** so the map/canvas
-`token()` bridge (reads `--rt-layer-*`, `--rt-map-*`, `--rt-series-*` by name) keeps resolving —
-LDS's theme defines `--c-*`/`--grey-*`, not `--rt-*`. Reconcile later: keep a thin `--rt-*`
-alias layer for the bridge, or repoint the bridge at LDS var names.
+Adopt **`@lew/lds/css` + `theme-roadtrip` + `mode-dark`** for LDS components, and **keep
+`tokens.css` loaded alongside** so the map/canvas `token()` bridge (reads `--rt-layer-*`,
+`--rt-map-*`, `--rt-series-*` by name) keeps resolving — LDS's theme defines `--c-*`/`--grey-*`,
+not `--rt-*`. The two sets are disjoint, so nothing collides and cascade position is immaterial.
+
+**Still outstanding, and NOT done by Phase 5:** reconciling the two vocabularies — a thin `--rt-*`
+alias layer over LDS's names, or repointing the bridge at them. Phase 5 moved `tokens.css` into
+the React tree and bundled it; it deliberately did not merge the two, because that is a design
+decision about which names win rather than part of removing the vanilla tree.
 
 ---
 
 ## Toolchain, CI & deploy changes
 
-- **Serving:** Vite builds to `frontend/dist/`. Point Ktor `static-dir`/`StaticSiteRoutes` at
-  the built output; update `docker-compose*.yml` mounts, `Dockerfile`, `Tiltfile`. With a build
-  step now, **bake built assets into the image** (`COPY dist`) instead of bind-mounting source.
-  During strangler: serve migrated pages from `dist/`, unmigrated from legacy `web/`.
-  Files: `backend/src/main/kotlin/ca/floo/roadtrip/route/static/StaticSiteRoutes.kt`,
-  `backend/src/main/resources/application-*.yaml` (`static-dir`), `docker-compose.yml`
-  (~lines 101-106), `docker-compose.sandbox.yml`, `Dockerfile`, `Tiltfile`.
-- **Tests:** migrate `node --test` `*.test.mjs` → Vitest. Port suites alongside modules.
-- **Typecheck:** `tsc --noEmit` as a CI step.
-- **Color checker:** extend `scripts/check-color-tokens.mjs` `EXTENSIONS` to include `.ts`/`.tsx`
-  and repoint `ROOTS`/`EXEMPT`/`LEGACY_RAW_COLOR_BUDGET` to the new tree; keep bridge-integrity
-  pointed at the retained `tokens.css`/`tokens.js`. (Today it does NOT scan `.tsx` → raw hex
-  would pass silently.)
-- **CI** (`.github/workflows/ci.yml` `web-tests` job, ~lines 185-217): replace the `node --test`
-  discovery block with `vitest run` + `tsc --noEmit` + the color check; add `frontend/**` to the
-  `dorny/paths-filter` `web` filter (~lines 58-62). **CI pins Node 22** — keep it.
-- **Gallery:** rebuild `web/design-system/gallery.html` as an LDS-backed catalog (Storybook fits).
+All of these are done. Recorded because each is a place a future change lands:
+
+- **Serving:** Vite builds to `frontend/dist/`, which Ktor serves via `StaticSiteRoutes.kt`. The
+  build is **bind-mounted, not baked into the image** — the original plan said `COPY dist`, and
+  bind-mounting won because it keeps a rebuild from needing an image rebuild or a container
+  restart, and keeps CI's `docker-build` job from needing Node. Files:
+  `backend/src/main/kotlin/ca/floo/roadtrip/route/static/StaticSiteRoutes.kt`, `docker-compose.yml`,
+  `docker-compose.sandbox.yml`, `Tiltfile`, `Makefile`, `scripts/deploy.sh`.
+- **Tests:** every `node --test` `*.test.mjs` suite is a Vitest suite beside its module.
+- **Typecheck:** `tsc --noEmit` is a CI step, and `npm run build` runs it first.
+- **Color checker:** `scripts/check-color-tokens.mjs` scans `.ts`/`.tsx`, roots at `frontend`, and
+  checks bridge integrity against `src/tokens/tokens.{css,ts}`. `scripts/check-css-blocks.mjs`
+  joined it after 4d.
+- **CI:** the `web-tests` job is `frontend-tests`, gated by a `frontend` paths filter; the single
+  branch-protection check is the `ci-passed` aggregate, which is why renaming the job was safe.
+  **CI pins Node 22** — keep it.
+- **Gallery:** `web/design-system/gallery.html` was **deleted, not rebuilt.** It mounted the
+  vanilla primitives from their real modules, so it could not survive them, and LDS documents its
+  own components (`frontend/vendor/lds/README.md`, `lds-react/src/index.d.ts`). An LDS-backed
+  catalog (Storybook fits) is a real gap and a separate piece of work. `slack-blockkit-payloads.js`
+  went the same way; `docs/design-references/roadtrip-slack-notifications.html` is the surviving
+  Slack design reference.
 
 ---
 
@@ -390,8 +419,9 @@ this line is what led to porting it once already.
   4e. Topbar/trip planner (drag-reorder, turf corridor, route + share-link encode/restore);
       replace remaining `window.__rt*` with `tripStore`.
 
-**Phase 5 — Decommission.** Delete legacy `web/*` + the `window.__rt*` shim; drop dual serving;
-final CI/deploy cleanup; remove the `python3 -m http.server` static launch config.
+**Phase 5 — Decommission.** *(COMPLETE)* `web/*` and the root `index.html` deleted; dual serving
+dropped; CI/deploy cleanup; the `python3 -m http.server` static launch config replaced by a Vite
+one. The `window.__rt*` shim was on this line and **stayed** — see the section below for why.
 
 ---
 
@@ -1107,84 +1137,213 @@ which would have failed CI:
 or not MapLibre ever gets a style, which makes it a test of the bundle rather than of the
 tiles.
 
-### What remains
+### What remained after 4e
 
-1. **Phase 5 — delete the strangled vanilla.** `web/topbar*`, `web/account/*`,
-   `web/search.js`, `web/share-links.js`, `web/drawer/*`, `web/layers.js`, `web/app.js`,
-   `web/core.js` and the root `index.html` are all unreachable now that `/` is React. Two
-   things must be kept or replaced first, because a React page loads them at runtime:
-   `web/design-system/tokens.css` (the colour source of truth, and what
-   `scripts/check-color-tokens.mjs` checks against) and the two `web/sandbox-*` modules.
-   `@legacy/core` and `@tokens` in `vite.config.ts` are the aliases that go with them, and
-   `lib/poi.test.ts`'s parity suite imports the legacy flattener — retire that suite in the
-   same change, or the deletion breaks the build.
-2. **The `window.__rt*` shim can go too**, once `SmokeTest.kt` no longer reads it. It is a
-   transition seam, and the transition is over; the smoke could drive the same steps
-   through the UI, at the cost of a slower and flakier suite. Worth a decision rather than
-   a default.
+1. **Phase 5 — delete the strangled vanilla.** Done; its own section follows.
+2. **The `window.__rt*` shim can go too**, once `SmokeTest.kt` no longer reads it. Still
+   outstanding: Phase 5 looked at it and kept it. See below.
 3. **One design question, not a regression.** On desktop an open drawer covers the topbar
    (drawer `z-index: 999`, topbar 5). The vanilla did exactly the same above 768px, so it
-   is a lift — but it matters more now that the topbar is the only search surface.
+   is a lift — but it matters more now that the topbar is the only search surface. Still
+   outstanding.
+
+## Phase 5 — what landed (branch `claude/phase-5-web-deletion`)
+
+`web/` is deleted: 14.6k LOC across ~100 files, plus the root `index.html`. `frontend/` is the
+whole of the site, and the only other static tree Ktor serves is `data/`.
+
+### The two runtime dependencies, and where they went
+
+Both had to move *before* the delete, because every React page loaded them from `/web/*` at
+runtime. Both are **bundled** now rather than runtime-served, which is what let the `/web` mount
+come off entirely.
+
+| Was | Is | Loaded by |
+|---|---|---|
+| `web/design-system/tokens.css` | `frontend/src/tokens/tokens.css` | `@import` in `src/ui/styles.css` |
+| `web/design-system/tokens.js` | `frontend/src/tokens/tokens.ts` (typed) | the `@tokens` alias, unchanged at ~9 call sites |
+| `web/sandbox-banner.{js,css}` | `frontend/src/app/sandbox/sandbox-banner.ts` + `sandbox.css` | `initSandboxChrome()` from `mountPage` |
+| `web/sandbox-user-switcher.{js,css}` | `frontend/src/app/sandbox/sandbox-user-switcher.ts` + `sandbox.css` | same |
+| the `runtimeServedAssets` Vite plugin | *(deleted)* | — |
+
+**Bundling `tokens.css` retires a rationale, not just a path.** It was runtime-served so a colour
+change would take effect without a frontend rebuild. That stopped being true the moment every page
+came from `frontend/dist`: the vendored `theme-roadtrip` is bundled and already carries those same
+values, so a token change needed a rebuild regardless. Bundling also means `npm run dev` no longer
+needs the backend up to render styled — which was a real papercut, since an unstyled dev page looks
+like a CSS bug rather than a missing proxy target.
+
+**`tokens.js` → `tokens.ts` reverses a Phase-0 decision, correctly.** Phase 0 refused to port it
+because "a TS copy would be a second source of truth for those colors and would itself trip the
+raw-hex check". Both halves were about it being a *copy*: this is a move, so there is still exactly
+one fallback table, and the checker exempts it by path — that entry already existed and only needed
+repointing. The hand-written `src/types/tokens.d.ts` that stood in for real types is gone, and
+`@tokens` is a plain tsconfig `paths` entry rather than a `declare module` over a `.js` file outside
+the root.
+
+**The sandbox chrome swapped a build-time guarantee for a structural one.** The plugin existed
+because Vite treats `<script type="module" src>` in an entry as a build input and *fails* on a path
+outside its root — so the tags could not be written in the HTML, and a page that silently forgot
+the user switcher looks signed-out in every sandbox (indistinguishable from a real auth failure).
+`vite/runtime-served-assets.test.ts` pinned the tag list for that reason. `mountPage` now calls
+`initSandboxChrome()`, so a page that mounts at all has the chrome, and `src/app/mount.test.tsx`
+pins that instead. Three deliberate changes came with the port:
+
+- **No import-time auto-init.** The vanilla modules ran `initX()` on import, which is how a
+  bundled unit test ends up making three network calls. `initSandboxChrome()` is explicit.
+- **They go through the API layer.** `fetchMe` was already typed in Phase 0; `/api/build-info` and
+  `/api/sandbox/users` are now `src/api/sandbox-api.ts`, with DTOs pinned against `BuildInfoDto`
+  and `SandboxUserDto` rather than guessed.
+- **The tests drive a real DOM.** Both suites passed a hand-rolled `doc` stub, because the vanilla
+  tree had no test DOM — so the banner test asserted `attrs.role` and could not see the classes or
+  the commit link it renders. jsdom sees both. The one seam kept is `renderUserSwitcher`'s `loc`
+  parameter: `window.location.reload` is not stubbable in jsdom, and the `path=/` on the session
+  cookie (the part that makes it apply site-wide) is captured with a setter spy on
+  `Document.prototype.cookie`, since jsdom's getter reports only `name=value`.
+
+Six of the seven raw `rgba(255,255,255,α)` in the switcher's CSS became
+`rgba(var(--rt-c-overlay-rgb), α)` on the way in — a provable no-op, since that primitive *is*
+`255,255,255`, and it is the fix the checker's own message recommends. The colour budget went from
+51 occurrences across eight files to **1**: the switcher bar's own translucent ground, which has no
+role to map onto.
+
+### The parity suite
+
+`lib/poi.test.ts` ran `flattenHydratedPoi` and `web/core.js`'s original over eleven fixtures and
+asserted deep equality, single-pass and re-flattened. It retires with the module it compared
+against — that was always the plan, and it is why the import was marked transition-only.
+
+What replaced it is not nothing. The behaviour tests above it were already the contract, but the
+parity suite was the only thing exercising **every** fixture (`test.each(Object.keys(FIXTURES))`),
+so dropping it would have quietly stopped covering the shapes no named test reaches for. A
+`describe('every fixture flattens')` block keeps the whole table in play: flattening is total, so
+"does not throw and is stable under a second pass" is a real assertion. The two comments that cited
+the suite as evidence — `core.js`'s wrong "Idempotent" claim, and the per-branch re-flattening
+table — now say that it confirmed them before the deletion, rather than pointing at a suite that no
+longer exists.
+
+### Backend: the whole static surface is now four mounts
+
+`StaticSiteRoutes.kt` lost the `/web` mount, the `migratedPages`/legacy distinction (there is only
+one kind of page now, so the list is `pages`), the per-page legacy fallback, and — the one worth
+reading — **the flat catch-all**.
+
+`staticFiles("/", staticDir)` existed to serve the vanilla site's flat files. With `web/` and the
+root `index.html` gone it had nothing legitimate left to serve, and on a host it points at the
+checkout itself, so it answered `/README.md`. It is deleted, and `StaticSiteRoutesTest` pins its
+absence rather than leaving that as an implementation detail. What remains: `/assets/*`, `/data/*`
+(minus `/raw/`), and the three pages on two URL forms each.
+
+**A latent break in 4e surfaced while doing it.** The deploy health check probed
+`/ /pois /reservables /watches /availability`. `/pois` and `/reservables` were never pages — they
+only ever 200'd because the catch-all carried `default(index.html)`, and 4e removed that default
+when `/` graduated. So they have 404'd, and failed that step, since 4e. Both are gone from the probe
+list. The `id="root"` grep 4e added to the same step is also gone, and for a happier reason: it
+existed because `/` was the last page with a legacy file, so a skipped frontend build degraded it to
+the vanilla map *with a 200*. No page has a fallback now, so a skipped build 404s and a plain 200 is
+sufficient again.
+
+`migratedPageFile`'s fallback went with it. Every deploy path builds the frontend (`tilt up`,
+`make run`, `scripts/deploy.sh`, which is fatal without npm), and a 404 on an unbuilt tree is the
+intended failure mode: a dead page beats a stale one a reviewer mistakes for the change.
+
+### What deliberately stayed, and why
+
+Both of these are transition scaffolding whose *other end* is what decides the question — which is
+the line Phase 5 drew rather than deleting everything with "legacy" in its name.
+
+- **The `window.__rt*` shim and `useQaHooks` stay, because their consumer is alive.**
+  `SmokeTest.kt` reads `__rtState`, `__rtMap`, `__rtRouteActive`, `__rtRefreshBbox` and
+  `__rtRouteShareUrl`. Removing them means rewriting those steps to drive the UI instead — slower
+  and flakier — which is a decision about the smoke suite, not a consequence of `web/` going away.
+  4e's "worth a decision rather than a default" still stands; this is that decision, deferred
+  explicitly. Both files now say so at their definition instead of promising Phase 5 would delete
+  them.
+- **The `roadtrip:*` event bridge stays, because it is load-bearing now.** It looked like the
+  clearest deletion in the tree — a listener for events only the vanilla side dispatched. It is
+  not: three React hooks (`features/{alerts,watches,availability}`) call
+  `notifyLegacyWatchesChanged` after a mutation, and `installLegacyEventBridge` is what turns that
+  into cross-feature cache invalidation. Nothing else invalidates the watches cache across
+  features. Deleting the bridge means replacing each of those calls with a direct
+  `invalidateQueries` on the same keys — a refactor of three hooks and their tests, with real
+  behaviour risk, and not part of removing the vanilla tree. The module's comment says this now,
+  in place of "drop this module then".
+
+`callButtonsHTML` is the counter-example: no consumer at all, so it went. See "What was preserved".
+
+### Verified
+
+typecheck clean · **1,409 tests green** (80 files) · build ok — only `maplibre` trips the 500kB
+chunk warning, as before · colour check ok (141 tokens, 44 bridged, budget 1) · CSS-block check ok ·
+`:backend:ktlintCheck` and `:backend:detekt` clean (0 findings) · `scripts/test_docker_compose.py`
+and `scripts/test_deploy_paths.py` green, which is what re-checks that every compose bind-mount
+still has a deploy filter matching it.
+
+The built pages were inspected: no `/web/` reference survives in `dist/`, and `--rt-*` tokens are
+in the emitted CSS. **Kotlin tests could not run here** — `:backend:generateJooq` needs Docker for
+its testcontainer Postgres and there is no daemon in this environment — so `StaticSiteRoutesTest`'s
+rewrite, `CachePolicyTest` and `OpenApiSmokeTest` are unverified beyond lint. Same limitation every
+phase since 4d has had; CI covers them.
+
+### Follow-ups this leaves behind
+
+1. **The two seams above**, each with its cost written down.
+2. **Reconcile `--rt-*` with LDS's `--c-*`.** Listed under Token strategy since Phase 0 and still
+   open; Phase 5 moved `tokens.css` without merging the vocabularies.
+3. **A component catalog.** The gallery was deleted, not rebuilt.
+4. **`frontend/` is not in `.github/dependabot.yml`.** It has React, MapLibre, Chart.js and turf,
+   and gets no automated security updates. Deliberately left out rather than overlooked — the
+   `vendor/*` workspaces pin each other by exact version, so a bump PR needs review against that
+   resolution — but it is a real gap, and the comment there now says so.
+5. **`/assets/*` is served `no-cache`** despite being content-hashed, because `CachePolicy` keys on
+   content type. Cheap win, and untouched here to keep Phase 5 to a deletion.
 
 ## Serving (DONE)
 
-Migrated pages are served from the React build; everything else still resolves from
-`web/`. The pieces:
+Every page is served from the React build, and nothing resolves from anywhere else. The pieces:
 
 - **`StaticSiteRoutes.kt`** takes a `frontendDir` alongside `staticDir` and registers
-  `/assets/*` (the hashed bundles — the flat catch-all deliberately refuses
-  subdirectories, so without this mount a built page loads its HTML and nothing else).
-  `MIGRATED_PAGES` drives both URL forms per page (`/watches` and `/watches.html`);
-  add one entry per phase. Those names are also **excluded from the catch-all**, so the
-  explicit route is the only thing that can serve them rather than leaving it to Ktor's
-  resolution scoring.
-- **Fallback is load-bearing, not defensive.** A page falls back to its legacy file when
-  the built one is absent. A sandbox pulls a pre-built image but bind-mounts the
-  checkout, so an unbuilt `frontend/dist` would otherwise 404 a page that works fine on
-  the legacy path.
-- **`frontend-dir` config** (`InfraModule`), default `frontend/dist`, resolved under
-  `static-dir` when relative — so `.` on the host and `/app/static` in a container both
-  work with no per-profile override.
-- **Bind-mounted, not baked into the image**, exactly like `web/` already is:
+  `/assets/*` (the hashed bundles — without this mount a built page loads its HTML and
+  nothing else) and `/data/*`. `pages` drives both URL forms per page (`/watches` and
+  `/watches.html`); the root page's second form is `/` rather than the `/index` that
+  stripping `.html` would give.
+- **There is no fallback, and no catch-all.** Both existed for the vanilla tree and both
+  went with it in Phase 5. A page whose built file is absent is a 404 — the honest answer,
+  and a loud one. The catch-all's removal is pinned by a test, because on a host
+  `staticDir` is the checkout and it used to answer `/README.md`.
+- **`frontendDir`** defaults to `frontend/dist` under `staticDir` — so `.` on the host and
+  `/app/static` in a container both work with no per-profile override.
+- **Bind-mounted, not baked into the image**, exactly as `web/` used to be:
   `./frontend/dist:/app/static/frontend/dist:ro` in `docker-compose.yml` and
-  `docker-compose.sandbox.yml`. A rebuild therefore needs no image rebuild and no
-  container restart — just a browser refresh. The Dockerfile is unchanged, which also
-  keeps CI's `docker-build` job from needing Node.
+  `docker-compose.sandbox.yml`, alongside `./data`. A rebuild therefore needs no image
+  rebuild and no container restart — just a browser refresh. The Dockerfile is unchanged,
+  which also keeps CI's `docker-build` job from needing Node.
 - **`tilt up`** builds it: `frontend-deps` (keyed on the lockfile) → `frontend-dist`
   (keyed on sources), and `backend` waits on `frontend-dist` so the first bring-up has a
   build ready. A type error fails the resource in the Tilt UI.
 - **`make frontend`** builds it standalone; `make run` (dev and prod) calls it.
 - **`make test`** now runs the frontend gates — it claimed to "run everything CI runs"
   and did not.
-- **Sandbox**: `scripts/deploy.sh` builds the frontend before `compose up`, guarded on
-  `npm` being present and non-fatal on failure, so a host without Node serves the legacy
-  site instead of failing the deploy.
+- **Sandbox**: `scripts/deploy.sh` builds the frontend before `compose up` and **fails** if
+  npm is missing or the build fails. It was non-fatal while pages still had a vanilla file
+  to fall back to; nothing does now, so a skipped build means a sandbox with no site.
 
-**Nothing is legacy-served any more.** 4e added `index.html` to `migratedPages`, so all three
-pages come from `frontend/dist`; `web/` and `data/` stay mounted for the assets a React page still
-loads at runtime (`tokens.css`, the two sandbox modules) and for the GeoJSON layers. The root
+**Nothing is legacy-served, because there is no legacy tree.** All three pages come from
+`frontend/dist`; only `data/` is still bind-mounted beside it, for the GeoJSON overlays. The root
 page's second URL form is `/` rather than the `/index` that stripping `.html` would give —
-`urlFormsOf` — and the catch-all's `default(index.html)` came off, so the explicit route is the
-only thing that can answer `/`.
+`urlFormsOf`.
 
-### Watches is decommissioned (Phase 5, for this page only)
+### Deleting a page's vanilla file (the pattern, applied three times then wholesale)
 
-`web/watches/` and the root `watches.html` are **deleted** — React owns the page.
-Consequences worth knowing:
+Watches went first, availability second, and Phase 5 did the rest. The consequences that showed up
+each time, worth knowing if a page is ever removed:
 
-- **`/watches` has no fallback.** `migratedPageFile` still prefers the build and
-  still falls back to a legacy file, but watches no longer has one, so an unbuilt
-  `frontend/dist` means `/watches` is a 404 (not a 500 — the helper returns null
-  and the route answers 404 rather than calling `respondFile` on a missing path).
-- **The deploy therefore requires Node.** `scripts/deploy.sh` now *fails* if npm
-  is missing or the build fails, where it used to warn and continue. Shipping a
-  dead page silently is worse than a loud deploy failure.
-- Removed with it: the `watches.html` compose bind-mounts, its `deploy.yml` and
-  `ci.yml` path-filter entries, and its entry in the color checker's `ROOTS`
-  (which `statSync`-walks and would have thrown ENOENT).
-- **Kept on purpose:** `web/availability/watch-editor.js` and `web/api/watches-api.js`.
-  Neither lives under `web/watches/`, and `availability-week.js` plus the vanilla
-  topbar alerts panel still import them until Phases 2 and 4d.
+- **A page with no vanilla file has no fallback**, so an unbuilt `frontend/dist` means a 404 —
+  not a 500, because the route checks `isFile` rather than calling `respondFile` on a missing path.
+- **The deploy therefore requires Node**, and `scripts/deploy.sh` is fatal without it.
+- Each deletion also had to remove: the compose bind-mounts, the `deploy.yml` and `ci.yml`
+  path-filter entries, and the entry in the colour checker's `ROOTS` — which `statSync`-walks
+  every root and would have thrown ENOENT on a path that no longer exists.
 
 ## Gotchas / lessons (save yourself the debugging)
 
@@ -1303,26 +1462,22 @@ Consequences worth knowing:
 - **Vitest must be v3 for Vite 6.** Vitest 2.x depends on Vite 5 and pulls a *nested* copy,
   causing a `Plugin` type clash with `@vitejs/plugin-react`. Use Vitest 3 and import
   `defineConfig` from `vitest/config` (not `vite`).
-- **`tokens.css` and the sandbox chrome are intentionally not bundled**, and are injected
-  by the `runtimeServedAssets` Vite plugin (`frontend/vite/runtime-served-assets.ts`)
-  rather than written into each shell. Ktor serves them from the legacy tree at runtime,
-  so the backend (or the dev proxy) has to be up for styles to load.
+- **Every page needs the sandbox chrome, and the guarantee has to be structural.** An
+  auth-disabled sandbox 401s every API call until an `rt_session=sandbox:<id>` cookie is
+  picked, and the user switcher is the only page-local way to pick one — a page without it
+  just looks signed-out, which is indistinguishable from a real auth failure. The migrated
+  watches page shipped without it once. `mountPage` calls `initSandboxChrome()`, so a page
+  that mounts at all has it, and `src/app/mount.test.tsx` pins that.
 
-  A plugin because the tags cannot live in the HTML: Vite treats
-  `<script type="module" src>` in an entry as a build input and **fails** the build on
-  `/web/sandbox-banner.js` with "Failed to resolve … from watches.html", since it is
-  outside the Vite root. (A `<link>` is only warned about — that is where the old
-  "…doesn't exist at build time, it will remain unchanged to be resolved at runtime"
-  warning came from. It is gone; the build is clean now, so a *new* warning is worth
-  reading rather than assuming it is this one.) Injecting with `order: 'post'` runs after
-  Vite's own HTML transform, which is what leaves the references untouched.
-
-  **Every migrated shell needs the sandbox chrome.** An auth-disabled sandbox 401s every
-  API call until an `rt_session=sandbox:<id>` cookie is picked, and the user switcher is
-  the only page-local way to pick one — a page without it just looks signed-out, which is
-  indistinguishable from a real auth failure. The migrated watches page shipped without it
-  once. `vite/runtime-served-assets.test.ts` pins the tag set so a later phase cannot drop
-  it silently.
+  Until Phase 5 this was a `<link>`/`<script>` tag set injected into every entry by the
+  `runtimeServedAssets` Vite plugin, with `vite/runtime-served-assets.test.ts` pinning the
+  list. **Worth knowing why a plugin rather than tags in the HTML, in case anything is ever
+  runtime-served again:** Vite treats `<script type="module" src>` in an entry as a build
+  input and **fails** on a path outside its root ("Failed to resolve … from watches.html").
+  A `<link>` is only warned about — that is where the old "…doesn't exist at build time, it
+  will remain unchanged to be resolved at runtime" warning came from. Injecting with
+  `order: 'post'` runs after Vite's own HTML transform, which is what left the references
+  untouched. The build has been warning-free since, so a *new* warning is worth reading.
 - **GateGuard fact-forcing hook is ON** in this environment: every file create/edit and first
   Bash call demands a "facts, then retry" cycle (and denies the first attempt). Batch writes;
   present importers/purpose/instruction, then retry. (Disable path if ever wanted:
@@ -1335,8 +1490,10 @@ Consequences worth knowing:
   workspace members are symlinked and Vite treats linked deps as source, so `plugin-react`
   transforms them. This only fails at *bundle* time, never at typecheck — which is why CI runs
   `npm run build` and not just `tsc`.
-- **`@tokens`/`@legacy/*` resolve outside the Vite root**, so `server.fs.allow` must list
-  `../web` or the dev server refuses to serve them.
+- **An alias that resolves outside the Vite root needs `server.fs.allow`.** `@tokens` and
+  `@legacy/*` both pointed into `../web`, and the dev server refuses to serve a path it has
+  not been allowed. Both live in `src/` now, so the `fs.allow` entry is gone — but this is
+  the failure the next cross-tree alias will hit, and it only shows up in dev.
 - **jsdom has no CSS**, so `token()` falls back to its baked table in tests. Assert against
   `token('--rt-…')` rather than a literal hex — a literal would also trip the color checker.
 - **API faithfulness:** `createWatch`/`updateWatch`/`deleteWatch` use bare `fetch` (no explicit
@@ -1350,6 +1507,7 @@ Consequences worth knowing:
   the drawer session/hydration guard.
 
 ## Reference reading (repo)
-`docs/frontend-components.md` (current DS + token discipline), `docs/backend-architecture.md`,
-`AGENTS.md` (project rules). Backend static serving: `StaticSiteRoutes.kt`. Color checker:
-`scripts/check-color-tokens.mjs`. CI: `.github/workflows/ci.yml` (`web-tests` job).
+`docs/frontend-components.md` (the maintained frontend rules — components, tokens, tests),
+`docs/backend-architecture.md`, `AGENTS.md` (project rules). Backend static serving:
+`StaticSiteRoutes.kt`. Guardrails: `scripts/check-color-tokens.mjs`,
+`scripts/check-css-blocks.mjs`. CI: `.github/workflows/ci.yml` (`frontend-tests` job).

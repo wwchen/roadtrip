@@ -22,7 +22,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const ROOT = process.cwd();
-const ROOTS = ['web', 'frontend/src'];
+const ROOTS = ['frontend/src'];
 const IGNORED_DIRS = new Set(['node_modules', 'dist']);
 
 /**

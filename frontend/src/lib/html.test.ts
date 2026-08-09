@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { callButtonsHTML, escapeHtml, formatPhone } from './html';
+import { escapeHtml, formatPhone, phoneNumbers, telHref } from './html';
 
 describe('escapeHtml', () => {
   test('escapes all five characters', () => {
@@ -49,44 +49,39 @@ describe('formatPhone', () => {
   });
 });
 
-describe('callButtonsHTML', () => {
-  test('renders one button for a single number', () => {
-    expect(callButtonsHTML('530.336.5521')).toBe(
-      '<a class="cg-btn cg-btn-tertiary" href="tel:5303365521">Call (530) 336-5521</a>',
-    );
-  });
-
-  test('splits slash-delimited numbers into two buttons', () => {
-    const html = callButtonsHTML('530.336.5521/530.257.2151');
-    expect(html).toBe(
-      '<a class="cg-btn cg-btn-tertiary" href="tel:5303365521">Call (530) 336-5521</a>' +
-        '<a class="cg-btn cg-btn-tertiary" href="tel:5302572151">Call (530) 257-2151</a>',
-    );
+// These two carried no tests of their own: every rule below was asserted through
+// `callButtonsHTML`, the HTML-string builder that went with `web/`. Restated
+// directly rather than dropped, since `CallButtons` in `features/drawer/parts.tsx`
+// now depends on exactly these rules. The one assertion that did NOT survive was
+// the escaping of provider data into markup — React escapes what it renders, and
+// `escapeHtml` has its own block above.
+describe('phoneNumbers', () => {
+  test('reads a single number as one entry', () => {
+    expect(phoneNumbers('530.336.5521')).toEqual(['530.336.5521']);
   });
 
   test.each([[','], [';'], ['/']])('splits on %j', (separator) => {
-    expect(callButtonsHTML(`5303365521${separator}5302572151`).match(/<a /g)).toHaveLength(2);
-  });
-
-  test('keeps a leading + in the tel: href but drops other punctuation', () => {
-    expect(callButtonsHTML('+44 20 7123 4567')).toContain('href="tel:+442071234567"');
+    expect(phoneNumbers(`5303365521${separator}5302572151`)).toEqual([
+      '5303365521',
+      '5302572151',
+    ]);
   });
 
   test('trims whitespace and drops empty segments', () => {
-    expect(callButtonsHTML(' 5303365521 , ,5302572151 ').match(/<a /g)).toHaveLength(2);
+    expect(phoneNumbers(' 5303365521 , ,5302572151 ')).toEqual(['5303365521', '5302572151']);
   });
 
-  test.each([[''], [null], [undefined]])('renders nothing for %j', (value) => {
-    expect(callButtonsHTML(value)).toBe('');
+  test.each([[''], [null], [undefined]])('reads %j as no numbers', (value) => {
+    expect(phoneNumbers(value)).toEqual([]);
+  });
+});
+
+describe('telHref', () => {
+  test('drops formatting punctuation', () => {
+    expect(telHref('(530) 336-5521')).toBe('tel:5303365521');
   });
 
-  test('escapes provider data in both the label and the href', () => {
-    const html = callButtonsHTML('"><script>alert(1)</script>');
-    expect(html).not.toContain('<script>');
-    expect(html).toContain('&lt;script&gt;');
-  });
-
-  test('honours a custom button class', () => {
-    expect(callButtonsHTML('5303365521', 'lds-button')).toContain('class="lds-button"');
+  test('keeps a leading + but drops other punctuation', () => {
+    expect(telHref('+44 20 7123 4567')).toBe('tel:+442071234567');
   });
 });

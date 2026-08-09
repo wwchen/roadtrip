@@ -2,17 +2,13 @@
 /**
  * Color-token guardrail.
  *
- * `web/design-system/tokens.css` is the single source of truth for color.
+ * `frontend/src/tokens/tokens.css` is the single source of truth for color.
  * A raw hex anywhere else is invisible to theming: it survives every token
  * override and quietly contradicts the system it sits next to. This check
  * fails the build on one.
  *
- * Covers both the legacy `web/` tree and the React `frontend/` tree, including
- * `.ts`/`.tsx` — until this scanned them, a raw hex in a component would have
- * passed silently.
- *
  * Also verifies the JS bridge stays honest: every fallback key in
- * `web/design-system/tokens.js` must name a token that tokens.css actually
+ * `frontend/src/tokens/tokens.ts` must name a token that tokens.css actually
  * defines, so a renamed token fails loudly here instead of silently
  * resolving to a stale hardcoded value at runtime.
  *
@@ -24,22 +20,18 @@ import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const TOKENS_CSS = 'web/design-system/tokens.css';
-const TOKENS_JS = 'web/design-system/tokens.js';
+const TOKENS_CSS = 'frontend/src/tokens/tokens.css';
+const TOKENS_JS = 'frontend/src/tokens/tokens.ts';
 
 /**
  * Directories and files scanned for raw color.
  *
- * `frontend` is the React tree. It is scanned on the same terms as `web` for the
- * duration of the strangler migration — both ship to users, so both are held to
- * the same rule.
- *
- * The root shells are named individually because they are files, not directories.
- * `availability.html` is gone from this list because React replaced it; `index.html`
- * is the last one left and goes the same way in Phase 4. Note that a name here must
- * exist — `walk` stats every root — so removing a shell means removing it here too.
+ * One root since Phase 5: `frontend` is the whole of the site. The legacy `web/`
+ * tree and the root `index.html` shell were both listed here until they were
+ * deleted — note that a name here must exist, since `walk` stats every root, so
+ * removing a tree means removing it here too.
  */
-const ROOTS = ['web', 'frontend', 'index.html'];
+const ROOTS = ['frontend'];
 const EXTENSIONS = ['.css', '.html', '.js', '.mjs', '.ts', '.tsx'];
 
 /**
@@ -62,10 +54,6 @@ const TEST_SUFFIXES = ['.test.mjs', '.test.js', '.test.ts', '.test.tsx'];
 const EXEMPT = {
   [TOKENS_CSS]: 'the source of truth — the one place raw values belong',
   [TOKENS_JS]: 'boot/jsdom fallbacks, verified against tokens.css below',
-  'web/design-system/gallery.html':
-    'demonstrates pre-token colors side by side with their replacements',
-  'web/design-system/slack-blockkit-payloads.js':
-    "Slack's attachment API takes a literal hex over the wire; each value names the token it mirrors",
   'frontend/vendor':
     'vendored LDS (matthewlew/lds) — third-party source with its own APCA palette; the roadtrip theme there is generated FROM tokens.css, so its values are already governed upstream',
 };
@@ -100,14 +88,11 @@ const HEX = /#[0-9a-fA-F]{3,8}\b/;
  */
 const RGB_FUNC = /(?:rgba?|hsla?)\(\s*(?!var\(--rt-)/g;
 const LEGACY_RAW_COLOR_BUDGET = {
-  'index.html': 32,
-  'web/sandbox-user-switcher.css': 7,
-  'web/design-system/banner.css': 3,
-  'web/topbar.js': 3,
-  'web/availability/watch-editor.js': 2,
-  'web/design-system/double-confirm-button.css': 2,
-  'web/app.js': 1,
-  'web/design-system/toggle-switch.css': 1,
+  // The sandbox bar's own translucent ground. The tints ON it compose from
+  // `--rt-c-overlay-rgb`; this one is a one-off surface with no role to map onto,
+  // and rounding it onto the nearest (`--rt-overlay-chip`, a different value) is
+  // the silent visual change the ratchet exists to avoid.
+  'frontend/src/app/sandbox/sandbox.css': 1,
 };
 
 function walk(path, out = []) {

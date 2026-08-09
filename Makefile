@@ -41,7 +41,7 @@ help:
 	@echo "  make recgov-login     Open companion Chromium and verify Recreation.gov login"
 	@echo "  make recgov-refresh   Force-refresh the companion Recreation.gov session"
 	@echo "  make recgov-atc       Run one Rec.gov add-to-cart attempt (PAYLOAD=/path/to/atc.json)"
-	@echo "  make test             Run everything CI runs: backend + lint + web + frontend + companion + scripts + secrets/dashboards checks"
+	@echo "  make test             Run everything CI runs: backend + lint + frontend + companion + scripts + secrets/dashboards checks"
 	@echo "  make data-fetch       Fetch upstream data on the host (TARGET=<data_source slug> for one)."
 	@echo "  make data-import      Import data/ files into Postgres (TARGET=<row name> for one). Routes by YAML section (poi_data / campsite_data)."
 	@echo "  make reset-db         Drop/recreate the local schema and Flyway history for a full migration replay."
@@ -105,20 +105,14 @@ install: install-hooks
 	cd companion && npm install && npx playwright install chromium
 
 # Everything CI runs (see .github/workflows/ci.yml), locally and in one shot:
-# backend tests, detekt-rule tests, ktlint + detekt, web unit tests, companion
+# backend tests, detekt-rule tests, ktlint + detekt, frontend gates, companion
 # tests, script/secrets-tooling tests, the secrets-registry drift check, and
 # Grafana dashboard validation. Backend tests need a running Docker daemon
 # (Testcontainers). One Gradle invocation covers the four Gradle jobs CI runs
-# separately. Web discovery is asserted, mirroring CI: an unquoted `**` glob
-# can silently run a subset, and a green run that tested a fraction of the
-# suite is worse than no run.
+# separately.
 test: _ensure-hooks
 	./gradlew :backend:test :backend:ktlintCheck :backend:detekt :detekt-rules:test
-	@set -- $$(find web -name '*.test.mjs' | sort); \
-	echo "discovered $$# web test files"; \
-	if [ "$$#" -eq 0 ]; then echo "no web test files found - discovery is broken"; exit 1; fi; \
-	node --test "$$@"
-	# Same steps, same order as CI's web-tests job. The build is not redundant
+	# Same steps, same order as CI's frontend-tests job. The build is not redundant
 	# with the typecheck: it is the only thing that exercises bundling (the
 	# vendored LDS ships untranspiled .jsx), which fails at bundle time only.
 	cd frontend && npm ci && npm run typecheck && npm run test && npm run build

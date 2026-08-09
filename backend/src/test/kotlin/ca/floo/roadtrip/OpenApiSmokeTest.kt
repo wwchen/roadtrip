@@ -80,7 +80,7 @@ class OpenApiSmokeTest {
                 routing {
                     apiDocsRoutes()
                     get("/") { call.respondText("root") }
-                    get("/web/{path...}") { call.respondText("static") }
+                    get("/data/{path...}") { call.respondText("static") }
                     healthRoutes { ReadinessService.Report(databaseReachable = true) }
                     poiRoutes(poiService)
                     poisOnRouteRoutes(
@@ -136,7 +136,7 @@ class OpenApiSmokeTest {
             assertFalse(paths.containsKey("/api/docs"))
             assertFalse(paths.containsKey("/api/docs/openapi.json"))
             assertFalse(paths.containsKey("/"))
-            assertFalse(paths.keys.any { it.startsWith("/web") })
+            assertFalse(paths.keys.any { it.startsWith("/data") })
             assertFalse(paths.containsKey("/api/campsite/events"))
             assertFalse(paths.containsKey("/api/campsite/availability/{poi_id}"))
             assertFalse(paths.containsKey("/api/poi/{poi_id}/reservables/availability"))

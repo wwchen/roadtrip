@@ -6,10 +6,12 @@
    is only the frame LDS does not own: the page background, the centred column,
    and the title/nav row.
 
-   Colors are `--rt-*` tokens from the retained tokens.css, not LDS's `--c-*`.
+   Colors are `--rt-*` tokens from `src/tokens/tokens.css`, not LDS's `--c-*`.
    Both cascades are loaded (see @ui/styles.css) and the `--rt-*` set is what
-   scripts/check-color-tokens.mjs validates, so new page CSS composes from it
-   until Phase 5 reconciles the two.
+   scripts/check-color-tokens.mjs validates, so new page CSS composes from it.
+   Reconciling the two sets — a thin `--rt-*` alias layer over LDS's names, or
+   repointing the JS bridge at them — is still outstanding; Phase 5 moved
+   `tokens.css` into this tree but deliberately did not merge the vocabularies.
    --------------------------------------------------------------------------- */
 
 * {

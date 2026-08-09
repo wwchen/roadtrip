@@ -13,31 +13,25 @@ import io.ktor.server.routing.get
 import java.io.File
 
 /**
- * Pages the React build owns, as filenames under the frontend build directory.
+ * The pages the site serves, as filenames under the frontend build directory.
  *
- * A list rather than a branch per page: each strangler phase adds one entry, and
- * both URL forms for a page (`/watches` and `/watches.html`) are registered from it
- * — see `urlFormsOf`, which is also what makes the root page's second form `/`.
+ * A list rather than a branch per page: both URL forms for a page (`/watches` and
+ * `/watches.html`) are registered from it — see `urlFormsOf`, which is also what
+ * makes the root page's second form `/` itself.
  *
- * A page listed here may or may not still have a vanilla file in `staticDir`:
- * watches' and availability's were deleted with the rest of their legacy trees, so
- * they are served from the build or not at all. See `migratedPageFile`.
- *
- * Registering both URL forms from this list is also what retired the hand-written
+ * Registering both forms from this list is what retired the hand-written
  * `/availability` route that used to sit below: the extensionless alias it existed
  * to provide is exactly what this loop generates.
  *
- * **`index.html` is here as of Phase 4e**, which is the whole of the site: the
- * legacy mounts below now exist only to serve `web/` and `data/` to the two
- * remaining vanilla-served things (the token bridge and the GeoJSON layers), and
- * they go away with Phase 5. The `/preview` mount and its
- * `roadtrip.sandbox.preview-pages` flag went with this entry arriving — the map was
- * the only page they ever carried.
+ * **Every page is React as of Phase 5, and there is no second tree.** The
+ * `web/` mount and the flat catch-all that served the vanilla site are gone with
+ * it, so the routes registered here plus `/assets` and `/data` are the whole
+ * static surface — nothing resolves by Ktor's scoring, and nothing under
+ * `staticDir` is reachable except through a mount named here.
  */
-private val migratedPages = listOf("watches.html", "availability.html", INDEX_FILE)
+private val pages = listOf("watches.html", "availability.html", INDEX_FILE)
 
 private const val HTML_SUFFIX = ".html"
-private const val LEGACY_WEB_DIR = "web"
 private const val DATA_DIR = "data"
 private const val ASSETS_PATH = "/assets"
 
@@ -56,15 +50,15 @@ internal fun Route.staticSiteRoutes(
     staticDir: File,
     frontendDir: File = File(staticDir, FRONTEND_DIR),
 ) {
-    // Hashed bundles, fonts, and the icon sprite emitted by `vite build`. This
-    // mount is what makes a built page loadable at all: the catch-all at the
-    // bottom deliberately refuses anything in a subdirectory, so `/assets/*`
-    // would otherwise 404 even with the HTML served correctly.
+    // Hashed bundles, fonts, and the icon sprite emitted by `vite build`. Without
+    // this mount a page would load its HTML and none of its assets.
     staticFiles(ASSETS_PATH, File(frontendDir, ASSETS_DIR))
         .access(RouteAccess.Anonymous)
 
-    staticFiles("/$LEGACY_WEB_DIR", File(staticDir, LEGACY_WEB_DIR))
-        .access(RouteAccess.Anonymous)
+    // The GeoJSON overlays (state boundaries) and the imported source data. The
+    // one static tree that is repo data rather than build output, which is why it
+    // outlived `web/`: `map/state-lines.ts` fetches `/data/us-states.geojson` at
+    // runtime, and bundling multi-megabyte geometry into the page would be worse.
     staticFiles("/$DATA_DIR", File(staticDir, DATA_DIR)) {
         exclude { it.path.contains(RAW_DATA_SEGMENT) }
         contentType { f ->
@@ -72,30 +66,19 @@ internal fun Route.staticSiteRoutes(
         }
     }.access(RouteAccess.Anonymous)
 
-    // Migrated pages, before the catch-all so an exact path wins over it.
-    for (page in migratedPages) {
+    // There is no legacy fallback left to try: an unbuilt `frontend/dist` means the
+    // page genuinely has nothing to serve, and every deploy path builds it (`tilt
+    // up`, `make run`, and `scripts/deploy.sh`, which fails loudly without npm).
+    // Answered as a 404 rather than by handing respondFile a path that does not
+    // exist, which throws and would surface as a 500.
+    for (page in pages) {
         for (path in urlFormsOf(page)) {
             get(path) {
-                val file = migratedPageFile(frontendDir, staticDir, page)
+                val file = File(frontendDir, page).takeIf { it.isFile }
                 if (file == null) call.respond(HttpStatusCode.NotFound) else call.respondFile(file)
             }.access(RouteAccess.Anonymous)
         }
     }
-
-    // No `default(INDEX_FILE)` any more: the root page is a migrated page like every
-    // other one, so it is served by the explicit route above. Leaving the default in
-    // would put a second claimant on `/` whose file the exclude below refuses anyway.
-    staticFiles("/", staticDir) {
-        exclude { f ->
-            val rel = f.relativeTo(staticDir).path
-            // Subdirectories are not part of the flat legacy site. Migrated pages
-            // are excluded so the explicit routes above are the ONLY thing that
-            // can serve them: both would otherwise match `/watches.html`, and
-            // which one wins would rest on Ktor's resolution scoring rather than
-            // on anything stated here.
-            rel.contains(File.separator) || rel in migratedPages
-        }
-    }.access(RouteAccess.Anonymous)
 }
 
 /**
@@ -110,21 +93,3 @@ private fun urlFormsOf(page: String): List<String> =
         "/$page",
         if (page == INDEX_FILE) "/" else "/${page.removeSuffix(HTML_SUFFIX)}",
     )
-
-/**
- * The built page, else the legacy one, else null.
- *
- * The legacy fallback covers a checkout whose `frontend/dist` was never built —
- * a sandbox bind-mounts the source tree but pulls a pre-built image, so the
- * build can legitimately be missing. It only helps while a page still HAS a
- * vanilla file, though: watches' was deleted once React replaced it, so an
- * unbuilt frontend now means `/watches` is genuinely unavailable.
- *
- * Hence the null: respondFile on a path that does not exist throws, which would
- * surface as a 500. A 404 is the honest answer for a page with nothing to serve.
- */
-private fun migratedPageFile(
-    frontendDir: File,
-    staticDir: File,
-    page: String,
-): File? = File(frontendDir, page).takeIf { it.isFile } ?: File(staticDir, page).takeIf { it.isFile }
