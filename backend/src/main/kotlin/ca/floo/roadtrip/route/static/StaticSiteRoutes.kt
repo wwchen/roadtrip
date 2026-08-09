@@ -16,9 +16,8 @@ import java.io.File
  * Pages the React build owns, as filenames under the frontend build directory.
  *
  * A list rather than a branch per page: each strangler phase adds one entry, and
- * both URL forms for a page (`/watches` and `/watches.html`) are registered from
- * it. When the whole site has moved this becomes the catch-all and the legacy
- * mounts below go away.
+ * both URL forms for a page (`/watches` and `/watches.html`) are registered from it
+ * — see `urlFormsOf`, which is also what makes the root page's second form `/`.
  *
  * A page listed here may or may not still have a vanilla file in `staticDir`:
  * watches' and availability's were deleted with the rest of their legacy trees, so
@@ -27,25 +26,16 @@ import java.io.File
  * Registering both URL forms from this list is also what retired the hand-written
  * `/availability` route that used to sit below: the extensionless alias it existed
  * to provide is exactly what this loop generates.
- */
-private val migratedPages = listOf("watches.html", "availability.html")
-
-/**
- * In-progress React pages, by the URL name they get under `/preview`.
  *
- * A page belongs here when the React build produces it but `migratedPages` does
- * not own it yet — the map, mid-Phase-4. It is a SECOND url, not a replacement:
- * `/` keeps serving the vanilla page, which matters because the vanilla map is
- * still the only one with a drawer and a topbar, and is what QA of everything
- * else runs against. Flipping `/` on a sandbox would take that away.
- *
- * Gated on `roadtrip.sandbox.preview-pages`, off by default, so production never
- * exposes a half-built page. A page graduates by moving to `migratedPages`, and
- * this list (with the flag) goes away when the last one does.
+ * **`index.html` is here as of Phase 4e**, which is the whole of the site: the
+ * legacy mounts below now exist only to serve `web/` and `data/` to the two
+ * remaining vanilla-served things (the token bridge and the GeoJSON layers), and
+ * they go away with Phase 5. The `/preview` mount and its
+ * `roadtrip.sandbox.preview-pages` flag went with this entry arriving — the map was
+ * the only page they ever carried.
  */
-private val previewPages = mapOf("map" to INDEX_FILE)
+private val migratedPages = listOf("watches.html", "availability.html", INDEX_FILE)
 
-private const val PREVIEW_PREFIX = "/preview"
 private const val HTML_SUFFIX = ".html"
 private const val LEGACY_WEB_DIR = "web"
 private const val DATA_DIR = "data"
@@ -65,7 +55,6 @@ private val geoJsonContentType = ContentType("application", "geo+json")
 internal fun Route.staticSiteRoutes(
     staticDir: File,
     frontendDir: File = File(staticDir, FRONTEND_DIR),
-    previewPagesEnabled: Boolean = false,
 ) {
     // Hashed bundles, fonts, and the icon sprite emitted by `vite build`. This
     // mount is what makes a built page loadable at all: the catch-all at the
@@ -85,8 +74,7 @@ internal fun Route.staticSiteRoutes(
 
     // Migrated pages, before the catch-all so an exact path wins over it.
     for (page in migratedPages) {
-        val extensionless = "/${page.removeSuffix(HTML_SUFFIX)}"
-        for (path in listOf("/$page", extensionless)) {
+        for (path in urlFormsOf(page)) {
             get(path) {
                 val file = migratedPageFile(frontendDir, staticDir, page)
                 if (file == null) call.respond(HttpStatusCode.NotFound) else call.respondFile(file)
@@ -94,20 +82,10 @@ internal fun Route.staticSiteRoutes(
         }
     }
 
-    // In-progress pages, where they are switched on. No legacy fallback: a
-    // preview URL has no vanilla counterpart (the vanilla page is still at its own
-    // URL), so an unbuilt frontend means there is genuinely nothing to serve here.
-    if (previewPagesEnabled) {
-        for ((name, page) in previewPages) {
-            get("$PREVIEW_PREFIX/$name") {
-                val file = File(frontendDir, page).takeIf { it.isFile }
-                if (file == null) call.respond(HttpStatusCode.NotFound) else call.respondFile(file)
-            }.access(RouteAccess.Anonymous)
-        }
-    }
-
+    // No `default(INDEX_FILE)` any more: the root page is a migrated page like every
+    // other one, so it is served by the explicit route above. Leaving the default in
+    // would put a second claimant on `/` whose file the exclude below refuses anyway.
     staticFiles("/", staticDir) {
-        default(INDEX_FILE)
         exclude { f ->
             val rel = f.relativeTo(staticDir).path
             // Subdirectories are not part of the flat legacy site. Migrated pages
@@ -119,6 +97,19 @@ internal fun Route.staticSiteRoutes(
         }
     }.access(RouteAccess.Anonymous)
 }
+
+/**
+ * Both URLs a page answers on.
+ *
+ * `/watches.html` and `/watches` for a named page; for the root page the second form
+ * is `/` itself rather than the `/index` that stripping the suffix would produce —
+ * nothing has ever linked to `/index`.
+ */
+private fun urlFormsOf(page: String): List<String> =
+    listOf(
+        "/$page",
+        if (page == INDEX_FILE) "/" else "/${page.removeSuffix(HTML_SUFFIX)}",
+    )
 
 /**
  * The built page, else the legacy one, else null.

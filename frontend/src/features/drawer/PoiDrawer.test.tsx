@@ -144,6 +144,38 @@ describe('opening', () => {
     await waitFor(() => expect(screen.getByRole('heading', { level: 2 })).toBeInTheDocument());
   });
 
+  // The bug this pins shipped in 4c and would have shipped to `/` with 4e: the
+  // flattener rewrites a campground's `category` to its `subcategory` (core.js
+  // parity, pinned by `lib/poi.test.ts`), so the registry was handed 'state' or
+  // 'federal' and answered with the no-panel fallback — for the single most common
+  // POI on the map. Every drawer test until now used a park, which is not rewritten.
+  test('a campground whose category was rewritten to its subcategory still gets one', async () => {
+    respond = () =>
+      json({
+        type: 'Feature',
+        id: 45626,
+        geometry: { type: 'Point', coordinates: [-122.81, 39.01] },
+        properties: {
+          category: 'campground',
+          subcategory: 'state',
+          agency: 'California State Parks',
+          name: 'Clear Lake SP Cabins',
+          region: 'CA',
+        },
+      });
+    renderDrawer();
+
+    await select(45626);
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Clear Lake SP Cabins'),
+    );
+    expect(screen.queryByText('No detail view for this place yet')).toBeNull();
+    // Campground-specific, so this cannot pass with any other panel: the agency line
+    // above the name is `CampgroundDrawer`'s.
+    expect(document.querySelector('.rt-cg-agency')?.textContent).toBe('California State Parks');
+  });
+
   // A category nobody has written a panel for is a gap in the registry. Saying so
   // beats an empty drawer that looks deliberate.
   test('an unrendered category says so instead of showing an empty panel', async () => {

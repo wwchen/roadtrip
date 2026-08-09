@@ -212,24 +212,20 @@ The backend container runs with:
 | `ROADTRIP_BUILD_SHA` | `<sha>` |
 | `ROADTRIP_BUILD_BRANCH` | `<branch>` |
 | `ROADTRIP_SANDBOX_ASSUME_USER` | `true` (auth bypass; no OIDC issuer is passed, so auth is off) |
-| `ROADTRIP_SANDBOX_PREVIEW_PAGES` | `true` (serves the mid-migration React pages under `/preview`) |
 | `OTEL_*_EXPORTER` | `none` (no Alloy collector in a sandbox) |
 
-### Reviewing a page that is mid-migration
+### The React pages
 
-A sandbox is the only place to see a React page the strangler migration has not
-finished yet, because production serves the vanilla one. `ROADTRIP_SANDBOX_PREVIEW_PAGES`
-adds a second URL per unfinished page without touching the original:
+Every page is React now, served from `frontend/dist` on the same URL it has always
+had (`/`, `/availability`, `/watches`) — so a sandbox shows a reviewer the same app
+production runs, with no second URL to visit. `ROADTRIP_SANDBOX_PREVIEW_PAGES` and
+the `/preview/*` URLs it switched on are gone: the map was the last page they
+carried, and Phase 4e graduated it. `migratedPages` in `StaticSiteRoutes.kt` is the
+list.
 
-| URL | Serves |
-|---|---|
-| `/` | the vanilla map — still the only one with a drawer and a topbar |
-| `/preview/map` | the React map app as of the reviewed commit |
-
-Both are live at once on purpose: the vanilla page is what QA of everything else
-runs against, so replacing it would cost more than the preview gains. The list of
-preview pages lives in `StaticSiteRoutes.kt`; a page graduates by moving to
-`migratedPages`, and the flag disappears when the last one does.
+A sandbox bind-mounts the checkout, so `frontend/dist` has to have been built for a
+page to be the React one; an unbuilt tree falls back to the legacy file where one
+still exists (`/` only — see `migratedPageFile`).
 
 ## Host configuration
 

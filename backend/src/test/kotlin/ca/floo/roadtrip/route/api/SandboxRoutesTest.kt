@@ -62,7 +62,7 @@ class SandboxRoutesTest {
             application {
                 routing {
                     sandboxRoutes(
-                        SandboxConfig(assumeUserEnabled = true, previewPagesEnabled = false),
+                        SandboxConfig(assumeUserEnabled = true),
                         stubUserRepo(listOf(willAdmin, mattUser)),
                     )
                 }
@@ -82,7 +82,7 @@ class SandboxRoutesTest {
             application {
                 routing {
                     sandboxRoutes(
-                        SandboxConfig(assumeUserEnabled = false, previewPagesEnabled = false),
+                        SandboxConfig(assumeUserEnabled = false),
                         stubUserRepo(emptyList()),
                     )
                 }

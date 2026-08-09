@@ -34,7 +34,7 @@ export function PoiDrawer() {
 
   const open = selectedPoiId != null;
   const feature = query.data;
-  const Content = drawerFor(feature?.properties?.category);
+  const Content = drawerFor(feature?.properties);
 
   return (
     <Drawer open={open} onClose={close}>
