@@ -611,8 +611,44 @@ describe('route mode', () => {
     });
 
     // The hint goes as soon as a route is active; the agency row appears when the
-    // corridor's own request lands, which is a debounce later.
+    // corridor's own request lands, which is a 250ms debounce plus a round trip
+    // later — hence the raised timeout, which a loaded full-suite run needs.
     await waitFor(() => expect(screen.queryByText('(zoom in to load)')).toBeNull());
-    await waitFor(() => expect(screen.getByLabelText(/BC Parks \(1\)/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText(/BC Parks \(1\)/)).toBeInTheDocument(), {
+      timeout: 3000,
+    });
+  });
+});
+
+// The `window.__rt*` seams. Phase 0 wrote the installer and nothing ever called it,
+// so every one of these was absent from the React tree until the map page mounted
+// the shim — including `__rtRouteShareUrl`, which `SmokeTest.kt` reads.
+describe('the transition shim', () => {
+  test('is installed while the map page is mounted', async () => {
+    const view = await renderMap();
+    // Set explicitly rather than assumed: earlier tests in this file leave a trip
+    // behind, and what matters here is that the global reflects the store.
+    act(() => useTripStore.getState().setMode('browse'));
+
+    expect(window.__rtTripMode?.()).toBe('browse');
+    expect(window.__rtRouteShareUrl).toBeTypeOf('function');
+    expect(window.__rtRefreshBbox).toBeTypeOf('function');
+
+    view.unmount();
+
+    expect(window.__rtTripMode).toBeUndefined();
+  });
+
+  test('answers the share URL from the trip on screen', async () => {
+    await renderMap();
+
+    act(() => {
+      useTripStore.getState().setStops([
+        { name: 'A', lng: -122, lat: 47 },
+        { name: 'B', lng: -121, lat: 48 },
+      ]);
+    });
+
+    expect(window.__rtRouteShareUrl?.()).toContain('route=');
   });
 });

@@ -31,7 +31,8 @@
 // declaration site for the whole `window.__rt*` surface.
 //
 // Phase 5 deletes web/ and this file with it.
-import type { QueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { routeShareUrl } from '@/lib/share-links';
 import { queryKeys } from '@/queries/keys';
 import { useMapStore } from './mapStore';
@@ -117,4 +118,22 @@ export function installTransitionShim(queryClient: QueryClient): () => void {
       else Object.assign(window, { [key]: before });
     }
   };
+}
+
+/**
+ * Install the shim for as long as the map page is mounted.
+ *
+ * Phase 0 wrote `installTransitionShim` and never called it, so until now every
+ * `window.__rt*` global was simply absent from the React tree — caught by driving
+ * the built page in a browser and asking for `__rtRouteShareUrl()`, which answered
+ * `undefined`. Unit tests could not catch it: they call the installer directly.
+ *
+ * Mounted from the map page rather than from `AppProviders` because that is where
+ * every consumer is. The watches and availability pages have no business publishing
+ * a trip API, and a global that exists on a page with no trip is a global someone
+ * will eventually read there.
+ */
+export function useTransitionShim(): void {
+  const queryClient = useQueryClient();
+  useEffect(() => installTransitionShim(queryClient), [queryClient]);
 }

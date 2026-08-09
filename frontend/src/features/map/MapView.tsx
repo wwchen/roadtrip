@@ -1,5 +1,6 @@
 import { PoiDrawer } from '@/features/drawer/PoiDrawer';
 import { TopBar } from '@/features/trip/TopBar';
+import { useTransitionShim } from '@/stores/transition-shim';
 import { LegendPanel } from './LegendPanel';
 import { useDeepLinkedPoi } from './useDeepLinkedPoi';
 import { useMapOverlays, useStateLines } from './useMapOverlays';
@@ -27,6 +28,10 @@ export function MapView() {
   useQaHooks(pois);
   useDeepLinkedPoi();
   useTripOverlay();
+  // The `window.__rt*` seams. Phase 0 wrote the installer and nothing called it, so
+  // they were absent from the React tree until 4e — including the two `SmokeTest.kt`
+  // reads.
+  useTransitionShim();
 
   return (
     <>
