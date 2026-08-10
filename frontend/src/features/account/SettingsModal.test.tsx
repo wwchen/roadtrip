@@ -1,7 +1,8 @@
 // The settings modal: three tabs over one document, per-tab save, and the reseed
 // that keeps the masked Slack hint honest after a save.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
+import { createTestQueryClient } from '@/test/query-client';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AppProviders } from '@/app/AppProviders';
@@ -71,9 +72,7 @@ beforeEach(() => {
   requests.length = 0;
   getSettings = () => json(settingsBody());
   onPut = () => json(settingsBody());
-  client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  client = createTestQueryClient();
   stubApi();
 });
 

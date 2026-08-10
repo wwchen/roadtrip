@@ -1,6 +1,6 @@
 // The topbar's auth row, which is also the settings modal's only trigger.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
+import { createTestQueryClient } from '@/test/query-client';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
 import { AuthRow } from './AuthRow';
@@ -42,7 +42,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 const mount = () =>
   render(
-    <AppProviders client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <AppProviders client={createTestQueryClient()}>
       <AuthRow />
     </AppProviders>,
   );

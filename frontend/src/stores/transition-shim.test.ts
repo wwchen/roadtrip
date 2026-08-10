@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/queries/keys';
+import { createTestQueryClient } from '@/test/query-client';
 import { useTripStore, type TripStop } from './tripStore';
 import { installTransitionShim } from './transition-shim';
 
@@ -11,7 +12,7 @@ let dispose: () => void;
 
 beforeEach(() => {
   useTripStore.getState().reset();
-  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  queryClient = createTestQueryClient();
   dispose = installTransitionShim(queryClient);
 });
 

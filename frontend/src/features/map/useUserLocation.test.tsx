@@ -5,7 +5,7 @@
 // so the only thing that proves this end works is that a `geolocate` event lands there
 // — and that a failure clears it rather than leaving a stale position behind.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
+import { createTestQueryClient } from '@/test/query-client';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
 import { useMapStore } from '@/stores/mapStore';
@@ -86,7 +86,7 @@ function Harness() {
 
 const mount = () =>
   render(
-    <AppProviders client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <AppProviders client={createTestQueryClient()}>
       <MapProvider>
         <Harness />
       </MapProvider>

@@ -1,7 +1,8 @@
 // Search-as-you-type: the debounce, the two parallel sources, and what happens
 // when one of them fails.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createTestQueryClient } from '@/test/query-client';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { useMapStore } from '@/stores/mapStore';
 import { GEOCODE_DEBOUNCE_MS } from '@/stores/tripStore';
@@ -15,7 +16,7 @@ const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 const wrapper = ({ children }: { children: React.ReactNode }) => {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = createTestQueryClient();
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 };
 

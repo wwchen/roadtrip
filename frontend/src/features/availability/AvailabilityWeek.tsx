@@ -22,7 +22,7 @@
 // What is NOT simplified is the arming behaviour, the capability gates, and the state
 // resets on week change — those are product decisions, and they are carried over
 // exactly. See the notes at each.
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useToast } from '@ui';
 import type { PoiFeature } from '@/lib/poi';
 import { availableCount } from '@/lib/day-fields';
@@ -30,14 +30,14 @@ import { addLocalDays, localToday, localYmd, parseLocalYmd, sameLocalDay } from 
 import { DayDetail, type WatchUnavailableReason } from './DayDetail';
 import { CalendarPopover } from './CalendarPopover';
 import { SiteList } from './SiteList';
-import { SiteMatrix, SiteMatrixSkeleton, type ArmedBook } from './SiteMatrix';
+import { SiteMatrix, SiteMatrixSkeleton } from './SiteMatrix';
 import { WatchPopover } from './WatchPopover';
 import { WeekNav } from './WeekNav';
 import { GENERIC_AVAILABILITY_ERROR } from './availability-errors';
 import { reservationUrlFromTemplate } from './booking-links';
 import type { FusedDay } from './fuse';
-import { DEFAULT_MATRIX_FILTERS, type MatrixFilters } from './matrix-rows';
-import { DEFAULT_SITE_COLUMN_WIDTH, loadSiteColumnWidth } from './site-column';
+import { DEFAULT_SITE_COLUMN_WIDTH } from './site-column';
+import { useAvailabilityController } from './availability-controller';
 import { useCampsites } from './useCampsites';
 import { useDelayedFlag } from './useDelayedFlag';
 import {
@@ -110,16 +110,18 @@ function AvailabilityWeekView({
   // and "Earliest" returns to it — which is not the same as "today" for a campground
   // that only opens a booking window months out.
   const earliestDate = useMemo(() => featureEarliestDate(feature), [feature]);
-  const [weekStart, setWeekStart] = useState(earliestDate);
-
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
-  const [sitesExpanded, setSitesExpanded] = useState(false);
-  const [armedBook, setArmedBook] = useState<ArmedBook | null>(null);
-  const [filters, setFilters] = useState<MatrixFilters>(DEFAULT_MATRIX_FILTERS);
-  const [siteColumnWidth, setSiteColumnWidth] = useState(() => loadSiteColumnWidth());
-  const [calendarOpen, setCalendarOpen] = useState(false);
-  const [watchTarget, setWatchTarget] = useState<{ anchor: HTMLElement; date: string } | null>(null);
+  const { state, actions } = useAvailabilityController(earliestDate);
+  const {
+    weekStart,
+    selectedDate,
+    selectedSiteId,
+    sitesExpanded,
+    armedBook,
+    filters,
+    siteColumnWidth,
+    calendarOpen,
+    watchTarget,
+  } = state;
 
   const { toast } = useToast();
   const week = useWeekAvailability(poiId, weekStart);
@@ -129,30 +131,11 @@ function AvailabilityWeekView({
 
   const showSkeleton = useDelayedFlag(week.isPending, SKELETON_RENDER_DELAY_MS);
 
-  /**
-   * Changing week clears every selection made against the old one.
-   *
-   * Carried over from `resetWeekViewState`, and each part earns its place: a selected
-   * date that is no longer on screen would keep a day-detail panel open for an
-   * invisible column, and — the one that matters — an armed booking cell surviving a
-   * week change would mean the second tap opens a booking page for a different night
-   * than the one the user is looking at.
-   */
-  const resetWeekView = useCallback(() => {
-    setSelectedDate(null);
-    setSelectedSiteId(null);
-    setSitesExpanded(false);
-    setArmedBook(null);
-    setWatchTarget(null);
-  }, []);
-
   const goToWeek = useCallback(
     (next: Date) => {
-      resetWeekView();
-      setCalendarOpen(false);
-      setWeekStart(next < earliestDate ? earliestDate : next);
+      actions.changeWeek(next < earliestDate ? earliestDate : next);
     },
-    [earliestDate, resetWeekView],
+    [actions, earliestDate],
   );
 
   const days: FusedDay[] = week.data?.state === 'success' ? week.data.days : [];
@@ -180,19 +163,10 @@ function AvailabilityWeekView({
 
   const onSelectDate = useCallback(
     (date: string) => {
-      // Derived from the current value rather than from inside a `setSelectedDate`
-      // updater. An updater must be pure — React double-invokes it under StrictMode
-      // and may replay it — so calling another setter in there is not a supported
-      // pattern even though it happens to work today. Both setters are in one event
-      // handler, so React batches them into a single render either way.
-      const selecting = selectedDate !== date;
-      setArmedBook(null);
-      setSelectedDate(selecting ? date : null);
-      // Selecting a date is a request to see what is open on it; clearing it closes
-      // the list again.
-      setSitesExpanded(selecting);
+      // The reducer owns the coupled site-list and booking reset rules.
+      actions.selectDate(date);
     },
-    [selectedDate],
+    [actions],
   );
 
   const openBooking = useCallback(
@@ -208,12 +182,12 @@ function AvailabilityWeekView({
       // No URL means the template could not be filled. Disarm rather than open a
       // blank tab: the cell returns to "A" and the user can try again.
       if (!url) {
-        setArmedBook(null);
+        actions.armBooking(null);
         return;
       }
       window.open(url, '_blank', 'noreferrer');
     },
-    [catalog.data],
+    [actions, catalog.data],
   );
 
   /**
@@ -249,7 +223,7 @@ function AvailabilityWeekView({
       // gets its address. Returning silently here — which is what this did — left
       // those providers with a button that could not be made to work.
       if (!existing && !capabilities.triggerKinds.has(TRIGGER_KIND_SLACK_NOTIFY)) {
-        setWatchTarget({ anchor, date: selectedDate });
+        actions.openWatch(anchor, selectedDate);
         return;
       }
       try {
@@ -266,7 +240,7 @@ function AvailabilityWeekView({
         reportWatchFailure(caught);
       }
     },
-    [capabilities, mutations, reportWatchFailure, selectedDate, watches],
+    [actions, capabilities, mutations, reportWatchFailure, selectedDate, watches],
   );
 
   const weekNav = (
@@ -278,7 +252,7 @@ function AvailabilityWeekView({
       onPrev={() => goToWeek(addLocalDays(weekStart, -WEEK_DAYS))}
       onNext={() => goToWeek(addLocalDays(weekStart, WEEK_DAYS))}
       onEarliest={() => goToWeek(earliestDate)}
-      onPickDate={() => setCalendarOpen(true)}
+      onPickDate={() => actions.toggleCalendar(true)}
       calendar={
         calendarOpen ? (
           <CalendarPopover
@@ -287,7 +261,7 @@ function AvailabilityWeekView({
             selectedDate={weekStart}
             maxDate={addLocalDays(earliestDate, CALENDAR_MAX_DAYS_OUT)}
             onPick={goToWeek}
-            onClose={() => setCalendarOpen(false)}
+            onClose={() => actions.toggleCalendar(false)}
           />
         ) : null
       }
@@ -304,38 +278,31 @@ function AvailabilityWeekView({
         matrix={
           <SiteMatrix
             days={days}
-            campsites={catalog.data?.campsites ?? []}
-            reservationUrlTemplates={catalog.data?.reservation_url_templates}
-            sitesState={catalog.isPending ? 'loading' : catalog.error ? 'error' : 'success'}
-            sitesError={catalog.error?.message ?? null}
-            onRetrySites={() => void catalog.refetch()}
-            filters={filters}
-            onFiltersChange={(next) => {
-              // Any filter change moves the rows, so an armed cell would end up
-              // under a different site. Disarm rather than let the second tap land
-              // somewhere the user did not aim.
-              setArmedBook(null);
-              setFilters(next);
+            catalog={{
+              campsites: catalog.data?.campsites ?? [],
+              reservationUrlTemplates: catalog.data?.reservation_url_templates,
+              state: catalog.isPending ? 'loading' : catalog.error ? 'error' : 'success',
+              error: catalog.error?.message ?? null,
+              retry: () => void catalog.refetch(),
             }}
-            siteColumnWidth={siteColumnWidth}
-            onSiteColumnWidthChange={setSiteColumnWidth}
-            selectedSiteId={selectedSiteId}
-            onSelectSite={(id) => {
-              // The vanilla controller disarmed on *any* click in the grid that was
-              // not a booking cell. Expanding a site row is the only other in-grid
-              // control, and it pushes rows down — so an armed cell would be left
-              // showing "Book" somewhere the user is no longer looking.
-              setArmedBook(null);
-              setSelectedSiteId(id);
+            view={{
+              filters,
+              siteColumnWidth,
+              selectedSiteId,
+              armedBook,
+              watchedDates: watchedDatesOf(watches.byWindow),
+              canWatch,
             }}
-            armedBook={armedBook}
-            onArmBook={setArmedBook}
-            onOpenBooking={openBooking}
-            onSelectDate={onSelectDate}
-            watchedDates={watchedDatesOf(watches.byWindow)}
-            canWatch={canWatch}
-            onOpenWatch={(anchor, date) => setWatchTarget({ anchor, date })}
-            actions={weekNav}
+            events={{
+              filtersChanged: actions.changeFilters,
+              siteColumnResized: actions.resizeSiteColumn,
+              siteSelected: actions.selectSite,
+              bookingArmed: actions.armBooking,
+              bookingOpened: openBooking,
+              dateSelected: onSelectDate,
+              watchOpened: actions.openWatch,
+            }}
+            weekActions={weekNav}
           />
         }
       />
@@ -363,7 +330,7 @@ function AvailabilityWeekView({
         reservationUrlTemplates={catalog.data?.reservation_url_templates}
         error={catalog.error?.message ?? null}
         expanded={sitesExpanded}
-        onToggle={() => setSitesExpanded((current) => !current)}
+        onToggle={actions.toggleSites}
         onRetry={() => void catalog.refetch()}
         selectedDay={selectedDay && availableCount(selectedDay) > 0 ? selectedDay : null}
         selectedEndDate={selectedDay ? stayEndDate(selectedDay.date) : null}
@@ -398,7 +365,7 @@ function AvailabilityWeekView({
               throw caught;
             }
           }}
-          onClose={() => setWatchTarget(null)}
+          onClose={actions.closeWatch}
         />
       ) : null}
     </section>

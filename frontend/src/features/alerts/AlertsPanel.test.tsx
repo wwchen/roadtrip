@@ -5,7 +5,7 @@
 // link focuses a row without acting on it, and that pause/resume/delete go through and
 // refetch.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
+import { createTestQueryClient } from '@/test/query-client';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
 import { useMapStore } from '@/stores/mapStore';
@@ -71,7 +71,7 @@ afterEach(() => {
 
 const mount = () =>
   render(
-    <AppProviders client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <AppProviders client={createTestQueryClient()}>
       <AlertsPanel />
     </AppProviders>,
   );

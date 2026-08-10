@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
+import { createTestQueryClient } from '@/test/query-client';
 import { render, screen } from '@testing-library/react';
 import { useMe } from '@/queries/auth';
 import { jsonResponse, stubFetch, textResponse } from '@/test/fetch-stub';
@@ -29,7 +29,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe('AppProviders', () => {
   test('provides the supplied query client to children', async () => {
     stubFetch(jsonResponse(SIGNED_IN));
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const client = createTestQueryClient();
 
     render(
       <AppProviders client={client}>
@@ -53,7 +53,7 @@ describe('AppProviders', () => {
 
   test('surfaces query failures without a second auth state store', async () => {
     stubFetch(textResponse('boom', 503));
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const client = createTestQueryClient();
 
     render(
       <AppProviders client={client}>

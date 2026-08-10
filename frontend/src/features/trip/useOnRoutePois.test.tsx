@@ -4,7 +4,8 @@
 // publish-on-success is what keeps the map's pins up while the next corridor
 // loads — the vanilla published an empty list first and blanked them.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createTestQueryClient } from '@/test/query-client';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { useTripStore, type TripStop } from '@/stores/tripStore';
 import { ON_ROUTE_DEBOUNCE_MS, useOnRoutePois } from './useOnRoutePois';
@@ -24,7 +25,7 @@ let bodies: string[];
 let features: ReturnType<typeof pin>[];
 
 const wrapper = ({ children }: { children: React.ReactNode }) => {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = createTestQueryClient();
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 };
 

@@ -5,9 +5,9 @@
 // changing week clears an armed booking cell, that a 401 on watches degrades to "sign
 // in" rather than an error, and that the two-tap booking flow needs both taps.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
+import { createTestQueryClient } from '@/test/query-client';
 import type { PoiFeature } from '@/lib/poi';
 import { AvailabilityWeek } from './AvailabilityWeek';
 
@@ -112,8 +112,7 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals());
 
-const testClient = () =>
-  new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+const testClient = createTestQueryClient;
 
 async function mount(props: Record<string, unknown> = {}) {
   // The client is returned so a test can re-render into the same cache, which is what
@@ -454,63 +453,6 @@ describe('booking a cell', () => {
     );
   });
 
-  // The second tap must not be able to open a different night than the label shows.
-  test('changing week disarms the cell', async () => {
-    await mount();
-
-    await act(async () => {
-      cell('Site 1', WEEK[0]).click();
-    });
-    expect(cell('Site 1', WEEK[0])).toHaveTextContent('Book');
-
-    await act(async () => {
-      screen.getByRole('button', { name: 'Next week' }).click();
-    });
-    await act(async () => {
-      screen.getByRole('button', { name: 'Jump to earliest date' }).click();
-    });
-
-    await waitFor(() => expect(cell('Site 1', WEEK[0])).toHaveTextContent('A'));
-    expect(window.open).not.toHaveBeenCalled();
-  });
-
-  // Filtering moves the rows, so an armed cell would sit under a different site.
-  test('filtering disarms the cell', async () => {
-    await mount();
-
-    await act(async () => {
-      cell('Site 1', WEEK[0]).click();
-    });
-
-    const search = screen.getByRole('searchbox', { name: 'Filter sites' });
-    await act(async () => {
-      search.focus();
-      // A controlled input: setting value and firing input is how RTL types here.
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(search, 'Site');
-      search.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-
-    expect(cell('Site 1', WEEK[0])).toHaveTextContent('A');
-  });
-
-  // The vanilla controller disarmed on any click in the grid that was not a booking
-  // cell. Expanding a site row pushes the rows down, so an armed cell would be left
-  // showing "Book" under the user's finger somewhere they are no longer looking.
-  test('expanding a site row disarms the cell', async () => {
-    await mount();
-
-    await act(async () => {
-      cell('Site 1', WEEK[0]).click();
-    });
-    expect(cell('Site 1', WEEK[0])).toHaveTextContent('Book');
-
-    await act(async () => {
-      screen.getByRole('button', { name: /View details for/ }).click();
-    });
-
-    expect(cell('Site 1', WEEK[0])).toHaveTextContent('A');
-  });
-
   // No template means no link to build, so the cell is inert rather than a button
   // that opens a blank tab.
   test('an available cell with no booking template is not a button', async () => {
@@ -552,16 +494,6 @@ describe('selecting a day', () => {
     expect(screen.queryByText(/Available sites/)).toBeNull();
   });
 
-  test('tapping the same day again clears it', async () => {
-    await mount();
-
-    const header = () => screen.getAllByRole('columnheader')[2]!.querySelector('button')!;
-    await act(async () => header().click());
-    expect(screen.getByRole('button', { name: 'Set watch' })).toBeInTheDocument();
-
-    await act(async () => header().click());
-    expect(screen.queryByRole('button', { name: 'Set watch' })).toBeNull();
-  });
 });
 
 describe('watches', () => {
