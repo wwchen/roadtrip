@@ -129,8 +129,15 @@ That covers, in order (mirroring `.github/workflows/ci.yml`):
 - `python3 scripts/validate_grafana_dashboards.py` — dashboard provisioning
 
 During iteration, run just the suite your change touches (each line above
-works standalone). Beyond `make test`, `make qa` runs the Playwright JVM smoke
-against a running stack (see [SMOKE.md](SMOKE.md)).
+works standalone). Two browser checks sit outside `make test`, because both need a
+browser:
+
+- **`make browser-check`** — drives the built frontend in headless Chromium against a
+  stub API, asserting the same selectors the JVM smoke does. No stack, no database,
+  ~30 seconds. This is the one to run while working on the frontend: `vitest` cannot
+  see layout or a page that fails to mount, and this can.
+- **`make qa`** — the Playwright JVM smoke against a running stack, and the CI gate
+  (see [SMOKE.md](SMOKE.md)).
 
 ### Git hooks
 

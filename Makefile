@@ -1,4 +1,4 @@
-.PHONY: help run test data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop frontend
+.PHONY: help run test browser-check data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop frontend
 
 PORT       ?= 8765
 BACKEND_IMAGE ?= roadtrip/backend
@@ -45,6 +45,7 @@ help:
 	@echo "  make data-fetch       Fetch upstream data on the host (TARGET=<data_source slug> for one)."
 	@echo "  make data-import      Import data/ files into Postgres (TARGET=<row name> for one). Routes by YAML section (poi_data / campsite_data)."
 	@echo "  make reset-db         Drop/recreate the local schema and Flyway history for a full migration replay."
+	@echo "  make browser-check    Drive the built frontend in headless Chromium (no stack needed)"
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make frontend         Build the React frontend into frontend/dist (tilt up does this too)"
 	@echo "  make grafana-export   Snapshot UI-edited dashboards and apply shared links"
@@ -154,6 +155,15 @@ reset-db:
 	$(DC) rm -sf postgres backend
 	rm -rf $(POSTGRES_DATA)
 	$(DC) up -d --build postgres recgov-companion backend
+
+# The fast browser check: drives frontend/dist in headless Chromium against a stub
+# API, asserting the same selectors SmokeTest.kt does. No database, no network, no
+# stack — it sits between `vitest` (which cannot see layout or a failed mount) and
+# `make qa` (which needs the whole stack). Not part of `make test`, because it needs a
+# browser; see the header of the script for what it has caught.
+browser-check:
+	cd frontend && npm run build
+	node scripts/smoke-parity.mjs
 
 # Local-only Playwright smoke. Hits the Kotlin backend on $(PORT) (serves
 # static + all /api routes). Doesn't boot the stack — bring it up first

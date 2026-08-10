@@ -176,10 +176,17 @@ charts re-resolve.
 - Pure modules get their own suites; components get behaviour tests through their real
   hooks against a stubbed `fetch`.
 - **jsdom cannot see layout, and cannot see a page that fails to mount.** Three purely
-  visual bugs reached review during the migration with every gate green. What catches
-  those is `backend/src/smokeTest/.../SmokeTest.kt` — Playwright against a live stack via
-  `make qa` — and, for anything jsdom structurally cannot answer, driving the built page
-  in headless Chromium by hand.
+  visual bugs reached review during the migration with every gate green, and a P0 in the
+  drawer registry survived a full green suite. Two things catch that class of failure:
+  `backend/src/smokeTest/.../SmokeTest.kt` — Playwright against a live stack via
+  `make qa`, which is the CI gate — and **`make browser-check`**, which drives
+  `frontend/dist` in headless Chromium against a stub API with the same selectors, in
+  ~30 seconds and with no database. Reach for the second while working; the first is
+  what has to be green.
+- **Keep `scripts/smoke-parity.mjs` in step with `SmokeTest.kt`.** Its value is that the
+  assertions are identical, so a selector the port breaks fails locally instead of in
+  CI. A weaker local check is worse than none — that file once asserted a subset where
+  the Kotlin asserted an exact set, and that is exactly the bug it then missed.
 - The map's fake (`frontend/src/test/fake-map.ts`) is a recorder, not a simulator: it
   answers what the app *asked* the map to do. Add to it rather than reaching for a real
   MapLibre instance, which needs WebGL.
