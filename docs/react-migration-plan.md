@@ -89,7 +89,7 @@ coming, and React is easier to hire/onboard for. TypeScript throughout.
 
 | Area | Decision |
 |---|---|
-| Framework | **React 18.3 + TypeScript** (18.3 chosen for max compatibility; `@lew-ds/lds-react` peers `^18 \|\| ^19`) |
+| Framework | **React 19.2 + TypeScript**; `@lew-ds/lds-react` 1.0.1 supports React 19 |
 | Build | **Vite 8**, multi-page: 3 HTML entries mirroring `/`, `/availability`, `/watches` |
 | Server state | **TanStack Query** (replaces the `roadtrip:*` custom-event refetch bus) |
 | Client state | **Zustand** (replaces `state`/`trip` singletons + `window.__rt*` global RPC bridge) |

@@ -117,7 +117,7 @@ export function useTripOverlay(): void {
   }, [map, styleReady, line]);
 
   // Markers: the stops changed, which includes a reorder relabelling them.
-  const registryRef = useRef<TripMarkerRegistry>();
+  const registryRef = useRef<TripMarkerRegistry>(undefined);
   registryRef.current ??= createTripMarkerRegistry();
   useEffect(() => {
     const registry = registryRef.current;

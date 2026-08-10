@@ -103,7 +103,7 @@ export function useViewportPois(): ViewportPois {
 
   // Lazily, because `useRef(createViewportCache())` would build a fresh cache on
   // every render and throw all but the first away.
-  const cacheRef = useRef<ViewportCache<ViewportPoiCollection>>();
+  const cacheRef = useRef<ViewportCache<ViewportPoiCollection>>(undefined);
   cacheRef.current ??= createViewportCache<ViewportPoiCollection>();
   const cache = cacheRef.current;
 
