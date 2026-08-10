@@ -2,19 +2,31 @@
    Page-level style entry for the React app.
 
    Load order matters:
-     1. `@lew/lds/css`             — the APCA palette + LDS component cascade.
-     2. `@lew/lds/css/themes/roadtrip` — the roadtrip theme, whose every value is
-        read from `src/tokens/tokens.css`. Applied by the
-        `theme-roadtrip mode-dark` classes on <html> (roadtrip is dark-native and
-        LDS resolves light at `:root`, so BOTH classes go on the root element).
-     3. `../tokens/tokens.css`     — the `--rt-*` tokens themselves.
+     1. `@lew/lds/css`              — the APCA palette + LDS component cascade.
+     2. `../tokens/roadtrip-zion.css` — the roadtrip-zion theme (Phase 1 of the
+        LDS reskin proposal, "Roadtrip LDS Reskin.dc.html"), light-first, warm
+        neutrals, Zion persimmon. Applied via `theme-roadtrip-zion` on <html>
+        (light is the default class; `mode-dark` alongside it opts into night —
+        see roadtrip-zion.css's own header). Replaces the old dark-native
+        `@lew/lds/css/themes/roadtrip`, which is still vendored (unused) so the
+        revert is one line: swap this import and the two <html> classes back.
+     3. `../tokens/tokens.css`      — the app's own `--rt-*` tokens, unedited.
+     4. `../tokens/roadtrip-zion-bridge.css` — repoints the CHROME half of
+        `--rt-*` (surfaces, text, brand, type, radii, elevation) onto
+        roadtrip-zion.css's roles, so components keep reading `var(--rt-surface)`
+        etc. and the theme supplies the value. Loads last on purpose: several
+        roles above collide by name between roadtrip-zion.css and tokens.css
+        (`--rt-scrim` is the real one), and this file is what's meant to win.
+        Layer hues, availability/status, cell-signal and map-geometry roles are
+        deliberately untouched — tokens.css's own header calls those "data,
+        never decoration," and the reskin proposal's Move 04 agrees; see the
+        bridge file's own header for the full list and why.
 
-   The two token sets are disjoint and coexist: LDS's theme defines `--c-*` /
-   `--grey-*` / `--surface-*`, ours defines `--rt-*` (the theme only NAMES ours in
-   comments, recording which `--rt-*` role each of its values was measured from).
-   So nothing here can collide, and position in the cascade is immaterial —
-   `tokens.css` is a single `:root` block of custom properties, and `var()`
-   resolves at use time rather than at parse time.
+   The two token sets are otherwise disjoint and coexist: LDS's theme defines
+   `--c-*` / `--gray-*` / `--surface-*`, ours defines `--rt-*`. `tokens.css` is a
+   single `:root` block of custom properties, and `var()` resolves at use time
+   rather than at parse time, so cascade position is only load-bearing for the
+   handful of same-named roles the bridge exists to settle.
 
    `tokens.css` is bundled here, not linked at runtime. Until Phase 5 it was
    served from the legacy `web/` tree and injected into each HTML entry by a Vite
@@ -25,5 +37,6 @@
    server no longer needs the backend up just to render styled.
    --------------------------------------------------------------------------- */
 @import '@lew/lds/css';
-@import '@lew/lds/css/themes/roadtrip';
+@import '../tokens/roadtrip-zion.css';
 @import '../tokens/tokens.css';
+@import '../tokens/roadtrip-zion-bridge.css';

@@ -59,6 +59,8 @@ const EXEMPT = {
   [TOKENS_JS]: 'boot/jsdom fallbacks, verified against tokens.css below',
   'frontend/vendor':
     'vendored LDS (matthewlew/lds) — third-party source with its own APCA palette; the roadtrip theme there is generated FROM tokens.css, so its values are already governed upstream',
+  'frontend/src/tokens/roadtrip-zion.css':
+    'a full LDS theme direction, exported byte-identical from Claude Design and kept unedited so re-syncing the direction stays a trivial diff — same rationale frontend/vendor gets for matthewlew/lds. roadtrip-zion-bridge.css repoints our own --rt-* chrome roles onto it without touching this file',
 };
 
 /** Line-level escapes for cases a file-level exemption would over-grant. */
