@@ -48,6 +48,14 @@ class DeploymentContractTest(unittest.TestCase):
         for entry in entries:
             self.assertTrue((ROOT / entry).exists(), entry)
 
+    def test_tilt_builds_the_backend_without_the_production_frontend_stage(self) -> None:
+        dockerfile = (ROOT / "Dockerfile").read_text()
+        tiltfile = (ROOT / "Tiltfile").read_text()
+
+        self.assertIn("FROM backend-base AS backend-local", dockerfile)
+        self.assertIn("FROM backend-base AS backend", dockerfile)
+        self.assertIn("target='backend-local'", tiltfile)
+
 
 if __name__ == "__main__":
     unittest.main()

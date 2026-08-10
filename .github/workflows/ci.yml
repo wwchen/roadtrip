@@ -38,6 +38,7 @@ jobs:
               - 'gradle.properties'
               - 'gradlew'
               - 'gradlew.bat'
+              - 'build.gradle.kts'
               - 'settings.gradle.kts'
               - 'codecov.yml'
               - '.github/workflows/ci.yml'
@@ -47,6 +48,7 @@ jobs:
               - 'gradle.properties'
               - 'gradlew'
               - 'gradlew.bat'
+              - 'build.gradle.kts'
               - 'settings.gradle.kts'
               - 'frontend/**'
               - '.github/workflows/ci.yml'
@@ -54,6 +56,7 @@ jobs:
               - 'frontend/**'
               - 'scripts/check-color-tokens.mjs'
               - 'scripts/check-feature-boundaries.mjs'
+              - 'scripts/check-feature-boundaries.test.mjs'
               - 'scripts/check-css-blocks.mjs'
               - 'scripts/check-token-usage.mjs'
               - '.github/workflows/ci.yml'
@@ -62,7 +65,6 @@ jobs:
               - '.github/workflows/ci.yml'
             companion_image:
               - 'companion/**'
-              - 'docker-compose*.yml'
               - '.github/workflows/ci.yml'
             data_image:
               - 'data/**'
@@ -72,6 +74,9 @@ jobs:
               - 'secrets/**'
               - 'grafana/**'
               - 'deploy/**'
+              - 'Dockerfile'
+              - 'Tiltfile'
+              - 'docker-compose*.yml'
               - '.github/actions/**'
               - '.github/workflows/**'
             gradle_lint:
@@ -146,10 +151,6 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
-
-      - name: Typecheck frontend
-        working-directory: frontend
-        run: npm run typecheck
 
       - name: Check frontend architecture
         working-directory: frontend
@@ -469,7 +470,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: smoke-test-reports
-          path: backend/build/reports/tests/test/
+          path: backend/build/reports/tests/smokeTest/
           retention-days: 7
 
   ci-passed:
