@@ -54,7 +54,7 @@ import {
   supportsAddToCart,
   supportsWatchAlerts,
   watchedDates as watchedDatesOf,
-} from './watch-windows';
+} from '@/lib/watch-windows';
 import { TRIGGER_KIND_SLACK_NOTIFY, buildTriggerPayload, triggerStateOf } from '@/lib/watch-triggers';
 import './availability.css';
 

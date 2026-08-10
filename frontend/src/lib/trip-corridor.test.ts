@@ -7,7 +7,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import type { LineString, Polygon } from 'geojson';
 import { CORRIDOR_DEFAULT_MILES } from '@/stores/tripStore';
-import { clampCorridorMiles, computeCorridor, routeLine, serverCorridor } from './corridor';
+import { clampCorridorMiles, computeCorridor, routeLine, serverCorridor } from './trip-corridor';
 
 /** Seattle → Boston, roughly, at one degree of longitude per vertex. */
 const longLine: LineString = {

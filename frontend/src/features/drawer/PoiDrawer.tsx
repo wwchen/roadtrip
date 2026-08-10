@@ -1,10 +1,11 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, type ReactNode } from 'react';
 import { Banner, Button } from '@ui';
+import type { FlatPoiFeature } from '@/lib/poi';
 import { useMapStore } from '@/stores/mapStore';
 import { Drawer } from './Drawer';
-import { clearPoiFromUrl, showPoiInUrl } from './poi-url';
+import { clearPoiFromUrl, showPoiInUrl } from '@/lib/poi-url';
 import { drawerFor } from './registry';
-import { usePoiDetail } from './usePoiDetail';
+import { usePoiDetail } from '@/queries/poi-detail';
 
 /**
  * The drawer for whatever pin is selected.
@@ -18,7 +19,11 @@ import { usePoiDetail } from './usePoiDetail';
  * function of the selection now, which is what makes a deep link work without a
  * separate code path (`?poi=<id>` seeds the same state a click would).
  */
-export function PoiDrawer() {
+export interface PoiDrawerProps {
+  renderCampgroundAvailability?: (feature: FlatPoiFeature) => ReactNode;
+}
+
+export function PoiDrawer({ renderCampgroundAvailability }: PoiDrawerProps = {}) {
   const selectedPoiId = useMapStore((s) => s.selectedPoiId);
   const clearSelectedPoi = useMapStore((s) => s.clearSelectedPoi);
   const query = usePoiDetail(selectedPoiId);
@@ -34,7 +39,7 @@ export function PoiDrawer() {
 
   const open = selectedPoiId != null;
   const feature = query.data;
-  const Content = drawerFor(feature?.properties);
+  const registration = drawerFor(feature?.properties);
 
   return (
     <Drawer open={open} onClose={close}>
@@ -58,9 +63,19 @@ export function PoiDrawer() {
         </div>
       ) : null}
 
-      {feature && Content ? <Content feature={feature} onClose={close} /> : null}
+      {feature && registration ? (
+        registration.kind === 'campground' ? (
+          <registration.Content
+            feature={feature}
+            onClose={close}
+            availability={renderCampgroundAvailability?.(feature)}
+          />
+        ) : (
+          <registration.Content feature={feature} onClose={close} />
+        )
+      ) : null}
 
-      {feature && !Content ? (
+      {feature && !registration ? (
         // A category with no renderer is a gap in the registry, not a state to
         // paper over — say so rather than showing an empty panel.
         <div className="rt-drawer-error">

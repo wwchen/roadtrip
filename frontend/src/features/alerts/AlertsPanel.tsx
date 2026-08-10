@@ -11,8 +11,8 @@ import { useEffect, useRef, useState } from 'react';
 import { signIn } from '@/api/auth-api';
 import { getWatch, updateWatch, type Watch } from '@/api/watches-api';
 import { useQuery } from '@tanstack/react-query';
-import { WatchEditor } from '@/features/availability/WatchEditor';
-import { normalizeWatchCapabilities } from '@/features/availability/watch-windows';
+import { WatchEditor } from '@/domain/watch/WatchEditor';
+import { normalizeWatchCapabilities } from '@/lib/watch-windows';
 import { formatWatchDate, relativeTime } from '@/lib/watch-format';
 import {
   TRIGGER_KIND_ATC,

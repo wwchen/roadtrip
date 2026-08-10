@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -9,6 +7,8 @@ import {
   type ReactNode,
 } from 'react';
 import { Map as MapLibreMap } from 'maplibre-gl';
+import { MapRuntimeContext, type MapContextValue } from '@/map/context';
+export { useMapContext } from '@/map/context';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './map.css';
 import {
@@ -27,24 +27,6 @@ import {
  */
 const INITIAL_CENTER: [number, number] = [-98.5, 39.5];
 const INITIAL_ZOOM = 3.6;
-
-export interface MapContextValue {
-  /** The live MapLibre instance, or null before the first render completes. */
-  map: MapLibreMap | null;
-  /**
-   * True once the style has loaded and overlays may be installed.
-   *
-   * Every overlay install has to wait for this, and it goes FALSE again on a basemap
-   * change — see `setBasemap`.
-   */
-  styleReady: boolean;
-  basemapKey: string;
-  setBasemap: (key: string) => void;
-  satellite: boolean;
-  setSatellite: (on: boolean) => void;
-}
-
-const MapContext = createContext<MapContextValue | null>(null);
 
 /**
  * The map instance, and the style lifecycle everything else hangs off.
@@ -150,7 +132,7 @@ export function MapProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <MapContext.Provider value={value}>
+    <MapRuntimeContext.Provider value={value}>
       {/* The provider owns its own frame rather than trusting each host page to
           size one. MapLibre measures its container, so an unsized ancestor yields a
           0x0 canvas — a map that initialises cleanly, passes every test, and draws
@@ -160,19 +142,6 @@ export function MapProvider({ children }: { children: ReactNode }) {
         <div ref={containerRef} className="rt-map-canvas" data-testid="map-canvas" />
         {children}
       </div>
-    </MapContext.Provider>
+    </MapRuntimeContext.Provider>
   );
-}
-
-/**
- * The map context.
- *
- * Throws when used outside the provider rather than returning null: every caller
- * needs the instance, and a silent null would surface as a map that simply never
- * shows anything.
- */
-export function useMapContext(): MapContextValue {
-  const value = useContext(MapContext);
-  if (!value) throw new Error('useMapContext must be used inside <MapProvider>');
-  return value;
 }

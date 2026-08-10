@@ -14,8 +14,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { decodeRouteState, setVisibleRouteParam } from '@/lib/share-links';
 import { CORRIDOR_DEFAULT_MILES, useTripStore } from '@/stores/tripStore';
-import { clampCorridorMiles } from './corridor';
-import { allStopsFilled } from './stops';
+import { clampCorridorMiles } from '@/lib/trip-corridor';
+import { allStopsFilled } from '@/domain/trip/stops';
 
 export const ROUTE_PARAM = 'route';
 

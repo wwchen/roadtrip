@@ -6,7 +6,7 @@
 // registry is passed in rather than module-global so two maps (or two tests)
 // cannot collide.
 import { Marker, type Map as MapLibreMap } from 'maplibre-gl';
-import { markerLabel, stopRole, type StopSlot } from '@/features/trip/stops';
+import { markerLabel, stopRole, type StopSlot } from '@/domain/trip/stops';
 
 /**
  * A marker per stop slot, `null` where the slot has no marker.

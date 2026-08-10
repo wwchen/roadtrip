@@ -27,7 +27,7 @@ import {
   type TriggerPayload,
   type TriggerState,
 } from '@/lib/watch-triggers';
-import type { WatchCapabilities } from './watch-windows';
+import type { WatchCapabilities } from '@/lib/watch-windows';
 
 export interface WatchEditorProps {
   title?: string;

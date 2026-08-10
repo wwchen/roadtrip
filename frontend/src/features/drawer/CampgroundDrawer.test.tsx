@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
+import { AvailabilityWeek } from '@/features/availability/AvailabilityWeek';
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore } from '@/stores/tripStore';
 import { PoiDrawer } from './PoiDrawer';
@@ -71,7 +72,7 @@ async function openCampground(properties: Record<string, unknown> = {}) {
   respond = () => json(campground(properties));
   render(
     <AppProviders client={testClient()}>
-      <PoiDrawer />
+      <PoiDrawer renderCampgroundAvailability={(feature) => <AvailabilityWeek feature={feature} />} />
     </AppProviders>,
   );
   await act(async () => {

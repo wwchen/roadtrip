@@ -17,7 +17,7 @@ import { FakeMap } from '@/test/fake-map';
 // The topbar reaches the camera through MapProvider's context; the fake records the
 // flyTo calls a browse-mode pick makes.
 let fakeMap: FakeMap;
-vi.mock('@/features/map/MapProvider', () => ({
+vi.mock('@/map/context', () => ({
   useMapContext: () => ({ map: fakeMap, styleReady: true }),
 }));
 

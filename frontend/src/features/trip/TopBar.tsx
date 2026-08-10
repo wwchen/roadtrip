@@ -11,15 +11,13 @@
 // `innerHTML`. Its three contents (a leg breakdown, a routing error, a geolocation
 // failure) are three components now, which is what makes the "computing route…"
 // state distinguishable from the "no route" state without reading a CSS class.
-import { useEffect, useMemo, useState } from 'react';
-import { AlertsPanel } from '@/features/alerts/AlertsPanel';
-import { AuthRow } from './AuthRow';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { RouteStatus } from './RouteStatus';
 import { SearchDropdown } from './SearchDropdown';
 import { StopRow } from './StopRow';
 import { TripResults } from './TripResults';
 import { MAX_SEARCH_RESULTS, type SearchResult } from './search-results';
-import { allStopsFilled, isLocated } from './stops';
+import { allStopsFilled, isLocated } from '@/domain/trip/stops';
 import { buildRouteIndex } from './route-index';
 import { tripCardsFromFeatures } from './trip-cards';
 import { useOnRoutePois } from './useOnRoutePois';
@@ -35,7 +33,12 @@ import './topbar.css';
 /** What the keyboard has selected before any arrow key is pressed. */
 const NO_ACTIVE_RESULT = -1;
 
-export function TopBar() {
+export interface TopBarProps {
+  alerts?: ReactNode;
+  auth?: ReactNode;
+}
+
+export function TopBar({ alerts, auth }: TopBarProps) {
   const planner = useTripPlanner();
   const route = useRoute();
   const corridor = useOnRoutePois();
@@ -148,11 +151,11 @@ export function TopBar() {
 
       {/* `#tb-alerts` sat here in the vanilla DOM too: under the rows, above the
           actions. It renders nothing at all for a user with no watches. */}
-      <AlertsPanel />
+      {alerts}
 
       {/* Where the vanilla topbar kept `#tb-auth`: sign-in, who you are, and the
           trigger for the settings modal Phase 3 built and nothing mounted. */}
-      <AuthRow />
+      {auth}
 
       {/* The ids on this row and the controls below it are the smoke suite's
           selectors (`#tb-actions`, `#tb-directions`, `#tb-route-summary`,

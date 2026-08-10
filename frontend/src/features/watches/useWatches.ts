@@ -11,12 +11,10 @@ import {
   useQueryClient,
   type UseMutationResult,
 } from '@tanstack/react-query';
-import { fetchPoiDetail } from '@/api/poi-api';
 import {
   createWatch,
   deleteWatch,
   getWatch,
-  listWatches,
   updateWatch,
   type CreateWatchRequest,
   type UpdateWatchRequest,
@@ -24,6 +22,12 @@ import {
   type WatchResponse,
   type WatchStatus,
 } from '@/api/watches-api';
+import {
+  isWatchUnauthorized,
+  useInvalidateWatches,
+  useWatchPoiNames,
+  watchListQuery,
+} from '@/domain/watch/queries';
 import { queryKeys } from '@/queries/keys';
 
 /** Matches the legacy page: one request per status, 200 rows each. */
@@ -31,14 +35,12 @@ const WATCH_LIST_LIMIT = 200;
 /** The statuses the page shows, in the order the legacy page merged them. */
 const LISTED_STATUSES: readonly WatchStatus[] = ['active', 'paused', 'done'] as const;
 
-const UNAUTHORIZED_STATUS = 401;
-
 /**
  * A 401 means "not signed in", which is a normal state for this page, not a
  * failure — it renders a sign-in prompt instead of an error.
  */
 export function isUnauthorized(error: unknown): boolean {
-  return (error as { status?: number } | null)?.status === UNAUTHORIZED_STATUS;
+  return isWatchUnauthorized(error);
 }
 
 /** Ascending by start date, blanks last. Ported from the legacy `byStartDate`. */
@@ -71,11 +73,9 @@ export interface WatchesResult {
  */
 export function useWatches(): WatchesResult {
   const results = useQueries({
-    queries: LISTED_STATUSES.map((status) => ({
-      queryKey: queryKeys.watches.list({ status, limit: WATCH_LIST_LIMIT }),
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        listWatches({ status, limit: WATCH_LIST_LIMIT, signal }),
-    })),
+    queries: LISTED_STATUSES.map((status) =>
+      watchListQuery({ status, limit: WATCH_LIST_LIMIT }),
+    ),
   });
 
   const watches = useMemo(
@@ -112,46 +112,7 @@ export function useWatches(): WatchesResult {
  * not blank out the row.
  */
 export function usePoiNames(watches: Watch[]): Map<number, string> {
-  const ids = useMemo(() => {
-    const seen = new Set<number>();
-    for (const w of watches) {
-      if (w.poi_id != null) seen.add(w.poi_id);
-    }
-    return [...seen].sort((a, b) => a - b);
-  }, [watches]);
-
-  const results = useQueries({
-    queries: ids.map((id) => ({
-      queryKey: queryKeys.pois.name(id),
-      queryFn: async ({ signal }: { signal: AbortSignal }): Promise<string> => {
-        try {
-          const detail = (await fetchPoiDetail(id, { signal })) as {
-            properties?: { name?: string };
-            name?: string;
-          } | null;
-          return detail?.properties?.name || detail?.name || `POI ${id}`;
-        } catch {
-          return `POI ${id}`;
-        }
-      },
-    })),
-  });
-
-  // A dependency array has to be a constant size, and the number of POI queries
-  // grows with the watch list — so the resolved names are collapsed into one
-  // scalar to depend on instead of being spread.
-  const resolved = results.map((r) => r.data ?? '').join('\u0000');
-
-  return useMemo(() => {
-    const names = new Map<number, string>();
-    ids.forEach((id, i) => {
-      const name = results[i]?.data;
-      if (name) names.set(id, name);
-    });
-    return names;
-    // `resolved` stands in for every results[i].data read above.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ids, resolved]);
+  return useWatchPoiNames(watches);
 }
 
 export interface SaveWatchInput {
@@ -178,10 +139,9 @@ interface WatchWriteHandlers {
  */
 function useWatchWriteHandlers(): WatchWriteHandlers {
   const queryClient = useQueryClient();
+  const invalidateWatches = useInvalidateWatches();
   return {
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.watches.all() });
-    },
+    onSuccess: invalidateWatches,
     onError: (error) => {
       if (!isUnauthorized(error)) return;
       void queryClient.invalidateQueries({ queryKey: queryKeys.watches.all() });

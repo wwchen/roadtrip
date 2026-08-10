@@ -17,12 +17,12 @@
 // right after the user asked to see a route on the map.
 import { useState } from 'react';
 import { token } from '@tokens';
-import { useMapContext } from '@/features/map/MapProvider';
+import { useMapContext } from '@/map/context';
 import { useMapStore } from '@/stores/mapStore';
 import { CorridorSlider } from './CorridorSlider';
 import { formatDistanceAlongRoute } from './route-summary';
 import { compactSeasonLabel, visibleCards, type TripCard } from './trip-cards';
-import { shouldAutoFocus } from './viewport';
+import { shouldAutoFocus } from '@/domain/trip/viewport';
 
 /** Where a card click puts the camera: tight enough to see the pin, wide enough to place it. */
 const CARD_FLY_ZOOM = 13;

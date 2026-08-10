@@ -8,7 +8,7 @@
 // which renders `45s` / `3m 20s` for the operations dashboard. A routing engine's
 // seconds are noise, and showing them invites the user to trust them.
 import { SECONDS_PER_MINUTE } from '@/lib/format';
-import { stopLabel, type StopSlot } from './stops';
+import { stopLabel, type StopSlot } from '@/domain/trip/stops';
 
 const METRES_PER_KM = 1000;
 const MINUTES_PER_HOUR = 60;

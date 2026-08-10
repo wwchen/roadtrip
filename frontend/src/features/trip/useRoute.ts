@@ -12,7 +12,7 @@ import type { FeatureCollection, LineString } from 'geojson';
 import { requestRoute, type RouteStop } from '@/api/directions-api';
 import { queryKeys } from '@/queries/keys';
 import { useTripStore, type TripStop } from '@/stores/tripStore';
-import { routeLine } from './corridor';
+import { routeLine } from '@/lib/trip-corridor';
 import {
   routeErrorMessage,
   routeLegLines,
@@ -21,7 +21,7 @@ import {
   type RouteProperties,
   type RouteSummary,
 } from './route-summary';
-import { allStopsFilled, isLocated, type StopSlot } from './stops';
+import { allStopsFilled, isLocated, type StopSlot } from '@/domain/trip/stops';
 
 /** What /api/route answers with: the line first, then optional extras. */
 export type RouteCollection = FeatureCollection;

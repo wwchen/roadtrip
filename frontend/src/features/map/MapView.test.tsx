@@ -60,6 +60,8 @@ vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
 
 const { MapProvider } = await import('./MapProvider');
 const { MapView } = await import('./MapView');
+const { PoiDrawer } = await import('@/features/drawer/PoiDrawer');
+const { TopBar } = await import('@/features/trip/TopBar');
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -177,7 +179,9 @@ const renderPage = () =>
   render(
     <AppProviders client={testClient()}>
       <MapProvider>
+        <TopBar />
         <MapView />
+        <PoiDrawer />
       </MapProvider>
     </AppProviders>,
   );

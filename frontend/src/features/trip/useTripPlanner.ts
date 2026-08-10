@@ -5,13 +5,13 @@
 // rules. What this hook does own is the three things a pure transition cannot: the
 // viewport-dependent focus decision, the browser's geolocation call, and the camera.
 import { useCallback, useState } from 'react';
-import { useMapContext } from '@/features/map/MapProvider';
+import { useMapContext } from '@/map/context';
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore, type TripStop } from '@/stores/tripStore';
-import { clampCorridorMiles } from './corridor';
-import { fillStopWithCurrentLocation } from './current-location';
+import { clampCorridorMiles } from '@/lib/trip-corridor';
+import { fillStopWithCurrentLocation } from '@/domain/trip/current-location';
 import { zoomForResult, type SearchResult } from './search-results';
-import { shouldAutoFocus } from './viewport';
+import { shouldAutoFocus } from '@/domain/trip/viewport';
 import {
   addEmptyStop,
   addExternalStop,
@@ -21,7 +21,7 @@ import {
   withStopAt,
   type StopSlot,
   type StopsTransition,
-} from './stops';
+} from '@/domain/trip/stops';
 
 /** Matches the vanilla's flyTo calls, which all used the same easing. */
 const FLY_SPEED = 1.6;

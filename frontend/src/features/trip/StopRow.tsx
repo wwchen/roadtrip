@@ -14,7 +14,7 @@
 //     no dependencies, and the reorder logic it feeds is already pure and tested.
 import { useEffect, useRef, useState } from 'react';
 import type { TripMode } from '@/stores/tripStore';
-import { isStructuralRow, stopPlaceholder, stopRole, type StopSlot } from './stops';
+import { isStructuralRow, stopPlaceholder, stopRole, type StopSlot } from '@/domain/trip/stops';
 
 export interface StopRowProps {
   index: number;
