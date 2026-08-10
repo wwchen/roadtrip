@@ -87,11 +87,12 @@ attaches rec.gov-specific metadata to the federal subset.
 - ID stamping: `scripts/fetch_parks_canada_aspira.py` walks the API once
   and adds an `aspira: { transactionLocationId, mapId, … }` block to
   each curated campground. Re-run only when Aspira renumbers (rare).
-- URL builder: `web/aspira.js` produces
-  `https://reservation.pc.gc.ca/create-booking/results?…` from the IDs.
-  Frontend's `reserveButtonHTML` (web/campground-card.js) calls it for
-  any campground with an `aspira` block; falls back to the homepage
-  otherwise. See RFC 0006 for the full URL shape.
+- URL builder: the backend stamps a per-reservable URL template
+  (`ReservationUrlTemplate.kt`) from those IDs, and the frontend fills the
+  date window into it — `reservationUrlFromTemplate` in
+  `frontend/src/features/availability/booking-links.ts`. A campground with no
+  template falls back to the provider homepage. See RFC 0006 for the full URL
+  shape.
 
 **BC Parks — British Columbia provincial parks**
 - API: `https://bcparks.api.gov.bc.ca/api/protected-areas` (Strapi, public,

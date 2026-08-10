@@ -30,9 +30,13 @@ updates:
       - dependency-name: "com.charleskorn.kaml:*"
         versions: [">=0.80.0"]
 
-  # Rec.gov companion sidecar — the only npm project in the tree. web/ is
-  # dependency-free ES modules with no package.json, so there is nothing to
-  # track there until one appears.
+  # Rec.gov companion sidecar. NOT the only npm project any more — `frontend/`
+  # has real dependencies (React, MapLibre, Chart.js, turf) and is deliberately
+  # absent here rather than overlooked: it declares `vendor/*` npm workspaces for
+  # the vendored LDS, whose members pin each other by exact version, so a bump PR
+  # has to be reviewed against that resolution rather than merged on green. Add an
+  # entry once LDS is a published registry dependency and the workspaces field
+  # comes out.
   - package-ecosystem: npm
     directory: /companion
     schedule:

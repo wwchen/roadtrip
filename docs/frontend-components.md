@@ -1,9 +1,9 @@
 # Frontend Component Architecture
 
 The frontend is **React + TypeScript in `frontend/`**, built by Vite, with components
-from the vendored LDS design system behind `@ui`. Phase 5 of the migration deleted the
-vanilla `web/` app; three things survive there and are described under "What is left of
-`web/`" below.
+from the vendored LDS design system behind `@ui`. **`web/` is gone entirely** — Phase 5
+deleted the vanilla app, and the three files it left behind (the colour tokens, their JS
+bridge, and the sandbox chrome) have since moved into this tree.
 
 Read [docs/react-migration-plan.md](react-migration-plan.md) alongside this. That doc is
 the long form — how each surface was ported, and a Gotchas section that is the accumulated
@@ -19,7 +19,8 @@ CSS. The vendored source is `frontend/vendor/lds*/` — read it when a prop's be
 unclear, because the types are occasionally narrower than the runtime.
 
 There is no living gallery any more; `web/design-system/gallery.html` went with the
-vanilla primitives it demonstrated. LDS's own source is the catalog.
+vanilla primitives it demonstrated. LDS's own source is the catalog, and an LDS-backed
+replacement is an open piece of work rather than something that exists.
 
 ## Two layers
 
@@ -81,32 +82,30 @@ Non-negotiable, and the plan's Gotchas section has the full detail. The short ve
 
 ## Page shells
 
-A page's `*.html` is a bare shell: `#root` plus its entry module. `tokens.css` and the
-sandbox banner/user switcher are injected into every entry by the `runtimeServedAssets`
-plugin (`frontend/vite/runtime-served-assets.ts`) — do not hand-write them, and do not
-omit them. They cannot be written in the HTML anyway: Vite treats a module script as a
-build input and fails to resolve one pointing outside its root.
+A page's `*.html` is a bare shell: `#root` plus its entry module. **Nothing else belongs
+in it.**
+
+- Styles come from `@ui/styles.css`, imported by each `pages/*/main.tsx`: the LDS
+  cascade, the roadtrip theme, then `src/tokens/tokens.css`.
+- The **sandbox chrome** (build banner + assume-user switcher) is started by
+  `mountPage()`, so every page has it structurally. Load-bearing for review, not
+  decoration: an auth-disabled sandbox 401s every API call until an
+  `rt_session=sandbox:<id>` cookie is picked, and the switcher is the only page-local way
+  to pick one — a page without it looks signed-out, which is indistinguishable from a
+  real auth failure. `src/app/mount.test.tsx` pins it.
+
+Both used to be `<link>`/`<script>` tags injected into every entry by a Vite plugin and
+served by Ktor from `web/`. They are bundled now; the plugin is gone.
 
 Three entries exist, mirroring the three URLs: `index.html` (map), `availability.html`,
-`watches.html`. Ktor serves each from `frontend/dist` and there is no vanilla fallback
-left, so an unbuilt tree 404s the whole site rather than degrading.
-
-## What is left of `web/`
-
-| Path | Why it survived |
-|---|---|
-| `web/design-system/tokens.css` | the colour source of truth, **served** rather than bundled so a token change needs no frontend rebuild |
-| `web/design-system/tokens.js` | the JS bridge (`@tokens`) for values `var()` cannot reach |
-| `web/sandbox-banner.*`, `web/sandbox-user-switcher.*` | environment-gated no-ops outside a sandbox; the switcher is the only way to pick a seed user on an auth-disabled sandbox |
-
-Everything else — the map app, the drawer, the topbar, the account panels, the vanilla
-design-system primitives and their gallery — was deleted once React owned every page.
-Nothing new should be added there; `tokens.css` is the only file in it a feature change
-normally touches.
+`watches.html`. Ktor serves each from `frontend/dist` and there is no fallback behind
+them, so an unbuilt tree 404s the whole site rather than degrading. Adding a page means
+an HTML entry, a `rollupOptions.input` entry, and an entry in `pages` in
+`StaticSiteRoutes.kt`.
 
 ## Color: tokens only
 
-`web/design-system/tokens.css` is the only place a raw **hex** may appear.
+`frontend/src/tokens/tokens.css` is the only place a raw **hex** may appear.
 `node scripts/check-color-tokens.mjs` fails the build on one anywhere else, and it runs in
 `make test` and in CI's web-test job.
 
@@ -152,19 +151,23 @@ defines, so a rename fails loudly instead of pinning a stale value at runtime.
 Because every role resolves through a primitive, a theme is an override block — redefine
 `--rt-c-*` under a scope like `[data-rt-theme="light"]`, plus only the roles that genuinely
 diverge. Custom properties inherit downward only, so the scope attribute belongs on
-`<html>`. Call `resetTokenCache()` from `tokens.js` after a runtime swap so the map and
+`<html>`. Call `resetTokenCache()` from `@tokens` after a runtime swap so the map and
 charts re-resolve.
 
 ## CSS rules
 
-- Custom properties come from `web/design-system/tokens.css` (`--rt-*` prefix).
+- Custom properties come from `src/tokens/tokens.css` (`--rt-*` prefix).
 - A component imports its own stylesheet: `import './topbar.css'` beside the component
   that owns it. Vite bundles and hashes it; there is no runtime `<link>` injection any
   more.
 - Prefer LDS's own classes and layout primitives before writing new CSS, and prefer
   extending an existing feature stylesheet before adding another one.
-- `node frontend/scripts/check-css-blocks.mjs` fails on an unbalanced brace — cheap
-  insurance for a file no test renders.
+- `node scripts/check-css-blocks.mjs` fails on an unbalanced brace, and
+  `node scripts/check-token-usage.mjs` fails on a `var(--rt-*)` naming a token that does
+  not exist or a declaration whose parens do not balance. Both are cheap insurance for
+  failures no test can see: a missing token resolves to nothing, and an unbalanced
+  declaration is dropped whole by the browser. jsdom does no layout, so neither shows up
+  in the suite.
 
 ## Testing
 

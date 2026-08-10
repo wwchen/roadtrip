@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 import { Button } from '@ui';
 import { distanceKm, formatDistance } from '@/lib/geo';
 import type { PoiFeature } from '@/lib/poi';
-import { formatPhone, phoneNumbers, telHref } from '@/lib/html';
+import { formatPhone, phoneNumbers, telHref } from '@/lib/phone';
 import { useMapStore } from '@/stores/mapStore';
 import { addPoiToTrip } from '@/features/trip/add-poi-to-trip';
 import { useTripStore } from '@/stores/tripStore';
@@ -233,9 +233,10 @@ function UpstreamValue({ value }: { value: unknown }) {
 /**
  * One `Call …` button per number in a provider's phone field.
  *
- * The splitting and `tel:` rules come from `lib/html.ts`, which the vanilla
- * `callButtonsHTML` also uses — one source of truth for "what counts as a number",
- * two renderers, and the string version disappears with `web/`.
+ * The splitting and `tel:` rules come from `lib/phone.ts` — one source of truth for
+ * "what counts as a number". It had two renderers while `web/` existed; this is the
+ * one that outlived it, and `phone.test.ts` now pins those rules directly rather
+ * than through the string builder.
  */
 export function CallButtons({ phone }: { phone: unknown }) {
   return (

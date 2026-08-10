@@ -240,17 +240,22 @@ before import.
 
 ## Architecture notes
 
-- **Backend.** Kotlin/Ktor + Netty serves the entire site: `/` →
-  `index.html`, `/web/*` and `/data/*` → static (with `/data/raw/*`
-  excluded), plus `/api/pois`, `/api/health`, and the availability/watch API
-  described below. Postgres+PostGIS holds the imported POI data; Supercharger
-  geometry is live from supercharge.info/service/supercharge/allSites.
+- **Backend.** Kotlin/Ktor + Netty serves the entire site: `/`, `/watches` and
+  `/availability` → the React build in `frontend/dist`, `/assets/*` → its hashed
+  bundles, `/data/*` → static data (with `/data/raw/*` excluded), plus
+  `/api/pois`, `/api/health`, and the availability/watch API described below.
+  Postgres+PostGIS holds the imported POI data; Supercharger geometry is live
+  from supercharge.info/service/supercharge/allSites.
+- **Frontend.** React 18 + TypeScript in `frontend/`, built by Vite into three
+  page entries. Components come from LDS via the `@ui` adapter; server state is
+  TanStack Query, client state Zustand. Every page is served from the build and
+  nothing else — there is no fallback, so an unbuilt `frontend/dist` 404s
+  loudly. See [docs/frontend-components.md](docs/frontend-components.md).
 - **Campsite availability + watches.** Reservation-provider availability and
   watch/alert management live in the main app: the API is
   `/api/pois/{id}/campsites`, `/api/pois/{id}/campsites/availability`, and
-  `/api/watches`, and the UI is the topbar alerts panel, the standalone
-  `/availability` page (served from the repo root as `availability.html`), and
-  `/watches`, which is React and served from `frontend/dist`. See
+  `/api/watches`, and the UI is the topbar alerts panel, the campground drawer's
+  availability grid, the `/availability` admin dashboard, and `/watches`. See
   [docs/reservation-providers.md](docs/reservation-providers.md) for the
   provider abstraction.
 - **Map** — MapLibre GL, vector and raster basemaps, runtime style-swap.

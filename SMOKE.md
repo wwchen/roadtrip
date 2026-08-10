@@ -115,6 +115,6 @@ URL: <https://roadtrip.floo.ca>
 | --- | --- | --- |
 | `/api/pois` or state-parks.geojson served uncompressed | gzip middleware not deployed or Cloudflare stripping | Check Ktor `Compression` config in `backend/.../Main.kt`; verify `Vary: Accept-Encoding` arrives at the client |
 | Tesla button → Access Denied | Akamai bot wall (rare) | Not user-fixable from the client; check `tesla.com/findus` directly outside the app |
-| No popup on tap (zooms instead) | Hit layer above visual layer was stripped by edit | `git diff web/layers.js` for `pf-points-hit`/`sc-points-hit`/`cg-points-hit`/`np-pts-hit`/`sp-pts-hit` |
+| No drawer on tap (zooms instead) | The transparent hit layer above the visual layer was stripped by an edit | `git diff frontend/src/map/overlays.ts` — every entry in `POINT_OVERLAYS` derives a `<id>-points-hit` layer, and the click handlers bind to those |
 | Geolocate dot doesn't appear | iOS denied permission silently | iOS Settings → Safari → Location → While Using App |
 | Campsite availability section errors | provider adapter down or misconfigured | Check the `/availability` Grafana dashboard / `availability_fetch_call` rows for the target provider |

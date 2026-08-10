@@ -37,11 +37,12 @@
 - **Phase 4d is merged** (#576), and so are the three P2 defects a later review of it found
   (#577) — read "Phase 4d follow-ups" before touching `AvailabilityWeek`, `DayDetail` or
   `useWatches`, because that fix reshaped all three.
-- **Phase 5 is COMPLETE**: the strangled `web/` app and the root `index.html` are
-  deleted (116 files), the parity suite and `@legacy/core` are retired, and
-  `docs/frontend-components.md` is rewritten for the React tree. What survives of `web/`
-  is `tokens.css`, its JS bridge, and the sandbox chrome — all three served at runtime.
-  **The migration is done**; read "Phase 5 — COMPLETE" for what stayed and why.
+- **Phase 5 is COMPLETE, and `web/` is gone entirely.** The strangled app and the root
+  `index.html` went first (116 files, #580), and a follow-up moved the three files that
+  had stayed — `tokens.css`, its JS bridge, and the sandbox chrome — into `frontend/`,
+  taking the `/web` mount, the flat catch-all and the `runtimeServedAssets` plugin with
+  them. **The migration is done**; read "Phase 5 — COMPLETE" and then "Finishing the job"
+  for what moved and why the served-not-bundled rationale did not hold up.
 - **Phase 4e is COMPLETE**, across `claude/react-migration-4e-topbar` (PR #578) and
   `claude/react-migration-4e-results` stacked on it: the pure layers, the route/corridor
   overlay and markers, the fetch hooks, the panel (search, directions, drag-reorder), the
@@ -50,10 +51,8 @@
   3's `<SettingsModal>`, the map's zoom/locate-me controls and the user-location puck, and
   the `window.__rt*` shim — which Phase 0 wrote and **nothing had ever installed**. Its own
   section below is the handoff.
-- **`/` is React.** `index.html` is in `migratedPages`, the `/preview/*` mount and its sandbox
-  flag are deleted, and `SmokeTest.kt` drives the React DOM. **Phase 5 — deleting `web/` — is
-  what's left**; read "What remains" in the 4e section for the two runtime dependencies that
-  have to move first.
+- **`/` is React.** `index.html` is in the page list, the `/preview/*` mount and its sandbox
+  flag are deleted, and `SmokeTest.kt` drives the React DOM.
 - **Browser coverage is real now.** `SmokeTest.kt` covers all three pages, and its seven map
   tests drive the React app: the cold load, the mobile layers sheet, the agency filter, two
   shared-link paths, the shared route, and route mode from the current location. It needs a live
@@ -1118,9 +1117,18 @@ tiles.
    transition seam, and the transition is over; the smoke could drive the same steps
    through the UI, at the cost of a slower and flakier suite. Worth a decision rather than
    a default — the shim is 60 lines and buys the suite deterministic access to trip state.
-2. **`@tokens` is the last legacy import**, and it survives on purpose: `tokens.css` is
-   served rather than bundled so a colour change needs no frontend build. Retiring it means
-   reconciling `--rt-*` with LDS's `--c-*`, which is a design decision, not a port.
+2. ~~**`@tokens` is the last legacy import**, and it survives on purpose~~ — **done, and
+   the reasoning above was wrong on both counts.** `tokens.css` moved into
+   `frontend/src/tokens/` and is bundled; `@tokens` is a plain tsconfig path now.
+   - The "no frontend build" property was **already gone**: LDS components read
+     `--c-*`/`--surface-*` from the bundled `theme-roadtrip`, whose values are baked hex
+     *copied* from tokens.css (`--c-600:#3B82F6;  /* --rt-brand */`). Editing tokens.css
+     alone never restyled an LDS component, so the property held only for `--rt-*`
+     consumers, and paying a runtime mount for it was not worth it.
+   - Retiring the alias did **not** require reconciling `--rt-*` with `--c-*`. That
+     reconciliation is still outstanding (see Token strategy) and is genuinely a design
+     decision — but it is orthogonal to where the file lives. Moving it kept both
+     vocabularies exactly as they were.
 3. **One design question, not a regression.** On desktop an open drawer covers the topbar
    (drawer `z-index: 999`, topbar 5). The vanilla did exactly the same above 768px, so it
    is a lift — but it matters more now that the topbar is the only search surface.
@@ -1133,14 +1141,17 @@ tiles.
 `upstream-html.js`), its seven `node:test` suites, and the vanilla design-system
 primitives with their gallery and docs — all of it unreachable once `/` became React.
 
-**Three things stayed, and they are not leftovers.** `web/design-system/tokens.css` is the
-colour source of truth and is **served rather than bundled**, so a token change takes
-effect without a frontend build; `tokens.js` is the `@tokens` bridge for the values
-`var()` cannot reach (MapLibre paint, canvas charts); and the two `sandbox-*` pairs are
-what let a reviewer pick a seed user on an auth-disabled sandbox. Every React page loads
-all three at runtime — `vite/runtime-served-assets.ts` injects them, and
-`runtime-served-assets.test.ts` pins the tag set so a later change cannot drop one
-silently.
+**Three things stayed, and a follow-up moved all three into `frontend/`.** As merged,
+`web/design-system/tokens.css` was the colour source of truth **served rather than
+bundled** so a token change needed no frontend build; `tokens.js` was the `@tokens`
+bridge for values `var()` cannot reach (MapLibre paint, canvas charts); and the two
+`sandbox-*` pairs are what let a reviewer pick a seed user on an auth-disabled sandbox.
+Every React page loaded all three at runtime, injected by
+`vite/runtime-served-assets.ts` with `runtime-served-assets.test.ts` pinning the tag set.
+
+They are now `src/tokens/tokens.{css,ts}` and `src/app/sandbox/`, bundled, with the
+`/web` mount and the plugin deleted — see "Finishing the job" below for why the
+served-not-bundled rationale did not survive contact with the LDS theme.
 
 **What the deletion touched beyond `web/`:**
 
@@ -1182,10 +1193,89 @@ colour check (7 legacy occurrences, down from 51), CSS-block check, the 24 survi
 remain unrunnable here — `:backend:generateJooq` needs Docker — so `StaticSiteRoutesTest`'s
 rewritten cases are CI's to confirm.
 
+## Finishing the job — `web/` is actually gone (follow-up to Phase 5)
+
+Phase 5 kept three files and the plumbing that served them. This removed all of it, so
+`frontend/` is the whole of the site and `data/` is the only other static tree.
+
+| Was | Is | Loaded by |
+|---|---|---|
+| `web/design-system/tokens.css` | `frontend/src/tokens/tokens.css` | `@import` in `src/ui/styles.css` |
+| `web/design-system/tokens.js` | `frontend/src/tokens/tokens.ts` (typed) | the `@tokens` alias, unchanged at ~9 call sites |
+| `web/sandbox-banner.{js,css}` | `frontend/src/app/sandbox/sandbox-banner.ts` + `sandbox.css` | `initSandboxChrome()` from `mountPage` |
+| `web/sandbox-user-switcher.{js,css}` | `frontend/src/app/sandbox/sandbox-user-switcher.ts` + `sandbox.css` | same |
+| `web/design-system/tokens-usage.test.mjs` | `scripts/check-token-usage.mjs` | `make test` and CI |
+| the `runtimeServedAssets` plugin, the `/web` mount, the flat catch-all | *(deleted)* | — |
+
+**The served-not-bundled rationale did not survive checking.** It was "a token change
+takes effect without a frontend build". That was already false for most of the UI: LDS
+components resolve `--c-*`/`--surface-*` from the bundled `theme-roadtrip`, and those are
+baked hex *copied out of* tokens.css — `--c-600:#3B82F6;  /* --rt-brand */`. Editing
+tokens.css alone restyled only the `--rt-*` consumers, never an LDS control, so the
+property being preserved was a fraction of the one advertised. Bundling also removed a
+papercut: `npm run dev` no longer needs the backend up to render styled, and an unstyled
+dev page is now a build problem rather than a missing proxy target.
+
+**`tokens.js` → `tokens.ts` reverses a Phase-0 decision, correctly.** Phase 0 refused to
+port it because "a TS copy would be a second source of truth for those colors and would
+itself trip the raw-hex check". Both halves were about it being a *copy*: this is a move,
+so there is still exactly one fallback table, and the checker exempts it by path — that
+entry already existed and only needed repointing. The hand-written `src/types/tokens.d.ts`
+is gone with it.
+
+**The sandbox chrome swapped a build-time guarantee for a structural one.** The plugin
+existed because Vite treats `<script type="module" src>` in an entry as a build input and
+*fails* on a path outside its root, so the tags could not live in the HTML — and a page
+that silently forgot the user switcher looks signed-out in every sandbox, which is
+indistinguishable from a real auth failure. `runtime-served-assets.test.ts` pinned the tag
+list for that reason. `mountPage` now calls `initSandboxChrome()`, so a page that mounts
+at all has the chrome, and `src/app/mount.test.tsx` pins that instead. Three deliberate
+changes came with the port: no import-time auto-init (the vanilla modules ran `initX()` on
+import, which is how a bundled unit test ends up making three network calls); the fetches
+go through the API layer (`src/api/sandbox-api.ts`, DTOs pinned against `BuildInfoDto` and
+`SandboxUserDto`); and the suites drive jsdom rather than a hand-rolled `doc` stub, which
+is why the banner test can now see the classes and the commit link it renders. The one
+seam kept is `renderUserSwitcher`'s `loc` parameter — `window.location.reload` is not
+stubbable in jsdom — and the cookie's `path=/` is captured with a setter spy on
+`Document.prototype.cookie`, since jsdom's getter reports only `name=value`.
+
+**The last `node --test` suite became the third guardrail script.**
+`tokens-usage.test.mjs` catches `var(--rt-typo)`, which resolves to nothing rather than
+erroring. It is `scripts/check-token-usage.mjs` now, beside `check-color-tokens.mjs` and
+`check-css-blocks.mjs` — a filesystem-walking repo check rather than a unit test — which
+is also what let the `node --test` step come out of CI entirely. **It scans more than it
+used to:** the suite walked `web/` only, so `frontend/src`'s stylesheets were never
+covered. Widening it to 241 files surfaced five component-local properties at once
+(`--rt-site-column-width`, `--rt-site-dates-width`, `--rt-site-matrix-viewport-width`,
+`--rt-watch-editor-width`, `--rt-watch-editor-mobile-margin`). Each was checked to be
+declared or assigned rather than misspelled — three are set from React inline styles in
+`SiteMatrix.tsx` and read behind a fallback, which is exactly the case where a typo would
+have rendered as the fallback forever — and they are allowlisted by name.
+
+**The flat catch-all is deleted, which is a behaviour change.** Phase 5 kept it "because
+the root is a real directory a deploy can drop a file into". That cuts the other way:
+`staticDir` is `/app/static` in a container but the **checkout itself** on a host, where
+it answered `/README.md`, `/Makefile` and `/gradlew`. Nothing needed it — every page is
+explicit and `/assets`/`/data` have their own mounts — so the exposure bought nothing. Its
+absence is pinned by a test, and `/preview/map` moved from 403 to 404 as a result.
+
+**A test-only trap worth keeping in mind:** Ktor answers **403**, not 404, when a
+`staticFiles` mount matches a path and its `exclude` rejects it. `/data/raw/*` is a 403;
+paths with no mount at all are 404s. Asserting 404 for the former cost a CI round trip.
+
+**Two seams still stay**, because what decides it is whether the *other* end is alive:
+the `window.__rt*` shim (`SmokeTest.kt` reads five of those globals) and the `roadtrip:*`
+event bridge (three React hooks call `notifyLegacyWatchesChanged`, and the bridge is what
+turns that into cross-feature invalidation — nothing else invalidates the watches cache
+across features). Both now say so at their definition instead of promising Phase 5 would
+delete them. `escapeHtml` was the counter-example: `git log -S` finds no non-test importer
+in `frontend/src` at any point, so it went, and `lib/html.ts` — left holding only phone
+helpers — became `lib/phone.ts`.
+
 ## Serving (DONE)
 
-Every page is served from the React build; `web/` and `data/` remain mounted for the
-assets a React page loads at runtime. The pieces:
+Every page is served from the React build, and `data/` is the only other static tree
+mounted. The pieces:
 
 - **`StaticSiteRoutes.kt`** takes a `frontendDir` alongside `staticDir` and registers
   `/assets/*` (the hashed bundles — the flat catch-all deliberately refuses

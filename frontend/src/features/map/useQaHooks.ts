@@ -11,8 +11,9 @@
 //
 // It lives here rather than in `stores/transition-shim.ts` because it is not a
 // transition artifact: the vanilla globals it mirrors are a TEST seam, and the
-// smoke keeps needing them after `web/` is deleted. The shim goes in Phase 5;
-// this stays until the smoke grows a better handle.
+// smoke still needs them now that `web/` is deleted. The shim turned out to be the
+// same case and also survived Phase 5 — both stay until the smoke grows a better
+// handle.
 //
 // Two deliberate differences from the vanilla `state` object, both because this
 // publishes a view of React state rather than the mutable singleton itself:

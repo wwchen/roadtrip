@@ -5,13 +5,16 @@
    cannot resolve `var(--rt-*)` — they need a concrete color at call
    time. This module is the only sanctioned way to get one.
 
-   `tokens.css` stays the single source of truth: every value here is
-   read from the live computed style of the document root, so a theme
-   that redefines a token is picked up by the map and the charts too,
-   with no duplicated palette to keep in sync.
+   `tokens.css` next to this file stays the single source of truth:
+   every value here is read from the live computed style of the
+   document root, so a theme that redefines a token is picked up by
+   the map and the charts too, with no duplicated palette to keep in
+   sync. `scripts/check-color-tokens.mjs` verifies that every fallback
+   key below names a token `tokens.css` actually defines, which is why
+   this file is the one module in `src/` allowed to hold raw hex.
 
    Usage:
-     import { token, LAYER_COLOR, SERIES } from '/web/design-system/tokens.js';
+     import { token } from '@tokens';
      paint: { 'circle-color': token('--rt-layer-np') }
 
    Values are memoized after first read (getComputedStyle is not free,
@@ -22,7 +25,7 @@
 /** Fallbacks, used only when the stylesheet has not loaded yet (early
  *  boot, unit tests in jsdom without CSS). Keep in sync with tokens.css;
  *  `scripts/check-color-tokens.mjs` verifies every key resolves there. */
-const FALLBACKS = {
+const FALLBACKS: Readonly<Record<string, string>> = {
   '--rt-text': '#e8eaed',
   '--rt-muted': '#9aa0a8',
   '--rt-faint': '#626770',
@@ -69,37 +72,41 @@ const FALLBACKS = {
   '--rt-series-9': '#8549ba',
 };
 
-const cache = new Map();
+/** The token every unknown name falls back to, so a typo is grey rather than
+ *  an empty paint property MapLibre would reject. */
+const UNKNOWN_TOKEN_FALLBACK = '--rt-muted';
+
+const cache = new Map<string, string>();
 
 /**
  * Resolve a design token to a concrete color string.
- * @param {string} name  Custom property name, e.g. '--rt-layer-np'.
- * @returns {string}
+ *
+ * @param name Custom property name, e.g. `'--rt-layer-np'`.
  */
-export function token(name) {
-  if (cache.has(name)) return cache.get(name);
+export function token(name: string): string {
+  const cached = cache.get(name);
+  if (cached !== undefined) return cached;
+
   let value = '';
   if (typeof document !== 'undefined' && document.documentElement) {
-    value = getComputedStyle(document.documentElement)
-      .getPropertyValue(name)
-      .trim();
+    value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
-  if (!value) value = FALLBACKS[name] || '';
+  if (!value) value = FALLBACKS[name] ?? '';
   if (!value) {
     console.warn(`[tokens] unknown design token ${name}`);
-    value = FALLBACKS['--rt-muted'];
+    value = FALLBACKS[UNKNOWN_TOKEN_FALLBACK]!;
   }
   cache.set(name, value);
   return value;
 }
 
 /** Drop memoized values. Call after swapping themes at runtime. */
-export function resetTokenCache() {
+export function resetTokenCache(): void {
   cache.clear();
 }
 
-/** Search-result kind → pin color. */
-export const KIND_TOKEN = {
+/** Search-result kind → pin color token name. */
+export const KIND_TOKEN: Readonly<Record<'PLACE' | 'ADDR' | 'CG' | 'SC' | 'NP' | 'SP' | 'PF', string>> = {
   PLACE: '--rt-kind-place',
   ADDR: '--rt-kind-address',
   CG: '--rt-layer-cg',
@@ -112,7 +119,7 @@ export const KIND_TOKEN = {
 /** Number of categorical chart series before the ramp wraps. */
 export const SERIES_COUNT = 9;
 
-/** Categorical chart color for series `i` (wraps past SERIES_COUNT). */
-export function seriesColor(i) {
+/** Categorical chart color for series `i` (wraps past `SERIES_COUNT`). */
+export function seriesColor(i: number): string {
   return token(`--rt-series-${(i % SERIES_COUNT) + 1}`);
 }

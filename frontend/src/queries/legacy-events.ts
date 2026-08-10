@@ -1,22 +1,28 @@
-// Bridges the legacy `roadtrip:*` CustomEvent bus onto query invalidation.
+// Bridges the `roadtrip:*` CustomEvent bus onto query invalidation.
 //
-// TRANSITION ONLY. While vanilla and React coexist, a still-vanilla module can
-// mutate data the React side is displaying — signing in from the vanilla topbar
-// changes which watches the React watches page should show. These listeners turn
-// each legacy event into the invalidation it was always standing in for, so a
-// migrated page stays correct without the vanilla side knowing React exists.
+// Written as a transition seam: while vanilla and React coexisted, a still-vanilla
+// module could mutate data the React side was displaying — signing in from the
+// vanilla topbar changes which watches the React watches page should show. These
+// listeners turned each legacy event into the invalidation it was always standing
+// in for, so a migrated page stayed correct without the vanilla side knowing React
+// existed.
 //
-// Phase 5 deletes web/ and with it these events; drop this module then. Until
-// then, event names must match web/availability/{auth,watch}-events.js exactly —
-// they are duplicated rather than imported because those modules also carry
-// dispatch helpers that the React side must not use.
+// **Phase 5 deleted `web/`, and this outlived it on purpose.** The vanilla end is
+// gone, so the bus is now React talking to itself — but it is doing real work while
+// it does: three hooks (`features/{alerts,watches,availability}`) call
+// `notifyLegacyWatchesChanged` after a mutation, and the listener below is what
+// turns that into the cross-feature invalidation. Deleting the bridge means
+// replacing each of those calls with a direct `invalidateQueries` on the same keys,
+// which is a refactor of three hooks rather than part of removing the vanilla tree.
+// Until then this is load-bearing, not vestigial: nothing else invalidates the
+// watches cache across features.
 import type { QueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/stores/authStore';
 import { queryKeys } from './keys';
 
-/** Mirrors AUTH_CHANGED_EVENT in web/availability/auth-events.js. */
+/** Was AUTH_CHANGED_EVENT in web/availability/auth-events.js. */
 export const AUTH_CHANGED_EVENT = 'roadtrip:auth-changed';
-/** Mirrors WATCHES_CHANGED_EVENT in web/availability/watch-events.js. */
+/** Was WATCHES_CHANGED_EVENT in web/availability/watch-events.js. */
 export const WATCHES_CHANGED_EVENT = 'roadtrip:watches-changed';
 
 /**
