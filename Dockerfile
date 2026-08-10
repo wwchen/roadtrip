@@ -31,7 +31,6 @@ FROM node:22-alpine AS frontend
 WORKDIR /src/frontend
 
 COPY frontend/package.json frontend/package-lock.json ./
-COPY frontend/vendor ./vendor
 RUN npm ci --no-audit --no-fund
 
 COPY frontend/ ./
