@@ -1,7 +1,7 @@
 # Frontend Component Architecture
 
 The frontend is **React + TypeScript in `frontend/`**, built by Vite, with components
-from the vendored LDS design system behind `@ui`. **`web/` is gone entirely** — Phase 5
+from the npm-published LDS design system behind `@ui`. **`web/` is gone entirely** — Phase 5
 deleted the vanilla app, and the three files it left behind (the colour tokens, their JS
 bridge, and the sandbox chrome) have since moved into this tree.
 
@@ -15,8 +15,8 @@ short version: where a component goes and what it may import.
 `frontend/src/ui/index.ts` re-exports every LDS component the app uses, plus the few
 corrections and local additions (`SeededTextField`, `ConfirmButton`, `SecretField`). If a
 component covers what you need, compose it rather than writing page-specific markup or
-CSS. The vendored source is `frontend/vendor/lds*/` — read it when a prop's behaviour is
-unclear, because the types are occasionally narrower than the runtime.
+CSS. The installed source is under `frontend/node_modules/@lew-ds/` — read it when a prop's
+behaviour is unclear, because the types are occasionally narrower than the runtime.
 
 There is no living gallery any more; `web/design-system/gallery.html` went with the
 vanilla primitives it demonstrated. LDS's own source is the catalog, and an LDS-backed
@@ -66,7 +66,7 @@ compose multiple features to exercise a page, but production composition belongs
 | `frontend/src/queries/` | query keys and cache invalidation |
 | `frontend/src/stores/` | Zustand stores for cross-surface UI state |
 | `frontend/src/lib/` | pure helpers shared across features |
-| `frontend/src/ui/` | the `@ui` barrel over vendored LDS |
+| `frontend/src/ui/` | the `@ui` barrel over npm-published LDS |
 
 Pure logic belongs in its own module beside the component that uses it — the ordering
 rules, the copy, the state machine — because that is the half worth testing directly.
