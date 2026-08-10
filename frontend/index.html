@@ -11,15 +11,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <!-- theme-color is read by browser chrome before any stylesheet loads, so it
-     cannot be a token reference. Mirrors --rt-surface, which the roadtrip-zion
-     bridge points at var(--surface-raised) — white in light. -->
+     cannot be a token reference. Mirrors --rt-surface. -->
 <meta name="theme-color" content="#ffffff">
 <title>Roadtrip</title>
-<!-- Bricolage Grotesque (display + ui) and Schibsted Grotesk (body/metadata) —
-     the roadtrip-zion direction's type pair. Loaded here, not bundled, same as
-     Claude Design's own export; @font-face can't live in an @imported CSS
-     module reliably across bundlers, and self-hosting is a fine follow-up but
-     out of scope for the Phase-1 token swap. -->
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap">
 <!-- Nothing else belongs here. The `--rt-*` tokens are bundled through
