@@ -168,6 +168,20 @@ docker_build(
     only=[
         'Dockerfile',
         'backend/build/libs',
+        # The Dockerfile's `frontend` stage builds frontend/dist from source
+        # (COPY --from=frontend, needed even though target=backend, since
+        # that COPY makes the frontend stage a build dependency). Mirror
+        # frontend-dist's own deps list above so the build context actually
+        # contains what the Dockerfile COPYs.
+        'frontend/package.json',
+        'frontend/package-lock.json',
+        'frontend/vendor',
+        'frontend/src',
+        'frontend/index.html',
+        'frontend/availability.html',
+        'frontend/watches.html',
+        'frontend/vite.config.ts',
+        'frontend/tsconfig.json',
     ],
 )
 
