@@ -18,8 +18,8 @@ buildscript {
     repositories { mavenCentral() }
     dependencies {
         classpath("org.testcontainers:postgresql:1.21.4")
-        classpath("org.flywaydb:flyway-core:10.20.1")
-        classpath("org.flywaydb:flyway-database-postgresql:10.20.1")
+        classpath("org.flywaydb:flyway-core:13.2.0")
+        classpath("org.flywaydb:flyway-database-postgresql:13.2.0")
         classpath("org.postgresql:postgresql:42.7.13")
     }
 }
@@ -29,10 +29,10 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("io.ktor.plugin") version "3.5.2"
-    id("org.flywaydb.flyway") version "10.20.1"
+    id("org.flywaydb.flyway") version "13.2.0"
     id("nu.studer.jooq") version "10.2.1"
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
-    id("dev.detekt") version "2.0.0-alpha.5"
+    id("dev.detekt") version "2.0.0-alpha.6"
     // Line/branch coverage. `./gradlew :backend:koverXmlReport` produces the XML the
     // CI job uploads to Codecov.
     id("org.jetbrains.kotlinx.kover") version "0.9.9"
@@ -47,7 +47,7 @@ ktlint {
 }
 
 detekt {
-    toolVersion = "2.0.0-alpha.5"
+    toolVersion = "2.0.0-alpha.6"
     config.setFrom(rootProject.file("config/detekt/detekt.yml"))
     buildUponDefaultConfig = false
 }
@@ -86,9 +86,9 @@ repositories {
 }
 
 val ktorVersion = "3.5.2"
-val jooqVersion = "3.21.6"
+val jooqVersion = "3.21.7"
 val postgresVersion = "42.7.13"
-val flywayVersion = "10.20.1"
+val flywayVersion = "13.2.0"
 val testcontainersVersion = "1.21.4"
 val bucket4jVersion = "8.10.1"
 val timeshapeVersion = "2026b.29"
@@ -96,7 +96,7 @@ val resendVersion = "4.13.0"
 val nimbusJoseVersion = "10.9.1"
 val junitVersion = "5.11.3"
 val koinVersion = "4.2.2"
-val playwrightVersion = "1.61.0"
+val playwrightVersion = "1.62.0"
 val backendImageName = "roadtrip/backend"
 val backendPort = 8765
 

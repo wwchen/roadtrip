@@ -28,7 +28,7 @@ jobs:
     steps:
       - name: Resolve PR head SHA
         id: pr
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const { data: pr } = await github.rest.pulls.get({
@@ -69,7 +69,7 @@ jobs:
       - name: Init status comment
         id: status
         if: steps.cmd.outputs.action == 'up' || steps.cmd.outputs.action == 'stop'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           ACTION: ${{ steps.cmd.outputs.action }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
@@ -106,7 +106,7 @@ jobs:
 
       - name: Post unknown-command comment
         if: steps.cmd.outputs.action == 'unknown'
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             await github.rest.issues.createComment({
@@ -193,7 +193,7 @@ jobs:
 
       - name: Status deploying
         if: (steps.cmd.outputs.action == 'up' || steps.cmd.outputs.action == 'stop') && steps.status.outputs.comment_id != ''
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           ACTION: ${{ steps.cmd.outputs.action }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
@@ -259,7 +259,7 @@ jobs:
 
       - name: Status live
         if: steps.cmd.outputs.action == 'up' && steps.status.outputs.comment_id != ''
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           SANDBOX_TUNNEL_ZONE: ${{ vars.SANDBOX_TUNNEL_ZONE || 'floo.ca' }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
@@ -286,7 +286,7 @@ jobs:
 
       - name: Status stopped
         if: steps.cmd.outputs.action == 'stop' && steps.status.outputs.comment_id != ''
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -305,7 +305,7 @@ jobs:
 
       - name: Status failed
         if: failure() && (steps.cmd.outputs.action == 'up' || steps.cmd.outputs.action == 'stop')
-        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           ACTION: ${{ steps.cmd.outputs.action }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
