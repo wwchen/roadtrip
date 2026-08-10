@@ -1,0 +1,55 @@
+/* ============================================================
+   roadtrip-zion.bridge — makes legacy --rt-* reads agree with LDS.
+
+   Every roadtrip component still reads `tokens.css`'s `--rt-*` semantic
+   roles (that file's own header calls this "the one rule": raw colours
+   live only there). Adopting LDS does not rewrite those components in one
+   pass, so this file keeps the two vocabularies pointed at the same
+   values for as long as both are on the page.
+
+   Direction: LDS role -> --rt-* alias. `roadtrip-zion.css` is the side
+   that actually sets `--c-*` / `--gray-*` / `--surface-*`; this file does
+   not introduce new values, it just makes the OLD names resolve to the
+   SAME values so a component migrated to `--surface-raised` and one still
+   on `--rt-surface` render identically.
+
+   Load order: tokens.css, then roadtrip-zion.css, then this file, then
+   any LDS component CSS. Scoped to the same selector as the theme so it
+   only takes effect where the theme is active.
+
+   This file is scaffolding for the migration, not a permanent layer.
+   Once a page's CSS reads LDS roles directly, delete its need for the
+   aliases below rather than adding to them. */
+.theme-roadtrip-zion{
+  /* Neutrals — surfaces */
+  --rt-bg-base:     var(--surface-page);
+  --rt-bg:           var(--surface-sunken);
+  --rt-bg-sunken:   var(--surface-base);
+  --rt-surface:     var(--surface-raised);
+  --rt-surface-raised: var(--surface-overlay);
+
+  /* Text */
+  --rt-text:  var(--gray-100);
+  --rt-muted: var(--gray-400);
+  --rt-faint: var(--gray-600);
+  --rt-reserved: var(--gray-600);
+
+  /* Interactive / brand */
+  --rt-brand:       var(--c-600);
+  --rt-brand-hover: var(--c-700);
+  --rt-brand-press: var(--c-800);
+  --rt-brand-text:  var(--c-500);
+
+  /* Radii */
+  --rt-r-sm:  var(--radius-sm);
+  --rt-r-md:  var(--radius-base);
+  --rt-r-lg:  var(--radius-lg);
+  --rt-r-xl:  var(--radius-xl);
+  --rt-r-2xl: 18px; /* no LDS role at this step; kept literal */
+  --rt-r-pill: var(--radius-pill);
+
+  /* Elevation */
+  --rt-e1: var(--shadow-sm);
+  --rt-e2: var(--shadow-base);
+  --rt-e3: var(--shadow-lg);
+}

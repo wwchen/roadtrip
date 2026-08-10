@@ -1,0 +1,2214 @@
+/* ==========================================================================
+   Theme faces, self-hosted. Core carries them because core now ships a working
+   brand: a file that names a face it does not carry renders differently
+   depending on whether the consumer happened to add the same <link>.
+
+   Ronzino and Coconat — Collletttivo, SIL OFL. Martian Mono — Evil Martians,
+   SIL OFL, variable on wdth + wght; three static instances because the mono
+   role uses three weights and the role does not need the axes.
+   See dist/fonts/ for the licences.
+   ========================================================================== */
+@font-face{font-family:'Ronzino';font-style:normal;font-weight:400;font-display:swap;
+  src:url('fonts/Ronzino-Regular.woff2') format('woff2');}
+@font-face{font-family:'Ronzino';font-style:normal;font-weight:500;font-display:swap;
+  src:url('fonts/Ronzino-Medium.woff2') format('woff2');}
+@font-face{font-family:'Ronzino';font-style:normal;font-weight:700;font-display:swap;
+  src:url('fonts/Ronzino-Bold.woff2') format('woff2');}
+@font-face{font-family:'Coconat';font-style:normal;font-weight:400;font-display:swap;
+  src:url('fonts/Coconat-Regular.woff2') format('woff2');}
+@font-face{font-family:'Coconat';font-style:normal;font-weight:600;font-display:swap;
+  src:url('fonts/Coconat-Demi.woff2') format('woff2');}
+@font-face{font-family:'Coconat';font-style:normal;font-weight:700;font-display:swap;
+  src:url('fonts/Coconat-Bold.woff2') format('woff2');}
+@font-face{font-family:'Martian Mono';font-style:normal;font-weight:400;font-display:swap;
+  src:url('fonts/MartianMono-Regular.woff2') format('woff2');}
+@font-face{font-family:'Martian Mono';font-style:normal;font-weight:500;font-display:swap;
+  src:url('fonts/MartianMono-Medium.woff2') format('woff2');}
+@font-face{font-family:'Martian Mono';font-style:normal;font-weight:600;font-display:swap;
+  src:url('fonts/MartianMono-SemiBold.woff2') format('woff2');}
+
+/* ==========================================================================
+   Lew Design System (LDS) — core
+   Layer 1: primitives · Layer 2: semantics (One Token) · Layer 3: components
+   Themes (Layer 4) define: --c-* brand scale, --th-*, --radius*, shadows,
+   density, --icon-size/--icon-weight. This file never hardcodes a hex.
+   ========================================================================== */
+
+:root{
+  /* ---- Layer 1: primitives ---- */
+  /* Neutrals: the previous grey lightnesses exactly, hue rotated ALONG the ramp
+     — 105 at the paper end to 150 at the ink end, on a chroma arc that dips
+     through the mids and rises at the bottom. Oat is a yellow-green paper and
+     the ink is a green-black, and they are not the same hue: one fixed hue
+     gives you a neutral ink under warm paper, or a yellow-green ink. Measured
+     drift against the old ramp: max 0.32 Lc across all eleven steps. The
+     hierarchy is unchanged; only its temperature is. */
+  --grey-50:#FAF9EA;  --grey-100:#F2F1E1; --grey-200:#E3E4D2; --grey-300:#CACCBB;
+  --grey-400:#ACAFA1; --grey-500:#888B80; --grey-600:#696D64; --grey-700:#4B5047;
+  --grey-800:#2E362B; --grey-900:#151F14; --grey-950:#061108;
+
+  /* ---- the default brand ramp ----
+     Core shipped no --c-* ramp, which meant .emph-subtle, .emph-soft,
+     .emph-strong and every status tint resolved to nothing until a theme
+     mounted. "Core never hardcodes a hex" was protecting the wrong boundary: it
+     kept core theme-agnostic by keeping it non-functional. Themes still replace
+     all of it — the difference is that replacing it is an override rather than a
+     prerequisite.
+
+     Green at OKLCH hue 150, the ink's own hue, each step's lightness solved
+     until its measured APCA hits a fixed target. The accent is the ink with the
+     chroma raised, so an accented word reads as the same voice louder rather
+     than as a different voice interrupting. */
+  --c-50:#D5ECD8;  --c-100:#C2E5C8; --c-200:#8FC99A; --c-300:#61AE73;
+  --c-400:#3C9656; --c-500:#1A803E; --c-600:#00662B; --c-700:#004F1D;
+  --c-800:#003A12; --c-900:#002008; --c-950:#000501;
+
+  /* ---- the link: a role, not an emphasis level ----
+     A link is text with behaviour, and One Token has seven object-colour roles
+     and none of them mean that — so themes were painting links with
+     --text-accent, which reads backwards both ways: every accented word looks
+     clickable and every link looks like emphasis.
+
+     It is a role and not a theme knob because the fallback has to be safe. A
+     consumer shipping a theme with no --link still renders links, and before
+     this they rendered browser blue on whatever ground the theme chose — the one
+     colour in the document nobody measured.
+
+     Two values, because a link lands on both grounds and one hue cannot clear
+     the body floor on both. --link-dark is not a dark-mode variant; it is the
+     same role solved against the other ground. Colour ALWAYS travels with an
+     underline: the distinction has to survive greyscale print and red-green
+     colour blindness, which — the accent being green — is the whole of it. */
+  --link:#00437C;
+  --link-dark:#AADDFF;
+
+  /* ---- the CTA: an object, not a sixth emphasis level ----
+     One value, not a ramp. It is a highlighter; build eleven steps of it and you
+     have a second brand hue, with two colours competing to mean "act on this".
+     It sits outside the ladder on purpose — subtle → soft → strong → stark is a
+     scale of loudness and every step retints with the brand hue, and the CTA
+     does neither. It is shaped like an emphasis class so it composes with the
+     same components, and that is the whole of the resemblance.
+
+     In core rather than in a theme because a theme could not finish the job:
+     components paint from an explicit emphasis list, so every theme wanting a
+     CTA had to hand-write the .lds-btn opt-in. Written once, here. */
+  --cta:#E0E9B4;
+  --cta-text:var(--grey-900);
+  --cta-hover:#D6E19E;
+  --cta-pressed:#C8D586;
+
+  /* ---- the grain ----
+     Luminance-neutral: mid-grey noise under `overlay` is a no-op on average
+     lightness, so every measured pair in the system stays true underneath it.
+     A token rather than a page rule because it was pasted by hand into
+     index.html and about.html, and a surface treatment that has to be re-pasted
+     per page is not part of the system. The consumer still owns the element it
+     paints on; core supplies the image and the opacity. */
+  --grain:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+  --grain-opacity:.4;
+
+  /* ---- breakpoints ----
+     READ THIS BEFORE USING THEM: a custom property CANNOT be read inside a
+     media query. `@media (min-width: var(--bp-md))` does not fail loudly, it
+     fails silently — the whole block is dropped. These tokens exist so that
+     JS (matchMedia, ResizeObserver), container queries, and clamp()/calc()
+     read the same numbers the stylesheet does, and so the numbers have names.
+     The @media rules below still spell the value; the token is the record of
+     what that value MEANS.
+
+     Four widths, chosen by what the layout has to do rather than by device:
+       --bp-sm   one column, thumb reach, no persistent chrome
+       --bp-md   two columns fit, or a rail plus content
+       --bp-lg   a persistent sidebar stops costing content width
+       --bp-xl   line length, not space, becomes the constraint
+
+     min-width-first, always. The 767/768 style off-by-one only exists when a
+     max-width query and a min-width query try to describe the same boundary
+     from both sides; one of them is always wrong by a pixel, and fractional
+     viewport widths (browser zoom, Windows scaling) land in the crack. Write
+     the base rule for small and add capability upward — then there is one
+     number per boundary and no gap to fall into. */
+  --bp-sm:480px;
+  --bp-md:768px;
+  --bp-lg:1024px;
+  --bp-xl:1440px;
+
+  /* ---- the height breakpoint, which is the one people forget ----
+     A phone in landscape is ~740-930px WIDE and ~380-430px TALL. Every
+     width-only breakpoint files it as a tablet and hands it a tablet layout
+     with a tablet's assumptions about vertical room — and that is where
+     centred modals, bottom sheets, sticky headers and full-height drawers
+     break, because the thing that ran out was height and nothing measured it.
+
+     So: width decides the COLUMN COUNT, height decides whether anything may
+     assume vertical room. Any component that fills or centres vertically pairs
+     its width query with `(max-height:520px)`. 520 clears the tallest phone
+     landscape (932x430 on a Pro Max) with room, and no tablet in portrait or
+     landscape is under it. */
+  --bp-short:520px;
+
+  --space-0:0;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;
+  --space-5:20px;--space-6:24px;--space-7:32px;--space-8:40px;
+
+  --size-0:11px;--size-1:12px;--size-2:13px;--size-3:14px;--size-4:16px;
+  --size-5:19px;--size-6:24px;--size-7:32px;--size-8:44px;
+
+  --weight-regular:400;--weight-medium:500;--weight-semibold:600;--weight-bold:700;
+  --ease-standard:cubic-bezier(.2,.8,.2,1);--dur-fast:120ms;--dur-base:180ms;
+  /* --dur-slow + --ease-decelerate cover the large-object case: sheets, drawers
+     and view-transition groups, where the standard 180ms ease lands too abrupt.
+     Contributed up from palette, which drives every view-transition group off
+     this pair — mismatched easing between a resizing card and a sliding sheet
+     reads as jank even at full frame rate. */
+  --dur-slow:320ms;--ease-decelerate:cubic-bezier(.22,1,.36,1);
+
+  /* ---- Brand Expression Levers ---- */
+  /* typography primitives */
+  --tracking-tighter: -0.04em; --tracking-tight: -0.02em; --tracking-normal: 0em; 
+  --tracking-wide: 0.02em; --tracking-wider: 0.04em; --tracking-widest: 0.08em;
+  
+  /* --leading-relaxed closes the widest gap in the ladder. 1 / 1.15 / 1.4 / 1.6
+     steps by 15%, 22%, 14% — and then nothing between 1.4 and 1.6, which is
+     where every body measure narrower than about 55ch actually wants to sit.
+     1.6 was solved for a 62ch paragraph; in a 34ch column the lines are short
+     enough that the same leading reads as gaps rather than as rhythm. */
+  --leading-none: 1; --leading-tight: 1.15; --leading-normal: 1.4;
+  --leading-relaxed: 1.475; --leading-loose: 1.6;
+
+  /* Four font roles. --th-ui is the CONTROL role: anything interactive or
+     chrome — buttons, tags, chips, field labels and inputs, nav links. It
+     exists because --th-body may legitimately be a serif (an editorial theme),
+     and a serif is wrong on a button label — a control is chrome, not prose.
+     Defaults to --th-display so a theme gets sans controls without opting in;
+     override --th-ui alone to decouple them.
+
+     The test: would you read it, or click it? Prose keeps --th-body, and only
+     four rules still take it — card__body, card__meta, banner, modal__body.
+
+     Declare --th-ui in the THEME, not once at :root. See decisions.md. */
+  --th-display:'Coconat','Iowan Old Style',Georgia,serif;
+  --th-body:'Ronzino','Helvetica Neue',system-ui,sans-serif;
+  --th-ui:var(--th-body);
+  --th-mono:'Martian Mono',ui-monospace,'SF Mono','SFMono-Regular',
+            'Cascadia Mono','Roboto Mono','Liberation Mono',Menlo,Consolas,monospace;
+
+  /* ---- the mono role's face corrections ----
+     A mono set at --text-meta beside the body sans at --text-meta reads heavier,
+     and the reason is not the stroke: "same font-size" means same em box, and
+     two faces put different amounts of letter inside one. The mono's x-height
+     fills more of its em, so at 12px it is optically the larger of the two and
+     it wins an argument it was never meant to enter — metadata outshouting the
+     prose it annotates.
+
+     The fix is font-size-adjust, not a smaller literal. --mono-adjust holds ONE
+     number: the x-height-to-em ratio of --th-body. The browser then scales
+     whatever face --th-mono names until its x-height matches, so the correction
+     survives a face swap — change --th-mono and the balance holds with nobody
+     re-tuning a size. A hand-picked 0.9 multiplier would be correct for exactly
+     one typeface. The number belongs to --th-body and has to travel with it:
+     font-size-adjust cannot read another family's metrics.
+
+     --mono-tracking is a judgement, not a measurement. A monospace is
+     letterspaced by construction; --tracking-widest on top of a face that sets
+     ~18% wider than the sans produces a label that takes a whole column to say
+     one word. --mono-weight drops labels from bold to medium: with x-heights
+     matched, the bold was carrying a size mismatch that no longer exists.
+
+     Needs Chrome 127 / Safari 16.4. Below that the mono renders uncorrected,
+     which is the previous behaviour — it degrades to before, not to broken. */
+  --mono-adjust:   0.53;
+  --mono-tracking: 0.03em;
+  --mono-weight:   var(--weight-medium);
+
+  /* ---- the highlight's own box (see .lds-mark) ----
+     Height and offset in em, so the painted box is a function of the FONT SIZE
+     and never of the line-height. Percentages resolve against the inline
+     fragment's content area, which the face's metrics set at roughly 1.25em —
+     taller than a tight line box, which is precisely the bug this replaces.
+     Vertical padding is zero for the same reason: inline padding paints outside
+     the line box and cannot be contained. */
+  --mark-height: 0.92em;
+  --mark-offset: 0.14em;
+  
+  /* type composites (size, leading, tracking) */
+  /* Two of these four are literals rather than scale steps, and that is
+     deliberate: the scale describes headings and captions, and body and subhead
+     are set where the faces actually work.
+
+     --text-body 18px. The grotesque carries 18 without looking set for a child,
+     and every control on the showcase was independently pushed to 18 by hand —
+     body and control agreeing is the argument. An --size-4-5 step was the
+     alternative and is worse: a step that serves one role is not a scale.
+
+     --text-subhead 28px. 24 was a section subhead and too quiet for a card
+     title, which is the role's only remaining consumer now that subdued ledes
+     take body size. 28 on --leading-tight resolves to 32px, so the pair needed
+     no second edit.
+
+     --text-caption 14px, and it means small PROSE only. It was carrying prose
+     and machine metadata at once; 12px is right for a counter and too small for
+     a sentence. Metadata moved to --text-meta, which keeps 12.
+
+     --tracking-subhead is 0. Negative tracking is a display correction — it
+     exists because letterfit that is right at 18px opens up at 44px. At 24-28px
+     the body sans is still inside its text range and -0.02em closes the
+     counters. Title keeps its negative value, where the correction earns. */
+  --text-caption: var(--size-3); --leading-caption: var(--leading-normal);   --tracking-caption: var(--tracking-normal);
+  --text-body:    18px;          --leading-body:    var(--leading-relaxed);  --tracking-body:    0.006em;
+  --text-subhead: 28px;          --leading-subhead: var(--leading-tight);    --tracking-subhead: var(--tracking-normal);
+  --text-title:   var(--size-8); --leading-title:   var(--leading-none);     --tracking-title:   var(--tracking-tight);
+
+  /* ---- HERO: the role two pages were hand-rolling ----
+     --text-title is a section title, and a page with one h1 needs something
+     louder than one — index.html and about.html each carried their own .display
+     rule with a literal clamp and a leading override. A role two pages
+     reimplement identically is a missing role.
+
+     Fluid, because a hero is the one place where the size is a function of the
+     viewport rather than of the scale: at 44px it is a heading, at 72px it is
+     the page. The scale steps stay fixed; only this role interpolates.
+
+     Leading is 1.1, a literal. An earlier attempt shipped a --leading-negative
+     primitive at 0.95; it survived a two-line hero and closed up on a
+     three-line one, and it had exactly one consumer. See decisions.md. */
+  --text-hero:     clamp(var(--size-8), 7vw, 72px);
+  --leading-hero:  1.1;
+  --tracking-hero: var(--tracking-tight);
+  --weight-hero:   var(--weight-regular);
+
+  /* ---- LABEL: a section eyebrow is not metadata ----
+     "Set metadata in mono" was taken by the eyebrows, which put a phrase naming
+     a section in uppercase mono beside a counter in uppercase mono, as though
+     prose and machine output were the same object. Mono keeps dates, tokens,
+     numbers, hex and counters. A label takes the sans — on --th-ui rather than
+     --th-body, for the reason --th-ui exists: an eyebrow is chrome, not prose.
+     Sentence case, like the headings.
+
+     Two scales, because the role names a SECTION (19px, beside a 44px title)
+     and a COMPONENT (14px card kicker, panel heading), and one size cannot do
+     both — 19px on a kicker competes with the card's own title.
+
+     The small one is its own composite, not a smaller copy. At 19px beside a
+     title, position and subdued ink separate a label from prose on their own; at
+     14px directly above a card title in the same family they do not, so it takes
+     a medium weight and a hair of tracking. 0.014em is a literal because the
+     smallest positive primitive (0.02em) reads as letterspacing at 14px. */
+  --text-label:        var(--size-5);
+  --leading-label:     var(--leading-tight);
+  --tracking-label:    var(--tracking-normal);
+  --weight-label:      var(--weight-regular);
+  --text-label-sm:     var(--size-3);
+  --weight-label-sm:   var(--weight-medium);
+  --tracking-label-sm: 0.014em;
+
+  /* ---- META: machine output. Counters, dates, tokens, hex, measurements. ---- */
+  --text-meta:     var(--size-1);
+  --leading-meta:  var(--leading-normal);
+  --tracking-meta: var(--mono-tracking);
+  --weight-meta:   var(--mono-weight);
+
+  /* ---- radius + corner shape ----
+     The scale was 4/8/12/16, which read sharp on every surface large enough to
+     show a corner. Raised across the board so an unthemed LDS is soft by
+     default; themes still override freely, and the two that do (product,
+     palette) are unaffected because they set their own.
+
+     --corner-shape is the second axis. `squircle` is a continuous superellipse
+     rather than a circular arc: the curve starts earlier and flattens through
+     the corner, which is the shape that reads as drawn rather than filleted.
+     Note the superellipse() ladder runs the other way — higher numbers are
+     SQUARER, not rounder, so squircle is the rounded end of that range.
+
+     Applied only to rectangular components. At --pill (999px) the radius
+     clamps to half the short side, and a squircle there flattens the ends of
+     what should be a stadium — pills stay round. */
+  --radius-sm: 10px; --radius-base: 18px; --radius-lg: 28px; --radius-xl: 36px; --radius-pill: 999px;
+  --radius: var(--radius-base);
+  --pill: var(--radius-pill);
+  --corner-shape: squircle;
+
+  /* density multiplier */
+  --density: 1;
+
+  /* ---- control size scale ----
+     One ladder of min-heights for everything a finger or a cursor lands on.
+     Before this, controls sized themselves from padding alone, so a button, a
+     text input and a tab in the same row came out three different heights and
+     nothing in the system said what a "medium" control was.
+
+     Steps are 4px apart because the whole spacing system is on a 4px grid;
+     a scale that drifts off it produces controls that cannot be aligned with
+     anything around them.
+
+       --control-sm    32   dense tables, toolbars, secondary chips
+       --control-md    36   compact forms, small buttons
+       --control-lg    40   the default for tabs and list rows
+       --control-xl    44   the touch floor: default buttons, inputs
+       --control-2xl   48   primary actions, mobile-first surfaces
+       --control-3xl   52   hero CTAs, single-action screens
+
+     THE FLOOR IS PART OF THE SCALE. --target-min is now an alias for the xl
+     step rather than a separate number, because the two were describing the
+     same thing and could drift apart. sm and md sit BELOW the floor on
+     purpose: they are legitimate sizes for a mouse and illegitimate for a
+     thumb, and the coarse-pointer rule further down grows their hit area
+     without changing their size. Anything smaller than sm is not a control. */
+  --control-sm: 32px;
+  --control-md: 36px;
+  --control-lg: 40px;
+  --control-xl: 44px;
+  --control-2xl: 48px;
+  --control-3xl: 52px;
+
+  /* minimum interactive target. Themes may raise it (palette uses 44px for
+     chrome that sits over artwork); components should never hardcode a size
+     below it. */
+  --target-min: var(--control-xl);
+
+  /* iconography — three steps, because an icon is sized by the text it sits
+     beside, not by the component it sits in. sm pairs with caption, base with
+     body, lg with subhead. Tag icons were a hardcoded 13px, which is not a
+     step on anything. */
+  --icon-size-sm: 16px;
+  --icon-size: 20px;
+  --icon-size-lg: 24px;
+  --icon-weight: 1.75;
+}
+
+*{box-sizing:border-box;}
+
+/* ---- Layer 2: One Token semantic resolution ----
+   mode × emphasis → the seven object-color roles.
+   --c-* (brand scale) is supplied by the theme + .hue-* override. */
+/* --- LIGHT is the default resolution. Drop emph-* on ANY element and it
+   resolves standalone; put it inside (or on) a .mode-dark for dark values.
+   This is what lets you write <div class="lds-card emph-strong"> to promote
+   one object without touching its container. --- */
+
+/* PLAIN — neutral surface. The default for cards and page chrome. */
+/* --background was pinned to #FFFFFF. On oat paper a white card does not read
+   as brighter, it reads as a hole — the paper's chroma stops at the card edge.
+   The surface IS grey-50, so this needs no hex. Three of the other changes are
+   floor failures on the steeper ramp, not preferences: grey-500 measures Lc 47.6
+   on the page against a Lc 60 content floor (grey-600 is 72.2), and grey-200
+   measures Lc 10.2 against a Lc 15 non-text floor (grey-300 is 24.1). grey-200
+   stays on --border-subdued below the floor as the one knowing exception: a
+   decorative separator inside an already-bounded card, never the sole boundary
+   of a control. */
+.emph-plain {--background:var(--grey-50);--text:var(--grey-900);--text-accent:var(--c-600);--text-subdued:var(--grey-600);--icon:var(--grey-400);--border:var(--grey-300);--border-subdued:var(--grey-200);--bg-hover:var(--grey-100);--bg-pressed:var(--grey-200);--link:#00437C;}
+/* Dark is not light inverted. On this ramp three roles land under their floors
+   on grey-950: --text-subdued grey-400 is Lc 57.7 (grey-300 is 74.4), --border
+   grey-800 is Lc 4.1 (grey-600 is 25.1), and --text-accent c-300 is Lc 49.8
+   against a Lc 75 body floor (c-100 is 85.3). The accent is the one that
+   matters, and the fix is to mirror it to the light end of its own ramp rather
+   than nudge it one step. */
+.mode-dark.emph-plain, .mode-dark .emph-plain {--background:var(--grey-950);--text:var(--grey-50);--text-accent:var(--c-100);--text-subdued:var(--grey-300);--icon:var(--grey-400);--border:var(--grey-600);--border-subdued:var(--grey-700);--bg-hover:var(--grey-900);--bg-pressed:var(--grey-800);--link:var(--link-dark);}
+
+/* ---- Layer 2b: surface elevation ----
+   Emphasis answers "how loud is this OBJECT". It does not answer "how deep is
+   this PLANE", and those are different questions: a card and the page behind it
+   can both be .emph-plain and still must not be the same colour.
+
+   Five planes, named by depth rather than by lightness, because which direction
+   is "up" is a property of the mode and not of the system:
+
+     --surface-sunken    a well: inset lists, code, map gutters, empty tracks
+     --surface-page      the frame everything sits in
+     --surface-base      the default panel
+     --surface-raised    a card sitting on a panel
+     --surface-overlay   modal, popover, drawer, sheet
+
+   The ramp is NOT extended to hold these. --grey-* is a lightness scale and its
+   eleven steps are consumed by text, borders and icons across the whole system;
+   adding an 850 and a 925 to solve an elevation problem changes the shape of a
+   scale that has nothing to do with elevation. Depth gets its own roles, and a
+   theme points them wherever it likes — at ramp steps, or at its own hexes.
+
+   Note what the defaults do at the ends:
+
+   LIGHT COLLAPSES AT THE TOP. base, raised and overlay are all grey-50. On oat
+   paper a brighter card reads as a hole, not as nearer (the same finding that
+   took --background off #FFFFFF), so in light, elevation is carried by SHADOW.
+   Three planes are enough.
+
+   DARK COLLAPSES AT THE BOTTOM. sunken and page are both grey-950, because
+   there is nothing below it. In dark, shadow is nearly invisible against a
+   near-black ground, so elevation has to be carried by LIGHTNESS — and the
+   moment that is true you need every step distinct.
+
+   Which is the whole answer to why roadtrip ships five dark surfaces and the
+   portfolio ships two: it is not that one of them is over-specified. A
+   dark-native product spends its entire elevation budget in the bottom three
+   steps of the ramp, so that is where it needs resolution. */
+:root{
+  --surface-sunken:var(--grey-200);
+  --surface-page:var(--grey-100);
+  --surface-base:var(--grey-50);
+  --surface-raised:var(--grey-50);
+  --surface-overlay:var(--grey-50);
+}
+.mode-dark{
+  --surface-sunken:var(--grey-950);
+  --surface-page:var(--grey-950);
+  --surface-base:var(--grey-900);
+  --surface-raised:var(--grey-800);
+  --surface-overlay:var(--grey-800);
+}
+
+/* The roles are applied through classes rather than being baked into
+   components, because depth is a decision about LAYOUT and the component does
+   not know what it has been put inside. A .lds-card is a card whether it is on
+   the page or in a drawer.
+
+   Setting --background as well as background is what makes them compose: a
+   child that paints from --background inherits the plane, and a child carrying
+   its own .emph-* still wins on itself. */
+.surface-sunken{background:var(--surface-sunken);--background:var(--surface-sunken);}
+.surface-page{background:var(--surface-page);--background:var(--surface-page);}
+.surface-base{background:var(--surface-base);--background:var(--surface-base);}
+.surface-raised{background:var(--surface-raised);--background:var(--surface-raised);}
+.surface-overlay{background:var(--surface-overlay);--background:var(--surface-overlay);}
+
+/* SUBTLE — the lightest wash of the hue. Reserved for LARGE fields (banners,
+   cards): a big plane of color needs less saturation to register, so it stays
+   gentlest to avoid overwhelming the view. */
+.emph-subtle {--background:var(--c-50);--text:var(--c-800);--text-accent:var(--c-600);--text-subdued:var(--c-500);--icon:var(--c-400);--border:var(--c-200);--border-subdued:var(--c-100);--bg-hover:var(--c-100);--bg-pressed:var(--c-200);}
+.mode-dark.emph-subtle, .mode-dark .emph-subtle {--background:var(--c-900);--text:var(--c-100);--text-accent:var(--c-200);--text-subdued:var(--c-400);--icon:var(--c-400);--border:var(--c-800);--border-subdued:var(--c-900);--bg-hover:var(--c-800);--bg-pressed:var(--c-700);}
+
+/* SOFT — light tint for SMALL components (tags, chips, primary buttons). One
+   step up from subtle: a pill or button is a small field, so it can carry a
+   touch more color and still read clean. Tags and buttons share this tone. */
+.emph-soft {--background:var(--c-100);--text:var(--c-800);--text-accent:var(--c-600);--text-subdued:var(--c-500);--icon:var(--c-500);--border:var(--c-200);--border-subdued:var(--c-100);--bg-hover:var(--c-200);--bg-pressed:var(--c-300);}
+.mode-dark.emph-soft, .mode-dark .emph-soft {--background:var(--c-800);--text:var(--c-100);--text-accent:var(--c-200);--text-subdued:var(--c-300);--icon:var(--c-400);--border:var(--c-700);--border-subdued:var(--c-800);--bg-hover:var(--c-700);--bg-pressed:var(--c-600);}
+
+/* STRONG — saturated knockout, white text (APCA fill ≈ Lc 75, label ≥ 77).
+   c-600 (not c-500) so the white label clears the body floor. */
+.emph-strong {--background:var(--c-600);--text:#FFFFFF;--text-accent:var(--c-100);--text-subdued:var(--c-200);--icon:var(--c-200);--border:var(--c-700);--border-subdued:var(--c-500);--bg-hover:var(--c-500);--bg-pressed:var(--c-700);}
+.mode-dark.emph-strong, .mode-dark .emph-strong {--background:var(--c-600);--text:#FFFFFF;--text-accent:var(--c-100);--text-subdued:var(--c-300);--icon:var(--c-200);--border:var(--c-700);--border-subdued:var(--c-500);--bg-hover:var(--c-500);--bg-pressed:var(--c-700);}
+
+/* STARK — reverse/knockout. On light pages: near-black surface. On dark
+   pages: intentionally inverted to a near-white surface. Maximum contrast. */
+.emph-stark {--background:var(--c-800);--text:#FFFFFF;--text-accent:var(--c-100);--text-subdued:var(--c-300);--icon:var(--c-200);--border:var(--c-700);--border-subdued:var(--c-600);--bg-hover:var(--c-700);--bg-pressed:var(--c-900);}
+.mode-dark.emph-stark, .mode-dark .emph-stark {--background:var(--grey-50);--text:var(--grey-900);--text-accent:var(--c-600);--text-subdued:var(--grey-600);--icon:var(--grey-500);--border:var(--grey-200);--border-subdued:var(--grey-100);--bg-hover:var(--grey-100);--bg-pressed:var(--grey-200);}
+
+/* MEDIA — the on-artwork role. Every emphasis above resolves against a surface
+   colour known at author time. This one does not: it is for chrome that sits on
+   a photo, video, album art, or a generated gradient, where the backdrop is
+   decided at runtime and changes as the user scrolls.
+
+   The whole role derives from `currentColor`, so the CONSUMER owns exactly one
+   decision — what the ink should be — and every other role follows. Set it and
+   the surface, border, hover and pressed states all fall out:
+
+       <div class="lds-card emph-media" style="color:#fff">
+
+   CHOOSING the ink is deliberately out of scope here. That is a sampling
+   problem (read the backdrop at the element's position, pick the most legible
+   ink), and it is where the unresolved contrast question lives: palette
+   enforces WCAG 4.5:1, LDS standardises on APCA Lc, and the two disagree
+   precisely in the mid-tones where gradients sit. Until that is settled, LDS
+   ships the half that needs no threshold and leaves the ink to the consumer —
+   see docs/lew-design-system/palette-adoption-delta.md. The two --on-* helpers
+   below cover the common static cases without any sampling at all. */
+.emph-media{
+  --text:currentColor;
+  --text-accent:currentColor;
+  --icon:currentColor;
+  --text-subdued:color-mix(in srgb,currentColor 70%,transparent);
+  /* The scrim is the OPPOSITE polarity to the ink — white behind dark text,
+     black behind white text. Defaults to `transparent`, which degrades to a
+     pure stroke-defined chip, because no single colour is right for both
+     polarities. Set it with the ink (mediaInkOn returns both), or use the
+     --on-dark / --on-light helpers, which set the matching pair. */
+  --media-scrim:transparent;
+  --background:color-mix(in srgb,var(--media-scrim) 25%,transparent);
+  --bg-hover:color-mix(in srgb,var(--media-scrim) 34%,transparent);
+  --bg-pressed:color-mix(in srgb,var(--media-scrim) 42%,transparent);
+  --border:color-mix(in srgb,currentColor 40%,transparent);
+  --border-subdued:color-mix(in srgb,currentColor 20%,transparent);
+  /* glass-specific aliases. .lds-glass reads THESE rather than --background, so
+     that it stays translucent inside a normal emphasis context — reading the
+     inherited --background would turn it opaque white inside any .emph-plain. */
+  --glass-bg:color-mix(in srgb,var(--media-scrim) 25%,transparent);
+  --glass-border:color-mix(in srgb,currentColor 40%,transparent);
+}
+/* THE SCRIM MUST BE THE OPPOSITE POLARITY TO THE INK. That is the whole design.
+
+   The obvious move — tint the chip with the ink, the way most glass UI does —
+   is a trap, for two compounding reasons. First, an alpha fill of the ink is
+   just a dimmer: it moves lightness only, so it desaturates the artwork behind
+   it. A 10% ink fill lowers backdrop chroma on 5 of 6 backdrops and a 30% fill
+   costs ~36% of it. Second, and worse, that fill is made of the same colour as
+   the label sitting on it, so every percent of fill eats the label's own
+   contrast: worst-case label lands at Lc 66.1 with a 10% ink fill, Lc 50.9
+   with 30%.
+
+   An INVERSE scrim inverts that second effect. It still costs saturation, but
+   it pushes the backdrop away from the ink, so the label gets easier to read
+   rather than harder. Measured worst-case across ten backdrops, dark through
+   near-white through max-chroma primaries:
+
+     scrim  stroke |  edge  label  chroma kept
+       0%     60%  |  20.6   60.9    100%     stroke-only; label misses the floor
+      15%     45%  |  16.3   72.1     89%
+      25%     40%  |  16.2   79.2     81%     <- shipped
+      30%     35%  |  15.5   82.3     77%
+
+   25/40 is where the label first clears the Lc 75 body floor while keeping the
+   most artwork chroma, and it lets the stroke soften from 60% to 40%. A pure
+   stroke at 40% could not carry the chip alone — 40% measured Lc 7.8 on magenta
+   — but it does not have to, because the scrim now shares edge duty.
+
+   The trade is explicit and worth stating: ~19% of the artwork's chroma under
+   the chip, bought for +18 Lc of label legibility and a visibly softer edge.
+
+   A `backdrop-filter: saturate()` pass was considered instead and rejected as a
+   default: on already-saturated artwork it clips to a no-op on pure primaries,
+   and on near-max colours it clips asymmetrically and shifts hue 4–10° — it
+   distorts the artwork on exactly the backdrops that need help most. It stays
+   available via --media-filter for known-low-chroma artwork. */
+/* Media chrome is backdrop-relative, not mode-relative, so .mode-dark must NOT
+   flip it — a white pill over a bright photo stays wrong in either mode. The
+   role is intentionally identical in both; the ink is what changes. */
+
+/* Static ink for backdrops you already know the tone of (a dark hero image, a
+   light product shot). Skips sampling entirely. */
+.emph-media--on-dark{color:#FFFFFF;--media-scrim:#000000;}
+.emph-media--on-light{color:var(--grey-900);--media-scrim:#FFFFFF;}
+
+/* Inactive is handled at the end of this file — it has to beat .lds-btn:disabled
+   on source order, and it must NOT be expressed as faded tokens. See the note
+   there; the short version is that fading --text and --border independently
+   makes them multiply. */
+
+/* semantic banner shortcuts (fixed hues regardless of theme brand) */
+.banner-success{--background:#E7F6EC;--text:#0B5A26;--border:#B7E4C6;--icon:#0B5A26;}
+.banner-error  {--background:#FDECEA;--text:#8A1C10;--border:#F5C4BD;--icon:#8A1C10;}
+.banner-warning{--background:#FFF8E6;--text:#785800;--border:#FCD874;--icon:#785800;}
+.banner-info   {--background:#EAF1FF;--text:#173D97;--border:#9DBEFF;--icon:#173D97;}
+.mode-dark.banner-success{--background:#0C2417;--text:#8FE0AB;--border:#17492B;}
+.mode-dark.banner-error  {--background:#2A0F0B;--text:#F3A79A;--border:#5A1A10;}
+.mode-dark.banner-warning{--background:#2C2000;--text:#FCD874;--border:#583F00;}
+.mode-dark.banner-info   {--background:#0A1943;--text:#9DBEFF;--border:#173D97;}
+
+/* ==========================================================================
+   One Token hue selectors — repoint the brand --c-* scale at a specific
+   APCA palette hue (from apca-palette.css). Drop on any element together with
+   an emph-x class to retint it. Because emphasis resolves off --c-*, swapping
+   the hue also swaps every derived state (default / hover / pressed / inactive).
+
+   A HUE IS A COLOUR, NEVER A MEANING. There is no `hue-error` — error is a
+   meaning, and it lives on the component (`lds-banner--error`), which points
+   at a hue. Same shape as `lds-btn--primary`: primary is a role that happens
+   to resolve to the brand hue, not a hue named "primary". See the status map
+   below for where meanings get bound to colours.
+   ========================================================================== */
+.hue-red{--c-50:var(--red-50);--c-100:var(--red-100);--c-200:var(--red-200);--c-300:var(--red-300);--c-400:var(--red-400);--c-500:var(--red-500);--c-600:var(--red-600);--c-700:var(--red-700);--c-800:var(--red-800);--c-900:var(--red-900);--c-950:var(--red-950);}
+.hue-orange{--c-50:var(--orange-50);--c-100:var(--orange-100);--c-200:var(--orange-200);--c-300:var(--orange-300);--c-400:var(--orange-400);--c-500:var(--orange-500);--c-600:var(--orange-600);--c-700:var(--orange-700);--c-800:var(--orange-800);--c-900:var(--orange-900);--c-950:var(--orange-950);}
+.hue-yellow{--c-50:var(--yellow-50);--c-100:var(--yellow-100);--c-200:var(--yellow-200);--c-300:var(--yellow-300);--c-400:var(--yellow-400);--c-500:var(--yellow-500);--c-600:var(--yellow-600);--c-700:var(--yellow-700);--c-800:var(--yellow-800);--c-900:var(--yellow-900);--c-950:var(--yellow-950);}
+.hue-green{--c-50:var(--green-50);--c-100:var(--green-100);--c-200:var(--green-200);--c-300:var(--green-300);--c-400:var(--green-400);--c-500:var(--green-500);--c-600:var(--green-600);--c-700:var(--green-700);--c-800:var(--green-800);--c-900:var(--green-900);--c-950:var(--green-950);}
+.hue-cyan{--c-50:var(--cyan-50);--c-100:var(--cyan-100);--c-200:var(--cyan-200);--c-300:var(--cyan-300);--c-400:var(--cyan-400);--c-500:var(--cyan-500);--c-600:var(--cyan-600);--c-700:var(--cyan-700);--c-800:var(--cyan-800);--c-900:var(--cyan-900);--c-950:var(--cyan-950);}
+.hue-blue{--c-50:var(--blue-50);--c-100:var(--blue-100);--c-200:var(--blue-200);--c-300:var(--blue-300);--c-400:var(--blue-400);--c-500:var(--blue-500);--c-600:var(--blue-600);--c-700:var(--blue-700);--c-800:var(--blue-800);--c-900:var(--blue-900);--c-950:var(--blue-950);}
+.hue-violet{--c-50:var(--violet-50);--c-100:var(--violet-100);--c-200:var(--violet-200);--c-300:var(--violet-300);--c-400:var(--violet-400);--c-500:var(--violet-500);--c-600:var(--violet-600);--c-700:var(--violet-700);--c-800:var(--violet-800);--c-900:var(--violet-900);--c-950:var(--violet-950);}
+.hue-pink{--c-50:var(--pink-50);--c-100:var(--pink-100);--c-200:var(--pink-200);--c-300:var(--pink-300);--c-400:var(--pink-400);--c-500:var(--pink-500);--c-600:var(--pink-600);--c-700:var(--pink-700);--c-800:var(--pink-800);--c-900:var(--pink-900);--c-950:var(--pink-950);}
+.hue-gray{--c-50:var(--gray-50);--c-100:var(--gray-100);--c-200:var(--gray-200);--c-300:var(--gray-300);--c-400:var(--gray-400);--c-500:var(--gray-500);--c-600:var(--gray-600);--c-700:var(--gray-700);--c-800:var(--gray-800);--c-900:var(--gray-900);--c-950:var(--gray-950);}
+
+/* ==========================================================================
+   Layer 2b: status → hue map — THE ONLY PLACE A MEANING TOUCHES A COLOUR.
+
+   Five statuses, bound here and nowhere else. Repointing caution from yellow to
+   orange is a one-line edit that reaches every component at once, and no
+   consumer markup changes — which is the whole reason the binding is central
+   rather than repeated inside each component.
+
+   Bound at :where() (specificity 0) so an author's emph-* or hue-* still wins
+   as a deliberate fine-tune override.
+
+   Adding a status-bearing component means adding its selector to these five
+   lists. That is intentional friction: it keeps the set of components that may
+   speak in status names small and visible in one place.
+
+   `info` resolves to BLUE. It previously meant two different colours depending
+   on which layer you asked: `hue-info` was grey, `lds-banner--info` was blue.
+   Grey lost — a grey "info" field is indistinguishable from ordinary chrome,
+   and neutral information is already the default surface. The old `helpful`
+   name is gone with it; it was a second name for the same blue.
+   ========================================================================== */
+:where(.lds-banner--error,.lds-tag--error,.lds-inline--error,.lds-field--error){--c-50:var(--red-50);--c-100:var(--red-100);--c-200:var(--red-200);--c-300:var(--red-300);--c-400:var(--red-400);--c-500:var(--red-500);--c-600:var(--red-600);--c-700:var(--red-700);--c-800:var(--red-800);--c-900:var(--red-900);--c-950:var(--red-950);}
+:where(.lds-banner--warning,.lds-tag--warning,.lds-inline--warning){--c-50:var(--orange-50);--c-100:var(--orange-100);--c-200:var(--orange-200);--c-300:var(--orange-300);--c-400:var(--orange-400);--c-500:var(--orange-500);--c-600:var(--orange-600);--c-700:var(--orange-700);--c-800:var(--orange-800);--c-900:var(--orange-900);--c-950:var(--orange-950);}
+:where(.lds-banner--caution,.lds-tag--caution,.lds-inline--caution){--c-50:var(--yellow-50);--c-100:var(--yellow-100);--c-200:var(--yellow-200);--c-300:var(--yellow-300);--c-400:var(--yellow-400);--c-500:var(--yellow-500);--c-600:var(--yellow-600);--c-700:var(--yellow-700);--c-800:var(--yellow-800);--c-900:var(--yellow-900);--c-950:var(--yellow-950);}
+:where(.lds-banner--success,.lds-tag--success,.lds-inline--success){--c-50:var(--green-50);--c-100:var(--green-100);--c-200:var(--green-200);--c-300:var(--green-300);--c-400:var(--green-400);--c-500:var(--green-500);--c-600:var(--green-600);--c-700:var(--green-700);--c-800:var(--green-800);--c-900:var(--green-900);--c-950:var(--green-950);}
+:where(.lds-banner--info,.lds-tag--info,.lds-inline--info){--c-50:var(--blue-50);--c-100:var(--blue-100);--c-200:var(--blue-200);--c-300:var(--blue-300);--c-400:var(--blue-400);--c-500:var(--blue-500);--c-600:var(--blue-600);--c-700:var(--blue-700);--c-800:var(--blue-800);--c-900:var(--blue-900);--c-950:var(--blue-950);}
+
+/* ==========================================================================
+   Layer 3: components — reference only the semantic vars + theme knobs
+   ========================================================================== */
+
+/* ---- Button ---- */
+.lds-btn{
+  font-family:var(--th-ui);
+  font-size:calc(var(--text-body) * var(--density));
+  font-weight:var(--weight-semibold);
+  padding:calc(9px * var(--density)) calc(17px * var(--density));
+  border-radius:var(--pill);
+  border:1px solid transparent;
+  cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-height:var(--control-xl);
+  transition:filter var(--dur-fast) var(--ease-standard),
+             background var(--dur-fast) var(--ease-standard),
+             transform var(--dur-fast) var(--ease-standard),
+             border-color var(--dur-fast) var(--ease-standard);
+}
+.lds-btn:active{transform:translateY(1px);}
+.lds-btn:disabled{opacity:.38;pointer-events:none;}
+.lds-btn:focus-visible{outline:2px solid var(--text-accent);outline-offset:2px;}
+
+.lds-btn--fill{background:var(--c-600);color:#fff;border-color:var(--c-600);box-shadow:var(--btn-shadow,none);}
+.lds-btn--fill:hover{filter:brightness(1.08);}
+
+.lds-btn--outline{background:transparent;color:var(--text);border-color:var(--border);}
+.lds-btn--outline:hover{background:var(--bg-hover);}
+
+.lds-btn--ghost{background:transparent;color:var(--text-accent);border-color:transparent;}
+.lds-btn--ghost:hover{background:var(--bg-hover);}
+
+.lds-btn--sm{font-size:calc(var(--size-1) * var(--density));padding:calc(6px * var(--density)) calc(12px * var(--density));min-height:var(--control-md);}
+.lds-btn--lg{font-size:calc(var(--text-subhead) * var(--density));padding:calc(12px * var(--density)) calc(22px * var(--density));min-height:var(--control-2xl);}
+
+/* icon-only — drops the horizontal padding so the button is square at exactly
+   --target-min. Without this an icon button inherits the label padding and
+   comes out oblong. Give it an accessible name (aria-label / title). */
+.lds-btn--icon{padding:0;min-width:var(--target-min);min-height:var(--target-min);justify-content:center;}
+
+/* Emphasis-driven buttons — the one-token-pure path. A primary button is
+   just a strong-emphasis surface: <button class="lds-btn emph-strong">.
+   Add emph-subtle/soft/plain/stark to re-tone the same button per object. */
+.lds-btn.emph-plain,.lds-btn.emph-subtle,.lds-btn.emph-soft,.lds-btn.emph-strong,.lds-btn.emph-stark{
+  background:var(--background);color:var(--text);border-color:transparent;box-shadow:var(--btn-shadow,none);
+}
+/* border only on the plain (outlined) emphasis — fills carry none */
+.lds-btn.emph-plain{border-color:var(--border);}
+.lds-btn.emph-plain:hover,.lds-btn.emph-subtle:hover,.lds-btn.emph-soft:hover,.lds-btn.emph-strong:hover,.lds-btn.emph-stark:hover{
+  background:var(--bg-hover);border-color:transparent;
+}
+.lds-btn.emph-plain:hover{border-color:var(--border);}
+
+/* media buttons are stroke-defined, and drop the shadow, which muddies the
+   backdrop they float on. --media-filter is the opt-in saturate pass. */
+.lds-btn.emph-media{
+  background:var(--background);color:var(--text);border-color:var(--border);
+  box-shadow:none;
+  backdrop-filter:blur(var(--glass-blur,10px)) var(--media-filter,);
+  -webkit-backdrop-filter:blur(var(--glass-blur,10px)) var(--media-filter,);
+  min-height:var(--target-min);min-width:var(--target-min);
+}
+.lds-btn.emph-media:hover{background:var(--bg-hover);}
+.lds-btn.emph-media:active{background:var(--bg-pressed);}
+
+/* Named button variants — plain-language presets so authors don't touch the
+   abstract emphasis/hue layer directly. Each one is literally a hue × emphasis
+   composition, and stays fully overridable (add emph-x / hue-x to retone):
+     primary   = emph-soft  × brand hue   (light brand fill, brand-dark label)
+     secondary = emph-soft  × grey        (light neutral fill, dark label)
+     tertiary  = emph-plain × grey        (quiet neutral, bordered)          */
+
+/* primary = emph-SOFT on brand hue: light tonal tint, same tone as the tags.
+   Kept light (c-100) so it reads clean rather than heavy next to grey. */
+.lds-btn--primary{
+  --background:var(--c-100);--text:var(--c-800);--border:var(--c-200);
+  --bg-hover:var(--c-200);--bg-pressed:var(--c-300);
+}
+.mode-dark.lds-btn--primary,.mode-dark .lds-btn--primary{
+  --background:var(--c-800);--text:var(--c-100);--border:var(--c-700);
+  --bg-hover:var(--c-700);--bg-pressed:var(--c-600);
+}
+/* secondary = emph-SOFT × grey — same soft shape on the neutral scale */
+.lds-btn--secondary{
+  --background:var(--grey-100);--text:var(--grey-900);--border:var(--grey-200);
+  --bg-hover:var(--grey-200);--bg-pressed:var(--grey-300);
+}
+.mode-dark.lds-btn--secondary,.mode-dark .lds-btn--secondary{
+  --background:var(--grey-800);--text:#FFFFFF;--border:var(--grey-700);
+  --bg-hover:var(--grey-700);--bg-pressed:var(--grey-600);
+}
+/* tertiary = emph-PLAIN × grey — default surface, quietest */
+.lds-btn--tertiary{
+  --background:#FFFFFF;--text:var(--grey-900);--border:var(--grey-200);
+  --bg-hover:var(--grey-100);--bg-pressed:var(--grey-200);
+}
+.mode-dark.lds-btn--tertiary,.mode-dark .lds-btn--tertiary{
+  --background:var(--grey-950);--text:#FFFFFF;--border:var(--grey-800);
+  --bg-hover:var(--grey-900);--bg-pressed:var(--grey-800);
+}
+/* shared paint for all three named variants — fills carry no border */
+.lds-btn--primary,.lds-btn--secondary,.lds-btn--tertiary{
+  background:var(--background);color:var(--text);border-color:transparent;box-shadow:var(--btn-shadow,none);
+}
+/* only the plain tertiary is outlined */
+.lds-btn--tertiary{border-color:var(--border);}
+.lds-btn--primary:hover,.lds-btn--secondary:hover,.lds-btn--tertiary:hover{background:var(--bg-hover);}
+.lds-btn--primary:active,.lds-btn--secondary:active,.lds-btn--tertiary:active{background:var(--bg-pressed);}
+
+/* ---- Card ---- */
+.lds-card{
+  background:var(--background);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  padding:calc(20px * var(--density));
+  box-shadow:var(--shadow-base,var(--card-shadow,none));
+}
+.lds-card__kicker{font-family:var(--th-mono);font-size:var(--text-caption);font-weight:700;letter-spacing:var(--tracking-widest);text-transform:uppercase;color:var(--text-accent);}
+.lds-card__title{font-family:var(--th-display);font-weight:var(--weight-medium);font-size:var(--text-title);line-height:var(--leading-title);color:var(--text);margin:8px 0 6px;letter-spacing:var(--tracking-title);}
+.lds-card__body{font-family:var(--th-body);font-size:var(--text-body);color:var(--text-subdued);line-height:var(--leading-body);letter-spacing:var(--tracking-body);}
+.lds-card__divider{border:none;border-top:1px solid var(--border-subdued);margin:calc(16px * var(--density)) 0;}
+.lds-card__meta{display:flex;align-items:center;gap:7px;font-family:var(--th-body);font-size:var(--size-1);color:var(--text-subdued);font-weight:500;}
+.lds-card__actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:calc(16px * var(--density));}
+
+/* ---- Field ---- */
+.lds-field label{display:block;font-family:var(--th-ui);font-size:var(--size-0);font-weight:600;color:var(--text-subdued);margin-bottom:6px;letter-spacing:var(--tracking-wide);}
+.lds-field input,
+.lds-field textarea,
+.lds-field select{
+  width:100%;font-family:var(--th-ui);font-size:var(--text-body);line-height:var(--leading-normal);letter-spacing:var(--tracking-body);
+  padding:10px 12px;border-radius:var(--radius);min-height:var(--control-xl);
+  border:1px solid var(--border);background:var(--background);color:var(--text);
+  outline:none;transition:border-color var(--dur-fast),box-shadow var(--dur-fast);
+}
+.lds-field input:focus,
+.lds-field textarea:focus,
+.lds-field select:focus{border-color:var(--text-accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--text-accent) 22%,transparent);}
+
+/* ---- Badge ---- */
+.lds-badge{
+  font-family:var(--th-mono);font-size:var(--text-caption);letter-spacing:var(--tracking-wide);
+  padding:4px 9px;border-radius:var(--pill);
+  background:var(--c-50);color:var(--c-700);border:1px solid var(--c-100);
+  display:inline-flex;align-items:center;gap:5px;
+}
+.mode-dark .lds-badge{background:var(--c-900);color:var(--c-200);border-color:var(--c-800);}
+
+/* ---- Tag ---- one-token pill. Default tone is emph-soft on the current hue.
+   Compose: hue-x sets intent (error/warning/caution/success/info/helpful),
+   emph-x changes tone, --interactive adds hover/press, --inactive/aria-disabled
+   gives the low-contrast disabled state. All states are derived from the same
+   --c-* scale, so swapping hue-x re-tints every state automatically.
+   Default tone is emph-SOFT (light tint, c-100) — the same tone as the primary
+   button, since both are small fields. Banners drop to subtle (c-50). Dark-mode
+   uses c-800 fill with c-100 label (not c-50/100 fills, which are too stark on
+   dark) so tags stay legible without glare. Fills carry no border — only the
+   plain emphasis is outlined. */
+.lds-tag{
+  --icon:var(--c-500);
+  font-family:var(--th-ui);font-size:var(--text-caption);font-weight:var(--weight-semibold);
+  letter-spacing:var(--tracking-wide);line-height:1.4;
+  padding:3px 10px;border-radius:var(--pill);
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;
+  background:var(--c-100);color:var(--c-800);border:1px solid transparent;
+}
+.mode-dark .lds-tag{--icon:var(--c-400);background:var(--c-800);color:var(--c-100);}
+/* emphasis override — compound specificity beats the subtle default.
+   Fills stay borderless; only plain (the outlined tone) shows a border. */
+.lds-tag.emph-plain,.lds-tag.emph-subtle,.lds-tag.emph-soft,.lds-tag.emph-strong,.lds-tag.emph-stark{
+  background:var(--background);color:var(--text);border-color:transparent;
+}
+/* media tags are stroke-defined, same reasoning as media buttons */
+.lds-tag.emph-media,.mode-dark .lds-tag.emph-media{
+  background:var(--background);color:var(--text);border-color:var(--border);
+}
+/* plain = colored outline: white bg, hue border, hue label (not neutral grey).
+   The icon sits one step stronger than the label so it still reads on white. */
+.lds-tag.emph-plain{--icon:var(--c-600);background:#FFFFFF;color:var(--c-800);border-color:var(--c-300);}
+.mode-dark .lds-tag.emph-plain{--icon:var(--c-300);background:transparent;color:var(--c-200);border-color:var(--c-700);}
+/* leading marker — icon takes the icon color token; dot takes the label color */
+.lds-tag__icon{width:var(--icon-size-sm);height:var(--icon-size-sm);flex-shrink:0;color:var(--icon);}
+.lds-tag__icon svg{width:100%;height:100%;display:block;}
+.lds-tag__dot{width:6px;height:6px;border-radius:50%;background:var(--icon);flex-shrink:0;}
+/* interactive (filter / removable chips) — one-token hover + pressed states */
+.lds-tag--interactive{cursor:pointer;transition:background var(--dur-fast) var(--ease-standard);}
+.lds-tag--interactive:hover{background:var(--c-200);}
+.mode-dark .lds-tag--interactive:hover{background:var(--c-700);}
+.lds-tag--interactive:active{background:var(--c-300);}
+.mode-dark .lds-tag--interactive:active{background:var(--c-600);}
+/* inactive / disabled — low-contrast surface + label (~Lc 27, reads disabled).
+   Icon is muted to the same step as the label so both fade together. */
+.lds-tag--inactive,.lds-tag[aria-disabled="true"]{--icon:var(--c-300);background:var(--c-100);color:var(--c-300);border-color:transparent;pointer-events:none;}
+.mode-dark .lds-tag--inactive,.mode-dark .lds-tag[aria-disabled="true"]{--icon:var(--c-700);background:var(--c-900);color:var(--c-700);border-color:transparent;}
+
+/* ---- Inline message ---- no container: just a hue icon + hue text, for form
+   validation and inline status. Icon uses currentColor so it is the exact same
+   color as the label — they read as one unit. Compose with hue-x. */
+.lds-inline{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:var(--th-ui);font-size:var(--size-1);font-weight:var(--weight-medium);
+  line-height:1.4;color:var(--c-700);
+}
+.mode-dark .lds-inline{color:var(--c-300);}
+/* --icon, not just color: an .lds-icon child sets `color:var(--icon)` on
+   itself, which beat the currentColor inherited from here — so the icon took
+   the neutral icon role while the label took the status hue, and the two read
+   as unrelated. Re-pointing --icon at currentColor fixes it wherever the icon
+   sits in the subtree. */
+.lds-inline__icon{width:var(--icon-size-sm);height:var(--icon-size-sm);flex-shrink:0;color:currentColor;--icon:currentColor;}
+.lds-inline__icon svg{width:100%;height:100%;display:block;}
+
+/* ---- Chip ---- the interactive counterpart to the tag. Tags are read-only
+   status; chips respond to input (filter / dropdown / removable). Neutral by
+   default with a real hover AND pressed step; --selected is the filled active
+   state (grey-900 knockout — clean contrast, unlike murky mid-hue fills). */
+.lds-chip{
+  --icon:var(--grey-500);
+  font-family:var(--th-ui);font-size:var(--text-caption);font-weight:var(--weight-semibold);
+  letter-spacing:var(--tracking-wide);line-height:1.4;
+  padding:5px 11px;border-radius:var(--pill);min-height:var(--control-md);
+  display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:pointer;
+  background:#FFFFFF;color:var(--grey-800);border:1px solid var(--grey-300);
+  transition:background var(--dur-fast) var(--ease-standard),border-color var(--dur-fast) var(--ease-standard);
+}
+.lds-chip:hover{background:var(--grey-100);border-color:var(--grey-400);}
+.lds-chip:active{background:var(--grey-200);border-color:var(--grey-500);}
+.lds-chip:focus-visible{outline:2px solid var(--grey-500);outline-offset:2px;}
+.mode-dark .lds-chip{background:transparent;color:var(--grey-200);border-color:var(--grey-700);}
+.mode-dark .lds-chip:hover{background:var(--grey-900);border-color:var(--grey-600);}
+.mode-dark .lds-chip:active{background:var(--grey-800);border-color:var(--grey-500);}
+/* selected / active — filled */
+.lds-chip--selected{--icon:#FFFFFF;background:var(--grey-900);color:#FFFFFF;border-color:var(--grey-900);}
+.lds-chip--selected:hover{background:var(--grey-800);border-color:var(--grey-800);}
+.mode-dark .lds-chip--selected{--icon:var(--grey-900);background:#FFFFFF;color:var(--grey-900);border-color:#FFFFFF;}
+.mode-dark .lds-chip--selected:hover{background:var(--grey-200);border-color:var(--grey-200);}
+/* media chips — the filter row over artwork. --selected steps the same mix up
+   rather than switching to a fixed grey, so the active state stays legible on
+   any backdrop. Beats .mode-dark, which must not touch media chrome. */
+.lds-chip.emph-media,.mode-dark .lds-chip.emph-media{
+  background:var(--background);color:var(--text);border-color:var(--border);
+  backdrop-filter:blur(var(--glass-blur,10px)) var(--media-filter,);
+  -webkit-backdrop-filter:blur(var(--glass-blur,10px)) var(--media-filter,);
+}
+.lds-chip.emph-media:hover,.mode-dark .lds-chip.emph-media:hover{background:var(--bg-hover);}
+.lds-chip.emph-media:active,.mode-dark .lds-chip.emph-media:active{background:var(--bg-pressed);}
+/* selected strengthens the STROKE rather than flooding the fill — the same
+   reason the resting state has no fill. A light 18% wash marks it as active
+   without desaturating the artwork or eating the label's contrast. */
+.lds-chip.emph-media.lds-chip--selected,.mode-dark .lds-chip.emph-media.lds-chip--selected{
+  --icon:currentColor;
+  background:var(--bg-pressed);color:var(--text);
+  border-color:color-mix(in srgb,currentColor 90%,transparent);
+}
+
+/* parts: leading icon, dropdown caret (rotates when open), remove button */
+.lds-chip__icon,.lds-chip__caret,.lds-chip__remove{flex-shrink:0;color:var(--icon);display:inline-flex;align-items:center;justify-content:center;}
+.lds-chip__icon{width:14px;height:14px;}
+.lds-chip__caret{width:12px;height:12px;margin-right:-2px;transition:transform var(--dur-fast) var(--ease-standard);}
+.lds-chip[aria-expanded="true"] .lds-chip__caret{transform:rotate(180deg);}
+.lds-chip__remove{width:15px;height:15px;margin:0 -3px 0 1px;border-radius:50%;}
+.lds-chip__remove:hover{background:color-mix(in srgb,currentColor 16%,transparent);}
+.lds-chip svg{width:100%;height:100%;display:block;}
+
+/* ---- Banner ---- large tinted field. STATUS IS BAKED IN: pick a semantic
+   modifier and the banner carries BOTH its hue and its (subtle) emphasis — no
+   hue-* / emph-* needed. Plain .lds-banner is the neutral default. The token
+   defaults live at :where() (specificity 0) so a page- or element-level emph-*
+   still wins as a fine-tune override.
+     lds-banner            neutral / default (grey)
+     lds-banner--info      informational        (blue)
+     lds-banner--success   confirmation         (green)
+     lds-banner--warning   caution ahead        (orange)
+     lds-banner--caution   softer warning       (yellow)
+     lds-banner--error     failure / blocking   (red)                         */
+.lds-banner{
+  display:flex;gap:10px;align-items:flex-start;
+  padding:12px 14px;border-radius:var(--radius);
+  font-family:var(--th-body);font-size:var(--size-2);line-height:var(--leading-normal);letter-spacing:var(--tracking-body);
+  background:var(--background);color:var(--text);border:1px solid var(--border);
+}
+/* The message is a flex child, and a flex child's default min-width:auto will
+   not shrink below its longest unbreakable word — so a banner containing a URL
+   or a long token pushed the page sideways on a phone rather than wrapping.
+   Applied to the children rather than the banner: the banner itself must stay
+   shrinkable by its own parent. */
+.lds-banner > *{min-width:0;}
+.lds-banner > *:not(.lds-banner__dismiss){overflow-wrap:anywhere;}
+/* An icon dropped straight into the banner sizes itself, rather than trusting
+   the markup to wrap it in something sized. The sprite habit across this
+   codebase is style="width:100%;height:100%" on the <svg>, which as a direct
+   flex child resolves against the banner and produced banners 481px and 772px
+   tall. Stated width/height beats --icon-size but loses to that inline style,
+   so the aspect-ratio and max-width are what actually hold the line. */
+.lds-banner > .lds-icon{
+  flex:0 0 auto;
+  width:16px;height:16px;max-width:16px;max-height:16px;
+  aspect-ratio:1;color:var(--icon);
+}
+/* default = neutral grey, baked at zero specificity */
+:where(.lds-banner){--icon:var(--grey-500);--background:var(--grey-50);--text:var(--grey-900);--border:var(--grey-200);}
+:where(.mode-dark .lds-banner){--icon:var(--grey-400);--background:var(--grey-900);--text:#FFFFFF;--border:var(--grey-800);}
+/* Only the BANNER needs a paint rule per status, because its default surface is
+   grey rather than the --c-* ramp, so a status has to switch it onto the ramp.
+   Tag and inline already paint from --c-* in their base rules, so remapping
+   --c-* in the status map above is enough — they need nothing here. Adding
+   redundant rules would also be a trap: at :where() they carry specificity 0
+   and would lose to their own base rule anyway.
+
+   Each status keeps the tone its SIZE calls for: banner subtle (c-50, a large
+   field stays gentle), tag soft (c-100, a pill can carry more), inline text
+   only. Same status, same hue, three tones — the emphasis scale doing its job. */
+:where(.lds-banner--error,.lds-banner--warning,.lds-banner--caution,.lds-banner--success,.lds-banner--info){--icon:var(--c-600);--background:var(--c-50);--text:var(--c-800);--border:var(--c-200);}
+:where(.mode-dark .lds-banner--error,.mode-dark .lds-banner--warning,.mode-dark .lds-banner--caution,.mode-dark .lds-banner--success,.mode-dark .lds-banner--info){--icon:var(--c-400);--background:var(--c-900);--text:var(--c-100);--border:var(--c-800);}
+.lds-banner svg{width:16px;height:16px;flex-shrink:0;margin-top:1px;color:var(--icon);}
+
+/* ---- Nav ---- */
+.lds-nav{
+  display:flex;align-items:center;gap:18px;
+  padding:12px 16px;border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  background:var(--background);box-shadow:var(--shadow-base,var(--card-shadow,none));
+}
+.lds-nav__logo{font-family:var(--th-display);font-weight:var(--weight-medium);font-size:var(--text-subhead);letter-spacing:var(--tracking-subhead);color:var(--text);}
+.lds-nav__logo b{color:var(--text-accent);font-weight:inherit;}
+.lds-nav__links{display:flex;gap:14px;font-family:var(--th-ui);font-size:var(--size-1);letter-spacing:var(--tracking-body);color:var(--text-subdued);}
+.lds-nav__links a{cursor:pointer;text-decoration:none;color:inherit;}
+.lds-nav__links a:hover{color:var(--text);}
+.lds-nav__spacer{margin-left:auto;}
+
+/* ---- Modal ---- */
+.lds-modal-scrim{background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:24px;}
+/* Zero-specificity, so an .emph-* on the modal itself still wins. A modal is
+   the top plane by definition; it should not have to be told. */
+:where(.lds-modal){--background:var(--surface-overlay);}
+.lds-modal{
+  background:var(--background);color:var(--text);
+  border:1px solid var(--border);border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-lg,var(--card-shadow,0 20px 50px rgba(0,0,0,.25)));
+  padding:calc(22px * var(--density));max-width:var(--modal-w);width:100%;
+}
+.lds-modal__title{font-family:var(--th-display);font-size:var(--text-subhead);font-weight:var(--weight-medium);margin-bottom:8px;line-height:var(--leading-subhead);letter-spacing:var(--tracking-subhead);}
+.lds-modal__body{font-family:var(--th-body);font-size:var(--text-body);color:var(--text-subdued);line-height:var(--leading-body);letter-spacing:var(--tracking-body);}
+.lds-modal__actions{display:flex;gap:10px;justify-content:flex-end;margin-top:20px;}
+
+/* ---- Glass surface ----
+   The blur half of media chrome. Paints the .emph-media tokens, so it adapts to
+   whatever ink the consumer set instead of assuming a white knockout — the old
+   fixed rgba(255,255,255,.14) recipe was invisible on a light backdrop.
+
+       <div class="lds-glass emph-media" style="color:#fff">
+
+   Falls back to the white recipe when used without emph-media, so it still does
+   something sensible on its own. --glass-blur is a theme knob. */
+.lds-glass{
+  background:var(--glass-bg,rgba(255,255,255,.14));
+  backdrop-filter:blur(var(--glass-blur,14px));-webkit-backdrop-filter:blur(var(--glass-blur,14px));
+  border:1px solid var(--glass-border,rgba(255,255,255,.28));
+  box-shadow:var(--shadow-base,var(--card-shadow,0 8px 24px rgba(0,0,0,.22)));
+}
+
+/* ==========================================================================
+   State overrides that must win on source order
+   ========================================================================== */
+
+/* Inactive media chrome. Deliberately opacity, not faded tokens.
+   The tempting version — --text at 45% and --border at 12% — is broken: the
+   component sets `color:var(--text)`, so once the label fades, `currentColor`
+   IS the faded ink, and the border's own color-mix re-derives 12% OF 45% and
+   lands at 5.4%. The two fades multiply, and the stroke all but vanishes.
+   One opacity does the whole job correctly and in one operation: the 28%
+   stroke becomes 12.6% and the ink becomes 45%, which is exactly the intended
+   relationship.
+   .45 rather than the .38 used for ordinary disabled buttons, because media
+   chrome has no container to fade toward — drop it further and it stops
+   reading as a disabled control and starts reading as a rendering artifact. */
+.emph-media:disabled,
+.emph-media[aria-disabled="true"],
+.emph-media.is-inactive{
+  opacity:.45;
+  pointer-events:none;
+}
+
+/* ---- Icon ---- */
+.lds-icon{
+  width:var(--icon-size);height:var(--icon-size);
+  color:var(--icon);
+  stroke-width:var(--icon-weight);
+  flex-shrink:0;
+}
+
+/* ==========================================================================
+   Corner shape
+   One place, so a component never has to remember it. Rectangular surfaces
+   only: --pill clamps its radius to half the short side, and a squircle there
+   flattens the ends of what should be a stadium, so pills keep a circular arc.
+   Browsers without corner-shape drop the declaration and get the plain radius.
+   ========================================================================== */
+.lds-card,
+.lds-banner,
+.lds-modal,
+.lds-field input,
+.lds-field textarea,
+.lds-list__item{
+  corner-shape:var(--corner-shape);
+}
+
+/* ==========================================================================
+   List — do / don't, rules, guidance
+   Was three near-identical .rule-item implementations across the site, each
+   with its own hardcoded greys, and each pointing at a --accent token that has
+   never existed in this system — so the "don't" side silently lost its colour.
+
+   Colour comes from the emphasis + hue mechanism, not from do/dont variants.
+   Note these are COLOUR hues, not statuses — a do/don't pair is guidance, not
+   one of the five statuses, so it names the colour it wants directly:
+
+       <ul class="lds-list emph-plain hue-green"> … </ul>
+       <ul class="lds-list emph-plain hue-red">   … </ul>
+
+   emph-plain must sit on the ul itself, not an ancestor — see "A hue only
+   retints where emphasis resolves" in decisions.md.
+
+   That is the whole reason .lds-list--do does not exist. Bespoke variants are
+   what the One Token architecture replaces.
+   ========================================================================== */
+.lds-list{
+  list-style:none;
+  margin:0;
+  padding:0;
+}
+.lds-list__item{
+  position:relative;
+  padding:calc(14px * var(--density)) calc(16px * var(--density));
+  padding-left:calc(18px * var(--density));
+  border-left:2px solid var(--text-accent);
+  border-radius:var(--radius-sm);
+  /* No background. The item inherits whatever surface it is dropped on, which
+     is the system's own first rule — it previously painted var(--background),
+     and because a hue only retints where emphasis resolves, the list has to
+     carry an emph-* class, so that paint forced the plain surface through any
+     tinted container it sat in. Structure comes from the rule and the spacing.
+     For a lifted card, put an emph-* on the item itself. */
+  color:var(--text-subdued);
+  font-size:var(--text-body);
+  line-height:var(--leading-body);
+}
+.lds-list__item + .lds-list__item{
+  margin-top:calc(8px * var(--density));
+}
+/* The lead-in. A block so the rule reads as heading-then-explanation rather
+   than one run-on sentence. */
+.lds-list__title{
+  display:block;
+  color:var(--text);
+  font-weight:var(--weight-semibold);
+  margin-bottom:calc(3px * var(--density));
+}
+/* Flush variant for lists that sit inside an already-bordered container and
+   should not look like stacked cards. */
+.lds-list--flush .lds-list__item{
+  border-radius:0;
+  corner-shape:round;
+  margin-top:0;
+  border-top:1px solid var(--border-subdued);
+  padding-left:calc(16px * var(--density));
+}
+.lds-list--flush .lds-list__item:first-child{border-top:none;}
+
+
+/* ==========================================================================
+   Layer 2b + Layer 3 — v2 additions
+   These belong in the sections named on each block; they are grouped here so
+   the v2 diff reads in one place. Fold them into their sections when tidying.
+   ========================================================================== */
+
+/* [Layer 2 — One Token] --link resolves per emphasis, like any other role.
+   Set on the emphasis classes rather than at :root, because :root inherits one
+   concrete colour down past every surface it has to survive. A link on a
+   knockout surface is the case that breaks — #00437C on c-800 is unreadable, and
+   it is the same role, so it resolves rather than getting an exception. */
+.emph-subtle, .emph-soft{ --link:#00437C; }
+.mode-dark.emph-subtle, .mode-dark .emph-subtle,
+.mode-dark.emph-soft,   .mode-dark .emph-soft{ --link:var(--link-dark); }
+.emph-strong, .emph-stark{ --link:var(--link-dark); }
+.mode-dark.emph-stark, .mode-dark .emph-stark{ --link:#00437C; }
+
+/* [Layer 2 — One Token] .emph-cta. Not an emphasis level; see the --cta note in
+   :root. There is exactly one on a page and it does not retint. Ink on
+   chartreuse holds in both modes, so the chartreuse does not flip: a highlighter
+   is the brightest thing present, and on a dark ground that is more true, not
+   less (Lc 89.9 against grey-950). */
+.emph-cta,
+.mode-dark.emph-cta, .mode-dark .emph-cta{
+  --background:var(--cta);
+  --text:var(--cta-text);
+  --text-accent:var(--cta-text);
+  --text-subdued:var(--grey-700);
+  --icon:var(--cta-text);
+  --border:var(--cta);
+  --border-subdued:var(--cta);
+  --link:#00437C;
+  --bg-hover:var(--cta-hover);
+  --bg-pressed:var(--cta-pressed);
+}
+
+/* [Layer 3 — components] Components paint from an explicit emphasis list, so the
+   CTA is opted in per component. This is the patch every theme was writing,
+   written once. The button is the only component that needs it today; anything
+   else that grows a CTA gets a rule here rather than in a theme. */
+.lds-btn.emph-cta{
+  background:var(--background); color:var(--text);
+  border-color:transparent; box-shadow:var(--btn-shadow,none);
+}
+.lds-btn.emph-cta:hover{ background:var(--bg-hover); border-color:transparent; }
+.lds-btn.emph-cta:active{ background:var(--bg-pressed); }
+
+/* [Layer 3 — components] .lds-mark — the highlighter as a text run. The CTA's
+   other form: .emph-cta paints a control, this paints a phrase. Both take --cta,
+   and there is still only one of each on a page.
+
+   Built on a background-image rather than a background colour, because a colour
+   fills the inline box and an image can be given a size — see --mark-height.
+   box-decoration-break:clone so a phrase that wraps gets one box per line rather
+   than one box with two open ends. */
+.lds-mark{
+  color:var(--cta-text);
+  background-image:linear-gradient(var(--cta),var(--cta));
+  background-repeat:no-repeat;
+  background-size:100% var(--mark-height);
+  background-position:0 var(--mark-offset);
+  padding-block:0;
+  padding-inline:.18em;
+  margin-inline:-.06em;
+  box-decoration-break:clone;
+  -webkit-box-decoration-break:clone;
+}
+
+/* [Layer 3 — components] .lds-meta — the mono role as a utility. Six
+   declarations that were being pasted at every metadata site, three of which
+   (the adjust, the tracking, the weight) are corrections nobody applies from
+   memory. Same argument as --grain: a treatment re-typed per instance is not
+   part of the system.
+
+   font-size-adjust inherits, so an inline mono span inside a paragraph gets the
+   correction without being given the class — which was the case reading
+   heaviest. */
+.lds-meta{
+  font-family:var(--th-mono);
+  font-size:var(--text-meta);
+  font-size-adjust:var(--mono-adjust);
+  font-weight:var(--weight-meta);
+  line-height:var(--leading-meta);
+  letter-spacing:var(--tracking-meta);
+}
+/* Inline mono inside prose takes the family and the adjust and NOTHING else: no
+   size (it is a run inside a line that already has one), no line-height (it
+   would break the paragraph's rhythm), no weight. */
+.lds-meta--inline{
+  font-family:var(--th-mono);
+  font-size-adjust:var(--mono-adjust);
+  font-size:1em;
+  letter-spacing:var(--tracking-normal);
+}
+.lds-meta--upper{ text-transform:uppercase; }
+.lds-meta--subdued{ color:var(--text-subdued); }
+
+/* [Layer 3 — lds-card] The title is chrome, not prose. It took --th-display,
+   which is right when the display face is a sans and wrong now that it is a
+   high-contrast serif: a card in a library is an object you act on, and a serif
+   title makes it read as an article. Same test --th-ui is built on — would you
+   read it, or click it. The four rules that keep --th-body (card__body,
+   card__meta, banner, modal__body) are prose and are unaffected. */
+.lds-card__title{
+  font-family:var(--th-ui);
+  font-weight:var(--weight-regular);
+  letter-spacing:var(--tracking-subhead);
+}
+
+/* [Layer 3 — lds-card] The kicker is a label, not machine output. It took
+   --th-mono in uppercase, which is three signals of machine-readability spent on
+   a phrase like "Tokens · Theming". Mono is for code, tokens, counters, dates
+   and measured numbers; everything else small and quiet is a label. No
+   uppercase, no widest tracking — size, ink and position already separate it
+   from the title. */
+.lds-card__kicker{
+  font-family:var(--th-ui);
+  font-size:var(--text-label-sm);
+  font-weight:var(--weight-label-sm);
+  line-height:var(--leading-label);
+  letter-spacing:var(--tracking-label-sm);
+  text-transform:none;
+  color:var(--text-subdued);
+}
+
+/* [Layer 3 — lds-card] The meta line is prose at caption scale, and caption is
+   14px now. Stated rather than inherited, because it was picking up the kicker's
+   weight through the component and reading as a second label. */
+.lds-card__meta{
+  font-family:var(--th-body);
+  font-size:var(--text-caption);
+  font-weight:var(--weight-regular);
+  color:var(--text-subdued);
+}
+
+/* ==========================================================================
+   Layer 3 — v3 additions: Tabs, Toggle, Table
+   Ported from the roadtrip product's rt-tabs / rt-toggle / rt-table (the
+   components already in production use) into One Token: rt-* fixed on
+   --rt-brand/--rt-text, these resolve off --text/--border/--c-* so they theme
+   and take a hue like every other component. See decisions.md.
+   ========================================================================== */
+
+/* ---- Tabs ---- */
+.lds-tabs{
+  display:flex;flex-direction:column;gap:2px;padding:4px;
+  background:var(--background);border-right:1px solid var(--border-subdued);
+  min-width:140px;flex:0 0 auto;
+}
+.lds-tabs__tab{
+  display:flex;align-items:center;
+  padding:8px 12px;min-height:var(--control-lg);
+  border:none;border-radius:var(--radius-sm);
+  background:transparent;color:var(--text-subdued);
+  font-family:var(--th-ui);font-size:var(--size-1);font-weight:500;
+  line-height:var(--leading-normal);
+  cursor:pointer;text-align:left;white-space:nowrap;
+  transition:background var(--dur-fast),color var(--dur-fast);
+}
+.lds-tabs__tab:hover{background:var(--bg-hover);color:var(--text);}
+.lds-tabs__tab:active{background:var(--bg-pressed);}
+.lds-tabs__tab--active,
+.lds-tabs__tab--active:hover{
+  background:var(--c-100);color:var(--text);font-weight:var(--weight-semibold);
+}
+.mode-dark .lds-tabs__tab--active,
+.mode-dark .lds-tabs__tab--active:hover{background:var(--c-800);}
+@media (max-width:560px){
+  .lds-tabs{
+    flex-direction:row;border-right:none;border-bottom:1px solid var(--border-subdued);
+    min-width:0;width:100%;
+  }
+  .lds-tabs__tab{
+    flex:1 1 0;min-width:0;justify-content:center;text-align:center;
+    padding:10px 8px;overflow:hidden;text-overflow:ellipsis;
+  }
+}
+
+/* ---- Toggle ---- */
+.lds-toggle{display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.lds-toggle__text{display:grid;gap:2px;min-width:0;}
+.lds-toggle__label{font-family:var(--th-ui);font-size:var(--size-1);font-weight:600;color:var(--text);}
+.lds-toggle__help{font-family:var(--th-body);font-size:var(--size-0);line-height:1.25;color:var(--text-subdued);}
+.lds-toggle__switch{position:relative;display:inline-grid;flex:0 0 auto;cursor:pointer;}
+.lds-toggle__switch input{position:absolute;opacity:0;pointer-events:none;}
+.lds-toggle__track{
+  width:34px;height:18px;border-radius:var(--radius-pill);
+  background:var(--border);transition:background var(--dur-fast);
+}
+.lds-toggle__track::after{
+  content:"";display:block;width:14px;height:14px;margin:2px;border-radius:50%;
+  background:#FFFFFF;box-shadow:0 1px 2px rgba(0,0,0,.2);
+  transition:transform var(--dur-fast);
+}
+.lds-toggle__switch input:checked + .lds-toggle__track{background:var(--c-600);}
+.lds-toggle__switch input:checked + .lds-toggle__track::after{transform:translateX(16px);}
+.lds-toggle__switch input:focus-visible + .lds-toggle__track{box-shadow:0 0 0 3px color-mix(in srgb,var(--text-accent) 22%,transparent);}
+.lds-toggle__switch input:disabled + .lds-toggle__track{opacity:.55;cursor:default;}
+
+/* ---- Table ---- */
+.lds-table{width:100%;border-collapse:separate;border-spacing:0;font-family:var(--th-ui);font-size:var(--size-1);}
+.lds-table th{
+  text-align:left;padding:calc(10px * var(--density)) calc(12px * var(--density));
+  font-weight:600;color:var(--text-subdued);font-size:var(--size-0);
+  letter-spacing:var(--tracking-wide);border-bottom:1px solid var(--border);
+}
+.lds-table td{
+  padding:calc(12px * var(--density)) calc(12px * var(--density));
+  border-bottom:1px solid var(--border-subdued);color:var(--text);
+  vertical-align:middle;
+}
+.lds-table tbody tr{transition:background var(--dur-fast);}
+.lds-table tbody tr:hover{background:var(--bg-hover);}
+.lds-table tbody tr:last-child td{border-bottom:none;}
+.lds-table--empty{
+  padding:calc(32px * var(--density));text-align:center;color:var(--text-subdued);
+}
+
+/* ==========================================================================
+   Layer 3 — v4: the form batch, plus the two states the system never had.
+
+   Everything here paints from --text/--border/--c-* like the rest of Layer 3,
+   so it themes and takes a hue without a variant class.
+   ========================================================================== */
+
+/* ---- Field: help, error, and the controls beyond a text input ----
+   `.lds-field` styled `label` and `input` and nothing else, which meant a form
+   could not show a validation error and a `select` or `textarea` fell back to
+   the browser's own chrome mid-form. `lds-inline--error` existed but was never
+   wired to a field, so every consumer either invented a message style or shipped
+   none. */
+
+/* The help line sits under the control, not the label: it is most often read
+   after a failed attempt, and above the input it competes with the label for
+   the same glance. */
+.lds-field__help{
+  display:block;
+  font-family:var(--th-body);
+  font-size:var(--text-caption);
+  line-height:var(--leading-normal);
+  color:var(--text-subdued);
+  margin-top:6px;
+}
+
+/* The error message. Registered in the status map, so the red comes from the
+   one place that binds a meaning to a colour — not from a hex here. */
+.lds-field__error{
+  display:flex;align-items:flex-start;gap:6px;
+  font-family:var(--th-ui);
+  font-size:var(--text-caption);
+  line-height:var(--leading-normal);
+  color:var(--c-700);
+  margin-top:6px;
+}
+.mode-dark .lds-field__error{color:var(--c-200);}
+.lds-field__error .lds-icon{flex:0 0 auto;width:1em;height:1em;margin-top:.15em;color:currentColor;}
+
+/* The errored control. Border AND message, never border alone: colour is not
+   an accessible carrier on its own, which is the same argument that puts an
+   icon on every status tag. */
+.lds-field--error input,
+.lds-field--error textarea,
+.lds-field--error select{border-color:var(--c-500);}
+.lds-field--error input:focus,
+.lds-field--error textarea:focus,
+.lds-field--error select:focus{
+  border-color:var(--c-600);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--c-500) 26%,transparent);
+}
+
+/* The required marker is generated rather than typed, so it cannot drift and
+   cannot be forgotten. aria-hidden is the consumer's job on the markup side —
+   `required` on the control is what actually carries it. */
+.lds-field__req::after{content:"*";color:var(--c-600);margin-left:.25em;}
+.mode-dark .lds-field__req::after{color:var(--c-300);}
+
+.lds-field textarea{min-height:calc(88px * var(--density));resize:vertical;}
+
+/* A select is a control, so it takes the UI face and a caret. The caret is an
+   inline SVG data URI rather than a pseudo-element: `appearance:none` removes
+   the native arrow, and a pseudo-element cannot be positioned inside a
+   replaced element. currentColor cannot reach a data URI, so the stroke is
+   stated — this is the one place in the file where that is unavoidable. */
+.lds-field select{
+  appearance:none;-webkit-appearance:none;
+  padding-right:38px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23888B80' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;
+  background-position:right 12px center;
+  cursor:pointer;
+}
+.lds-field select:disabled{cursor:default;}
+
+.lds-field input:disabled,
+.lds-field textarea:disabled,
+.lds-field select:disabled{opacity:.55;cursor:default;}
+
+/* ---- Checkbox and radio ----
+   One component, two shapes: everything except the corner radius and the mark
+   is shared, and splitting them would be two copies of the same eight rules.
+   Built on an accessible-hidden native input rather than a restyled one, so
+   keyboard behaviour, form submission and :checked all stay the browser's. */
+.lds-check{
+  display:flex;align-items:flex-start;gap:10px;
+  min-height:var(--control-xl);
+  font-family:var(--th-ui);font-size:var(--size-1);
+  line-height:var(--leading-normal);color:var(--text);
+  cursor:pointer;
+}
+.lds-check input{
+  position:absolute;opacity:0;width:0;height:0;pointer-events:none;
+}
+.lds-check__box{
+  flex:0 0 auto;position:relative;
+  width:18px;height:18px;margin-top:1px;
+  border:1px solid var(--border);border-radius:var(--radius-sm);
+  background:var(--background);
+  transition:background var(--dur-fast),border-color var(--dur-fast);
+}
+.lds-check--radio .lds-check__box{border-radius:50%;}
+
+/* The mark is a rotated box-shadow-free pseudo-element rather than an SVG, so
+   it inherits size from the box and needs no icon sprite for a control this
+   small. */
+.lds-check__box::after{
+  content:"";position:absolute;opacity:0;
+  transition:opacity var(--dur-fast);
+}
+.lds-check input:checked + .lds-check__box{
+  background:var(--c-600);border-color:var(--c-600);
+}
+.lds-check input:checked + .lds-check__box::after{opacity:1;}
+.lds-check:not(.lds-check--radio) .lds-check__box::after{
+  left:5px;top:1px;width:5px;height:10px;
+  border:solid #FFFFFF;border-width:0 2px 2px 0;
+  transform:rotate(45deg);
+}
+.lds-check--radio .lds-check__box::after{
+  left:50%;top:50%;width:7px;height:7px;margin:-3.5px 0 0 -3.5px;
+  border-radius:50%;background:#FFFFFF;
+}
+.lds-check input:focus-visible + .lds-check__box{
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--text-accent) 22%,transparent);
+}
+.lds-check input:disabled + .lds-check__box{opacity:.55;}
+.lds-check:has(input:disabled){cursor:default;color:var(--text-subdued);}
+
+/* ---- Skeleton ----
+   The system had no loading state at all, which left every consumer showing
+   nothing while it waited — and nothing reads as broken rather than slow, so
+   people reload, which on a weak connection makes it worse.
+
+   Painted with color-mix against --text rather than a hardcoded white wash.
+   The white version only works on a dark ground; this one resolves on whatever
+   surface it is dropped on, in either mode, under any theme. */
+.lds-skeleton{
+  display:block;
+  border-radius:var(--radius-sm);
+  background:
+    linear-gradient(90deg,
+      color-mix(in srgb,var(--text) 7%,transparent),
+      color-mix(in srgb,var(--text) 15%,transparent),
+      color-mix(in srgb,var(--text) 7%,transparent));
+  background-size:220% 100%;
+  animation:lds-skeleton-sweep 1.2s ease-in-out infinite;
+}
+@keyframes lds-skeleton-sweep{
+  from{background-position:120% 0;}
+  to{background-position:-120% 0;}
+}
+/* Height comes from the type role the placeholder is standing in for, so a
+   skeleton paragraph occupies the same space as the text that replaces it and
+   the layout does not jump on arrival. */
+.lds-skeleton--text{height:calc(var(--text-body) * var(--leading-body));}
+.lds-skeleton--caption{height:calc(var(--text-caption) * var(--leading-normal));}
+.lds-skeleton--title{height:calc(var(--text-subhead) * var(--leading-subhead));border-radius:var(--radius);}
+.lds-skeleton--circle{border-radius:50%;aspect-ratio:1;}
+.lds-skeleton + .lds-skeleton{margin-top:calc(8px * var(--density));}
+/* A row of placeholder lines reads as text only if the last one is short. */
+.lds-skeleton--last{width:62%;}
+@media (prefers-reduced-motion:reduce){
+  .lds-skeleton{animation:none;}
+}
+
+/* ---- Empty state ----
+   Was re-typed on every surface that can return nothing. No variants: an empty
+   list and a failed search differ in their words, not their shape. */
+.lds-empty{
+  display:flex;flex-direction:column;align-items:center;text-align:center;
+  gap:calc(8px * var(--density));
+  padding:calc(40px * var(--density)) calc(24px * var(--density));
+  color:var(--text-subdued);
+}
+.lds-empty .lds-icon{flex:0 0 auto;width:28px;height:28px;color:var(--icon);margin-bottom:4px;}
+.lds-empty__title{
+  font-family:var(--th-ui);
+  font-size:var(--text-label);
+  font-weight:var(--weight-semibold);
+  color:var(--text);
+}
+.lds-empty__body{
+  font-family:var(--th-body);
+  font-size:var(--text-caption);
+  line-height:var(--leading-normal);
+  color:var(--text-subdued);
+  max-width:44ch;
+}
+.lds-empty__actions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:calc(8px * var(--density));}
+
+/* ---- Dismiss ----
+   The banner could not be dismissed, so a consumer needing one built a second
+   banner. Sits in its container's own flow rather than absolutely positioned:
+   absolute leaves the text running under the button at narrow widths.
+
+   The paint is shared with the modal's close button, which is the same control
+   doing the same job on a different container — quiet, square, icon-only, and
+   sized below the touch floor on purpose (the coarse-pointer rule at the end of
+   this file grows the target without growing the button). Only the margins
+   differ, and they are stated per container below. */
+.lds-banner__dismiss,
+.lds-modal__close{
+  flex:0 0 auto;align-self:flex-start;
+  display:inline-grid;place-items:center;
+  width:var(--control-sm);height:var(--control-sm);
+  border:none;border-radius:var(--radius-sm);
+  background:transparent;color:var(--icon);
+  cursor:pointer;
+  transition:background var(--dur-fast),color var(--dur-fast);
+}
+.lds-banner__dismiss:hover,
+.lds-modal__close:hover{background:color-mix(in srgb,currentColor 12%,transparent);color:var(--text);}
+.lds-banner__dismiss:focus-visible,
+.lds-modal__close:focus-visible{outline:2px solid var(--text-accent);outline-offset:1px;}
+.lds-banner__dismiss .lds-icon,
+.lds-modal__close .lds-icon{width:16px;height:16px;color:currentColor;}
+.lds-banner__dismiss{margin:-4px -6px -4px auto;}
+
+/* ==========================================================================
+   Layer 3 — v5: the deferred pair, and the modal's missing parts.
+
+   `SecretField` and `DoubleConfirmButton` were held back in the tabs/toggle/
+   table pass as too single-consumer-shaped to generalise. Building them turned
+   out to be smaller than the deferral implied, because neither is a component:
+   one is a composition of parts the system already ships, and the other is a
+   state a button can be in. See decisions.md.
+   ========================================================================== */
+
+/* ---- Secret field ----
+   A write-only credential input with two modes. `stored` shows the mask and a
+   Replace button; `replacing` swaps in the password input and a Cancel.
+
+   Composes INSIDE .lds-field rather than beside it. The roadtrip original
+   carried its own label and its own help text — a second, divergent copy of
+   what .lds-field already owns — and had no error state at all, so a rejected
+   credential had nowhere to report:
+
+     <div class="lds-field">
+       <label>API key</label>
+       <div class="lds-secret">
+         <div class="lds-secret__stored">
+           <span class="lds-secret__masked">••••••••••••4f2a</span>
+           <button class="lds-btn lds-btn--secondary lds-btn--sm">Replace</button>
+         </div>
+       </div>
+       <p class="lds-field__help">Write-only. Stored encrypted.</p>
+     </div>
+
+   Nested, it inherits the label, the help, the error and the required marker,
+   and the two buttons are .lds-btn rather than bespoke — the originals were a
+   secondary and a tertiary button re-implemented at a different size. */
+.lds-secret{display:grid;gap:calc(6px * var(--density));}
+.lds-secret__stored,
+.lds-secret__replacing{display:flex;align-items:center;gap:8px;min-height:var(--control-xl);}
+/* The mask is data, so it takes the mono face: a proportional face makes a run
+   of bullets ragged and pushes the hint suffix — the last few real characters,
+   the only part that identifies which credential this is — out of alignment
+   between one row and the next. */
+.lds-secret__masked{
+  flex:1 1 auto;min-width:0;
+  font-family:var(--th-mono);font-size:var(--text-caption);
+  letter-spacing:var(--tracking-wide);color:var(--text-subdued);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+/* .lds-field states width:100% on its inputs, which fights flex-basis in a row
+   that also holds a button. auto hands sizing back to the flex line. */
+.lds-secret__replacing input{flex:1 1 auto;min-width:0;width:auto;}
+/* Buttons hold their label when the mask is long; the mask ellipses instead. */
+.lds-secret .lds-btn{flex:0 0 auto;}
+
+/* ---- Armed — the two-step destructive action ----
+   First press arms, second commits. The consumer owns the label change and the
+   disarm timeout; the system owns what armed LOOKS like.
+
+   A state on .lds-btn, not a .lds-confirm component. The roadtrip original was
+   an entire button re-implemented — its own size, padding, border and hover —
+   in order to add one state, which meant it could never be primary, never be
+   large, and never got the button's focus ring. As a state it composes with
+   every variant and size already on the shelf:
+
+     <button class="lds-btn lds-btn--secondary is-armed">Tap again to confirm</button>
+
+   The red is bound here rather than asked for, because armed is a STATUS and
+   not a colour choice. Same binding as .lds-banner--error, and the reason there
+   is no `hue-error` to reach for. */
+:where(.lds-btn.is-armed){--c-50:var(--red-50);--c-100:var(--red-100);--c-200:var(--red-200);--c-300:var(--red-300);--c-400:var(--red-400);--c-500:var(--red-500);--c-600:var(--red-600);--c-700:var(--red-700);--c-800:var(--red-800);--c-900:var(--red-900);--c-950:var(--red-950);}
+/* c-900 and not c-800 for the label. c-800 measures Lc 79.5 resting, which
+   passes, and Lc 71.8 once hover deepens the fill to c-200 — under the 75
+   floor at exactly the moment the button is being pressed. c-900 holds 88.4
+   and 80.8 across the same pair. */
+.lds-btn.is-armed{
+  background:var(--c-100);border-color:var(--c-500);color:var(--c-900);
+  font-weight:var(--weight-semibold);
+}
+.lds-btn.is-armed:hover{background:var(--c-200);filter:none;}
+.mode-dark .lds-btn.is-armed{background:var(--c-900);border-color:var(--c-600);color:var(--c-100);}
+.mode-dark .lds-btn.is-armed:hover{background:var(--c-800);}
+/* Committing is not instant — the caller disables while the request is in
+   flight, and `wait` says *this is happening* where the button's default
+   disabled cursor says *this is refused*. */
+.lds-btn.is-armed:disabled{cursor:wait;}
+
+/* ---- Modal: header, close, and the sheet ----
+   The modal shipped as a padded card with a title, a body and an actions row.
+   What it had no answer for: a close affordance, a body that scrolls while the
+   title and the actions stay put, and the bottom sheet that every phone-sized
+   modal wants to be.
+
+   Padding moves off the card and onto the parts as soon as a header is present,
+   because a header that has to sit inside 22px of card padding cannot draw its
+   divider edge to edge. `:has()` rather than a `--framed` modifier, so the
+   author is not made to declare a fact the markup already states. */
+.lds-modal:has(.lds-modal__header){
+  padding:0;display:flex;flex-direction:column;overflow:hidden;
+  max-height:var(--modal-h);
+}
+.lds-modal__header{
+  flex:0 0 auto;display:flex;align-items:center;gap:12px;
+  padding:calc(14px * var(--density)) calc(22px * var(--density));
+  min-height:var(--control-xl);
+  border-bottom:1px solid var(--border-subdued);
+}
+/* Inside the header the title is a row item, so it drops the standalone
+   title's bottom margin and truncates rather than wrapping the close button
+   onto a second line. */
+.lds-modal__header .lds-modal__title{
+  flex:1 1 auto;min-width:0;margin-bottom:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.lds-modal__close{margin:0 -6px 0 auto;align-self:center;}
+/* The body is the only scrolling region; overscroll-behavior stops a flick at
+   its end from scrolling the page behind the scrim. */
+.lds-modal:has(.lds-modal__header) .lds-modal__body{
+  flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;
+  padding:calc(20px * var(--density)) calc(22px * var(--density));
+}
+/* Actions sit outside the scroll area, so the commit button is reachable
+   without scrolling to the end of a long body. Divider, matching the header. */
+.lds-modal:has(.lds-modal__header) .lds-modal__actions{
+  flex:0 0 auto;margin-top:0;
+  padding:calc(14px * var(--density)) calc(22px * var(--density));
+  border-top:1px solid var(--border-subdued);
+}
+
+/* The grab handle. The visible bar is 4px, which is an unusable drag target for
+   a thumb, so the element is a 24px band and the bar is drawn inside it by
+   ::after — the affordance stays visually quiet while staying grabbable.
+   Hidden until the sheet breakpoint: on a centred modal it affords a drag that
+   does nothing. */
+.lds-modal__handle{
+  display:none;flex:0 0 auto;position:relative;
+  width:100%;height:24px;cursor:grab;
+}
+.lds-modal__handle::after{
+  content:"";position:absolute;top:10px;left:50%;transform:translateX(-50%);
+  width:36px;height:4px;border-radius:var(--radius-pill);
+  background:var(--border);
+}
+
+/* ---- Sheet ----
+   On a phone a centred modal is a compromise: it is pinned to the middle of a
+   screen whose only comfortably reachable region is the bottom third.
+   .lds-modal--sheet drops it to the bottom edge below the breakpoint and rounds
+   only the top corners. Above the breakpoint it IS a centred modal — one class,
+   one markup path, no second component.
+
+   560px is the tabs breakpoint, deliberately reused. A second phone width in
+   the same system produces a viewport where the tabs have collapsed and the
+   modal has not, and nobody can say which of the two is wrong. */
+@media (max-width:560px){
+  .lds-modal-scrim:has(.lds-modal--sheet){align-items:flex-end;padding:0;}
+  .lds-modal--sheet{
+    max-width:none;width:100%;
+    max-height:88dvh;
+    border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+    border-bottom:none;
+    /* Snap back when a drag is released short of the dismiss threshold. */
+    transition:transform var(--dur-base) var(--ease-standard);
+  }
+  .lds-modal--sheet .lds-modal__handle{display:block;}
+  /* A sheet is flush with the bottom edge, which on a phone is where the home
+     indicator lives — so the commit button ends up underneath it. The inset
+     goes on whichever region is last, and resolves to 0 everywhere else.
+     :has() to match the header rules' specificity; without it the base padding
+     wins on source order and the inset silently does nothing. */
+  .lds-modal--sheet:has(.lds-modal__header) .lds-modal__actions{
+    padding-bottom:calc(14px * var(--density) + env(safe-area-inset-bottom));
+  }
+  .lds-modal--sheet:has(.lds-modal__header):not(:has(.lds-modal__actions)) .lds-modal__body{
+    padding-bottom:calc(20px * var(--density) + env(safe-area-inset-bottom));
+  }
+  /* Claim the vertical gesture on the drag region, or the browser scrolls the
+     page while the sheet is following the finger. Confined to the handle and
+     the header — the body has to keep its own scrolling. */
+  .lds-modal--sheet .lds-modal__handle,
+  .lds-modal--sheet .lds-modal__header{touch-action:none;}
+  /* LDS ships no JS, so the gesture is the consumer's: set .is-dragging and
+     drive `transform` while the finger is down. The transition has to be off
+     for that, or the sheet lags behind the touch it is supposed to track. */
+  .lds-modal--sheet.is-dragging{transition:none;cursor:grabbing;}
+}
+@media (prefers-reduced-motion:reduce){
+  .lds-modal--sheet{transition:none;}
+}
+
+/* ==========================================================================
+   Responsive — the four widths, and the height nobody checks
+   ========================================================================== */
+
+/* ---- phone landscape ----
+   The concrete failure this fixes: a centred modal in a 932x430 viewport is
+   filed as "desktop" by every width query in the system, so it keeps its 24px
+   scrim padding and its natural height, and its buttons end up below the fold
+   of a window that cannot scroll — the scrim is the scroll container and it is
+   exactly viewport-height.
+
+   Note the query is height-only. Adding `(orientation:landscape)` reads as more
+   precise and is worse: a short window on a desktop is still short, and a
+   phone with the keyboard open is portrait and short at the same time. Height
+   is the thing that ran out. Measure that. */
+@media (max-height:520px){
+  .lds-modal-scrim{
+    align-items:flex-start;
+    padding:16px;
+    overflow-y:auto;
+  }
+  .lds-modal{
+    max-height:calc(100dvh - 32px);
+    overflow-y:auto;
+  }
+}
+
+/* ==========================================================================
+   Layer 3 — v6: overlays that dock, tables that hold, rows, and menus
+
+   Four components that look independent and are not. A table row, a list row
+   and a menu item are one horizontal anatomy at three densities — leading
+   slot, a content column that truncates, a trailing slot — so they are built
+   from the same rules here rather than three times.
+
+   Spec and rationale: docs/lew-design-system/v6-spec.md
+   ========================================================================== */
+
+/* ---- Modal size scale ----
+   The steps are derived from one anchor rather than picked. --modal-lg is the
+   MEASURE ceiling: at --text-body 18px, 560px is ~62 characters, the top of
+   the comfortable band. Everything at or below lg is one column of prose;
+   everything above it is not a column of prose at all, which is why xl and
+   2xl are separate steps and not degrees of "bigger".
+
+   --modal-full is a cap, NOT 100vw. Full-screen on a 5K display is nobody's
+   intent; "as large as is useful" is. The gutter collapses at --bp-sm, so the
+   same expression is edge-to-edge on a phone — the convergence trick --side
+   and --sheet use below. */
+:root{
+  --modal-sm:360px;
+  --modal-md:420px;
+  --modal-lg:560px;
+  --modal-xl:720px;
+  --modal-2xl:960px;
+  --modal-gutter:24px;
+}
+@media (max-width:480px){
+  :root{--modal-gutter:0px;}
+}
+
+/* Zero specificity so a consumer's own --modal-w still wins. The named class
+   sets nothing but this property, which is what keeps the raw override
+   available as a designer's lever without a second mechanism. */
+:where(.lds-modal){--modal-w:var(--modal-md);--modal-h:min(80vh,640px);}
+.lds-modal--sm {--modal-w:var(--modal-sm);}
+.lds-modal--lg {--modal-w:var(--modal-lg);}
+.lds-modal--xl {--modal-w:var(--modal-xl); --modal-h:min(88vh,800px);}
+.lds-modal--2xl{--modal-w:var(--modal-2xl);--modal-h:min(88vh,800px);}
+.lds-modal--full{
+  --modal-w:min(100vw - 2 * var(--modal-gutter),1280px);
+  --modal-h:min(100vh - 2 * var(--modal-gutter),900px);
+}
+
+/* ---- Side sheet ----
+   A centred modal INTERRUPTS; a side sheet ACCOMPANIES. If dismissing the
+   overlay to look at what is behind it would lose work, it is a side sheet.
+   An alert is never a side sheet: a destructive confirmation pushed to the
+   edge of a 1440px display sits outside the reader's gaze.
+
+   "Accompanies" has a measurable consequence — never half the screen, or
+   neither side is primary. Hence the 40vw cap. The 320px floor matters as
+   much: below it a side sheet is a column of broken labels. */
+@media (min-width:768px){
+  .lds-modal-scrim:has(.lds-modal--side){
+    align-items:stretch;justify-content:flex-end;padding:0;
+  }
+  .lds-modal--side{
+    width:clamp(320px,var(--modal-w),40vw);max-width:none;
+    height:100%;max-height:none;
+    border-radius:0;border-width:0 0 0 1px;
+  }
+  /* No swipe gesture with a mouse, so no handle — the handle is a promise
+     that the panel drags, and it must not be made where it cannot be kept. */
+  .lds-modal--side .lds-modal__handle{display:none;}
+  /* A side sheet sits beside live content, so its title stays subordinate to
+     the page's own hierarchy rather than claiming the centre. */
+  .lds-modal--side .lds-modal__title{text-align:left;}
+}
+/* Below the breakpoint there is no "beside" — the content it accompanies is
+   already gone — so a side sheet IS a bottom sheet. One class, correct at
+   every width. */
+@media (max-width:767.98px){
+  .lds-modal-scrim:has(.lds-modal--side){align-items:flex-end;padding:0;}
+  .lds-modal--side{
+    max-width:none;width:100%;max-height:var(--modal-h);
+    border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+  }
+  .lds-modal--side .lds-modal__handle{display:block;}
+}
+
+/* ---- Header: the bar is chrome, the large title is content ----
+   The collapsing header is buildable without a runtime because of one
+   structural call: .lds-modal__title--large sits at the top of the SCROLL
+   REGION, so it leaves on its own. Nothing animates it away.
+
+   The bar is a three-column grid rather than a flex row with text-align, so
+   the title holds its optical centre when a back button appears. With
+   text-align it shifts sideways the moment the stack grows, which is what
+   makes a nested flow feel unstable. The leading column is reserved whether
+   or not a back button is present, for the same reason. */
+.lds-modal__header{
+  display:grid;
+  grid-template-columns:minmax(var(--control-xl),auto) 1fr minmax(var(--control-xl),auto);
+}
+.lds-modal__header .lds-modal__title{
+  grid-column:2;text-align:center;
+}
+.lds-modal__back{grid-column:1;justify-self:start;}
+.lds-modal__header .lds-modal__close{grid-column:3;justify-self:end;margin:0;}
+
+/* Back and close are never the same target. Back is directional and belongs
+   at the origin edge; close is terminal and belongs at the far edge. Back
+   pops ONE level of the stack; close dismisses the whole stack. */
+.lds-modal__back{
+  width:var(--control-sm);height:var(--control-sm);
+  display:grid;place-items:center;
+  background:transparent;border:0;border-radius:var(--radius-sm);
+  color:var(--text-subdued);cursor:pointer;padding:0;
+  transition:background var(--dur-fast),color var(--dur-fast);
+}
+.lds-modal__back:hover{background:var(--bg-hover);color:var(--text);}
+.lds-modal__back:focus-visible{outline:2px solid var(--text-accent);outline-offset:1px;}
+.lds-modal__back .lds-icon{width:var(--icon-size-sm);height:var(--icon-size-sm);color:currentColor;}
+
+/* The large title. Takes the whole subhead composite — leading and tracking,
+   not only the size — because a role taken by font-size alone still drifts. */
+.lds-modal__title--large{
+  display:block;
+  font-family:var(--th-display);
+  font-size:var(--text-subhead);
+  line-height:var(--leading-subhead);
+  letter-spacing:var(--tracking-subhead);
+  font-weight:var(--weight-medium);
+  color:var(--text);
+  text-align:left;
+  margin:0 0 12px;
+}
+
+/* The cross-fade is POLISH over a layout that is already correct. Without
+   scroll-driven animation the bar title simply stays visible: mildly
+   redundant beside the large one at rest, never broken. Firefox still has
+   this flagged, so the @supports branch is load-bearing, not defensive.
+
+   scroll(nearest) cannot be used: the bar is not inside the scroller. The
+   body names a timeline and the modal scopes it so the header can reach it. */
+@supports (timeline-scope:--lds-modal-body){
+  .lds-modal:has(.lds-modal__title--large){timeline-scope:--lds-modal-body;}
+  .lds-modal:has(.lds-modal__title--large) .lds-modal__body{
+    scroll-timeline:--lds-modal-body y;
+  }
+  .lds-modal:has(.lds-modal__title--large) .lds-modal__header{
+    border-bottom-color:transparent;
+    animation:lds-modal-divider linear both;
+    animation-timeline:--lds-modal-body;
+    animation-range:0 var(--modal-collapse,48px);
+  }
+  .lds-modal:has(.lds-modal__title--large) .lds-modal__header .lds-modal__title{
+    opacity:0;
+    animation:lds-modal-title-in linear both;
+    animation-timeline:--lds-modal-body;
+    animation-range:0 var(--modal-collapse,48px);
+  }
+}
+@keyframes lds-modal-title-in{to{opacity:1;}}
+@keyframes lds-modal-divider{to{border-bottom-color:var(--border-subdued);}}
+
+/* ---- Modal media ----
+   Full-bleed is the SUBJECT of the overlay; inset is an illustration
+   supporting text. Two roles, not a styling preference.
+
+   Aspect, never a fixed height: a fixed height crops differently at every
+   panel width. The full-bleed escapes the body's padding, so it has to be a
+   direct child of the body — not wrapped. */
+.lds-modal__media{
+  display:block;
+  width:calc(100% + 44px * var(--density));
+  margin:calc(-20px * var(--density)) calc(-22px * var(--density)) calc(14px * var(--density));
+  aspect-ratio:var(--media-ratio,16 / 9);
+  object-fit:cover;
+  background:var(--surface-sunken);
+}
+/* As the panel's first child it inherits the panel's top corners. Below a
+   header it is square, because the bar already owns that rounded edge. */
+.lds-modal__body > .lds-modal__media:first-child{
+  border-radius:var(--radius-lg) var(--radius-lg) 0 0;
+}
+.lds-modal:has(.lds-modal__header) .lds-modal__media{border-radius:0;}
+.lds-modal__media--inset{
+  width:100%;margin:0 0 calc(14px * var(--density));
+  border-radius:var(--radius-base);
+}
+
+/* ---- List row ----
+   The anatomy the system never had: leading slot, content column, trailing
+   slot, affordance. Every slot optional except the title.
+
+   Heights come from the --control-* scale rather than new tokens, and the
+   whole row is the target, so every variant clears the 44px floor. */
+.lds-row{
+  display:flex;align-items:center;
+  gap:calc(12px * var(--density));
+  padding:calc(8px * var(--density)) calc(14px * var(--density));
+  min-height:var(--control-2xl);
+  font-family:var(--th-ui);
+  color:var(--text);
+  text-decoration:none;
+  background:var(--background);
+  transition:background var(--dur-fast) var(--ease-standard);
+}
+.lds-row + .lds-row{border-top:1px solid var(--border-subdued);}
+.lds-row--compact{min-height:var(--control-xl);}
+.lds-row--roomy{min-height:72px;}
+a.lds-row:hover,
+.lds-row--interactive:hover{background:var(--bg-hover);cursor:pointer;}
+a.lds-row:focus-visible,
+.lds-row--interactive:focus-visible{
+  outline:2px solid var(--text-accent);outline-offset:-2px;
+}
+
+.lds-row__lead,
+.lds-row__trail{flex:0 0 auto;display:flex;align-items:center;gap:8px;}
+.lds-row__trail{flex-direction:column;align-items:flex-end;gap:1px;text-align:right;}
+
+/* min-width:0 is load-bearing. A flex child defaults to min-width:auto, so
+   without this the subtitle refuses to truncate and shoves the trailing slot
+   off the row — the same trap already documented on .lds-banner. */
+.lds-row__content{flex:1 1 auto;min-width:0;}
+.lds-row__title{
+  font-size:var(--size-1);font-weight:var(--weight-semibold);color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.lds-row__subtitle{
+  font-size:var(--size-1);color:var(--text-subdued);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.lds-row__label{font-size:var(--size-1);font-weight:var(--weight-medium);color:var(--text);}
+.lds-row__meta{font-size:var(--size-1);color:var(--text-subdued);}
+.lds-row__chevron{
+  flex:0 0 auto;display:grid;place-items:center;color:var(--icon);
+}
+.lds-row__chevron .lds-icon{
+  width:var(--icon-size-sm);height:var(--icon-size-sm);color:currentColor;
+}
+.lds-row__thumb{
+  width:52px;height:38px;border-radius:var(--radius-sm);object-fit:cover;
+  background:var(--surface-sunken);
+}
+.lds-row__avatar{
+  width:34px;height:34px;border-radius:var(--radius-pill);object-fit:cover;
+  background:var(--surface-sunken);
+}
+/* A row cannot be both navigable and multi-select from ONE tap target. Where
+   it needs both, the checkbox is its own target and the rest of the row
+   navigates — two targets, both clearing the floor. */
+.lds-row .lds-check{min-height:0;}
+
+/* The list container. Rows carry their own separators, so this only draws the
+   boundary and clips the first and last row's corners. */
+.lds-rows{
+  border:1px solid var(--border);border-radius:var(--radius-lg);
+  background:var(--surface-base);overflow:hidden;
+}
+.lds-rows--flush{border:0;border-radius:0;background:none;}
+
+/* ---- Table: per-column intent ----
+   The default was th nowrap / td wrap, which is why headers refused to
+   compress and the table handed back a horizontal scrollbar for content that
+   would have fitted in one column. Wrapping is now the default on BOTH, and
+   not-wrapping is a stated intent per column.
+
+   The three intents are not interchangeable: a wrapped date column is worse
+   than a scrolled one, and a truncated title is worse than a wrapped one. */
+.lds-table__col--wrap{white-space:normal;min-width:var(--col-min,180px);}
+.lds-table__col--nowrap{white-space:nowrap;}
+.lds-table__col--truncate{
+  max-width:var(--col-max,160px);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+
+/* ---- Table: sticky header and frozen columns ----
+   Both need their own background: a transparent sticky cell lets rows ghost
+   through it, which is the failure everyone hits first. Both take a surface
+   token rather than a hex, so dark mode needs no second rule.
+
+   The scroll container must have a bounded height, or `top:0` has nothing to
+   stick to. That fails silently — nothing errors, the header simply scrolls. */
+.lds-table-scroll{
+  max-height:var(--table-max-h,420px);
+  overflow:auto;
+  border:1px solid var(--border);border-radius:var(--radius-lg);
+  background:var(--surface-base);
+}
+.lds-table--sticky thead th{
+  position:sticky;top:0;z-index:2;
+  background:var(--surface-raised);
+}
+/* Only leading columns freeze — freezing a middle column is not a thing. A
+   frozen column needs its own right edge, because the row border it would
+   otherwise rely on disappears under the scrolling content. */
+.lds-table__col--freeze{
+  position:sticky;left:0;z-index:1;
+  background:var(--surface-base);
+  border-right:1px solid var(--border);
+}
+.lds-table--sticky thead th.lds-table__col--freeze{
+  z-index:3;background:var(--surface-raised);
+}
+.lds-table tbody tr:hover td.lds-table__col--freeze{background:var(--bg-hover);}
+/* A frozen column eats the width it exists to preserve once the viewport is
+   narrow enough that the table is mostly the frozen column. */
+@media (max-width:767.98px){
+  .lds-table__col--freeze{position:static;}
+}
+
+/* ---- Table: sort affordance ----
+   A real button inside the th, not a th with a click handler — that is what
+   carries keyboard and screen-reader semantics.
+
+   The caret is present AT REST on every sortable column. Revealing it only on
+   hover means a touch user cannot discover that the column sorts at all. */
+.lds-table th:has(.lds-table__sort){padding:0;}
+.lds-table__sort{
+  display:flex;align-items:center;gap:6px;
+  width:100%;min-height:var(--control-md);
+  padding:calc(10px * var(--density)) calc(12px * var(--density));
+  background:transparent;border:0;
+  font:inherit;color:inherit;letter-spacing:inherit;
+  text-align:left;cursor:pointer;
+}
+.lds-table__sort:hover{color:var(--text);background:var(--bg-hover);}
+.lds-table__sort:focus-visible{outline:2px solid var(--text-accent);outline-offset:-2px;}
+.lds-table__caret{
+  flex:0 0 auto;width:12px;height:12px;
+  color:currentColor;opacity:.35;
+}
+[aria-sort="ascending"] .lds-table__caret,
+[aria-sort="descending"] .lds-table__caret{opacity:1;color:var(--text-accent);}
+
+/* ---- Menu ----
+   A surface at the overlay plane — the same token the modal takes, rather
+   than a new elevation — carrying list-row anatomy at compact density. */
+.lds-menu{
+  min-width:200px;max-width:320px;
+  background:var(--surface-overlay);color:var(--text);
+  border:1px solid var(--border);border-radius:var(--radius-lg);
+  box-shadow:var(--shadow-base,var(--card-shadow,0 12px 34px rgba(0,0,0,.2)));
+  padding:5px;font-family:var(--th-ui);
+}
+.lds-menu__item{
+  display:flex;align-items:center;gap:10px;
+  width:100%;min-height:var(--control-sm);
+  padding:0 9px;border:0;background:transparent;
+  border-radius:var(--radius-sm);
+  font:inherit;font-size:var(--size-1);color:var(--text);
+  text-align:left;text-decoration:none;cursor:pointer;
+}
+.lds-menu__item:hover{background:var(--bg-hover);}
+.lds-menu__item:focus-visible{outline:2px solid var(--text-accent);outline-offset:-2px;}
+.lds-menu__item[aria-disabled="true"]{color:var(--text-subdued);cursor:default;}
+.lds-menu__item[aria-disabled="true"]:hover{background:transparent;}
+.lds-menu__label{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lds-menu__hint{flex:0 0 auto;color:var(--text-subdued);font-family:var(--th-mono);font-size:var(--size-0);}
+.lds-menu__item .lds-icon{
+  flex:0 0 auto;width:var(--icon-size-sm);height:var(--icon-size-sm);color:var(--icon);
+}
+/* Destructive takes the hue at text weight. emph-plain is neutral by design
+   and cannot carry this meaning, which is why the item states the ramp. */
+.lds-menu__item--danger{color:var(--c-700);}
+.lds-menu__item--danger .lds-icon{color:var(--c-700);}
+.mode-dark .lds-menu__item--danger,
+.mode-dark .lds-menu__item--danger .lds-icon{color:var(--c-300);}
+
+.lds-menu__separator{height:1px;background:var(--border-subdued);margin:5px 7px;border:0;}
+/* The submenu's back affordance. Present only in the replace branch. */
+.lds-menu__header{
+  display:flex;align-items:center;gap:8px;
+  padding:2px 6px 7px;margin-bottom:5px;
+  border-bottom:1px solid var(--border-subdued);
+  font-size:var(--size-1);font-weight:var(--weight-semibold);color:var(--text);
+}
+.lds-menu__header .lds-modal__back{width:26px;height:26px;}
+
+/* Nesting branches on POINTER, not preference. On a fine pointer the submenu
+   opens beside its parent and the parent stays visible. On a coarse pointer
+   tapping a parent REPLACES the panel: a cascade opens under the thumb and
+   there is no hover to keep it alive. The replace branch is the base case and
+   needs no CSS beyond the header above — the cascade is the enhancement. */
+.lds-menu__sub{position:relative;}
+@media (hover:hover) and (pointer:fine){
+  .lds-menu__sub > .lds-menu{
+    position:absolute;top:-5px;left:100%;margin-left:-2px;
+    display:none;
+  }
+  .lds-menu__sub:hover > .lds-menu,
+  .lds-menu__sub:focus-within > .lds-menu{display:block;}
+}
+/* A menu item is a full-width row, so on touch the ROW grows rather than
+   taking the invisible ::after target the small controls use. */
+@media (pointer:coarse){
+  .lds-menu__item{min-height:var(--control-xl);}
+}
+
+/* ---- visibility utilities ----
+   min-width-first: the un-suffixed state is the small one, and each step adds.
+   Named for the boundary they cross, not for a device — `hide-below-lg` stays
+   true when a tablet gets bigger, `hide-on-tablet` does not.
+
+   `display:revert` and not `display:block`: these are put on flex rows, grid
+   items and inline spans, and forcing block silently breaks the layout the
+   element was already in. */
+.hide-below-md,
+.hide-below-lg{display:none !important;}
+@media (min-width:768px){
+  .hide-below-md{display:revert !important;}
+  .hide-md-up{display:none !important;}
+}
+@media (min-width:1024px){
+  .hide-below-lg{display:revert !important;}
+  .hide-lg-up{display:none !important;}
+}
+/* Short viewports are a third axis, not a width. A phone in landscape is
+   `hide-md-up`-visible and `hide-when-short`-hidden at the same time, which is
+   correct: it has the width of a tablet and the height of a phone. */
+@media (max-height:520px){
+  .hide-when-short{display:none !important;}
+}
+
+/* ==========================================================================
+   Hit area — for controls deliberately smaller than the touch floor
+   ==========================================================================
+
+   --control-sm and --control-md sit below --target-min on purpose: a 36px
+   button is a reasonable size for a mouse and an unreasonable one for a thumb.
+   The wrong fix is to grow them to 44px everywhere, which throws away the
+   dense sizes the scale exists to provide and inflates every toolbar on a
+   laptop that happens to have a touchscreen.
+
+   So the SIZE stays and the TARGET grows. An absolutely positioned ::after,
+   centred on the control and floored at --target-min, takes the press without
+   participating in layout — nothing shifts, nothing reflows, and the control
+   still measures 36px to a ruler.
+
+   Scoped to (pointer:coarse) so it costs a mouse user nothing. Written with
+   :where() so a component can opt out by stating its own ::after. */
+@media (pointer:coarse){
+  :where(.lds-btn--sm,.lds-chip,.lds-banner__dismiss,.lds-modal__close,.lds-tag--interactive){
+    position:relative;
+  }
+  :where(.lds-btn--sm,.lds-chip,.lds-banner__dismiss,.lds-modal__close,.lds-tag--interactive)::after{
+    content:"";
+    position:absolute;left:50%;top:50%;
+    width:100%;height:100%;
+    min-width:var(--target-min);min-height:var(--target-min);
+    transform:translate(-50%,-50%);
+  }
+}

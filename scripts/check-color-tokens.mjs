@@ -38,6 +38,10 @@ const EXEMPT = {
     'demonstrates pre-token colors side by side with their replacements',
   'web/design-system/slack-blockkit-payloads.js':
     "Slack's attachment API takes a literal hex over the wire; each value names the token it mirrors",
+  'web/design-system/roadtrip-zion.css':
+    'an LDS theme face — its whole job is restating tokens.css values under LDS role names; every hex is commented with the --rt-* token it mirrors',
+  'web/design-system/vendor/lds':
+    "vendored third-party build output from matthewlew/lds's dist/ — not this repo's source, see vendor/lds/README.md",
 };
 
 /** Line-level escapes for cases a file-level exemption would over-grant. */
