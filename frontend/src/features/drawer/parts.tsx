@@ -10,7 +10,7 @@ import { distanceKm, formatDistance } from '@/lib/geo';
 import type { PoiFeature } from '@/lib/poi';
 import { formatPhone, phoneNumbers, telHref } from '@/lib/phone';
 import { useMapStore } from '@/stores/mapStore';
-import { addPoiToTrip } from '@/features/trip/add-poi-to-trip';
+import { addPoiToTrip } from '@/domain/trip/add-poi-to-trip';
 import { useTripStore } from '@/stores/tripStore';
 
 /**

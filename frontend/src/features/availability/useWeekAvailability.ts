@@ -21,7 +21,7 @@ import {
   NO_WATCH_CAPABILITIES,
   normalizeWatchCapabilities,
   type WatchCapabilities,
-} from './watch-windows';
+} from '@/lib/watch-windows';
 
 /** Days in the visible window. Seven, and the grid's column count follows it. */
 export const WEEK_DAYS = 7;

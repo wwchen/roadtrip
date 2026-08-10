@@ -17,9 +17,9 @@ import { createPortal } from 'react-dom';
 import type { Watch } from '@/api/watches-api';
 import { TRIGGER_KIND_ATC, TRIGGER_KIND_SLACK_NOTIFY, TRIGGER_KIND_EMAIL_NOTIFY } from '@/lib/watch-triggers';
 import type { TriggerPayload } from '@/lib/watch-triggers';
-import { WatchEditor } from './WatchEditor';
+import { WatchEditor } from '@/domain/watch/WatchEditor';
 import { longDayLabel } from './week-labels';
-import { normalizeWatchCapabilities, type WatchCapabilities } from './watch-windows';
+import { normalizeWatchCapabilities, type WatchCapabilities } from '@/lib/watch-windows';
 
 /** Matches `--rt-watch-editor-width` in availability.css. */
 const POPOVER_WIDTH_PX = 240;

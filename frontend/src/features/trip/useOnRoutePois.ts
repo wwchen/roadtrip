@@ -23,7 +23,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchOnRoutePois, type PoiPinCollection } from '@/api/poi-api';
 import { queryKeys } from '@/queries/keys';
 import { selectRouteActive, useTripStore } from '@/stores/tripStore';
-import { isLocated, type StopSlot } from './stops';
+import { isLocated, type StopSlot } from '@/domain/trip/stops';
 
 /** One settle of the radius slider. Matches the vanilla's ON_ROUTE_DEBOUNCE_MS. */
 export const ON_ROUTE_DEBOUNCE_MS = 250;

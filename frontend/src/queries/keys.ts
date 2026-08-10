@@ -74,7 +74,7 @@ export const queryKeys = {
   },
 
   /**
-   * A static GeoJSON asset served out of the legacy `web/` tree (state lines).
+   * A static GeoJSON asset served by the backend (state lines).
    *
    * Its own namespace rather than a `pois` entry: it is a file, not an API
    * resource, and it must not be swept up by a `['pois']` invalidation.

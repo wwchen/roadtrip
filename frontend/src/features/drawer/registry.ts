@@ -25,24 +25,37 @@ export interface DrawerContentProps {
 
 export type DrawerContent = ComponentType<DrawerContentProps>;
 
+export type DrawerRegistration =
+  | { kind: 'campground'; Content: typeof CampgroundDrawer }
+  | { kind: 'standard'; Content: DrawerContent };
+
+const campgroundRegistration: DrawerRegistration = {
+  kind: 'campground',
+  Content: CampgroundDrawer,
+};
+const standardRegistration = (Content: DrawerContent): DrawerRegistration => ({
+  kind: 'standard',
+  Content,
+});
+
 /**
  * Both the canonical category and the alias reach the client depending on which
  * endpoint answered, exactly as in the overlay registry.
  */
-const BY_CATEGORY = new Map<string, DrawerContent>([
-  ['campground', CampgroundDrawer],
-  ['national-park', ParkDrawer],
-  ['state-park', ParkDrawer],
-  ['planet_fitness_location', PlanetFitnessDrawer],
-  ['planet-fitness', PlanetFitnessDrawer],
-  ['tesla_supercharger', SuperchargerDrawer],
-  ['supercharger', SuperchargerDrawer],
+const BY_CATEGORY = new Map<string, DrawerRegistration>([
+  ['campground', campgroundRegistration],
+  ['national-park', standardRegistration(ParkDrawer)],
+  ['state-park', standardRegistration(ParkDrawer)],
+  ['planet_fitness_location', standardRegistration(PlanetFitnessDrawer)],
+  ['planet-fitness', standardRegistration(PlanetFitnessDrawer)],
+  ['tesla_supercharger', standardRegistration(SuperchargerDrawer)],
+  ['supercharger', standardRegistration(SuperchargerDrawer)],
   // Complete for every category the map paints. A category with no entry still opens
   // the drawer and says so — see `PoiDrawer` — rather than swallowing the click.
 ]);
 
 /**
- * The drawer for a hydrated POI, or null when nothing renders it.
+ * The drawer registration for a hydrated POI, or null when nothing renders it.
  *
  * Takes the flattened properties rather than a category string, because for a
  * campground the category is not what came off the wire: `flattenHydratedPoi`
@@ -62,10 +75,10 @@ const BY_CATEGORY = new Map<string, DrawerContent>([
  */
 export function drawerFor(
   properties: Readonly<Record<string, unknown>> | null | undefined,
-): DrawerContent | null {
+): DrawerRegistration | null {
   const category = properties?.category;
   if (typeof category !== 'string') return null;
   const direct = BY_CATEGORY.get(category);
   if (direct) return direct;
-  return category === properties?.subcategory ? CampgroundDrawer : null;
+  return category === properties?.subcategory ? campgroundRegistration : null;
 }

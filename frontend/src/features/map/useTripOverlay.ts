@@ -12,7 +12,7 @@
 // slider and the campground count said something else, with no path back until the
 // route itself changed. A single memo cannot disagree with itself.
 import { useEffect, useMemo, useRef } from 'react';
-import { computeCorridor, routeLine, serverCorridor } from '@/features/trip/corridor';
+import { computeCorridor, routeLine, serverCorridor } from '@/lib/trip-corridor';
 import {
   ROUTE_FIT_DURATION_MS,
   ROUTE_FIT_PADDING_PX,

@@ -13,7 +13,7 @@
 // fetch stops anyone signing in. See the Phase 3 note in docs/react-migration-plan.md.
 import { useState } from 'react';
 import { signIn, signOut } from '@/api/auth-api';
-import { SettingsModal } from '@/features/account/SettingsModal';
+import { SettingsModal } from './SettingsModal';
 import { useMe } from '@/queries/auth';
 import './auth-row.css';
 

@@ -14,7 +14,7 @@
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { LineString } from 'geojson';
 import { token } from '@tokens';
-import type { CorridorGeometry } from '@/features/trip/corridor';
+import type { CorridorGeometry } from '@/lib/trip-corridor';
 
 export const ROUTE_SOURCE_ID = 'trip-route';
 export const ROUTE_LAYER_ID = 'trip-route-line';

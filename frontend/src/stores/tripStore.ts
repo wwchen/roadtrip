@@ -50,7 +50,7 @@ export interface TripStop {
    * stop rather than a separate loading flag because the row it belongs to can
    * move: the coordinates are (0, 0) until geolocation answers, so routing and
    * marker placement both have to skip it — see `isLocated` in
-   * features/trip/stops.ts. Null island is a real coordinate that passes every
+   * domain/trip/stops.ts. Null island is a real coordinate that passes every
    * finite check.
    */
   pending?: boolean;
@@ -180,7 +180,7 @@ export const useTripStore = create<TripState>()((set) => ({
  * Deliberately NOT the routing gate: it counts a `pending` "Locating you…" stop as
  * filled, because for the store's purposes the slot is occupied. The predicate that
  * decides whether a route may be requested is `allStopsFilled` in
- * features/trip/stops.ts, which also requires every stop to be located. The two
+ * domain/trip/stops.ts, which also requires every stop to be located. The two
  * cannot disagree about a live route — `selectRouteActive` needs a fetched route as
  * well, and only that stricter gate can produce one.
  */

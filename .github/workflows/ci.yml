@@ -53,6 +53,7 @@ jobs:
             frontend:
               - 'frontend/**'
               - 'scripts/check-color-tokens.mjs'
+              - 'scripts/check-feature-boundaries.mjs'
               - 'scripts/check-css-blocks.mjs'
               - 'scripts/check-token-usage.mjs'
               - '.github/workflows/ci.yml'
@@ -149,6 +150,10 @@ jobs:
       - name: Typecheck frontend
         working-directory: frontend
         run: npm run typecheck
+
+      - name: Check frontend architecture
+        working-directory: frontend
+        run: npm run lint
 
       - name: Run frontend unit tests
         working-directory: frontend

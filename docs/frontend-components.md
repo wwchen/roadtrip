@@ -46,11 +46,21 @@ own DOM and layer list, so those modules are imperative functions that take a ma
 on it. React effects in `features/map/` drive them. Do not try to express a layer or a
 marker as JSX.
 
+Reusable business rules and domain-specific components that genuinely serve more than
+one feature live under `frontend/src/domain/<domain>/`. Unlike `@ui`, they may know what
+a watch or trip stop is; unlike a feature, they do not own a page surface. Pages compose
+features, features and pages may import domains, and domains never import features.
+
+`npm run lint` enforces the no-cross-feature rule for production source. Tests may
+compose multiple features to exercise a page, but production composition belongs in
+`pages/`.
+
 ## File structure
 
 | Path | Holds |
 |---|---|
 | `frontend/src/features/<feature>/` | components, hooks and pure logic for one surface |
+| `frontend/src/domain/<domain>/` | business rules and domain UI shared by multiple features |
 | `frontend/src/map/` | imperative MapLibre modules (layers, markers, overlays) |
 | `frontend/src/api/` | one typed client per endpoint group |
 | `frontend/src/queries/` | query keys and cache invalidation |
@@ -60,7 +70,7 @@ marker as JSX.
 
 Pure logic belongs in its own module beside the component that uses it — the ordering
 rules, the copy, the state machine — because that is the half worth testing directly.
-`features/trip/stops.ts` next to `StopRow.tsx` is the pattern.
+`features/availability/matrix-rows.ts` next to `SiteMatrix.tsx` is the pattern.
 
 ## Forms on LDS: the controls are uncontrolled
 

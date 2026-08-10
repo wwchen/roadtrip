@@ -8,7 +8,7 @@ import { act, render, screen } from '@testing-library/react';
 import { HttpError } from '@/api/http';
 import type { Watch } from '@/api/watches-api';
 import { WatchEditor } from './WatchEditor';
-import { normalizeWatchCapabilities } from './watch-windows';
+import { normalizeWatchCapabilities } from '@/lib/watch-windows';
 
 const caps = (triggerKinds: string[], bookingActions: string[] = []) =>
   normalizeWatchCapabilities({ trigger_kinds: triggerKinds, booking_actions: bookingActions });

@@ -91,7 +91,7 @@ test: _ensure-hooks
 	# Same steps, same order as CI's frontend-tests job. The build is not redundant
 	# with the typecheck: it is the only thing that exercises bundling (the
 	# vendored LDS ships untranspiled .jsx), which fails at bundle time only.
-	cd frontend && npm ci && npm run typecheck && npm run test && npm run build
+	cd frontend && npm ci && npm run lint && npm run typecheck && npm run test && npm run build
 	node scripts/check-color-tokens.mjs
 	node scripts/check-css-blocks.mjs
 	node scripts/check-token-usage.mjs

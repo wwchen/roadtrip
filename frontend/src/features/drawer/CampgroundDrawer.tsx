@@ -1,5 +1,5 @@
+import type { ReactNode } from 'react';
 import { Button } from '@ui';
-import { AvailabilityWeek } from '@/features/availability/AvailabilityWeek';
 import { descriptionHtml, upstreamDecorations } from '@/lib/upstream-html';
 import {
   amenityList,
@@ -47,7 +47,11 @@ import type { DrawerContentProps } from './registry';
  * because our availability is more permissive than the vendor's booking flow —
  * routing intent through watches avoids implying a guarantee we cannot keep.
  */
-export function CampgroundDrawer({ feature, onClose }: DrawerContentProps) {
+export interface CampgroundDrawerProps extends DrawerContentProps {
+  availability?: ReactNode;
+}
+
+export function CampgroundDrawer({ feature, onClose, availability }: CampgroundDrawerProps) {
   const p = feature.properties;
   const [lng, lat] = coordinatesOf(feature);
   const distance = useDistanceTo(lng, lat);
@@ -118,12 +122,12 @@ export function CampgroundDrawer({ feature, onClose }: DrawerContentProps) {
         )}
       </div>
 
-      {availabilitySupported(p) ? (
+      {availabilitySupported(p) && availability ? (
         // Gated on the backend's own provider-capability flag, so the grid only
         // appears for pins that genuinely have availability to show — rather than
         // rendering an empty week for a campground nobody can book through us.
         <div className="rt-drawer-section">
-          <AvailabilityWeek feature={feature} />
+          {availability}
         </div>
       ) : null}
 

@@ -14,8 +14,8 @@
 // a shared link can point at a category — or, for a campground, an agency — the
 // recipient has switched off, and a drawer for an invisible pin reads as a bug.
 import { useEffect, useRef } from 'react';
-import { usePoiDetail } from '@/features/drawer/usePoiDetail';
-import { poiFromUrl } from '@/features/drawer/poi-url';
+import { poiFromUrl } from '@/lib/poi-url';
+import { usePoiDetail } from '@/queries/poi-detail';
 import { geomCenter, hasCoordinates, zoomForBbox } from '@/lib/geo';
 import { featureAgency } from '@/map/agencies';
 import { overlayForCategory } from '@/map/overlays';

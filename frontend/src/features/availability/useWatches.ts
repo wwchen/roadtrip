@@ -13,25 +13,27 @@
 // availability is worth reading even when we cannot say whether the user is
 // watching it.
 import { useCallback, useEffect } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   createWatch,
   deleteWatch,
-  listWatches,
   updateWatch,
   type Watch,
 } from '@/api/watches-api';
-import { HttpError } from '@/api/http';
-import { queryKeys } from '@/queries/keys';
+import {
+  isWatchUnauthorized,
+  useInvalidateWatches,
+  watchListQuery,
+  type WatchListFilters,
+} from '@/domain/watch/queries';
 import type { TriggerPayload } from '@/lib/watch-triggers';
 import {
   DEFAULT_WATCH_CADENCE_SEC,
   indexWatchesByWindow,
   stayEndDate,
   watchWindowKey,
-} from './watch-windows';
+} from '@/lib/watch-windows';
 
-const HTTP_UNAUTHORIZED = 401;
 /** Only active watches mark cells; a `done` one is history. */
 const WATCH_LIST_STATUS = 'active';
 
@@ -42,8 +44,6 @@ const WATCH_LIST_STATUS = 'active';
  * the same key the watches page uses — so a mutation there and a badge here cannot
  * drift onto separate cache entries.
  */
-type WatchListFilters = Readonly<Record<string, unknown>>;
-
 const listFilters = (poiId: string | number): WatchListFilters => ({
   status: WATCH_LIST_STATUS,
   poiId: String(poiId),
@@ -82,9 +82,6 @@ export interface PoiWatches {
 /** No watches to mark, whatever the reason. Shared, so identity does not churn. */
 const NO_WINDOWS: ReadonlyMap<string, Watch> = new Map();
 
-const isUnauthorized = (error: unknown): boolean =>
-  error instanceof HttpError && error.status === HTTP_UNAUTHORIZED;
-
 /**
  * The user's active watches for one POI.
  *
@@ -93,12 +90,7 @@ const isUnauthorized = (error: unknown): boolean =>
  * would be a state nothing can reach and a fourth thing for `access` to mean.
  */
 export function usePoiWatches(poiId: string | number): PoiWatches {
-  const query = useQuery({
-    queryKey: queryKeys.watches.list(listFilters(poiId)),
-    // A 401 is an answer, not a fault, so retrying it just delays the same answer.
-    retry: false,
-    queryFn: ({ signal }) => listWatches({ status: WATCH_LIST_STATUS, poiId, signal }),
-  });
+  const query = useQuery(watchListQuery(listFilters(poiId)));
 
   // In an effect, not in the render body. A `console.warn` while rendering fires
   // again on every re-render for as long as the error is cached — and a render must
@@ -107,7 +99,7 @@ export function usePoiWatches(poiId: string | number): PoiWatches {
   useEffect(() => {
     // A 401 is the expected answer for an anonymous visitor, so it is not logged;
     // anything else is a real fault the user is now being told about.
-    if (error && !isUnauthorized(error)) console.warn('watch list fetch failed', error);
+    if (error && !isWatchUnauthorized(error)) console.warn('watch list fetch failed', error);
   }, [error]);
 
   const retry = useCallback(() => {
@@ -115,7 +107,7 @@ export function usePoiWatches(poiId: string | number): PoiWatches {
   }, [refetch]);
 
   const access: WatchAccess = error
-    ? isUnauthorized(error)
+    ? isWatchUnauthorized(error)
       ? 'unauthorized'
       : 'error'
     : query.data
@@ -160,11 +152,7 @@ export class WatchAuthError extends Error {
  * mounted watch surface refetches from the same source of truth.
  */
 export function useWatchMutations(poiId: string | number | null | undefined): WatchMutations {
-  const queryClient = useQueryClient();
-
-  const settled = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.watches.all() });
-  }, [queryClient]);
+  const invalidateWatches = useInvalidateWatches();
 
   /**
    * Run a mutation, mapping a 401 to `WatchAuthError` and refetching the list.
@@ -184,12 +172,12 @@ export function useWatchMutations(poiId: string | number | null | undefined): Wa
       try {
         return await run();
       } catch (caught) {
-        if (!isUnauthorized(caught)) throw caught;
-        void queryClient.invalidateQueries({ queryKey: queryKeys.watches.all() });
+        if (!isWatchUnauthorized(caught)) throw caught;
+        void invalidateWatches();
         throw new WatchAuthError();
       }
     },
-    [queryClient],
+    [invalidateWatches],
   );
 
   const saveMutation = useMutation({
@@ -216,12 +204,12 @@ export function useWatchMutations(poiId: string | number | null | undefined): Wa
           ...payload,
         });
       }),
-    onSuccess: settled,
+    onSuccess: invalidateWatches,
   });
 
   const removeMutation = useMutation({
     mutationFn: (existing: Watch) => withAuthMapping(() => deleteWatch(existing.id)),
-    onSuccess: settled,
+    onSuccess: invalidateWatches,
   });
 
   return {

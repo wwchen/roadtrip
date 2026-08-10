@@ -1,5 +1,3 @@
-import { PoiDrawer } from '@/features/drawer/PoiDrawer';
-import { TopBar } from '@/features/trip/TopBar';
 import { useTransitionShim } from '@/stores/transition-shim';
 import { LegendPanel } from './LegendPanel';
 import { useDeepLinkedPoi } from './useDeepLinkedPoi';
@@ -18,9 +16,8 @@ import { useViewportPois } from './useViewportPois';
  * legend — and threading it through a context would hide that while buying
  * nothing: this is the only place either is used.
  *
- * Everything 4e listed as still to come is here now: the topbar (search,
- * directions, the corridor slider, the results list and the alerts panel), the
- * trip overlay, and the map's own controls.
+ * Page-level UI is composed beside this component by the map entrypoint. This
+ * feature owns map behavior and the legend only.
  */
 export function MapView() {
   const pois = useViewportPois();
@@ -38,11 +35,7 @@ export function MapView() {
 
   return (
     <>
-      <TopBar />
       <LegendPanel pois={pois} />
-      {/* Reads `mapStore.selectedPoiId`, which 4b's layer click handlers write and
-          the empty-map click clears — so the drawer needs no wiring of its own. */}
-      <PoiDrawer />
     </>
   );
 }
