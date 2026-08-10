@@ -1,19 +1,11 @@
 // Fetching the route for the current stops.
 //
-// Port of `tryFetchRoute` from web/topbar.js. Three of its mechanisms come from
-// the query key rather than from hand-written bookkeeping:
+// The query key replaces hand-written request sequencing: a key change retires
+// the old query, so a late response for a previous stop list has no observer to
+// reach. Query also supplies the abort signal used by `requestRoute`.
 //
-//   trip.generation counter  -> the key. It existed so a response for the
-//                               previous stop list could not paint over the
-//                               current one; a key change retires the old query,
-//                               so a late response has no observer to reach.
-//   trip.routeAbort          -> Query's `signal`, passed into `requestRoute`,
-//                               which is what lets query-core cancel it.
-//   the ok/!ok error branch  -> `routeErrorMessage`, in route-summary.ts.
-//
-// This hook is the single writer of `tripStore.route`, the same arrangement
-// `useMe()` has with `authStore`: the store is what `selectRouteActive` and the
-// viewport loop read, and one writer means they cannot disagree with the cache.
+// This hook is the single writer of `tripStore.route`; the store is what
+// `selectRouteActive` and the viewport loop read.
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { FeatureCollection, LineString } from 'geojson';

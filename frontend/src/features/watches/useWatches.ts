@@ -25,7 +25,6 @@ import {
   type WatchStatus,
 } from '@/api/watches-api';
 import { queryKeys } from '@/queries/keys';
-import { notifyLegacyWatchesChanged } from '@/queries/legacy-events';
 
 /** Matches the legacy page: one request per status, 200 rows each. */
 const WATCH_LIST_LIMIT = 200;
@@ -169,8 +168,7 @@ interface WatchWriteHandlers {
 /**
  * The shared success/error wiring for every watch mutation.
  *
- * `onSuccess` invalidates everything a write can affect and tells the
- * still-vanilla side so the topbar alerts list refreshes too.
+ * `onSuccess` invalidates everything a write can affect.
  *
  * `onError` exists for one case: a session that expires between loading the page
  * and pressing a button. The write 401s, but the list queries already succeeded,
@@ -182,7 +180,6 @@ function useWatchWriteHandlers(): WatchWriteHandlers {
   const queryClient = useQueryClient();
   return {
     onSuccess: async () => {
-      notifyLegacyWatchesChanged();
       await queryClient.invalidateQueries({ queryKey: queryKeys.watches.all() });
     },
     onError: (error) => {

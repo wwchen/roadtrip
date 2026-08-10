@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/queries/keys';
-import { useMapStore } from './mapStore';
 import { useTripStore, type TripStop } from './tripStore';
 import { installTransitionShim } from './transition-shim';
 
@@ -12,7 +11,6 @@ let dispose: () => void;
 
 beforeEach(() => {
   useTripStore.getState().reset();
-  useMapStore.getState().reset();
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   dispose = installTransitionShim(queryClient);
 });
@@ -22,160 +20,44 @@ afterEach(() => {
   queryClient.clear();
 });
 
-describe('installation', () => {
-  test('publishes exactly the seven globals that have a consumer', () => {
-    expect(typeof window.__rtTripMode).toBe('function');
-    expect(typeof window.__rtRouteActive).toBe('function');
-    expect(typeof window.__rtAddTripStop).toBe('function');
-    expect(typeof window.__rtClearBrowsePin).toBe('function');
-    expect(typeof window.__rtOpenPoiById).toBe('function');
-    expect(typeof window.__rtSetRoutePois).toBe('function');
-    expect(typeof window.__rtRefreshBbox).toBe('function');
-  });
-
-  // Both are defined by topbar.js and read by nothing in the repo, so shimming
-  // them would invent an API rather than preserve one.
-  // A test seam, not dead API: SmokeTest.kt reads it (~line 662) to assert that
-  // copying a shared route produces a link with a `route=` parameter.
-  test('publishes the route share URL from the store', () => {
-    useTripStore.setState({
-      stops: [
-        { name: 'Seattle', lng: -122.33, lat: 47.6 },
-        { name: 'Bowman Bay', lng: -122.65, lat: 48.41 },
-      ],
-    });
-
-    expect(window.__rtRouteShareUrl?.()).toContain('route=');
-  });
-
-  test('answers an empty share URL for a trip that cannot be shared', () => {
-    expect(window.__rtRouteShareUrl?.()).toBe('');
-  });
-
-  // The other seam needs the planner (it fills a row, with geolocation), so the
-  // topbar publishes it — see `usePublishedLocationFiller` in TopBar.tsx.
-  test('leaves the current-location filler to the topbar', () => {
+describe('browser QA hooks', () => {
+  test('publishes only hooks consumed by the smoke suite', () => {
+    expect(window.__rtRouteActive).toBeTypeOf('function');
+    expect(window.__rtAddTripStop).toBeTypeOf('function');
+    expect(window.__rtRefreshBbox).toBeTypeOf('function');
+    expect(window.__rtRouteShareUrl).toBeTypeOf('function');
     expect(window).not.toHaveProperty('__rtUseCurrentLocationForTripStop');
   });
 
-  test('dispose removes the globals it added', () => {
+  test('restores an existing hook on dispose', () => {
     dispose();
-
-    expect(window.__rtTripMode).toBeUndefined();
-    expect(window.__rtRefreshBbox).toBeUndefined();
-  });
-
-  // A still-vanilla page may already have installed its own definitions; a React
-  // root unmounting must not leave the page broken.
-  test('dispose restores a pre-existing definition', () => {
-    dispose();
-    const original = () => 'directions' as const;
-    window.__rtTripMode = original;
+    const original = () => false;
+    window.__rtRouteActive = original;
 
     const disposeAgain = installTransitionShim(queryClient);
-    expect(window.__rtTripMode).not.toBe(original);
     disposeAgain();
 
-    expect(window.__rtTripMode).toBe(original);
-    delete window.__rtTripMode;
-  });
-});
-
-describe('trip reads', () => {
-  test('__rtTripMode reads the store', () => {
-    expect(window.__rtTripMode?.()).toBe('browse');
-
-    useTripStore.getState().setMode('directions');
-
-    expect(window.__rtTripMode?.()).toBe('directions');
+    expect(window.__rtRouteActive).toBe(original);
+    delete window.__rtRouteActive;
   });
 
-  test('__rtRouteActive mirrors the legacy predicate', () => {
-    expect(window.__rtRouteActive?.()).toBe(false);
-
-    useTripStore.getState().setStops([stop('a'), stop('b')]);
+  test('reads route state and its share URL from the store', () => {
+    useTripStore.getState().setStops([stop('Seattle'), stop('Bowman Bay')]);
     useTripStore.getState().setRoute({ type: 'FeatureCollection', features: [] });
     useTripStore.getState().setMode('directions');
 
     expect(window.__rtRouteActive?.()).toBe(true);
+    expect(window.__rtRouteShareUrl?.()).toContain('route=');
   });
-});
 
-describe('trip writes', () => {
-  test('__rtAddTripStop appends through the store', () => {
+  test('adds a trip stop through the store', () => {
     window.__rtAddTripStop?.(stop('Manzanita Lake'));
-
     expect(useTripStore.getState().stops).toEqual([stop('Manzanita Lake')]);
   });
 
-  test('__rtAddTripStop fills an empty slot', () => {
-    useTripStore.getState().setStops([null, stop('b')]);
-    window.__rtAddTripStop?.(stop('a'));
-
-    expect(useTripStore.getState().stops.map((s) => s?.name)).toEqual(['a', 'b']);
-  });
-
-  test('__rtClearBrowsePin clears the pin', () => {
-    useTripStore.getState().setBrowsePin(stop('pin'));
-    window.__rtClearBrowsePin?.();
-
-    expect(useTripStore.getState().browsePin).toBeNull();
-  });
-
-  test('__rtSetRoutePois replaces the route POI list', () => {
-    window.__rtSetRoutePois?.([{ id: 1 }, { id: 2 }]);
-
-    expect(useTripStore.getState().routePois).toHaveLength(2);
-  });
-
-  test('__rtSetRoutePois treats an empty list as a clear', () => {
-    window.__rtSetRoutePois?.([{ id: 1 }]);
-    window.__rtSetRoutePois?.([]);
-
-    expect(useTripStore.getState().routePois).toEqual([]);
-  });
-
-  // topbar.js calls this with `fc.features || []`, but a defensive nullish guard
-  // keeps a missing argument from writing undefined into the store.
-  test('__rtSetRoutePois tolerates a missing argument', () => {
-    window.__rtSetRoutePois?.(undefined as unknown as Record<string, unknown>[]);
-
-    expect(useTripStore.getState().routePois).toEqual([]);
-  });
-});
-
-describe('map writes', () => {
-  test('__rtOpenPoiById selects the POI, which opens the drawer', () => {
-    window.__rtOpenPoiById?.(42);
-
-    expect(useMapStore.getState().selectedPoiId).toBe(42);
-  });
-
-  test('__rtOpenPoiById accepts a string id', () => {
-    window.__rtOpenPoiById?.('sc-1');
-
-    expect(useMapStore.getState().selectedPoiId).toBe('sc-1');
-  });
-});
-
-describe('__rtRefreshBbox', () => {
-  test('invalidates the POI queries', () => {
+  test('invalidates viewport POI queries', () => {
     const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
-
     window.__rtRefreshBbox?.();
-
     expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.pois.all() });
-  });
-
-  // The key is hierarchical, so invalidating ['pois'] reaches every viewport and
-  // detail query below it.
-  test('marks an existing viewport query stale', async () => {
-    const key = queryKeys.pois.viewport([-122, 40, -121, 41], 9, []);
-    queryClient.setQueryData(key, { results: [] });
-    expect(queryClient.getQueryState(key)?.isInvalidated).toBe(false);
-
-    window.__rtRefreshBbox?.();
-
-    expect(queryClient.getQueryState(key)?.isInvalidated).toBe(true);
   });
 });

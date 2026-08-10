@@ -35,7 +35,6 @@ export function useTripOverlay(): void {
   const route = useTripStore((s) => s.route);
   const stops = useTripStore((s) => s.stops);
   const corridorMiles = useTripStore((s) => s.corridorMiles);
-  const setCorridor = useTripStore((s) => s.setCorridor);
 
   const line = useMemo(() => routeLine(route), [route]);
   const server = useMemo(() => serverCorridor(route), [route]);
@@ -98,12 +97,11 @@ export function useTripOverlay(): void {
     };
   }, [map, styleReady, line]);
 
-  // Keep the fill and the store in step with the derived value. `setData` rather
-  // than a reinstall, because this runs on every tick of the radius slider.
+  // Update the fill without reinstalling the route layers. This runs on every
+  // tick of the radius slider.
   useEffect(() => {
-    setCorridor(corridor);
     if (map) setCorridorData(map, corridor);
-  }, [map, corridor, setCorridor]);
+  }, [map, corridor]);
 
   // Fit, once per route. The ref is the "have I already framed this one" flag: a
   // style reload re-runs the install effect, and refitting there would undo the

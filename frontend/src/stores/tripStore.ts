@@ -11,7 +11,7 @@
 //                      handles belong in the imperative `src/map/` module's refs,
 //                      the same reason the map instance itself stays out of here.
 import { create } from 'zustand';
-import type { Feature, FeatureCollection, MultiPolygon, Polygon } from 'geojson';
+import type { Feature, FeatureCollection } from 'geojson';
 
 /** Constants ported from web/topbar/state.js. */
 export const MAX_STOPS = 25;
@@ -67,7 +67,6 @@ export interface TripStop {
  * until something consumes it.
  */
 export type TripRouteCollection = FeatureCollection;
-export type TripCorridor = Polygon | MultiPolygon;
 /** A slim POI pin from /api/pois/on-route. Painted, never read field-by-field. */
 export type TripPoiFeature = Feature;
 
@@ -77,19 +76,9 @@ export interface TripState {
   stops: (TripStop | null)[];
   /** FeatureCollection from /api/route. */
   route: TripRouteCollection | null;
-  /** Polygon from turf.buffer(route, corridorMiles). */
-  corridor: TripCorridor | null;
   corridorMiles: number;
-  /**
-   * Bumped on every change that invalidates an in-flight route response.
-   * Preserved from the legacy singleton: the route fetch is seq-guarded, and a
-   * late response for generation N is dropped once the counter has moved on.
-   */
-  generation: number;
-  /** POI features found along the active route (the __rtSetRoutePois payload). */
+  /** POI features found along the active route. */
   routePois: TripPoiFeature[];
-  /** The single dropped pin in browse mode. */
-  browsePin: TripStop | null;
   /**
    * The row that should take keyboard focus, once.
    *
@@ -112,15 +101,10 @@ export interface TripState {
   addStop: (stop: TripStop) => void;
   removeStopAt: (index: number) => void;
   setRoute: (route: TripRouteCollection | null) => void;
-  setCorridor: (corridor: TripCorridor | null) => void;
   setCorridorMiles: (miles: number) => void;
   setRoutePois: (features: TripPoiFeature[]) => void;
-  setBrowsePin: (pin: TripStop | null) => void;
-  clearBrowsePin: () => void;
   requestFocus: (row: number | null) => void;
   clearFocus: () => void;
-  /** Invalidate any in-flight route response. Returns the new generation. */
-  bumpGeneration: () => number;
   reset: () => void;
 }
 
@@ -128,11 +112,8 @@ const INITIAL_TRIP = {
   mode: 'browse',
   stops: [],
   route: null,
-  corridor: null,
   corridorMiles: CORRIDOR_DEFAULT_MILES,
-  generation: 0,
   routePois: [],
-  browsePin: null,
   focusRow: null,
 } satisfies Omit<
   TripState,
@@ -142,21 +123,17 @@ const INITIAL_TRIP = {
   | 'addStop'
   | 'removeStopAt'
   | 'setRoute'
-  | 'setCorridor'
   | 'setCorridorMiles'
   | 'setRoutePois'
-  | 'setBrowsePin'
-  | 'clearBrowsePin'
   | 'requestFocus'
   | 'clearFocus'
-  | 'bumpGeneration'
   | 'reset'
 >;
 
 const clampCorridorMiles = (miles: number): number =>
   Math.min(CORRIDOR_MAX_MILES, Math.max(CORRIDOR_MIN_MILES, miles));
 
-export const useTripStore = create<TripState>()((set, get) => ({
+export const useTripStore = create<TripState>()((set) => ({
   ...INITIAL_TRIP,
 
   setMode: (mode) => set({ mode }),
@@ -185,19 +162,10 @@ export const useTripStore = create<TripState>()((set, get) => ({
   removeStopAt: (index) => set((s) => ({ stops: s.stops.filter((_, i) => i !== index) })),
 
   setRoute: (route) => set({ route }),
-  setCorridor: (corridor) => set({ corridor }),
   setCorridorMiles: (miles) => set({ corridorMiles: clampCorridorMiles(miles) }),
   setRoutePois: (routePois) => set({ routePois }),
-  setBrowsePin: (browsePin) => set({ browsePin }),
-  clearBrowsePin: () => set({ browsePin: null }),
   requestFocus: (focusRow) => set({ focusRow }),
   clearFocus: () => set({ focusRow: null }),
-
-  bumpGeneration: () => {
-    const generation = get().generation + 1;
-    set({ generation });
-    return generation;
-  },
 
   reset: () => set({ ...INITIAL_TRIP }),
 }));
