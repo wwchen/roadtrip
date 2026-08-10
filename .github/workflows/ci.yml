@@ -26,7 +26,7 @@ jobs:
     outputs:
       backend_tests: ${{ steps.filter.outputs.backend_tests }}
       smoke: ${{ steps.filter.outputs.smoke }}
-      web: ${{ steps.filter.outputs.web }}
+      frontend: ${{ steps.filter.outputs.frontend }}
       companion: ${{ steps.filter.outputs.companion }}
       companion_image: ${{ steps.filter.outputs.companion_image }}
       docker: ${{ steps.filter.outputs.docker }}
@@ -54,25 +54,17 @@ jobs:
               - 'gradlew'
               - 'gradlew.bat'
               - 'settings.gradle.kts'
-              # `web/` is three retained asset pairs now (tokens.css + the sandbox
-              # chrome), and every React page loads all of them at runtime — so a
-              # change there can still break every page the smoke drives.
-              - 'web/**'
-              # The React tree, which is the whole site as of Phase 5. This job
+              # The React tree, which is the whole site. This job
               # builds frontend/dist and drives it, so a frontend-only change must
               # trigger it — without this, a broken bundle would ship with smoke
               # skipped and green.
               - 'frontend/**'
               - '.github/workflows/ci.yml'
-            # `frontend/**` is the app; `web/**` is what Phase 5 left behind
-            # (tokens.css, its JS bridge, the sandbox chrome) and still has its own
-            # node:test suites. `scripts/check-color-tokens.mjs` runs here too and
-            # scans both.
-            web:
-              - 'web/**'
+            frontend:
               - 'frontend/**'
               - 'scripts/check-color-tokens.mjs'
               - 'scripts/check-css-blocks.mjs'
+              - 'scripts/check-token-usage.mjs'
               - '.github/workflows/ci.yml'
             companion:
               - 'companion/**'
@@ -98,7 +90,6 @@ jobs:
               - 'gradle.properties'
               - 'gradlew'
               - 'settings.gradle.kts'
-              - 'web/**'
               - 'frontend/**'
               - '.github/workflows/ci.yml'
             # Everything the fast lint half reads: Grafana dashboards, the
@@ -191,14 +182,10 @@ jobs:
       - name: detekt rule tests
         run: ./gradlew :detekt-rules:test
 
-  # Gates both frontend trees while they coexist.
-  #
-  # web/ has no package.json: its remaining suites are dependency-free node:test
-  # modules (the token-usage guard and the two sandbox modules), so there is nothing
-  # to install for them. frontend/ does, so its steps install first.
-  web-tests:
+  # Gates the frontend, which is the whole of the site.
+  frontend-tests:
     needs: changes
-    if: needs.changes.outputs.web == 'true'
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -208,26 +195,6 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      # Enumerated with find and handed to node as an explicit list rather than
-      # left to a `web/**/*.test.mjs` pattern. The pattern is correct today
-      # (verified: same 24 tests either way — it was 153 before Phase 5 deleted the
-      # vanilla app and its suites), but it only works while quoted —
-      # unquoted, a shell without globstar collapses `**` to one directory level
-      # and silently runs a subset. A job that goes green having tested a
-      # fraction of the suite is worse than no job, so discovery is asserted
-      # rather than trusted.
-      - name: Run web unit tests
-        run: |
-          set --
-          while IFS= read -r f; do set -- "$@" "$f"; done \
-            < <(find web -name '*.test.mjs' | sort)
-          echo "discovered $# web test files"
-          if [ "$#" -eq 0 ]; then
-            echo "no web test files found - discovery is broken"
-            exit 1
-          fi
-          node --test "$@"
-
       # `npm ci` rather than `npm install` so a lockfile that drifted from
       # package.json fails here instead of resolving to something CI-only. The
       # vendored LDS packages are `vendor/*` npm workspaces, so this links them
@@ -252,9 +219,9 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      # tokens.css is the only place a raw color may live. A hex that slips in
-      # elsewhere survives every theme override, so this gates the same job. It
-      # scans what is left of web/ plus frontend/ (including .ts/.tsx).
+      # frontend/src/tokens/tokens.css is the only place a raw color may live. A hex
+      # that slips in elsewhere survives every theme override, so this gates the same
+      # job. It scans frontend/, including .ts/.tsx.
       - name: Check color tokens
         run: node scripts/check-color-tokens.mjs
 
@@ -263,6 +230,13 @@ jobs:
       # catches that — the build succeeds and jsdom does no layout.
       - name: Check CSS block structure
         run: node scripts/check-css-blocks.mjs
+
+      # `var(--rt-typo)` resolves to nothing rather than erroring — an invisible
+      # control, or a hardcoded fallback rendering forever behind a misspelling.
+      # Was web/design-system/tokens-usage.test.mjs, the last node:test suite; it is
+      # a script now, and it scans frontend/src, which the suite never did.
+      - name: Check design token usage
+        run: node scripts/check-token-usage.mjs
 
   companion-tests:
     needs: changes
@@ -603,7 +577,7 @@ jobs:
       - changes
       - lint
       - gradle-lint
-      - web-tests
+      - frontend-tests
       - companion-tests
       - companion-image
       - docker-build

@@ -102,9 +102,10 @@ when you're not using it:
 - **Java 25** — `backend/build.gradle.kts` sets `jvmToolchain(25)`; the Gradle
   wrapper handles the rest.
 - **Node 22.9+** — the companion pins `"node": ">=22.9.0"` in
-  `companion/package.json`, and the `web/` unit tests run under Node 22 in CI
-  (`node --test`; no package.json — the suites import the browser sources
-  directly).
+  `companion/package.json` and the frontend pins `">=22"` in
+  `frontend/package.json`; CI runs both under Node 22. The frontend is a real
+  build step (Vite), so `npm ci && npm run build` in `frontend/` is a
+  prerequisite for serving any page.
 - **Python 3.9+** for `secrets/manage.py` and the host-side fetchers in
   `scripts/`. 3.9 is a real floor, not caution: macOS Command Line Tools ships
   3.9, these fetchers run on dev machines, and CI's ruff lints with

@@ -114,11 +114,10 @@ services:
     volumes:
       # Static files bind-mounted so reviewers see the frontend at the SHA
       # being reviewed; the image carries the compiled backend jar only.
-      - ./web:/app/static/web:ro
       - ./data:/app/static/data:ro
       # The React build — the whole site as of Phase 5. Bind-mounted rather than
-      # baked into the image, exactly like web/ above, so the served frontend tracks
-      # the checkout.
+      # baked into the image, exactly as web/ used to be, so the served frontend
+      # tracks the checkout.
       #
       # Every page (/, /watches, /availability) is served ONLY from here: the vanilla
       # files were all deleted, so there is no per-file fallback left and an unbuilt

@@ -4,16 +4,26 @@
    Load order matters:
      1. `@lew/lds/css`             — the APCA palette + LDS component cascade.
      2. `@lew/lds/css/themes/roadtrip` — the roadtrip theme, whose every value is
-        read from `web/design-system/tokens.css`. Applied by the
+        read from `src/tokens/tokens.css`. Applied by the
         `theme-roadtrip mode-dark` classes on <html> (roadtrip is dark-native and
         LDS resolves light at `:root`, so BOTH classes go on the root element).
+     3. `../tokens/tokens.css`     — the `--rt-*` tokens themselves.
 
-   `web/design-system/tokens.css` is deliberately NOT imported here. The HTML
-   shells link it absolutely from Ktor at runtime, because the `token()` bridge
-   in `web/design-system/tokens.js` resolves `--rt-*` names through
-   `getComputedStyle` for MapLibre paint and Chart.js, which cannot read
-   `var()`. LDS's theme defines `--c-*`/`--grey-*`, not `--rt-*`, so the two
-   token sets coexist for the duration of the strangler migration.
+   The two token sets are disjoint and coexist: LDS's theme defines `--c-*` /
+   `--grey-*` / `--surface-*`, ours defines `--rt-*` (the theme only NAMES ours in
+   comments, recording which `--rt-*` role each of its values was measured from).
+   So nothing here can collide, and position in the cascade is immaterial —
+   `tokens.css` is a single `:root` block of custom properties, and `var()`
+   resolves at use time rather than at parse time.
+
+   `tokens.css` is bundled here, not linked at runtime. Until Phase 5 it was
+   served from the legacy `web/` tree and injected into each HTML entry by a Vite
+   plugin, on the rationale that a colour change should not need a frontend
+   rebuild. That stopped being true once every page came from `frontend/dist`:
+   the roadtrip theme above is already bundled and already carries those values,
+   so a token change needed a rebuild regardless. Bundling also means the dev
+   server no longer needs the backend up just to render styled.
    --------------------------------------------------------------------------- */
 @import '@lew/lds/css';
 @import '@lew/lds/css/themes/roadtrip';
+@import '../tokens/tokens.css';

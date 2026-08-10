@@ -30,7 +30,13 @@
 // `usePublishedLocationFiller` there. Both are declared here so there is one
 // declaration site for the whole `window.__rt*` surface.
 //
-// Phase 5 deletes web/ and this file with it.
+// Phase 5 deleted `web/` and did NOT delete this. The name is now only historical:
+// nothing vanilla is left to bridge to, but `SmokeTest.kt` reads five of these
+// globals, so they are the suite's handle on a page it otherwise has to drive
+// through the UI. Retiring them is a decision about the smoke suite — the same
+// steps through real interactions, at the cost of a slower and flakier run — not a
+// consequence of the vanilla tree going away. `features/map/useQaHooks.ts`
+// publishes `__rtMap`/`__rtState` for the same reason.
 import { useEffect } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { routeShareUrl } from '@/lib/share-links';

@@ -1,44 +1,36 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';
-import { runtimeServedAssets } from './vite/runtime-served-assets';
 
 const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
-// In dev, /api, /auth, and the retained legacy static assets (/web, /data) are
-// proxied to the running Ktor backend so HMR works against real data. Override
-// the target with VITE_BACKEND_ORIGIN when the backend runs elsewhere.
+// In dev, /api, /auth and /data are proxied to the running Ktor backend so HMR
+// works against real data. `/data` is the GeoJSON overlays (state lines), which
+// are repo data files the backend serves rather than bundle inputs. `/web` was
+// here too until the last three files under it moved into this tree. Override the
+// target with VITE_BACKEND_ORIGIN when the backend runs elsewhere.
 const BACKEND_ORIGIN = process.env.VITE_BACKEND_ORIGIN ?? 'http://localhost:8765';
 const proxy = Object.fromEntries(
-  ['/api', '/auth', '/web', '/data'].map((path) => [
+  ['/api', '/auth', '/data'].map((path) => [
     path,
     { target: BACKEND_ORIGIN, changeOrigin: true },
   ]),
 );
 
-// What is left of `web/`.
-//
-// Phase 5 deleted the strangled vanilla app; three things stayed, and this alias is
-// the build-time one. `web/design-system/tokens.js` remains the single source of
-// truth for `--rt-*` colors (it holds the fallback table that
-// scripts/check-color-tokens.mjs verifies against tokens.css), so the React app
-// imports that module rather than owning a TS copy. Typed by src/types/tokens.d.ts,
-// and it goes when the bridge is reconciled with LDS's `--c-*` names.
-//
-// The other two are runtime-served rather than bundled: `tokens.css` itself and the
-// `sandbox-*` chrome — see `vite/runtime-served-assets.ts`. `@legacy/core` used to
-// sit here too, for the parity suite that ran `lib/poi.ts` against `web/core.js`;
-// both are gone.
-const LEGACY_WEB_DIR = here('../web');
-
 export default defineConfig({
   root: here('.'),
-  plugins: [react(), runtimeServedAssets()],
+  plugins: [react()],
   resolve: {
     alias: {
       '@': here('./src'),
       '@ui': here('./src/ui'),
-      '@tokens': `${LEGACY_WEB_DIR}/design-system/tokens.js`,
+      // The `--rt-*` token bridge. Aliased rather than imported by path because it
+      // is not ordinary source: `src/tokens/tokens.css` beside it is the single
+      // source of truth for colour and this module is the only sanctioned way to
+      // read one from JS, so the specifier says so at every call site. It used to
+      // point outside the Vite root, at `web/design-system/tokens.js`, which is why
+      // it needed a hand-written `.d.ts`; it is a plain tsconfig `paths` entry now.
+      '@tokens': here('./src/tokens/tokens.ts'),
     },
   },
   build: {
@@ -67,9 +59,6 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy,
-    // `@tokens` resolves outside the Vite root, so the dev server has to be
-    // allowed to serve it.
-    fs: { allow: [here('.'), LEGACY_WEB_DIR] },
   },
   test: {
     globals: true,

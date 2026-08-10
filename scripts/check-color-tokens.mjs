@@ -2,18 +2,16 @@
 /**
  * Color-token guardrail.
  *
- * `web/design-system/tokens.css` is the single source of truth for color.
+ * `frontend/src/tokens/tokens.css` is the single source of truth for color.
  * A raw hex anywhere else is invisible to theming: it survives every token
  * override and quietly contradicts the system it sits next to. This check
  * fails the build on one.
  *
- * Covers the React `frontend/` tree, including `.ts`/`.tsx` — until this scanned
- * them, a raw hex in a component would have passed silently — plus what is left of
- * `web/` after Phase 5 deleted the vanilla app: `tokens.css`, its JS bridge, and the
- * `sandbox-*` chrome every React page still loads at runtime.
+ * Covers the React `frontend/` tree, which is all of it — including `.ts`/`.tsx`,
+ * since until this scanned them a raw hex in a component would have passed silently.
  *
  * Also verifies the JS bridge stays honest: every fallback key in
- * `web/design-system/tokens.js` must name a token that tokens.css actually
+ * `frontend/src/tokens/tokens.ts` must name a token that tokens.css actually
  * defines, so a renamed token fails loudly here instead of silently
  * resolving to a stale hardcoded value at runtime.
  *
@@ -25,22 +23,18 @@ import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const TOKENS_CSS = 'web/design-system/tokens.css';
-const TOKENS_JS = 'web/design-system/tokens.js';
+const TOKENS_CSS = 'frontend/src/tokens/tokens.css';
+const TOKENS_JS = 'frontend/src/tokens/tokens.ts';
 
 /**
  * Directories and files scanned for raw color.
  *
- * `frontend` is the React tree. It is scanned on the same terms as `web` for the
- * duration of the strangler migration — both ship to users, so both are held to
- * the same rule.
- *
- * No root shells are named any more: React owns every page, so `index.html` and
- * `availability.html` are both gone from the repo and from this list. A name here
- * must exist — `walk` stats every root — so deleting a shell means deleting its
- * entry, which is what made this list shrink twice.
+ * One root: `frontend` is the whole of the site. `web`, `index.html` and
+ * `availability.html` were all named here and are all gone from the repo. A name
+ * here must exist — `walk` stats every root — so deleting a tree means deleting its
+ * entry, which is what made this list shrink three times.
  */
-const ROOTS = ['web', 'frontend'];
+const ROOTS = ['frontend'];
 const EXTENSIONS = ['.css', '.html', '.js', '.mjs', '.ts', '.tsx'];
 
 /**
@@ -96,13 +90,19 @@ const HEX = /#[0-9a-fA-F]{3,8}\b/;
  * when you tokenize some, and delete the entry when it reaches zero.
  *
  * Phase 5 took this from 51 occurrences to 7 by deleting their files rather than by
- * tokenizing anything — the remaining entry is the sandbox user switcher, which is
- * still served. A stale entry for a deleted file would not FAIL anything (the check
- * is `found > allowed`), it would just overstate the debt in the summary line.
+ * tokenizing anything. Moving the sandbox chrome into this tree took it to 1: six of
+ * that file's seven were `rgba(255,255,255,a)`, which is literally what
+ * `--rt-c-overlay-rgb` expands to, so composing from the primitive was a provable
+ * no-op rather than a rounding. A stale entry for a deleted file would not FAIL
+ * anything (the check is `found > allowed`), it would just overstate the debt.
  */
 const RGB_FUNC = /(?:rgba?|hsla?)\(\s*(?!var\(--rt-)/g;
 const LEGACY_RAW_COLOR_BUDGET = {
-  'web/sandbox-user-switcher.css': 7,
+  // The sandbox bar's own translucent ground. The tints ON it compose from
+  // `--rt-c-overlay-rgb`; this one is a one-off surface with no role to map onto, and
+  // rounding it onto the nearest (`--rt-overlay-chip`, a different value) is the
+  // silent visual change the ratchet exists to avoid.
+  'frontend/src/app/sandbox/sandbox.css': 1,
 };
 
 function walk(path, out = []) {

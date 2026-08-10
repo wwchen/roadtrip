@@ -24,7 +24,8 @@
     "paths": {
       "@/*": ["src/*"],
       "@ui": ["src/ui/index.ts"],
-      "@ui/*": ["src/ui/*"]
+      "@ui/*": ["src/ui/*"],
+      "@tokens": ["src/tokens/tokens.ts"]
     }
   },
   "include": ["src", "vite.config.ts", "vitest.setup.ts"]

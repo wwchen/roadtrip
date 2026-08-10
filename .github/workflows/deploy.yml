@@ -132,7 +132,6 @@ jobs:
               - 'postgres-init/**'
               - 'caddy/**'
               - 'data/**'
-              - 'web/**'
               # The React tree. Compose bind-mounts frontend/dist, which is
               # generated and gitignored — so the source is what a push can
               # actually touch, and `make run env=prod` (this workflow's deploy

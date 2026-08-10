@@ -62,20 +62,22 @@ to add your age public key to `secrets/.sops.yaml` and run
 
 Plenty of work needs no vault at all, though:
 
-- **Frontend work.** The React app runs against the dev server, and only needs the
-  backend up for `/api` and `tokens.css`:
+- **Frontend work.** The React app runs against the dev server, which only needs the
+  backend up for `/api` and `/data` — styles are bundled, so an unstyled page means a
+  build problem rather than a missing proxy target:
 
   ```sh
   cd frontend && npm ci && npm run dev
   ```
 
-- **Frontend unit tests.** Vitest for the app; a handful of dependency-free
-  `node:test` suites still cover what is left of `web/` (the token guard and the
-  sandbox modules), and those need no install:
+- **Frontend unit tests and guardrails.** Vitest for the app, plus three
+  filesystem checks that need no install:
 
   ```sh
-  cd frontend && npm test
-  node --test $(find web -name '*.test.mjs')
+  cd frontend && npm run typecheck && npm test
+  node scripts/check-color-tokens.mjs      # from the repo root
+  node scripts/check-css-blocks.mjs
+  node scripts/check-token-usage.mjs
   ```
 
 - **Python script + tooling tests** (fetchers, secrets tooling, CI-shape
@@ -114,11 +116,10 @@ That covers, in order (mirroring `.github/workflows/ci.yml`):
   static analysis
 - `./gradlew :detekt-rules:test` — the repo's custom detekt rules
 - `cd frontend && npm run typecheck && npm test && npm run build` — the React app
-- `node --test` over every `web/**/*.test.mjs` — the retained `web/` assets: the
-  token-usage guard and the two sandbox modules (discovery is asserted, so zero
-  found files fails loudly)
-- `node scripts/check-color-tokens.mjs` + `node frontend/scripts/check-css-blocks.mjs`
-  — colour tokens and CSS brace balance across both trees
+- `node scripts/check-color-tokens.mjs`, `check-css-blocks.mjs` and
+  `check-token-usage.mjs` — raw colour outside `tokens.css`, a CSS rule that lost its
+  closing brace, and a `var(--rt-*)` naming a token that does not exist. All three are
+  invisible to the test suite, because jsdom does no layout
 - `cd companion && npm test` — Rec.gov companion (Node `--test`; needs
   `companion/` deps, which `make install` provides)
 - `python3 -m unittest discover -s scripts -p 'test_*.py'` — Python fetchers,
@@ -141,7 +142,7 @@ against a running stack (see [SMOKE.md](SMOKE.md)).
   staged.
 - **pre-push** — runs `./gradlew :backend:test` before a push whose range
   touches backend source or Gradle build inputs; pushes that only change
-  web/docs/data skip it automatically. For the rare "yes I know, just push
+  frontend/docs/data skip it automatically. For the rare "yes I know, just push
   it" case: `SKIP_PREPUSH=1 git push` (use sparingly — CI still runs the
   tests).
 

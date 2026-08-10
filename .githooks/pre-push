@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run backend tests before pushing backend code or Gradle build inputs. Skip
-# when the pushed range only changes web/docs/data/etc., and skip entirely
+# when the pushed range only changes frontend/docs/data/etc., and skip entirely
 # under SKIP_PREPUSH=1 for the rare "yes I know, just push it" case. Enable
 # with `make install-hooks`.
 #
