@@ -1,14 +1,11 @@
 .PHONY: help run test data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop frontend
 
-PORT       ?= 8765
+PORT ?= 8765
 RUN_ENV ?= $(or $(env),dev)
 DEPLOY_SHA ?=
 DEPLOY_BRANCH ?= master
 DEPLOY_DATA_SHA ?=
 DEPLOY_COMPANION_SHA ?=
-POSTGRES_DB ?= roadtrip
-POSTGRES_USER ?= roadtrip
-POSTGRES_PASSWORD ?= roadtrip
 RECGOV_ATC_LOCAL_URL ?= http://127.0.0.1:8770
 RECGOV_COMPANION_BROWSER_PROFILE ?= $(HOME)/.campsite-companion/browser-session
 RECGOV_COMPANION_PROFILE_ENV := COMPANION_BROWSER_PROFILE="$${COMPANION_BROWSER_PROFILE:-$${RECGOV_COMPANION_BROWSER_PROFILE:-$(RECGOV_COMPANION_BROWSER_PROFILE)}}"
@@ -72,30 +69,27 @@ recgov-atc: _ensure-hooks
 	@if [ -z "$(PAYLOAD)" ]; then echo "Usage: make recgov-atc PAYLOAD=/path/to/atc.json"; exit 2; fi
 	cd companion && $(RECGOV_COMPANION_PROFILE_ENV) npm run --silent recgov:atc -- --payload-file "$(PAYLOAD)"
 
-# One-time host setup for a fresh clone. Idempotent: brew is no-op when
-# packages are present, npm install + playwright install are no-op when the
-# lockfile and browser cache are unchanged, install-hooks just rewrites
-# .git/config.
+# One-time host setup for a fresh clone. Brew and the browser install reuse
+# existing packages; npm ci recreates the companion tree from the lockfile.
 install: install-hooks
-	brew install tilt docker openjdk node sops age
-	cd companion && npm install && npx playwright install chromium
+	brew install tilt docker openjdk node sops age ruff
+	cd companion && npm ci && npx playwright install chromium
 
 # Everything CI runs (see .github/workflows/ci.yml), locally and in one shot:
 # backend tests, detekt-rule tests, ktlint + detekt, frontend gates, companion
 # tests, script/secrets-tooling tests, the secrets-registry drift check, and
 # Grafana dashboard validation. Backend tests need a running Docker daemon
-# (Testcontainers). One Gradle invocation covers the four Gradle jobs CI runs
-# separately.
+# (Testcontainers). One Gradle invocation shares configuration and compilation
+# across the backend checks that CI runs in separate jobs.
 test: _ensure-hooks
-	./gradlew :backend:test :backend:ktlintCheck :backend:detekt :detekt-rules:test
-	# Same steps, same order as CI's frontend-tests job. The build is not redundant
-	# with the typecheck: it is the only thing that exercises bundling (the
-	# vendored LDS ships untranspiled .jsx), which fails at bundle time only.
-	cd frontend && npm ci && npm run lint && npm run typecheck && npm run test && npm run build
+	./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify :backend:ktlintCheck :backend:detekt :detekt-rules:test
+	# npm run build includes the TypeScript check before bundling.
+	cd frontend && npm ci && npm run lint && npm run test && npm run build
 	node scripts/check-color-tokens.mjs
 	node scripts/check-css-blocks.mjs
 	node scripts/check-token-usage.mjs
-	cd companion && npm test
+	cd companion && npm ci --ignore-scripts && npm test
+	ruff check --isolated --target-version py39 --select E4,E7,E9,F,B,UP secrets/ scripts/
 	python3 -m unittest discover -s scripts -p 'test_*.py'
 	python3 secrets/manage.py generate --check
 	python3 secrets/manage.py check
@@ -125,11 +119,10 @@ data-import:
 # Postgres re-initializes from scratch; Flyway re-migrates on backend boot
 # (including R__grafana_reader_grants.sql which re-grants grafana_reader).
 POSTGRES_DATA ?= $(HOME)/.roadtrip-map/postgres
-DC := $(LOCAL_COMPOSE)
 reset-db:
-	$(DC) rm -sf postgres backend
+	$(LOCAL_COMPOSE) rm -sf postgres backend
 	rm -rf $(POSTGRES_DATA)
-	$(DC) up -d --build postgres recgov-companion backend
+	$(LOCAL_COMPOSE) up -d --build postgres recgov-companion backend
 
 # Local-only Playwright smoke. Hits the Kotlin backend on $(PORT) (serves
 # static + all /api routes). Doesn't boot the stack — bring it up first
