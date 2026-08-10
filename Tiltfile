@@ -7,7 +7,13 @@
 
 PORT = '8765'
 COMPOSE_PROJECT = 'roadtrip'
-COMPOSE = 'docker compose -p ' + COMPOSE_PROJECT + ' --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml -f docker-compose.secrets.yml --profile pois --profile recgov-companion'
+COMPOSE_FILES = ['docker-compose.yml', 'docker-compose.local.yml', 'docker-compose.secrets.yml']
+COMPOSE_PROFILES = ['pois', 'recgov-companion']
+COMPOSE = (
+    'docker compose -p ' + COMPOSE_PROJECT + ' --env-file /dev/null ' +
+    ' '.join(['-f ' + path for path in COMPOSE_FILES]) + ' ' +
+    ' '.join(['--profile ' + profile for profile in COMPOSE_PROFILES])
+)
 COMPOSE_INFRA_SERVICES = ['postgres', 'loki', 'tempo', 'prometheus', 'alloy']
 COMPOSE_APP_SERVICES = ['backend', 'recgov-companion', 'grafana']
 COMPOSE_DEV_SERVICES = ' '.join(COMPOSE_INFRA_SERVICES + COMPOSE_APP_SERVICES)
@@ -123,7 +129,6 @@ local_resource(
         'frontend/package.json',
         'frontend/package-lock.json',
         'frontend/src',
-        'frontend/vendor',
         'frontend/index.html',
         'frontend/availability.html',
         'frontend/watches.html',
@@ -138,9 +143,9 @@ local_resource(
 )
 
 docker_compose(
-    ['docker-compose.yml', 'docker-compose.local.yml', 'docker-compose.secrets.yml'],
+    COMPOSE_FILES,
     project_name=COMPOSE_PROJECT,
-    profiles=['pois', 'recgov-companion'],
+    profiles=COMPOSE_PROFILES,
 )
 
 # When `backend-jar` produces a new fat jar, Tilt rebuilds this image and
@@ -154,7 +159,7 @@ docker_compose(
 # the restart_process extension's entrypoint wrapper is rejected for compose
 # resources ("entrypoint not supported for Docker Compose"). A full rebuild +
 # recreate is the reliable path, and it's cheap here: only the jar COPY layer
-# changes (the JRE + apt base layers are cached), so the rebuild is a fast
+# changes (the JRE + telemetry-agent layers are cached), so the rebuild is a fast
 # layer swap, not a from-scratch image build.
 #
 # The jar name is configured through Ktor's `fatJar` extension in
@@ -164,7 +169,7 @@ docker_build(
     'roadtrip/backend',
     '.',
     dockerfile='Dockerfile',
-    target='backend',
+    target='backend-local',
     only=[
         'Dockerfile',
         'backend/build/libs',

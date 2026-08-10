@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from '@lew/lds-react';
+import { Button } from '@lew-ds/lds-react';
 import { SeededTextField } from './SeededTextField';
 
 export interface SecretFieldProps {

@@ -2,7 +2,7 @@
    Page-level style entry for the React app.
 
    Load order:
-     1. `@lew/lds/css`                       — LDS component cascade.
+     1. `@lew-ds/lds/css`                     — LDS component cascade.
      2. `../tokens/roadtrip-zion.css`        — the roadtrip-zion theme.
      3. `../tokens/tokens.css`               — the app's own `--rt-*` tokens.
      4. `../tokens/roadtrip-zion-bridge.css` — repoints `--rt-*` chrome roles
@@ -12,7 +12,7 @@
    `tokens.css` is bundled here, not linked at runtime, so the dev server
    doesn't need the backend up to render styled.
    --------------------------------------------------------------------------- */
-@import '@lew/lds/css';
+@import '@lew-ds/lds/css';
 @import '../tokens/roadtrip-zion.css';
 @import '../tokens/tokens.css';
 @import '../tokens/roadtrip-zion-bridge.css';
