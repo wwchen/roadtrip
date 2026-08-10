@@ -59,11 +59,9 @@ services:
   #   - GET /data/*                    → the GeoJSON layers
   #   - GET /api/pois               → bbox query against postgres
   #   - GET /api/health             → liveness/readiness probe
-  # Static files come from the repo bind-mount so deploys are git-pull +
-  # docker compose up — no Dockerfile rebuild needed for HTML/JS/data changes.
   backend:
     profiles: [pois]
-    image: roadtrip/backend
+    image: ${ROADTRIP_BACKEND_IMAGE:-roadtrip/backend}
     restart: unless-stopped
     logging: *log-rotation
     hostname: backend
@@ -72,6 +70,9 @@ services:
       # Profile selection is a process env control that chooses
       # application-<profile>.yaml before backend config is parsed.
       - ROADTRIP_PROFILE=${ROADTRIP_PROFILE:-prod}
+      - ROADTRIP_BUILD_ENV=${ROADTRIP_BUILD_ENV:-prod}
+      - ROADTRIP_BUILD_SHA=${ROADTRIP_BUILD_SHA:-unknown}
+      - ROADTRIP_BUILD_BRANCH=${ROADTRIP_BUILD_BRANCH:-unknown}
       # Active auth vendor selector (non-secret). Matches application.yaml's
       # `provider: "${AUTH_PROVIDER:clerk}"` default, and — because it is passed
       # through here — makes the RFC 0009 rollback a real one-variable flip:
@@ -99,17 +100,7 @@ services:
       # is an environment variable here, so `docker inspect` shows none of it.
       # Which secrets this service receives is declared in secrets/registry.yaml.
     volumes:
-      - ./data:/app/static/data
-      # The React build — the whole site as of Phase 5. Bind-mounted rather than
-      # baked into the image, exactly as web/ used to be, so the served frontend
-      # tracks the checkout.
-      #
-      # Every page (/, /watches, /availability) is served ONLY from here: the vanilla
-      # files were all deleted, so there is no per-file fallback left and an unbuilt
-      # tree 404s rather than degrading. `tilt up` and `make run` build it for you,
-      # `scripts/deploy.sh` fails if it cannot, and the deploy health check probes
-      # every path and greps `/` for the React shell.
-      - ./frontend/dist:/app/static/frontend/dist:ro
+      - roadtrip-data:/app/static/data:ro
     healthcheck:
       test: ["CMD", "java", "-Xmx32m", "-cp", "/app/app.jar", "ca.floo.roadtrip.HealthProbe"]
       interval: 5s
@@ -124,9 +115,7 @@ services:
 
   recgov-companion:
     profiles: [recgov-companion]
-    build:
-      context: ./companion
-    image: roadtrip/recgov-companion
+    image: ${ROADTRIP_COMPANION_IMAGE:-roadtrip/recgov-companion}
     restart: unless-stopped
     logging: *log-rotation
     hostname: recgov-companion
@@ -301,7 +290,7 @@ services:
     volumes:
       # Root config + the runtime snippet directory deploy.sh writes into.
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./caddy/sandboxes:/etc/caddy/sandboxes:ro
+      - ${SANDBOX_CADDY_DIR:-./caddy/sandboxes}:/etc/caddy/sandboxes:ro
     # Join the shared sandbox network so `reverse_proxy sb-<name>-backend:8765`
     # resolves the per-sandbox containers by their network alias.  `caddy` also
     # stays on the default project network for cloudflared to reach :80.
@@ -310,6 +299,9 @@ services:
       - roadtrip-sandbox
 
 volumes:
+  roadtrip-data:
+    external: true
+    name: ${ROADTRIP_DATA_VOLUME:-roadtrip-data}
   grafana-data:
   loki-data:
   tempo-data:

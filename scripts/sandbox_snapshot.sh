@@ -16,7 +16,7 @@
 #   - docker compose (v2 plugin) is on PATH.
 #   - The snapshot directory is writable by the user running this script.
 #   - A half-written .tmp file is cleaned on failure so a mid-dump restart
-#     never leaves a corrupt archive that sandbox_up.sh would restore.
+#     never leaves a corrupt archive that deploy.sh would restore.
 set -euo pipefail
 
 # ── Tunables ──────────────────────────────────────────────────────────────────
@@ -189,9 +189,9 @@ done
 echo "==> dumping ${SNAPSHOT_POSTGRES_DB} (project: ${SNAPSHOT_SOURCE_PROJECT}) → ${SNAPSHOT_TMP}"
 echo "==> excluding table data for: ${EXCLUDE_TABLE_DATA_FLAGS[*]}"
 
-# Mirror the exec style used by sandbox_up.sh's pg_restore invocation:
+# Mirror the exec style used by deploy.sh's pg_restore invocation:
 #   docker compose -p <project> -f <file> exec -T <service> <cmd>
-# -Fc produces a custom-format archive (the format sandbox_up.sh pg_restores).
+# -Fc produces a custom-format archive (the format deploy.sh pg_restores).
 # --exclude-table-data=<table> omits ROWS but keeps the CREATE TABLE DDL so the
 # restored flyway_schema_history stays consistent (Flyway won't re-run those
 # migrations, and queries against those tables won't hit "relation does not exist").

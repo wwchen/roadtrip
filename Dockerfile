@@ -1,8 +1,20 @@
-# Backend Docker image. Runtime-only: build the fat jar on the host with
-# `./gradlew :backend:buildFatJar`, then build this image from the repo root.
+FROM node:22-alpine AS frontend
+
+WORKDIR /src/frontend
+
+COPY frontend/package.json frontend/package-lock.json ./
+COPY frontend/vendor ./vendor
+RUN npm ci --no-audit --no-fund
+
+COPY frontend/ ./
+RUN npm run build
+
 FROM eclipse-temurin:25-jre AS backend
 
 WORKDIR /app
+
+LABEL ca.floo.roadtrip.managed="true" \
+      ca.floo.roadtrip.component="backend"
 
 ARG OTEL_JAVAAGENT_VERSION=2.29.0
 
@@ -15,6 +27,7 @@ ENV OTEL_METRICS_EXPORTER=none
 ENV OTEL_LOGS_EXPORTER=none
 
 COPY backend/build/libs/roadtrip-backend-*-all.jar /app/app.jar
+COPY --from=frontend /src/frontend/dist /app/static/frontend/dist
 
 EXPOSE 8765
 

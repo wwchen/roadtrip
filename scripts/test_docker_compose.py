@@ -75,5 +75,31 @@ class BackendAuthProviderPassthroughTest(unittest.TestCase):
         )
 
 
+class ImmutableApplicationImageTest(unittest.TestCase):
+    def test_deploy_uses_images_and_versioned_data_while_local_uses_bind_mounts(self):
+        base = compose("docker-compose.yml")
+        sandbox = compose("docker-compose.sandbox.yml")
+        local = compose("docker-compose.local.yml")
+        backend = base["services"]["backend"]
+        mount = "./frontend/dist:/app/static/frontend/dist:ro"
+        base_volumes = backend.get("volumes", [])
+        sandbox_volumes = sandbox["services"]["backend"].get("volumes", [])
+        local_volumes = local["services"]["backend"].get("volumes", [])
+
+        self.assertEqual("${ROADTRIP_BACKEND_IMAGE:-roadtrip/backend}", backend["image"])
+        self.assertNotIn(mount, base_volumes)
+        self.assertNotIn(mount, sandbox_volumes)
+        self.assertIn(mount, local_volumes)
+        self.assertIn("roadtrip-data:/app/static/data:ro", base_volumes)
+        self.assertEqual(
+            "${ROADTRIP_DATA_VOLUME:-roadtrip-data}",
+            base["volumes"]["roadtrip-data"]["name"],
+        )
+        self.assertIn("roadtrip-data:/app/static/data:ro", sandbox_volumes)
+        self.assertIn("./data:/app/static/data", local_volumes)
+        self.assertNotIn("build", base["services"]["recgov-companion"])
+        self.assertEqual("./companion", local["services"]["recgov-companion"]["build"]["context"])
+
+
 if __name__ == "__main__":
     unittest.main()

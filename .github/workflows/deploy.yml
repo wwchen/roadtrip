@@ -1,22 +1,5 @@
 name: Deploy
 
-# SSHes to mini-ca, checks the deploy tree out at the commit CI validated, then
-# runs `make run env=prod`. Runtime secrets pass through this workflow without being
-# read by it: they ride along encrypted in secrets/, and the host decrypts them
-# with its own age key into /run/secrets mounts. CI deliberately holds no
-# decryption key — the secrets below are credentials *for* the pipeline, not app
-# config. A push that changes only secrets/ still has to deploy, though, which is
-# why that path is a trigger: the vault is where runtime config lives. Wraps a
-# Tailscale join (mini-ca isn't on the public internet) around the SSH step.
-#
-# Deploys only when files that affect the running service change. Doc-only
-# pushes, RFCs, and Tilt config don't burn deploy minutes — see the `changes`
-# job, which re-implements that gating since workflow_run has no `paths:`.
-# Manual override via workflow_dispatch for "redeploy without a code change".
-
-# Runs only after CI succeeds on master. Previously both workflows fired
-# independently on push, and deploy — which just SSHes — usually won the race,
-# so a commit that failed lint or tests shipped anyway.
 on:
   workflow_run:
     workflows: [CI]
@@ -24,177 +7,42 @@ on:
     branches: [master]
   workflow_dispatch: {}
 
-# Don't queue concurrent deploys — if a second push lands while the first
-# is still running, cancel-in-progress would risk leaving the stack in a
-# partial state. Serial: latest push waits, but completes the running run.
 concurrency:
   group: deploy
   cancel-in-progress: false
 
 permissions:
   contents: read
-  # `changes` reads previous Deploy runs *and their jobs* to find the last SHA
-  # that shipped — the run conclusion alone doesn't prove a deploy happened.
   actions: read
 
 env:
-  # workflow_run runs against the default branch by default, so every ref here
-  # has to be pinned to the commit CI actually validated.
   DEPLOY_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
-  # workflow_run triggers carry no `paths:` filter, so the path gating that
-  # kept doc-only pushes from burning deploy minutes has to be redone in-job.
-  #
-  # The comparison point is the last *successfully deployed* commit, not this
-  # push's parent. Diffing against the parent would drop changes on the floor:
-  # a backend commit whose CI failed, followed by a doc-only commit whose CI
-  # passed, would look doc-only and skip — leaving the backend change on master
-  # and never deployed. Anything unexpected (no prior deploy, a force-push, an
-  # unreachable SHA) deploys rather than skips.
-  changes:
+  deploy:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    outputs:
-      deploy: ${{ steps.decide.outputs.deploy }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ env.DEPLOY_SHA }}
-          fetch-depth: 0
-
-      # Newest *successful run* is the wrong signal: this job skips the deploy
-      # job on a doc-only push, and a run whose only real job was skipped still
-      # concludes `success`. Baselining there would diff the next push against a
-      # commit that never shipped — stranding whatever came before it, the exact
-      # failure this baseline exists to prevent. scripts/last_deployed_sha.py
-      # requires the `deploy` job itself to have concluded `success`; see
-      # scripts/test_last_deployed_sha.py.
-      - name: Find last deployed commit
-        id: last
-        if: github.event_name != 'workflow_dispatch'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          sha="$(python3 scripts/last_deployed_sha.py)"
-          # A run that deployed a commit no longer reachable (force-push, or a
-          # branch that was rebuilt) can't anchor a diff.
-          if [ -n "$sha" ] && ! git cat-file -e "$sha^{commit}" 2>/dev/null; then
-            echo "last deployed $sha is unreachable; treating as unknown"
-            sha=""
-          fi
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "last deployed: ${sha:-<none>}"
-
-      - name: Check for deploy-relevant changes
-        id: filter
-        if: github.event_name != 'workflow_dispatch' && steps.last.outputs.sha != ''
-        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
-        with:
-          base: ${{ steps.last.outputs.sha }}
-          ref: ${{ env.DEPLOY_SHA }}
-          # Every production input `make run env=prod` consumes has to be in
-          # here: a path that's missing evaluates to deploy=false, and because
-          # that green run then becomes the next baseline, the change is stranded
-          # for good rather than picked up by the following push. A
-          # hand-maintained list is what produced exactly that bug (companion/,
-          # watches.html, and the root build.gradle.kts were all missing), so
-          # scripts/test_deploy_paths.py now derives the required set from
-          # docker-compose.yml's bind mounts and build contexts, the prod Compose
-          # profiles in the Makefile, and the root Gradle build files, and fails
-          # if any of them isn't matched here.
-          filters: |
-            deploy:
-              # `./gradlew :backend:buildFatJar`. The root build files carry the
-              # Kotlin/plugin versions the backend build resolves against, so a
-              # bump there changes the deployed jar without touching backend/.
-              - 'backend/**'
-              - 'gradle/**'
-              - 'gradle.properties'
-              - 'gradlew'
-              - 'gradlew.bat'
-              - '*.gradle.kts'
-              # `docker build --target backend .`
-              - 'Dockerfile'
-              - '.dockerignore'
-              - 'Makefile'
-              # `$(PROD_COMPOSE) build recgov-companion` builds this context.
-              - 'companion/**'
-              - 'docker-compose*.yml'
-              # Bind-mounted by Compose, so they ship without an image rebuild —
-              # and are just as invisible to a filter that omits them.
-              - 'grafana/**'
-              - 'postgres-init/**'
-              - 'caddy/**'
-              - 'data/**'
-              # The React tree. Compose bind-mounts frontend/dist, which is
-              # generated and gitignored — so the source is what a push can
-              # actually touch, and `make run env=prod` (this workflow's deploy
-              # step) builds dist from it on the host via the `frontend` target.
-              # Without this a frontend-only change would never ship.
-              - 'frontend/**'
-              # A vault change is a runtime config change: the host decrypts
-              # these on deploy, so a new client id or rotated token has to
-              # reach it the same way code does. Without this, `manage.py set`
-              # lands on master and never ships.
-              - 'secrets/**'
-              - '.github/workflows/deploy.yml'
-
-      - name: Decide
-        id: decide
-        env:
-          # Manual runs are the escape hatch for "redeploy without a code
-          # change", so they must never be path-gated.
-          DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
-          NO_BASELINE: ${{ steps.last.outputs.sha == '' }}
-          MATCHED: ${{ steps.filter.outputs.deploy }}
-        run: |
-          set -euo pipefail
-          if [ "$DISPATCH" = "true" ]; then
-            reason="manual dispatch"; deploy=true
-          elif [ "$NO_BASELINE" = "true" ]; then
-            reason="no known previous deploy"; deploy=true
-          elif [ "$MATCHED" = "true" ]; then
-            reason="deploy-relevant paths changed"; deploy=true
-          else
-            reason="no deploy-relevant paths changed"; deploy=false
-          fi
-          echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
-          echo "deploy=$deploy ($reason)"
-
-  deploy:
-    needs: changes
-    if: needs.changes.outputs.deploy == 'true'
-    runs-on: ubuntu-latest
-    # Bound to a GitHub Environment so deploys show up in the environment's
-    # timeline and the door is open for approval gates / per-env secrets
-    # without another workflow change.
     environment: production
     timeout-minutes: 30
     steps:
-      # Pinned to the validated commit so the URLs this job resolves come from
-      # the same tree the host is about to check out.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.DEPLOY_SHA }}
 
-      # Join the tailnet so we can ssh mini-ca over Tailscale. OAuth client
-      # is preferred over a static auth key: scoped to the `ci` tag, the
-      # node is ephemeral, and the credentials can be rotated without
-      # touching the workflow.
+      - name: Resolve independently versioned images
+        run: |
+          echo "DEPLOY_DATA_SHA=$(git rev-parse HEAD:data)" >> "$GITHUB_ENV"
+          echo "DEPLOY_COMPANION_SHA=$(git rev-parse HEAD:companion)" >> "$GITHUB_ENV"
+
       - name: Join tailnet
         uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
-          # A concrete client version, not `latest`: a deploy should not change
-          # behavior because Tailscale cut a release between two pushes.
           version: 1.98.10
 
       - name: Configure SSH
@@ -204,68 +52,37 @@ jobs:
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          # Create the file 0600 *before* writing the key into it — a
-          # write-then-chmod leaves a window where the default-umask file
-          # holds the private key.
           install -m 600 /dev/null ~/.ssh/id_ed25519
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-          # Pinned host key — fail fast if mini-ca's identity ever changes.
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      # Single ssh invocation so any failure (checkout, Gradle build, image
-      # build, or Compose recreate) returns non-zero and fails the workflow.
-      #
-      # The SHA is passed as an argument to `bash -s` and the script body is a
-      # quoted heredoc, so only the SHA is interpolated by the runner — every
-      # other `$` is evaluated on the host.
+      - name: Install runtime release
+        uses: ./.github/actions/install-release
+        with:
+          host: mini@mini-ca
+          sha: ${{ env.DEPLOY_SHA }}
+
       - name: Deploy on mini-ca
         run: |
-          ssh -o BatchMode=yes mini@mini-ca "bash -s -- '$DEPLOY_SHA'" <<'REMOTE'
-          # The remote shell is explicitly bash (`bash -s` above), so pipefail
-          # is available: any stage of a pipeline failing fails the deploy,
-          # and -u turns a typo'd variable into an error instead of "".
+          ssh -o BatchMode=yes mini@mini-ca "bash -s -- '$DEPLOY_SHA' '$DEPLOY_DATA_SHA' '$DEPLOY_COMPANION_SHA'" <<'REMOTE'
           set -euo pipefail
           sha="$1"
-          cd ~/workspace/roadtrip
-          # Was `git pull --ff-only`, which deployed whatever master pointed at
-          # when the SSH landed — not necessarily the commit CI validated and
-          # this job resolved its URLs from. Detaching at an explicit SHA makes
-          # the deployed tree exactly the tested one, and makes a later push
-          # racing this deploy a no-op here rather than a surprise rollout.
-          git fetch --prune origin
-          git checkout --detach "$sha"
-          make run env=prod
-          running="$(docker compose --profile tunnel --profile pois ps --services --status running)"
-          for service in backend grafana loki alloy tempo prometheus; do
-            echo "$running" | grep -qx "$service"
-          done
+          data_sha="$2"
+          companion_sha="$3"
+          release="$HOME/.roadtrip/releases/$sha"
+          cd "$release"
+          scripts/deploy.sh prod "$sha" "$data_sha" "$companion_sha" master
+          ln -sfn "$release" "$HOME/.roadtrip/current"
           REMOTE
 
       - name: Report deployed commit
         run: echo "deployed $DEPLOY_SHA"
 
-      # The app's own prod config is the single source for its origin — the same
-      # value AuthConfig derives the OIDC redirect URI from, for the same reason:
-      # two sources for one URL is how you end up probing a hostname the app
-      # stopped serving. The repo variables remain as overrides for a tunnel
-      # rename, but the default is read, not restated.
       - name: Resolve deploy URLs
         run: |
-          # PyYAML ships with the runner's system python3 today, but nothing else
-          # in CI imports yaml, so an image that drops it would surface here as a
-          # failed deploy. A no-op when it's already present. apt rather than pip
-          # because this is the distro's python3, and PEP 668 makes `pip install`
-          # into it an error on Ubuntu 24.04 — the fallback would fail exactly
-          # when it were needed.
-          # `update` first: runner images ship with stale apt lists, and an
-          # install against them 404s exactly when the fallback is needed.
           python3 -c "import yaml" 2>/dev/null \
             || { sudo apt-get update -qq && sudo apt-get install -y -qq python3-yaml; }
-          # Reads roadtrip.web.root-url and strips the trailing slash the way
-          # WebAppConfig does, so "$base$path" can't double up. Exits non-zero if
-          # the key moves, which -e turns into a failed step rather than an empty
-          # base URL and a pile of confusing curl errors further down.
           root_url="$(python3 scripts/prod_base_url.py)"
           base="${{ vars.DEPLOY_BASE_URL }}"
           base="${base:-$root_url}"
@@ -278,32 +95,19 @@ jobs:
 
       - name: Health check
         run: |
-          # Probe via the public tunnel URL so we're verifying what users see,
-          # not the LAN-side container.
           for _ in $(seq 1 30); do
             if curl -fsS "$DEPLOY_HEALTH" >/dev/null; then
-              # Every page the site has, and nothing else. `/pois` and
-              # `/reservables` were probed here until they started failing the
-              # deploy: neither has ever been a page. They 200'd only because the
-              # catch-all carried `default(index.html)`, so any unknown path served
-              # the vanilla map — and that default came off when `/` graduated to
-              # React in 4e. Since then this loop has 404'd on the second path it
-              # tries, which is why runs 454 and 455 both died here with
-              # `curl: (22) ... error: 404` immediately after reporting `/ OK`.
               for path in / /watches /availability; do
                 curl -fsS "$DEPLOY_BASE$path" >/dev/null
                 echo "health: $DEPLOY_BASE$path OK"
               done
-              # Phase 5 deleted the legacy `index.html`, so a missing build now
-              # 404s `/` and the loop above catches it. This grep stays as the
-              # cheaper half of that guarantee: it asserts what came back IS the
-              # React shell, so a stray file left at the static root being served
-              # as `/` cannot pass for a working deploy.
               if ! curl -fsS "$DEPLOY_BASE/" | grep -q 'id="root"'; then
                 echo "health: / is not the React shell — frontend/dist missing or shadowed"
                 exit 1
               fi
               echo "health: / is the React shell OK"
+              curl -fsS "$DEPLOY_BASE/api/build-info" \
+                | DEPLOY_SHA="$DEPLOY_SHA" python3 -c 'import json,os,sys; info=json.load(sys.stdin); expected={"env":"prod","sha":os.environ["DEPLOY_SHA"],"branch":"master"}; actual={key:info.get(key) for key in expected}; actual == expected or sys.exit(f"build-info mismatch: expected {expected}, got {actual}"); print("health: build-info prod SHA master OK")'
               echo "health: $DEPLOY_HEALTH OK"
               exit 0
             fi
@@ -312,15 +116,8 @@ jobs:
           echo "health check failed: $DEPLOY_HEALTH"
           exit 1
 
-      # The checks above pass with sign-in completely broken: every page returns
-      # 200 and /api/me reports auth_enabled:true whenever the active vendor's
-      # auth secrets are merely *present*. Only the provider knows whether the client id and
-      # callback URL it received are ones it recognises, so drive one real hop of
-      # the handshake and let it answer.
       - name: Verify sign-in handshake
         run: |
-          # Not `status`: zsh makes that read-only, so anyone pasting this to
-          # debug by hand gets a confusing failure instead of a result.
           http_code="$(curl -s -o /dev/null -D headers.txt -w '%{http_code}' "$DEPLOY_BASE/auth/login")"
           if [ "$http_code" != "302" ]; then
             echo "auth: $DEPLOY_BASE/auth/login returned $http_code, expected 302 (sign-in disabled?)"
@@ -331,16 +128,12 @@ jobs:
             echo "auth: /auth/login redirected with no Location header"
             exit 1
           fi
-          # Query string carries state/nonce/PKCE — log only the endpoint.
           echo "auth: /auth/login -> ${authorize%%\?*}"
           http_code="$(curl -s -o authorize.html -w '%{http_code}' "$authorize")"
           case "$http_code" in
             200|302) echo "auth: provider accepted the callback URL (HTTP $http_code)" ;;
             *)
               echo "auth: provider rejected the authorize request (HTTP $http_code)"
-              # The reason is prose inside an HTML error page (e.g. "Callback
-              # URL mismatch" — wording varies by vendor), so strip tags rather
-              # than pattern-match a class name that will drift.
               tr -d '\n' < authorize.html \
                 | sed -e 's#<style[^>]*>[^<]*</style>##g' -e 's#<script[^>]*>[^<]*</script>##g' \
                       -e 's/<[^>]*>/ /g' -e 's/  */ /g' \
@@ -349,31 +142,30 @@ jobs:
               ;;
           esac
 
-      # `ps --status running` above passes for a wedged Alloy or a full Loki disk.
-      # Ask Prometheus instead. promtool ships inside the image, so this needs no
-      # published ports.
       - name: Verify telemetry pipeline
         run: |
-          ssh -o BatchMode=yes mini@mini-ca \
-            'set -e
-             cd ~/workspace/roadtrip
-             q() {
-               docker compose --profile tunnel --profile pois exec -T prometheus \
-                 promtool query instant http://localhost:9090 "$1" \
-                 | sed -n "s/.*=> \([0-9.]*\) @.*/\1/p" | head -1
-             }
-             # 60s agent export interval, so give a fresh stack time to fill in.
-             for attempt in $(seq 1 20); do
-               collectors="$(q "count(up{job=~\"alloy|loki|tempo\"} == 1) or vector(0)")"
-               backend="$(q "count(jvm_thread_count) or vector(0)")"
-               collectors="${collectors%%.*}"
-               backend="${backend%%.*}"
-               if [ "${collectors:-0}" -ge 3 ] && [ "${backend:-0}" -ge 1 ]; then
-                 echo "telemetry: 3/3 collectors up, backend metrics flowing"
-                 exit 0
-               fi
-               echo "telemetry: collectors=${collectors:-0}/3 backend_metrics=${backend:-0} (attempt $attempt)"
-               sleep 10
-             done
-             echo "telemetry pipeline check failed"
-             exit 1'
+          ssh -o BatchMode=yes mini@mini-ca "bash -s -- '$DEPLOY_DATA_SHA'" <<'REMOTE'
+          set -e
+          data_sha="$1"
+          cd "$HOME/.roadtrip/current"
+          export ROADTRIP_DATA_VOLUME="roadtrip-data-$data_sha"
+          q() {
+            docker compose --profile tunnel --profile pois exec -T prometheus \
+              promtool query instant http://localhost:9090 "$1" \
+              | sed -n "s/.*=> \([0-9.]*\) @.*/\1/p" | head -1
+          }
+          for attempt in $(seq 1 20); do
+            collectors="$(q "count(up{job=~\"alloy|loki|tempo\"} == 1) or vector(0)")"
+            backend="$(q "count(jvm_thread_count) or vector(0)")"
+            collectors="${collectors%%.*}"
+            backend="${backend%%.*}"
+            if [ "${collectors:-0}" -ge 3 ] && [ "${backend:-0}" -ge 1 ]; then
+              echo "telemetry: 3/3 collectors up, backend metrics flowing"
+              exit 0
+            fi
+            echo "telemetry: collectors=${collectors:-0}/3 backend_metrics=${backend:-0} (attempt $attempt)"
+            sleep 10
+          done
+          echo "telemetry pipeline check failed"
+          exit 1
+          REMOTE

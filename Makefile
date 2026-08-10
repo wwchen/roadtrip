@@ -1,15 +1,17 @@
 .PHONY: help run test data-fetch data-import reset-db qa install install-hooks _ensure-hooks recgov-companion recgov-login recgov-refresh recgov-atc grafana-export sandbox sandbox-stop frontend
 
 PORT       ?= 8765
-BACKEND_IMAGE ?= roadtrip/backend
 RUN_ENV ?= $(or $(env),dev)
+DEPLOY_SHA ?=
+DEPLOY_BRANCH ?= master
+DEPLOY_DATA_SHA ?=
+DEPLOY_COMPANION_SHA ?=
 POSTGRES_DB ?= roadtrip
 POSTGRES_USER ?= roadtrip
 POSTGRES_PASSWORD ?= roadtrip
 RECGOV_ATC_LOCAL_URL ?= http://127.0.0.1:8770
 RECGOV_COMPANION_BROWSER_PROFILE ?= $(HOME)/.campsite-companion/browser-session
 RECGOV_COMPANION_PROFILE_ENV := COMPANION_BROWSER_PROFILE="$${COMPANION_BROWSER_PROFILE:-$${RECGOV_COMPANION_BROWSER_PROFILE:-$(RECGOV_COMPANION_BROWSER_PROFILE)}}"
-PROD_COMPOSE_PROFILES ?= --profile tunnel --profile pois --profile recgov-companion
 LOCAL_COMPOSE_PROFILES ?= --profile pois --profile recgov-companion
 # Every stack command runs under `manage.py exec`, which decrypts the vault in
 # memory and execs the command with the values in its environment. Compose then
@@ -20,23 +22,14 @@ LOCAL_COMPOSE_PROFILES ?= --profile pois --profile recgov-companion
 # no secrets targets of its own.
 SECRETS := ./secrets/manage.py
 SECRETS_FILE := -f docker-compose.secrets.yml
-PROD_COMPOSE := $(SECRETS) exec prod -- docker compose -f docker-compose.yml $(SECRETS_FILE) $(PROD_COMPOSE_PROFILES)
 LOCAL_COMPOSE := $(SECRETS) exec local -- docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml $(SECRETS_FILE) $(LOCAL_COMPOSE_PROFILES)
-# Every service here bind-mounts its config, so `up -d` alone won't reload it.
-# Loki was missing: it mounts grafana/loki/loki-config.yml the same way the other
-# four mount theirs, so a retention or limits change would deploy without ever
-# taking effect.
-OBSERVABILITY_SERVICES := grafana alloy tempo prometheus loki
-# The only service that reads /run/secrets, so the only one a vault-only change
-# has to bounce.
-BACKEND_SERVICE := backend
 
 help:
 	@echo "Targets:"
 	@echo "  make install          One-time host setup: brew deps + companion + git hooks"
 	@echo "  make install-hooks    Point this clone's git hooks at .githooks/ (per-clone)"
 	@echo "  make run              Run backend locally + Docker Rec.gov companion"
-	@echo "  make run env=prod     Build backend/companion images + run production Compose profiles"
+	@echo "  make run env=prod     Pull the CI-built app image + run production Compose profiles"
 	@echo "  make recgov-companion Run the Docker one-shot Rec.gov companion"
 	@echo "  make recgov-login     Open companion Chromium and verify Recreation.gov login"
 	@echo "  make recgov-refresh   Force-refresh the companion Recreation.gov session"
@@ -51,29 +44,12 @@ help:
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (host backend + Rec.gov companion)."
 
-# Plain `make run` runs the backend on the host for local dev. `make run
-# env=prod` builds the container image and rolls out the production Compose
-# stack on the deploy host.
 run: _ensure-hooks
 ifeq ($(RUN_ENV),prod)
-	$(MAKE) frontend
-	./gradlew :backend:buildFatJar
-	docker build -t $(BACKEND_IMAGE) --target backend .
-	$(PROD_COMPOSE) build recgov-companion
-	# `up -d` recreates only what changed: the rebuilt backend (new image id)
-	# and any service whose `.env`-sourced config moved. Postgres/Loki/Alloy
-	# keep running, so a code deploy no longer bounces the database.
-	$(PROD_COMPOSE) up -d
-	# `up -d` folds image ids and `.env`-sourced config into its change detection,
-	# but not the value behind a `secrets: environment:` entry — a vault-only
-	# change leaves the old /run/secrets mount in place and the container
-	# "Running". Deps are already up from the line above, so this bounces only the
-	# service that reads them.
-	$(PROD_COMPOSE) up -d --force-recreate --no-deps $(BACKEND_SERVICE)
-	# Grafana, Alloy, Tempo, and Prometheus bind-mount config, so `up -d` won't
-	# reload those files. Provisioned dashboards poll dashboard JSON, but
-	# datasource, telemetry pipeline, trace, and metric config need restarts.
-	$(PROD_COMPOSE) restart $(OBSERVABILITY_SERVICES)
+	@[ -n "$(DEPLOY_SHA)" ] || { echo "DEPLOY_SHA is required for env=prod" >&2; exit 2; }
+	@[ -n "$(DEPLOY_DATA_SHA)" ] || { echo "DEPLOY_DATA_SHA is required for env=prod" >&2; exit 2; }
+	@[ -n "$(DEPLOY_COMPANION_SHA)" ] || { echo "DEPLOY_COMPANION_SHA is required for env=prod" >&2; exit 2; }
+	scripts/deploy.sh prod "$(DEPLOY_SHA)" "$(DEPLOY_DATA_SHA)" "$(DEPLOY_COMPANION_SHA)" "$(DEPLOY_BRANCH)"
 else ifeq ($(RUN_ENV),dev)
 	$(MAKE) frontend
 	$(LOCAL_COMPOSE) up -d --build postgres recgov-companion
@@ -183,9 +159,6 @@ _ensure-hooks:
 # Workflow: edit in the UI (allowUiUpdates=true in dev), then
 # `make grafana-export` before committing. UID, password, and UID list
 # overridable via env vars; see scripts/export_grafana_dashboards.py.
-# Build the React frontend into frontend/dist, which the backend serves through
-# a bind-mount. `tilt up` does this for you; this target is for `make run` and
-# for a deploy host that has no Tilt.
 frontend:
 	cd frontend && npm ci && npm run build
 
@@ -194,7 +167,7 @@ grafana-export:
 	./scripts/sync_grafana_dashboard_links.py
 
 sandbox:
-	SANDBOX_SHA=$(or $(SHA),$(shell git rev-parse HEAD)) scripts/sandbox_up.sh $(or $(REF),$(shell git rev-parse --abbrev-ref HEAD)) $(NAME)
+	SANDBOX_SHA=$(or $(SHA),$(shell git rev-parse HEAD)) scripts/deploy.sh sandbox-up $(or $(REF),$(shell git rev-parse --abbrev-ref HEAD)) $(NAME)
 
 sandbox-stop:
-	scripts/sandbox_down.sh $(NAME)
+	scripts/deploy.sh sandbox-down $(NAME)

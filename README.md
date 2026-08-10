@@ -33,7 +33,7 @@ Then bring up the stack:
 ```sh
 tilt up                  # full dev stack: Postgres/backend/Grafana/observability/Rec.gov companion
 make run                 # backend on the host; Postgres + Rec.gov companion in Docker
-make run env=prod        # on the deploy host: build images + docker compose up
+# production: merge to master; the deploy workflow pulls immutable images
 ```
 
 Where to go next:
@@ -69,9 +69,10 @@ is documented in **[docs/observability.md](docs/observability.md)**.
 
 Plain `make run` remains the fastest backend-only loop: it starts Postgres and
 builds + starts the Rec.gov companion in Docker, then runs the Kotlin/Ktor
-backend on the host with Gradle. Production deploys use `make run env=prod`,
-which builds the backend and companion images and recreates the production
-Compose stack.
+backend on the host with Gradle. Production deploys run `scripts/deploy.sh prod`
+from a commit-pinned release archive. The host pulls exact application,
+companion, and data images and updates Compose; it builds nothing and has no Git
+checkout. `make run env=prod` is only a compatible manual wrapper.
 
 The Tilt UI also has a `data` cluster of manual-trigger background workers
 (none auto-run on `tilt up`) for POI refresh.
@@ -151,10 +152,11 @@ args. How catalog rows carry provider identity (`data_provider` /
 provider is documented in
 [docs/reservation-providers.md](docs/reservation-providers.md).
 
-**Raw cache.** `data/raw/` is gitignored — captures are append-only on
-the host running the poller. Crawling Aspira/Tesla is expensive (Azure
-WAF, curl-impersonate + cookie injection); replaying raw is free.
-Recovery on a fresh checkout: re-run the fetchers.
+**Raw captures.** `data/raw/` is Git-tracked — captures are append-only and
+become a new immutable data image when committed. Production materializes that
+image into `roadtrip-data-<data-tree-sha>`. The Docker volume survives container
+replacement, is traceable to Git, and is reconstructible; sandboxes share it
+read-only. Generated `data/etl-out/` remains ignored.
 
 ### `/api/docs` — interactive API browser
 
@@ -190,10 +192,11 @@ routes are reachable on `127.0.0.1:8765` directly. **If you ever expose dev
 to the public internet (port-forward, ngrok, etc.), bind admin routes to
 loopback only first.**
 
-The admin import API only runs on hosts where `data/` is writable. In the
-Compose stack, the backend container mounts `./data` read-write at
-`/app/static/data`; host-side fetchers write raw captures into the checkout
-before import.
+The admin import API reads captured data but writes imported rows only to
+Postgres. Local Compose mounts `./data` read-write for fetch loops; production
+mounts the SHA-addressed data volume read-only at `/app/static/data`. New
+production data becomes available after captures are committed and CI publishes
+the resulting data-tree image.
 
 ## Deploy via Docker + Cloudflare tunnel
 
@@ -208,7 +211,7 @@ before import.
    once (`./secrets/manage.py init`, add its public key to `secrets/.sops.yaml`,
    then `rotate` from a machine that can already decrypt). After that, changing
    a secret is `./secrets/manage.py set NAME prod` plus a commit — the same
-   `git pull` that deploys code deploys the value. See
+   release archive that deploys code also carries the encrypted value. See
    [docs/secrets.md](docs/secrets.md).
 
    Grafana state is stored in the Compose-managed named volume
@@ -225,11 +228,12 @@ before import.
    `GRAFANA_DASHBOARD_ALLOW_UI_UPDATES=true` only when you intentionally want
    Grafana to persist UI edits in its database.
 
-3. **Bring up the stack:** on the deploy host, `make run env=prod` builds the
-   backend image and rolls it out with `docker compose up -d` (Postgres and the
-   other long-running services stay up). The deploy is wired to GHA
-   (push to master → .github/workflows/deploy.yml), so you usually don't run
-   this by hand. The older `make deploy` SSH wrapper has been removed.
+3. **Bring up the stack:** GitHub Actions sends the validated commit's small
+   release archive to `~/.roadtrip/releases/<sha>` and runs
+   `scripts/deploy.sh prod`. That single entrypoint pulls the application and
+   companion images, initializes the Git-tree-addressed data volume, updates
+   Compose, verifies service state, and prunes unused Roadtrip images. Postgres
+   and the other stateful services stay up. No production Git clone is involved.
 
    The `backend` container serves the map on port 8765 (not exposed to the
    public host — cloudflared talks to it on the compose network).
@@ -250,7 +254,9 @@ before import.
   page entries. Components come from LDS via the `@ui` adapter; server state is
   TanStack Query, client state Zustand. Every page is served from the build and
   nothing else — there is no fallback, so an unbuilt `frontend/dist` 404s
-  loudly. See [docs/frontend-components.md](docs/frontend-components.md).
+  loudly. CI packages that build with the backend JAR into the SHA-tagged image
+  used by production and sandboxes; local development overlays `frontend/dist`
+  for quick iteration. See [docs/frontend-components.md](docs/frontend-components.md).
 - **Campsite availability + watches.** Reservation-provider availability and
   watch/alert management live in the main app: the API is
   `/api/pois/{id}/campsites`, `/api/pois/{id}/campsites/availability`, and

@@ -1,21 +1,15 @@
 name: CI
 
-# Build-only. Production deploys are handled by the separate Deploy workflow
-# (mini-ca runs the prod container via `make run env=prod`).
 on:
   push:
     branches: [master]
   pull_request:
     branches: [master]
 
-# Cancel superseded runs on the same PR/branch to save minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Every job here only reads the repo: nothing comments on PRs, pushes tags, or
-# publishes packages. Codecov authenticates with its own token rather than the
-# workflow's, so read-only `contents` covers the whole file.
 permissions:
   contents: read
 
@@ -29,7 +23,7 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       companion: ${{ steps.filter.outputs.companion }}
       companion_image: ${{ steps.filter.outputs.companion_image }}
-      docker: ${{ steps.filter.outputs.docker }}
+      data_image: ${{ steps.filter.outputs.data_image }}
       scripts: ${{ steps.filter.outputs.scripts }}
       gradle_lint: ${{ steps.filter.outputs.gradle_lint }}
     steps:
@@ -54,10 +48,6 @@ jobs:
               - 'gradlew'
               - 'gradlew.bat'
               - 'settings.gradle.kts'
-              # The React tree, which is the whole site. This job
-              # builds frontend/dist and drives it, so a frontend-only change must
-              # trigger it — without this, a broken bundle would ship with smoke
-              # skipped and green.
               - 'frontend/**'
               - '.github/workflows/ci.yml'
             frontend:
@@ -69,42 +59,20 @@ jobs:
             companion:
               - 'companion/**'
               - '.github/workflows/ci.yml'
-            # Wider than `companion`: Compose owns the build (context, image
-            # name), so a compose edit can break the image without touching
-            # companion/. Kept separate from `docker` so a JS-only change
-            # doesn't drag in a fat-jar build, and vice versa.
             companion_image:
               - 'companion/**'
               - 'docker-compose*.yml'
               - '.github/workflows/ci.yml'
-            # The image is a thin runtime wrapper around the fat jar, so a
-            # backend change is as much an image change as the Dockerfile is.
-            # Frontend/static files are bind-mounted into sandboxes at runtime,
-            # so a frontend-only PR also needs a GHCR image pushed or the
-            # sandbox image-wait will time out.
-            docker:
-              - 'Dockerfile'
-              - '.dockerignore'
-              - 'backend/**'
-              - 'gradle/**'
-              - 'gradle.properties'
-              - 'gradlew'
-              - 'settings.gradle.kts'
-              - 'frontend/**'
+            data_image:
+              - 'data/**'
               - '.github/workflows/ci.yml'
-            # Everything the fast lint half reads: Grafana dashboards, the
-            # secrets registry + vault tooling, and the Python that ruff and
-            # the unittest sweep cover.
             scripts:
               - 'scripts/**'
               - 'secrets/**'
               - 'grafana/**'
-              - '.github/workflows/ci.yml'
-            # Generous on purpose: anything that can change what ktlint or
-            # detekt see — Kotlin sources, the custom rule set, detekt config,
-            # ktlint's .editorconfig, or the Gradle build that wires them up —
-            # has to re-lint. A path missing here is a lint that silently
-            # stops running.
+              - 'deploy/**'
+              - '.github/actions/**'
+              - '.github/workflows/**'
             gradle_lint:
               - 'backend/**'
               - 'detekt-rules/**'
@@ -117,9 +85,6 @@ jobs:
               - '.editorconfig'
               - '.github/workflows/ci.yml'
 
-  # The fast, JVM-free half of linting. The Gradle half (ktlint/detekt) is
-  # gradle-lint below — split so a docs-adjacent scripts/ change doesn't pay
-  # for a Gradle daemon, and a backend change doesn't pay for pipx.
   lint:
     needs: changes
     if: needs.changes.outputs.scripts == 'true'
@@ -130,34 +95,17 @@ jobs:
       - name: Validate Grafana dashboards
         run: python3 scripts/validate_grafana_dashboards.py
 
-      # The registry is the source of truth; docker-compose.secrets.yml is
-      # generated from it. `generate --check` fails if the committed file is
-      # stale, so `consumers` cannot drift from what Compose actually runs.
-      # Needs no age key — CI never decrypts anything.
       - name: Validate secrets registry
         run: |
           python3 secrets/manage.py generate --check
           python3 secrets/manage.py check
 
-      # The backend has ktlint and detekt; the repo's Python had nothing, which
-      # left the vault tooling in secrets/manage.py unlinted. Rules are passed
-      # here rather than in a ruff.toml deliberately: this is the correctness
-      # core (pyflakes, syntax/import errors, bugbear) that the tree is already
-      # clean against. Ruff's built-in default additionally enables a broad
-      # pylint/style surface with ~65 pre-existing hits — adopting that is its
-      # own cleanup. py39 is a real floor, not caution: macOS Command Line
-      # Tools ships 3.9, and these fetchers run on dev machines, so UP must not
-      # rewrite `dt.timezone.utc` into the 3.11-only `dt.UTC`.
-      # Pinned so a ruff release can't change the lint verdict mid-PR; bump
-      # deliberately.
       - name: ruff
         run: |
           pipx install ruff==0.16.0
           ruff check --isolated --target-version py39 \
             --select E4,E7,E9,F,B,UP secrets/ scripts/
 
-      # Was `-p 'test_secrets.py'`, which ran 1 of the 10 script test modules
-      # and let the other 9 rot — two of them were red on master for months.
       - name: Script + secrets tooling tests
         run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
 
@@ -182,7 +130,6 @@ jobs:
       - name: detekt rule tests
         run: ./gradlew :detekt-rules:test
 
-  # Gates the frontend, which is the whole of the site.
   frontend-tests:
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
@@ -195,10 +142,6 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      # `npm ci` rather than `npm install` so a lockfile that drifted from
-      # package.json fails here instead of resolving to something CI-only. The
-      # vendored LDS packages are `vendor/*` npm workspaces, so this links them
-      # from the checkout with nothing to fetch.
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
@@ -211,30 +154,16 @@ jobs:
         working-directory: frontend
         run: npm run test
 
-      # The build is not redundant with the two steps above: it is the only thing
-      # that exercises bundling — resolving `@lew/lds-react`'s untranspiled .jsx
-      # out of the vendor workspace, the LDS CSS cascade, and the font/sprite
-      # assets. Those fail at bundle time, not typecheck time.
       - name: Build frontend
         working-directory: frontend
         run: npm run build
 
-      # frontend/src/tokens/tokens.css is the only place a raw color may live. A hex
-      # that slips in elsewhere survives every theme override, so this gates the same
-      # job. It scans frontend/, including .ts/.tsx.
       - name: Check color tokens
         run: node scripts/check-color-tokens.mjs
 
-      # A rule that loses its closing brace is still valid CSS: everything after it
-      # becomes a descendant of it and silently stops matching. Nothing else here
-      # catches that — the build succeeds and jsdom does no layout.
       - name: Check CSS block structure
         run: node scripts/check-css-blocks.mjs
 
-      # `var(--rt-typo)` resolves to nothing rather than erroring — an invisible
-      # control, or a hardcoded fallback rendering forever behind a misspelling.
-      # Was web/design-system/tokens-usage.test.mjs, the last node:test suite; it is
-      # a script now, and it scans frontend/src, which the suite never did.
       - name: Check design token usage
         run: node scripts/check-token-usage.mjs
 
@@ -250,10 +179,6 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: companion/package-lock.json
-      # --ignore-scripts skips Playwright's browser download (~100MB+). The
-      # suites stub the browser and only need `playwright` to resolve as a
-      # module — src/browser.js imports it at load time, so omitting the
-      # install entirely fails every suite that reaches it.
       - name: Install companion dependencies
         working-directory: companion
         run: npm ci --ignore-scripts
@@ -261,44 +186,9 @@ jobs:
         working-directory: companion
         run: npm test
 
-  # The other half of what `make run env=prod` builds. Production builds this
-  # one through Compose (`$(PROD_COMPOSE) build recgov-companion`), not `docker
-  # build`, so CI drives the same Compose service rather than a hand-written
-  # equivalent — otherwise a broken companion/Dockerfile, a failing `npm ci`
-  # layer, or a build-context change still reaches mini-ca unbuilt and fails
-  # mid-deploy. scripts/test_ci_image_builds.py asserts CI keeps building
-  # everything the prod recipe does.
   companion-image:
     needs: changes
     if: needs.changes.outputs.companion_image == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # docker-compose.yml alone: docker-compose.secrets.yml only adds runtime
-      # `secrets:` entries sourced from environment values CI deliberately
-      # doesn't hold, and contributes nothing to the build.
-      #
-      # No GHA layer cache here, deliberately: Compose owns this build (that
-      # parity with prod is the whole point of the job), and routing buildx
-      # `--cache-to type=gha` through `docker compose build` needs either
-      # cache_from/cache_to entries in the compose file or a `buildx bake`
-      # indirection — both fork the build away from what prod actually runs.
-      # BuildKit is pinned on explicitly so within-build layer reuse still
-      # applies; cross-run caching lives on the plain-`docker build` backend
-      # job below. If compose-native GHA cache lands upstream, revisit.
-      - name: Build companion image
-        env:
-          DOCKER_BUILDKIT: '1'
-          COMPOSE_DOCKER_CLI_BUILD: '1'
-        run: docker compose -f docker-compose.yml --profile recgov-companion build recgov-companion
-
-  # A broken Dockerfile used to surface for the first time on the prod host,
-  # mid-deploy. The image only wraps the fat jar, so the jar has to exist first
-  # — same order as `make run env=prod`.
-  docker-build:
-    needs: changes
-    if: needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -306,6 +196,77 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Build companion image
+        run: docker build -t roadtrip/recgov-companion ./companion
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag and push companion image by tree SHA
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          TREE_SHA="$(git rev-parse HEAD:companion)"
+          IMAGE="ghcr.io/${{ github.repository }}/recgov-companion:${TREE_SHA}"
+          docker tag roadtrip/recgov-companion "$IMAGE"
+          docker push "$IMAGE"
+
+  data-image:
+    needs: changes
+    if: needs.changes.outputs.data_image == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Build data image
+        env:
+          DOCKER_BUILDKIT: '1'
+        run: |
+          TREE_SHA="$(git rev-parse HEAD:data)"
+          IMAGE="ghcr.io/${{ github.repository }}/data:${TREE_SHA}"
+          docker build \
+            --build-arg "ROADTRIP_DATA_SHA=${TREE_SHA}" \
+            -t "$IMAGE" \
+            data
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v3.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push data image by tree SHA
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          TREE_SHA="$(git rev-parse HEAD:data)"
+          IMAGE="ghcr.io/${{ github.repository }}/data:${TREE_SHA}"
+          docker push "$IMAGE"
+
+  docker-build:
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
         with:
           distribution: temurin
@@ -316,24 +277,10 @@ jobs:
       - name: Build backend fat-jar
         run: ./gradlew :backend:buildFatJar
 
-      # Container-driver builder: the default docker driver can't export a
-      # cache, and `type=gha` needs an exporter. `install: true` aliases
-      # `docker build` to buildx on this builder — without it the literal
-      # `docker build` below still hits the docker driver and dies with
-      # "Cache export is not supported for the docker driver".
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
         with:
           install: true
 
-      # BuildKit's gha cache backend authenticates with the runner's
-      # cache-service credentials, which GitHub hands to JS actions but not to
-      # `run` steps. docker/build-push-action wires them up internally, but
-      # this job builds via the `docker build` CLI on purpose — the prod recipe
-      # does, and scripts/test_ci_image_builds.py holds CI to it — so export
-      # them for the step below instead. ACTIONS_CACHE_URL is deliberately NOT
-      # exported: it points at the retired v1 cache service, which now answers
-      # every request with an HTML "services aren't available" 400, and its
-      # presence steers BuildKit away from the v2 endpoint (ACTIONS_RESULTS_URL).
       - name: Expose cache-service credentials to buildx
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
@@ -342,10 +289,6 @@ jobs:
               if (process.env[name]) core.exportVariable(name, process.env[name]);
             }
 
-      # --load lands the image in the local daemon the way plain `docker build`
-      # does; the container-driver builder otherwise keeps it to itself.
-      # ignore-error on cache-to: a cache-service outage should cost us the
-      # cache, not the build — export failures are otherwise fatal.
       - name: Build backend image
         run: |
           docker build -t roadtrip/backend --target backend --load \
@@ -354,6 +297,7 @@ jobs:
             .
 
       - name: Log in to GHCR
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v3.4.0
         with:
           registry: ghcr.io
@@ -361,13 +305,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Tag and push backend image by SHA
+        if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
           IMAGE="ghcr.io/${{ github.repository }}/backend"
-          # On pull_request events github.sha is the ephemeral merge commit, not
-          # the PR branch tip.  The sandbox workflow resolves pr.head.sha and
-          # polls GHCR for that tag — so we must push the head SHA, not the
-          # merge SHA.  On push (master) github.event.pull_request.head.sha is
-          # empty and the expression falls through to github.sha.
           SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           docker tag roadtrip/backend "$IMAGE:${SHA}"
           docker push "$IMAGE:${SHA}"
@@ -375,8 +315,6 @@ jobs:
   backend-tests:
     needs: changes
     if: needs.changes.outputs.backend_tests == 'true'
-    # gradle test runs Testcontainers (Postgis-flavored Postgres in Docker).
-    # ubuntu runners ship Docker, so this Just Works without service containers.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -391,12 +329,6 @@ jobs:
       - name: Run backend tests + coverage
         run: ./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify
 
-      # fail_ci_if_error was false, so a Codecov outage (or a revoked token)
-      # silently removed the coverage gate instead of failing the run.
-      #
-      # Skipped for Dependabot: its runs can't read the Actions secrets store,
-      # so CODECOV_TOKEN is empty and the tokenless upload is rejected on the
-      # protected branch. Coverage doesn't change on a dependency bump anyway.
       - name: Upload coverage to Codecov
         if: github.actor != 'dependabot[bot]'
         uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
@@ -420,9 +352,6 @@ jobs:
       always() &&
       needs.changes.outputs.smoke == 'true' &&
       (needs.backend-tests.result == 'success' || needs.backend-tests.result == 'skipped')
-    # End-to-end: importer hydrates Postgres from data/, backend serves
-    # static site + /api/*, Playwright-JVM drives Chromium against it.
-    # Mirrors the local `make qa` flow.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -440,10 +369,6 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      # The backend takes its DB coordinates from the profile file, not env
-      # vars, so the service container above must match what
-      # application-local.yaml hardcodes: db roadtrip, user roadtrip, password
-      # roadtrip, on localhost:5432. Change one and you must change the other.
       ROADTRIP_PROFILE: local
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -458,11 +383,6 @@ jobs:
       - name: Build backend fat-jar
         run: ./gradlew :backend:buildFatJar
 
-      # The migrated React pages are served ONLY from frontend/dist — Phases 1 and 2
-      # deleted their vanilla files, so `migratedPageFile` finds nothing and answers
-      # 404 without a build. This job had no build step, so /watches and /availability
-      # have been 404ing here since #568; nothing noticed because nothing navigated to
-      # them until the migrated-page smoke test was added.
       - name: Build frontend
         working-directory: frontend
         run: |
@@ -482,15 +402,6 @@ jobs:
           done
           echo "backend failed to start"; tail -100 backend.log; exit 1
 
-      # Seed the canonical catalog with a tiny fixture so the serving smoke has
-      # rows to render.
-      # The new ETL pipeline is pinned out of CI for now (it needs upstream
-      # auth + WAF-shaped fetches that don't fit here); this row gives the
-      # FE a Banff/Parks-Canada-shaped Aspira pin which matches what the
-      # smoke clicks on. Fetch + import remain exercisable locally via Tilt.
-      #
-      # Post-V44 shape: campground rows carry provider identity directly; the
-      # old vendor_ref tables and canonical materialized views no longer exist.
       - name: Seed canonical catalog with smoke fixture
         run: |
           PGPASSWORD=roadtrip psql -h localhost -U roadtrip -d roadtrip <<'SQL'
@@ -527,11 +438,6 @@ jobs:
           FROM poi, campground;
           SQL
 
-      # Chromium is a fixed-version (~150MB) download the install task otherwise
-      # re-fetches every run (~40s). Cache it, keyed on the Playwright version
-      # itself so only a real version bump invalidates it — hashing all of
-      # build.gradle.kts churned the cache on every unrelated build edit. On a
-      # hit installPlaywrightBrowsers is a no-op.
       - name: Extract Playwright version
         id: playwright
         run: |
@@ -549,10 +455,6 @@ jobs:
           key: ${{ runner.os }}-playwright-${{ steps.playwright.outputs.version }}
           restore-keys: ${{ runner.os }}-playwright-
 
-      # -x generateJooq: the fat-jar step above already compiled main, so the
-      # generated jOOQ sources exist and codegen's build-time Postgres isn't
-      # needed again here (installing the browser only needs the smokeTest
-      # classpath, which compiles the single SmokeTest class).
       - name: Install Playwright Chromium
         run: ./gradlew :backend:installPlaywrightBrowsers -x :backend:generateJooq
 
@@ -567,11 +469,6 @@ jobs:
           path: backend/build/reports/tests/test/
           retention-days: 7
 
-  # The single branch-protection check. The path-gated jobs above skip
-  # routinely, so protection can't require them individually — a required
-  # check that never reports blocks the merge forever. This aggregates:
-  # skipped counts as pass (the filter decided the job wasn't needed), while
-  # failure or cancellation of anything fails the whole run.
   ci-passed:
     needs:
       - changes
@@ -580,6 +477,7 @@ jobs:
       - frontend-tests
       - companion-tests
       - companion-image
+      - data-image
       - docker-build
       - backend-tests
       - smoke

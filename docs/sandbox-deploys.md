@@ -89,10 +89,11 @@ workflow; comments from other identities are silently ignored before any
 step runs.
 
 The workflow (`sandbox.yml`) resolves the PR head SHA via the GitHub API,
-waits for the GHCR image (`ghcr.io/wwchen/roadtrip/backend:<sha>`) to
-appear, then SSHes to `mini@mini-ca` over Tailscale and runs
-`scripts/sandbox_up.sh <pr_number>` (with `SANDBOX_SHA` set) or
-`scripts/sandbox_down.sh pr<pr_number>`. On success it posts the sandbox
+waits for the application and Git-tree-addressed data images to appear in GHCR,
+then SSHes to `mini@mini-ca` over Tailscale and installs the PR's
+release archive (no Git checkout), and runs
+`scripts/deploy.sh sandbox-up <pr_number>` (with `SANDBOX_SHA` set) or
+`scripts/deploy.sh sandbox-down pr<pr_number>`. On success it posts the sandbox
 URL as a PR comment:
 
 ```
@@ -119,13 +120,13 @@ make sandbox-stop NAME=<name>
 `make sandbox` expands to:
 
 ```sh
-SANDBOX_SHA=<sha> scripts/sandbox_up.sh <ref> [name]
+SANDBOX_SHA=<sha> scripts/deploy.sh sandbox-up <ref> [name]
 ```
 
 where `<sha>` defaults to the current `git rev-parse HEAD` if `SHA` is
 not set, and `<ref>` defaults to the current branch if `REF` is not set.
 
-`make sandbox-stop` calls `scripts/sandbox_down.sh <name>` directly;
+`make sandbox-stop` calls `scripts/deploy.sh sandbox-down <name>` directly;
 `NAME` is required.
 
 This path is gated by SSH access to the deploy host — no GitHub identity
@@ -133,11 +134,15 @@ check.
 
 ## Architecture
 
-### Image
+### Images
 
-CI publishes `ghcr.io/wwchen/roadtrip/backend:<sha>` on every branch
-build. The sandbox pulls the image by SHA; no image is ever built on the
-deploy host.
+CI publishes `ghcr.io/wwchen/roadtrip/backend:<commit-sha>` for every PR and
+master commit. It contains the backend JAR and compiled React application.
+Compose, provisioning, encrypted secrets, and deployment scripts travel in a
+small commit-pinned release archive installed by the shared workflow action.
+`ghcr.io/wwchen/roadtrip/data:<data-tree-sha>` contains the Git-tracked dataset.
+The host initializes a same-SHA Docker volume from it; sandboxes share that
+volume read-only. Nothing is built or checked out on the deploy host.
 
 ### Network
 
@@ -185,8 +190,9 @@ tunnel to the caddy container at `http://caddy:80`.
 ### Compose project isolation
 
 Each sandbox runs as a separate Compose project `roadtrip-sb-<name>` with
-its own named volume (`roadtrip-sb-<name>_postgres-data`). Projects never
-share volumes with each other or with the production `roadtrip` project.
+its own named volume (`roadtrip-sb-<name>_postgres-data`). Database volumes are
+never shared. Sandboxes do share the immutable, read-only
+`roadtrip-data-<data-tree-sha>` dataset volume with production.
 
 ### Database
 
@@ -223,15 +229,15 @@ the `/preview/*` URLs it switched on are gone: the map was the last page they
 carried, and Phase 4e graduated it. `migratedPages` in `StaticSiteRoutes.kt` is the
 list.
 
-A sandbox bind-mounts the checkout, so `frontend/dist` has to have been built for a
-page to be the React one; an unbuilt tree falls back to the legacy file where one
-still exists (`/` only — see `migratedPageFile`).
+The compiled `frontend/dist` is part of the SHA-tagged application image. The
+sandbox does not bind-mount or rebuild it, so the browser, backend JAR, and build
+provenance always come from the same CI artifact.
 
 ## Host configuration
 
-All host-specific values are env vars read by `scripts/deploy.sh` and
-`scripts/sandbox_down.sh`. Overriding them on the host (or in the SSH
-command) re-targets the entire tier with no code change.
+All host-specific values are env vars read by `scripts/deploy.sh`. Overriding
+them on the host (or in the SSH command) re-targets the entire tier with no code
+change.
 
 | Variable | Default | Notes |
 |---|---|---|
@@ -265,7 +271,7 @@ archive or the new one — never a partial write.
 Example cron entry (nightly at 02:00, logged to syslog):
 
 ```
-0 2 * * * root /path/to/scripts/sandbox_snapshot.sh >> /var/log/sandbox-snapshot.log 2>&1
+0 2 * * * mini $HOME/.roadtrip/current/scripts/sandbox_snapshot.sh >> $HOME/.roadtrip/sandbox-snapshot.log 2>&1
 ```
 
 The script honours these tunables:
@@ -281,7 +287,7 @@ The script honours these tunables:
 ### Reaper (hourly)
 
 `scripts/sandbox_reap.sh` reads every `*.meta` marker in `SANDBOX_STATE_DIR`,
-parses the `START_EPOCH` field, and calls `sandbox_down.sh` for any sandbox
+parses the `START_EPOCH` field, and calls `deploy.sh sandbox-down` for any sandbox
 whose age exceeds `SANDBOX_TTL_HOURS`. Fresh sandboxes are left running.
 Malformed markers emit a warning and are skipped; the script exits non-zero
 if any marker was malformed so cron/systemd can alert on it.
@@ -289,7 +295,7 @@ if any marker was malformed so cron/systemd can alert on it.
 Example cron entry (hourly):
 
 ```
-0 * * * * root /path/to/scripts/sandbox_reap.sh >> /var/log/sandbox-reap.log 2>&1
+0 * * * * mini $HOME/.roadtrip/current/scripts/sandbox_reap.sh >> $HOME/.roadtrip/sandbox-reap.log 2>&1
 ```
 
 ## Moving sandboxes to a dedicated host
