@@ -86,7 +86,7 @@ repositories {
 }
 
 val ktorVersion = "3.5.2"
-val jooqVersion = "3.21.6"
+val jooqVersion = "3.21.7"
 val postgresVersion = "42.7.13"
 val flywayVersion = "10.20.1"
 val testcontainersVersion = "1.21.4"
@@ -96,7 +96,7 @@ val resendVersion = "4.13.0"
 val nimbusJoseVersion = "10.9.1"
 val junitVersion = "5.11.3"
 val koinVersion = "4.2.2"
-val playwrightVersion = "1.61.0"
+val playwrightVersion = "1.62.0"
 val backendImageName = "roadtrip/backend"
 val backendPort = 8765
 
