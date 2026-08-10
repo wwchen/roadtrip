@@ -67,10 +67,6 @@ export function WatchEditor({
       setError('Select at least one trigger.');
       return;
     }
-    if (state.emailNotify && !state.emailTo.trim()) {
-      setError('Enter an email address.');
-      return;
-    }
     await run(() => onSave(payload));
   };
 
@@ -126,29 +122,14 @@ export function WatchEditor({
         ) : null}
 
         {canEmail ? (
-          <>
-            <ToggleRow
-              name="email_notify"
-              title="Email"
-              help="Send email when a matching site opens."
-              checked={state.emailNotify}
-              disabled={busy}
-              onChange={(emailNotify) => patch({ emailNotify })}
-            />
-            {state.emailNotify ? (
-              <label className="rt-watch-editor-field">
-                <span>To</span>
-                <input
-                  type="text"
-                  name="email_to"
-                  value={state.emailTo}
-                  placeholder="you@example.com, other@example.com"
-                  disabled={busy}
-                  onChange={(event) => patch({ emailTo: event.target.value })}
-                />
-              </label>
-            ) : null}
-          </>
+          <ToggleRow
+            name="email_notify"
+            title="Email"
+            help="Send to the email address saved in your account settings."
+            checked={state.emailNotify}
+            disabled={busy}
+            onChange={(emailNotify) => patch({ emailNotify })}
+          />
         ) : null}
 
         {canAtc || state.addToCart ? (

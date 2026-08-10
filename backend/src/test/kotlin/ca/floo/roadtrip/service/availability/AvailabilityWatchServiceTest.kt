@@ -37,8 +37,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -184,6 +182,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val targetResolver =
             WatchNotificationTargetResolver(
                 userSettingsRepo = UserSettingsRepo(ctx),
+                userRepo = UserRepo(ctx),
                 cipher = null,
             )
         val dispatcher =
@@ -364,26 +363,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     }
 
     @Test
-    fun `create rejects email notify without a to address`() {
-        val poiId = seedPoi("232447")
-        seedCampsite(poiId, "100")
-
-        val error =
-            assertFailsWith<AvailabilityWatchValidationException> {
-                service().createForTest(
-                    poiInput(
-                        poiId,
-                        triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY),
-                    ),
-                )
-            }
-
-        assertEquals("invalid_trigger_config", error.error)
-        assertEquals(0, AvailabilityWatchRepo(ctx).count())
-    }
-
-    @Test
-    fun `create stores email notify to address`() {
+    fun `create accepts email notify without watch-level config`() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
 
@@ -392,17 +372,11 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 poiInput(
                     poiId,
                     triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY),
-                    triggerConfig = emailTriggerConfig("alerts@example.test"),
                 ),
             )
 
         assertEquals(listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY), watch.triggerKinds)
-        assertEquals(
-            "alerts@example.test",
-            watch.triggerConfig[AvailabilityTriggerKinds.EMAIL_NOTIFY]!!
-                .jsonObject["to"]!!
-                .jsonPrimitive.content,
-        )
+        assertEquals(JsonObject(emptyMap()), watch.triggerConfig)
     }
 
     @Test
@@ -473,24 +447,22 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     }
 
     @Test
-    fun `update rejects adding email notify without a to address`() {
+    fun `update accepts adding email notify without watch-level config`() {
         val poiId = seedPoi("232447")
         seedCampsite(poiId, "100")
         val svc = service()
         val watch = svc.createForTest(poiInput(poiId, triggerKinds = listOf(AvailabilityTriggerKinds.SLACK_NOTIFY)))
 
-        val error =
-            assertFailsWith<AvailabilityWatchValidationException> {
-                svc.updateForTest(
-                    watch.id,
-                    AvailabilityWatchRepo.UpdateInput(
-                        triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY),
-                    ),
-                )
-            }
+        val updated =
+            svc.updateForTest(
+                watch.id,
+                AvailabilityWatchRepo.UpdateInput(
+                    triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY),
+                ),
+            )
 
-        assertEquals("invalid_trigger_config", error.error)
-        assertEquals(listOf(AvailabilityTriggerKinds.SLACK_NOTIFY), AvailabilityWatchRepo(ctx).findById(watch.id)!!.triggerKinds)
+        assertEquals(listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY), updated?.triggerKinds)
+        assertEquals(JsonObject(emptyMap()), updated?.triggerConfig)
     }
 
     @Test
@@ -687,7 +659,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         val status = notifications.statuses.single()
         assertEquals(watch.id, status.notice.watchId)
         assertEquals(WatchStatusNotice.State.UNCHECKED, status.notice.state)
-        assertEquals(listOf(NotificationTarget.Email(listOf("alerts@example.test"))), status.targets)
+        assertEquals(listOf(NotificationTarget.Email(listOf("test-owner@example.com"))), status.targets)
     }
 
     @Test

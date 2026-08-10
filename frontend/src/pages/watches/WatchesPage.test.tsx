@@ -271,39 +271,22 @@ describe('create', () => {
     await screen.findByText('No watches yet');
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Email' }));
-    await userEvent.type(screen.getByLabelText('Email address'), 'a@b.test');
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => expect(postedTo('/api/watches')).toBeTruthy());
     expect(postedTo('/api/watches')!.body).toMatchObject({
       trigger_kinds: ['slack_notify', 'email_notify'],
-      trigger_config: { email_notify: { to: 'a@b.test' } },
+      trigger_config: {},
     });
   });
 
-  // LDS controls are uncontrolled, so a conditional field's seed is read at its
-  // own mount. Seeding it from a snapshot frozen when the FORM opened made the
-  // remounted field show a stale value while the payload carried the live one —
-  // i.e. the address on screen was not the address saved.
-  test('a trigger field toggled off and back on submits the value it displays', async () => {
+  test('email never renders a watch-level recipient field', async () => {
     stubApi(watchList(), createOk());
     renderPage();
     await screen.findByText('No watches yet');
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Email' }));
-    await userEvent.type(screen.getByLabelText('Email address'), 'new@b.test');
-    // Off unmounts the field, on mounts a fresh one that must reseed from state.
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Email' }));
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Email' }));
-
-    expect(screen.getByLabelText('Email address')).toHaveValue('new@b.test');
-
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
-
-    await waitFor(() => expect(postedTo('/api/watches')).toBeTruthy());
-    expect(postedTo('/api/watches')!.body).toMatchObject({
-      trigger_config: { email_notify: { to: 'new@b.test' } },
-    });
+    expect(screen.queryByLabelText('Email address')).toBeNull();
   });
 
   // createWatch attaches the raw response text as `.body`; it carries the

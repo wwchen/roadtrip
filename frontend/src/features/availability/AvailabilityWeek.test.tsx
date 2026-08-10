@@ -603,14 +603,6 @@ describe('watches', () => {
     expect(editor.queryByRole('checkbox', { name: /Slack/ })).toBeNull();
     expect(editor.getByRole('checkbox', { name: /Email/ })).toBeChecked();
 
-    const address = editor.getByRole('textbox');
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
-        address,
-        'camp@example.com',
-      );
-      address.dispatchEvent(new Event('input', { bubbles: true }));
-    });
     await act(async () => {
       editor.getByRole('button', { name: 'Set watch' }).click();
     });
@@ -623,7 +615,7 @@ describe('watches', () => {
       poi_id: POI_ID,
       start_date: '2026-08-11',
       trigger_kinds: ['email_notify'],
-      trigger_config: { email_notify: { to: 'camp@example.com' } },
+      trigger_config: {},
     });
   });
 

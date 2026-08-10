@@ -33,7 +33,11 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
             .id
 
     private fun resolver(cipher: SecretCipher? = testCipher): WatchNotificationTargetResolver =
-        WatchNotificationTargetResolver(userSettingsRepo = UserSettingsRepo(ctx), cipher = cipher)
+        WatchNotificationTargetResolver(
+            userSettingsRepo = UserSettingsRepo(ctx),
+            userRepo = UserRepo(ctx),
+            cipher = cipher,
+        )
 
     private fun watch(
         owner: UserId,
@@ -57,6 +61,8 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
         )
 
     private fun slackTargets(targets: List<NotificationTarget>) = targets.filterIsInstance<NotificationTarget.Slack>()
+
+    private fun ownerEmail(owner: UserId): String = UserRepo(ctx).findById(owner)!!.email
 
     @Test
     fun `watch channel override wins and is used as the slack channel`() {
@@ -112,7 +118,7 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
         assertTrue(slackTargets(targets).isEmpty(), "no owner-controlled channel must yield no Slack target")
         // Email still fires when configured.
         assertEquals(
-            listOf(NotificationTarget.Email(listOf("alerts@example.test"))),
+            listOf(NotificationTarget.Email(listOf(ownerEmail(owner)))),
             targets.filterIsInstance<NotificationTarget.Email>(),
         )
     }
@@ -136,7 +142,7 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
 
         assertTrue(slackTargets(targets).isEmpty(), "email-only watch must not produce a Slack card")
         assertEquals(
-            listOf(NotificationTarget.Email(listOf("alerts@example.test"))),
+            listOf(NotificationTarget.Email(listOf(ownerEmail(owner)))),
             targets.filterIsInstance<NotificationTarget.Email>(),
         )
     }
@@ -205,8 +211,49 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
         assertTrue(slackTargets(targets).isEmpty(), "channel without token must yield no Slack target")
         // Email still fires when configured.
         assertEquals(
-            listOf(NotificationTarget.Email(listOf("alerts@example.test"))),
+            listOf(NotificationTarget.Email(listOf(ownerEmail(owner)))),
             targets.filterIsInstance<NotificationTarget.Email>(),
+        )
+    }
+
+    @Test
+    fun `notification setting wins over login email and legacy watch override`() {
+        val owner = seedOwner()
+        UserSettingsRepo(ctx).upsertNotifications(
+            owner,
+            notificationEmail = "settings@example.test",
+            slackChannel = null,
+        )
+
+        val targets =
+            resolver().resolve(
+                watch(
+                    owner,
+                    triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY),
+                    triggerConfig = JsonObject(mapOf(AvailabilityTriggerKinds.EMAIL_NOTIFY to emailTo("legacy@example.test"))),
+                ),
+            )
+
+        assertEquals(listOf(NotificationTarget.Email(listOf("settings@example.test"))), targets)
+    }
+
+    @Test
+    fun `changing notification setting redirects an existing watch`() {
+        val owner = seedOwner()
+        val settingsRepo = UserSettingsRepo(ctx)
+        val existingWatch = watch(owner, triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY))
+        settingsRepo.upsertNotifications(owner, notificationEmail = "first@example.test", slackChannel = null)
+
+        assertEquals(
+            listOf(NotificationTarget.Email(listOf("first@example.test"))),
+            resolver().resolve(existingWatch),
+        )
+
+        settingsRepo.upsertNotifications(owner, notificationEmail = "second@example.test", slackChannel = null)
+
+        assertEquals(
+            listOf(NotificationTarget.Email(listOf("second@example.test"))),
+            resolver().resolve(existingWatch),
         )
     }
 

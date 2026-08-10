@@ -93,8 +93,7 @@ describe('what the form offers', () => {
 
     expect(screen.queryByRole('checkbox', { name: /Slack/ })).toBeNull();
     expect(toggle('Email')).toBeChecked();
-    // Ticked, but not yet valid — the address is the next thing to fill in.
-    expect(screen.getByRole('textbox')).toHaveValue('');
+    expect(screen.queryByRole('textbox')).toBeNull();
   });
 
   // Slack when both are possible: it needs no further input, where email needs an
@@ -111,22 +110,20 @@ describe('what the form offers', () => {
       capabilities: caps(['slack_notify', 'email_notify']),
       watch: watch({
         trigger_kinds: ['email_notify'],
-        trigger_config: { email_notify: { to: 'camp@example.com' } },
+        trigger_config: {},
         stop_when_triggered: false,
       }),
     });
 
     expect(toggle('Slack')).not.toBeChecked();
     expect(toggle('Email')).toBeChecked();
-    expect(screen.getByRole('textbox')).toHaveValue('camp@example.com');
+    expect(screen.queryByRole('textbox')).toBeNull();
     expect(toggle('Stop when triggered')).not.toBeChecked();
     // An existing watch is saved, not set.
     expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
   });
 
-  // A controlled checkbox, because flipping it has to reveal the address field in the
-  // same render — which is why these are not LDS's uncontrolled form controls.
-  test('ticking email reveals the address field', async () => {
+  test('ticking email does not offer a watch-level recipient override', async () => {
     open({ capabilities: caps(['slack_notify', 'email_notify']) });
     expect(screen.queryByRole('textbox')).toBeNull();
 
@@ -134,7 +131,7 @@ describe('what the form offers', () => {
       toggle('Email').click();
     });
 
-    expect(screen.getByRole('textbox')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).toBeNull();
   });
 });
 
@@ -169,9 +166,7 @@ describe('saving', () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  // Email opens pre-ticked on an email-only provider, so this is what saving straight
-  // away looks like there.
-  test('refuses email with no address', async () => {
+  test('saves email intent without a recipient override', async () => {
     const { onSave } = open({ capabilities: caps(['email_notify']) });
 
     expect(toggle('Email')).toBeChecked();
@@ -179,32 +174,10 @@ describe('saving', () => {
       save().click();
     });
 
-    expect(screen.getByRole('alert')).toHaveTextContent('Enter an email address.');
-    expect(onSave).not.toHaveBeenCalled();
-  });
-
-  test('includes the address once given', async () => {
-    const { onSave } = open({ capabilities: caps(['slack_notify', 'email_notify']) });
-
-    await act(async () => {
-      toggle('Email').click();
-    });
-    const input = screen.getByRole('textbox');
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
-        input,
-        'camp@example.com',
-      );
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await act(async () => {
-      save().click();
-    });
-
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
-        trigger_kinds: ['slack_notify', 'email_notify'],
-        trigger_config: { email_notify: { to: 'camp@example.com' } },
+        trigger_kinds: ['email_notify'],
+        trigger_config: {},
       }),
     );
   });
