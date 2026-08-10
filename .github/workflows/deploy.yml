@@ -283,7 +283,15 @@ jobs:
           # not the LAN-side container.
           for _ in $(seq 1 30); do
             if curl -fsS "$DEPLOY_HEALTH" >/dev/null; then
-              for path in / /pois /reservables /watches /availability; do
+              # Every page the site has, and nothing else. `/pois` and
+              # `/reservables` were probed here until they started failing the
+              # deploy: neither has ever been a page. They 200'd only because the
+              # catch-all carried `default(index.html)`, so any unknown path served
+              # the vanilla map — and that default came off when `/` graduated to
+              # React in 4e. Since then this loop has 404'd on the second path it
+              # tries, which is why runs 454 and 455 both died here with
+              # `curl: (22) ... error: 404` immediately after reporting `/ OK`.
+              for path in / /watches /availability; do
                 curl -fsS "$DEPLOY_BASE$path" >/dev/null
                 echo "health: $DEPLOY_BASE$path OK"
               done
