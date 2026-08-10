@@ -108,13 +108,20 @@ class StaticSiteRoutesTest {
             }
         }
 
+    // `/data` keeps its `exclude`, so a raw dump is refused with 403 rather than 404:
+    // Ktor answers Forbidden when a staticFiles mount matches a path and its exclude
+    // rejects it. That is the stronger assertion of the two — it says the mount saw the
+    // request and turned it down, where a 404 would also pass if `/data` stopped being
+    // served at all. The 404s above are the opposite case, and now genuinely 404: with
+    // the catch-all deleted there is no handler at `/` to match them in the first
+    // place, which is why `/preview/map` moved from Forbidden to NotFound.
     @Test
-    fun `data files are served and raw dumps are not`() =
+    fun `data files are served and raw dumps are refused`() =
         serving(staticTree(), builtTree()) { client ->
             val geoJson = client.get("/data/us-states.geojson")
             assertEquals(HttpStatusCode.OK, geoJson.status)
             assertEquals(GEOJSON, geoJson.bodyAsText())
-            assertEquals(HttpStatusCode.NotFound, client.get("/data/raw/dump.json").status)
+            assertEquals(HttpStatusCode.Forbidden, client.get("/data/raw/dump.json").status)
         }
 
     // frontendDir defaults to frontend/dist under staticDir, which is what makes
