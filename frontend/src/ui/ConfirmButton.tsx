@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, type ButtonProps } from '@lew/lds-react';
+import { Button, type ButtonProps } from '@lew-ds/lds-react';
 
 /** How long an armed button stays armed before disarming itself. */
 const ARM_TIMEOUT_MS = 5000;

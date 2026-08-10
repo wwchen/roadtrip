@@ -2,8 +2,8 @@
    Page-level style entry for the React app.
 
    Load order matters:
-     1. `@lew/lds/css`             — the APCA palette + LDS component cascade.
-     2. `@lew/lds/css/themes/roadtrip` — the roadtrip theme, whose every value is
+     1. `@lew-ds/lds/css`             — the APCA palette + LDS component cascade.
+     2. `@lew-ds/lds/css/themes/roadtrip` — the roadtrip theme, whose every value is
         read from `src/tokens/tokens.css`. Applied by the
         `theme-roadtrip mode-dark` classes on <html> (roadtrip is dark-native and
         LDS resolves light at `:root`, so BOTH classes go on the root element).
@@ -24,6 +24,6 @@
    so a token change needed a rebuild regardless. Bundling also means the dev
    server no longer needs the backend up just to render styled.
    --------------------------------------------------------------------------- */
-@import '@lew/lds/css';
-@import '@lew/lds/css/themes/roadtrip';
+@import '@lew-ds/lds/css';
+@import '@lew-ds/lds/css/themes/roadtrip';
 @import '../tokens/tokens.css';

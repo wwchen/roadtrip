@@ -57,8 +57,6 @@ const TEST_SUFFIXES = ['.test.mjs', '.test.js', '.test.ts', '.test.tsx'];
 const EXEMPT = {
   [TOKENS_CSS]: 'the source of truth — the one place raw values belong',
   [TOKENS_JS]: 'boot/jsdom fallbacks, verified against tokens.css below',
-  'frontend/vendor':
-    'vendored LDS (matthewlew/lds) — third-party source with its own APCA palette; the roadtrip theme there is generated FROM tokens.css, so its values are already governed upstream',
 };
 
 /** Line-level escapes for cases a file-level exemption would over-grant. */

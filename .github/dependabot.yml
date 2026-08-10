@@ -30,13 +30,23 @@ updates:
       - dependency-name: "com.charleskorn.kaml:*"
         versions: [">=0.80.0"]
 
-  # Rec.gov companion sidecar. NOT the only npm project any more — `frontend/`
-  # has real dependencies (React, MapLibre, Chart.js, turf) and is deliberately
-  # absent here rather than overlooked: it declares `vendor/*` npm workspaces for
-  # the vendored LDS, whose members pin each other by exact version, so a bump PR
-  # has to be reviewed against that resolution rather than merged on green. Add an
-  # entry once LDS is a published registry dependency and the workspaces field
-  # comes out.
+  # Frontend app. LDS is installed from npm under the @lew-ds scope; keep the
+  # framework package on 1.0.x while the app imports its Roadtrip theme, which
+  # was removed from the 1.1.0 export map.
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      frontend-npm-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      - dependency-name: "@lew-ds/lds"
+        versions: [">=1.1.0"]
+
+  # Rec.gov companion sidecar.
   - package-ecosystem: npm
     directory: /companion
     schedule:
