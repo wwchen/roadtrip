@@ -16,12 +16,19 @@ const proxy = Object.fromEntries(
   ]),
 );
 
-// The retained token bridge. `web/design-system/tokens.js` stays the single
-// source of truth for `--rt-*` colors (it holds the fallback table that
+// What is left of `web/`.
+//
+// Phase 5 deleted the strangled vanilla app; three things stayed, and this alias is
+// the build-time one. `web/design-system/tokens.js` remains the single source of
+// truth for `--rt-*` colors (it holds the fallback table that
 // scripts/check-color-tokens.mjs verifies against tokens.css), so the React app
-// imports that module rather than owning a TS copy. Typed by
-// src/types/tokens.d.ts; dropped in Phase 5 when the bridge is reconciled with
-// LDS's `--c-*` names.
+// imports that module rather than owning a TS copy. Typed by src/types/tokens.d.ts,
+// and it goes when the bridge is reconciled with LDS's `--c-*` names.
+//
+// The other two are runtime-served rather than bundled: `tokens.css` itself and the
+// `sandbox-*` chrome — see `vite/runtime-served-assets.ts`. `@legacy/core` used to
+// sit here too, for the parity suite that ran `lib/poi.ts` against `web/core.js`;
+// both are gone.
 const LEGACY_WEB_DIR = here('../web');
 
 export default defineConfig({
@@ -32,9 +39,6 @@ export default defineConfig({
       '@': here('./src'),
       '@ui': here('./src/ui'),
       '@tokens': `${LEGACY_WEB_DIR}/design-system/tokens.js`,
-      // Transition-only: lets parity tests run a port against the original it
-      // was ported from. Typed by src/types/legacy.d.ts; removed in Phase 5.
-      '@legacy/core': `${LEGACY_WEB_DIR}/core.js`,
     },
   },
   build: {

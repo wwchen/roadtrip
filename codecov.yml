@@ -46,3 +46,13 @@ ignore:
   # silently shrinks nothing while making the filter set look bigger than it is.
   - "backend/src/main/kotlin/ca/floo/roadtrip/Main.kt"
   - "backend/src/main/kotlin/ca/floo/roadtrip/RoadtripRouting.kt"
+  # The Playwright suite. It is TEST code that the coverage job never executes
+  # (`smokeTest` is its own source set, run by `make qa` against a live stack),
+  # so every line of it counted as uncovered production code — 49 of the 50
+  # "missing" lines on the PR that rewrote it, which is patch coverage measuring
+  # the wrong thing rather than a gap to close.
+  #
+  # This shifts the denominator, which the calibration note above warns about —
+  # in the safe direction: it removes never-covered lines, so both percentages
+  # can only rise. The `project` target stays at 66%.
+  - "backend/src/smokeTest/**"

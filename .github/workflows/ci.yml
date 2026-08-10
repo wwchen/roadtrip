@@ -54,18 +54,20 @@ jobs:
               - 'gradlew'
               - 'gradlew.bat'
               - 'settings.gradle.kts'
-              - '*.html'
-              - 'web/**/*.js'
-              - 'web/**/*.css'
-              # The React tree. This job now builds frontend/dist and navigates the
-              # migrated pages, so a frontend-only change must trigger it — without
-              # this, a broken bundle would ship with smoke skipped and green.
+              # `web/` is three retained asset pairs now (tokens.css + the sandbox
+              # chrome), and every React page loads all of them at runtime — so a
+              # change there can still break every page the smoke drives.
+              - 'web/**'
+              # The React tree, which is the whole site as of Phase 5. This job
+              # builds frontend/dist and drives it, so a frontend-only change must
+              # trigger it — without this, a broken bundle would ship with smoke
+              # skipped and green.
               - 'frontend/**'
               - '.github/workflows/ci.yml'
-            # Both frontend trees gate the same job for the duration of the
-            # strangler migration: `web/**` is the vanilla tree, `frontend/**`
-            # the React one. `scripts/check-color-tokens.mjs` runs here too, and
-            # it now scans both.
+            # `frontend/**` is the app; `web/**` is what Phase 5 left behind
+            # (tokens.css, its JS bridge, the sandbox chrome) and still has its own
+            # node:test suites. `scripts/check-color-tokens.mjs` runs here too and
+            # scans both.
             web:
               - 'web/**'
               - 'frontend/**'
@@ -98,7 +100,6 @@ jobs:
               - 'settings.gradle.kts'
               - 'web/**'
               - 'frontend/**'
-              - 'index.html'
               - '.github/workflows/ci.yml'
             # Everything the fast lint half reads: Grafana dashboards, the
             # secrets registry + vault tooling, and the Python that ruff and
@@ -192,9 +193,9 @@ jobs:
 
   # Gates both frontend trees while they coexist.
   #
-  # web/ has no package.json: those suites are dependency-free node:test modules
-  # importing the browser sources directly, so there is nothing to install for
-  # them. frontend/ does, so its steps install first.
+  # web/ has no package.json: its remaining suites are dependency-free node:test
+  # modules (the token-usage guard and the two sandbox modules), so there is nothing
+  # to install for them. frontend/ does, so its steps install first.
   web-tests:
     needs: changes
     if: needs.changes.outputs.web == 'true'
@@ -209,7 +210,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       # Enumerated with find and handed to node as an explicit list rather than
       # left to a `web/**/*.test.mjs` pattern. The pattern is correct today
-      # (verified: same 153 tests either way), but it only works while quoted —
+      # (verified: same 24 tests either way — it was 153 before Phase 5 deleted the
+      # vanilla app and its suites), but it only works while quoted —
       # unquoted, a shell without globstar collapses `**` to one directory level
       # and silently runs a subset. A job that goes green having tested a
       # fraction of the suite is worse than no job, so discovery is asserted
@@ -252,7 +254,7 @@ jobs:
 
       # tokens.css is the only place a raw color may live. A hex that slips in
       # elsewhere survives every theme override, so this gates the same job. It
-      # scans web/ and frontend/ (including .ts/.tsx).
+      # scans what is left of web/ plus frontend/ (including .ts/.tsx).
       - name: Check color tokens
         run: node scripts/check-color-tokens.mjs
 

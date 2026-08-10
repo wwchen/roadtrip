@@ -132,7 +132,6 @@ jobs:
               - 'postgres-init/**'
               - 'caddy/**'
               - 'data/**'
-              - 'index.html'
               - 'web/**'
               # The React tree. Compose bind-mounts frontend/dist, which is
               # generated and gitignored — so the source is what a push can
@@ -288,15 +287,13 @@ jobs:
                 curl -fsS "$DEPLOY_BASE$path" >/dev/null
                 echo "health: $DEPLOY_BASE$path OK"
               done
-              # A 200 on `/` is not enough, and it is the only page where that is
-              # true: since the map graduated to React it is served by the
-              # migrated-page route, which falls back to the legacy `index.html`
-              # when `frontend/dist` is missing. That fallback 200s, so only the
-              # React shell distinguishes a real deploy from a silently degraded
-              # one. (`/watches` and `/availability` have no legacy file left, so
-              # the 404 above is enough for them.)
+              # Phase 5 deleted the legacy `index.html`, so a missing build now
+              # 404s `/` and the loop above catches it. This grep stays as the
+              # cheaper half of that guarantee: it asserts what came back IS the
+              # React shell, so a stray file left at the static root being served
+              # as `/` cannot pass for a working deploy.
               if ! curl -fsS "$DEPLOY_BASE/" | grep -q 'id="root"'; then
-                echo "health: / served the legacy map — frontend/dist missing from the deploy"
+                echo "health: / is not the React shell — frontend/dist missing or shadowed"
                 exit 1
               fi
               echo "health: / is the React shell OK"

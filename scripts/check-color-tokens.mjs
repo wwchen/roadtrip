@@ -7,9 +7,10 @@
  * override and quietly contradicts the system it sits next to. This check
  * fails the build on one.
  *
- * Covers both the legacy `web/` tree and the React `frontend/` tree, including
- * `.ts`/`.tsx` — until this scanned them, a raw hex in a component would have
- * passed silently.
+ * Covers the React `frontend/` tree, including `.ts`/`.tsx` — until this scanned
+ * them, a raw hex in a component would have passed silently — plus what is left of
+ * `web/` after Phase 5 deleted the vanilla app: `tokens.css`, its JS bridge, and the
+ * `sandbox-*` chrome every React page still loads at runtime.
  *
  * Also verifies the JS bridge stays honest: every fallback key in
  * `web/design-system/tokens.js` must name a token that tokens.css actually
@@ -34,12 +35,12 @@ const TOKENS_JS = 'web/design-system/tokens.js';
  * duration of the strangler migration — both ship to users, so both are held to
  * the same rule.
  *
- * The root shells are named individually because they are files, not directories.
- * `availability.html` is gone from this list because React replaced it; `index.html`
- * is the last one left and goes the same way in Phase 4. Note that a name here must
- * exist — `walk` stats every root — so removing a shell means removing it here too.
+ * No root shells are named any more: React owns every page, so `index.html` and
+ * `availability.html` are both gone from the repo and from this list. A name here
+ * must exist — `walk` stats every root — so deleting a shell means deleting its
+ * entry, which is what made this list shrink twice.
  */
-const ROOTS = ['web', 'frontend', 'index.html'];
+const ROOTS = ['web', 'frontend'];
 const EXTENSIONS = ['.css', '.html', '.js', '.mjs', '.ts', '.tsx'];
 
 /**
@@ -62,10 +63,6 @@ const TEST_SUFFIXES = ['.test.mjs', '.test.js', '.test.ts', '.test.tsx'];
 const EXEMPT = {
   [TOKENS_CSS]: 'the source of truth — the one place raw values belong',
   [TOKENS_JS]: 'boot/jsdom fallbacks, verified against tokens.css below',
-  'web/design-system/gallery.html':
-    'demonstrates pre-token colors side by side with their replacements',
-  'web/design-system/slack-blockkit-payloads.js':
-    "Slack's attachment API takes a literal hex over the wire; each value names the token it mirrors",
   'frontend/vendor':
     'vendored LDS (matthewlew/lds) — third-party source with its own APCA palette; the roadtrip theme there is generated FROM tokens.css, so its values are already governed upstream',
 };
@@ -97,17 +94,15 @@ const HEX = /#[0-9a-fA-F]{3,8}\b/;
  * So: the counts below are a high-water mark. New raw color of this form
  * fails the build; the existing debt can only shrink. Drop a file's number
  * when you tokenize some, and delete the entry when it reaches zero.
+ *
+ * Phase 5 took this from 51 occurrences to 7 by deleting their files rather than by
+ * tokenizing anything — the remaining entry is the sandbox user switcher, which is
+ * still served. A stale entry for a deleted file would not FAIL anything (the check
+ * is `found > allowed`), it would just overstate the debt in the summary line.
  */
 const RGB_FUNC = /(?:rgba?|hsla?)\(\s*(?!var\(--rt-)/g;
 const LEGACY_RAW_COLOR_BUDGET = {
-  'index.html': 32,
   'web/sandbox-user-switcher.css': 7,
-  'web/design-system/banner.css': 3,
-  'web/topbar.js': 3,
-  'web/availability/watch-editor.js': 2,
-  'web/design-system/double-confirm-button.css': 2,
-  'web/app.js': 1,
-  'web/design-system/toggle-switch.css': 1,
 };
 
 function walk(path, out = []) {

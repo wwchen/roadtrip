@@ -114,17 +114,17 @@ services:
     volumes:
       # Static files bind-mounted so reviewers see the frontend at the SHA
       # being reviewed; the image carries the compiled backend jar only.
-      - ./index.html:/app/static/index.html:ro
       - ./web:/app/static/web:ro
       - ./data:/app/static/data:ro
-      # The React build (Phase 1+). Bind-mounted rather than baked into the image,
-      # exactly like web/ above, so the served frontend tracks the checkout.
+      # The React build — the whole site as of Phase 5. Bind-mounted rather than
+      # baked into the image, exactly like web/ above, so the served frontend tracks
+      # the checkout.
       #
-      # Both migrated pages (/watches, /availability) are served ONLY from here —
-      # their vanilla files were deleted, so there is no per-file fallback left and
-      # an unbuilt tree 404s rather than degrading. `tilt up` and `make run` build
-      # it for you, `scripts/deploy.sh` fails if it cannot, and the deploy health
-      # check probes both paths.
+      # Every page (/, /watches, /availability) is served ONLY from here: the vanilla
+      # files were all deleted, so there is no per-file fallback left and an unbuilt
+      # tree 404s rather than degrading. `tilt up` and `make run` build it for you,
+      # `scripts/deploy.sh` fails if it cannot, and the deploy health check probes
+      # every path and greps `/` for the React shell.
       - ./frontend/dist:/app/static/frontend/dist:ro
     healthcheck:
       test: ["CMD", "java", "-Xmx32m", "-cp", "/app/app.jar", "ca.floo.roadtrip.HealthProbe"]

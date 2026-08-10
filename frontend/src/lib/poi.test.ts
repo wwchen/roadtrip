@@ -1,13 +1,14 @@
 import { describe, expect, test } from 'vitest';
 import { token } from '@tokens';
-// Transition-only import: the legacy implementation this module was ported from.
-// It drives the parity suite at the bottom and goes away with `web/` in Phase 5.
-import { flattenHydratedPoi as legacyFlatten } from '@legacy/core';
 import { flattenHydratedPoi, type PoiFeature } from './poi';
 
 // ---------------------------------------------------------------------------
-// Fixtures. Shared by the behavior tests and the parity suite so both cover the
-// same shapes — one per branch of the flattener, plus the awkward inputs.
+// Fixtures: one per branch of the flattener, plus the awkward inputs.
+//
+// These were shared with a parity suite that ran this port and `web/core.js`'s
+// original over the same inputs and compared output. Phase 5 deleted `web/`, so
+// that suite is gone and the behaviour tests below are the contract. They are the
+// reason the fixtures are this exhaustive — keep them that way.
 // ---------------------------------------------------------------------------
 
 const FIXTURES: Readonly<Record<string, PoiFeature>> = {
@@ -327,33 +328,5 @@ describe('re-flattening', () => {
     const twice = flattenHydratedPoi(structuredClone(once));
     expect(twice.properties.Unit_Nm).toBe('Lassen Volcanic'); // falls back to p.name
     expect(twice.properties.State_Nm).toBe('CA'); // falls back to p.region
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Parity against web/core.js.
-//
-// This port is meant to be behavior-faithful, so the strongest available check
-// is running both implementations over the same fixtures and comparing output.
-// DELETE THIS SUITE WITH web/ IN PHASE 5 — by then the legacy module is gone and
-// the behavior tests above are the contract.
-// ---------------------------------------------------------------------------
-
-describe('parity with the legacy web/core.js implementation', () => {
-  test.each(Object.keys(FIXTURES))('produces identical output for %s', (key) => {
-    const fixture = FIXTURES[key]!;
-    const legacy = legacyFlatten(structuredClone(fixture));
-    const ported = flattenHydratedPoi(structuredClone(fixture));
-    expect(ported).toEqual(legacy);
-  });
-
-  test('agrees on re-flattened output too', () => {
-    for (const fixture of Object.values(FIXTURES)) {
-      const legacyOnce = legacyFlatten(structuredClone(fixture));
-      const portedOnce = flattenHydratedPoi(structuredClone(fixture));
-      expect(flattenHydratedPoi(structuredClone(portedOnce))).toEqual(
-        legacyFlatten(structuredClone(legacyOnce)),
-      );
-    }
   });
 });

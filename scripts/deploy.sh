@@ -264,17 +264,15 @@ fi
 # the served frontend tracks the reviewed SHA rather than whatever the pre-built
 # image happens to carry. That means the build has to happen here.
 #
-# Fatal, not best-effort. This was a warning while every migrated page still had
-# a vanilla file to fall back to; web/watches/ is now deleted, so a skipped or
-# failed build means /watches serves a 404. `/` is worse rather than better: it
-# still HAS a legacy file, so an unbuilt frontend silently serves a sandbox the
-# vanilla map — a reviewer would be looking at the wrong app. A loud deploy
-# failure beats either, and the fix is to install Node on the host.
+# Fatal, not best-effort. This was a warning while every page still had a vanilla
+# file to fall back to. Phase 5 deleted the last of them, so a skipped or failed
+# build means the ENTIRE site 404s — there is nothing left to degrade to. A loud
+# deploy failure beats a dead sandbox, and the fix is to install Node on the host.
 if [[ -d "${REPO_ROOT}/frontend" ]]; then
     if ! command -v npm >/dev/null 2>&1; then
-        echo "ERROR: npm not found, but frontend/ must be built — /watches has no" >&2
-        echo "       legacy fallback since web/watches/ was removed, and / would" >&2
-        echo "       silently serve the vanilla map. Install Node." >&2
+        echo "ERROR: npm not found, but frontend/ must be built — every page (/, " >&2
+        echo "       /watches, /availability) is served from frontend/dist alone" >&2
+        echo "       since the vanilla tree was deleted. Install Node." >&2
         exit 1
     fi
     echo "==> building frontend (npm ci && npm run build)"

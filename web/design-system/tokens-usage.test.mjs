@@ -20,15 +20,16 @@ const defined = new Set(
 // Custom properties declared and consumed inside a single component. They are
 // deliberately not global tokens, so they're allowlisted by name — see the
 // comment on the rule below for why "has a fallback" is not a safe exemption.
-const COMPONENT_LOCAL = new Set([
-  '--rt-modal-width',
-  '--rt-watch-editor-width',
-  '--rt-watch-editor-mobile-margin',
-]);
+// Empty since Phase 5: every component that declared one of these
+// (`--rt-modal-width`, `--rt-watch-editor-*`) was deleted with the vanilla app.
+// Kept as the seam rather than removed, because the rule below still needs
+// somewhere to put a component-local property the day one is added again.
+const COMPONENT_LOCAL = new Set([]);
 
-// .js is walked alongside .css on purpose: several components (topbar.js,
-// topbar/auth.js, topbar/alerts.js, availability/watch-editor.js) inject their
-// CSS as a template literal into a <style> tag, which a .css-only scan misses.
+// .js is walked alongside .css on purpose: the components that used to inject CSS
+// as a template literal into a <style> tag (topbar.js, topbar/auth.js,
+// topbar/alerts.js, availability/watch-editor.js) are gone, but `sandbox-banner.js`
+// and `sandbox-user-switcher.js` still do it, and a .css-only scan would miss them.
 function* walkFiles(dir) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === 'node_modules') continue;

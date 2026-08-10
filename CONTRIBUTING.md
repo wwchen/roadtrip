@@ -62,19 +62,19 @@ to add your age public key to `secrets/.sops.yaml` and run
 
 Plenty of work needs no vault at all, though:
 
-- **Design-system components.** The gallery runs standalone against the real
-  stylesheets and component modules — see
-  [web/design-system/README.md](web/design-system/README.md#start-here-the-living-gallery):
+- **Frontend work.** The React app runs against the dev server, and only needs the
+  backend up for `/api` and `tokens.css`:
 
   ```sh
-  python3 -m http.server 8766
-  open http://localhost:8766/web/design-system/gallery.html
+  cd frontend && npm ci && npm run dev
   ```
 
-- **Frontend unit tests.** `web/` has no package.json and no install step; the
-  suites import the browser sources directly:
+- **Frontend unit tests.** Vitest for the app; a handful of dependency-free
+  `node:test` suites still cover what is left of `web/` (the token guard and the
+  sandbox modules), and those need no install:
 
   ```sh
+  cd frontend && npm test
   node --test $(find web -name '*.test.mjs')
   ```
 
@@ -113,8 +113,12 @@ That covers, in order (mirroring `.github/workflows/ci.yml`):
 - `./gradlew :backend:ktlintCheck` + `:backend:detekt` — Kotlin formatting and
   static analysis
 - `./gradlew :detekt-rules:test` — the repo's custom detekt rules
-- `node --test` over every `web/**/*.test.mjs` — frontend map/UI modules
-  (discovery is asserted, so zero found files fails loudly)
+- `cd frontend && npm run typecheck && npm test && npm run build` — the React app
+- `node --test` over every `web/**/*.test.mjs` — the retained `web/` assets: the
+  token-usage guard and the two sandbox modules (discovery is asserted, so zero
+  found files fails loudly)
+- `node scripts/check-color-tokens.mjs` + `node frontend/scripts/check-css-blocks.mjs`
+  — colour tokens and CSS brace balance across both trees
 - `cd companion && npm test` — Rec.gov companion (Node `--test`; needs
   `companion/` deps, which `make install` provides)
 - `python3 -m unittest discover -s scripts -p 'test_*.py'` — Python fetchers,
@@ -171,7 +175,8 @@ self-merge and no auto-approval from CI passing alone.
 - [docs/installation.md](docs/installation.md) — dev machine vs. deploy host setup.
 - [docs/secrets.md](docs/secrets.md) — the `secrets/` vault, rotation, what's deliberately not in it.
 - [docs/backend-architecture.md](docs/backend-architecture.md) — Kotlin/Ktor layering rules.
-- [docs/frontend-components.md](docs/frontend-components.md) — frontend component/design-system rules.
+- [docs/frontend-components.md](docs/frontend-components.md) — React component rules, the `@ui` layer, and the colour-token system.
+- [docs/react-migration-plan.md](docs/react-migration-plan.md) — how the frontend got here, and the Gotchas worth reading before your first LDS form or MapLibre effect.
 - [docs/touch-scroll-interactions.md](docs/touch-scroll-interactions.md) — touch/scroll interaction rules for the map UI.
 - [docs/observability.md](docs/observability.md) — the Grafana/Loki/Tempo/Prometheus/Alloy stack.
 - [docs/reservation-providers.md](docs/reservation-providers.md) — the availability-provider abstraction.
@@ -180,5 +185,4 @@ self-merge and no auto-approval from CI passing alone.
 - [docs/adding-a-data-source.md](docs/adding-a-data-source.md) — step-by-step for a new POI data source.
 - [DATA_SOURCES.md](DATA_SOURCES.md) — per-category data source research and refresh plan.
 - [SMOKE.md](SMOKE.md) — real-device smoke checklist.
-- [web/design-system/README.md](web/design-system/README.md) — the design system and its living gallery.
 - [rfcs/](rfcs/) — accepted architecture/process decisions, including [0002-pr-process.md](rfcs/0002-pr-process.md).
