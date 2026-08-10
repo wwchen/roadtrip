@@ -209,6 +209,7 @@ val serviceModule =
             val cipher: SecretCipher? = config.secrets?.let { SecretCipher(it.encryptionKey) }
             WatchNotificationTargetResolver(
                 userSettingsRepo = get<UserSettingsRepo>(),
+                userRepo = get<UserRepo>(),
                 cipher = cipher,
             )
         }

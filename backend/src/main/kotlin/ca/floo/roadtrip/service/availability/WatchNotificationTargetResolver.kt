@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
+import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.security.SecretCipher
@@ -9,8 +10,10 @@ import org.slf4j.LoggerFactory
 
 /**
  * Translates a watch's persisted trigger intent into concrete notification
- * targets, resolving the Slack destination from **owner-controlled sources
- * only**. This is the privacy boundary for watch alert cards: a card carries
+ * targets. Email always resolves from the owner's current notification setting,
+ * falling back to their login email; watch-level recipient overrides are ignored.
+ * Slack resolves from **owner-controlled sources only**. This is the privacy
+ * boundary for watch alert cards: a card carries
  * Pause/Resume/Delete buttons and the Slack interactivity port applies those
  * mutations with no per-click owner check, so isolation must come from *where*
  * the card is delivered. Each owner's cards land only in a channel that owner
@@ -47,6 +50,7 @@ import org.slf4j.LoggerFactory
  */
 internal class WatchNotificationTargetResolver(
     private val userSettingsRepo: UserSettingsRepo,
+    private val userRepo: UserRepo,
     private val cipher: SecretCipher?,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -57,9 +61,15 @@ internal class WatchNotificationTargetResolver(
                 resolveSlackTarget(watch)?.let(::add)
             }
             if (AvailabilityTriggerKinds.EMAIL_NOTIFY in watch.triggerKinds) {
-                add(NotificationTarget.Email(recipients = watch.emailRecipients()))
+                resolveEmailTarget(watch)?.let(::add)
             }
         }
+
+    private fun resolveEmailTarget(watch: AvailabilityWatchRepo.Watch): NotificationTarget.Email? {
+        val ownerId = UserId(watch.ownerUserId)
+        val recipient = userSettingsRepo.find(ownerId)?.notificationEmail ?: userRepo.findById(ownerId)?.email ?: return null
+        return NotificationTarget.Email(recipients = listOf(recipient))
+    }
 
     /**
      * The owner-scoped Slack target, or null when the security invariant cannot be

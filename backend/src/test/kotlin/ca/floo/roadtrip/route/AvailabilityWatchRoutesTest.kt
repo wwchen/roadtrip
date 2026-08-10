@@ -698,20 +698,13 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonPrimitive.content,
             )
 
-            val badEmailTrigger =
+            val emailTrigger =
                 client.post(modifyWatchPath(id)) {
                     asUser(USER_TOKEN)
                     contentType(ContentType.Application.Json)
                     setBody("""{"trigger_kinds": ["email_notify"]}""")
                 }
-            assertEquals(HttpStatusCode.BadRequest, badEmailTrigger.status)
-            assertEquals(
-                "invalid_trigger_config",
-                Json
-                    .parseToJsonElement(badEmailTrigger.bodyAsText())
-                    .jsonObject["error"]!!
-                    .jsonPrimitive.content,
-            )
+            assertEquals(HttpStatusCode.OK, emailTrigger.status)
 
             val badConfig =
                 client.post(modifyWatchPath(id)) {
@@ -769,8 +762,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                         {
                           "trigger_kinds": ["slack_notify", "email_notify", "atc"],
                           "trigger_config": {
-                            "slack_notify": {"channel": "#camping"},
-                            "email_notify": {"to": "alerts@example.test"}
+                            "slack_notify": {"channel": "#camping"}
                           },
                           "stop_when_triggered": false
                         }
@@ -788,13 +780,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonObject["channel"]!!
                     .jsonPrimitive.content,
             )
-            assertEquals(
-                "alerts@example.test",
-                watch["trigger_config"]!!
-                    .jsonObject["email_notify"]!!
-                    .jsonObject["to"]!!
-                    .jsonPrimitive.content,
-            )
+            assertEquals(null, watch["trigger_config"]!!.jsonObject["email_notify"])
             assertEquals(false, watch["stop_when_triggered"]!!.jsonPrimitive.boolean)
         }
 

@@ -14,10 +14,6 @@ const valueOf = (e: Event): string => (e.target as HTMLInputElement).value;
 /**
  * Rebuild of web/watches/trigger-selector.js on LDS.
  *
- * The channel and address fields stay conditional on their toggle, as in the
- * original — an address box under a disabled email trigger reads as a required
- * field that does nothing.
- *
  * **LDS form controls are uncontrolled.** Their `value`/`checked` is the initial
  * value only: the components render a template string, so a changed prop swaps
  * the whole field's DOM, and feeding React state back in destroys the focused
@@ -32,14 +28,13 @@ const valueOf = (e: Event): string => (e.target as HTMLInputElement).value;
  *
  *  - The toggles live as long as this component, so a snapshot frozen at mount
  *    (`initial`) is the right seed for them.
- *  - The channel and address fields do NOT: switching a toggle off unmounts one
- *    and switching it back on mounts a fresh one. Seeding those from `initial`
+ *  - The channel field does NOT: switching its toggle off unmounts it and
+ *    switching it back on mounts a fresh one. Seeding it from `initial`
  *    showed the value as it was when the FORM opened, while `value` — and so the
  *    submitted payload — held whatever had been typed since. Editing `#old` to
  *    `#new`, toggling Slack off and on again, then saving would display `#old`
- *    and post `#new`; on the email field that means notifications going somewhere
- *    other than the address on screen. They use `SeededTextField`, which reads
- *    the live `value` at each of its own mounts instead.
+ *    and post `#new`. It uses `SeededTextField`, which reads the live `value` at
+ *    each of its own mounts instead.
  *
  * Every control carries an `id`, and each Toggle also an `aria-label`: LDS's
  * `textField` emits `<label for={id}>`, but its `toggle` puts the visible label in
@@ -82,24 +77,11 @@ export function TriggerSelector({ value, onChange, disabled }: TriggerSelectorPr
         name="email_notify"
         label="Email"
         aria-label="Email"
-        help="Send email when a matching site opens."
+        help="Send to the email address saved in your account settings."
         defaultChecked={initial.emailNotify}
         disabled={disabled}
         onChange={(e) => patch({ emailNotify: checkedOf(e) })}
       />
-      {value.emailNotify && (
-        <SeededTextField
-          id="watch-email-to"
-          name="email_to"
-          label="Email address"
-          type="text"
-          placeholder="you@example.com, other@example.com"
-          seed={value.emailTo}
-          disabled={disabled}
-          onChange={(e) => patch({ emailTo: valueOf(e) })}
-        />
-      )}
-
       <Toggle
         id="watch-stop-when-triggered"
         name="stop_when_triggered"

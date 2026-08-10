@@ -16,7 +16,6 @@ export interface TriggerState {
   slackNotify: boolean;
   slackChannel: string;
   emailNotify: boolean;
-  emailTo: string;
   addToCart: boolean;
   stopWhenTriggered: boolean;
 }
@@ -64,11 +63,6 @@ export function watchSlackChannel(watch: Partial<Watch> | null | undefined): str
   return typeof legacy === 'string' && legacy.trim() ? legacy : '';
 }
 
-export function watchEmailTo(watch: Partial<Watch> | null | undefined): string {
-  const nested = nestedString(triggerConfigOf(watch), TRIGGER_KIND_EMAIL_NOTIFY, 'to');
-  return nested.trim();
-}
-
 export function watchStopWhenTriggered(
   watch: Partial<Watch> | null | undefined,
   fallback = true,
@@ -88,7 +82,6 @@ export function triggerStateOf(watch: Partial<Watch> | null | undefined): Trigge
     slackNotify: watch ? watchHasTrigger(watch, TRIGGER_KIND_SLACK_NOTIFY) : true,
     slackChannel: watch ? watchSlackChannel(watch) : '',
     emailNotify: watch ? watchHasTrigger(watch, TRIGGER_KIND_EMAIL_NOTIFY) : false,
-    emailTo: watch ? watchEmailTo(watch) : '',
     addToCart: watch ? watchHasTrigger(watch, TRIGGER_KIND_ATC) : false,
     stopWhenTriggered: watchStopWhenTriggered(watch, true),
   };
@@ -112,11 +105,6 @@ export function buildTriggerPayload(state: TriggerState): TriggerPayload {
   if (state.slackNotify && channel) {
     triggerConfig[TRIGGER_KIND_SLACK_NOTIFY] = { channel };
   }
-  const emailTo = String(state.emailTo || '').trim();
-  if (state.emailNotify && emailTo) {
-    triggerConfig[TRIGGER_KIND_EMAIL_NOTIFY] = { to: emailTo };
-  }
-
   return {
     trigger_kinds: triggerKinds,
     trigger_config: triggerConfig,

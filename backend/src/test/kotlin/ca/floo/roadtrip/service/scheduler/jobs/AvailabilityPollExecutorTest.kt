@@ -24,6 +24,7 @@ import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
@@ -106,7 +107,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
      *  (the security invariant: cards only via the owner's own token, never the
      *  shared global bot). A watch whose owner has no channel OR no token produces
      *  NO Slack target. */
-    private fun seedOwner(slackChannel: String? = "#camping"): Long {
+    private fun seedOwner(
+        slackChannel: String? = "#camping",
+        notificationEmail: String? = null,
+    ): Long {
         val userId =
             ca.floo.roadtrip.repo
                 .UserRepo(ctx)
@@ -119,7 +123,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val repo =
                 ca.floo.roadtrip.repo
                     .UserSettingsRepo(ctx)
-            repo.upsertNotifications(userId, notificationEmail = null, slackChannel = slackChannel)
+            repo.upsertNotifications(userId, notificationEmail = notificationEmail, slackChannel = slackChannel)
             // Seed a token so the resolver produces a Slack target (new security gate).
             repo.setSlackToken(userId, cipher = testCipher.seal("xoxb-owner-token"), hint = "oken")
         }
@@ -173,9 +177,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         triggerConfig: String = "{}",
         stopWhenTriggered: Boolean = false,
         ownerSlackChannel: String? = "#camping",
+        ownerNotificationEmail: String? = null,
     ): Long {
         val kindsLiteral = triggerKinds.joinToString(prefix = "ARRAY[", postfix = "]") { "'$it'" }
-        val ownerId = seedOwner(ownerSlackChannel)
+        val ownerId = seedOwner(ownerSlackChannel, ownerNotificationEmail)
         val watchId =
             ctx
                 .fetchOne(
@@ -385,6 +390,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     private fun targetResolver(): WatchNotificationTargetResolver =
         WatchNotificationTargetResolver(
             userSettingsRepo = UserSettingsRepo(ctx),
+            userRepo = UserRepo(ctx),
             cipher = testCipher,
         )
 
@@ -876,8 +882,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     farStart.toString(),
                     farStart.plusDays(2).toString(),
                     triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY),
-                    triggerConfig =
-                        """{"email_notify":{"to":"one@example.test, two@example.test"}}""",
+                    ownerNotificationEmail = "alerts@example.test",
                 )
             // No cube data: this is the confirmation/status path, not an opening alert.
             val notifier = RecordingSlackNotifications()
@@ -887,7 +892,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val post = notifier.posts.single()
             assertNull(post.channel)
             assertEquals(
-                listOf(NotificationTarget.Email(listOf("one@example.test", "two@example.test"))),
+                listOf(NotificationTarget.Email(listOf("alerts@example.test"))),
                 post.targets,
             )
             assertTrue(post.allText.contains("Watching"), post.allText)

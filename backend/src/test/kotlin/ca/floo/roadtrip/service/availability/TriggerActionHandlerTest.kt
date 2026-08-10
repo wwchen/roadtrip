@@ -9,11 +9,14 @@ import ca.floo.roadtrip.model.booking.AddToCartResult
 import ca.floo.roadtrip.model.booking.BookingAction
 import ca.floo.roadtrip.model.booking.BookingTarget
 import ca.floo.roadtrip.model.domain.Campground
+import ca.floo.roadtrip.model.domain.auth.User
 import ca.floo.roadtrip.model.domain.auth.UserId
+import ca.floo.roadtrip.model.domain.auth.UserStatus
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
+import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.testCampground
@@ -203,6 +206,7 @@ class TriggerActionHandlerTest {
                                         slackTokenHint = "ner",
                                     ),
                                 ),
+                            userRepo = FakeUserRepo(),
                             cipher = testCipher,
                         ),
                     appRootUrl = "https://app.example",
@@ -244,7 +248,7 @@ class TriggerActionHandlerTest {
                 )
 
             assertTrue(delivered)
-            assertEquals(listOf(NotificationTarget.Email(listOf("alerts@example.test"))), notifications.lastTargets)
+            assertEquals(listOf(NotificationTarget.Email(listOf("owner@example.test"))), notifications.lastTargets)
         }
 
     @Test
@@ -287,7 +291,7 @@ class TriggerActionHandlerTest {
 
             assertTrue(delivered)
             assertEquals(
-                listOf(NotificationTarget.Slack("#custom", "xoxb-owner-token"), NotificationTarget.Email(listOf("alerts@example.test"))),
+                listOf(NotificationTarget.Slack("#custom", "xoxb-owner-token"), NotificationTarget.Email(listOf("owner@example.test"))),
                 notifications.lastTargets,
             )
             assertEquals(1, notifications.openingSends)
@@ -505,12 +509,27 @@ class TriggerActionHandlerTest {
         override fun find(userId: UserId): UserSettingsRepo.Settings? = settings
     }
 
+    private class FakeUserRepo : UserRepo(ctx = DSL.using(SQLDialect.POSTGRES)) {
+        override fun findById(id: UserId): User =
+            User(
+                id = id,
+                email = "owner@example.test",
+                displayName = null,
+                isEmailVerified = true,
+                status = UserStatus.ACTIVE,
+                roles = emptySet(),
+                createdAt = OffsetDateTime.parse("2026-01-01T00:00:00Z"),
+                updatedAt = OffsetDateTime.parse("2026-01-01T00:00:00Z"),
+            )
+    }
+
     /** A resolver over an owner that has no stored settings by default. When
      *  settings with a token are provided, testCipher is passed so the token can
      *  be decrypted, otherwise cipher is null. */
     private fun resolver(settings: UserSettingsRepo.Settings? = null): WatchNotificationTargetResolver =
         WatchNotificationTargetResolver(
             userSettingsRepo = FakeUserSettingsRepo(settings),
+            userRepo = FakeUserRepo(),
             cipher = if (settings?.slackTokenCipher != null) testCipher else null,
         )
 

@@ -6,7 +6,6 @@ import {
   TRIGGER_KIND_EMAIL_NOTIFY,
   TRIGGER_KIND_SLACK_NOTIFY,
   triggerStateOf,
-  watchEmailTo,
   watchHasTrigger,
   watchSlackChannel,
   watchStopWhenTriggered,
@@ -19,7 +18,6 @@ const state = (fields: Partial<TriggerState> = {}): TriggerState => ({
   slackNotify: false,
   slackChannel: '',
   emailNotify: false,
-  emailTo: '',
   addToCart: false,
   stopWhenTriggered: true,
   ...fields,
@@ -84,26 +82,6 @@ describe('watchSlackChannel', () => {
   });
 });
 
-describe('watchEmailTo', () => {
-  test('reads and trims the address', () => {
-    expect(watchEmailTo(watch({ trigger_config: { email_notify: { to: '  a@b.test ' } } }))).toBe(
-      'a@b.test',
-    );
-  });
-
-  test.each([[{}], [{ email_notify: {} }], [{ email_notify: { to: '  ' } }]])(
-    'is empty for the config %j',
-    (config) => {
-      expect(watchEmailTo(watch({ trigger_config: config }))).toBe('');
-    },
-  );
-
-  // Unlike Slack there is no legacy top-level fallback, matching the original.
-  test('does not read a top-level to', () => {
-    expect(watchEmailTo(watch({ trigger_config: { to: 'a@b.test' } }))).toBe('');
-  });
-});
-
 describe('watchStopWhenTriggered', () => {
   test('returns the fallback for no watch', () => {
     expect(watchStopWhenTriggered(null)).toBe(true);
@@ -135,7 +113,6 @@ describe('triggerStateOf', () => {
       slackNotify: true,
       slackChannel: '',
       emailNotify: false,
-      emailTo: '',
       addToCart: false,
       stopWhenTriggered: true,
     });
@@ -146,7 +123,7 @@ describe('triggerStateOf', () => {
       triggerStateOf(
         watch({
           trigger_kinds: ['email_notify', 'atc'],
-          trigger_config: { email_notify: { to: 'a@b.test' } },
+          trigger_config: {},
           stop_when_triggered: false,
         }),
       ),
@@ -154,7 +131,6 @@ describe('triggerStateOf', () => {
       slackNotify: false,
       slackChannel: '',
       emailNotify: true,
-      emailTo: 'a@b.test',
       addToCart: true,
       stopWhenTriggered: false,
     });
@@ -169,19 +145,17 @@ describe('buildTriggerPayload', () => {
     ).toEqual(['slack_notify', 'email_notify', 'atc']);
   });
 
-  test('nests each config under its kind', () => {
+  test('only Slack has watch-level configuration', () => {
     expect(
       buildTriggerPayload(
         state({
           slackNotify: true,
           slackChannel: '#alerts',
           emailNotify: true,
-          emailTo: 'a@b.test',
         }),
       ).trigger_config,
     ).toEqual({
       slack_notify: { channel: '#alerts' },
-      email_notify: { to: 'a@b.test' },
     });
   });
 
@@ -212,16 +186,19 @@ describe('buildTriggerPayload', () => {
     expect(buildTriggerPayload(state({ stopWhenTriggered: false })).stop_when_triggered).toBe(false);
   });
 
-  test('round-trips a watch through read and rebuild', () => {
+  test('strips a legacy email override when rebuilding a watch payload', () => {
     const original = watch({
       trigger_kinds: ['slack_notify', 'email_notify'],
-      trigger_config: { slack_notify: { channel: '#alerts' }, email_notify: { to: 'a@b.test' } },
+      trigger_config: {
+        slack_notify: { channel: '#alerts' },
+        email_notify: { to: 'legacy@example.test' },
+      },
       stop_when_triggered: false,
     });
 
     expect(buildTriggerPayload(triggerStateOf(original))).toEqual({
       trigger_kinds: ['slack_notify', 'email_notify'],
-      trigger_config: { slack_notify: { channel: '#alerts' }, email_notify: { to: 'a@b.test' } },
+      trigger_config: { slack_notify: { channel: '#alerts' } },
       stop_when_triggered: false,
     });
   });

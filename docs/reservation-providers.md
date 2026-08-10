@@ -262,11 +262,12 @@ The campsite availability API exposes proposed-watch capabilities for the
 current POI scope as provider-neutral `watch_capabilities`:
 `trigger_kinds` includes configured notification triggers such as
 `slack_notify` and `email_notify`, and includes `atc` only when the resolved
-watch scope supports `BookingAction.ADD_TO_CART`. Email notification watches
-carry their recipient on the watch itself as `trigger_config.email_notify.to`;
-there is no environment-level recipient fallback. The FE renders the Email and
-Add to cart toggles from this contract; create/update validation still uses the
-same capability service and trigger-config validator as the authoritative gate.
+watch scope supports `BookingAction.ADD_TO_CART`. Email notification recipients
+resolve at delivery time from the watch owner's `user_settings.notification_email`,
+falling back to the owner's login email; watches cannot override or persist a
+recipient. The FE renders the Email and Add to cart toggles from this contract;
+create/update validation still uses the same capability service and
+trigger-config validator as the authoritative gate.
 
 ## Capabilities
 
