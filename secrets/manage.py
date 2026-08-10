@@ -12,8 +12,8 @@ Everything lives in this directory:
 
 A vault is a dotenv whose *values* are age-encrypted and whose *keys* are
 plaintext, so `git diff` shows which secret changed without showing what it
-changed to. All of it is committed: durability is git history, and deploying a
-secret is the same `git pull` that deploys code.
+changed to. All of it is committed: durability is git history, and the
+commit-pinned runtime archive carries the encrypted vault with the code.
 
 Nothing is ever decrypted to a file. `exec` merges common + the environment's
 overlay in memory and replaces itself with the target command; Docker Compose

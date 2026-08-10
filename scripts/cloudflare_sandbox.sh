@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # cloudflare_sandbox.sh — per-sandbox Cloudflare DNS provisioning.
 #
-# Sourced by deploy.sh (on up) and sandbox_down.sh (on down).  NOT executable on
+# Sourced by deploy.sh for both sandbox up and down. NOT executable on
 # its own.  Provides two entrypoints:
 #
 #   cf_sandbox_up   <fqdn>   — create/refresh the proxied CNAME for <fqdn>.

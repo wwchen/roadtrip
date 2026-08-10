@@ -4,9 +4,9 @@ Two kinds of machine run this stack, and they need different things:
 
 - a **dev machine** — builds the backend, runs Tilt, drives the companion
   browser, runs the smoke suite;
-- a **deploy host** (`mini-ca`) — builds the backend jar and images, runs the
-  Compose stack, and decrypts secrets, but never runs Tilt, tests, or the
-  companion browser directly.
+- a **deploy host** (`mini-ca`) — pulls CI-built application, companion, and
+  data images, runs a small commit-pinned release archive, and decrypts secrets. It has no
+  repository clone and builds no project code.
 
 Installing the dev toolchain on the deploy host works but drags in Tilt,
 Playwright, and a Chromium download it will never use.
@@ -41,23 +41,23 @@ try to decrypt — the stack does not come up on a partial secret set, because
 
 ## Deploy host
 
-Needs Docker, a JDK, and the secrets toolchain. It does **not** need Tilt,
-Node, or Playwright. It *does* need a JDK: `make run env=prod` runs
-`./gradlew :backend:buildFatJar` on the deploy host before building the
-backend image (the image only wraps the jar it is handed — it does not build
-it):
+Needs Docker and the secrets toolchain. It does **not** need Git, a JDK, Tilt,
+Node, or Playwright. CI publishes three immutable images: the application by
+commit SHA, plus companion and data by their Git tree SHAs. The workflow sends
+the versioned Compose/configuration archive over the existing SSH connection:
 
 ```sh
-brew install docker openjdk sops age
+brew install docker sops age
 ```
 
 `sops` is the one people miss. `age` alone is enough to *mint a key*, but every
-stack command shells out to `sops` to decrypt the vault — without it `make run
-env=prod` fails after `git pull` has already landed new code.
+stack command shells out to `sops` to decrypt the vault.
 
-Then mint the host's identity:
+The first deployment extracts its bundle under `~/.roadtrip/releases/` and
+points `~/.roadtrip/current` at it. From there, mint the host's identity:
 
 ```sh
+cd ~/.roadtrip/current
 ./secrets/manage.py init
 ```
 
@@ -88,7 +88,7 @@ Grafana volumes — is in the [README](../README.md#deploy-via-docker--cloudflar
 ./secrets/manage.py check     # registry, vaults and generated output agree
 ./secrets/manage.py ls        # what exists and where it's set (never values)
 tilt up                       # dev machine
-make run env=prod             # deploy host
+# production normally deploys only through .github/workflows/deploy.yml
 ```
 
 `check` is what the pre-commit hook runs against staged blobs, so a clean

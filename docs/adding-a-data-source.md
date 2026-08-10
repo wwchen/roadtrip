@@ -142,7 +142,7 @@ If the upstream needs a secret, **read it from an env var inside the fetcher; ne
    ```
 
    `--consumers` is comma-separated: use `host-tools` for a secret only the host-side fetcher reads (that is how `RIDB_API_KEY` is registered), `backend,host-tools` when a backend client also reads it (like `CAMPFLARE_API_KEY`). See the field docs at the top of `secrets/registry.yaml`.
-4. **Commit** what `add` tells you to: `secrets/registry.yaml`, the updated `secrets/*.enc.env` vault, and the regenerated `docker-compose.secrets.yml`. That commit *is* the deploy — the deploy host decrypts with its own age key on the next `git pull`.
+4. **Commit** what `add` tells you to: `secrets/registry.yaml`, the updated `secrets/*.enc.env` vault, and the regenerated `docker-compose.secrets.yml`. The next production release archive carries those files to the deploy host, which decrypts them with its own age key.
 5. **Plumbing is automatic.** `make data-fetch` runs the fetchers under `./secrets/manage.py exec local --`, which decrypts the vault in memory and injects `host-tools` values as env vars; the Tiltfile loads the same set for its resources; containers get `consumers`-scoped `/run/secrets` mounts from the generated compose file. Nothing to add to `docker-compose.yml` or the Tiltfile by hand. For a bare fetcher invocation outside make/Tilt, wrap it yourself: `./secrets/manage.py exec local -- python3 scripts/<fetcher>.py …`.
 
 **Never** commit a real key. **Never** log the key value. Don't include it in the envelope's `request_headers`.

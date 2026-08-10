@@ -1,0 +1,64 @@
+name: Install runtime release
+description: Package the checked-out runtime files and atomically install them on the deploy host
+
+inputs:
+  host:
+    description: SSH destination
+    required: true
+  sha:
+    description: Validated 40-character commit SHA
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        RELEASE_HOST: ${{ inputs.host }}
+        RELEASE_SHA: ${{ inputs.sha }}
+      run: |
+        set -euo pipefail
+        [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+        archive_name="${RELEASE_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tgz"
+        archive="$RUNNER_TEMP/$archive_name"
+        tar -czf "$archive" -T deploy/release-manifest.txt
+
+        ssh -o BatchMode=yes "$RELEASE_HOST" \
+          'mkdir -p "$HOME/.roadtrip/incoming"'
+        scp -q -o BatchMode=yes "$archive" \
+          "$RELEASE_HOST:.roadtrip/incoming/${archive_name}"
+        ssh -o BatchMode=yes "$RELEASE_HOST" "bash -s -- '$RELEASE_SHA' '$archive_name'" <<'REMOTE'
+        set -euo pipefail
+        sha="$1"
+        archive_name="$2"
+        root="$HOME/.roadtrip"
+        release="$root/releases/$sha"
+        archive="$root/incoming/$archive_name"
+        marker="$release/.roadtrip-release-sha"
+        owned_lock=""
+        trap 'rm -f "$archive"; [ -z "$owned_lock" ] || rmdir "$owned_lock" 2>/dev/null || true' EXIT
+        mkdir -p "$root/releases" "$root/locks"
+
+        if [ ! -f "$marker" ]; then
+          lock="$root/locks/$sha"
+          if mkdir "$lock" 2>/dev/null; then
+            owned_lock="$lock"
+            staging="$(mktemp -d "$root/releases/.${sha}.XXXXXX")"
+            tar -xzf "$archive" -C "$staging"
+            test -x "$staging/scripts/deploy.sh"
+            printf '%s\n' "$sha" > "$staging/.roadtrip-release-sha"
+            mv "$staging" "$release"
+          else
+            for _ in $(seq 1 60); do
+              [ -f "$marker" ] && break
+              sleep 1
+            done
+            if [ ! -f "$marker" ]; then
+              rmdir "$lock" 2>/dev/null || true
+              echo "release install timed out: $sha" >&2
+              exit 1
+            fi
+          fi
+        fi
+        test "$(cat "$marker")" = "$sha"
+        REMOTE

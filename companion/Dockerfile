@@ -2,6 +2,9 @@ FROM mcr.microsoft.com/playwright:v1.60.0-noble
 
 WORKDIR /app
 
+LABEL ca.floo.roadtrip.managed="true" \
+      ca.floo.roadtrip.component="recgov-companion"
+
 COPY package.json package-lock.json ./
 RUN npm ci
 

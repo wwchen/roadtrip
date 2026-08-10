@@ -12,6 +12,9 @@ backend/build/*
 
 companion/node_modules
 
+frontend/node_modules
+frontend/dist
+
 data/raw
 data/pricing-cache
 

@@ -3,17 +3,17 @@
 #
 # Tear down sandboxes whose START_EPOCH is older than SANDBOX_TTL_HOURS.
 #
-# Reads every ${SANDBOX_STATE_DIR}/*.meta marker written by sandbox_up.sh,
-# parses START_EPOCH, and calls sandbox_down.sh for any sandbox whose age
+# Reads every ${SANDBOX_STATE_DIR}/*.meta marker written by deploy.sh,
+# parses START_EPOCH, and calls deploy.sh sandbox-down for any sandbox whose age
 # exceeds the TTL.  Fresh sandboxes are left running.
 #
 # Intended to run on a schedule.  Example cron entry (hourly):
 #
-#   0 * * * * root /path/to/scripts/sandbox_reap.sh >> /var/log/sandbox-reap.log 2>&1
+#   0 * * * * mini $HOME/.roadtrip/current/scripts/sandbox_reap.sh >> $HOME/.roadtrip/sandbox-reap.log 2>&1
 #
 # Runtime assumptions (documented):
-#   - sandbox_down.sh lives alongside this script (same directory).
-#   - Marker files are in the format written by sandbox_up.sh:
+#   - deploy.sh lives alongside this script (same directory).
+#   - Marker files are in the format written by deploy.sh:
 #       NAME=<name>
 #       PORT=<port>
 #       START_EPOCH=<unix seconds>
@@ -23,7 +23,7 @@ set -euo pipefail
 # Maximum sandbox lifetime in hours before it is reaped.
 SANDBOX_TTL_HOURS="${SANDBOX_TTL_HOURS:-24}"
 
-# Directory containing *.meta marker files (must match sandbox_up.sh).
+# Directory containing *.meta marker files (must match deploy.sh).
 SANDBOX_STATE_DIR="${SANDBOX_STATE_DIR:-/var/lib/roadtrip-sandboxes}"
 
 # ── Derived values ────────────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ for meta in "${META_FILES[@]}"; do
 
     if [[ ${AGE} -gt ${SANDBOX_TTL_SECONDS} ]]; then
         echo "==> reaping '${NAME}' (age=${AGE}s > TTL=${SANDBOX_TTL_SECONDS}s)"
-        "${SCRIPT_DIR}/sandbox_down.sh" "${NAME}"
+        "${SCRIPT_DIR}/deploy.sh" sandbox-down "${NAME}"
         REAPED=$(( REAPED + 1 ))
     else
         REMAINING=$(( SANDBOX_TTL_SECONDS - AGE ))

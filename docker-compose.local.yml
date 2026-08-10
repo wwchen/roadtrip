@@ -14,11 +14,19 @@ services:
     restart: "no"
     environment:
       ROADTRIP_PROFILE: compose-local
+      ROADTRIP_BUILD_ENV: local
+      ROADTRIP_BUILD_SHA: local
+      ROADTRIP_BUILD_BRANCH: local
       OTEL_RESOURCE_ATTRIBUTES: service.namespace=roadtrip,deployment.environment=compose-local,service.version=${ROADTRIP_BACKEND_VERSION:-0.1.0}
     ports:
       - "127.0.0.1:8765:8765"
+    volumes:
+      - ./frontend/dist:/app/static/frontend/dist:ro
+      - ./data:/app/static/data
 
   recgov-companion:
+    build:
+      context: ./companion
     restart: "no"
     ports:
       - "127.0.0.1:8770:8770"

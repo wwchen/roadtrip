@@ -22,9 +22,8 @@ secrets/
 ./secrets/manage.py rm OLD_KEY
 ```
 
-Then commit. Deploying a secret is the same `git pull` that deploys code — the
-vault travels with the repo, and the deploy host decrypts it with its own age
-key.
+Then commit. The production release archive carries the encrypted vault to the
+deploy host, which decrypts it with its own age key.
 
 `make run`, `make run env=prod`, `tilt up` and `make data-fetch` all work
 unchanged; they wrap themselves in `manage.py exec`.
