@@ -33,6 +33,14 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const TOKENS_CSS = 'frontend/src/tokens/tokens.css';
+// roadtrip-zion.css and its bridge declare their own --rt-* roles — the LDS
+// theme direction's own vocabulary (--rt-ink, --rt-action-container, etc.),
+// consumed only within these two files — that tokens.css never lists and
+// never should; see roadtrip-zion-bridge.css's own header.
+const THEME_TOKEN_SOURCES = [
+  'frontend/src/tokens/roadtrip-zion.css',
+  'frontend/src/tokens/roadtrip-zion-bridge.css',
+];
 const ROOTS = ['frontend/src'];
 const EXTENSIONS = ['.css', '.ts', '.tsx'];
 
@@ -60,8 +68,8 @@ const COMPONENT_LOCAL = new Set([
 ]);
 
 const defined = new Set(
-  [...readFileSync(join(ROOT, TOKENS_CSS), 'utf8').matchAll(/(--rt-[a-z0-9-]+)\s*:/g)].map(
-    (m) => m[1],
+  [TOKENS_CSS, ...THEME_TOKEN_SOURCES].flatMap((f) =>
+    [...readFileSync(join(ROOT, f), 'utf8').matchAll(/(--rt-[a-z0-9-]+)\s*:/g)].map((m) => m[1]),
   ),
 );
 
