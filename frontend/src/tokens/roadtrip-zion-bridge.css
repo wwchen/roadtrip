@@ -1,0 +1,123 @@
+/* ============================================================
+   roadtrip-zion — token bridge
+
+   Move 01 of the LDS reskin proposal ("Roadtrip LDS Reskin.dc.html"):
+   ship roadtrip-zion.css and alias every --rt-* CHROME role onto it, so
+   the app keeps reading var(--rt-surface) etc. and the theme supplies
+   the value. Zero component changes — this file is the only diff.
+
+   Scope: CHROME only. tokens.css's own header groups its tier-2 roles
+   into four families — "Neutrals / Brand blue / Layer hues / Availability
+   & status" — and the reskin proposal's Move 04 ("Keep the data
+   language") is explicit that only the first two are chrome:
+
+     "Layer hues and the availability vocabulary stay exactly as they
+     are. LDS has no role for them and should not get one — they are
+     data, not chrome."
+
+   So this file repoints neutrals, brand/action, type, radii and
+   elevation. It does NOT touch: --rt-layer-*, --rt-map-* (np/sp/pin/
+   route/waypoint/locate — "resolved through tokens.js at runtime, not
+   CSS. Gap 3"), --rt-kind-*, --rt-avail(-bg), --rt-first-come(-bg),
+   --rt-reserved, --rt-watching, --rt-paused, --rt-rating,
+   --rt-signal-0..4 (a known,
+   documented defect roadtrip-zion.css doesn't fix either — that's
+   Phase 4, not this), --rt-series-1..9, the status quartet
+   (--rt-success/--rt-warn/--rt-error/--rt-info — "meaning, never
+   decoration"), --rt-overlay-chip (a map label chip, map chrome not UI
+   chrome) or the two --rt-c-brand-tesla* primitives, which tokens.css
+   itself marks non-themeable. Nor --rt-on-accent — tokens.css documents
+   it as "Fixed white by design — a theme changes the fill, not this."
+
+   Mechanics: every right-hand side is a var()/color-mix() built from
+   roadtrip-zion.css's own tokens (--surface-*, --rt-ink, --rt-action-*,
+   --c-*, --radius-*, --shadow-*, --th-*), which are already mode-aware
+   (roadtrip-zion.css redefines them under
+   ".mode-dark.theme-roadtrip-zion, .theme-roadtrip-zion .mode-dark").
+   So ONE rule below serves both modes — nothing here needs its own
+   ".mode-dark" block. Text roles use color-mix() against --rt-ink and
+   --surface-page rather than a fixed gray step, because zion's --gray-*
+   ramp itself does NOT invert under dark (only the product roles built
+   from it do) — a literal --gray-700 is correct-looking secondary text
+   in light and unreadable dark-on-dark text in night.
+
+   Load order (see ../ui/styles.css): roadtrip-zion.css, then
+   tokens.css, then this file last — so this always wins on any name
+   both files define (--rt-scrim being the one real collision: same
+   role, two different theme's numbers. This file's value is what
+   applies; tokens.css's dark-tuned rgba(var(--rt-c-overlay-rgb), .62)
+   is written for the OLD theme-roadtrip and no longer applies).
+   ============================================================ */
+
+.theme-roadtrip-zion {
+  /* Type */
+  --rt-sans: var(--th-body);
+  --rt-mono: var(--th-mono);
+
+  /* Surfaces */
+  --rt-bg-base: var(--surface-page);
+  --rt-bg: var(--surface-sunken);
+  --rt-bg-sunken: var(--surface-base);
+  --rt-surface: var(--surface-raised);
+  --rt-surface-raised: var(--surface-overlay);
+  --rt-surface-inset: var(--surface-sunken);
+  --rt-surface-alt: color-mix(in srgb, var(--rt-ink) 3%, var(--surface-page));
+
+  /* Overlays & borders — mode-safe: blended from the mode-aware ink and
+     page roles rather than a fixed gray step or the old white-channel
+     --rt-c-overlay-rgb primitive, so light and dark both fall out of the
+     same expression. */
+  --rt-fill-subtle: color-mix(in srgb, var(--rt-ink) 4%, transparent);
+  --rt-fill-hover: color-mix(in srgb, var(--rt-ink) 6%, transparent);
+  --rt-fill-active: color-mix(in srgb, var(--rt-ink) 9%, transparent);
+  --rt-border: color-mix(in srgb, var(--rt-ink) 12%, var(--surface-page));
+  --rt-border-strong: color-mix(in srgb, var(--rt-ink) 20%, var(--surface-page));
+  /* Independent expression, not var(--rt-scrim) — this file and
+     roadtrip-zion.css both define a role of that exact name, so a
+     self-reference here would be circular. Matches roadtrip-zion.css's
+     own scrim closely (its light and dark values are both, in effect, a
+     38–62% ink wash) without needing to read a value this file cannot
+     address by name. */
+  --rt-scrim: color-mix(in srgb, var(--rt-ink) 40%, transparent);
+  --rt-scrim-strong: color-mix(in srgb, var(--rt-ink) 50%, transparent);
+
+  /* Text — var(--rt-ink) IS the primary text color, not just the
+     "structural" one roadtrip-zion.css's header calls out (selection,
+     route, secondary button): same charcoal-in-light /
+     near-white-in-dark value either way. */
+  --rt-text: var(--rt-ink);
+  --rt-muted: color-mix(in srgb, var(--rt-ink) 70%, var(--surface-page));
+  --rt-faint: color-mix(in srgb, var(--rt-ink) 50%, var(--surface-page));
+  --rt-hint: color-mix(in srgb, var(--rt-ink) 35%, var(--surface-page));
+
+  /* Brand / action. Per Move 01's token-bridge table: --rt-brand takes
+     the SOLID persimmon (--c-600), not the tonal container — this is a
+     blunt whole-app alias, ahead of Phase 2's per-component swap onto
+     real LDS Button, where the tonal-vs-solid distinction (persimmon
+     once per screen, solid reserved for checkout) actually gets drawn
+     component by component. Until then, every bespoke element reading
+     --rt-brand directly goes solid persimmon uniformly — that's the
+     known, called-out trade of doing the token layer before the
+     component layer. */
+  --rt-brand: var(--c-600);
+  --rt-brand-hover: var(--c-700);
+  --rt-brand-press: var(--c-800);
+  --rt-brand-tint: var(--rt-action-wash);
+  --rt-brand-text: var(--c-500);
+
+  /* Radii — roadtrip-zion.css has no distinct 2xl step; --radius-xl is
+     the nearest (20px vs. tokens.css's 18px). */
+  --rt-r-sm: var(--radius-sm);
+  --rt-r-md: var(--radius-base);
+  --rt-r-lg: var(--radius-lg);
+  --rt-r-xl: var(--radius-xl);
+  --rt-r-2xl: var(--radius-xl);
+  --rt-r-pill: var(--radius-pill);
+
+  /* Elevation — roadtrip-zion.css ships three steps against tokens.css's
+     four; e3 and e4 both land on --shadow-lg. */
+  --rt-e1: var(--shadow-sm);
+  --rt-e2: var(--shadow-base);
+  --rt-e3: var(--shadow-lg);
+  --rt-e4: var(--shadow-lg);
+}

@@ -1,0 +1,269 @@
+/* ==========================================================================
+   LDS theme: roadtrip-zion
+   Light-first, white page, warm-neutral chrome, Zion persimmon tonal primary.
+
+   Load order (LDS convention):
+     apca-palette.css  →  lds.css  →  themes/roadtrip-zion.css
+   Then on the root element:
+     <html class="theme-roadtrip-zion">            light (default)
+     <html class="theme-roadtrip-zion mode-dark">  night
+
+   Decisions this theme encodes (from the direction exploration):
+   - The page is WHITE. Elevation is a hairline + 1px shadow, not a grey step.
+     Where a well is needed it is a ~3% tint of the ink, --surface-sunken.
+   - Basalt (--c-neutral-ink) is the STRUCTURAL colour: selection, active tab,
+     price pin, secondary button, route line. It appears many times per screen.
+   - Persimmon is the ACTION colour and appears once per screen, as a TONAL
+     button: light container + dark label. The solid fill is reserved for
+     checkout.
+   - No green anywhere in chrome or accents: green belongs to map terrain and
+     photography.
+   - Highlights are mid-tone (≈half chroma) so one hex serves both modes:
+     on light it is a ~12% tint behind dark text; on dark it IS the text over a
+     ~14% tint of itself.
+   ========================================================================== */
+.theme-roadtrip-zion{
+
+  /* ---- Brand ramp — Zion persimmon ------------------------------------ */
+  --c-50:#FDF3EE;
+  --c-100:#FBEAE1;   /* wash: unbooked night, empty slot */
+  --c-200:#F6D6C6;   /* TONAL CONTAINER — primary button, selected pin */
+  --c-300:#EFBBA3;
+  --c-400:#E29A79;
+  --c-500:#C9612F;
+  --c-600:#B04A26;   /* SOLID fill — checkout only */
+  --c-700:#94391C;
+  --c-800:#782C15;
+  --c-900:#5C1B0A;   /* ON-CONTAINER LABEL */
+  --c-950:#3E1409;
+
+  /* ---- Neutral ramp — warm-cool basalt, low chroma -------------------- */
+  /* NOTE: LDS spells this ramp --gray-*, not --grey-*. Using the British
+     spelling silently leaves .emph-plain resolving the portfolio oat. */
+  --gray-50:#FAFBFC;
+  --gray-100:#F4F6F8;   /* well / sunken */
+  --gray-200:#E5E8EB;   /* hairline */
+  --gray-300:#D8DCE1;   /* control border */
+  --gray-400:#B4BAC1;
+  --gray-500:#8B9198;
+  --gray-600:#6C7076;   /* secondary text */
+  --gray-700:#4A4E54;   /* body text */
+  --gray-800:#2E343B;
+  --gray-900:#232A33;   /* BASALT — ink, structural colour */
+  --gray-950:#14171B;
+
+  /* ---- Surfaces ------------------------------------------------------- */
+  /* Light: four of the five roles are white on purpose. A card is defined by
+     its border and shadow, so there is exactly one non-white plane. */
+  --surface-page:#FFFFFF;
+  --surface-sunken:#F4F6F8;
+  --surface-base:#FFFFFF;
+  --surface-raised:#FFFFFF;
+  --surface-overlay:#FFFFFF;
+
+  /* ---- Type ----------------------------------------------------------- */
+  /* Bricolage Grotesque: display AND ui — optical sizing keeps the 46px
+     headline and the 11px chip in one family. Schibsted Grotesk for prose and
+     metadata, where Bricolage's joints get busy at small sizes. No mono: it
+     reads as software. */
+  --th-display:'Bricolage Grotesque','Schibsted Grotesk',system-ui,sans-serif;
+  --th-ui:var(--th-display);
+  --th-body:'Schibsted Grotesk',system-ui,sans-serif;
+  --th-mono:'Schibsted Grotesk',system-ui,sans-serif;
+
+  --text-caption:11px;
+  --text-body:13px;
+  --text-subhead:16px;
+  --text-title:26px;
+
+  /* ---- Shape ---------------------------------------------------------- */
+  /* Pills for every control; generous radii on cards and sheets. */
+  --radius-sm:8px;
+  --radius-base:12px;
+  --radius:12px;
+  --radius-lg:16px;
+  --radius-xl:20px;
+  --radius-pill:999px;
+  --pill:999px;
+  --corner-shape:round;
+
+  /* ---- Elevation — nearly invisible on white ------------------------- */
+  --shadow-sm:0 1px 2px rgba(23,25,28,.05);
+  --shadow-base:0 2px 8px rgba(23,25,28,.08);
+  --shadow-lg:0 8px 24px rgba(23,25,28,.14);
+  --card-shadow:var(--shadow-sm);
+  --btn-shadow:none;
+
+  --density:1;
+  --icon-size:16px;
+  --icon-weight:1.75;
+
+  /* ---- Product roles (consume these, not the ramps) ------------------ */
+  --rt-ink:#232A33;              /* basalt: structural, selection, route line */
+  --rt-ink-on:#FFFFFF;
+  --rt-action-container:#F6D6C6; /* tonal primary background */
+  --rt-action-label:#5C1B0A;     /* tonal primary label */
+  --rt-action-hover:#F0C6AF;
+  --rt-action-pressed:#E7B398;
+  --rt-action-wash:#FBEAE1;      /* empty/unbooked slot */
+  --rt-action-solid:#B04A26;     /* checkout only */
+  --rt-action-solid-on:#FFF4EE;
+  /* Scrim. A sheet over a dimmed backdrop is its own role: on dark a black scrim
+     over a near-black page does almost nothing, so the SHEET lifts to the raised
+     plane and the scrim only has to dim the map behind it. */
+  --rt-scrim:rgba(23,25,28,.38);
+  --rt-sheet:#FFFFFF;
+  --rt-sheet-border:#E5E8EB;
+  --rt-disabled:#F1F0EE;
+  --rt-disabled-label:#A9A7A3;
+
+  /* ---- Highlights — one hex per hue, no green ------------------------ */
+  --rt-butter:#E3B75C;  --rt-butter-tint:#F7EFDB;  --rt-butter-ink:#725310;
+  --rt-rose:#DC8E8B;    --rt-rose-tint:#F8E6E4;    --rt-rose-ink:#8A3B38;
+  --rt-sky:#7FA6CB;     --rt-sky-tint:#E5EDF5;     --rt-sky-ink:#2B5375;
+  --rt-lilac:#A497C4;   --rt-lilac-tint:#EDE9F4;   --rt-lilac-ink:#4B4270;
+  --rt-sage:#8FB284;    --rt-sage-tint:#E8F0E7;    --rt-sage-ink:#2D6027;
+
+  /* ---- Statuses ------------------------------------------------------ */
+  /* Error is BERRY, not red-orange: the brand already owns red-orange, and a
+     status must never be mistaken for the primary action. Scarcity is not a
+     status — it is butter, and it is always a tag, never loose coloured text. */
+  --rt-error:#A4123A;   --rt-error-tint:#FBEAED;   --rt-error-ink:#7A0E25;
+  --rt-warning:#A97400; --rt-warning-tint:#FAF1DC; --rt-warning-ink:#7E5600;
+  --rt-caution:#7E6A1F; --rt-caution-tint:#F4EEDB; --rt-caution-ink:#5F5117;
+  --rt-success:#2F7D4B; --rt-success-tint:#E8F2EB; --rt-success-ink:#276340;
+  --rt-info:#2E6FA8;    --rt-info-tint:#E6EEF6;    --rt-info-ink:#245479;
+
+  /* ---- Map ----------------------------------------------------------- */
+  --rt-map-land:#EEF0EC;
+  --rt-map-forest:#E2EADC;
+  --rt-map-water:#A9C6DC;
+  --rt-map-route:var(--rt-ink);
+}
+
+/* ==========================================================================
+   Night. Dark is a driving mode, not the brand.
+   Sunken cannot go below the page, so a well is drawn with a BORDER instead of
+   a value, and overlay borrows raised's value and separates with shadow.
+   Consequence: never encode meaning in elevation alone.
+   ========================================================================== */
+.mode-dark.theme-roadtrip-zion, .theme-roadtrip-zion .mode-dark{
+  --surface-page:#101215;
+  --surface-sunken:#101215;
+  --surface-base:#191C21;
+  --surface-raised:#232A33;
+  --surface-overlay:#232A33;
+
+  --rt-ink:#E9EBEE;
+  --rt-ink-on:#14171B;
+  --rt-action-container:#6E3220;
+  --rt-action-label:#FBDBCA;
+  --rt-action-hover:#7E3B26;
+  --rt-action-pressed:#8C452D;
+  --rt-action-wash:#33190F;
+  --rt-action-solid:#C9612F;
+  --rt-action-solid-on:#1A0D07;
+  --rt-scrim:rgba(8,9,11,.62);
+  --rt-sheet:#232A33;
+  --rt-sheet-border:#2E343B;
+  --rt-disabled:#22252A;
+  --rt-disabled-label:#5E636A;
+
+  --rt-butter-tint:#2C2618;  --rt-butter-ink:#E3B75C;
+  --rt-rose-tint:#2E1F1E;    --rt-rose-ink:#DC8E8B;
+  --rt-sky-tint:#1C242C;     --rt-sky-ink:#7FA6CB;
+  --rt-lilac-tint:#232030;   --rt-lilac-ink:#A497C4;
+  --rt-sage-tint:#1E261C;    --rt-sage-ink:#8FB284;
+
+  --rt-error-tint:#2A1418;   --rt-error-ink:#EE7A93;
+  --rt-warning-tint:#2A2314; --rt-warning-ink:#E8C46A;
+  --rt-caution-tint:#26220F; --rt-caution-ink:#D6C078;
+  --rt-success-tint:#16251A; --rt-success-ink:#8CCB7F;
+  --rt-info-tint:#151F2A;    --rt-info-ink:#8CB6E0;
+
+  --rt-map-land:#191C21;
+  --rt-map-forest:#1D2620;
+  --rt-map-water:#27455C;
+
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+  --shadow-base:0 4px 14px rgba(0,0,0,.45);
+  --shadow-lg:0 10px 30px rgba(0,0,0,.55);
+}
+
+/* ==========================================================================
+   Recipes — the six patterns the direction actually uses.
+   Drop-in classes so a consuming session doesn't have to re-derive them.
+   ========================================================================== */
+.rt-btn{
+  height:44px;padding:0 20px;border:0;border-radius:var(--pill);
+  font-family:var(--th-ui);font-size:14px;font-weight:600;
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.rt-btn--primary{background:var(--rt-action-container);color:var(--rt-action-label);}
+.rt-btn--primary:hover{background:var(--rt-action-hover);}
+.rt-btn--primary:active{background:var(--rt-action-pressed);}
+.rt-btn--checkout{background:var(--rt-action-solid);color:var(--rt-action-solid-on);}
+.rt-btn--secondary{background:transparent;color:var(--rt-ink);border:1px solid var(--rt-ink);}
+.rt-btn:disabled{background:var(--rt-disabled);color:var(--rt-disabled-label);cursor:default;}
+
+/* Filter / selection chip. Selected is BASALT, never the action colour. */
+.rt-chip{
+  height:32px;padding:0 13px;border-radius:var(--pill);
+  font-family:var(--th-ui);font-size:12px;font-weight:600;
+  background:var(--surface-base);color:var(--gray-800);
+  border:1px solid var(--gray-300);
+  display:inline-flex;align-items:center;cursor:pointer;
+}
+.rt-chip[aria-pressed="true"],.rt-chip--selected{
+  background:var(--rt-ink);color:var(--rt-ink-on);border-color:var(--rt-ink);
+}
+
+/* Informational tag. Tint fill + hue-matched ink, both modes. */
+.rt-tag{
+  padding:4px 9px;border-radius:var(--pill);
+  font-family:var(--th-ui);font-size:11px;font-weight:600;
+  display:inline-flex;align-items:center;gap:5px;
+}
+.rt-tag--butter {background:var(--rt-butter-tint); color:var(--rt-butter-ink);}
+.rt-tag--rose   {background:var(--rt-rose-tint);   color:var(--rt-rose-ink);}
+.rt-tag--sky    {background:var(--rt-sky-tint);    color:var(--rt-sky-ink);}
+.rt-tag--lilac  {background:var(--rt-lilac-tint);  color:var(--rt-lilac-ink);}
+.rt-tag--success{background:var(--rt-success-tint);color:var(--rt-success-ink);}
+.rt-tag--error  {background:var(--rt-error-tint);  color:var(--rt-error-ink);}
+.rt-tag--info   {background:var(--rt-info-tint);   color:var(--rt-info-ink);}
+/* Scarcity: "2 left". Butter, tag-only. Never the action colour. */
+.rt-tag--scarce {background:var(--rt-butter-tint); color:var(--rt-butter-ink);}
+
+/* Card: hairline + 1px shadow. NOT a lighter plane than the page. */
+.rt-card{
+  background:var(--surface-raised);
+  border:1px solid var(--gray-200);
+  border-radius:var(--radius-lg);
+  box-shadow:var(--card-shadow);
+  padding:12px;
+}
+
+/* Well: an empty slot waiting to be filled, not an error. */
+.rt-well{background:var(--surface-sunken);border-radius:var(--radius-lg);padding:15px;}
+.mode-dark .rt-well{background:transparent;border:1px solid var(--gray-800);}
+/* The one well that should attract attention — an unbooked night. */
+.rt-well--action{background:var(--rt-action-wash);border:0;}
+
+/* Banner: icon + tint, left rule. A status is never a filled pill. */
+.rt-banner{
+  display:flex;gap:9px;align-items:flex-start;
+  border-radius:var(--radius-base);padding:11px 12px;
+  border-left:3px solid currentColor;
+  font-family:var(--th-body);font-size:12px;line-height:1.5;
+}
+.rt-banner--error  {background:var(--rt-error-tint);  color:var(--rt-error-ink);}
+.rt-banner--warning{background:var(--rt-warning-tint);color:var(--rt-warning-ink);}
+.rt-banner--success{background:var(--rt-success-tint);color:var(--rt-success-ink);}
+.rt-banner--info   {background:var(--rt-info-tint);   color:var(--rt-info-ink);}
+.rt-banner__title{font-family:var(--th-display);font-size:13px;font-weight:600;}
+
+/* Section rule — "Fri · night one" */
+.rt-daylabel{
+  font-family:var(--th-body);font-size:11px;font-weight:600;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--gray-600);
+}

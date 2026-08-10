@@ -57,6 +57,8 @@ const TEST_SUFFIXES = ['.test.mjs', '.test.js', '.test.ts', '.test.tsx'];
 const EXEMPT = {
   [TOKENS_CSS]: 'the source of truth — the one place raw values belong',
   [TOKENS_JS]: 'boot/jsdom fallbacks, verified against tokens.css below',
+  'frontend/src/tokens/roadtrip-zion.css':
+    'a full LDS theme direction, exported byte-identical from Claude Design and kept unedited so re-syncing the direction stays a trivial diff. roadtrip-zion-bridge.css repoints our own --rt-* chrome roles onto it without touching this file',
 };
 
 /** Line-level escapes for cases a file-level exemption would over-grant. */

@@ -1,29 +1,18 @@
 /* ---------------------------------------------------------------------------
    Page-level style entry for the React app.
 
-   Load order matters:
-     1. `@lew-ds/lds/css`             — the APCA palette + LDS component cascade.
-     2. `@lew-ds/lds/css/themes/roadtrip` — the roadtrip theme, whose every value is
-        read from `src/tokens/tokens.css`. Applied by the
-        `theme-roadtrip mode-dark` classes on <html> (roadtrip is dark-native and
-        LDS resolves light at `:root`, so BOTH classes go on the root element).
-     3. `../tokens/tokens.css`     — the `--rt-*` tokens themselves.
+   Load order:
+     1. `@lew-ds/lds/css`                     — LDS component cascade.
+     2. `../tokens/roadtrip-zion.css`        — the roadtrip-zion theme.
+     3. `../tokens/tokens.css`               — the app's own `--rt-*` tokens.
+     4. `../tokens/roadtrip-zion-bridge.css` — repoints `--rt-*` chrome roles
+        onto roadtrip-zion.css. Loads last so it wins any name collision with
+        tokens.css (`--rt-scrim`).
 
-   The two token sets are disjoint and coexist: LDS's theme defines `--c-*` /
-   `--grey-*` / `--surface-*`, ours defines `--rt-*` (the theme only NAMES ours in
-   comments, recording which `--rt-*` role each of its values was measured from).
-   So nothing here can collide, and position in the cascade is immaterial —
-   `tokens.css` is a single `:root` block of custom properties, and `var()`
-   resolves at use time rather than at parse time.
-
-   `tokens.css` is bundled here, not linked at runtime. Until Phase 5 it was
-   served from the legacy `web/` tree and injected into each HTML entry by a Vite
-   plugin, on the rationale that a colour change should not need a frontend
-   rebuild. That stopped being true once every page came from `frontend/dist`:
-   the roadtrip theme above is already bundled and already carries those values,
-   so a token change needed a rebuild regardless. Bundling also means the dev
-   server no longer needs the backend up just to render styled.
+   `tokens.css` is bundled here, not linked at runtime, so the dev server
+   doesn't need the backend up to render styled.
    --------------------------------------------------------------------------- */
 @import '@lew-ds/lds/css';
-@import '@lew-ds/lds/css/themes/roadtrip';
+@import '../tokens/roadtrip-zion.css';
 @import '../tokens/tokens.css';
+@import '../tokens/roadtrip-zion-bridge.css';
