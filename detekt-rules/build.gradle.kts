@@ -6,7 +6,7 @@ repositories {
     mavenCentral()
 }
 
-val detektVersion = "2.0.0-alpha.5"
+val detektVersion = "2.0.0-alpha.6"
 
 dependencies {
     compileOnly("dev.detekt:detekt-api:$detektVersion")
