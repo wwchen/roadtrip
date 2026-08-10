@@ -559,12 +559,9 @@ describe('selection', () => {
     expect(useMapStore.getState().selectedPoiId).toBe(77);
   });
 
-  // A click that hit no pin closes the drawer and drops the browse-mode pin —
-  // otherwise the marker and the topbar's first row survive a click on emptiness.
-  test('clicking empty map clears the selection and the browse pin', async () => {
+  test('clicking empty map clears the selection', async () => {
     await renderMap();
     useMapStore.getState().selectPoi(77);
-    useTripStore.getState().setBrowsePin({ name: 'Somewhere', lng: -121, lat: 40 });
     instance.renderedFeatures = [];
 
     act(() => {
@@ -572,7 +569,6 @@ describe('selection', () => {
     });
 
     expect(useMapStore.getState().selectedPoiId).toBeNull();
-    expect(useTripStore.getState().browsePin).toBeNull();
   });
 
   test('a click that landed on a pin leaves the selection alone', async () => {
@@ -646,23 +642,16 @@ describe('route mode', () => {
   });
 });
 
-// The `window.__rt*` seams. Phase 0 wrote the installer and nothing ever called it,
-// so every one of these was absent from the React tree until the map page mounted
-// the shim — including `__rtRouteShareUrl`, which `SmokeTest.kt` reads.
-describe('the transition shim', () => {
+describe('browser QA hooks', () => {
   test('is installed while the map page is mounted', async () => {
     const view = await renderMap();
-    // Set explicitly rather than assumed: earlier tests in this file leave a trip
-    // behind, and what matters here is that the global reflects the store.
-    act(() => useTripStore.getState().setMode('browse'));
 
-    expect(window.__rtTripMode?.()).toBe('browse');
     expect(window.__rtRouteShareUrl).toBeTypeOf('function');
     expect(window.__rtRefreshBbox).toBeTypeOf('function');
 
     view.unmount();
 
-    expect(window.__rtTripMode).toBeUndefined();
+    expect(window.__rtRouteShareUrl).toBeUndefined();
   });
 
   test('answers the share URL from the trip on screen', async () => {
@@ -813,6 +802,5 @@ describe('the trip overlay', () => {
 
     expect(instance.getLayer('trip-route-line')).toBeUndefined();
     expect(instance.getLayer('trip-corridor-fill')).toBeUndefined();
-    expect(useTripStore.getState().corridor).toBeNull();
   });
 });

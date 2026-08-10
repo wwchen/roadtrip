@@ -31,11 +31,8 @@ describe('initial state', () => {
       mode: 'browse',
       stops: [],
       route: null,
-      corridor: null,
       corridorMiles: CORRIDOR_DEFAULT_MILES,
-      generation: 0,
       routePois: [],
-      browsePin: null,
     });
   });
 });
@@ -124,26 +121,6 @@ describe('corridor', () => {
   });
 });
 
-describe('generation', () => {
-  // The route fetch is seq-guarded: a late response for an old generation is
-  // dropped. Preserved from the legacy singleton.
-  test('increments and returns the new value', () => {
-    expect(trip().bumpGeneration()).toBe(1);
-    expect(trip().bumpGeneration()).toBe(2);
-    expect(trip().generation).toBe(2);
-  });
-});
-
-describe('browse pin', () => {
-  test('sets and clears', () => {
-    trip().setBrowsePin(stop('pin'));
-    expect(trip().browsePin).toEqual(stop('pin'));
-
-    trip().clearBrowsePin();
-    expect(trip().browsePin).toBeNull();
-  });
-});
-
 describe('route POIs', () => {
   test('replaces the list', () => {
     trip().setRoutePois([poiFeature(1), poiFeature(2)]);
@@ -211,9 +188,7 @@ describe('reset', () => {
     trip().setStops([stop('a')]);
     trip().setRoute({ type: 'FeatureCollection', features: [] });
     trip().setCorridorMiles(50);
-    trip().bumpGeneration();
     trip().setRoutePois([poiFeature(1)]);
-    trip().setBrowsePin(stop('pin'));
 
     trip().reset();
 
@@ -221,11 +196,8 @@ describe('reset', () => {
       mode: 'browse',
       stops: [],
       route: null,
-      corridor: null,
       corridorMiles: CORRIDOR_DEFAULT_MILES,
-      generation: 0,
       routePois: [],
-      browsePin: null,
     });
   });
 });

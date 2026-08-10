@@ -2,8 +2,7 @@
 //
 // One place for these because three different producers feed the same layers:
 // `POST /api/pois` (the viewport loop), `POST /api/pois/on-route` (the trip
-// corridor), and the vanilla topbar through `window.__rtSetRoutePois`, whose
-// payload is untyped by construction. The overlays care about exactly two
+// corridor). The overlays care about exactly two
 // fields — the category that decides which layer a pin belongs to, and the
 // agency the campground legend filters on — so that is what this pins down, and
 // everything else rides along untouched.
@@ -13,7 +12,7 @@ import type { Feature, FeatureCollection, Geometry } from 'geojson';
  * A pin's properties, as narrow as the map needs and no narrower.
  *
  * Both fields are optional even though `POST /api/pois` always sends `category`:
- * the on-route and shim paths are not schema-checked at the boundary, and a pin
+ * the on-route path is not schema-checked at the boundary, and a pin
  * with no category is a pin we simply do not paint (see `bucketPins`) rather
  * than a crash.
  */

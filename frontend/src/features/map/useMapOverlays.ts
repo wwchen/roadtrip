@@ -39,7 +39,6 @@ import {
 import { pinFeatureId, type PinFeature } from '@/map/pins';
 import { STATE_LINES_URL, installStateLines } from '@/map/state-lines';
 import { useMapStore } from '@/stores/mapStore';
-import { useTripStore } from '@/stores/tripStore';
 import { useMapContext } from './MapProvider';
 import type { ViewportPois } from './useViewportPois';
 
@@ -49,7 +48,6 @@ export function useMapOverlays(pois: ViewportPois): void {
   const hiddenAgencies = useMapStore((s) => s.hiddenAgencies);
   const selectPoi = useMapStore((s) => s.selectPoi);
   const clearSelectedPoi = useMapStore((s) => s.clearSelectedPoi);
-  const clearBrowsePin = useTripStore((s) => s.clearBrowsePin);
 
   /**
    * The data an install should start from.
@@ -130,14 +128,13 @@ export function useMapOverlays(pois: ViewportPois): void {
      * whether anything pickable was under the cursor, which is cheaper than
      * subscribing to every layer and correct regardless of handler order. It also
      * clears the browse-mode pin, or an empty-space click would close the drawer
-     * and leave the "A" marker and the topbar's first row behind.
+     * and leaves route state to the trip planner.
      */
     const onMapClick = (event: MapLayerMouseEvent) => {
       const layers = installedHitLayerIds(map);
       const hits = layers.length > 0 ? map.queryRenderedFeatures(event.point, { layers }) : [];
       if (hits.length > 0) return;
       clearSelectedPoi();
-      clearBrowsePin();
     };
     map.on('click', onMapClick);
     unbind.push(() => map.off('click', onMapClick));
@@ -145,7 +142,7 @@ export function useMapOverlays(pois: ViewportPois): void {
     return () => {
       for (const off of unbind) off();
     };
-  }, [map, styleReady, selectPoi, clearSelectedPoi, clearBrowsePin]);
+  }, [map, styleReady, selectPoi, clearSelectedPoi]);
 }
 
 /**

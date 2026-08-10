@@ -1,11 +1,7 @@
 // The user's watches for one campground, and the mutations that change them.
 //
-// Replaces `fetchWatches` / `toggleWatch` / `clearWatchState` and the two event
-// subscriptions in web/availability/availability-week.js. Three of those four
-// concerns come free here: `queries/legacy-events.ts` already invalidates
-// `['watches']` on both the legacy `watches-changed` and `auth-changed` events, so
-// the grid refetches when a watch changes anywhere — including from the still-vanilla
-// topbar — without subscribing to anything itself.
+// TanStack Query owns the shared watch cache; every mutation invalidates the
+// watch-key prefix so the grid stays in sync with the alerts and watches pages.
 //
 // What does NOT come free is the signed-out case, and it is the interesting one. A
 // 401 here is not a failure to report: watches are per-user, so an anonymous visitor
@@ -27,7 +23,6 @@ import {
 } from '@/api/watches-api';
 import { HttpError } from '@/api/http';
 import { queryKeys } from '@/queries/keys';
-import { notifyLegacyWatchesChanged } from '@/queries/legacy-events';
 import type { TriggerPayload } from '@/lib/watch-triggers';
 import {
   DEFAULT_WATCH_CADENCE_SEC,
@@ -161,18 +156,14 @@ export class WatchAuthError extends Error {
 /**
  * Watch mutations for one POI.
  *
- * Every one of them ends the same way — invalidate `['watches']` and tell the
- * vanilla side — so that pair lives in one place here rather than at each call
- * site. `notifyLegacyWatchesChanged` is the transition seam: the vanilla topbar's
- * alerts row is still listening, and a watch created here has to announce itself
- * the way the vanilla drawer would have.
+ * Every successful mutation invalidates the shared watch-key prefix, so every
+ * mounted watch surface refetches from the same source of truth.
  */
 export function useWatchMutations(poiId: string | number | null | undefined): WatchMutations {
   const queryClient = useQueryClient();
 
   const settled = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.watches.all() });
-    notifyLegacyWatchesChanged();
   }, [queryClient]);
 
   /**

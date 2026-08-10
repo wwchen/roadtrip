@@ -188,11 +188,9 @@ export function useViewportPois(): ViewportPois {
   /**
    * While a route is up, the corridor owns which POIs exist.
    *
-   * `routePois` is whatever the trip planner last published (through
-   * `tripStore`, or through `window.__rtSetRoutePois` while the topbar is still
-   * vanilla — hence the cast: that payload crosses an untyped boundary by
-   * construction). The viewport query is disabled in this state, so there is no
-   * late response to lose a race with.
+   * `routePois` is whatever the trip planner last published through `tripStore`.
+   * The viewport query is disabled in this state, so there is no late response to
+   * lose a race with.
    */
   const features = routeActive
     ? (routePois as unknown as PinFeature[])
@@ -208,8 +206,7 @@ export function useViewportPois(): ViewportPois {
     agencies,
     // A route supplies campgrounds whatever the zoom, so the hint would otherwise
     // tell the user to zoom in while the legend lists the corridor's agencies
-    // right below it. The vanilla equivalent was `__rtSetRoutePois` painting with
-    // `wantCG: true`, which removed the hint element.
+    // right below it.
     campgroundsRequested: routeActive || (request?.campgroundsRequested ?? false),
   };
 }

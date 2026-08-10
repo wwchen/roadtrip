@@ -1,15 +1,7 @@
 // The signed-in user's watches, for the alerts panel.
 //
-// Port of `refresh` / `ensurePoiNames` / the action half of `onClick` from
-// web/topbar/alerts.js. Three things the vanilla hand-rolled come from Query:
-//
-//   the `watches-changed` + `auth-changed` subscriptions -> `queries/legacy-events.ts`
-//       already invalidates `['watches']` on both, so this refetches when a watch
-//       changes anywhere — including from the availability grid, or the still-vanilla
-//       tree — without subscribing to anything;
-//   the `poiNameCache` Map -> `queryKeys.pois.name(id)`, the key Phase 0 added for
-//       exactly this ("same request, different cached value, so different key");
-//   the manual `await refresh()` after every action -> invalidation.
+// TanStack Query owns list and POI-name caching; mutations invalidate the shared
+// watch-key prefix so every mounted watch surface stays in sync.
 //
 // The signed-out case is the interesting one, as in the availability grid: a 401 is an
 // answer, not a fault. Watches are per-user, so an anonymous visitor gets one on every
@@ -27,7 +19,6 @@ import {
   type WatchStatus,
 } from '@/api/watches-api';
 import { queryKeys } from '@/queries/keys';
-import { notifyLegacyWatchesChanged } from '@/queries/legacy-events';
 import { ALERT_STATUSES, WATCH_LIST_LIMIT, alertRows, countByStatus } from './alert-rows';
 
 const HTTP_UNAUTHORIZED = 401;
@@ -107,17 +98,15 @@ export interface AlertMutations {
 /**
  * Pause, resume and delete.
  *
- * Each ends by invalidating `['watches']` and telling the vanilla tree, the same pair
- * the availability grid's mutations use — so a watch paused here updates the grid's
- * badges and the legacy topbar alike. A 401 mid-action invalidates too, which is what
- * collapses the panel: the list request 401s in turn and `signedOut` goes true.
+ * Each ends by invalidating `['watches']`, so a watch paused here updates every
+ * mounted watch surface. A 401 mid-action invalidates too, which collapses the
+ * panel when the list request returns unauthorized.
  */
 export function useAlertMutations(): AlertMutations {
   const queryClient = useQueryClient();
 
   const settled = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.watches.all() });
-    notifyLegacyWatchesChanged();
   }, [queryClient]);
 
   const withAuthHandling = useCallback(

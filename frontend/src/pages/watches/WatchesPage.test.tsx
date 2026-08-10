@@ -12,7 +12,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Watch } from '@/api/watches-api';
 import { AppProviders } from '@/app/AppProviders';
-import { AUTH_CHANGED_EVENT, WATCHES_CHANGED_EVENT } from '@/queries/legacy-events';
+import { queryKeys } from '@/queries/keys';
 import { WatchesPage } from './WatchesPage';
 
 const watch = (fields: Partial<Watch> = {}): Watch => ({
@@ -322,22 +322,6 @@ describe('create', () => {
     expect(await screen.findByText('start_date must be before end_date')).toBeInTheDocument();
   });
 
-  test('tells the still-vanilla side that watches changed', async () => {
-    stubApi(watchList(), createOk());
-    let announced = 0;
-    const handler = () => {
-      announced += 1;
-    };
-    window.addEventListener(WATCHES_CHANGED_EVENT, handler);
-    renderPage();
-    await screen.findByText('No watches yet');
-
-    await userEvent.type(screen.getByLabelText('POI ID'), '42');
-    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
-
-    await waitFor(() => expect(announced).toBeGreaterThan(0));
-    window.removeEventListener(WATCHES_CHANGED_EVENT, handler);
-  });
 });
 
 describe('edit', () => {
@@ -642,8 +626,7 @@ describe('deep links', () => {
     expect(requests.find((r) => r.url.includes('/delete'))).toBeUndefined();
   });
 
-  // And it stays dropped: signing in from the still-vanilla topbar refetches the
-  // lists, and the destructive action from the stale URL must NOT fire then.
+  // And it stays dropped if the watch queries are refreshed after sign-in.
   test('a dropped deep-linked delete does not fire after signing in later', async () => {
     window.history.replaceState(null, '', '/watches.html?action=delete&id=7');
     let signedIn = false;
@@ -655,7 +638,7 @@ describe('deep links', () => {
     await screen.findByText('Sign in to manage your alerts');
 
     signedIn = true;
-    window.dispatchEvent(new CustomEvent(AUTH_CHANGED_EVENT));
+    await client.invalidateQueries({ queryKey: queryKeys.watches.all() });
 
     // The table appears, proving the lists refetched and we are signed in now.
     await screen.findByRole('table');
