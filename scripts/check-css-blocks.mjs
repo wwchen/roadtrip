@@ -25,17 +25,6 @@ const ROOT = process.cwd();
 const ROOTS = ['frontend/src'];
 const IGNORED_DIRS = new Set(['node_modules', 'dist']);
 
-/**
- * Files that legitimately nest selectors inside blocks.
- *
- * The vendored design system is not ours to reformat. Add a path here only with a
- * reason — an entry is an assertion that the file uses nesting on purpose.
- */
-const NESTING_ALLOWED = [
-  'frontend/vendor/',
-  // At-rules nest by definition; they are unwrapped before the scan instead.
-];
-
 function* walk(dir) {
   let entries;
   try {
@@ -85,8 +74,6 @@ for (const root of ROOTS) {
       problems.push(`${file}: ${depth} unclosed block(s) — a rule is missing its }`);
       continue;
     }
-
-    if (NESTING_ALLOWED.some((prefix) => file.startsWith(prefix))) continue;
 
     // --- 2. no selector inside a rule --------------------------------------
     // At-rule bodies (`@media`, `@supports`, `@keyframes`) contain rules by
