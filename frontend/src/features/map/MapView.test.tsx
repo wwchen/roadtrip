@@ -11,7 +11,6 @@
 // (containment and expiry), `map/agencies.test.ts` (the filter expression) and
 // `map/overlays.test.ts` (paint, ids, idempotence).
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AppProviders } from '@/app/AppProviders';
@@ -19,6 +18,7 @@ import { UNCATEGORIZED_AGENCY } from '@/map/agencies';
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore } from '@/stores/tripStore';
 import { FakeGeolocateControl, FakeMap, FakeNavigationControl } from '@/test/fake-map';
+import { createTestQueryClient } from '@/test/query-client';
 
 // MapLibre needs WebGL, which jsdom has none of, so the map is the fake recorder.
 let instance: FakeMap;
@@ -172,8 +172,7 @@ function stubApi() {
 }
 
 /** A client with retries off, so a failure surfaces as itself rather than as a hang. */
-const testClient = () =>
-  new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+const testClient = createTestQueryClient;
 
 const renderPage = () =>
   render(

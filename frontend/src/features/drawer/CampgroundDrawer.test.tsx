@@ -3,12 +3,12 @@
 // are covered in campground-detail.test.ts; this checks composition: that the sections
 // appear, in the right shape, and that provider markup arrives sanitised.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
 import { AvailabilityWeek } from '@/features/availability/AvailabilityWeek';
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore } from '@/stores/tripStore';
+import { createTestQueryClient } from '@/test/query-client';
 import { PoiDrawer } from './PoiDrawer';
 
 const ID = 232447;
@@ -65,13 +65,10 @@ const respondFor = (url: string): Response => {
   return respond();
 };
 
-const testClient = () =>
-  new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-
 async function openCampground(properties: Record<string, unknown> = {}) {
   respond = () => json(campground(properties));
   render(
-    <AppProviders client={testClient()}>
+    <AppProviders client={createTestQueryClient()}>
       <PoiDrawer renderCampgroundAvailability={(feature) => <AvailabilityWeek feature={feature} />} />
     </AppProviders>,
   );

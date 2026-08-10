@@ -6,7 +6,8 @@
 // pinning of behaviour that until now lived only in the source. That makes them
 // the guard against silent drift rather than a formality.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
+import { createTestQueryClient } from '@/test/query-client';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AppProviders } from '@/app/AppProviders';
@@ -159,9 +160,7 @@ function renderPage(search = '') {
 
 beforeEach(() => {
   requests.length = 0;
-  client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  client = createTestQueryClient();
 });
 
 afterEach(() => {

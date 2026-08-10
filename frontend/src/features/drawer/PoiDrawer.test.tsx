@@ -6,12 +6,12 @@
 // failed hydration (the vanilla path left "Loading…" up for ever), keep the visible
 // URL in step with the selection, and dismiss on the paths that dismissed before.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AppProviders } from '@/app/AppProviders';
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore } from '@/stores/tripStore';
+import { createTestQueryClient } from '@/test/query-client';
 import { PoiDrawer } from './PoiDrawer';
 
 const PARK_ID = 4242;
@@ -51,12 +51,9 @@ function stubApi() {
   );
 }
 
-const testClient = () =>
-  new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-
 const renderDrawer = () =>
   render(
-    <AppProviders client={testClient()}>
+    <AppProviders client={createTestQueryClient()}>
       <PoiDrawer />
     </AppProviders>,
   );

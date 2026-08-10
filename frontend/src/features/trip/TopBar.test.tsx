@@ -6,7 +6,7 @@
 // origin, that the keyboard picks the same row the highlight shows, and that a
 // complete trip requests a route without anything asking it to.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
+import { createTestQueryClient } from '@/test/query-client';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
 import { encodeRouteState } from '@/lib/share-links';
@@ -87,7 +87,7 @@ afterEach(() => {
 
 const mount = () =>
   render(
-    <AppProviders client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <AppProviders client={createTestQueryClient()}>
       <TopBar />
     </AppProviders>,
   );

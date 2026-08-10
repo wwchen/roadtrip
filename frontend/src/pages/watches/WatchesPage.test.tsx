@@ -7,7 +7,8 @@
 // repaint to race with. What is worth testing instead is the behavior the user
 // sees, which is what these cover.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
+import { createTestQueryClient } from '@/test/query-client';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Watch } from '@/api/watches-api';
@@ -150,9 +151,7 @@ function renderPage() {
 beforeEach(() => {
   requests.length = 0;
   window.history.replaceState(null, '', '/watches.html');
-  client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
+  client = createTestQueryClient();
 });
 
 afterEach(() => {

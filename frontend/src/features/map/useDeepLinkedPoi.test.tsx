@@ -5,7 +5,7 @@
 // correctly and every shared link still opens a bare map. `SmokeTest.kt` loads
 // `/?poi=…` directly, so this is also the contract that keeps the smoke honest.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient } from '@tanstack/react-query';
+import { createTestQueryClient } from '@/test/query-client';
 import { act, render, waitFor } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
 import { useMapStore } from '@/stores/mapStore';
@@ -47,7 +47,7 @@ function Harness() {
 /** Renders on `url`, then lets the style come up as MapLibre would. */
 async function openOn(url: string, { readyStyle = true } = {}) {
   window.history.replaceState(null, '', url);
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = createTestQueryClient();
   const view = render(
     <AppProviders client={client}>
       <MapProvider>

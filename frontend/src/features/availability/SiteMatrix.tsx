@@ -55,40 +55,37 @@ export interface ArmedBook {
 
 export interface SiteMatrixProps {
   days: readonly FusedDay[];
-  campsites: readonly Campsite[];
-  reservationUrlTemplates: ReservationUrlTemplates;
-  /** Catalog load state — the days are already loaded if this renders. */
-  sitesState: 'loading' | 'success' | 'error';
-  sitesError: string | null;
-  onRetrySites: () => void;
-
-  filters: MatrixFilters;
-  onFiltersChange: (filters: MatrixFilters) => void;
-
-  siteColumnWidth: number;
-  onSiteColumnWidthChange: (width: number) => void;
-
-  /** The expanded site's row, or null. */
-  selectedSiteId: string | null;
-  onSelectSite: (campsiteId: string | null) => void;
-
-  armedBook: ArmedBook | null;
-  onArmBook: (armed: ArmedBook | null) => void;
-  onOpenBooking: (campsiteId: string, date: string) => void;
-
-  onSelectDate: (date: string) => void;
-
-  /** Dates in view that already have a watch. */
-  watchedDates: ReadonlySet<string>;
-  canWatch: boolean;
-  onOpenWatch: (anchor: HTMLElement, date: string) => void;
-
-  /** Rendered into the section header — the week nav. */
-  actions: React.ReactNode;
+  catalog: {
+    campsites: readonly Campsite[];
+    reservationUrlTemplates: ReservationUrlTemplates;
+    state: 'loading' | 'success' | 'error';
+    error: string | null;
+    retry: () => void;
+  };
+  view: {
+    filters: MatrixFilters;
+    siteColumnWidth: number;
+    selectedSiteId: string | null;
+    armedBook: ArmedBook | null;
+    watchedDates: ReadonlySet<string>;
+    canWatch: boolean;
+  };
+  events: {
+    filtersChanged: (filters: MatrixFilters) => void;
+    siteColumnResized: (width: number) => void;
+    siteSelected: (campsiteId: string | null) => void;
+    bookingArmed: (armed: ArmedBook | null) => void;
+    bookingOpened: (campsiteId: string, date: string) => void;
+    dateSelected: (date: string) => void;
+    watchOpened: (anchor: HTMLElement, date: string) => void;
+  };
+  weekActions: React.ReactNode;
 }
 
 export function SiteMatrix(props: SiteMatrixProps) {
-  const { days, campsites, sitesState, sitesError, onRetrySites, siteColumnWidth } = props;
+  const { days, catalog, view, events, weekActions } = props;
+  const { campsites, state: sitesState, error: sitesError, retry: onRetrySites } = catalog;
+  const { siteColumnWidth } = view;
   const visibleDays = days.filter((day) => day?.date);
   if (visibleDays.length === 0) return null;
 
@@ -97,14 +94,14 @@ export function SiteMatrix(props: SiteMatrixProps) {
       <SiteMatrixSkeleton
         days={visibleDays}
         siteColumnWidth={siteColumnWidth}
-        actions={props.actions}
+        actions={weekActions}
       />
     );
   }
 
   if (sitesState === 'error') {
     return (
-      <MatrixSection title="Sites by date" actions={props.actions}>
+      <MatrixSection title="Sites by date" actions={weekActions}>
         <div className="cg-site-matrix-status cg-site-matrix-error">
           {sitesError || "Couldn't load sites"}{' '}
           <button type="button" className="cg-sites-retry cg-link-button" onClick={onRetrySites}>
@@ -118,13 +115,13 @@ export function SiteMatrix(props: SiteMatrixProps) {
   const allRows = sortedCampsites(campsites, visibleDays);
   if (allRows.length === 0) {
     return (
-      <MatrixSection title="Sites by date" actions={props.actions}>
+      <MatrixSection title="Sites by date" actions={weekActions}>
         <div className="cg-site-matrix-status">No reservable sites found for this campground.</div>
       </MatrixSection>
     );
   }
 
-  const filters = normalizeFilters(props.filters);
+  const filters = normalizeFilters(view.filters);
   const availabilityByDate = availabilityIndex(visibleDays);
   const rows = sortCampsites(filterCampsites(allRows, filters), filters.sort, {
     availabilityByDate,
@@ -136,13 +133,13 @@ export function SiteMatrix(props: SiteMatrixProps) {
       filters={filters}
       loopOptions={filterOptions(allRows, 'loop_name')}
       typeOptions={filterOptions(allRows, 'kind')}
-      onChange={props.onFiltersChange}
+      onChange={events.filtersChanged}
     />
   );
 
   if (rows.length === 0) {
     return (
-      <MatrixSection title={`0 of ${allRows.length} Sites by date`} tools={tools} actions={props.actions}>
+      <MatrixSection title={`0 of ${allRows.length} Sites by date`} tools={tools} actions={weekActions}>
         <div className="cg-site-matrix-status">No sites match these filters.</div>
       </MatrixSection>
     );
@@ -156,7 +153,7 @@ export function SiteMatrix(props: SiteMatrixProps) {
       : `${rows.length} of ${allRows.length} Sites by date`;
 
   return (
-    <MatrixSection title={title} tools={tools} actions={props.actions}>
+    <MatrixSection title={title} tools={tools} actions={weekActions}>
       <MatrixScroll siteColumnWidth={siteColumnWidth} dateCount={visibleDays.length}>
         <table className="cg-site-matrix-table">
           <thead>
@@ -165,7 +162,7 @@ export function SiteMatrix(props: SiteMatrixProps) {
                 <span>Site</span>
                 <SiteColumnResizer
                   width={siteColumnWidth}
-                  onChange={props.onSiteColumnWidthChange}
+                  onChange={events.siteColumnResized}
                 />
               </th>
               {visibleDays.map((day) => (
@@ -173,7 +170,7 @@ export function SiteMatrix(props: SiteMatrixProps) {
                   <button
                     type="button"
                     className="cg-site-matrix-date-button"
-                    onClick={() => props.onSelectDate(day.date)}
+                    onClick={() => events.dateSelected(day.date)}
                   >
                     <span>{dowLabel(day.date)}</span>
                     <strong>{dayOfMonthLabel(day.date)}</strong>
@@ -189,15 +186,15 @@ export function SiteMatrix(props: SiteMatrixProps) {
                 row={row}
                 visibleDays={visibleDays}
                 availabilityByDate={availabilityByDate}
-                selectedSiteId={props.selectedSiteId}
-                onSelectSite={props.onSelectSite}
-                reservationUrlTemplates={props.reservationUrlTemplates}
-                armedBook={props.armedBook}
-                onArmBook={props.onArmBook}
-                onOpenBooking={props.onOpenBooking}
-                watchedDates={props.watchedDates}
-                canWatch={props.canWatch}
-                onOpenWatch={props.onOpenWatch}
+                selectedSiteId={view.selectedSiteId}
+                onSelectSite={events.siteSelected}
+                reservationUrlTemplates={catalog.reservationUrlTemplates}
+                armedBook={view.armedBook}
+                onArmBook={events.bookingArmed}
+                onOpenBooking={events.bookingOpened}
+                watchedDates={view.watchedDates}
+                canWatch={view.canWatch}
+                onOpenWatch={events.watchOpened}
               />
             ))}
           </tbody>

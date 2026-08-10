@@ -5,7 +5,8 @@
 // refusal becomes the right sentence, and that a radius change does not re-request
 // a road that cannot have changed.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createTestQueryClient } from '@/test/query-client';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { useTripStore, type TripStop } from '@/stores/tripStore';
 import { useRoute } from './useRoute';
@@ -42,7 +43,7 @@ const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 const wrapper = ({ children }: { children: React.ReactNode }) => {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = createTestQueryClient();
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 };
 
