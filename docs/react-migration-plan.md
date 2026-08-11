@@ -146,12 +146,10 @@ Prefer, in order:
 | Follow-up | Tokens and sandbox chrome moved into `frontend/`; `/web` mount removed |
 | Cleanup | `window.__rt*` QA globals removed; smoke coverage moved to public behavior; Storybook added |
 
-The cleanup PR's adversarial review is tracked in
-[`pr-623-adversarial-review.md`](../.claude/reviews/pr-623-adversarial-review.md). Its first live
-CI pass exercised all nine browser scenarios and found one test-contract defect: route mode
-asserted visibility on an LDS checkbox input that is intentionally visually hidden. The smoke
-now asserts the visible label instead, and the replacement run passed all nine scenarios plus
-the complete required CI suite.
+The cleanup PR's first live CI pass exercised all nine browser scenarios and found one
+test-contract defect: route mode asserted visibility on an LDS checkbox input that is
+intentionally visually hidden. The smoke now asserts the visible label instead, and the
+replacement run passed all nine scenarios plus the complete required CI suite.
 
 An initial cleanup implementation also added a custom production `/gallery` route without an
 explicit product requirement. That scope was removed in review and replaced with standard,
