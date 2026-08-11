@@ -88,6 +88,18 @@ remained green.
 **Resolution:** Add `npm run build-storybook` to the frontend CI job and the matching `make test`
 frontend gate. Generated `storybook-static/` output is ignored rather than committed.
 
+### M4 — Generated Storybook bundle trips the source color checker (MEDIUM, FIXED)
+
+The first Storybook-enabled CI run built the catalog successfully, then failed because the
+repository-wide color-token guard walked the generated `frontend/storybook-static` tree and
+reported hundreds of Storybook vendor colors as authored application violations. The local check
+had run before the Storybook build, hiding this order-dependent failure.
+
+**Resolution:** Treat `storybook-static` like the existing Vite `dist` directory in the color
+checker: both are generated output, while authored Storybook CSS under `frontend/src` remains
+fully checked. Reproduce the CI order locally by building Storybook before running all three
+CSS/token guardrails.
+
 ## Verification log
 
 | Check | Result |
@@ -119,6 +131,7 @@ frontend gate. Generated `storybook-static/` output is ignored rather than commi
 | Frontend lint, typecheck, and CSS/token guardrails | Pass |
 | Ktor static-route tests, Kotlin formatting, and smoke compilation | Pass |
 | Workflow syntax (`actionlint`) | Pass |
+| First Storybook-enabled GitHub CI (run `31522197198`) | **Fail; generated Storybook vendor colors scanned as source** |
 | Updated-head GitHub CI | Pending |
 
 The first focused test invocation omitted `--no-experimental-webstorage`: 44 tests
