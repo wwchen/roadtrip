@@ -3,7 +3,7 @@
 **PR:** #623 — Finish React migration cleanup and add UI gallery  
 **Branch:** `codex/react-migration-cleanup` → `master`  
 **Started:** 2026-08-11  
-**Status:** IN PROGRESS — CI SMOKE FIX UNDER VERIFICATION
+**Status:** COMPLETE — APPROVED
 
 ## Review objective
 
@@ -86,7 +86,7 @@ test hook or mistaking the accessibility node for the painted control.
 | GitHub mergeability after force-push | Pass; PR is mergeable |
 | Rebased-head GitHub CI (run `31518827395`) | **Fail; 5/6 jobs passed, route smoke used hidden LDS input** |
 | Focused smoke fix formatting and Kotlin compilation | Pass |
-| Replacement live smoke / aggregate CI | Pending |
+| Replacement live smoke / aggregate CI (run `31519829633`) | Pass; all nine smoke scenarios and all required jobs green |
 
 The first focused test invocation omitted `--no-experimental-webstorage`: 44 tests
 passed and all 16 `MapProvider` tests failed in setup because local Node 26 replaced
@@ -95,10 +95,9 @@ established workaround. Project CI uses Node 22 and does not require it.
 
 ## Final decision
 
-**CHANGES REQUESTED UNTIL REPLACEMENT CI PASSES.** The CI-found smoke defect is fixed locally,
-but the review remains open until the corrected test is exercised and the replacement head is
-green.
+**APPROVE.** All findings are fixed, the PR applies cleanly to current `master`, and the
+replacement run passed every required job, including all nine live Playwright scenarios.
 
-GitHub's live Playwright run executed all nine scenarios: eight passed and the route scenario
-reached its final assertion before exposing M2. That signal replaces the earlier compile-only
-risk assessment; the corrected assertion still requires a replacement run.
+GitHub's first live Playwright run executed all nine scenarios: eight passed and the route
+scenario reached its final assertion before exposing M2. The replacement run passed that
+scenario and the full smoke suite, closing the earlier compile-only integration risk.

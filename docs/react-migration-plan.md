@@ -150,7 +150,8 @@ The cleanup PR's adversarial review is tracked in
 [`pr-623-adversarial-review.md`](../.claude/reviews/pr-623-adversarial-review.md). Its first live
 CI pass exercised all nine browser scenarios and found one test-contract defect: route mode
 asserted visibility on an LDS checkbox input that is intentionally visually hidden. The smoke
-now asserts the visible label instead; replacement CI verification is in progress.
+now asserts the visible label instead, and the replacement run passed all nine scenarios plus
+the complete required CI suite.
 
 ## Lessons that still apply
 
