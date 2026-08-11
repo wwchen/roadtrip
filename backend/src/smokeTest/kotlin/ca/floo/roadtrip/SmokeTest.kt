@@ -286,7 +286,7 @@ class SmokeTest {
     }
 
     @Test
-    fun `campground agency filter narrows rendered federal pins`() {
+    fun `campground agency controls MapLibre layer filter`() {
         val context =
             browser.newContext(
                 Browser
@@ -371,7 +371,11 @@ class SmokeTest {
             assertTrue(forestService.isChecked())
             assertTrue(stateParks.isChecked())
 
-            // Un-checking one agency hides only its pins from the map.
+            // Un-checking one agency installs the exclusion on both campground
+            // layers. Assert the real MapLibre style state rather than
+            // queryRenderedFeatures output: MapLibre 6 deliberately changed that
+            // query's overscaling semantics, so its results are no longer a stable
+            // proxy for a layer's active filter.
             agencyRow(page, "US Forest Service").click()
             assertFalse(forestService.isChecked())
             assertTrue(nps.isChecked())
@@ -380,18 +384,14 @@ class SmokeTest {
                 """
                 () => {
                   const map = globalThis.__rtMap;
-                  const canvas = map?.getCanvas?.();
-                  if (!map || !canvas || !map.getLayer('cg-points')) return false;
-                  const agencies = map
-                    .queryRenderedFeatures([[0, 0], [canvas.width, canvas.height]], { layers: ['cg-points'] })
-                    .map(f => f.properties.agency)
-                    .filter(Boolean)
-                    .sort();
-                  return JSON.stringify(agencies) === JSON.stringify(['National Park Service', 'WA State Parks']);
+                  if (!map || !map.getLayer('cg-points') || !map.getLayer('cg-points-hit')) return false;
+                  const expected = ['all', ['!', ['in', ['get', 'agency'], ['literal', ['US Forest Service']]]]];
+                  return JSON.stringify(map.getFilter('cg-points')) === JSON.stringify(expected)
+                    && JSON.stringify(map.getFilter('cg-points-hit')) === JSON.stringify(expected);
                 }
                 """.trimIndent(),
                 null,
-                Page.WaitForFunctionOptions().setTimeout(5_000.0),
+                Page.WaitForFunctionOptions().setTimeout(MAP_READY_TIMEOUT_MS),
             )
 
             // The un-check persists across a repaint. `__rtRefreshBbox()` is the
@@ -409,31 +409,19 @@ class SmokeTest {
             assertTrue(nps.isChecked())
             assertFalse(forestService.isChecked())
 
-            // Re-checking the agency shows its pins again — and the expected set is all
-            // THREE agencies, where the vanilla expected two. That is a consequence of
-            // the repaint above being a refetch: `__rtRefreshBbox` re-serves the stubbed
-            // three-feature response, while the vanilla's `__rtSetRoutePois` had
-            // replaced the painted set with two features and dropped WA State Parks.
+            // Re-checking the agency removes both layer filters again.
             agencyRow(page, "US Forest Service").click()
             assertTrue(forestService.isChecked())
             page.waitForFunction(
                 """
                 () => {
                   const map = globalThis.__rtMap;
-                  const canvas = map?.getCanvas?.();
-                  if (!map || !canvas || !map.getLayer('cg-points')) return false;
-                  const agencies = map
-                    .queryRenderedFeatures([[0, 0], [canvas.width, canvas.height]], { layers: ['cg-points'] })
-                    .map(f => f.properties.agency)
-                    .filter(Boolean)
-                    .sort();
-                  return JSON.stringify(agencies) === JSON.stringify(
-                    ['National Park Service', 'US Forest Service', 'WA State Parks'],
-                  );
+                  if (!map || !map.getLayer('cg-points') || !map.getLayer('cg-points-hit')) return false;
+                  return map.getFilter('cg-points') == null && map.getFilter('cg-points-hit') == null;
                 }
                 """.trimIndent(),
                 null,
-                Page.WaitForFunctionOptions().setTimeout(5_000.0),
+                Page.WaitForFunctionOptions().setTimeout(MAP_READY_TIMEOUT_MS),
             )
             assertTrue(
                 pageErrors.isEmpty(),
