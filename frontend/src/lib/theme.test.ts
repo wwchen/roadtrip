@@ -65,10 +65,10 @@ describe('the mirror', () => {
 
   // Safari private mode throws on access rather than returning null.
   test('survives localStorage throwing', () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+    vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
       throw new Error('SecurityError');
     });
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
       throw new Error('SecurityError');
     });
     expect(readStoredMode()).toBeNull();
