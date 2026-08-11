@@ -155,7 +155,8 @@ the complete required CI suite.
 
 An initial cleanup implementation also added a custom production `/gallery` route without an
 explicit product requirement. That scope was removed in review and replaced with standard,
-development-only Storybook configuration and component stories.
+development-only Storybook configuration and component stories. The updated PR head passed the
+Storybook build and the complete required CI suite in run `31522500217`.
 
 ## Lessons that still apply
 

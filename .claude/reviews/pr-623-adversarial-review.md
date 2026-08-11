@@ -3,7 +3,7 @@
 **PR:** #623 — Finish React migration cleanup and add Storybook
 **Branch:** `codex/react-migration-cleanup` → `master`
 **Started:** 2026-08-11
-**Status:** IN PROGRESS — STORYBOOK REPLACEMENT UNDER VERIFICATION
+**Status:** COMPLETE — APPROVED
 
 ## Review objective
 
@@ -18,7 +18,7 @@ Findings are recorded before fixes and retained after resolution.
 - [x] Exercise the rewritten smoke-test assumptions against component and map behavior.
 - [x] Review the initial gallery for accessibility, representative coverage, and deploy wiring.
 - [x] Verify the Storybook replacement and removal of the production gallery route locally.
-- [ ] Verify the updated PR head in CI.
+- [x] Verify the updated PR head in CI.
 - [x] Review desktop drawer/topbar stacking across breakpoints.
 - [x] Run focused and full local verification after fixes.
 - [x] Update the PR with review fixes and final decision.
@@ -132,7 +132,7 @@ CSS/token guardrails.
 | Ktor static-route tests, Kotlin formatting, and smoke compilation | Pass |
 | Workflow syntax (`actionlint`) | Pass |
 | First Storybook-enabled GitHub CI (run `31522197198`) | **Fail; generated Storybook vendor colors scanned as source** |
-| Updated-head GitHub CI | Pending |
+| Updated-head GitHub CI (run `31522500217`) | Pass; Storybook build, frontend checks, backend checks, images, and live smoke all green |
 
 The first focused test invocation omitted `--no-experimental-webstorage`: 44 tests
 passed and all 16 `MapProvider` tests failed in setup because local Node 26 replaced
@@ -141,9 +141,8 @@ established workaround. Project CI uses Node 22 and does not require it.
 
 ## Final decision
 
-**CHANGES REQUESTED UNTIL STORYBOOK VERIFICATION PASSES.** The unintended production gallery is
-removed and its replacement is implemented, but the review remains open until Storybook and the
-regression suite pass.
+**APPROVE.** The unintended production gallery is removed, Storybook is development-only, every
+review finding is fixed, and the replacement head passed the full required CI suite.
 
 GitHub's first live Playwright run executed all nine scenarios: eight passed and the route
 scenario reached its final assertion before exposing M2. The replacement run passed that
