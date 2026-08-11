@@ -11,6 +11,7 @@ import {
   buildProfilePayload,
   isProfileDirty,
   profileValuesOf,
+  type ProfileValues,
 } from './ProfilePanel';
 
 const settings = (over: {
@@ -23,6 +24,7 @@ const settings = (over: {
     is_email_verified: true,
     roles: [],
     provider_label: 'Clerk',
+    theme: 'system',
     ...over.profile,
   },
   notifications: {
@@ -123,7 +125,7 @@ describe('ProfilePanel', () => {
   test('reports every keystroke to its parent, not just the first', async () => {
     const s = settings({ profile: { display_name: '' } });
     const state = { values: profileValuesOf(s) };
-    const onChange = vi.fn((next: { display_name: string }) => {
+    const onChange = vi.fn((next: ProfileValues) => {
       state.values = next;
       rerender();
     });
@@ -137,31 +139,34 @@ describe('ProfilePanel', () => {
 
     await userEvent.type(screen.getByLabelText('Display name'), 'Grace');
 
-    expect(state.values).toEqual({ display_name: 'Grace' });
+    expect(state.values).toEqual({ display_name: 'Grace', theme: 'system' });
   });
 });
 
 describe('profile dirty tracking', () => {
   test('a null saved name is equivalent to empty, not to the string "null"', () => {
     const s = settings({ profile: { display_name: null } });
-    expect(profileValuesOf(s)).toEqual({ display_name: '' });
-    expect(isProfileDirty(s, { display_name: '' })).toBe(false);
+    expect(profileValuesOf(s)).toEqual({ display_name: '', theme: 'system' });
+    expect(isProfileDirty(s, { display_name: '', theme: 'system' })).toBe(false);
   });
 
   test('an unchanged name is not dirty', () => {
-    expect(isProfileDirty(settings(), { display_name: 'Ada' })).toBe(false);
+    expect(isProfileDirty(settings(), { display_name: 'Ada', theme: 'system' })).toBe(false);
   });
 
   test('a changed name is dirty', () => {
-    expect(isProfileDirty(settings(), { display_name: 'Grace' })).toBe(true);
+    expect(isProfileDirty(settings(), { display_name: 'Grace', theme: 'system' })).toBe(true);
   });
 
   // Clearing a name is an edit, so Save has to stay reachable.
   test('clearing a set name is dirty', () => {
-    expect(isProfileDirty(settings(), { display_name: '' })).toBe(true);
+    expect(isProfileDirty(settings(), { display_name: '', theme: 'system' })).toBe(true);
   });
 
-  test('the payload carries just the display name', () => {
-    expect(buildProfilePayload({ display_name: 'Grace' })).toEqual({ display_name: 'Grace' });
+  test('the payload carries the display name and theme', () => {
+    expect(buildProfilePayload({ display_name: 'Grace', theme: 'system' })).toEqual({
+      display_name: 'Grace',
+      theme: 'system',
+    });
   });
 });

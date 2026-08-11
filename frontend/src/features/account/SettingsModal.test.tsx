@@ -16,6 +16,7 @@ const settingsBody = (over: Partial<SettingsResponse['notifications']> = {}): Se
     is_email_verified: true,
     roles: [],
     provider_label: 'Clerk',
+    theme: 'system',
   },
   notifications: {
     notification_email: null,
@@ -118,7 +119,10 @@ describe('save', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(putTo('/api/settings/profile')).toBeTruthy());
-    expect(putTo('/api/settings/profile')!.body).toEqual({ display_name: 'Ada Lovelace' });
+    expect(putTo('/api/settings/profile')!.body).toEqual({
+      display_name: 'Ada Lovelace',
+      theme: 'system',
+    });
     expect(await screen.findByText('Settings saved.')).toBeInTheDocument();
   });
 

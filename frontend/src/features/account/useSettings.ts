@@ -50,7 +50,7 @@ function useSettingsWrite<TInput>(mutationFn: (input: TInput) => Promise<Setting
 }
 
 export function useSaveProfile() {
-  return useSettingsWrite((input: { display_name: string }) => updateProfile(input));
+  return useSettingsWrite((input: { display_name: string; theme: string }) => updateProfile(input));
 }
 
 export function useSaveNotifications() {

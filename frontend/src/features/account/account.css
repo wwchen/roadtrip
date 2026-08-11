@@ -134,6 +134,19 @@
   font-size: 12px;
 }
 
+/* ---- appearance field ----
+   SegmentedControl has no visible label and no help slot of its own (see
+   AppearanceField's doc comment) — this reuses the label/help typography
+   `rt-account-row-label`/`rt-secret-field-help` already define and adds only
+   the vertical stack neither of those inline-row layouts provides. */
+
+.rt-appearance-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
 /* ---- settings modal ---- */
 
 .rt-settings-modal {

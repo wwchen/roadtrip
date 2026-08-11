@@ -27,6 +27,7 @@ const settings = (over: Partial<SettingsResponse['notifications']> = {}): Settin
     is_email_verified: true,
     roles: [],
     provider_label: 'Clerk',
+    theme: 'system',
   },
   notifications: {
     notification_email: null,
