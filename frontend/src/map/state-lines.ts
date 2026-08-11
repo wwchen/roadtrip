@@ -10,7 +10,7 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { FeatureCollection } from 'geojson';
 import { token } from '@tokens';
 
-/** Served out of the retained legacy static tree; see StaticSiteRoutes.kt. */
+/** Served from the repository data mount; see StaticSiteRoutes.kt. */
 export const STATE_LINES_URL = '/data/us-states.geojson';
 
 export const STATE_LINES_SOURCE_ID = 'states';

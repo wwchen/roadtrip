@@ -1,9 +1,9 @@
 # Frontend Migration: vanilla JS → React + TypeScript
 
-> **Handoff doc.** Status as of 2026-08-09 (Phase 4e complete). This is the source of truth for the
-> React migration; it captures the approved plan, decisions, what's already
-> done (and verified), what remains, and the gotchas discovered along the way so
-> a fresh agent session can continue without re-deriving anything.
+> **Completed migration record.** Status as of 2026-08-11: the React migration and its
+> cleanup are complete on `master`. This document preserves the approved plan, decisions,
+> implementation history, and gotchas discovered along the way. For current frontend
+> architecture rules, start with [frontend-components.md](frontend-components.md).
 
 ---
 
@@ -23,12 +23,11 @@
 - **Phase 2 (availability dashboard) is COMPLETE, served, and merged** (#569). Chart.js comes from
   npm; `web/availability.js` + `web/components/availability/*` and the root `availability.html`
   are deleted.
-- **Serving is wired**: `tilt up` / `make run` / `make sandbox` build and serve both React pages.
-  Neither has a legacy fallback any more — an unbuilt `frontend/dist` 404s, deliberately and
-  loudly, and the prod deploy health check probes both paths.
-- **Phase 3 (account/settings) is COMPLETE as React work** (#570) — every component exists and is
-  tested. Nothing mounts `SettingsModal` yet; read its note in "Execution phases" for why that is
-  deliberate, and note the mounting task has moved to **4e**, not 4a.
+- **Serving is wired**: `tilt up` / `make run` / `make sandbox` build and serve all three React
+  pages. None has a legacy fallback any more — an unbuilt `frontend/dist` 404s, deliberately
+  and loudly, and the prod deploy health check probes all three paths.
+- **Phase 3 (account/settings) is COMPLETE** (#570), and Phase 4e mounted its
+  `SettingsModal` from the map page's auth row.
 - **Phase 4a is merged** (#571): `maplibre-gl` from npm, the basemap registry, and `MapProvider`
   with the style-reload lifecycle. It shipped the map instance only — no layers, no fetch loop.
 - **Phase 4b is merged**: the imperative overlay module, the viewport POI fetch loop, and the
@@ -65,14 +64,14 @@
 cd frontend
 npm ci              # installs LDS and the rest of the locked npm dependency graph
 npm run typecheck   # tsc --noEmit — must be clean
-npm run test        # vitest run — currently 1,394 tests green
+npm run test        # vitest run
 npm run build       # vite build — emits dist/{index,availability,watches}.html
-npm run dev         # Vite dev server :5173, proxies /api,/auth,/web,/data → :8765 (Ktor)
+npm run dev         # Vite dev server :5173, proxies /api,/auth,/data → :8765 (Ktor)
 node ../scripts/check-color-tokens.mjs   # from frontend/, or drop the ../ from the repo root
 ```
 All four must be green before every commit.
 Run the Ktor backend separately (e.g. `make run` or `tilt up`) so the dev proxy resolves
-`/api`, and so `/web/design-system/tokens.css` is served (see Token strategy).
+API and repository-data requests. Styles and tokens are bundled by Vite.
 
 ---
 
@@ -1099,36 +1098,18 @@ which would have failed CI:
 or not MapLibre ever gets a style, which makes it a test of the bundle rather than of the
 tiles.
 
-### What remains
+### Closure status — cleanup complete in PR #623
 
-1. **The `window.__rt*` shim can go**, once `SmokeTest.kt` no longer reads it. It is a
-   transition seam, and the transition is over; the smoke could drive the same steps
-   through the UI, at the cost of a slower and flakier suite. Worth a decision rather than
-   a default — the shim is 60 lines and buys the suite deterministic access to trip state.
-2. ~~**`@tokens` is the last legacy import**, and it survives on purpose~~ — **done, and
-   the reasoning above was wrong on both counts.** `tokens.css` moved into
-   `frontend/src/tokens/` and is bundled; `@tokens` is a plain tsconfig path now.
-   - The "no frontend build" property was **already gone**: LDS components read
-     `--c-*`/`--surface-*` from the bundled `theme-roadtrip`, whose values are baked hex
-     *copied* from tokens.css (`--c-600:#3B82F6;  /* --rt-brand */`). Editing tokens.css
-     alone never restyled an LDS component, so the property held only for `--rt-*`
-     consumers, and paying a runtime mount for it was not worth it.
-   - Retiring the alias did **not** require reconciling `--rt-*` with `--c-*`. That
-     reconciliation is still outstanding (see Token strategy) and is genuinely a design
-     decision — but it is orthogonal to where the file lives. Moving it kept both
-     vocabularies exactly as they were.
-3. **One design question, not a regression.** On desktop an open drawer covers the topbar
-   (drawer `z-index: 999`, topbar 5). The vanilla did exactly the same above 768px, so it
-   is a lift — but it matters more now that the topbar is the only search surface.
-
-### Cleanup follow-up — PR #623
-
-The two remaining cleanup items above are complete:
+Nothing remains in the React migration itself:
 
 - `window.__rt*` and the transition shim are removed. Smoke coverage now drives public UI
   behavior and accessible DOM instead of reading Zustand or MapLibre internals.
 - On desktop, the drawer starts below the topbar/search surface instead of covering it. Mobile
   remains an overlay because its compact topbar and sheet interaction use a different layout.
+- The token CSS, typed runtime bridge, and sandbox chrome all live under `frontend/src/` and
+  are bundled by Vite. `@tokens` is an app-local alias, not a legacy import.
+- The later Roadtrip Zion theme maps app chrome roles onto LDS roles through
+  `roadtrip-zion-bridge.css`; map, availability, and status roles remain app-owned by design.
 
 Storybook replaces the deleted design-system gallery as a development-only component catalog.
 Its static build runs in frontend CI so stories cannot silently drift from the production
