@@ -20,6 +20,7 @@ interface StyleLayer {
 
 /** The last fake instance built, so tests can drive it. */
 let instance: FakeMap;
+const setWorkerUrl = vi.fn();
 
 class FakeMap {
   handlers = new Map<string, Array<() => void>>();
@@ -83,7 +84,7 @@ class FakeMap {
   }
 }
 
-vi.mock('maplibre-gl', () => ({ Map: FakeMap }));
+vi.mock('maplibre-gl', () => ({ Map: FakeMap, setWorkerUrl }));
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
 
 const { MapProvider, useMapContext } = await import('./MapProvider');
@@ -116,6 +117,11 @@ beforeEach(() => {
 });
 
 describe('setup', () => {
+  test('points MapLibre at the worker asset emitted by Vite', () => {
+    expect(setWorkerUrl).toHaveBeenCalledOnce();
+    expect(setWorkerUrl).toHaveBeenCalledWith(expect.stringContaining('maplibre-gl-worker'));
+  });
+
   test('renders a container for the map to own', () => {
     renderMap();
     expect(screen.getByTestId('map-canvas')).toBeInTheDocument();
