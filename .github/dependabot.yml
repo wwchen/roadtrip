@@ -42,10 +42,6 @@ updates:
     groups:
       frontend-npm-minor-and-patch:
         update-types: [minor, patch]
-    ignore:
-      - dependency-name: "@lew-ds/lds"
-        versions: [">=1.1.0"]
-
   # Rec.gov companion sidecar.
   - package-ecosystem: npm
     directory: /companion
