@@ -69,5 +69,10 @@ export default defineConfig({
     // Component styles are validated by the color-token checker, not by the
     // test runner; skip CSS processing to keep tests fast.
     css: false,
+    environmentOptions: {
+      jsdom: {
+        localStorage: true,
+      },
+    },
   },
 });
