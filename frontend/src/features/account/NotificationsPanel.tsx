@@ -87,7 +87,7 @@ export function NotificationsPanel({
 }: NotificationsPanelProps) {
   const [pending, setPending] = useState(false);
   const [status, setStatus] = useState<TestStatus | null>(null);
-  const clearTimer = useRef<ReturnType<typeof setTimeout>>();
+  const clearTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   // A success message is transient; a failure stays until the next attempt, because
   // it is the only place the reason is shown.
