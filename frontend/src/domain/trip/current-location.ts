@@ -37,9 +37,7 @@ export interface FillOptions {
  * Fill row `index` with the user's location.
  *
  * Returns immediately; the fill may happen later, or not at all. A location we
- * already know goes in with no permission prompt — which is also what makes the
- * `__rtUseCurrentLocationForTripStop` seam synchronous, since it seeds
- * `mapStore.userLocation` first.
+ * already know goes in with no permission prompt.
  */
 export function fillStopWithCurrentLocation(index: number, options: FillOptions = {}): void {
   const { silent = false, onError } = options;

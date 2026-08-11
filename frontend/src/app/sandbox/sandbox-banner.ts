@@ -6,7 +6,7 @@
 //
 // Rendered imperatively into `document.body` rather than as a React component
 // because it is chrome OUTSIDE `#root`: it belongs to the deployment, not to the
-// page, and it must be identical on all three pages whatever they render.
+// page, and it must be identical on every page whatever they render.
 import { fetchBuildInfo, type BuildInfo } from '@/api/sandbox-api';
 
 /** The one `build-info.env` value that gets a banner. */

@@ -1,7 +1,6 @@
 // The trip planner's state.
 //
-// Replaces the `trip` singleton from web/topbar/state.js and the window.__rt*
-// globals that read and wrote it (see stores/transition-shim.ts).
+// Replaces the `trip` singleton from the retired vanilla topbar.
 //
 // Two members of the legacy singleton are deliberately absent, because they are
 // imperative handles rather than state:
@@ -189,7 +188,7 @@ export const selectAllStopsFilled = (s: TripState): boolean =>
 
 /**
  * Whether a usable route is on the map. Mirrors the legacy
- * `__rtRouteActive` predicate exactly: directions mode, a fetched route, and
+ * Route-active predicate: directions mode, a fetched route, and
  * every slot filled.
  */
 export const selectRouteActive = (s: TripState): boolean =>

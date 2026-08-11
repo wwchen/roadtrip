@@ -309,7 +309,7 @@ describe('setVisibleRouteParam', () => {
 });
 
 describe('a stop that is still resolving', () => {
-  // `__rtRouteShareUrl` reads the store's stops directly, without the
+  // Route sharing reads the store's stops directly, without the
   // `allStopsFilled` gate the address-bar writer has — and a pending stop's (0, 0)
   // coordinates are finite, so the coordinate check alone let it through. The link
   // named the Gulf of Guinea as the trip's origin.

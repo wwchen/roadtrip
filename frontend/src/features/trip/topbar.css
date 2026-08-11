@@ -27,6 +27,15 @@
   font-family: inherit;
 }
 
+/* The desktop drawer is a detail surface; this is the only search and trip
+   navigation surface. Keep it reachable while a drawer is open. Mobile remains a
+   modal bottom sheet, where the compact topbar is intentionally behind it. */
+@media (min-width: 768px) {
+  .tb-panel {
+    z-index: 1000;
+  }
+}
+
 /* Stops list */
 .tb-stops {
   display: flex;

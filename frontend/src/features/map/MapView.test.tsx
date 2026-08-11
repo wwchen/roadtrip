@@ -645,32 +645,6 @@ describe('route mode', () => {
   });
 });
 
-describe('browser QA hooks', () => {
-  test('is installed while the map page is mounted', async () => {
-    const view = await renderMap();
-
-    expect(window.__rtRouteShareUrl).toBeTypeOf('function');
-    expect(window.__rtRefreshBbox).toBeTypeOf('function');
-
-    view.unmount();
-
-    expect(window.__rtRouteShareUrl).toBeUndefined();
-  });
-
-  test('answers the share URL from the trip on screen', async () => {
-    await renderMap();
-
-    act(() => {
-      useTripStore.getState().setStops([
-        { name: 'A', lng: -122, lat: 47 },
-        { name: 'B', lng: -121, lat: 48 },
-      ]);
-    });
-
-    expect(window.__rtRouteShareUrl?.()).toContain('route=');
-  });
-});
-
 // The route's own layers, and the bug an adversarial review of 4e found in them.
 describe('the trip overlay', () => {
   /** A route response whose second feature is the server's corridor polygon. */

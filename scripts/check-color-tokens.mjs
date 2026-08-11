@@ -38,11 +38,11 @@ const ROOTS = ['frontend'];
 const EXTENSIONS = ['.css', '.html', '.js', '.mjs', '.ts', '.tsx'];
 
 /**
- * Never walked. Build output and installed dependencies are not authored source,
- * and `frontend/dist` in particular contains the bundled LDS cascade, whose every
- * palette value would read as a violation.
+ * Never walked. Build output and installed dependencies are not authored source.
+ * Both Vite's `dist` and Storybook's `storybook-static` contain bundled third-party
+ * palettes whose values would otherwise read as violations.
  */
-const IGNORED_DIRS = new Set(['node_modules', 'dist']);
+const IGNORED_DIRS = new Set(['node_modules', 'dist', 'storybook-static']);
 
 /**
  * Test files quote colors in assertions; they describe the source, they do not

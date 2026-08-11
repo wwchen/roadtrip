@@ -247,7 +247,10 @@ alias layer for the bridge, or repoint the bridge at LDS var names.
 - **CI** (`.github/workflows/ci.yml` `web-tests` job, ~lines 185-217): replace the `node --test`
   discovery block with `vitest run` + `tsc --noEmit` + the color check; add `frontend/**` to the
   `dorny/paths-filter` `web` filter (~lines 58-62). **CI pins Node 22** — keep it.
-- **Gallery:** rebuild `web/design-system/gallery.html` as an LDS-backed catalog (Storybook fits).
+- ~~**Gallery:** rebuild `web/design-system/gallery.html` as an LDS-backed catalog (Storybook
+  fits).~~ **Completed in PR #623:** Storybook is the development-only React/LDS component
+  catalog; there is no production `/gallery` route. Run it with `npm run storybook`, and verify
+  its static build with `npm run build-storybook`.
 
 ---
 
@@ -1117,6 +1120,19 @@ tiles.
 3. **One design question, not a regression.** On desktop an open drawer covers the topbar
    (drawer `z-index: 999`, topbar 5). The vanilla did exactly the same above 768px, so it
    is a lift — but it matters more now that the topbar is the only search surface.
+
+### Cleanup follow-up — PR #623
+
+The two remaining cleanup items above are complete:
+
+- `window.__rt*` and the transition shim are removed. Smoke coverage now drives public UI
+  behavior and accessible DOM instead of reading Zustand or MapLibre internals.
+- On desktop, the drawer starts below the topbar/search surface instead of covering it. Mobile
+  remains an overlay because its compact topbar and sheet interaction use a different layout.
+
+Storybook replaces the deleted design-system gallery as a development-only component catalog.
+Its static build runs in frontend CI so stories cannot silently drift from the production
+React/Vite aliases, theme, or component APIs.
 
 ## Phase 5 — COMPLETE (branch `claude/react-migration-5-delete-vanilla`)
 

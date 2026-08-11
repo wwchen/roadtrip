@@ -18,9 +18,11 @@ component covers what you need, compose it rather than writing page-specific mar
 CSS. The installed source is under `frontend/node_modules/@lew-ds/` — read it when a prop's
 behaviour is unclear, because the types are occasionally narrower than the runtime.
 
-There is no living gallery any more; `web/design-system/gallery.html` went with the
-vanilla primitives it demonstrated. LDS's own source is the catalog, and an LDS-backed
-replacement is an open piece of work rather than something that exists.
+The living component catalog is Storybook under `frontend/.storybook/`, with stories beside
+the components they document. Run `npm run storybook` for local development and
+`npm run build-storybook` to verify the static catalog. The global preview imports the same
+`@ui/styles.css` theme boundary as production. Add a representative story when a new shared
+primitive or reusable Roadtrip UI pattern is introduced.
 
 ## Two layers
 
@@ -89,6 +91,8 @@ Non-negotiable, and the plan's Gotchas section has the full detail. The short ve
   template, which swaps the DOM and discards what was typed.
 - An LDS checkbox's real `<input>` is `opacity: 0` with no size and `pointer-events:
   none`. Read state from it; click the **label**. Browser drivers time out on the input.
+- An LDS toggle's visible `label` is a sibling of the switch, not the checkbox's
+  accessible label. Always pass a matching `aria-label` to `Toggle`.
 
 ## Page shells
 
@@ -107,9 +111,10 @@ in it.**
 Both used to be `<link>`/`<script>` tags injected into every entry by a Vite plugin and
 served by Ktor from `web/`. They are bundled now; the plugin is gone.
 
-Three entries exist, mirroring the three URLs: `index.html` (map), `availability.html`,
-`watches.html`. Ktor serves each from `frontend/dist` and there is no fallback behind
-them, so an unbuilt tree 404s the whole site rather than degrading. Adding a page means
+Three entries exist: `index.html` (map), `availability.html`, and `watches.html`. Ktor serves
+each from `frontend/dist` and there is no fallback behind them, so an unbuilt tree 404s the
+whole site rather than degrading. Storybook is a development tool and is not a Ktor route or
+production Vite entry. Adding a production page means
 an HTML entry, a `rollupOptions.input` entry, and an entry in `pages` in
 `StaticSiteRoutes.kt`.
 

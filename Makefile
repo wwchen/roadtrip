@@ -84,7 +84,7 @@ install: install-hooks
 test: _ensure-hooks
 	./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify :backend:ktlintCheck :backend:detekt :detekt-rules:test
 	# npm run build includes the TypeScript check before bundling.
-	cd frontend && npm ci && npm run lint && npm run test && npm run build
+	cd frontend && npm ci && npm run lint && npm run test && npm run build && npm run build-storybook
 	node scripts/check-color-tokens.mjs
 	node scripts/check-css-blocks.mjs
 	node scripts/check-token-usage.mjs

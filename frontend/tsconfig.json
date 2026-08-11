@@ -27,5 +27,5 @@
       "@tokens": ["./src/tokens/tokens.ts"]
     }
   },
-  "include": ["src", "vite.config.ts", "vitest.setup.ts"]
+  "include": ["src", ".storybook", "vite.config.ts", "vitest.setup.ts"]
 }
