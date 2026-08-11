@@ -88,10 +88,20 @@ Only **OWNER** or **COLLABORATOR** accounts on the repo can trigger the
 workflow; comments from other identities are silently ignored before any
 step runs.
 
-The workflow (`sandbox.yml`) resolves the PR head SHA via the GitHub API,
-waits for the application and Git-tree-addressed data images to appear in GHCR,
-then SSHes to `mini@mini-ca` over Tailscale and installs the PR's
-release archive (no Git checkout), and runs
+Once `/sandbox` succeeds, later commits deploy automatically after their `CI`
+workflow succeeds. Updates reuse the stable `pr<N>` Compose project and its
+database volume. Stale or duplicate CI completions are ignored, fork PRs are
+excluded, and `/sandbox stop` disables updates until `/sandbox` is issued again.
+
+Automatic updates expire after `SANDBOX_TTL_HOURS` (24 hours by default), in
+step with the host reaper. Reissuing `/sandbox` starts a new lease. An update
+also rechecks the activation record immediately before installing or deploying
+anything, so a concurrent `/sandbox stop` wins.
+
+The workflow (`sandbox.yml`) resolves the PR head SHA via the GitHub API and,
+for an explicit command, waits for the application and Git-tree-addressed data
+images to appear in GHCR. It then SSHes to `mini@mini-ca` over Tailscale,
+installs the PR's release archive without a Git checkout, and runs
 `scripts/deploy.sh sandbox-up <pr_number>` (with `SANDBOX_SHA` set) or
 `scripts/deploy.sh sandbox-down pr<pr_number>`. On success it posts the sandbox
 URL as a PR comment:
