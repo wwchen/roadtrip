@@ -164,6 +164,10 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Build Storybook
+        working-directory: frontend
+        run: npm run build-storybook
+
       - name: Check color tokens
         run: node scripts/check-color-tokens.mjs
 

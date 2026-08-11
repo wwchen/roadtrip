@@ -1,0 +1,44 @@
+.rt-storybook-shell {
+  min-height: 100vh;
+  padding: 32px;
+  background: var(--rt-bg);
+  color: var(--rt-text);
+  font-family: var(--th-ui);
+}
+
+.rt-storybook-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 960px;
+}
+
+.rt-storybook-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.rt-storybook-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  max-width: 960px;
+}
+
+.rt-storybook-rows {
+  overflow: hidden;
+  border: 1px solid var(--rt-border);
+  border-radius: var(--rt-r-lg);
+}
+
+@media (max-width: 640px) {
+  .rt-storybook-shell {
+    padding: 16px;
+  }
+
+  .rt-storybook-grid {
+    grid-template-columns: 1fr;
+  }
+}

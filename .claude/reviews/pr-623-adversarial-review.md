@@ -1,22 +1,24 @@
 # PR #623 Adversarial Self-Review
 
-**PR:** #623 — Finish React migration cleanup and add UI gallery  
-**Branch:** `codex/react-migration-cleanup` → `master`  
-**Started:** 2026-08-11  
-**Status:** COMPLETE — APPROVED
+**PR:** #623 — Finish React migration cleanup and add Storybook
+**Branch:** `codex/react-migration-cleanup` → `master`
+**Started:** 2026-08-11
+**Status:** IN PROGRESS — STORYBOOK REPLACEMENT UNDER VERIFICATION
 
 ## Review objective
 
 Try to disprove that the PR is safe by checking the removed QA coverage, desktop drawer
-interaction, new gallery serving/build path, accessibility, documentation accuracy, and
-test reliability. Findings are recorded before fixes and retained after resolution.
+interaction, Storybook build path, accessibility, documentation accuracy, and test reliability.
+Findings are recorded before fixes and retained after resolution.
 
 ## Progress
 
 - [x] Inventory the complete `master...HEAD` diff and project rules.
 - [x] Audit every removed `window.__rt*` consumer and identify replacement coverage.
 - [x] Exercise the rewritten smoke-test assumptions against component and map behavior.
-- [x] Review the gallery for accessibility, representative coverage, and deploy wiring.
+- [x] Review the initial gallery for accessibility, representative coverage, and deploy wiring.
+- [x] Verify the Storybook replacement and removal of the production gallery route locally.
+- [ ] Verify the updated PR head in CI.
 - [x] Review desktop drawer/topbar stacking across breakpoints.
 - [x] Run focused and full local verification after fixes.
 - [x] Update the PR with review fixes and final decision.
@@ -43,7 +45,19 @@ unsafe usage pattern even though production `TriggerSelector` correctly supplies
 matching `aria-label`.
 
 **Resolution:** Add the matching `aria-label`, assert the checkbox by accessible name,
-and preserve the LDS-specific rule in the frontend component guide.
+and preserve the LDS-specific rule in the frontend component guide. The custom gallery was later
+removed by H2; the corrected usage remains in the Storybook input story.
+
+### H2 — Custom production gallery was unintended scope (HIGH, FIXED)
+
+The user requested replacement coverage and cleanup, not a new customer-deployed component
+catalog. Interpreting “build replacement” as authorization for `/gallery` added a Ktor route,
+fourth Vite entry, smoke surface, and bespoke catalog without confirming that product scope.
+
+**Resolution:** Remove the `/gallery` route, production entry, page, styles, unit test, and smoke
+case. Replace it with Storybook 10's supported React/Vite framework, Docs and Accessibility
+addons, and representative stories that import the production `@ui` theme boundary. Storybook
+is development-only and built independently with `npm run build-storybook`.
 
 ### L1 — Drawer source comment describes the wrong desktop edge (LOW, FIXED)
 
@@ -64,6 +78,15 @@ helper documents this LDS contract.
 **Resolution:** Assert visibility of the public `.rt-legend` label containing the accessible
 name and route-scoped zero count. This retains the behavioral check without reviving an internal
 test hook or mistaking the accessibility node for the painted control.
+
+### M3 — Storybook had no CI durability gate (MEDIUM, FIXED)
+
+The initial replacement added local scripts, but the existing frontend CI job built only the
+production Vite entries. A dependency or alias change could therefore break every story while CI
+remained green.
+
+**Resolution:** Add `npm run build-storybook` to the frontend CI job and the matching `make test`
+frontend gate. Generated `storybook-static/` output is ignored rather than committed.
 
 ## Verification log
 
@@ -87,6 +110,16 @@ test hook or mistaking the accessibility node for the painted control.
 | Rebased-head GitHub CI (run `31518827395`) | **Fail; 5/6 jobs passed, route smoke used hidden LDS input** |
 | Focused smoke fix formatting and Kotlin compilation | Pass |
 | Replacement live smoke / aggregate CI (run `31519829633`) | Pass; all nine smoke scenarios and all required jobs green |
+| Storybook 10.5.7 compatibility (React 19 / Vite 8 peer ranges) | Pass; supported by `@storybook/react-vite` |
+| Storybook static build | Pass; Docs, Accessibility, catalog, and component stories emitted |
+| Storybook dev server startup | Pass on `localhost:6006` |
+| Rendered browser inspection | Unavailable; no controllable browser attached to this session |
+| Production Vite build | Pass; only the three intended application entries emitted |
+| Full frontend suite after replacement | Pass; 79 files / 1,335 tests |
+| Frontend lint, typecheck, and CSS/token guardrails | Pass |
+| Ktor static-route tests, Kotlin formatting, and smoke compilation | Pass |
+| Workflow syntax (`actionlint`) | Pass |
+| Updated-head GitHub CI | Pending |
 
 The first focused test invocation omitted `--no-experimental-webstorage`: 44 tests
 passed and all 16 `MapProvider` tests failed in setup because local Node 26 replaced
@@ -95,8 +128,9 @@ established workaround. Project CI uses Node 22 and does not require it.
 
 ## Final decision
 
-**APPROVE.** All findings are fixed, the PR applies cleanly to current `master`, and the
-replacement run passed every required job, including all nine live Playwright scenarios.
+**CHANGES REQUESTED UNTIL STORYBOOK VERIFICATION PASSES.** The unintended production gallery is
+removed and its replacement is implemented, but the review remains open until Storybook and the
+regression suite pass.
 
 GitHub's first live Playwright run executed all nine scenarios: eight passed and the route
 scenario reached its final assertion before exposing M2. The replacement run passed that

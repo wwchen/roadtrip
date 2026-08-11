@@ -18,10 +18,11 @@ component covers what you need, compose it rather than writing page-specific mar
 CSS. The installed source is under `frontend/node_modules/@lew-ds/` — read it when a prop's
 behaviour is unclear, because the types are occasionally narrower than the runtime.
 
-The living component catalog is `/gallery`, implemented in
-`frontend/src/pages/gallery/GalleryPage.tsx`. It renders through the production `@ui`
-boundary, providers, theme, and CSS cascade. Add a representative state there when a new
-shared primitive or reusable Roadtrip UI pattern is introduced.
+The living component catalog is Storybook under `frontend/.storybook/`, with stories beside
+the components they document. Run `npm run storybook` for local development and
+`npm run build-storybook` to verify the static catalog. The global preview imports the same
+`@ui/styles.css` theme boundary as production. Add a representative story when a new shared
+primitive or reusable Roadtrip UI pattern is introduced.
 
 ## Two layers
 
@@ -110,9 +111,10 @@ in it.**
 Both used to be `<link>`/`<script>` tags injected into every entry by a Vite plugin and
 served by Ktor from `web/`. They are bundled now; the plugin is gone.
 
-Four entries exist: `index.html` (map), `availability.html`, `watches.html`, and
-`gallery.html`. Ktor serves each from `frontend/dist` and there is no fallback behind
-them, so an unbuilt tree 404s the whole site rather than degrading. Adding a page means
+Three entries exist: `index.html` (map), `availability.html`, and `watches.html`. Ktor serves
+each from `frontend/dist` and there is no fallback behind them, so an unbuilt tree 404s the
+whole site rather than degrading. Storybook is a development tool and is not a Ktor route or
+production Vite entry. Adding a production page means
 an HTML entry, a `rollupOptions.input` entry, and an entry in `pages` in
 `StaticSiteRoutes.kt`.
 

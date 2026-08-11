@@ -10,14 +10,13 @@ The browser application is entirely React + TypeScript under `frontend/`. The fo
 tree, root vanilla shells, dual-serving fallback, transition aliases, and runtime-served asset
 plugin are gone.
 
-Four Vite entries are built and served by Ktor:
+Three Vite entries are built and served by Ktor:
 
 | URL | Entry | Purpose |
 |---|---|---|
 | `/` | `frontend/index.html` | Map, search, trip planner, POI drawers, and account UI |
 | `/availability` | `frontend/availability.html` | Availability administration dashboard |
 | `/watches` | `frontend/watches.html` | Watch management |
-| `/gallery` | `frontend/gallery.html` | Production LDS and Roadtrip component gallery |
 
 There are no `window.__rt*` APIs. Browser smoke tests exercise public UI behavior and accessible
 DOM instead of reaching into Zustand or MapLibre internals.
@@ -33,6 +32,7 @@ npm run typecheck
 npm run lint
 npm run test
 npm run build
+npm run build-storybook
 cd ..
 node scripts/check-color-tokens.mjs
 node scripts/check-token-usage.mjs
@@ -49,7 +49,6 @@ frontend/
   index.html
   availability.html
   watches.html
-  gallery.html
   src/
     api/                         typed same-origin clients
     app/                         providers, page mount, sandbox chrome
@@ -80,8 +79,9 @@ frontend work.
   `src/map/`. Layers and markers are not expressed as JSX.
 - Ktor serves only declared HTML entries, Vite assets, and the `data/` tree. An unbuilt frontend
   returns 404 instead of falling back to vanilla files.
-- The component gallery is a production Vite entry, not Storybook, so it always renders through
-  the same dependency versions, providers, theme, and CSS cascade as the application.
+- Storybook is the development-only component catalog. Its React/Vite framework uses the same
+  dependencies and `@ui/styles.css` theme boundary as the application; it is not served by Ktor
+  or included in the production Vite entries.
 
 ## Page composition
 
@@ -144,7 +144,7 @@ Prefer, in order:
 | 4e | Search/trip planner, routes, corridor results, alerts, auth, map controls, shared links |
 | 5 | Vanilla application and dual-serving infrastructure deleted |
 | Follow-up | Tokens and sandbox chrome moved into `frontend/`; `/web` mount removed |
-| Cleanup | `window.__rt*` QA globals removed; smoke coverage moved to public behavior; gallery added |
+| Cleanup | `window.__rt*` QA globals removed; smoke coverage moved to public behavior; Storybook added |
 
 The cleanup PR's adversarial review is tracked in
 [`pr-623-adversarial-review.md`](../.claude/reviews/pr-623-adversarial-review.md). Its first live
@@ -152,6 +152,10 @@ CI pass exercised all nine browser scenarios and found one test-contract defect:
 asserted visibility on an LDS checkbox input that is intentionally visually hidden. The smoke
 now asserts the visible label instead, and the replacement run passed all nine scenarios plus
 the complete required CI suite.
+
+An initial cleanup implementation also added a custom production `/gallery` route without an
+explicit product requirement. That scope was removed in review and replaced with standard,
+development-only Storybook configuration and component stories.
 
 ## Lessons that still apply
 

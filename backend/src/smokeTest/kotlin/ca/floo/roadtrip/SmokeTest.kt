@@ -857,7 +857,7 @@ class SmokeTest {
         }
     }
 
-    // Every React page, including the component gallery. Three
+    // Every production React page. Three
     // purely visual bugs reached review during the migration (uncoloured error text, an
     // input that dropped every keystroke after the first, and a 0x0 map canvas); every
     // one passed tsc, the unit suite, the bundle and the colour-token check, because
@@ -890,7 +890,6 @@ class SmokeTest {
             listOf(
                 "/watches" to "Watches",
                 "/availability" to "Availability Dashboard",
-                "/gallery" to "UI Gallery",
                 // The map's only heading is the legend's title. It renders whether or
                 // not the style ever loads, which is what makes it the right probe
                 // here: this test is about the bundle mounting, not about MapLibre.
