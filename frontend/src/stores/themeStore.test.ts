@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { DARK_MODE_CLASS, THEME_COLORS, writeStoredMode } from '@/lib/theme';
+import {
+  DARK_MODE_CLASS,
+  THEME_COLORS,
+  readStoredChoice,
+  readStoredMode,
+  writeStoredChoice,
+  writeStoredMode,
+} from '@/lib/theme';
 import { resetTokenCache } from '@/tokens/tokens';
 import { useThemeStore } from './themeStore';
 
@@ -72,20 +79,33 @@ describe('setChoice', () => {
     expect(document.documentElement.classList.contains('theme-roadtrip-zion')).toBe(true);
   });
 
-  test('mirrors the resolved mode, not the choice', () => {
+  test('mirrors both the resolved mode and the choice, for an explicit choice', () => {
     installMatchMedia(true);
+    useThemeStore.getState().setChoice('dark');
+    expect(readStoredMode()).toBe('dark');
+    expect(readStoredChoice()).toBe('dark');
+  });
+
+  test('clears both mirrors for system, even over a previously-mirrored explicit choice', () => {
+    installMatchMedia(true);
+    useThemeStore.getState().setChoice('dark');
+
     useThemeStore.getState().setChoice('system');
-    expect(window.localStorage.getItem('rt-theme')).toBe('dark');
+
+    expect(readStoredMode()).toBeNull();
+    expect(readStoredChoice()).toBeNull();
   });
 });
 
 describe('initTheme', () => {
-  test('seeds from the mirror', () => {
+  test('seeds from an explicit choice mirror', () => {
     installMatchMedia(false);
     writeStoredMode('dark');
+    writeStoredChoice('dark');
 
     const stop = useThemeStore.getState().initTheme();
     expect(document.documentElement.classList.contains(DARK_MODE_CLASS)).toBe(true);
+    expect(useThemeStore.getState().choice).toBe('dark');
     stop();
   });
 
@@ -94,6 +114,36 @@ describe('initTheme', () => {
 
     const stop = useThemeStore.getState().initTheme();
     expect(useThemeStore.getState().mode).toBe('dark');
+    stop();
+  });
+
+  // Finding 1 (regression): a `system` user must never be pinned to a mode
+  // their OS has since moved on from. Simulates the exact repro — a mode
+  // mirror left over from a session where the OS said light, no explicit
+  // choice ever mirrored (the choice mirror is what actually governs), and
+  // the OS now saying dark on this load.
+  test('a stale mode mirror never overrides a live OS change for a system user', () => {
+    writeStoredMode('light'); // stale leftover; the choice mirror is what matters
+    installMatchMedia(true); // the OS has since switched to dark
+
+    const stop = useThemeStore.getState().initTheme();
+
+    expect(useThemeStore.getState().mode).toBe('dark');
+    expect(document.documentElement.classList.contains(DARK_MODE_CLASS)).toBe(true);
+    stop();
+  });
+
+  // The flip side: an explicit choice must survive regardless of what the OS
+  // says, including across a fresh `initTheme` seed (not just a live flip).
+  test('an explicit light choice is not overridden by a dark OS on seed', () => {
+    writeStoredMode('light');
+    writeStoredChoice('light');
+    installMatchMedia(true); // OS says dark; the explicit choice still wins
+
+    const stop = useThemeStore.getState().initTheme();
+
+    expect(useThemeStore.getState().mode).toBe('light');
+    expect(document.documentElement.classList.contains(DARK_MODE_CLASS)).toBe(false);
     stop();
   });
 

@@ -111,6 +111,20 @@ class UserRepoTest : SharedDbTest() {
     }
 
     @Test
+    fun `updateProfile with a null displayName leaves the stored display name unchanged`() {
+        val user = userRepo.create(email = "displayname-coalesce@example.com", displayName = null, isEmailVerified = true)
+        userRepo.updateProfile(user.id, displayName = "Wm", theme = "dark")
+
+        // A client updating only the theme (e.g. `{"theme":"dark"}`) must not
+        // silently wipe the display name it never mentioned.
+        val updated = userRepo.updateProfile(user.id, displayName = null, theme = "light")
+
+        assertEquals("Wm", updated?.displayName)
+        assertEquals("Wm", userRepo.findById(user.id)?.displayName)
+        assertEquals("light", updated?.theme)
+    }
+
+    @Test
     fun `the theme CHECK constraint rejects an illegal value`() {
         val user = userRepo.create(email = "theme-illegal@example.com", displayName = null, isEmailVerified = true)
 

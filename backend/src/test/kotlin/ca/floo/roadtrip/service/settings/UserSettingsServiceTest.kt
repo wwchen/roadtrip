@@ -49,7 +49,7 @@ private class FakeUserRepo : UserRepo(ctx = detachedCtx) {
     ): User? {
         val u = users[id.value] ?: return null
         // Faithful to the real repo's coalesce semantics: null means "unchanged".
-        val updated = u.copy(displayName = displayName, theme = theme ?: u.theme)
+        val updated = u.copy(displayName = displayName ?: u.displayName, theme = theme ?: u.theme)
         users[id.value] = updated
         return updated
     }

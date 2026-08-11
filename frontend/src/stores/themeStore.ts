@@ -13,8 +13,10 @@ import {
   DARK_MODE_CLASS,
   DEFAULT_THEME_CHOICE,
   THEME_COLORS,
-  readStoredMode,
+  clearStoredMode,
+  readStoredChoice,
   resolveMode,
+  writeStoredChoice,
   writeStoredMode,
   type ThemeChoice,
   type ThemeMode,
@@ -34,12 +36,16 @@ function osPrefersDark(): boolean {
  *
  * `resetTokenCache()` is not optional: `tokens.ts` memoizes every value it reads
  * off the root, so without it the map keeps painting the previous mode's colours.
+ *
+ * Does not touch either mirror — mode alone can't say whether it came from an
+ * explicit choice or from `system`, and that distinction is exactly what keeps
+ * a `system` user from being pinned to a stale mode (see `theme.ts`). Callers
+ * that know the choice write the mirrors themselves.
  */
 export function applyMode(mode: ThemeMode): void {
   document.documentElement.classList.toggle(DARK_MODE_CLASS, mode === 'dark');
   document.querySelector(THEME_COLOR_SELECTOR)?.setAttribute('content', THEME_COLORS[mode]);
   resetTokenCache();
-  writeStoredMode(mode);
 }
 
 interface ThemeState {
@@ -64,16 +70,30 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   setChoice: (choice) => {
     const mode = resolveMode(choice, osPrefersDark());
     applyMode(mode);
+    if (choice === 'system') {
+      // Nothing local is worth remembering for `system` — the next load (and
+      // the boot script before it) should ask the OS again, not replay
+      // whatever the OS said this session.
+      clearStoredMode();
+    } else {
+      writeStoredMode(mode);
+      writeStoredChoice(choice);
+    }
     set({ choice, mode });
   },
 
   initTheme: () => {
-    // The mirror is the resolved mode the boot script already applied, so seeding
-    // from it repaints nothing. Absent a mirror, the OS is the answer — which is
-    // also what the boot script fell back to.
-    const mode = readStoredMode() ?? resolveMode(DEFAULT_THEME_CHOICE, osPrefersDark());
+    // The choice mirror — not the mode mirror — decides how to seed: only an
+    // explicit choice is trustworthy across sessions, because only an explicit
+    // choice can't go stale when the OS changes underneath it. `system` (the
+    // default when nothing is mirrored) always re-derives from the live OS, so
+    // a leftover mode string can never pin a `system` user to last session's
+    // mode. The boot script already reached the same mode independently, from
+    // the mode mirror or its own OS fallback, so this repaints nothing.
+    const choice = readStoredChoice() ?? DEFAULT_THEME_CHOICE;
+    const mode = resolveMode(choice, osPrefersDark());
     applyMode(mode);
-    set({ mode });
+    set({ choice, mode });
 
     if (typeof window.matchMedia !== 'function') return () => {};
 

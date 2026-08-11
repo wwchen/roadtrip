@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   DEFAULT_THEME_CHOICE,
+  THEME_CHOICE_STORAGE_KEY,
   THEME_COLORS,
   THEME_STORAGE_KEY,
   clearStoredMode,
   coerceChoice,
+  readStoredChoice,
   readStoredMode,
   resolveMode,
+  writeStoredChoice,
   writeStoredMode,
 } from './theme';
 
@@ -73,6 +76,49 @@ describe('the mirror', () => {
     });
     expect(readStoredMode()).toBeNull();
     expect(() => writeStoredMode('dark')).not.toThrow();
+  });
+});
+
+describe('the choice mirror', () => {
+  test('round-trips a choice', () => {
+    writeStoredChoice('dark');
+    expect(window.localStorage.getItem(THEME_CHOICE_STORAGE_KEY)).toBe('dark');
+    expect(readStoredChoice()).toBe('dark');
+  });
+
+  test('round-trips system', () => {
+    writeStoredChoice('system');
+    expect(readStoredChoice()).toBe('system');
+  });
+
+  test('reads null when nothing is stored', () => {
+    expect(readStoredChoice()).toBeNull();
+  });
+
+  test('reads null for a value that is not a choice', () => {
+    window.localStorage.setItem(THEME_CHOICE_STORAGE_KEY, 'sepia');
+    expect(readStoredChoice()).toBeNull();
+  });
+
+  test('survives localStorage throwing', () => {
+    vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
+    expect(readStoredChoice()).toBeNull();
+    expect(() => writeStoredChoice('dark')).not.toThrow();
+  });
+
+  test('clearStoredMode drops both mirrors', () => {
+    writeStoredMode('dark');
+    writeStoredChoice('dark');
+
+    clearStoredMode();
+
+    expect(readStoredMode()).toBeNull();
+    expect(readStoredChoice()).toBeNull();
   });
 });
 
