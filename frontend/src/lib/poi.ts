@@ -1,5 +1,4 @@
-// POI hydration flattening. Typed port of `flattenHydratedPoi` and its private
-// helpers from web/core.js — behavior preserved exactly.
+// POI hydration flattening.
 //
 // Runs after a `/api/pois/{id}` hydration. Promotes the rich nested structure
 // (`detail`, `raw`, `address`, provider payloads) into the flat property names

@@ -1,8 +1,5 @@
 // The expanded row under a selected site in the matrix.
 //
-// Port of the rendering half of web/availability/site-detail.js; every rule it draws
-// from lives in `site-detail-facts.ts`.
-//
 // No `dangerouslySetInnerHTML` anywhere, unlike the campground drawer's About section:
 // a campsite description is one clamped paragraph in a dense row, so its markup has
 // nothing to contribute and `site-detail-facts` strips it. That also means this

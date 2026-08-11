@@ -1,23 +1,5 @@
-// The campgrounds inside the active corridor.
-//
-// Port of `refreshOnRoutePois` / `refreshOnRoutePoisNow` from web/topbar.js. It
-// feeds two consumers: the map (through `tripStore.routePois`, which the viewport
-// loop paints instead of its own pins while a route is up) and the topbar's card
-// list, which reads what this returns.
-//
-// Where the vanilla's machinery went:
-//
-//   250ms debounce      -> still hand-rolled, because it is a property of the
-//                          slider gesture rather than of the fetch. Dragging the
-//                          radius from 5 to 100 miles is twenty 'input' events.
-//   AbortController     -> Query's `signal`. The debounced radius is part of the
-//                          key, so a settled drag retires the previous query.
-//   the manual clear    -> `enabled`, plus the effect below. The vanilla also
-//                          published an empty list BEFORE each fetch, which blanked
-//                          every pin on the map for the length of the round trip;
-//                          publishing on success only keeps the previous corridor's
-//                          pins up until the new ones land. Same lesson as
-//                          `useViewportPois`'s last-good repaint.
+// Feeds both the route-corridor map pins and the topbar card list. Radius changes
+// are debounced, and the last successful pins stay visible while a new query runs.
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchOnRoutePois, type PoiPinCollection } from '@/api/poi-api';
@@ -25,7 +7,7 @@ import { queryKeys } from '@/queries/keys';
 import { selectRouteActive, useTripStore } from '@/stores/tripStore';
 import { isLocated, type StopSlot } from '@/domain/trip/stops';
 
-/** One settle of the radius slider. Matches the vanilla's ON_ROUTE_DEBOUNCE_MS. */
+/** One settle of the radius slider. */
 export const ON_ROUTE_DEBOUNCE_MS = 250;
 
 /** Campgrounds are the only category the corridor list is about. */

@@ -1,5 +1,3 @@
-// Shared fetch helpers. Typed port of web/api/http.js — behavior preserved.
-//
 // `credentials` is stated explicitly even though 'same-origin' is already the
 // Fetch default — the session cookie reaching the API is load-bearing once
 // routes require a principal, and an implicit default is easy to break by

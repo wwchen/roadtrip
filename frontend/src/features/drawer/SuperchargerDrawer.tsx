@@ -12,12 +12,12 @@ import type { DrawerContentProps } from './registry';
 import { amenityLabels, busyHours, rateRows } from './supercharger-detail';
 
 /**
- * Tesla Supercharger drawer. Port of web/drawer/supercharger.js.
+ * Tesla Supercharger drawer.
  *
  * Everything interesting about a site comes from Tesla's own capture, which the ETL
  * stores verbatim rather than promoting field by field — so the drawer reads
  * `upstream.detail` on top of `detailPayload`, and a new pill needs no backend
- * schema change. That merge order is the legacy one: the verbatim capture wins.
+ * schema change. The verbatim capture wins during the merge.
  */
 export function SuperchargerDrawer({ feature, onClose }: DrawerContentProps) {
   const p = feature.properties;

@@ -4,12 +4,6 @@ import type { SandboxUser } from '@/api/sandbox-api';
 import { jsonResponse, stubFetch, textResponse } from '@/test/fetch-stub';
 import { initUserSwitcher, renderUserSwitcher } from './sandbox-user-switcher';
 
-// Ported from web/sandbox-user-switcher.test.mjs, which drove a hand-rolled
-// document stub. jsdom is a real DOM, so these assert against rendered markup —
-// and the cookie assertion goes through `document.cookie` itself, captured by a
-// setter spy, because jsdom's getter reports only name=value and the `path=/`
-// attribute is the part that makes the session apply site-wide.
-
 const me = (authEnabled: boolean): Me => ({ authenticated: false, auth_enabled: authEnabled });
 const user = (id: number, name: string, roles: string[] = []): SandboxUser => ({ id, name, roles });
 
@@ -48,9 +42,6 @@ describe('renderUserSwitcher', () => {
     expect(switcher()).toBeNull();
   });
 
-  // A response we could not read is not a sandbox: a stray session picker on a
-  // live deployment is the worse failure, so the check is `auth_enabled === false`
-  // rather than falsy.
   test('renders nothing when /api/me said nothing about auth', () => {
     expect(renderUserSwitcher([user(1, 'Will')], {} as Me, noReload)).toBeNull();
     expect(renderUserSwitcher([user(1, 'Will')], null, noReload)).toBeNull();
@@ -107,7 +98,6 @@ describe('initUserSwitcher', () => {
     expect(switcher()).toBeNull();
   });
 
-  // The normal answer outside a sandbox: the route 404s unless assume-user is on.
   test('swallows a 404 from the users endpoint', async () => {
     stubFetch(jsonResponse(me(false)), textResponse('', 404));
 

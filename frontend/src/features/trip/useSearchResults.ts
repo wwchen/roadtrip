@@ -1,20 +1,7 @@
 // Search-as-you-type for the topbar.
 //
-// Port of `onInput` / `runQuery` from web/topbar.js. Two sources in parallel, and
-// the pieces the vanilla hand-rolled:
-//
-//   220ms input debounce -> still hand-rolled. It is a property of typing, not of
-//                           the fetch, and the query key is what a settled value
-//                           feeds.
-//   geocodeAbort         -> Query's signal per source. A new keystroke is a new
-//                           key, and the previous query loses its observer.
-//   Promise.all + catch  -> two independent queries, so a failing source costs its
-//                           own rows and nothing else. Which layer absorbs a failure
-//                           differs by source, and it is worth knowing: `geocode()`
-//                           resolves to an empty list on a failed response by its own
-//                           documented contract (it backs a type-ahead), while
-//                           `searchPois` throws — so only the POI query ever reaches
-//                           the error branch below.
+// Geocoder and POI searches run independently after the input debounce, so one
+// source can fail without discarding the other's results.
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { geocode } from '@/api/geocode-api';

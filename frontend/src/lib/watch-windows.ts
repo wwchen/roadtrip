@@ -1,9 +1,5 @@
 // Availability watches, as the grid understands them.
 //
-// The watch half of web/availability/availability-week.js: what a watch's window
-// is, which of the user's watches apply to the visible week, and what the provider
-// will actually let us offer. Pure — the requests live in `useWatches.ts`.
-//
 // The capability gates here are load-bearing rather than decorative. A watch that a
 // provider cannot service is a promise we cannot keep, so "can this user set a
 // watch on this cell" is answered from the backend's own capability block and not

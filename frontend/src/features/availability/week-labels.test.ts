@@ -1,6 +1,3 @@
-// Date labels. The whole point of this module is the UTC pinning, so the tests run
-// under a zone that would expose a slip: America/Los_Angeles is UTC-7/-8, so any
-// label parsed in local time renders the previous day.
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import {
   dayOfMonthLabel,
@@ -18,10 +15,6 @@ afterAll(() => {
   process.env.TZ = ORIGINAL_TZ;
 });
 
-// Guards the guard. If the ambient zone were UTC — or if assigning `process.env.TZ`
-// stopped taking effect — every assertion below would pass without testing
-// anything, because a UTC-pinned label and a locally-parsed one would agree. This
-// asserts they disagree, so the suite fails loudly instead of going vacuous.
 test('the test zone actually shifts a bare ISO date', () => {
   const midnightUtc = new Date('2026-08-11T00:00:00Z');
 
@@ -46,8 +39,6 @@ describe('column headers', () => {
     expect(dayOfMonthLabel('2026-08-31')).toBe('31');
   });
 
-  // An unparseable string is shown verbatim rather than as "NaN": whatever the
-  // provider sent is more diagnosable than a blank column.
   test('fall back to the raw value', () => {
     expect(dayOfMonthLabel('not-a-date')).toBe('not-a-date');
   });
@@ -58,7 +49,6 @@ describe('the long day label', () => {
     expect(longDayLabel('2026-08-11')).toBe('Tue, Aug 11');
   });
 
-  // The classic off-by-one: local parsing turns this into "Dec 31".
   test('does not slip a day across the new year', () => {
     expect(longDayLabel('2027-01-01')).toBe('Fri, Jan 1');
   });
@@ -73,7 +63,6 @@ describe('the week label', () => {
     expect(formatWeekLabel('2026-08-30', '2026-09-05')).toBe('Aug 30 – Sep 5, 2026');
   });
 
-  // The year shown is the start's, which is the week the user asked for.
   test('spans a year boundary on the start year', () => {
     expect(formatWeekLabel('2026-12-28', '2027-01-03')).toBe('Dec 28 – Jan 3, 2026');
   });

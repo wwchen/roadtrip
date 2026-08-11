@@ -1,14 +1,7 @@
 // Shareable URLs for a POI and for a whole trip.
 //
-// Typed port of web/share-links.js. The wire format is a contract, not an
-// implementation detail: a link someone pasted into Slack last month has to keep
-// opening the same trip, so the schema version, the coordinate rounding and the
-// base64url alphabet are all preserved exactly. `decodeRouteState` is therefore
-// tested against strings produced by the legacy encoder as well as by this one.
-//
-// Phase 4c already ports the `?poi=` half of the reader (features/map/
-// useDeepLinkedPoi.ts). This module owns the writers, the `?route=` reader, and
-// the clipboard helper the drawer's share button needs.
+// The wire format is a durable contract: schema version, coordinate rounding,
+// and base64url alphabet must keep old shared links readable.
 
 /** Bumped only for a format change the old decoder could not read. */
 const ROUTE_SCHEMA_VERSION = 1;

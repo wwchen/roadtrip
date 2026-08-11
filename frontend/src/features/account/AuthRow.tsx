@@ -1,16 +1,5 @@
-// Sign in / who you are / settings, in the topbar.
-//
-// Port of web/topbar/auth.js, and the mounting task Phase 3 deliberately left for
-// 4e: every component behind the settings button already existed and was tested,
-// but nothing rendered `<SettingsModal>`, so users still got the vanilla modal.
-// This is the trigger it was waiting for.
-//
-// **The embedded (Auth0) branch is not ported, deliberately.** `web/topbar/auth.js`
-// mounts its login card only when `/api/me` reports `auth_embedded: true`, and with
-// Clerk — the live provider — that flag is false and the hosted redirect runs
-// instead. `signIn()` is that redirect, already ported in Phase 0. Porting the card
-// would drag `auth0-js` into the bundle on the one path where a failed third-party
-// fetch stops anyone signing in. See the Phase 3 note in docs/react-migration-plan.md.
+// Embedded Auth0 login is intentionally unsupported; the active Clerk flow uses
+// hosted redirects and keeps auth0-js out of the bundle.
 import { useState } from 'react';
 import { signIn, signOut } from '@/api/auth-api';
 import { SettingsModal } from './SettingsModal';

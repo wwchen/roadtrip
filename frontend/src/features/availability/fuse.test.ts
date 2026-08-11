@@ -1,5 +1,3 @@
-// The fusion rules. Every cell, count and banner in the availability UI is a
-// function of what comes out of this module, so it gets the closest reading.
 import { describe, expect, test } from 'vitest';
 import type { CampsiteAvailability } from '@/api/availability-api';
 import {
@@ -40,8 +38,6 @@ describe('rollupStatus', () => {
     expect(rollupStatus(['reserved', 'first_come', 'unknown'])).toBe('first_come');
   });
 
-  // The precedence that matters most: a stream we could not read must not render
-  // as a confident "full", because "?" sends the user to check and "R" does not.
   test('unknown outranks reserved', () => {
     expect(rollupStatus(['reserved', 'unknown'])).toBe('unknown');
   });
@@ -50,7 +46,6 @@ describe('rollupStatus', () => {
     expect(rollupStatus(['closed', 'reserved', 'closed'])).toBe('reserved');
   });
 
-  // Unanimity, so one open site keeps the campground open.
   test('closed needs every site to be closed', () => {
     expect(rollupStatus(['closed', 'closed'])).toBe('closed');
     expect(rollupStatus(['closed', 'reserved'])).not.toBe('closed');
@@ -60,9 +55,7 @@ describe('rollupStatus', () => {
     expect(rollupStatus([])).toBe('unknown');
   });
 
-  // The documented deviation: the original compared provider strings verbatim,
-  // so casing changed the answer here and nowhere else.
-  test('normalises before comparing, unlike the original', () => {
+  test('normalises before comparing', () => {
     expect(rollupStatus(['Available'])).toBe('available');
     expect(rollupStatus(['gibberish'])).toBe('unknown');
   });
@@ -85,8 +78,6 @@ describe('enumerateDates', () => {
     ]);
   });
 
-  // A DST spring-forward day is 23 hours long; date arithmetic that adds
-  // milliseconds skips a date here. `local-date` does not, and this pins it.
   test('does not skip a day across a DST transition', () => {
     expect(enumerateDates('2026-03-07', '2026-03-10')).toEqual([
       '2026-03-07',
@@ -101,7 +92,6 @@ describe('enumerateDates', () => {
 });
 
 describe('oldestCacheBlock', () => {
-  // The grid shows one freshness pill, so the honest number is the stalest.
   test('picks the stalest block across the streams', () => {
     const picked = oldestCacheBlock([
       stream(1, [], { cache: cache(30) }),
@@ -129,8 +119,6 @@ describe('fuseDay', () => {
     expect(day.status).toBe('available');
   });
 
-  // Numeric, not lexical: with string keys "10" sorts before "9", and the matrix
-  // and site list both iterate this order.
   test('orders campsites numerically', () => {
     const day = fuseDay('2026-08-11', [
       stream(10, [['2026-08-11', 'available']]),
@@ -142,8 +130,6 @@ describe('fuseDay', () => {
     expect(day.available_campsite_ids).toEqual([9, 10, 100]);
   });
 
-  // A stream that simply has no row for the date is not the same as one that
-  // reported "closed" — it is unknown, and rolls up as such.
   test('a campsite with no row for the date is unknown', () => {
     const day = fuseDay('2026-08-11', [stream(7, [['2026-08-10', 'available']])]);
 
@@ -194,8 +180,6 @@ describe('fusePoiCampsitesAvailability', () => {
     ]);
   });
 
-  // "No online-bookable sites" is permanent; "come back in May" is not. They stay
-  // different states because they need different copy.
   test('no campsites at all is empty, not closed for season', () => {
     const fused = fusePoiCampsitesAvailability({ campsites: [] }, ...window);
 

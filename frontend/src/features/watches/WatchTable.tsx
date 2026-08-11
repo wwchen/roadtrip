@@ -67,13 +67,7 @@ function compare(a: Watch, b: Watch, key: SortKey, dir: SortDir): number {
   return (av < bv ? -1 : 1) * sign;
 }
 
-/**
- * Rebuild of web/watches/watch-table.js on LDS.
- *
- * LDS's Table is presentational — no sort hooks, no per-row class — so sorting
- * lives here (where it is testable without the DOM) and the row-level
- * paused/done tint is replaced by a hued status Tag.
- */
+// LDS Table is presentational, so sorting remains local and statuses use Tags.
 export function WatchTable({
   watches,
   poiNames,

@@ -1,8 +1,3 @@
-// The route line and corridor fill, against the recorder fake.
-//
-// The assertions are about what the code asked the map to do — which layer, in
-// which order, above which anchor — because that is the part we own. Paint order
-// is the substance here: it is what decides whether the route is visible.
 import { describe, expect, test } from 'vitest';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { LineString, Polygon } from 'geojson';
@@ -61,8 +56,6 @@ describe('installing the route', () => {
     expect(fake.layer(ROUTE_LAYER_ID)?.layout['line-join']).toBe('round');
   });
 
-  // The corridor is a tint under the labels; the line is on top of everything.
-  // Both orderings are the point of the overlay, not decoration.
   test('puts the corridor fill under the basemap"s first symbol layer', () => {
     const { fake, map } = withMap();
 
@@ -90,8 +83,6 @@ describe('installing the route', () => {
     expect(fake.sources.has(CORRIDOR_SOURCE_ID)).toBe(false);
   });
 
-  // A second route shares nothing with the first, so install replaces rather than
-  // diffing — and must not leave a duplicate source behind.
   test('replaces a previous route', () => {
     const { fake, map } = withMap();
 
@@ -123,8 +114,6 @@ describe('removing the route', () => {
     expect(fake.sources.size).toBe(0);
   });
 
-  // MapLibre throws on a missing layer id, and between a basemap change and the
-  // reinstall there are no app layers at all — so this window is real.
   test('is safe on a map with nothing installed', () => {
     const { map } = withMap();
 
@@ -133,7 +122,6 @@ describe('removing the route', () => {
 });
 
 describe('the corridor slider path', () => {
-  // setData per tick, not a reinstall: the user is watching the fill breathe.
   test('repaints in place', () => {
     const { fake, map } = withMap();
     installRouteOverlay(map, line, corridor);
@@ -176,15 +164,11 @@ describe('routeBounds', () => {
     ]);
   });
 
-  // fitBounds on a degenerate box zooms to maximum on null island.
   test('answers null for a line with nothing to fit', () => {
     expect(routeBounds({ type: 'LineString', coordinates: [] })).toBeNull();
     expect(routeBounds(null)).toBeNull();
   });
 
-  // The whole pair is skipped, not just the bad number: pairing one point's
-  // latitude with another's longitude would invent a position that is not on the
-  // route.
   test('skips a coordinate pair that is not fully numeric', () => {
     expect(
       routeBounds({
@@ -197,7 +181,6 @@ describe('routeBounds', () => {
     ]);
   });
 
-  // Every coordinate unusable is not a box.
   test('answers null when no coordinate survives', () => {
     expect(
       routeBounds({ type: 'LineString', coordinates: [[Number.NaN, Number.NaN]] }),

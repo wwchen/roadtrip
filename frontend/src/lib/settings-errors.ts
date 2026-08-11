@@ -1,12 +1,4 @@
 // Backend error code → human-facing message, for the account/settings surface.
-//
-// Straight port of web/account/settings-errors.js. Pure and dependency-free there
-// and here, which is why it moves ahead of the UI it serves: the components can
-// land as a page, a modal, or a React island without changing any of this.
-//
-// The codes are the backend's contract — `web/api/account-api.js` documents
-// callers reaching for `settingsErrorMessage(err.code)` — so the keys are copied
-// verbatim rather than renamed.
 
 /**
  * A Map, not an object literal — and that is a fix, not a stylistic choice.

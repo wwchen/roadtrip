@@ -52,8 +52,6 @@ describe('watchSlackChannel', () => {
     ).toBe('#alerts');
   });
 
-  // Watches created before the config was namespaced per kind still carry a
-  // top-level `channel`; dropping it would silently clear the channel on save.
   test('falls back to a legacy top-level channel', () => {
     expect(watchSlackChannel(watch({ trigger_config: { channel: '#old' } }))).toBe('#old');
   });
@@ -106,8 +104,6 @@ describe('watchStopWhenTriggered', () => {
 });
 
 describe('triggerStateOf', () => {
-  // Slack defaults on for a new watch: it is the trigger every user has set up,
-  // and a watch with no trigger cannot notify anyone.
   test('defaults a new watch to Slack on, email off, stop on', () => {
     expect(triggerStateOf(null)).toEqual({
       slackNotify: true,
@@ -166,8 +162,6 @@ describe('buildTriggerPayload', () => {
     ).toEqual({ slack_notify: { channel: '#alerts' } });
   });
 
-  // The kind is the user's intent; a blank channel lets the backend fall back to
-  // the account's stored default. Only the config entry is dropped.
   test('keeps the kind but omits the config when the field is blank', () => {
     const payload = buildTriggerPayload(state({ slackNotify: true, slackChannel: '   ' }));
 

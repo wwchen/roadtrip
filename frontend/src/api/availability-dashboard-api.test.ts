@@ -1,6 +1,3 @@
-// No node --test suite existed for this client. These cover the query-string
-// assembly and the deliberately non-throwing forcePoller path, which are the
-// parts Phase 2 depends on.
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   forcePoller,
@@ -33,8 +30,6 @@ describe('listPollers', () => {
     expect(fetchStub.last.url).toBe('/api/availability/pollers?active=true&limit=50&offset=100');
   });
 
-  // `active` is tri-state in the UI: true, false, or "no opinion". Only the empty
-  // string and null/undefined mean the last one.
   test.each([
     [false, '?active=false'],
     ['false', '?active=false'],
@@ -83,8 +78,6 @@ describe('forcePoller', () => {
     });
   });
 
-  // A cooldown is an expected answer to a button press, so this wrapper reports
-  // it instead of throwing — unlike every GET in this module.
   test('reports a 429 cooldown rather than throwing', async () => {
     stubFetch(jsonResponse({ poller_id: 7, retry_after_sec: 45 }, 429));
 
@@ -171,8 +164,6 @@ describe('change listing', () => {
     expect(fetchStub.last.url).toBe('/api/availability/changes?poi_id=42');
   });
 
-  // The two wrappers share one builder; this pins that they still differ only in
-  // which filter key they set.
   test('the two wrappers differ only in the filter key', async () => {
     const fetchStub = stubFetch(jsonResponse({ changes: [] }));
 

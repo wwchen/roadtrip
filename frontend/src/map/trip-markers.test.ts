@@ -1,6 +1,3 @@
-// The stop markers. MapLibre's Marker is mocked: the real one attaches itself to
-// a live map's DOM, and the questions here are which markers exist, where, and
-// what they say.
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { TripStop } from '@/stores/tripStore';
@@ -66,7 +63,6 @@ describe('syncTripMarkers', () => {
     ]);
   });
 
-  // The ends read as ends; a via keeps its ordinal.
   test('labels the ends and numbers the vias', () => {
     const registry = createTripMarkerRegistry();
 
@@ -92,8 +88,6 @@ describe('syncTripMarkers', () => {
     expect(registry.markers[1]).toBeNull();
   });
 
-  // (0, 0) until the browser answers: a marker there puts "A" in the Gulf of
-  // Guinea and then the route fit follows it.
   test('a stop still locating gets no marker', () => {
     const registry = createTripMarkerRegistry();
 
@@ -120,8 +114,6 @@ describe('syncTripMarkers', () => {
     expect(registry.markers).toHaveLength(2);
   });
 
-  // A reorder moves the label with the row, which is why the registry is
-  // positional and every marker is rebuilt.
   test('a reorder relabels rather than moving a marker', () => {
     const registry = createTripMarkerRegistry();
     const a = stop('A', -122, 47);

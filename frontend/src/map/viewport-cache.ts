@@ -1,9 +1,5 @@
 // The viewport response cache.
 //
-// Port of the `viewportCache` ring inside web/app.js's bbox loader. It is its own
-// module because it is the one part of the fetch loop with interesting rules and
-// no dependencies at all.
-//
 // **Why this exists alongside TanStack Query.** A query key matches exactly, so
 // panning by one pixel is a cache miss. This is a CONTAINMENT cache: a pan into a
 // sub-bbox of a view already fetched is a hit, because the cached response covers
@@ -12,13 +8,13 @@
 // policy and the cancellation; this supplies the "I already have a superset"
 // tier. Neither replaces the other.
 //
-// Three rules carried over, each load-bearing:
+// Three load-bearing rules:
 //   - Only NON-truncated responses may be stored. `truncated: true` means the
 //     server dropped features past its per-category budget, so a contained
 //     sub-view would render fewer pins than a real fetch would return. The caller
 //     enforces this — see `useViewportPois`.
 //   - Entries expire. POI rows and campground data change under us, and a
-//     five-minute view of the world is the vanilla tolerance.
+//     five-minute view of the world is sufficient.
 //   - Newest-first lookup over a ring of eight, so zooming back out to a cached
 //     parent view still hits without the cache growing without bound.
 

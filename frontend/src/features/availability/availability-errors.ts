@@ -1,10 +1,5 @@
 // Turning an availability failure into something worth reading.
 //
-// Port of `AVAIL_ERROR_LABELS` / `formatAvailabilityError` from
-// web/availability/availability-week.js, including the note that earned the table:
-// the UI used to say "Upstream unavailable" for four unrelated faults, several of
-// which were ours and one of which happened while the booking site was perfectly
-// fine. The copy now says what happened and implies whether retrying is worth it.
 
 /** Keyed by the `error` code on the backend's `AvailabilityErrorDto`. */
 const AVAILABILITY_ERROR_LABELS = new Map<string, string>([

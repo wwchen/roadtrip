@@ -1,7 +1,6 @@
 // Server state for the settings modal.
 //
-// Replaces the imperative fetch/mutate/re-read chain in
-// web/account/settings-modal.js.
+// Settings queries and mutations.
 import {
   useMutation,
   useQuery,

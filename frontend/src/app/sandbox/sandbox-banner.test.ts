@@ -2,11 +2,6 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { jsonResponse, stubFetch, textResponse } from '@/test/fetch-stub';
 import { initSandboxBanner, renderSandboxBanner } from './sandbox-banner';
 
-// Ported from web/sandbox-banner.test.mjs, which drove a hand-rolled document
-// stub because the vanilla tree had no test DOM. jsdom is a real one, so these
-// assert against the rendered markup — including the classes and the commit link
-// the old fake could not see.
-
 const banner = () => document.querySelector('.sandbox-banner');
 
 beforeEach(() => {
@@ -65,8 +60,6 @@ describe('initSandboxBanner', () => {
     expect(banner()).toBeNull();
   });
 
-  // The banner is always optional, so neither a fault nor an absent endpoint may
-  // reach the page as an error.
   test('swallows a failed response', async () => {
     stubFetch(textResponse('nope', 500));
 

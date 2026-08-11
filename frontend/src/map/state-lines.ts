@@ -1,16 +1,9 @@
-// State and provincial boundary lines.
-//
-// Port of `installStateLines` from web/layers.js. The one overlay that is not
-// POIs and not bbox-driven: a small static file, fetched once, reinstalled on
-// every style load like everything else.
-//
-// It lives beside the pin overlays rather than in the registry because it shares
-// none of their shape — no hit layer, no legend row, no filter, no per-pan data.
+// Static boundaries are independent of the bbox-driven POI overlay registry.
 import type { Map as MapLibreMap } from 'maplibre-gl';
 import type { FeatureCollection } from 'geojson';
 import { token } from '@tokens';
 
-/** Served out of the retained legacy static tree; see StaticSiteRoutes.kt. */
+/** Served from the repository data mount; see StaticSiteRoutes.kt. */
 export const STATE_LINES_URL = '/data/us-states.geojson';
 
 export const STATE_LINES_SOURCE_ID = 'states';
@@ -19,11 +12,7 @@ export const STATE_LINES_LAYER_ID = 'state-lines';
 /**
  * Install the boundaries, beneath `below` when it is given.
  *
- * `below` is load-bearing rather than cosmetic. The vanilla `style.load` handler
- * installed state lines FIRST and the pin overlays after, so pins drew on top.
- * Here the boundaries arrive whenever their fetch resolves — usually after the
- * overlays are already installed — so without an explicit anchor they would be
- * appended last and draw over every pin.
+ * `below` keeps late-arriving boundaries from drawing over pins.
  */
 export function installStateLines(
   map: MapLibreMap,

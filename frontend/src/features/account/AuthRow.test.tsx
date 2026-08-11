@@ -1,4 +1,3 @@
-// The topbar's auth row, which is also the settings modal's only trigger.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createTestQueryClient } from '@/test/query-client';
 import { act, render, screen, waitFor } from '@testing-library/react';
@@ -56,13 +55,9 @@ describe('the auth row', () => {
       screen.getByRole('button', { name: 'Sign in' }).click();
     });
 
-    // A full-page navigation to the provider's hosted flow, which is what the live
-    // configuration uses — the embedded card is deliberately not ported.
     expect(signIn).toHaveBeenCalled();
   });
 
-  // A fresh clone with no identity provider should look exactly as it did before
-  // auth existed, rather than showing a control that cannot work.
   test('renders nothing when no provider is configured', async () => {
     me = { authenticated: false, auth_enabled: false };
     const { container } = mount();
@@ -89,8 +84,6 @@ describe('the auth row', () => {
     expect(signOut).toHaveBeenCalled();
   });
 
-  // Providers that return no display name — and Apple, after the first
-  // authorization — still always return the address.
   test('falls back to the email address', async () => {
     me = {
       authenticated: true,
@@ -104,9 +97,7 @@ describe('the auth row', () => {
     );
   });
 
-  // The mounting task Phase 3 left for 4e: every panel behind this button existed
-  // and was tested, but nothing rendered the modal.
-  test('opens the settings modal, which Phase 3 built and nothing mounted', async () => {
+  test('opens the settings modal', async () => {
     me = {
       authenticated: true,
       auth_enabled: true,

@@ -1,8 +1,5 @@
-// Client for /api/route. Typed port of web/api/directions-api.js.
-//
 // Returns the raw Response: the trip planner reads the routing failure body to
-// tell "no route exists between these stops" from a transport error, and Phase 4e
-// owns that branching.
+// distinguish "no route exists between these stops" from a transport error.
 import type { RequestOptions } from './http';
 
 const ROUTE_URL = '/api/route';

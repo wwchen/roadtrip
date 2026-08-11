@@ -1,13 +1,9 @@
 // The watch editor, anchored to the grid cell that opened it.
 //
-// Port of web/availability/watch-popover.js plus the `openWatchPopover` /
-// `positionWatchPopover` half of availability-week.js.
-//
 // **Fixed positioning against the cell's rect, not a child of the cell.** The matrix
 // is a horizontally scrolling container, so a popover parented inside it is clipped
 // by the scroll box the moment it is wider than one 66px column. Anchoring it to
-// `document.body` at fixed coordinates and recomputing on scroll and resize is what
-// the vanilla version settled on, and the reason is worth keeping written down.
+// `document.body` avoids that clipping; position is recomputed on scroll and resize.
 //
 // The viewport maths uses `visualViewport` when present: on iOS with the keyboard up,
 // the layout viewport is unchanged while the *visible* one is half the height, and a

@@ -1,7 +1,6 @@
 // Deep links into a provider's booking flow.
 //
-// Port of web/availability/booking-links.js. The backend hands us a per-campsite
-// URL *template* rather than a URL, because the link depends on the stay window the
+// The backend hands us a per-campsite URL template because it depends on the stay window the
 // user picked — so a booking link cannot be built until a date is selected, and
 // this module is the only thing that knows that.
 import type { Campsite } from '@/api/campsite-api';

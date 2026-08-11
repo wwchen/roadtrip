@@ -2,7 +2,7 @@
 // LDS adapter layer (`@ui`).
 //
 // LDS (`matthewlew/lds`) is the React component library that replaces the
-// legacy `web/design-system/*` primitives. It is consumed from npm under the
+// previous app-specific primitives. It is consumed from npm under the
 // `@lew-ds` scope.
 //
 // Every migrated page imports its primitives from `@ui` rather than reaching

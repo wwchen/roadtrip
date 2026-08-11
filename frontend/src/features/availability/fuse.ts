@@ -1,11 +1,8 @@
 // Fusing one campsite-availability response into the per-day rows the grid draws.
 //
-// Port of `fusePoiCampsitesAvailability` and its helpers from
-// web/availability/availability-week.js. The endpoint returns one envelope *per
-// campsite* — a stream each — and deliberately leaves the combining to the client,
+// The endpoint returns one envelope per campsite — a stream each — and deliberately leaves the combining to the client,
 // so this is where "what is this campground's status on Thursday" is actually
-// decided. Pure, and the most heavily tested module in the phase for that reason:
-// every cell, count and banner downstream is a function of what comes out of here.
+// decided.
 import { normalizeAvailabilityStatus, type AvailabilityStatus } from '@/lib/availability-status';
 import { addLocalDays, localYmd, parseLocalYmd } from '@/lib/local-date';
 import type {

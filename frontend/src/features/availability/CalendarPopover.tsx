@@ -1,16 +1,13 @@
 // Month calendar for jumping the visible week.
 //
-// Port of web/availability/calendar-popover.js. It keeps its own view month, so the
+// It keeps its own view month, so the
 // arrows page months without closing, while the parent owns the selection — the
 // popover only reports a pick.
 //
-// The dismissal rules are the fiddly part and are carried over exactly: a click
+// The dismissal rules are the fiddly part: a click
 // inside must not count as an outside click, and the document listeners are attached
 // a tick late so the very click that opened the popover does not immediately close
-// it. In the vanilla version that late attachment also needed a `stopPropagation`
-// inside the popover, because paging a month detached the clicked button and
-// defeated a `contains(target)` check; React re-renders the same way, so the guard
-// stays.
+// it. Paging can detach the clicked button, so the inner stopPropagation guard stays.
 import { useEffect, useRef, useState } from 'react';
 import {
   addLocalDays,

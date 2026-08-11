@@ -36,7 +36,6 @@ describe('normalizeAvailabilityStatus', () => {
     expect(normalizeAvailabilityStatus(0)).toBe('unknown');
   });
 
-  // Guards against a prototype key resolving as a status.
   test('does not treat inherited object keys as statuses', () => {
     expect(normalizeAvailabilityStatus('constructor')).toBe('unknown');
     expect(normalizeAvailabilityStatus('toString')).toBe('unknown');

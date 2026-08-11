@@ -1,8 +1,3 @@
-// The corridor's campgrounds: the debounce, the publish-on-success, and the clear.
-//
-// The debounce is what keeps a radius drag from firing twenty requests, and the
-// publish-on-success is what keeps the map's pins up while the next corridor
-// loads — the vanilla published an empty list first and blanked them.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createTestQueryClient } from '@/test/query-client';
@@ -99,7 +94,6 @@ describe('with a route up', () => {
     expect(result.current.features).toEqual([]);
   });
 
-  // Twenty 'input' events on the slider must not be twenty requests.
   test('debounces a radius drag into one request', async () => {
     vi.useFakeTimers();
     withActiveRoute();
@@ -123,8 +117,6 @@ describe('with a route up', () => {
     expect(JSON.parse(bodies[0]!).radius_miles).toBe(50);
   });
 
-  // The vanilla published [] before each fetch, which blanked every pin on the map
-  // for the length of the round trip. Same lesson as useViewportPois.
   test('keeps the previous corridor"s pins while the next one loads', async () => {
     withActiveRoute();
     const { result } = renderHook(() => useOnRoutePois(), { wrapper });
@@ -150,8 +142,6 @@ describe('with no route', () => {
     expect(bodies).toHaveLength(0);
   });
 
-  // A corridor's campgrounds outliving its route would leave pins on the map for a
-  // trip the user has cleared.
   test('clears the published pins when the route goes away', async () => {
     withActiveRoute();
     renderHook(() => useOnRoutePois(), { wrapper });

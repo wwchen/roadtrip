@@ -1,6 +1,6 @@
 // Sanitising provider HTML.
 //
-// Typed port of web/upstream-html.js. Some providers ship HTML, not text: RIDB
+// Some providers ship HTML, not text: RIDB
 // (recreation.gov, so NPS/USFS/BLM) puts markup in `FacilityUseFeeDescription`,
 // `FacilityDirections` and campground descriptions. It is third-party content that
 // reaches a page verbatim, so this is the one place in the React tree where

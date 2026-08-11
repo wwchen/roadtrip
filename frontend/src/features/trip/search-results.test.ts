@@ -1,4 +1,3 @@
-// The dropdown's data: kinds, ordering, sections, and what a pick flies to.
 import { describe, expect, test } from 'vitest';
 import {
   MAX_SEARCH_RESULTS,
@@ -39,8 +38,6 @@ describe('kindForCategory', () => {
     expect(kindForCategory('state-park')).toBe('SP');
   });
 
-  // Three categories have two spellings in the wild; the table makes that visible
-  // where the vanilla hid it in switch fallthrough.
   test('accepts both spellings of the aliased categories', () => {
     expect(kindForCategory('planet_fitness_location')).toBe('PF');
     expect(kindForCategory('planet-fitness')).toBe('PF');
@@ -54,7 +51,6 @@ describe('kindForCategory', () => {
     expect(kindForCategory(42)).toBe('PLACE');
   });
 
-  // An object literal would resolve these up the prototype chain.
   test('does not resolve a prototype member as a kind', () => {
     expect(kindForCategory('toString')).toBe('PLACE');
     expect(kindForCategory('constructor')).toBe('PLACE');
@@ -77,8 +73,6 @@ describe('poiSearchResults', () => {
     ]);
   });
 
-  // A row we cannot place on the map is a row that cannot be picked — and
-  // `Number(null)` is 0, which is a coordinate in the Gulf of Guinea.
   test('drops a hit with no usable coordinates', () => {
     expect(poiSearchResults([poiRow({ lng: null }), poiRow({ id: 2 })])).toHaveLength(1);
     expect(poiSearchResults([poiRow({ lat: '' })])).toEqual([]);
@@ -95,7 +89,6 @@ describe('poiSearchResults', () => {
 });
 
 describe('geocodeSearchResults', () => {
-  // The one distinction the dropdown draws, because it changes the pick's zoom.
   test('separates an address from a place', () => {
     expect(geocodeSearchResults([geocodeRow()])[0]!.kind).toBe('ADDR');
     expect(geocodeSearchResults([geocodeRow({ place_type: 'place' })])[0]!.kind).toBe('PLACE');
@@ -124,8 +117,6 @@ describe('mergeSearchResults', () => {
     source: 'geocode',
   });
 
-  // A POI hit opens a drawer with hours, availability and booking links; a geocoded
-  // place is a name and a coordinate. So the long tail stays the fallback.
   test('puts POIs ahead of places', () => {
     expect(mergeSearchResults([poi('a')], [place('b')]).map((r) => r.name)).toEqual(['a', 'b']);
   });
@@ -154,7 +145,6 @@ describe('sections', () => {
     expect(sectionFor(results[2]!)).toBe('Places');
   });
 
-  // One header per run of rows, which is what the vanilla's prevSection tracked.
   test('emits a header only where the section changes', () => {
     expect(sectionHeaders(results)).toEqual(['POIs', null, 'Places']);
   });
@@ -174,7 +164,6 @@ describe('isSearchable', () => {
 });
 
 describe('zoomForResult', () => {
-  // A building, a POI, a town — the vanilla's three call sites.
   test('zooms by what the result is', () => {
     expect(zoomForResult({ source: 'poi', kind: 'CG' } as SearchResult)).toBe(13);
     expect(zoomForResult({ source: 'geocode', kind: 'ADDR' } as SearchResult)).toBe(14);

@@ -1,9 +1,5 @@
 // Row content for the selected-day site list.
 //
-// The pure half of web/availability/site-list.js: which catalog rows a day's
-// available ids resolve to, and the one-line summary under each name. Split out for
-// the same reason as `matrix-rows.ts` — the fallbacks here are provider-shaped rules,
-// not markup.
 import type { Campsite } from '@/api/campsite-api';
 import { siteName } from './matrix-rows';
 

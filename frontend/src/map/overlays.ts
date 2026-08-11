@@ -1,25 +1,5 @@
-// The POI pin overlays: one registry entry per pin layer, and the imperative
-// install/update calls React effects drive.
-//
-// This is the port of `installCGLayer`, `installPFLayer` and `installSCLayer`
-// from web/layers.js. All three did the same six things — drop any previous
-// source, add a GeoJSON source, add a visual circle layer, add a transparent hit
-// layer above it, bind click + cursor handlers, apply the current filter —
-// differing only in ids, paint values, and which POI categories belong to them.
-// Those differences are data, so they live in `POINT_OVERLAYS` and the behaviour
-// is written once. A fourth overlay is a registry entry, not another install
-// function.
-//
-// Deliberately NOT React. MapLibre owns its own DOM and these calls mutate a
-// live style, which is the imperative escape hatch the migration plan
-// prescribes: `features/map/useMapOverlays` decides *when* to call these, and
-// this module knows *what* to do to the map.
-//
-// Two things the vanilla version needed are gone, both because effect cleanup
-// replaces them: `state.bound` (a per-layer "have I already attached the
-// handlers" flag) and `rebindLayerHandler` (an off-then-on pair to avoid
-// double-binding after a style reload). An effect unbinds what it bound, so
-// there is nothing to guard against.
+// Imperative MapLibre overlay registry. React effects decide when to install;
+// this module owns sources, layers, paint, filtering, and event binding.
 import type {
   DataDrivenPropertyValueSpecification,
   FilterSpecification,

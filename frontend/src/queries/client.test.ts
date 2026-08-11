@@ -22,15 +22,12 @@ describe('query defaults', () => {
 });
 
 describe('mutation defaults', () => {
-  // A mutation is a user action with a visible result; a silent retry can
-  // double-write.
   test('does not retry', () => {
     expect(createQueryClient().getDefaultOptions().mutations?.retry).toBe(false);
   });
 });
 
 describe('retry policy', () => {
-  // A 4xx means the request was wrong and will be wrong again.
   test.each([[400], [401], [403], [404], [422], [499]])(
     'does not retry a %i',
     (status) => {
@@ -38,7 +35,6 @@ describe('retry policy', () => {
     },
   );
 
-  // 429 is explicitly "try again", which is what the backoff is for.
   test('retries a 429', () => {
     expect(retryFor(httpError(429))).toBe(true);
   });

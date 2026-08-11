@@ -1,9 +1,3 @@
-// The campground card's rules, which the vanilla version had none of.
-//
-// These are the parsers and formatters behind every section of the drawer: two shapes
-// of amenity data, per-carrier signal on a 0-4 scale, a season string a human typed,
-// and a CTA chain with five fallbacks. `now` is a parameter wherever time matters, so
-// none of this needs a faked clock.
 import { describe, expect, test } from 'vitest';
 import {
   STALE_AFTER_DAYS,
@@ -43,8 +37,6 @@ describe('amenities', () => {
     ]);
   });
 
-  // Only some absences are worth stating. "No camp store" is noise, so there is no
-  // negative label for it and the flag drops out.
   test('drops a false flag that has no negative label', () => {
     expect(amenityList({ amenities: { camp_store: false } })).toEqual([]);
   });
@@ -53,7 +45,6 @@ describe('amenities', () => {
     expect(amenityList({ amenities: { wifi: 'lodge only' } })).toEqual(['Wi-Fi: lodge only']);
   });
 
-  // The kind subsumes the flag: "Vault toilets", not "Toilets" and "Vault".
   test('toilet_kind replaces the plain toilets flag', () => {
     expect(amenityList({ amenities: { toilets: true, toilet_kind: 'vault' } })).toEqual([
       'Vault toilets',
@@ -91,7 +82,6 @@ describe('carrierSignals', () => {
     expect(carrierSignals({ cell_service: { att: [1, 1] } })).toHaveLength(1);
   });
 
-  // A carrier with an unusable average would render as a blank chip.
   test('drops carriers with no usable average', () => {
     expect(carrierSignals({ cell_coverage: { att: 'unknown', verizon: [2, 3] } })).toHaveLength(1);
   });
@@ -139,7 +129,6 @@ describe('verified', () => {
     });
   });
 
-  // Past the threshold the footer warns, because a booking decision rests on it.
   test('data older than the threshold is stale', () => {
     const old = new Date(NOW.getTime() - (STALE_AFTER_DAYS + 1) * 86_400_000)
       .toISOString()
@@ -182,8 +171,6 @@ describe('seasonVerdict', () => {
     });
   });
 
-  // Past this year's close, the next opening is the same date next year — otherwise a
-  // November reader would be told it opened months ago.
   test('after the range closes, it rolls to next year', () => {
     expect(seasonVerdict('mid-May to early October', true, new Date(2026, 10, 1))).toEqual({
       tone: 'closed',
@@ -206,7 +193,6 @@ describe('seasonVerdict', () => {
     expect(seasonVerdict('year-round', false, JULY)?.text).toBe('Year-round · first-come');
   });
 
-  // Unparseable: show what the provider wrote rather than inventing a verdict.
   test('an unparseable season is passed through', () => {
     expect(seasonVerdict('Depends on snowpack', true, JULY)).toEqual({
       tone: 'fcfs',
@@ -255,8 +241,6 @@ describe('campgroundCtas', () => {
     expect(ctas({ info_url: 'https://parks.test/a' })[0]).toMatchObject({ label: 'Visit website' });
   });
 
-  // Marked first-come with nothing to link to: say so rather than offering a search
-  // that implies a booking flow.
   test('a first-come pin with no links offers no button', () => {
     const result = campgroundCtas({ reservable: false });
 
@@ -355,8 +339,6 @@ describe('structuredDetails', () => {
     expect(rows[0]?.value).toEqual({ kind: 'text', text: 'EUR 30' });
   });
 
-  // Structured values, not HTML: this is what replaced the `{ __html }` descriptors
-  // the vanilla card passed around.
   test('email and managing agency come back as links', () => {
     const contact = structuredDetails({
       email: 'ranger@example.gov',
@@ -448,7 +430,6 @@ describe('structuredDetails', () => {
 });
 
 describe('availabilitySupported', () => {
-  // The backend owns provider capability detection; both spellings reach the client.
   test('reads either casing of the backend flag', () => {
     expect(availabilitySupported({ availability_supported: true })).toBe(true);
     expect(availabilitySupported({ availabilitySupported: true })).toBe(true);

@@ -67,17 +67,8 @@ export interface NotificationsPanelProps {
   onTestEmail: () => Promise<void>;
 }
 
-/**
- * Rebuild of web/account/notifications-panel.js.
- *
- * Notification email, the write-only Slack token, the channel, and a test button for
- * each with inline feedback.
- *
- * The two tests share one in-flight guard, as they did originally — they post to the
- * same account and a second press while one is pending tells the user nothing. One
- * status slot for the same reason: the message names which test it came from, so two
- * stale results cannot sit side by side contradicting each other.
- */
+// Slack and email tests share one in-flight guard and one status slot so stale
+// results cannot contradict each other.
 export function NotificationsPanel({
   settings,
   values,

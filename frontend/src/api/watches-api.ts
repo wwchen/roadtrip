@@ -1,14 +1,10 @@
-// Client for /api/watches. Typed port of web/api/watches-api.js.
-//
 // Watches are user intent for availability polling; the backend persists them
 // and a scheduler turns them into polling jobs.
 //
 // DTOs are pinned against the backend (AvailabilityWatchSchema and friends).
 // Note the envelopes: the list route answers
 // `{ total, limit, offset, watches }` and the single-watch routes answer
-// `{ watch, watch_capabilities? }`. Callers unwrap, which is what the vanilla
-// callers already did (`data?.watches`, `created.watch`) — the earlier
-// provisional types in this file claimed bare `Watch`/`Watch[]` and were wrong.
+// `{ watch, watch_capabilities? }`.
 import type { Campsite } from './campsite-api';
 import { HttpError, jsonGetOk, type RequestOptions } from './http';
 

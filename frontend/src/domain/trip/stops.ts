@@ -1,30 +1,13 @@
-// The stop list, as algebra.
-//
-// Every rule the topbar's rows follow, extracted from the DOM handlers in
-// web/topbar.js (`onRowX`, `onAddStop`, `addTripStopFromExternal`, the drop
-// handler in `bindRowDrag`, `allStopsFilled`) so they can be read and tested
-// without a map, a keyboard or a drag.
-//
-// The rules are not arbitrary, and the reason each exists is at its site. The one
-// worth knowing before reading any of them: **origin and destination are
-// structural slots.** In directions mode the list always has at least two rows,
-// so clearing the destination empties it in place, while clearing a via removes
-// the row. The vanilla implemented that as four intertwined branches of one
-// `onRowX`; here each transition returns a whole next state, which is what makes
-// it testable — and what surfaced that two of those branches were unreachable.
+// Origin and destination are structural slots: directions mode always keeps at
+// least two rows, while clearing an intermediate stop removes that row.
 import { MAX_STOPS, type TripMode, type TripStop } from '@/stores/tripStore';
 
 /** A slot the user has not filled yet. */
 export type StopSlot = TripStop | null;
 
 /**
- * What a transition answers: the next list, the next mode, and where focus goes.
- *
- * Notably absent is "should this re-route", which every one of the vanilla's
- * handlers had to decide for itself — inconsistently, since `onAddStop` never
- * re-routed and the drop handler always did. Here the route is a query keyed on
- * the stops, so producing a complete trip *is* requesting its route: see
- * `useRoute`. A transition cannot forget to ask, and cannot ask twice.
+ * The route query is keyed on the resulting stops, so transitions do not carry a
+ * separate "should re-route" flag.
  */
 export interface StopsTransition {
   stops: StopSlot[];

@@ -40,8 +40,6 @@ describe('viewport', () => {
 });
 
 describe('overlay filter', () => {
-  // The hidden set is empty by default, which is the legend's all-on state — an
-  // overlay nothing has said anything about is visible.
   test('an overlay is visible until it is hidden', () => {
     expect(selectIsOverlayVisible('sc')(map())).toBe(true);
 
@@ -61,8 +59,6 @@ describe('overlay filter', () => {
     expect(map().hiddenOverlays).toEqual(['pf']);
   });
 
-  // Filter effects key off array identity, so a no-op write must not produce a
-  // new array — otherwise every unrelated store write re-runs setFilter.
   test('a redundant write keeps the same array', () => {
     map().setOverlayHidden('sc', true);
     const first = map().hiddenOverlays;
@@ -78,8 +74,6 @@ describe('agency filter', () => {
     expect(selectIsAgencyVisible('US Forest Service')(map())).toBe(true);
   });
 
-  // The legend is viewport-scoped: its rows come and go as the user pans, so an
-  // agency seen for the first time has to default to visible.
   test('an agency nobody has switched off is visible', () => {
     map().setAgencyHidden('US Forest Service', true);
 
@@ -117,7 +111,6 @@ describe('selection and drawer', () => {
     expect(selectIsDrawerOpen(map())).toBe(false);
   });
 
-  // Id 0 is falsy but a real POI id, so the drawer must still count as open.
   test('treats a zero id as a selection', () => {
     map().selectPoi(0);
 

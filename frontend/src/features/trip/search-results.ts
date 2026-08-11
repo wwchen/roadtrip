@@ -1,17 +1,7 @@
 // What the topbar's dropdown shows, as data.
 //
-// The result-shaping half of `runQuery` / `kindForCategory` / `renderDropdown` in
-// web/topbar.js. Pure, so the ordering and the copy can be tested without a
-// network round-trip.
-//
-// **Scope correction, and it is the same one 4b made about the panel's search box:
-// the local pin-index tier is NOT ported.** `pinSearch` filtered `web/search.js`'s
-// `searchIndex`, and nothing has called `registerSearchItems` since the slim
-// `/api/pois` response stopped shipping names — `web/app.js` says so in a comment.
-// So the tier could not match anything, its "sort by nearest" sorted an empty list,
-// and the dedupe pass that removed backend hits already in the index removed
-// nothing. Real cross-viewport search is `GET /api/pois/search`, which is what this
-// keeps. Do not "restore" the pin tier on the assumption it worked.
+// Cross-viewport POI search comes from the backend; slim map pins do not contain
+// names and therefore cannot support a local search index.
 import type { GeocodeResult } from '@/api/geocode-api';
 import type { PoiSearchResult } from '@/api/poi-api';
 

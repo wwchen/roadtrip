@@ -100,7 +100,8 @@ A page's `*.html` is a bare shell: `#root` plus its entry module. **Nothing else
 in it.**
 
 - Styles come from `@ui/styles.css`, imported by each `pages/*/main.tsx`: the LDS
-  cascade, the roadtrip theme, then `src/tokens/tokens.css`.
+  cascade, the Roadtrip Zion theme, app-owned data tokens, then the Zion-to-app
+  chrome-role bridge.
 - The **sandbox chrome** (build banner + assume-user switcher) is started by
   `mountPage()`, so every page has it structurally. Load-bearing for review, not
   decoration: an auth-disabled sandbox 401s every API call until an
@@ -120,9 +121,11 @@ an HTML entry, a `rollupOptions.input` entry, and an entry in `pages` in
 
 ## Color: tokens only
 
-`frontend/src/tokens/tokens.css` is the only place a raw **hex** may appear.
-`node scripts/check-color-tokens.mjs` fails the build on one anywhere else, and it runs in
-`make test` and in CI's web-test job.
+Raw **hex** values belong only in approved token sources. The app-owned source is
+`frontend/src/tokens/tokens.css`; `roadtrip-zion.css` is the other approved source because it
+is a byte-for-byte exported LDS theme kept intact for easy re-syncing. `tokens.ts` contains
+the corresponding early-boot/jsdom fallbacks. `node scripts/check-color-tokens.mjs` rejects
+raw hex everywhere else, and it runs in `make test` and in CI's web-test job.
 
 Functional notation — `rgba()`, `hsl()` — is **ratcheted, not banned**. The remaining
 occurrences are overlays at one-off alphas with no role to map onto; converting them would
@@ -156,18 +159,18 @@ A DOM element you build by hand is **not** one of these cases: `var()` resolves 
 inline style, so `map/trip-markers.ts` uses `background: var(--rt-brand)` and gets theme
 changes for free. Reach for `token()` only where the consumer parses colour itself.
 
-`tokens.js` carries a fallback table for early boot and for jsdom tests, where no
+`tokens.ts` carries a fallback table for early boot and for jsdom tests, where no
 stylesheet has loaded — which is why a unit test asserts `token('--rt-…')` rather than a
 literal hex. The checker verifies every fallback key names a token `tokens.css` actually
 defines, so a rename fails loudly instead of pinning a stale value at runtime.
 
 ### Theming
 
-Because every role resolves through a primitive, a theme is an override block — redefine
-`--rt-c-*` under a scope like `[data-rt-theme="light"]`, plus only the roles that genuinely
-diverge. Custom properties inherit downward only, so the scope attribute belongs on
-`<html>`. Call `resetTokenCache()` from `@tokens` after a runtime swap so the map and
-charts re-resolve.
+The active theme is scoped by `theme-roadtrip-zion` on `<html>`. Its bridge maps app chrome
+roles such as `--rt-surface` and `--rt-brand` onto LDS theme roles while deliberately leaving
+map-layer, availability, and status colors app-owned. Custom properties inherit downward
+only, so any future runtime theme scope also belongs on `<html>`. Call `resetTokenCache()`
+from `@tokens` after a runtime swap so the map and charts re-resolve computed colors.
 
 ## CSS rules
 

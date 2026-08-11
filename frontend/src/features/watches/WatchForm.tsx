@@ -55,15 +55,7 @@ function fieldsFor(
 
 const valueOf = (e: Event): string => (e.target as HTMLInputElement).value;
 
-/**
- * The typed POI id as a number, or null when it is blank or not a number.
- *
- * The vanilla form posted the raw input string (`poi_id: "42"`), which only
- * worked because the backend's JSON parsing is lenient. A number always
- * satisfies the DTO's `Long?`, so this sends one; a non-numeric entry becomes
- * null and the backend answers with its "target required" validation error
- * rather than a parse failure.
- */
+/** Parse the optional POI id into the backend DTO's numeric shape. */
 function parsePoiId(raw: string): number | null {
   const trimmed = raw.trim();
   if (trimmed === '') return null;
@@ -71,29 +63,9 @@ function parsePoiId(raw: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/**
- * Rebuild of web/watches/watch-form.js on LDS.
- *
- * **Uncontrolled by necessity.** LDS's form controls take their `value` at first
- * render only; a changed prop re-renders the template and swaps the input's DOM,
- * which during typing eats the caret and every keystroke after the first. So the
- * fields are seeded once with `defaultValue`, the DOM owns the live value, and
- * `onChange` mirrors it into React state for the payload. To reseed — switching
- * between create and edit, or clearing after a save — the PARENT remounts this
- * component with a new `key`; there is deliberately no reseeding effect here.
- *
- * Behaviors carried over from the original:
- *  - POI id, start date, and end date are all read-only in edit mode. Moving a
- *    watch's target would orphan its poller, and the update request does not
- *    accept a new poi_id at all. The dates are still sent, from their locked
- *    values, so the payload matches what the vanilla form posted.
- *  - Saving a `done` watch reactivates it, because the only reason to edit a
- *    finished watch is to run it again.
- *
- * One deliberate improvement: `loading` disables the buttons but NOT the fields.
- * The vanilla form disabled everything, which here would swap the inputs' DOM
- * mid-save and discard what the user typed the moment a save failed.
- */
+// LDS fields are seeded once and reseeded by a parent key. Edit mode locks target
+// fields, saving a done watch reactivates it, and loading disables buttons only so
+// a failed save cannot discard typed values.
 export function WatchForm({
   mode,
   watch,

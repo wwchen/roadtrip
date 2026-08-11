@@ -1,6 +1,3 @@
-// Local-calendar date helpers. Typed port of web/utils/local-date.js — behavior
-// preserved exactly.
-//
 // Every function here works in the browser's LOCAL time zone on purpose.
 // Campsite availability is a calendar fact ("the night of the 8th"), not an
 // instant, so a UTC round-trip would shift the user's date by a day either side

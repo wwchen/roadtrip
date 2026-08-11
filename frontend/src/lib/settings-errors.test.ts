@@ -15,8 +15,6 @@ describe('settingsErrorMessage', () => {
     expect(settingsErrorMessage('email_send_failed')).toBe("Couldn't send the test email.");
   });
 
-  // Total by construction: call sites write settingsErrorMessage(err.code) with no
-  // guard, so every input has to yield a string.
   test('falls back for an unknown code', () => {
     expect(settingsErrorMessage('brand_new_code')).toBe(DEFAULT);
   });
@@ -27,9 +25,6 @@ describe('settingsErrorMessage', () => {
     expect(settingsErrorMessage('')).toBe(DEFAULT);
   });
 
-  // A code colliding with an Object.prototype member must not leak a function or
-  // a stray truthy value into the UI — the original's plain-object lookup was
-  // exposed to this, and a message is the only acceptable return.
   test('a prototype-shadowing code still yields the fallback', () => {
     for (const code of ['toString', 'constructor', 'hasOwnProperty', '__proto__']) {
       expect(settingsErrorMessage(code)).toBe(DEFAULT);

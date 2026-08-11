@@ -1,6 +1,3 @@
-// The double-confirm primitive. Extracted at its third site, so this is also the
-// first test coverage the pattern has had in React — Phase 1's inline copy in
-// WatchTable was only exercised through the watches page.
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -33,8 +30,6 @@ describe('ConfirmButton', () => {
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
-  // The accessible name has to change, or a screen reader announces the same
-  // control for two different actions.
   test('the accessible name and the label both change when armed', async () => {
     render(<ConfirmButton label="Delete" onConfirm={vi.fn()} />);
 
@@ -56,8 +51,6 @@ describe('ConfirmButton', () => {
     );
   });
 
-  // An armed button left on screen is a trap: the next click on what looks like an
-  // ordinary button destroys something.
   test('it disarms itself after the timeout', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const onConfirm = vi.fn();
@@ -74,9 +67,6 @@ describe('ConfirmButton', () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
-  // The visible text and the announced name must not diverge when the caller gives
-  // explicit confirm wording — a screen reader would otherwise read a different
-  // action than the one on screen.
   test('an explicit confirmLabel is also the accessible name', async () => {
     render(
       <ConfirmButton label="Disconnect Slack" confirmLabel="Confirm disconnect" onConfirm={vi.fn()} />,
@@ -88,8 +78,6 @@ describe('ConfirmButton', () => {
     expect(armed).toHaveTextContent('Confirm disconnect');
   });
 
-  // Without one, the terse visible text and the explicit announced name differ on
-  // purpose.
   test('with no confirmLabel the name is derived and the text stays terse', async () => {
     render(<ConfirmButton label="Delete" onConfirm={vi.fn()} />);
 

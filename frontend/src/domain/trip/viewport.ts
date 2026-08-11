@@ -5,9 +5,9 @@
 // surface that has to decide whether a programmatic focus is welcome.
 //
 // On a phone, focusing an input raises the soft keyboard over the map and the drawer,
-// so the vanilla skipped auto-focus there and let the user tap the field themselves.
+// so phones leave focus to the user.
 
-/** The breakpoint the vanilla topbar treated as "phone". */
+/** The planner's phone breakpoint. */
 export const MOBILE_MAX_WIDTH_PX = 768;
 
 /**

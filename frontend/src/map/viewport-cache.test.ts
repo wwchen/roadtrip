@@ -24,8 +24,6 @@ describe('bboxContains', () => {
     expect(bboxContains(CALIFORNIA, GREAT_BASIN)).toBe(false);
   });
 
-  // Edges touching is containment: a viewport panned to exactly the cached
-  // bounds is fully described by the cached response.
   test('identical bboxes contain each other', () => {
     expect(bboxContains(CALIFORNIA, CALIFORNIA)).toBe(true);
   });
@@ -46,9 +44,6 @@ describe('lookup', () => {
     expect(cache.lookup(GREAT_BASIN, KEY)).toBeNull();
   });
 
-  // The key carries the requested categories AND whether campgrounds actually
-  // came back. Reusing a low-zoom response for a contained high-zoom view is the
-  // bug that key prevents — campgrounds would stay invisible.
   test('a different key never matches, however contained the bbox', () => {
     const cache = createViewportCache<string>();
     cache.put(CALIFORNIA, 'planet_fitness_location,tesla_supercharger|cg=0', 'no campgrounds');

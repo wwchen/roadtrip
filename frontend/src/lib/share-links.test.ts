@@ -1,6 +1,3 @@
-// Share links, which are a wire format rather than an implementation detail: a
-// link pasted into a message last month has to keep opening the same trip. The
-// round-trip and the legacy-string cases are the point of this suite.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   clearVisiblePoiUrl,
@@ -32,8 +29,6 @@ describe('poiShareUrl', () => {
     expect(poiShareUrl(232447)).toBe(`${ORIGIN}/?poi=232447`);
   });
 
-  // Built from `pathname`, not `href`: copying a route link while a drawer is
-  // open must not produce a link that reopens the drawer too.
   test('does not inherit the current query', () => {
     at('/?poi=1&route=abc');
 
@@ -71,7 +66,6 @@ describe('encodeRouteState', () => {
     expect(decodeRouteState(encoded)?.stops).toHaveLength(2);
   });
 
-  // A trip with one end is not a trip, and an empty slot has no coordinates.
   test('refuses fewer than two locatable stops', () => {
     expect(encodeRouteState([STOPS[0]!], 5)).toBe('');
     expect(encodeRouteState([STOPS[0]!, null], 5)).toBe('');
@@ -79,8 +73,6 @@ describe('encodeRouteState', () => {
     expect(encodeRouteState(null, 5)).toBe('');
   });
 
-  // The "Locating you…" placeholder carries lng/lat 0 with a pending flag in the
-  // planner, but a stop with non-finite coordinates is what a half-typed row is.
   test('drops stops with unusable coordinates', () => {
     const decoded = decodeRouteState(
       encodeRouteState([{ name: 'Nowhere', lng: NaN, lat: 47 }, ...STOPS], 5),
@@ -150,7 +142,6 @@ describe('decodeRouteState', () => {
     expect(decodeRouteState(btoa('{"v":1}').replace(/=+$/, ''))).toBeNull();
   });
 
-  // A future format bump must not be half-read by this decoder.
   test('rejects a schema version it does not know', () => {
     const future = btoa(JSON.stringify({ v: 2, stops: STOPS }))
       .replace(/\+/g, '-')
@@ -170,7 +161,6 @@ describe('the address bar', () => {
     expect(window.location.search).toBe('?route=abc');
   });
 
-  // replaceState, not pushState: Back must not walk through every edit.
   test('does not add history entries', () => {
     const spy = vi.spyOn(window.history, 'pushState');
 
@@ -206,7 +196,6 @@ describe('the address bar', () => {
     expect(window.location.search).toBe('?basemap=carto-dark');
   });
 
-  // Closing a drawer must not make the trip on screen unshareable.
   test('clearing the poi parameter keeps an active route', () => {
     at('/?poi=5&route=abc');
 
@@ -237,8 +226,6 @@ describe('copyShareUrl', () => {
     expect(writeText).toHaveBeenCalledWith(`${ORIGIN}/?route=abc`);
   });
 
-  // A rejected permission is what a non-secure context and an unfocused headless
-  // browser both look like, and the button still has to work there.
   test('falls back to a textarea when the clipboard rejects', async () => {
     vi.stubGlobal('navigator', {
       clipboard: {
@@ -289,8 +276,6 @@ describe('setVisibleRouteParam', () => {
     expect(decodeRouteState(url.searchParams.get('route'))?.corridorMiles).toBe(25);
   });
 
-  // The vanilla wrote `replaceVisibleUrl(routeShareUrl(...))`, which builds from
-  // `pathname` — so editing a trip with a drawer open dropped the shared POI.
   test('keeps an open drawer shareable', () => {
     at('/?poi=5');
 
@@ -309,10 +294,6 @@ describe('setVisibleRouteParam', () => {
 });
 
 describe('a stop that is still resolving', () => {
-  // Route sharing reads the store's stops directly, without the
-  // `allStopsFilled` gate the address-bar writer has — and a pending stop's (0, 0)
-  // coordinates are finite, so the coordinate check alone let it through. The link
-  // named the Gulf of Guinea as the trip's origin.
   test('is refused by the encoder', () => {
     const encoded = encodeRouteState(
       [{ name: 'Locating you…', lng: 0, lat: 0, pending: true }, STOPS[1]!],

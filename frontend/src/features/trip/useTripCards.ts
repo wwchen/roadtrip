@@ -1,20 +1,7 @@
 // The corridor's campgrounds, hydrated.
 //
-// Port of `hydrateTripCards` from web/topbar.js: the corridor response is slim, so each
-// card fetches `GET /api/pois/{id}` for its name, site count, season and rating.
-//
-// `useQueries` rather than a hand-rolled `Promise.allSettled`, and the difference is
-// the point:
-//
-//   - the vanilla awaited every card and re-rendered once at the end, so one slow
-//     detail request held the whole list at "Campground"; here each card swaps in as
-//     its own request lands;
-//   - it also had to check `tripResults.byId` before mutating, because a corridor
-//     refresh could have replaced the card under a resolving promise. A query result
-//     belongs to its id, so there is nothing to check;
-//   - repeats across a radius drag come from the query cache rather than from the
-//     browser's HTTP cache, and the detail key is the SAME one the drawer uses — so a
-//     card the user has already opened is hydrated before its request would have been.
+// Each slim corridor result is hydrated independently through the same detail key
+// used by the drawer, so cards appear as their requests settle and share cache data.
 import { useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { fetchPoiDetail } from '@/api/poi-api';
@@ -37,9 +24,7 @@ export function useTripCards(placeholders: readonly TripCard[]): TripCard[] {
       queryFn: async ({ signal }: { signal: AbortSignal }) =>
         flattenHydratedPoi((await fetchPoiDetail(card.id, { signal })) as PoiFeature),
       staleTime: DETAIL_STALE_MS,
-      // A card that cannot be hydrated stays a placeholder, which is what the vanilla
-      // did — and the next corridor refresh retries it. Retrying here would delay
-      // twenty other cards behind one bad id.
+      // Leave a failed card as a placeholder instead of delaying the rest behind retries.
       retry: false,
     })),
   });

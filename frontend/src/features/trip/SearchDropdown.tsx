@@ -1,10 +1,4 @@
 // The search dropdown under the rows.
-//
-// Port of `renderDropdown` / `refreshDropdownActive` / the arrow-key half of
-// `onInputKey` in web/topbar.js. The active row is a prop rather than a class the
-// component toggles on DOM nodes, because the keyboard handler lives in the topbar
-// (the input has focus, not the list) and one owner of "which row is active" is what
-// keeps the highlight and the Enter key in agreement.
 import { useEffect, useRef } from 'react';
 import { token, KIND_TOKEN } from '@tokens';
 import { sectionHeaders, type SearchKind, type SearchResult } from './search-results';

@@ -1,4 +1,3 @@
-// The route summary's copy, and the routing errors it has to explain.
 import { describe, expect, test } from 'vitest';
 import type { TripStop } from '@/stores/tripStore';
 import {
@@ -24,7 +23,6 @@ describe('formatTotalKm', () => {
 });
 
 describe('formatDistanceAlongRoute', () => {
-  // "in", not "away": the number answers how far into the drive a stop sits.
   test('reads as distance into the trip', () => {
     expect(formatDistanceAlongRoute(0.4)).toBe('400 m in');
     expect(formatDistanceAlongRoute(4.25)).toBe('4.3 km in');
@@ -63,7 +61,6 @@ describe('routeSummary', () => {
 });
 
 describe('routeLegLines', () => {
-  // One leg IS the total, which is already on screen.
   test('says nothing about a two-stop trip', () => {
     expect(routeLegLines({ legs: [{ distance_m: 1000, duration_s: 60 }] }, [])).toEqual([]);
     expect(routeLegLines({}, [])).toEqual([]);
@@ -102,13 +99,10 @@ describe('routeErrorMessage', () => {
     expect(routeErrorMessage(null, 500)).toBe('Routing error (500)');
   });
 
-  // No status at all means the request never got an answer.
   test('names a transport failure differently', () => {
     expect(routeErrorMessage(null)).toBe('Network error');
   });
 
-  // A Map, not an object literal: `MESSAGES['toString']` on an object resolves up
-  // the prototype chain and returns a function, which `??` does not catch.
   test('does not resolve a prototype member as a message', () => {
     expect(routeErrorMessage('toString', 500)).toBe('Routing error (500)');
     expect(routeErrorMessage('constructor', 500)).toBe('Routing error (500)');

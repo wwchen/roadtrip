@@ -1,14 +1,10 @@
-// Client for the embedded password endpoints. Typed port of
-// web/api/password-auth-api.js.
-//
 // The session lands as an HttpOnly cookie set by /auth/password/complete;
 // nothing sensitive is returned to script.
 //
 // This module deliberately does NOT go through `http.ts`. It carries its own
 // request helper because it takes an injectable `_fetch` — the embedded auth
 // flow is driven from a form whose tests supply a fake — and because its error
-// is a plain Error with `.code`, not an HttpError. Both are preserved so the
-// Phase-3 auth port is a like-for-like swap.
+// is a plain Error with `.code`, not an HttpError.
 const BEGIN_URL = '/auth/password/begin';
 const COMPLETE_URL = '/auth/password/complete';
 const CREDENTIALS: RequestCredentials = 'same-origin';
