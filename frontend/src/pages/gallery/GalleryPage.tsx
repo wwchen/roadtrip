@@ -86,7 +86,7 @@ export function GalleryPage() {
           <Checkbox label="Tent camping" defaultChecked />
           <Radio name="pace" label="Relaxed pace" defaultChecked />
           <Radio name="pace" label="Fast pace" />
-          <Toggle label="Availability alerts" defaultChecked />
+          <Toggle label="Availability alerts" aria-label="Availability alerts" defaultChecked />
         </div>
         <SegmentedControl
           label="Map detail"

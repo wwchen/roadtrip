@@ -12,7 +12,7 @@ export interface DrawerProps {
 }
 
 /**
- * The drawer shell: a right-hand panel on desktop, a bottom sheet on mobile.
+ * The drawer shell: a left-hand panel on desktop, a bottom sheet on mobile.
  *
  * Port of the DOM lifecycle in web/drawer/chrome.js. Content is the caller's
  * problem — this owns the frame, the animation, and dismissal.

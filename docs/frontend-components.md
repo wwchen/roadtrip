@@ -90,6 +90,8 @@ Non-negotiable, and the plan's Gotchas section has the full detail. The short ve
   template, which swaps the DOM and discards what was typed.
 - An LDS checkbox's real `<input>` is `opacity: 0` with no size and `pointer-events:
   none`. Read state from it; click the **label**. Browser drivers time out on the input.
+- An LDS toggle's visible `label` is a sibling of the switch, not the checkbox's
+  accessible label. Always pass a matching `aria-label` to `Toggle`.
 
 ## Page shells
 

@@ -8,6 +8,7 @@ test('renders the production component catalog', () => {
   expect(screen.getByRole('heading', { level: 1, name: 'UI Gallery' })).toBeInTheDocument();
   expect(screen.getByRole('heading', { name: 'Inputs' })).toBeInTheDocument();
   expect(screen.getByLabelText('Trip name')).toHaveValue('Pacific coast');
+  expect(screen.getByRole('checkbox', { name: 'Availability alerts' })).toBeChecked();
   expect(screen.getByText('Bowman Bay')).toBeInTheDocument();
   expect(screen.getByText('No watches yet')).toBeInTheDocument();
 });
