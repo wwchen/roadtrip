@@ -57,6 +57,35 @@ features, features and pages may import domains, and domains never import featur
 compose multiple features to exercise a page, but production composition belongs in
 `pages/`.
 
+## Theme
+
+`<html>` carries `theme-roadtrip-zion` always, and `mode-dark` when the resolved
+mode is dark. Three things own this and nothing else should touch it:
+
+- `src/lib/theme.ts` — the types, `resolveMode`, and the `localStorage` mirror.
+- `src/stores/themeStore.ts` — the only writer of the class, the `theme-color`
+  meta and `resetTokenCache()`. Adding the class anywhere else leaves the map
+  painting the previous mode's colours.
+- The inline script in each of the three page shells, which applies the mirrored
+  mode before first paint. It is duplicated on purpose and pinned by
+  `src/test/page-shells.test.ts` — edit all three together.
+
+A signed-in user's choice lives on `profile.theme`; anonymous visitors follow
+`prefers-color-scheme`. New colours must come from mode-aware `--rt-*` roles, not
+from a literal `--gray-*` step: zion's grey ramp does not invert, so a literal is
+correct-looking in light and unreadable in dark.
+
+The map follows the same mode through `src/features/map/basemaps.ts`. Dark mode
+resolves the opening basemap to `carto-dark` only when the user has never
+explicitly picked one — `initialBasemapKey(mode)` reads a stored key first and
+falls back to the mode's default. The picker's **Auto** option returns to that
+state by calling `forgetBasemapKey()`, which removes the stored key rather than
+writing a sentinel for "follow the theme": absence already means auto, so a
+second encoding of the same state would just be one more place for the two to
+drift apart. `MapProvider` re-styles the map on every mode change (even when the
+basemap key itself is unchanged), because overlay colours are cached by
+`tokens.ts` and a full `setStyle` is what makes them re-resolve.
+
 ## File structure
 
 | Path | Holds |
