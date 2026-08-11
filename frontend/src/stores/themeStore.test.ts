@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { DARK_MODE_CLASS, THEME_COLORS, writeStoredMode } from '@/lib/theme';
+import { resetTokenCache } from '@/tokens/tokens';
 import { useThemeStore } from './themeStore';
+
+// `tokens.ts` memoizes every value it reads off the document root, so a mode
+// change that forgets to reset that cache leaves the map painting the previous
+// mode's colours. Mocked here so `applyMode`'s call to it is a real assertion,
+// not an incidental pass-through to the real (cache-only, side-effect-free)
+// implementation.
+vi.mock('@/tokens/tokens', () => ({
+  resetTokenCache: vi.fn(),
+}));
 
 /** A controllable `matchMedia`, since jsdom does not implement it. */
 function installMatchMedia(prefersDark: boolean) {
@@ -112,5 +122,32 @@ describe('initTheme', () => {
     expect(media.listenerCount).toBe(1);
     stop();
     expect(media.listenerCount).toBe(0);
+  });
+});
+
+// `tokens.ts` memoizes every value it reads off the document root, so a mode
+// change that forgets to reset that cache leaves the map painting the
+// previous mode's colours — silently, since nothing else observes the cache.
+// A separate, order-independent describe block: the tests above rely on
+// `choice` carrying over between cases (the store is a module singleton, not
+// reset per test), so new cases append here rather than interleave, and each
+// one restores `choice` back to the default afterwards to stay a no-op for
+// whatever runs next.
+describe('applyMode resets the token cache', () => {
+  afterEach(() => {
+    useThemeStore.getState().setChoice('system');
+  });
+
+  test('via setChoice', () => {
+    installMatchMedia(false);
+    useThemeStore.getState().setChoice('dark');
+    expect(resetTokenCache).toHaveBeenCalled();
+  });
+
+  test('via initTheme', () => {
+    installMatchMedia(false);
+    const stop = useThemeStore.getState().initTheme();
+    expect(resetTokenCache).toHaveBeenCalled();
+    stop();
   });
 });
