@@ -1,10 +1,6 @@
-// Client for a POI's campsite availability window. Typed port of
-// web/api/availability-api.js.
-//
 // Returns the raw Response rather than parsed JSON, deliberately: the caller
 // (the availability week grid) branches on status — 200 with data, 200 with an
-// "empty" body, and the provider-error shapes — and reads headers. Phase 4d wraps
-// this in a hook that owns that branching.
+// "empty" body, and the provider-error shapes — and reads headers.
 import type { AvailabilityStatus } from '@/lib/availability-status';
 import type { RequestOptions } from './http';
 

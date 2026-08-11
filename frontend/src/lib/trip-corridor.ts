@@ -1,11 +1,6 @@
 // The corridor polygon: "within N miles of this route".
 //
-// Port of `computeCorridor` / `clampCorridorMiles` from web/topbar.js. Turf comes
-// from npm here (`@turf/buffer`, `@turf/simplify`) rather than from the CDN
-// `@turf/turf@7` global the vanilla index.html loads — the same swap Phase 2 made
-// for Chart.js, and it drops a 400kB global for two tree-shaken functions.
-//
-// Two consumers, and they are the reason the simplification is not optional:
+// Simplification is required for both consumers:
 // the polygon is drawn on the map *and* POSTed to /api/pois/on-route, where the
 // backend caps a request polygon at 2000 vertices. A cross-country route buffered
 // at 100 miles blows through that before simplification.

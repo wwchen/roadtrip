@@ -6,8 +6,6 @@
 // — every read and write goes through `getState()` already, because the browser can
 // take seconds to answer and the row will have moved on by then.
 //
-// Port of `fillRowWithCurrentLocation` from web/topbar.js, including all three of
-// its paths.
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore } from '@/stores/tripStore';
 import { withStopAt } from './stops';

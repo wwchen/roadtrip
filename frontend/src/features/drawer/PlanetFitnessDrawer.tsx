@@ -14,8 +14,6 @@ import {
 import type { DrawerContentProps } from './registry';
 
 /**
- * Planet Fitness drawer. Port of web/drawer/planet-fitness.js.
- *
  * OSM-imported gym pins, so the data is sparse and the CTAs lean on other sites:
  * Google Maps for routing (the coords-query form works on iOS, Android and web and
  * routes from the user's own location), and the planetfitness.com page when the OSM

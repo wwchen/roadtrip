@@ -1,6 +1,6 @@
 // The selected day's status line and its one action.
 //
-// Port of web/availability/day-detail.js. It appears only for a day with *no*
+// It appears only for a day with no
 // openings — a day with availability gets the site list instead, which is a more
 // useful thing to look at than a sentence saying there is availability.
 //

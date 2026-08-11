@@ -1,7 +1,6 @@
 // How far along the route a point sits.
 //
-// Port of `indexRoute` / `distanceAlongRouteKm` from web/topbar.js. It exists so the
-// corridor's campgrounds can be listed in the order a driver meets them, which is the
+// Campgrounds are listed in the order a driver meets them, which is the
 // only ordering that makes the card list useful: sorting by straight-line distance
 // from the origin puts a campground 20km off the far end of the route above one the
 // driver passes in the first hour.

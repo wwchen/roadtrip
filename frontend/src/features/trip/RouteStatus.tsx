@@ -1,13 +1,4 @@
 // The line under the topbar's buttons.
-//
-// The vanilla had one `#tb-status` element whose `innerHTML` was written by four
-// callers — a "Computing route…" message, a leg breakdown, a routing error, and a
-// geolocation failure — and whose only distinction between them was a CSS class.
-// Four states, one node, and the last writer won: a routing error could be
-// overwritten by a leg table from a previous route, and there was no way to show
-// both a leg breakdown and a location failure.
-//
-// Here each is its own element with its own rules, and precedence is explicit.
 import type { RouteLegLine } from './route-summary';
 
 export interface RouteStatusProps {

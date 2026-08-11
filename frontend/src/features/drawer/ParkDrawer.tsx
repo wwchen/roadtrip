@@ -12,14 +12,13 @@ import {
 import type { DrawerContentProps } from './registry';
 
 /**
- * National / state park drawer. Port of web/drawer/park.js.
+ * National / state park drawer.
  *
  * The two kinds differ only in labels and in the external link, which is why the
- * legacy module took a `kind` discriminator rather than existing twice.
+ * one component takes a `kind` discriminator rather than existing twice.
  *
  * **Unreachable from the map today**, and honestly so: the React map does not
- * request park categories, because the vanilla map stopped doing so (see
- * `map/viewport.ts`). It is here because the drawer is dispatched by category and a
+ * request park categories (see `map/viewport.ts`). It is here because the drawer is dispatched by category and a
  * park can still arrive by deep link (`?poi=<park id>`) or from a backend search
  * hit — the id path does not care which layer, if any, is painted.
  */

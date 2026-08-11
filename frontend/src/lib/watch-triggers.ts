@@ -1,9 +1,4 @@
-// Watch trigger vocabulary and accessors. Typed port of the pure helpers in
-// web/availability/watch-editor.js — behavior preserved exactly.
-//
-// Lives in lib/ rather than features/watches/ because two features read it: the
-// watches page (Phase 1) and the availability week's inline watch editor
-// (Phase 4d). Pure — no React, no fetch.
+// Watch trigger vocabulary shared by the watches page and inline editor.
 import type { Watch } from '@/api/watches-api';
 
 export const TRIGGER_KIND_SLACK_NOTIFY = 'slack_notify';

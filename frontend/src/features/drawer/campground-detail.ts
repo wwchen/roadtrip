@@ -1,14 +1,8 @@
 // Everything the campground drawer reasons about, as data.
 //
-// Port of web/campground-card.js (589 lines of HTML-string builders shared by the
-// old popup and drawer paths) plus the composing logic in web/drawer/campground.js.
-//
-// **The shape change that matters: no HTML.** The originals returned markup, and for
-// links and emails they passed `{ __html }` descriptors around so a caller could
-// interpolate them. Here every function returns structured values — a detail row is
+// Functions return structured values — a detail row is
 // `{ label, value }` where the value is text, a link, or chips — and the component
-// decides how to render. That removes the whole class of "escaped in one branch,
-// forgotten in another" bug, and it makes the rules testable without parsing strings.
+// decides how to render.
 //
 // Provider markup (fees, directions, description) is the one exception and does not
 // live here: it goes through `lib/upstream-html.ts`, which is the only sanctioned

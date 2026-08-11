@@ -1,10 +1,5 @@
 // Reading a per-day availability row.
 //
-// Port of web/availability/day-fields.js. Small enough to look like it belongs
-// inside a component, and it does not: five call sites across the matrix, the site
-// list and the day-detail panel all need the same answer to "how many sites are
-// bookable on this day", and the row can express it two different ways.
-//
 // A day carries `campsite_statuses` (every campsite → its status) and usually
 // `available_campsite_ids` as well. The ids are authoritative when present; when
 // they are absent they are derived from the statuses, which is what makes the

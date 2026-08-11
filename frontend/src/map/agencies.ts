@@ -1,10 +1,7 @@
 // The campground legend's agency logic.
 //
 // Campgrounds are the one overlay with no on/off switch: there are 50+ managing
-// agencies and the legend filters by them instead. Port of the agency half of
-// web/layers.js (`featureAgency`, `agencyCountsInViewport`,
-// `renderCampgroundLegend`'s counting, and `applyCGFilter`'s expression), kept
-// pure so the rules are testable without a map.
+// agencies and the legend filters by them instead.
 //
 // The legend is VIEWPORT-SCOPED: rows come from the campgrounds currently in
 // view, with no accumulated "agencies I have ever seen" set, so panning away

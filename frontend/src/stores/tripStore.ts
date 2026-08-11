@@ -1,18 +1,10 @@
 // The trip planner's state.
 //
-// Replaces the `trip` singleton from the retired vanilla topbar.
-//
-// Two members of the legacy singleton are deliberately absent, because they are
-// imperative handles rather than state:
-//   routeAbort       — an AbortController; the fetching layer owns it (TanStack
-//                      Query supplies one per query).
-//   endpointMarkers  — MapLibre Marker instances, parallel to `stops`. DOM
-//                      handles belong in the imperative `src/map/` module's refs,
-//                      the same reason the map instance itself stays out of here.
+// Abort controllers and MapLibre markers belong to the query and map layers,
+// respectively; this store contains serializable planner state only.
 import { create } from 'zustand';
 import type { Feature, FeatureCollection } from 'geojson';
 
-/** Constants ported from web/topbar/state.js. */
 export const MAX_STOPS = 25;
 
 // Corridor: a buffered polygon around the active route, used to filter

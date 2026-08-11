@@ -1,12 +1,6 @@
 // Which drawer a POI gets, by category.
 //
-// The vanilla map had no dispatch at all: each layer's click handler called its own
-// `openXDrawer` directly, so "what opens for this POI" was spread across five
-// modules and only worked for POIs that came from a painted layer. A POI reached by
-// deep link (`?poi=<id>`) has a category and nothing else, which is exactly what a
-// table keys off.
-//
-// Same shape as `map/overlays.ts`'s registry, and for the same reason: adding a
+// Same shape as `map/overlays.ts`'s registry: adding a
 // category should be a row, not another branch. A `Map`, not an object literal,
 // because the key arrives from the network — a plain-object lookup would resolve
 // `Object.prototype` members (the bug documented in `lib/settings-errors.ts`).

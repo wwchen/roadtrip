@@ -1,8 +1,5 @@
 // The drawer's deep link: `?poi=<id>`.
 //
-// Port of the POI half of web/share-links.js (`poiShareUrl`, `clearVisiblePoiUrl`,
-// and the same-origin guard in `replaceVisibleUrl`). The route half is Phase 4e.
-//
 // `replaceState`, never `pushState`: opening a drawer is not a navigation, and a
 // history entry per pin click would turn Back into "close the last twelve
 // drawers". The smoke suite loads `/?poi=…` directly, so this parameter is a

@@ -1,7 +1,6 @@
 // Reading a campsite catalog row into facts a camper cares about.
 //
-// The pure half of web/availability/site-detail.js. All of it is normalisation, and
-// all of that normalisation exists for one reason: the catalog row carries a
+// The catalog row carries a
 // `source_payload` that is whatever the provider stored, and the four providers
 // disagree about the spelling of every field in it. `min_capacity` /`minCapacity` /
 // `min_num_people` / `minNumPeople` are the same number from four vendors.

@@ -1,27 +1,4 @@
 // The availability grid, mounted inside the campground drawer.
-//
-// Port of `mountAvailabilityWeek` in web/availability/availability-week.js — the 1,226
-// line controller that owned a mutable `ctx` object, six delegated event listeners on
-// a host element, and `innerHTML` re-renders that had to capture and restore the
-// matrix's scroll position around every state change.
-//
-// Most of that machinery is gone rather than translated, and it is worth saying which
-// parts and why, because the absences are the point:
-//
-//   - **The scroll capture/restore dance is gone.** It existed because re-rendering
-//     replaced the scrolling element, losing `scrollLeft` — twice over for a booking
-//     tap, which needed a `requestAnimationFrame` double-restore. React keeps the
-//     node, so the scroll position simply persists.
-//   - **The request sequence counters are gone.** `weekRequestSeq` / `sitesRequestSeq`
-//     were compared at every await point so a stale response could not paint. Query
-//     keys do that structurally.
-//   - **The filter focus restoration is gone.** `restoreMatrixFilterFocus` re-focused
-//     the search box and restored its caret after each re-render, because the input
-//     was destroyed on every keystroke. A controlled input keeps both.
-//
-// What is NOT simplified is the arming behaviour, the capability gates, and the state
-// resets on week change — those are product decisions, and they are carried over
-// exactly. See the notes at each.
 import { useCallback, useMemo } from 'react';
 import { useToast } from '@ui';
 import type { PoiFeature } from '@/lib/poi';

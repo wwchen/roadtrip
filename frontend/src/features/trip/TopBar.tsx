@@ -1,16 +1,5 @@
-// The trip planner's top-left panel.
-//
-// Port of `injectDom` + `renderRows`' button visibility + `bindEvents` +
-// `onInputKey`'s pick half from web/topbar.js. The controller is
-// `useTripPlanner`, the data comes from `useRoute` / `useOnRoutePois` /
-// `useSearchResults`, and this file is the composition — which is why it holds only
-// the state that is genuinely about *this* panel: which row is being typed in, what
-// has been typed, and which dropdown row the keyboard has selected.
-//
-// One piece of the vanilla is deliberately absent: the `#tb-status` element's
-// `innerHTML`. Its three contents (a leg breakdown, a routing error, a geolocation
-// failure) are three components now, which is what makes the "computing route…"
-// state distinguishable from the "no route" state without reading a CSS class.
+// Trip-planner composition. Local state is limited to drafts, focus, and keyboard
+// selection; route, corridor, and search data live in their respective hooks.
 import { useMemo, useState, type ReactNode } from 'react';
 import { RouteStatus } from './RouteStatus';
 import { SearchDropdown } from './SearchDropdown';

@@ -1,5 +1,3 @@
-// Client for the POI surface. Typed port of web/api/poi-api.js.
-//
 // The three read paths deliberately differ in how they fail, because their
 // callers differ:
 //   searchPois        — swallows failure into an empty result list (typeahead)

@@ -12,19 +12,11 @@ export function profileValuesOf(settings: SettingsResponse): ProfileValues {
   return { display_name: settings.profile.display_name || '' };
 }
 
-/**
- * True when the edited values differ from what is saved.
- *
- * Port of `computeProfileDirty`. Kept a pure function rather than folded into the
- * component because the settings modal's Save button and its
- * discard-changes guard both read it, and it was already exported and tested that
- * way in the original.
- */
+/** True when the edited values differ from what is saved. */
 export function isProfileDirty(settings: SettingsResponse, values: ProfileValues): boolean {
   return values.display_name !== (settings.profile.display_name || '');
 }
 
-/** Port of `buildProfilePayload`. */
 export function buildProfilePayload(values: ProfileValues): { display_name: string } {
   return { display_name: values.display_name };
 }

@@ -1,9 +1,4 @@
 // How a watch reads: its date, its age, and what to call it.
-//
-// Extracted from `features/watches/WatchTable.tsx`, which ported them in Phase 1,
-// because the alerts panel (4e) is the second surface that shows a table of watches
-// and re-implementing three formatters would guarantee the two drift. `WatchTable`
-// re-exports them so its own suite and call sites are unchanged.
 import type { Watch } from '@/api/watches-api';
 
 const RELATIVE_MINUTE_S = 60;

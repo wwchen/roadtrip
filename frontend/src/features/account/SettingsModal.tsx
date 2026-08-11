@@ -46,29 +46,8 @@ export interface SettingsModalProps {
   onClose: () => void;
 }
 
-/**
- * Rebuild of web/account/settings-modal.js.
- *
- * Three tabs over one settings document: Profile and Notifications each save their
- * own slice; Account only fires actions and so has no Save.
- *
- * **Anchored on `dataUpdatedAt`.** Each panel's edits live here, seeded from the
- * loaded settings, and both panels are keyed on the query's `dataUpdatedAt` so a
- * successful save remounts them against the server's answer. That matters for more
- * than tidiness: saving a Slack token produces a new `slack_token_hint`, and the
- * masked field has to show the new one rather than the value it was seeded with. The
- * legacy modal achieved this by re-reading settings and re-mounting the panel by
- * hand.
- *
- * The tab bar is buttons, not the anchor pattern the availability dashboard uses:
- * these tabs are modal-local state with no URL of their own, so there is nothing to
- * link to. (LDS's `Tabs` still cannot report which tab was clicked — see
- * `TabNav.tsx` — so the buttons are hand-rolled either way.)
- *
- * No dirty-guard on close, matching the original: it closed on backdrop click with
- * no confirmation, and inventing one here would be a behaviour change dressed as a
- * port.
- */
+// dataUpdatedAt keys editable panels so a save remounts fields from the server's
+// answer, including a newly generated Slack-token hint.
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const settingsQuery = useSettings();
   const settings = settingsQuery.data;

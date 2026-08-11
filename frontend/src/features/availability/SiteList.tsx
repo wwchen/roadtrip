@@ -1,6 +1,6 @@
 // "Available sites" for the selected day.
 //
-// Port of web/availability/site-list.js. Renders nothing at all when the selected day
+// Renders nothing when the selected day
 // has no openings: the day-detail panel owns that case, and an empty accordion header
 // reading "Available sites (0)" is a worse answer than no accordion.
 //

@@ -1,11 +1,5 @@
 // The route line and its corridor fill.
 //
-// Port of `drawRoute` / `removeRouteLayer` / `updateCorridor`'s map half /
-// `firstSymbolLayerId` / `fitMapToRoute` from web/topbar.js. Imperative and
-// outside React for the same reason every other overlay is: MapLibre owns the
-// layer list, and expressing it as JSX would mean reconciling two trees that
-// disagree about what "removed" means.
-//
 // Two orderings matter and both are encoded here rather than left to insertion
 // order. The corridor fill goes UNDER the basemap's first symbol layer, so place
 // labels stay readable through it; the route line goes on top of everything,

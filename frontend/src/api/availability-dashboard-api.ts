@@ -1,5 +1,4 @@
-// Client for /api/availability/pollers|runs|changes GETs, plus the "check now"
-// force-pull POST. Typed port of web/api/availability-dashboard-api.js.
+// Availability dashboard reads plus the "check now" force-pull action.
 import type { AvailabilityStatus } from '@/lib/availability-status';
 import { jsonGetOk, jsonPost, type RequestOptions } from './http';
 

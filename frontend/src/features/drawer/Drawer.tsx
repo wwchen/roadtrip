@@ -14,9 +14,6 @@ export interface DrawerProps {
 /**
  * The drawer shell: a left-hand panel on desktop, a bottom sheet on mobile.
  *
- * Port of the DOM lifecycle in web/drawer/chrome.js. Content is the caller's
- * problem — this owns the frame, the animation, and dismissal.
- *
  * **The backdrop deliberately does not take pointer events.** MapLibre has to keep
  * receiving pan and zoom while the drawer is open, so the usual "click the scrim to
  * dismiss" is impossible; the equivalent is a map click that hits no pin, which

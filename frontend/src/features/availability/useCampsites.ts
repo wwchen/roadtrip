@@ -1,9 +1,5 @@
 // The POI's campsite catalog: the matrix's rows.
 //
-// Replaces `fetchSites` in web/availability/availability-week.js, including its
-// `sitesRequestSeq` guard, for the same reason `useWeekAvailability` replaces the
-// week counter: the key is the guard.
-//
 // Separate from the availability request even though the grid needs both, because
 // they change on different schedules. The catalog is a POI's fixed inventory —
 // stable for the life of the drawer, and identical across every week the user pages

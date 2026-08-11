@@ -1,9 +1,6 @@
 // How wide "along the route" is.
 //
-// Port of the `#tb-corridor` range input from web/topbar.js. A plain controlled
-// `<input type="range">` rather than an LDS control, for the reason the watch
-// editor's toggles are: LDS's form components are uncontrolled by design, and this
-// one drives a live map repaint on every tick.
+// This remains a controlled range input because it drives live map repainting.
 import {
   CORRIDOR_MAX_MILES,
   CORRIDOR_MIN_MILES,

@@ -1,10 +1,7 @@
 // The Tesla-specific reasoning behind the supercharger drawer.
 //
-// Pure, and separated from the component because this is where the port's risk
-// lives: pricebook shapes, Tesla's SCREAMING_SNAKE amenity vocabulary, and a 7×24
-// occupancy histogram read in the site's own timezone. The legacy versions were
-// HTML-string builders in web/drawer/supercharger.js with the rules inlined; none of
-// it was testable.
+// Handles pricebook shapes, Tesla's SCREAMING_SNAKE amenity vocabulary, and a 7×24
+// occupancy histogram in the site's own timezone.
 //
 // `now` is a parameter throughout rather than a `new Date()` at the point of use, so
 // "today" and "the current hour" are testable without faking the clock.

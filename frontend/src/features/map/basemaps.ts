@@ -1,13 +1,7 @@
 // The basemap registry.
-//
-// Typed port of web/basemap.js's data half. The DOM half (`initBasemapPicker`,
-// `bindSatelliteToggle`) does not come with it: those wired a `<select>` and a
-// checkbox by id, which is React's job now. What lives here is the registry, the
-// persisted-choice logic, and the two raster style builders — all pure, all testable.
 import type { StyleSpecification } from 'maplibre-gl';
 
-/** Where the chosen basemap is remembered. Same key the vanilla map used, so a
- *  returning user keeps their basemap across the migration. */
+/** Where the chosen basemap is remembered. */
 export const BASEMAP_STORAGE_KEY = 'basemap';
 
 export const DEFAULT_BASEMAP = 'openfreemap-liberty';
