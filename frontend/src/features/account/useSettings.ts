@@ -2,6 +2,7 @@
 //
 // Replaces the imperative fetch/mutate/re-read chain in
 // web/account/settings-modal.js.
+import { useEffect } from 'react';
 import {
   useMutation,
   useQuery,
@@ -18,13 +19,34 @@ import {
   type SettingsResponse,
   type UpdateNotificationsFields,
 } from '@/api/account-api';
+import { coerceChoice } from '@/lib/theme';
 import { queryKeys } from '@/queries/keys';
+import { useThemeStore } from '@/stores/themeStore';
 
+/**
+ * The settings document, plus the side effect of the server being the
+ * authority on theme: whenever a load or a save resolves this document, the
+ * document's theme wins over whatever preview is currently applied.
+ *
+ * Lives here rather than in a component so every consumer of this hook agrees
+ * on the applied theme — there is exactly one place a `settings` load can
+ * change the document, no matter how many components call `useSettings`.
+ */
 export function useSettings(): UseQueryResult<SettingsResponse> {
-  return useQuery({
+  const query = useQuery({
     queryKey: queryKeys.settings(),
     queryFn: ({ signal }) => fetchSettings({ signal }),
   });
+
+  // Runs on each successful load and after each save, which is also what
+  // refreshes the localStorage mirror the boot script reads.
+  const serverTheme = query.data?.profile.theme;
+  useEffect(() => {
+    if (serverTheme === undefined) return;
+    useThemeStore.getState().setChoice(coerceChoice(serverTheme));
+  }, [serverTheme]);
+
+  return query;
 }
 
 /**

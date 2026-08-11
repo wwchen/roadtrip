@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Banner, Button, Modal, Skeleton } from '@ui';
 import { signOut } from '@/api/auth-api';
+import { coerceChoice } from '@/lib/theme';
 import { settingsErrorMessage } from '@/lib/settings-errors';
+import { useThemeStore } from '@/stores/themeStore';
 import { AccountPanel } from './AccountPanel';
 import {
   NotificationsPanel,
@@ -73,6 +75,28 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const settingsQuery = useSettings();
   const settings = settingsQuery.data;
   const version = settingsQuery.dataUpdatedAt;
+
+  // The saved choice, tracked in a ref so the revert-on-close effect below runs
+  // its cleanup exactly once, on unmount, rather than on every edit.
+  const savedChoice = settings ? coerceChoice(settings.profile.theme) : null;
+  const savedChoiceRef = useRef(savedChoice);
+  savedChoiceRef.current = savedChoice;
+
+  // Previewing a theme (ProfilePanel's Appearance control) applies it to the
+  // document immediately, ahead of Save. If the modal closes without saving,
+  // that preview must not outlive it — the applied theme has to equal the saved
+  // theme whenever the modal is closed. `[]` deps: this arms the cleanup once,
+  // on unmount, reading the latest saved choice through the ref rather than
+  // re-subscribing on every keystroke.
+  useEffect(
+    () => () => {
+      const saved = savedChoiceRef.current;
+      // Unconditional: setChoice is idempotent, so a saved preview costs one
+      // no-op rather than an equality check that could go stale.
+      if (saved) useThemeStore.getState().setChoice(saved);
+    },
+    [],
+  );
 
   const [activeTab, setActiveTab] = useState<TabId>(TAB_PROFILE);
   const [notice, setNotice] = useState<Notice | null>(null);
