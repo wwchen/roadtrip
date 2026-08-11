@@ -2,16 +2,14 @@
    Page chrome shared by every migrated page.
 
    The legacy shells each carried this as an inline <style> block; it lives here
-   once so the three pages cannot drift. Component styling comes from LDS — this
+   once so the four pages cannot drift. Component styling comes from LDS — this
    is only the frame LDS does not own: the page background, the centred column,
    and the title/nav row.
 
-   Colors are `--rt-*` tokens from `src/tokens/tokens.css`, not LDS's `--c-*`.
-   Both cascades are loaded (see @ui/styles.css) and the `--rt-*` set is what
-   scripts/check-color-tokens.mjs validates, so new page CSS composes from it.
-   Reconciling the two sets — a thin `--rt-*` alias layer over LDS's names, or
-   repointing the JS bridge at them — is still outstanding; Phase 5 moved
-   `tokens.css` into this tree but deliberately did not merge the vocabularies.
+   Colors are semantic `--rt-*` roles. `@ui/styles.css` loads the Zion LDS theme,
+   the Roadtrip token source, and the bridge that maps app chrome onto that theme.
+   `scripts/check-color-tokens.mjs` validates the result, so page CSS composes from
+   semantic roles rather than LDS palette values or raw colors.
    --------------------------------------------------------------------------- */
 
 * {

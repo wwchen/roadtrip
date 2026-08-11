@@ -45,6 +45,7 @@ export default defineConfig({
         map: here('./index.html'),
         availability: here('./availability.html'),
         watches: here('./watches.html'),
+        gallery: here('./gallery.html'),
       },
       output: {
         // MapLibre is ~800kB minified and changes only when we bump it, while the

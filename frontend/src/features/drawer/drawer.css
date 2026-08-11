@@ -10,7 +10,8 @@
 
    Two shapes, one component:
      mobile  — bottom sheet, 60dvh, 90dvh in the `--full` snap state, drag-dismiss
-     ≥768px  — left-hand panel, full height, no handle, an X to close
+     ≥768px  — left-hand panel, full height, no handle, an X to close; the
+               topbar stays above it so search and trip navigation remain reachable
    --------------------------------------------------------------------------- */
 
 .rt-drawer-backdrop {

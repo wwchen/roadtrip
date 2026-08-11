@@ -150,7 +150,7 @@ describe('selectAllStopsFilled', () => {
 });
 
 describe('selectRouteActive', () => {
-  // Mirrors the legacy __rtRouteActive predicate exactly: directions mode, a
+  // Route activity requires directions mode, a
   // fetched route, and every slot filled.
   test('needs all three conditions', () => {
     trip().setStops([stop('a'), stop('b')]);

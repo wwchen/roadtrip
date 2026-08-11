@@ -5,8 +5,8 @@
 // deliberate:
 //
 //   the puck follows the STORE, not the control event. `mapStore.userLocation` has
-//       three writers now (this control, the topbar's locate button, and the
-//       `__rtUseCurrentLocationForTripStop` seam), and the vanilla only drew a puck
+//       two writers now (this control and the topbar's locate button), and the
+//       vanilla only drew a puck
 //       for the first of them — so locating yourself from the topbar left the map
 //       with no "you are here" at all. One effect on one field fixes that for free,
 //       and keeps "single source of truth for where am I" true rather than aspirational.

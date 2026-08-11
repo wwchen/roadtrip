@@ -41,7 +41,7 @@ export const subline = (parts: (string | null | undefined | false)[]): string =>
  *
  * `mapStore.userLocation` is written by the map's locate-me control
  * (`useUserLocation`), by the topbar's locate button, and by the
- * `__rtUseCurrentLocationForTripStop` seam. Until one of them has a fix this is
+ * current-location route helper. Until one of them has a fix this is
  * empty, which is what the vanilla drawer shows without a location too.
  */
 export function useDistanceTo(lng: number | undefined, lat: number | undefined): string {
@@ -100,7 +100,7 @@ export interface DirectionsButtonProps {
  * "Directions" / "Add stop", depending on whether a trip is being built.
  *
  * The vanilla version was an HTML string with `data-*` attributes, picked up by a
- * delegated listener in chrome.js that called `window.__rtAddTripStop` — indirection
+ * delegated listener in the vanilla chrome — indirection
  * that existed so the drawer did not import the topbar. `tripStore` is that seam
  * now, so the button calls it directly and the data attributes go away.
  *

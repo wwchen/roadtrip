@@ -11,7 +11,7 @@
 // `innerHTML`. Its three contents (a leg breakdown, a routing error, a geolocation
 // failure) are three components now, which is what makes the "computing route…"
 // state distinguishable from the "no route" state without reading a CSS class.
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { RouteStatus } from './RouteStatus';
 import { SearchDropdown } from './SearchDropdown';
 import { StopRow } from './StopRow';
@@ -26,7 +26,6 @@ import { useTripCards } from './useTripCards';
 import { useSearchResults } from './useSearchResults';
 import { useSharedTrip } from './useSharedTrip';
 import { useTripPlanner } from './useTripPlanner';
-import { useMapStore } from '@/stores/mapStore';
 import { MAX_STOPS } from '@/stores/tripStore';
 import './topbar.css';
 
@@ -43,7 +42,6 @@ export function TopBar({ alerts, auth }: TopBarProps) {
   const route = useRoute();
   const corridor = useOnRoutePois();
   const shared = useSharedTrip();
-  usePublishedLocationFiller(planner.useCurrentLocation);
 
   // Placeholder cards from the corridor response, then hydrated per card. Both steps
   // are cheap enough to run per render: the index is one pass over the route's
@@ -241,33 +239,6 @@ export function TopBar({ alerts, auth }: TopBarProps) {
       ) : null}
     </div>
   );
-}
-
-/**
- * Publish `window.__rtUseCurrentLocationForTripStop`.
- *
- * A test seam, not dead API: `SmokeTest.kt` (~line 803) calls it with a seeded
- * location to drive the "from my location" path without a real permission prompt,
- * then asserts row 0 reads "Current location". The Phase 0 audit recorded this
- * global as read by nothing and left it out of the transition shim; that was wrong,
- * and a React `/` without it fails that smoke step against a page that works.
- *
- * It lives here rather than in the shim because filling a row needs the planner,
- * and the shim has no hooks. Removed on unmount, so a remounted topbar cannot leave
- * a stale closure behind.
- */
-function usePublishedLocationFiller(useCurrentLocation: (index: number) => void): void {
-  useEffect(() => {
-    window.__rtUseCurrentLocationForTripStop = (index, location) => {
-      if (location && Number.isFinite(location.lng) && Number.isFinite(location.lat)) {
-        useMapStore.getState().setUserLocation({ lng: location.lng, lat: location.lat });
-      }
-      useCurrentLocation(index);
-    };
-    return () => {
-      delete window.__rtUseCurrentLocationForTripStop;
-    };
-  }, [useCurrentLocation]);
 }
 
 function DirectionsIcon() {

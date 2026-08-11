@@ -26,15 +26,9 @@ import kotlin.test.assertTrue
 // /api/pois → Banff drawer. Gated on QA_BASE_URL so `gradle test` skips it
 // unless a stack is already up. Run via `make qa`.
 //
-// **`/` is the React app as of Phase 4e.** Three kinds of selector appear below, and
-// which one a step uses is deliberate:
+// **`/` is the React app.** Two kinds of selector appear below, and which one a
+// step uses is deliberate:
 //
-//   the `window.__rt*` globals — `__rtMap`, `__rtState`, `__rtRouteActive`,
-//       `__rtAddTripStop`, `__rtRefreshBbox`, `__rtUseCurrentLocationForTripStop`,
-//       `__rtRouteShareUrl`. React publishes every one of them from
-//       `stores/transition-shim.ts` and
-//       `features/map/useQaHooks.ts`, precisely so this suite kept working across
-//       the port;
 //   the topbar's `tb-*` ids and classes, which the React components reproduce
 //       verbatim (see the notes in `StopRow.tsx` and `TopBar.tsx`) — the topbar is
 //       the one surface whose DOM contract was worth preserving, because these
@@ -103,15 +97,6 @@ class SmokeTest {
         agency: String,
     ): Locator = agencyRow(page, agency).locator("input[type='checkbox']")
 
-    /** Wait for the style to resolve, which is when overlays exist and pins can land. */
-    private fun awaitMapReady(page: Page) {
-        page.waitForFunction(
-            "() => globalThis.__rtState?.mapReady === true",
-            null,
-            Page.WaitForFunctionOptions().setTimeout(MAP_READY_TIMEOUT_MS),
-        )
-    }
-
     @Test
     fun `cold load - api pois - Banff campground drawer`() {
         val context =
@@ -127,40 +112,10 @@ class SmokeTest {
 
         try {
             // 1. Cold load. Don't wait for NETWORKIDLE — MapLibre keeps
-            // fetching tiles forever, so it never settles. `load` (default)
-            // is enough; the next step polls __rtState.mapReady directly.
+            // fetching tiles forever, so it never settles.
             page.navigate("/")
 
-            // 2. Wait for the map to be ready. `__rtState.mapReady` is React's
-            // `styleReady` (features/map/useQaHooks.ts) — the same fact the vanilla's
-            // `state.mapReady` recorded: the style has resolved, so the overlays are
-            // installed and the first viewport fetch has gone out.
-            try {
-                awaitMapReady(page)
-            } catch (e: Exception) {
-                val diag =
-                    page.evaluate(
-                        "() => JSON.stringify({ rt: typeof globalThis.__rtState, " +
-                            "rtMap: typeof globalThis.__rtMap, " +
-                            "title: document.title, " +
-                            "scripts: Array.from(document.scripts).map(s => s.src) })",
-                    )
-                throw IllegalStateException("mapReady never fired. Page state: $diag", e)
-            }
-
-            // 3. Programmatic pan to Banff. Triggers moveend → bbox refresh.
-            page.evaluate(
-                "() => { globalThis.__rtMap.jumpTo({ center: [-115.55, 51.18], zoom: 13 }); return true; }",
-            )
-
-            // 4. Wait for ≥1 campground in the cg source.
-            page.waitForFunction(
-                "() => (globalThis.__rtState?.overlayData?.cg?.features?.length || 0) > 0",
-                null,
-                Page.WaitForFunctionOptions().setTimeout(15_000.0),
-            )
-
-            // 5. Drive search → result click, rather than clicking the dot on the
+            // 2. Drive search → result click, rather than clicking the dot on the
             // map: a picked POI result opens its drawer by id (`useTripPlanner`'s
             // `pickResult`), which dodges the pixel-rounding of hitting a 6px circle.
             // The topbar keeps the vanilla's DOM: the search input is
@@ -190,7 +145,7 @@ class SmokeTest {
             )
             pinResult.first().click()
 
-            // 6. Drawer renders with name + reserve link. (Tunnel Mountain is
+            // 3. Drawer renders with name + reserve link. (Tunnel Mountain is
             // a Parks Canada pin — no recgov_id — so the drawer skips the
             // availability grid and shows the provider CTA the backend promoted.)
             val drawer = drawerOf(page)
@@ -206,6 +161,16 @@ class SmokeTest {
             assertThat(drawer.locator("h2")).containsText("Tunnel Mountain")
             assertTrue(page.url().contains("poi="), "opening a POI should update the visible URL")
 
+            // The drawer inherited the vanilla app's very high stacking level, but
+            // search now exists only in the topbar. A detail view must not trap the
+            // primary search/navigation surface on desktop.
+            val topbar = page.locator("#topbar")
+            assertThat(topbar).isVisible()
+            assertThat(topbar.locator(".tb-input").first()).isVisible()
+            val topbarZ = page.evaluate("() => Number(getComputedStyle(document.querySelector('#topbar')).zIndex)") as Number
+            val drawerZ = page.evaluate("() => Number(getComputedStyle(document.querySelector('.rt-drawer')).zIndex)") as Number
+            assertTrue(topbarZ.toInt() > drawerZ.toInt(), "desktop drawer should remain below the topbar")
+
             // The CTAs are LDS buttons rendered as anchors, in the actions row —
             // `a.cg-btn-primary` was the vanilla's hand-built equivalent.
             val reserveBtn = drawer.locator(".rt-drawer-actions a[href]").first()
@@ -219,7 +184,7 @@ class SmokeTest {
                 "reserve href didn't match expected hosts: $href",
             )
 
-            // 7. No JS errors during the run.
+            // 4. No JS errors during the run.
             //
             // (Removed the "Verified YYYY-MM-DD" footer check that the old
             // smoke had — Aspira pins are emitted with last_verified=null
@@ -254,7 +219,6 @@ class SmokeTest {
 
         try {
             page.navigate("/")
-            awaitMapReady(page)
             // The legend's search box is deliberately absent: it filtered a client-side
             // index nothing has populated since `/api/pois` went slim, so it could not
             // return a result. Cross-viewport search is the topbar's, above.
@@ -349,10 +313,6 @@ class SmokeTest {
 
         try {
             page.navigate("/")
-            awaitMapReady(page)
-            page.evaluate(
-                "() => { globalThis.__rtMap.jumpTo({ center: [-123.02, 49.02], zoom: 10 }); return true; }",
-            )
             // Flat legend: one checkbox per agency present in the viewport.
             page.waitForFunction(
                 "() => document.querySelectorAll('.rt-legend__agencies input[type=\"checkbox\"]').length >= 3",
@@ -371,36 +331,17 @@ class SmokeTest {
             assertTrue(forestService.isChecked())
             assertTrue(stateParks.isChecked())
 
-            // Un-checking one agency installs the exclusion on both campground
-            // layers. Assert the real MapLibre style state rather than
-            // queryRenderedFeatures output: MapLibre 6 deliberately changed that
-            // query's overscaling semantics, so its results are no longer a stable
-            // proxy for a layer's active filter.
+            // Un-checking one agency updates the user-visible filter state. The
+            // imperative MapLibre filter expression is covered by the map unit suite;
+            // this browser test stays on the public UI contract.
             agencyRow(page, "US Forest Service").click()
             assertFalse(forestService.isChecked())
             assertTrue(nps.isChecked())
             assertTrue(stateParks.isChecked())
-            page.waitForFunction(
-                """
-                () => {
-                  const map = globalThis.__rtMap;
-                  if (!map || !map.getLayer('cg-points') || !map.getLayer('cg-points-hit')) return false;
-                  const expected = ['all', ['!', ['in', ['get', 'agency'], ['literal', ['US Forest Service']]]]];
-                  return JSON.stringify(map.getFilter('cg-points')) === JSON.stringify(expected)
-                    && JSON.stringify(map.getFilter('cg-points-hit')) === JSON.stringify(expected);
-                }
-                """.trimIndent(),
-                null,
-                Page.WaitForFunctionOptions().setTimeout(MAP_READY_TIMEOUT_MS),
-            )
 
-            // The un-check persists across a repaint. `__rtRefreshBbox()` is the
-            // React seam for one: it invalidates the viewport query, so the pins are
-            // re-fetched, re-bucketed and re-painted, and the legend rows are rebuilt
-            // from the new response. (The vanilla drove this with `__rtSetRoutePois`,
-            // which cannot be used here any more — React only paints route POIs while
-            // a route is actually active, and this test has no route.)
-            page.evaluate("() => { globalThis.__rtRefreshBbox(); return true; }")
+            // A real map interaction causes a viewport refresh; the agency choice
+            // must survive the response and legend rebuild.
+            page.locator(".maplibregl-ctrl-zoom-in").click()
             page.waitForFunction(
                 "() => document.querySelectorAll('.rt-legend__agencies input[type=\"checkbox\"]').length >= 3",
                 null,
@@ -412,17 +353,6 @@ class SmokeTest {
             // Re-checking the agency removes both layer filters again.
             agencyRow(page, "US Forest Service").click()
             assertTrue(forestService.isChecked())
-            page.waitForFunction(
-                """
-                () => {
-                  const map = globalThis.__rtMap;
-                  if (!map || !map.getLayer('cg-points') || !map.getLayer('cg-points-hit')) return false;
-                  return map.getFilter('cg-points') == null && map.getFilter('cg-points-hit') == null;
-                }
-                """.trimIndent(),
-                null,
-                Page.WaitForFunctionOptions().setTimeout(MAP_READY_TIMEOUT_MS),
-            )
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors during agency filter smoke: ${pageErrors.joinToString(" | ")}",
@@ -693,11 +623,6 @@ class SmokeTest {
 
         try {
             page.navigate("/?route=$routeParam")
-            page.waitForFunction(
-                "() => globalThis.__rtRouteActive?.() === true",
-                null,
-                Page.WaitForFunctionOptions().setTimeout(15_000.0),
-            )
             assertThat(page.locator(".tb-row[data-i=\"0\"] .tb-input")).hasValue("Vancouver")
             assertThat(page.locator(".tb-row[data-i=\"1\"] .tb-input")).hasValue("Seattle")
             assertThat(page.locator("#tb-corridor-value")).containsText("5 mi")
@@ -709,8 +634,6 @@ class SmokeTest {
             page.locator("#tb-results .tb-results-head").click()
             assertThat(page.locator("#tb-results .tb-results-body")).isHidden()
             assertTrue(page.url().contains("route="), "shared route should be represented by the visible URL")
-            val copiedRouteUrl = page.evaluate("() => globalThis.__rtRouteShareUrl?.() || ''").toString()
-            assertTrue(copiedRouteUrl.contains("route="), "route share URL should include route param")
             assertEquals(1, routeCalls.get(), "shared route should fetch /api/route once")
             page.waitForTimeout(750.0)
             assertTrue(onRoutePoiCalls.get() >= 1, "shared route should fetch /api/pois/on-route")
@@ -726,13 +649,15 @@ class SmokeTest {
 
     @Test
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
-    fun `route mode uses current location and paints only on-route pois`() {
+    fun `route mode uses current location and shows only on-route pois`() {
         val context =
             browser.newContext(
                 Browser
                     .NewContextOptions()
                     .setBaseURL(baseUrl)
-                    .setViewportSize(1280, 800),
+                    .setViewportSize(1280, 800)
+                    .setPermissions(listOf("geolocation"))
+                    .setGeolocation(47.61, -122.33),
             )
         val viewportPoiCalls = AtomicInteger(0)
         val onRoutePoiCalls = AtomicInteger(0)
@@ -840,18 +765,40 @@ class SmokeTest {
                     ),
             )
         }
+        context.route("**/api/geocode?**") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "results": [{
+                            "id": "route-destination",
+                            "place_name": "Route Destination",
+                            "place_type": "place",
+                            "lng": -121.5,
+                            "lat": 48.1
+                          }]
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+        context.route("**/api/pois/search?**") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody("""{"results":[]}"""),
+            )
+        }
 
         try {
             page.navigate("/")
-            page.waitForFunction(
-                "() => globalThis.__rtState?.mapReady === true",
-                null,
-                Page.WaitForFunctionOptions().setTimeout(15_000.0),
-            )
-
-            page.evaluate(
-                "() => globalThis.__rtUseCurrentLocationForTripStop(0, { lng: -122.33, lat: 47.61 })",
-            )
+            page.getByLabel("Use current location").click()
             assertThat(page.locator(".tb-row[data-i=\"0\"] .tb-input")).hasValue("Current location")
 
             page.locator("#tb-directions").click()
@@ -862,21 +809,16 @@ class SmokeTest {
             // The vanilla built the row up front and hid it, so this assertion used to
             // pass against a `display: none` control.
             assertThat(page.locator("#tb-corridor-range")).hasCount(0)
-            page.evaluate(
-                "() => globalThis.__rtAddTripStop({ name: 'Route Destination', lng: -121.5, lat: 48.1, kind: 'PLACE' })",
-            )
+            val destination = page.locator(".tb-row[data-i=\"1\"] .tb-input")
+            destination.fill("route destination")
+            page
+                .getByRole(AriaRole.OPTION)
+                .filter(
+                    Locator.FilterOptions().setHasText("Route Destination"),
+                ).click()
 
-            page.waitForFunction(
-                "() => globalThis.__rtRouteActive?.() === true",
-                null,
-                Page.WaitForFunctionOptions().setTimeout(10_000.0),
-            )
+            assertThat(page.locator("#tb-route-summary")).containsText("100 km")
             assertTrue(page.url().contains("route="), "active route should update the visible URL")
-            page.waitForFunction(
-                "() => globalThis.__rtState?.overlayData?.cg?.features?.[0]?.id === 999",
-                null,
-                Page.WaitForFunctionOptions().setTimeout(10_000.0),
-            )
             // Now that the list is up, so is its radius control, at its default.
             assertThat(page.locator("#tb-corridor-range")).hasValue("5")
             assertThat(page.locator("#tb-corridor-value")).containsText("5 mi")
@@ -887,9 +829,7 @@ class SmokeTest {
             assertThat(firstCard.locator(".tb-card-location")).containsText("WA")
 
             val viewportCallsAfterRoute = viewportPoiCalls.get()
-            page.evaluate(
-                "() => { globalThis.__rtMap.jumpTo({ center: [-120.5, 48.0], zoom: 10 }); return true; }",
-            )
+            page.locator(".maplibregl-ctrl-zoom-in").click()
             page.waitForTimeout(750.0)
 
             assertEquals(1, routeCalls.get(), "route should be fetched once")
@@ -899,15 +839,7 @@ class SmokeTest {
                 viewportPoiCalls.get(),
                 "viewport /api/pois should not refetch while a route is active",
             )
-            assertEquals(
-                "999",
-                page.evaluate("() => String(globalThis.__rtState.overlayData.cg.features[0].id)"),
-            )
-            assertEquals(
-                "0",
-                page.evaluate("() => String(globalThis.__rtState.overlayData.sc.features.length)"),
-                "route-scoped map paint should clear viewport supercharger POIs",
-            )
+            assertThat(page.getByLabel(Pattern.compile("Superchargers \\(0\\)"))).isVisible()
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors during route smoke: ${pageErrors.joinToString(" | ")}",
@@ -918,7 +850,7 @@ class SmokeTest {
         }
     }
 
-    // The migrated React pages — which, as of Phase 4e, is all three of them. Three
+    // Every React page, including the component gallery. Three
     // purely visual bugs reached review during the migration (uncoloured error text, an
     // input that dropped every keystroke after the first, and a 0x0 map canvas); every
     // one passed tsc, the unit suite, the bundle and the colour-token check, because
@@ -951,6 +883,7 @@ class SmokeTest {
             listOf(
                 "/watches" to "Watches",
                 "/availability" to "Availability Dashboard",
+                "/gallery" to "UI Gallery",
                 // The map's only heading is the legend's title. It renders whether or
                 // not the style ever loads, which is what makes it the right probe
                 // here: this test is about the bundle mounting, not about MapLibre.

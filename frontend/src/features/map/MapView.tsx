@@ -1,8 +1,6 @@
-import { useTransitionShim } from '@/stores/transition-shim';
 import { LegendPanel } from './LegendPanel';
 import { useDeepLinkedPoi } from './useDeepLinkedPoi';
 import { useMapOverlays, useStateLines } from './useMapOverlays';
-import { useQaHooks } from './useQaHooks';
 import { useTripOverlay } from './useTripOverlay';
 import { useUserLocation } from './useUserLocation';
 import { useViewportPois } from './useViewportPois';
@@ -23,16 +21,10 @@ export function MapView() {
   const pois = useViewportPois();
   useMapOverlays(pois);
   useStateLines();
-  useQaHooks(pois);
   useDeepLinkedPoi();
   useTripOverlay();
   // Zoom + locate-me, and the puck for whatever fix the app is holding.
   useUserLocation();
-  // The `window.__rt*` seams. Phase 0 wrote the installer and nothing called it, so
-  // they were absent from the React tree until 4e — including the two `SmokeTest.kt`
-  // reads.
-  useTransitionShim();
-
   return (
     <>
       <LegendPanel pois={pois} />

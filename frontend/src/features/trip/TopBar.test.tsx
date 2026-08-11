@@ -499,30 +499,7 @@ describe('a shared link', () => {
   });
 });
 
-describe('the smoke suite"s seams', () => {
-  // SmokeTest.kt (~line 803) seeds a location and asserts row 0 reads "Current
-  // location" straight afterwards — so the seed has to be visible to the fill in the
-  // same tick, which is why the fill reads the store rather than a closure.
-  test('__rtUseCurrentLocationForTripStop fills a row from a seeded location', async () => {
-    mount();
-
-    await act(async () => {
-      window.__rtUseCurrentLocationForTripStop?.(0, { lng: -122.33, lat: 47.61 });
-    });
-
-    expect(searchBox()).toHaveValue('Current location');
-    expect(useMapStore.getState().userLocation).toEqual({ lng: -122.33, lat: 47.61 });
-  });
-
-  test('and is removed when the topbar unmounts', () => {
-    const view = mount();
-    expect(window.__rtUseCurrentLocationForTripStop).toBeTypeOf('function');
-
-    view.unmount();
-
-    expect(window.__rtUseCurrentLocationForTripStop).toBeUndefined();
-  });
-
+describe('the smoke suite selectors', () => {
   // The rows keep `data-i`, which is how the smoke suite addresses them.
   test('rows carry the index the smoke selectors use', () => {
     useTripStore.setState({

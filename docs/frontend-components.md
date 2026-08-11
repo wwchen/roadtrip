@@ -18,9 +18,10 @@ component covers what you need, compose it rather than writing page-specific mar
 CSS. The installed source is under `frontend/node_modules/@lew-ds/` — read it when a prop's
 behaviour is unclear, because the types are occasionally narrower than the runtime.
 
-There is no living gallery any more; `web/design-system/gallery.html` went with the
-vanilla primitives it demonstrated. LDS's own source is the catalog, and an LDS-backed
-replacement is an open piece of work rather than something that exists.
+The living component catalog is `/gallery`, implemented in
+`frontend/src/pages/gallery/GalleryPage.tsx`. It renders through the production `@ui`
+boundary, providers, theme, and CSS cascade. Add a representative state there when a new
+shared primitive or reusable Roadtrip UI pattern is introduced.
 
 ## Two layers
 
@@ -107,8 +108,8 @@ in it.**
 Both used to be `<link>`/`<script>` tags injected into every entry by a Vite plugin and
 served by Ktor from `web/`. They are bundled now; the plugin is gone.
 
-Three entries exist, mirroring the three URLs: `index.html` (map), `availability.html`,
-`watches.html`. Ktor serves each from `frontend/dist` and there is no fallback behind
+Four entries exist: `index.html` (map), `availability.html`, `watches.html`, and
+`gallery.html`. Ktor serves each from `frontend/dist` and there is no fallback behind
 them, so an unbuilt tree 404s the whole site rather than degrading. Adding a page means
 an HTML entry, a `rollupOptions.input` entry, and an entry in `pages` in
 `StaticSiteRoutes.kt`.

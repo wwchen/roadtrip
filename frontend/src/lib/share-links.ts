@@ -33,7 +33,7 @@ export interface ShareableStop {
    *
    * Declared here so the encoder can reject it: a pending stop's coordinates are
    * (0, 0), which is finite, so the coordinate check alone lets it through — and
-   * `__rtRouteShareUrl` reads the store's stops directly, without the
+   * Route sharing reads the store's stops directly, without the
    * `allStopsFilled` gate the address-bar writer has. A link whose origin is null
    * island is worse than no link.
    */
