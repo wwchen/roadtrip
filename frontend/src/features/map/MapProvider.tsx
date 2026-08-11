@@ -10,15 +10,18 @@ import { Map as MapLibreMap, setWorkerUrl } from 'maplibre-gl';
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { MapRuntimeContext, type MapContextValue } from '@/map/context';
 export { useMapContext } from '@/map/context';
+import { useThemeStore } from '@/stores/themeStore';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './map.css';
 import {
   SATELLITE_LAYER_ID,
   SATELLITE_SOURCE_ID,
   basemapStyle,
+  forgetBasemapKey,
   initialBasemapKey,
   rememberBasemapKey,
   satelliteSource,
+  storedBasemapKey,
 } from './basemaps';
 
 /**
@@ -65,7 +68,8 @@ export function MapProvider({ children }: { children: ReactNode }) {
   const mapRef = useRef<MapLibreMap | null>(null);
   const [map, setMap] = useState<MapLibreMap | null>(null);
   const [styleReady, setStyleReady] = useState(false);
-  const [basemapKey, setBasemapKey] = useState(initialBasemapKey);
+  const mode = useThemeStore((s) => s.mode);
+  const [basemapKey, setBasemapKey] = useState(() => initialBasemapKey(mode));
   // Read by the create-once effect, which must not depend on `basemapKey` —
   // the basemap is applied via setStyle, never by recreating the map.
   const basemapKeyRef = useRef(basemapKey);
@@ -104,10 +108,14 @@ export function MapProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const changeBasemap = useCallback((key: string) => {
+  // The style-reload mechanics, shared by an explicit pick and the mode effect
+  // below. Deliberately does not persist anything — `rememberBasemapKey` is
+  // split out and called only by `changeBasemap`, because the mode effect and
+  // `resetBasemap` resolve a key rather than choose one, and storing what they
+  // resolved would pin "auto" to that key on first use.
+  const applyBasemap = useCallback((key: string) => {
     setBasemapKey(key);
     basemapKeyRef.current = key;
-    rememberBasemapKey(key);
     const instance = mapRef.current;
     if (!instance) return;
     // Overlays are about to be destroyed by the reload, so stop anything from
@@ -115,6 +123,31 @@ export function MapProvider({ children }: { children: ReactNode }) {
     setStyleReady(false);
     instance.setStyle(basemapStyle(key), { diff: false });
   }, []);
+
+  const changeBasemap = useCallback(
+    (key: string) => {
+      rememberBasemapKey(key);
+      applyBasemap(key);
+    },
+    [applyBasemap],
+  );
+
+  const resetBasemap = useCallback(() => {
+    forgetBasemapKey();
+    applyBasemap(initialBasemapKey(mode));
+  }, [mode, applyBasemap]);
+
+  // Re-style on every mode change, even when the key is unchanged: the overlays
+  // read their colours through `tokens.ts`, whose cache the theme store has just
+  // reset, and a full setStyle is what reinstalls them. Skipped on the first run,
+  // when the map was created with the right style already.
+  const appliedMode = useRef(mode);
+  useEffect(() => {
+    if (appliedMode.current === mode) return;
+    appliedMode.current = mode;
+    if (!map) return;
+    applyBasemap(initialBasemapKey(mode));
+  }, [mode, map, applyBasemap]);
 
   // Satellite is an underlay, reinstalled on every style load because the reload
   // wipes it along with everything else.
@@ -138,8 +171,17 @@ export function MapProvider({ children }: { children: ReactNode }) {
   }, [map, styleReady, satellite]);
 
   const value = useMemo<MapContextValue>(
-    () => ({ map, styleReady, basemapKey, setBasemap: changeBasemap, satellite, setSatellite }),
-    [map, styleReady, basemapKey, changeBasemap, satellite],
+    () => ({
+      map,
+      styleReady,
+      basemapKey,
+      setBasemap: changeBasemap,
+      isAutoBasemap: storedBasemapKey() === null,
+      resetBasemap,
+      satellite,
+      setSatellite,
+    }),
+    [map, styleReady, basemapKey, changeBasemap, resetBasemap, satellite],
   );
 
   return (

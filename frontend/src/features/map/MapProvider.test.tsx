@@ -9,9 +9,10 @@
 //
 // MapLibre needs WebGL, which jsdom has none of, so the instance is faked. The fake
 // records the calls that matter and lets tests fire `style.load` by hand.
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
-import { BASEMAPS, BASEMAP_STORAGE_KEY, DEFAULT_BASEMAP } from './basemaps';
+import { useThemeStore } from '@/stores/themeStore';
+import { BASEMAPS, BASEMAP_STORAGE_KEY, DARK_BASEMAP, DEFAULT_BASEMAP } from './basemaps';
 
 interface StyleLayer {
   id: string;
@@ -114,6 +115,14 @@ const loadStyle = async () => {
 
 beforeEach(() => {
   window.localStorage.clear();
+});
+
+// useThemeStore is a module singleton, never reset between test files — any test
+// that moves the mode off its 'light' default has to put it back, or later tests
+// (in this file and any file that shares the module registry) inherit the wrong
+// starting mode.
+afterEach(() => {
+  useThemeStore.getState().setChoice('light');
 });
 
 describe('setup', () => {
@@ -227,6 +236,86 @@ describe('changing basemap', () => {
 
     expect(instance).toBe(first);
     expect(first.removed).toBe(false);
+  });
+});
+
+describe('following the theme', () => {
+  test('opens on the dark default when dark mode has nothing remembered', () => {
+    useThemeStore.getState().setChoice('dark');
+    renderMap();
+    expect(ctx.basemapKey).toBe(DARK_BASEMAP);
+    expect(instance.options.style).toBe(BASEMAPS[DARK_BASEMAP].style);
+  });
+
+  test('reports auto until a basemap is explicitly picked', () => {
+    renderMap();
+    expect(ctx.isAutoBasemap).toBe(true);
+  });
+
+  test('re-styles to the dark default when the mode changes after mount', async () => {
+    renderMap();
+    await loadStyle();
+    expect(instance.setStyleCalls).toHaveLength(0);
+
+    await act(async () => {
+      useThemeStore.getState().setChoice('dark');
+    });
+
+    expect(instance.setStyleCalls).toHaveLength(1);
+    expect(instance.setStyleCalls[0].style).toBe(BASEMAPS[DARK_BASEMAP].style);
+    expect(ctx.basemapKey).toBe(DARK_BASEMAP);
+  });
+
+  // The trap this task's brief calls out by name: a mode change resolves a key,
+  // it does not choose one. Persisting it would pin "auto" to whatever mode was
+  // active the first time it fired.
+  test('does not persist the key the mode effect resolves', async () => {
+    renderMap();
+    await loadStyle();
+
+    await act(async () => {
+      useThemeStore.getState().setChoice('dark');
+    });
+
+    expect(window.localStorage.getItem(BASEMAP_STORAGE_KEY)).toBeNull();
+    expect(ctx.isAutoBasemap).toBe(true);
+  });
+
+  // An explicit pick outranks the mode: it must survive a later mode change
+  // rather than being overwritten by the mode's default.
+  test('an explicit pick survives a mode change', async () => {
+    renderMap();
+    await loadStyle();
+
+    await act(async () => {
+      ctx.setBasemap('osm');
+    });
+    expect(ctx.isAutoBasemap).toBe(false);
+
+    await act(async () => {
+      useThemeStore.getState().setChoice('dark');
+    });
+
+    expect(ctx.basemapKey).toBe('osm');
+    expect(window.localStorage.getItem(BASEMAP_STORAGE_KEY)).toBe('osm');
+  });
+
+  test('resetBasemap forgets the explicit pick and returns to the mode default', async () => {
+    renderMap();
+    await loadStyle();
+
+    await act(async () => {
+      ctx.setBasemap('osm');
+    });
+    expect(ctx.isAutoBasemap).toBe(false);
+
+    await act(async () => {
+      ctx.resetBasemap();
+    });
+
+    expect(window.localStorage.getItem(BASEMAP_STORAGE_KEY)).toBeNull();
+    expect(ctx.isAutoBasemap).toBe(true);
+    expect(ctx.basemapKey).toBe(DEFAULT_BASEMAP);
   });
 });
 

@@ -1,11 +1,14 @@
 import { Checkbox, Select } from '@ui';
-import { BASEMAPS } from './basemaps';
+import { AUTO_BASEMAP_VALUE, BASEMAPS } from './basemaps';
 import { useMapContext } from './MapProvider';
 
-const BASEMAP_OPTIONS = Object.entries(BASEMAPS).map(([value, basemap]) => ({
-  value,
-  label: basemap.name,
-}));
+/** The picker's "follow the theme" option, always first. */
+const AUTO_OPTION = { value: AUTO_BASEMAP_VALUE, label: 'Auto (match theme)' };
+
+const BASEMAP_OPTIONS = [
+  AUTO_OPTION,
+  ...Object.entries(BASEMAPS).map(([value, basemap]) => ({ value, label: basemap.name })),
+];
 
 /**
  * Basemap choice and the satellite underlay.
@@ -23,7 +26,8 @@ const BASEMAP_OPTIONS = Object.entries(BASEMAPS).map(([value, basemap]) => ({
  * which is the trap `docs/frontend-components.md` warns about.
  */
 export function BasemapPicker() {
-  const { basemapKey, setBasemap, satellite, setSatellite } = useMapContext();
+  const { basemapKey, setBasemap, isAutoBasemap, resetBasemap, satellite, setSatellite } =
+    useMapContext();
 
   return (
     <>
@@ -32,8 +36,12 @@ export function BasemapPicker() {
           id="rt-basemap"
           aria-label="Basemap"
           options={BASEMAP_OPTIONS}
-          value={basemapKey}
-          onChange={(e) => setBasemap((e.target as HTMLSelectElement).value)}
+          value={isAutoBasemap ? AUTO_BASEMAP_VALUE : basemapKey}
+          onChange={(e) => {
+            const next = (e.target as HTMLSelectElement).value;
+            if (next === AUTO_BASEMAP_VALUE) resetBasemap();
+            else setBasemap(next);
+          }}
         />
       </div>
       <Checkbox

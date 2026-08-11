@@ -6,6 +6,11 @@ export interface MapContextValue {
   styleReady: boolean;
   basemapKey: string;
   setBasemap: (key: string) => void;
+  /** True when the user has never explicitly picked a basemap — it is following
+   *  the theme rather than pinned to a choice. */
+  isAutoBasemap: boolean;
+  /** Drop the explicit pick and return to following the theme. */
+  resetBasemap: () => void;
   satellite: boolean;
   setSatellite: (on: boolean) => void;
 }

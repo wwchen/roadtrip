@@ -5,6 +5,7 @@
 // checkbox by id, which is React's job now. What lives here is the registry, the
 // persisted-choice logic, and the two raster style builders — all pure, all testable.
 import type { StyleSpecification } from 'maplibre-gl';
+import type { ThemeMode } from '@/lib/theme';
 
 /** Where the chosen basemap is remembered. Same key the vanilla map used, so a
  *  returning user keeps their basemap across the migration. */
@@ -70,22 +71,50 @@ export const BASEMAPS: Readonly<Record<string, Basemap>> = {
   },
 };
 
+/** The basemap dark mode reaches for when the user has never picked one. */
+export const DARK_BASEMAP = 'carto-dark';
+
+/** The picker's "follow the theme" option. An empty string, because selecting it
+ *  REMOVES the stored key — absence already means auto, and a stored sentinel
+ *  would be a second encoding of the same state. */
+export const AUTO_BASEMAP_VALUE = '';
+
+/** The mode's default when the user has expressed no preference. */
+function defaultBasemapFor(mode: ThemeMode): string {
+  return mode === 'dark' ? DARK_BASEMAP : DEFAULT_BASEMAP;
+}
+
 /**
- * The basemap to open with: the remembered one if it still exists, else the default.
+ * The user's explicit pick, or null when they have never made one.
  *
- * The existence check is not defensive padding — a stored key outlives the registry,
- * so a basemap that is renamed or dropped would otherwise hand `setStyle` an
- * `undefined` style and leave a blank map. Reads defensively too, since Safari's
- * private mode throws on `localStorage` access rather than returning null.
+ * Reads defensively — Safari's private mode throws rather than returning null —
+ * and drops a key the registry no longer has: a stored key outlives the
+ * registry, and one that was renamed would otherwise reach `setStyle` as an
+ * undefined style and leave a blank map.
  */
-export function initialBasemapKey(): string {
+export function storedBasemapKey(): string | null {
   let saved: string | null = null;
   try {
     saved = window.localStorage.getItem(BASEMAP_STORAGE_KEY);
   } catch {
-    saved = null;
+    return null;
   }
-  return saved != null && saved in BASEMAPS ? saved : DEFAULT_BASEMAP;
+  return saved != null && saved in BASEMAPS ? saved : null;
+}
+
+/** Drop the explicit pick, returning to "follow the theme". */
+export function forgetBasemapKey(): void {
+  try {
+    window.localStorage.removeItem(BASEMAP_STORAGE_KEY);
+  } catch {
+    // Private mode / quota. The map still works.
+  }
+}
+
+/** The basemap to open with: the remembered one if it still exists, else the one
+ *  this mode calls for. */
+export function initialBasemapKey(mode: ThemeMode): string {
+  return storedBasemapKey() ?? defaultBasemapFor(mode);
 }
 
 /** Remember a basemap choice. Silent on failure — a blocked write must not break the map. */
