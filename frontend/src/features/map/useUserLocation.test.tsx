@@ -68,6 +68,7 @@ class TestMarker {
 vi.mock('maplibre-gl', () => ({
   Map: TestMap,
   Marker: TestMarker,
+  setWorkerUrl: vi.fn(),
   GeolocateControl: TestGeolocateControl,
   NavigationControl: FakeNavigationControl,
 }));

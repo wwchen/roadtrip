@@ -19,7 +19,7 @@ class TestMap extends FakeMap {
   }
 }
 
-vi.mock('maplibre-gl', () => ({ Map: TestMap }));
+vi.mock('maplibre-gl', () => ({ Map: TestMap, setWorkerUrl: vi.fn() }));
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
 
 const { MapProvider } = await import('./MapProvider');

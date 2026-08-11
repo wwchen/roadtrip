@@ -364,6 +364,95 @@ class SmokeTest {
     }
 
     @Test
+    fun `viewport POI is rendered and clickable`() {
+        val context =
+            browser.newContext(
+                Browser
+                    .NewContextOptions()
+                    .setBaseURL(baseUrl)
+                    .setViewportSize(1280, 800),
+            )
+        val page = context.newPage()
+        val pageErrors = mutableListOf<String>()
+        page.onPageError { pageErrors.add(it) }
+
+        context.route("**/api/pois") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "type": "FeatureCollection",
+                          "truncated": false,
+                          "features": [{
+                            "type": "Feature",
+                            "id": 9001,
+                            "geometry": { "type": "Point", "coordinates": [-98.5, 39.5] },
+                            "properties": { "category": "planet_fitness_location" }
+                          }]
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+        context.route("**/api/pois/9001") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "type": "Feature",
+                          "id": 9001,
+                          "geometry": { "type": "Point", "coordinates": [-98.5, 39.5] },
+                          "properties": {
+                            "category": "planet-fitness",
+                            "name": "Rendered Gym"
+                          }
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+
+        try {
+            page.navigate("/")
+            page.waitForFunction(
+                "() => document.querySelector('.rt-legend')?.textContent?.includes('Planet Fitness (1)')",
+                null,
+                Page.WaitForFunctionOptions().setTimeout(MAP_READY_TIMEOUT_MS),
+            )
+
+            // The fixture is exactly at the map's initial center. Clicking the
+            // canvas center proves the worker processed the GeoJSON and MapLibre
+            // painted a pickable feature; a legend count alone proves only fetch.
+            val canvas = page.locator(".maplibregl-canvas").boundingBox()
+            assertTrue(canvas != null, "the MapLibre canvas has no bounding box")
+            page.mouse().click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2)
+
+            val drawer = drawerOf(page)
+            assertThat(drawer).isVisible(
+                com.microsoft.playwright.assertions.LocatorAssertions
+                    .IsVisibleOptions()
+                    .setTimeout(MAP_READY_TIMEOUT_MS),
+            )
+            assertThat(drawer.locator("h2")).containsText("Rendered Gym")
+            assertTrue(
+                pageErrors.isEmpty(),
+                "Page errors while rendering a viewport POI: ${pageErrors.joinToString(" | ")}",
+            )
+        } finally {
+            page.close()
+            context.close()
+        }
+    }
+
+    @Test
     fun `poi share link opens drawer by id`() {
         val context =
             browser.newContext(

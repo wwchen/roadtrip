@@ -51,6 +51,7 @@ class TestMarker {
 vi.mock('maplibre-gl', () => ({
   Map: TestMap,
   Marker: TestMarker,
+  setWorkerUrl: vi.fn(),
   // The map's own controls. What they do with a fix is `useUserLocation.test.tsx`;
   // here they only have to exist, because `MapView` installs them.
   GeolocateControl: FakeGeolocateControl,

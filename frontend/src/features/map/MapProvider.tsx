@@ -6,7 +6,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { Map as MapLibreMap } from 'maplibre-gl';
+import { Map as MapLibreMap, setWorkerUrl } from 'maplibre-gl';
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { MapRuntimeContext, type MapContextValue } from '@/map/context';
 export { useMapContext } from '@/map/context';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -27,6 +28,16 @@ import {
  */
 const INITIAL_CENTER: [number, number] = [-98.5, 39.5];
 const INITIAL_ZOOM = 3.6;
+
+/**
+ * MapLibre 6 ships its worker as a sibling of the library module and derives the
+ * default URL from `import.meta.url`. Once Vite moves the library into a hashed
+ * chunk, that sibling is not copied automatically: the browser requests the
+ * nonexistent `/assets/maplibre-gl-worker.mjs`, leaving every vector-tile and
+ * GeoJSON update pending forever. `?worker&url` makes Vite bundle the worker and
+ * its shared module into one content-hashed asset, then gives MapLibre that URL.
+ */
+setWorkerUrl(maplibreWorkerUrl);
 
 /**
  * The map instance, and the style lifecycle everything else hangs off.
