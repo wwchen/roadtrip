@@ -3,7 +3,7 @@
 **PR:** #623 — Finish React migration cleanup and add UI gallery  
 **Branch:** `codex/react-migration-cleanup` → `master`  
 **Started:** 2026-08-11  
-**Status:** LOCAL REVIEW COMPLETE — PR UPDATE PENDING
+**Status:** COMPLETE — REMOTE CI PENDING
 
 ## Review objective
 
@@ -19,7 +19,7 @@ test reliability. Findings are recorded before fixes and retained after resoluti
 - [x] Review the gallery for accessibility, representative coverage, and deploy wiring.
 - [x] Review desktop drawer/topbar stacking across breakpoints.
 - [x] Run focused and full local verification after fixes.
-- [ ] Update the PR with review fixes and final decision.
+- [x] Update the PR with review fixes and final decision.
 
 ## Findings
 
@@ -70,6 +70,9 @@ needlessly ambiguous.
 | Post-rebase full frontend suite | Pass; 1,337 tests on React 19.2 |
 | Post-rebase typecheck, lint, build, and CSS/token checks | Pass |
 | Post-rebase static route tests and smoke compilation | Pass |
+| Pre-push full backend suite | Pass |
+| GitHub mergeability after force-push | Pass; PR is mergeable |
+| GitHub CI | Pending on rebased head |
 
 The first focused test invocation omitted `--no-experimental-webstorage`: 44 tests
 passed and all 16 `MapProvider` tests failed in setup because local Node 26 replaced
@@ -78,9 +81,9 @@ established workaround. Project CI uses Node 22 and does not require it.
 
 ## Final decision
 
-**APPROVE LOCALLY.** The two implementation findings are fixed, the PR conflict is
-resolved, and the rebased tree passes the available local gates. Force-push and the
-resulting GitHub CI state remain to be recorded.
+**APPROVE.** The two implementation findings are fixed, the PR conflict is resolved,
+the rebased tree passes the available local gates, and GitHub now reports the PR as
+mergeable. Remote CI is pending on the rebased head.
 
 The live Playwright smoke suite was compiled but not executed because no QA stack was
 running in this review. Its rewritten interactions therefore retain the ordinary
