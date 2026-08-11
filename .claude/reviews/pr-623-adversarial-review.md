@@ -3,7 +3,7 @@
 **PR:** #623 — Finish React migration cleanup and add UI gallery  
 **Branch:** `codex/react-migration-cleanup` → `master`  
 **Started:** 2026-08-11  
-**Status:** COMPLETE — REMOTE CI PENDING
+**Status:** IN PROGRESS — CI SMOKE FIX UNDER VERIFICATION
 
 ## Review objective
 
@@ -53,6 +53,18 @@ needlessly ambiguous.
 
 **Resolution:** Correct the source comment to say left-hand panel.
 
+### M2 — Route smoke asserts visibility on an intentionally hidden LDS input (MEDIUM, FIXED)
+
+The rebased-head CI run reached the live browser suite and failed only the route-mode test.
+`getByLabel("Superchargers (0)")` correctly resolves the native checkbox, but LDS deliberately
+renders that input at zero size and opacity and makes its wrapping label the visible, clickable
+control. The test therefore rejected correct UI behavior even though its own shared agency-row
+helper documents this LDS contract.
+
+**Resolution:** Assert visibility of the public `.rt-legend` label containing the accessible
+name and route-scoped zero count. This retains the behavioral check without reviving an internal
+test hook or mistaking the accessibility node for the painted control.
+
 ## Verification log
 
 | Check | Result |
@@ -72,7 +84,9 @@ needlessly ambiguous.
 | Post-rebase static route tests and smoke compilation | Pass |
 | Pre-push full backend suite | Pass |
 | GitHub mergeability after force-push | Pass; PR is mergeable |
-| GitHub CI | Pending on rebased head |
+| Rebased-head GitHub CI (run `31518827395`) | **Fail; 5/6 jobs passed, route smoke used hidden LDS input** |
+| Focused smoke fix formatting and Kotlin compilation | Pass |
+| Replacement live smoke / aggregate CI | Pending |
 
 The first focused test invocation omitted `--no-experimental-webstorage`: 44 tests
 passed and all 16 `MapProvider` tests failed in setup because local Node 26 replaced
@@ -81,10 +95,10 @@ established workaround. Project CI uses Node 22 and does not require it.
 
 ## Final decision
 
-**APPROVE.** The two implementation findings are fixed, the PR conflict is resolved,
-the rebased tree passes the available local gates, and GitHub now reports the PR as
-mergeable. Remote CI is pending on the rebased head.
+**CHANGES REQUESTED UNTIL REPLACEMENT CI PASSES.** The CI-found smoke defect is fixed locally,
+but the review remains open until the corrected test is exercised and the replacement head is
+green.
 
-The live Playwright smoke suite was compiled but not executed because no QA stack was
-running in this review. Its rewritten interactions therefore retain the ordinary
-integration risk that CI/live-stack execution is intended to cover.
+GitHub's live Playwright run executed all nine scenarios: eight passed and the route scenario
+reached its final assertion before exposing M2. That signal replaces the earlier compile-only
+risk assessment; the corrected assertion still requires a replacement run.

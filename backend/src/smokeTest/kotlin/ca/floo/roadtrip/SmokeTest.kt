@@ -839,7 +839,14 @@ class SmokeTest {
                 viewportPoiCalls.get(),
                 "viewport /api/pois should not refetch while a route is active",
             )
-            assertThat(page.getByLabel(Pattern.compile("Superchargers \\(0\\)"))).isVisible()
+            // LDS keeps the native checkbox in the accessibility tree but makes it
+            // visually hidden; the wrapping label is the control a person sees and
+            // clicks. Assert that public surface, including the route-scoped count.
+            assertThat(
+                page
+                    .locator(".rt-legend label")
+                    .filter(Locator.FilterOptions().setHasText(Pattern.compile("Superchargers \\(0\\)"))),
+            ).isVisible()
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors during route smoke: ${pageErrors.joinToString(" | ")}",
