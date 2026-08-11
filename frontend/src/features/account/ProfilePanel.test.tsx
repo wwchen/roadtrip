@@ -87,4 +87,19 @@ describe('the Appearance control', () => {
     expect(useThemeStore.getState().choice).toBe('dark');
     expect(document.documentElement.classList.contains('mode-dark')).toBe(true);
   });
+
+  // aria-label names the group ("Appearance") but says nothing about the help
+  // text sitting after it — aria-describedby is what a screen reader actually
+  // announces alongside the control, so it has to point at a real element.
+  test('describes the radiogroup with the help text, for assistive tech', () => {
+    render(<ProfilePanel profile={profile} values={profileValuesOf(settings)} onChange={() => {}} />);
+
+    const radiogroup = screen.getByRole('radiogroup');
+    const describedBy = radiogroup.getAttribute('aria-describedby');
+
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy!)).toHaveTextContent(
+      'System follows your device setting.',
+    );
+  });
 });
