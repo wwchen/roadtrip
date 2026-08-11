@@ -1,5 +1,3 @@
-// The dashboard's URL contract. These shapes are linked to from poller rows and
-// rewritten as filters change, so they are a published interface, not internals.
 import { describe, expect, test } from 'vitest';
 import { readTabRoute, tabSearch, TAB_CHANGES, TAB_POLLERS, TAB_RUNS } from './useTabRoute';
 
@@ -14,8 +12,6 @@ describe('readTabRoute', () => {
     expect(readTabRoute('?poller_id=7').tab).toBe(TAB_POLLERS);
   });
 
-  // An unknown tab falls back rather than rendering nothing, matching the legacy
-  // `TABS[tab] ? tab : 'pollers'` guard.
   test('falls back to pollers for an unknown tab', () => {
     expect(readTabRoute('?tab=nope').tab).toBe(TAB_POLLERS);
   });
@@ -41,8 +37,6 @@ describe('tabSearch', () => {
     expect(tabSearch(TAB_RUNS, { poller_id: '7' })).toBe('?tab=runs&poller_id=7');
   });
 
-  // Kept from the original: an empty filter is absent from the URL rather than
-  // present and blank, so a reset link is clean.
   test('drops empty values', () => {
     expect(tabSearch(TAB_RUNS, { poller_id: '', status: 'failed' })).toBe(
       '?tab=runs&status=failed',

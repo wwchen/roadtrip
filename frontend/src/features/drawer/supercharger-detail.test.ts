@@ -21,8 +21,6 @@ const charging = (fields: Partial<Pricebook> = {}): Pricebook => ({
 });
 
 describe('formatRate', () => {
-  // narrowSymbol is why this is not just toFixed: CAD would otherwise render as
-  // "CA$0.36", which is noise in a panel this narrow.
   test('renders a bare symbol and the unit', () => {
     expect(formatRate(charging())).toBe('$0.36/kWh');
     expect(formatRate(charging({ currencyCode: 'CAD', rateBase: 0.42 }))).toBe('$0.42/kWh');
@@ -35,8 +33,6 @@ describe('rateRows', () => {
     expect(rateRows([])).toBeNull();
   });
 
-  // MapLibre stringifies nested properties; a malformed blob is "no pricing" rather
-  // than a broken drawer.
   test('accepts a JSON string and survives a malformed one', () => {
     expect(rateRows(JSON.stringify([charging()]))?.[0]?.rate).toBe('$0.36/kWh');
     expect(rateRows('{not json')).toBeNull();
@@ -48,8 +44,6 @@ describe('rateRows', () => {
     ]);
   });
 
-  // The currency is disclosed once per group instead of on every row, and only when
-  // it is not the default.
   test('tags a non-USD group', () => {
     expect(rateRows([charging({ currencyCode: 'CAD' })])?.[0]?.currencyTag).toBe('CAD');
     expect(rateRows([charging()])?.[0]?.currencyTag).toBeUndefined();
@@ -71,8 +65,6 @@ describe('rateRows', () => {
     expect(rows?.at(-1)).toEqual({ kind: 'congestion', label: 'Idle/congestion', rate: '$1.00/min' });
   });
 
-  // The capture also carries other makes and fee types; the vanilla drawer ignored
-  // them and so does this.
   test('ignores fees for other vehicle makes', () => {
     expect(rateRows([charging({ vehicleMakeType: 'FORD' })])).toBeNull();
   });
@@ -88,16 +80,11 @@ describe('amenityLabels', () => {
     expect(prettifyAmenity('AMENITIES_CAFE')).toBe('Café');
   });
 
-  // The 24-hour amenity duplicates the 24/7 capability pill, so it is dropped.
   test('drops the amenity that duplicates a capability pill', () => {
     expect(prettifyAmenity('AMENITIES_TWENTY_FOUR_HOUR')).toBeNull();
     expect(amenityLabels(['AMENITIES_TWENTY_FOUR_HOUR', 'AMENITIES_RESTROOMS'])).toEqual(['Restrooms']);
   });
 
-  // Carried over rather than corrected: the overrides are keyed on the prefixed form,
-  // so a bare legacy value falls through to title-casing and reads "Wifi" instead of
-  // "Wi-Fi". The vanilla helper documents exactly that outcome, and stripping the
-  // prefix before the override lookup would be a behaviour change, not a port.
   test('a legacy lowercase value misses the override and title-cases', () => {
     expect(prettifyAmenity('wifi')).toBe('Wifi');
     expect(prettifyAmenity('AMENITIES_WIFI')).toBe('Wi-Fi');
@@ -108,7 +95,6 @@ describe('amenityLabels', () => {
     expect(amenityLabels('AMENITIES_CAFE')).toEqual([]);
   });
 
-  // A long list must not blow up the drawer's height.
   test('caps the pill count', () => {
     const many = Array.from({ length: 20 }, (_, i) => `AMENITIES_THING_${i}`);
 
@@ -137,8 +123,6 @@ describe('busyHours', () => {
     expect(busyHours(profile([0.1, 0.2]), 'UTC', MONDAY)).toBeNull();
   });
 
-  // Scaling against the day's own peak is what makes a quiet site readable — which
-  // also means an all-zero day has no shape to show.
   test('an all-zero day draws nothing', () => {
     expect(busyHours(profile(new Array(24).fill(0)), 'UTC', MONDAY)).toBeNull();
   });
@@ -161,8 +145,6 @@ describe('busyHours', () => {
     expect(result?.bars[3]?.bucket).toBe('low'); // 0.05/0.8 ≈ 0.06
   });
 
-  // The day AND the "now" highlight are resolved in the site's zone: a supercharger's
-  // busy hours are a fact about where it is, not about where it is being read.
   test('reads the weekday and current hour in the site timezone', () => {
     const inUtc = busyHours(profile(day()), 'UTC', MONDAY);
     expect(inUtc?.bars.find((bar) => bar.now)?.hour).toBe(15);

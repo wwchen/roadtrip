@@ -1,5 +1,3 @@
-// No node --test suite existed for this client. Covers the boolean→'1'/'0'
-// serialisation and the swallow-on-failure contract the search box relies on.
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { geocode } from './geocode-api';
 import { jsonResponse, stubFetch, textResponse } from '@/test/fetch-stub';
@@ -66,8 +64,6 @@ describe('geocode', () => {
     await expect(geocode('mineral')).resolves.toEqual({ results: [result] });
   });
 
-  // Swallowing failure keeps a transient upstream error showing "no matches"
-  // rather than an error state mid-keystroke.
   test.each([
     ['a 500', textResponse('boom', 500)],
     ['a 429', jsonResponse({ error: 'rate_limited' }, 429)],

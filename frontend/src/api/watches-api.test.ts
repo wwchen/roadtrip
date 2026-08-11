@@ -41,7 +41,6 @@ describe('watches-api', () => {
     expect(fetchStub.last.url).toBe('/api/watches');
   });
 
-  // deleteWatch is a POST to /delete, not an HTTP DELETE.
   test('deleteWatch swallows a 404', async () => {
     stubFetch(textResponse('', 404));
     await expect(deleteWatch(5)).resolves.toBeUndefined();

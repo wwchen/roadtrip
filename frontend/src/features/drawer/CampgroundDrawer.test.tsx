@@ -1,7 +1,3 @@
-// The campground drawer as rendered, through the real selection → hydrate → dispatch
-// path rather than by mounting the component directly. The rules behind each section
-// are covered in campground-detail.test.ts; this checks composition: that the sections
-// appear, in the right shape, and that provider markup arrives sanitised.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
@@ -91,8 +87,6 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('the campground drawer', () => {
-  // The order identifies the place before locating it: name, containing park, agency,
-  // then region — which is what the legacy above-the-fold layout established.
   test('leads with the name, its park and its agency', async () => {
     await openCampground();
 
@@ -111,9 +105,6 @@ describe('the campground drawer', () => {
     expect(screen.getByText('Year-round')).toBeInTheDocument();
   });
 
-  // Queried as a button, not a link: LDS renders an href'd `Button` as an anchor that
-  // carries `role="button"` — its documented "a link that must look like a button IS
-  // this button" path — so that is the accessible role throughout the drawers.
   test('renders the backend CTA rather than inventing a link', async () => {
     await openCampground();
 
@@ -122,21 +113,13 @@ describe('the campground drawer', () => {
     expect(cta).toHaveAttribute('target', '_blank');
   });
 
-  // A first-come pin with nothing to link to states the fact instead of offering a
-  // search that implies a booking flow.
   test('a first-come pin with no links offers no button', async () => {
     await openCampground({ cta: undefined, reservable: false, season: undefined });
 
-    // Twice, as in the vanilla drawer: once as the season verdict, once as the
-    // disabled action. Carried over rather than deduplicated — collapsing them is a
-    // design change, not a port.
     expect(screen.getAllByText('First-come, first-served')).toHaveLength(2);
     expect(screen.queryByRole('button', { name: /recreation\.gov/ })).toBeNull();
   });
 
-  // "No availability shown" and "this provider has no availability" are different
-  // facts, and only the backend's capability flag can tell them apart — so the grid
-  // is mounted from that flag rather than from whether a week happened to come back.
   test('a pin with availability support mounts the grid', async () => {
     await openCampground();
 
@@ -186,8 +169,6 @@ describe('the campground drawer', () => {
     expect(screen.getByText('Hiking')).toBeInTheDocument();
   });
 
-  // Provider HTML reaches the page through dangerouslySetInnerHTML, so the assertion
-  // that matters is that it arrives sanitised.
   test('sanitises the provider description and fee markup', async () => {
     await openCampground({
       description: '<p>Waterfront sites.<script>alert(1)</script></p>',
@@ -225,8 +206,6 @@ describe('the campground drawer', () => {
     expect(screen.getByText(/check before booking/)).toBeInTheDocument();
   });
 
-  // The POI is the destination of a new two-row trip, not a first stop — see
-  // `add-poi-to-trip.ts` and the matching case in PoiDrawer.test.tsx.
   test('adds the campground to a trip as its destination, and closes', async () => {
     await openCampground();
 
@@ -242,7 +221,6 @@ describe('the campground drawer', () => {
     expect(useMapStore.getState().selectedPoiId).toBeNull();
   });
 
-  // A sparse pin should render short, not as a grid of blanks.
   test('a pin with almost no data renders without empty scaffolding', async () => {
     await openCampground({
       address: undefined,

@@ -1,9 +1,3 @@
-// The alerts panel, driven through its real hooks against stubbed endpoints.
-//
-// What matters here is the wiring the vanilla hand-rolled: that the panel is absent
-// until there is something to show, that a 401 hides it entirely, that a Slack deep
-// link focuses a row without acting on it, and that pause/resume/delete go through and
-// refetch.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createTestQueryClient } from '@/test/query-client';
 import { act, render, screen, waitFor } from '@testing-library/react';
@@ -91,7 +85,6 @@ describe('the bar', () => {
     );
   });
 
-  // The panel is additive: it must not take space to say there is nothing.
   test('is absent for a user with no watches', async () => {
     byStatus = { active: [], paused: [], done: [] };
     const { container } = mount();
@@ -100,8 +93,6 @@ describe('the bar', () => {
     expect(container.querySelector('#tb-alerts')).toBeNull();
   });
 
-  // A 401 is the answer for an anonymous visitor, not a fault — and a nav row that says
-  // "unauthorized" is worse than no nav row.
   test('is absent entirely when signed out', async () => {
     listStatus = 401;
     const { container } = mount();
@@ -142,8 +133,6 @@ describe('the table', () => {
     expect(error).toHaveAttribute('title', 'provider 500');
   });
 
-  // A done watch is terminal, so it gets a status glyph rather than a toggle — and
-  // which glyph is inferred from its window, since the list cannot say why it ended.
   test('a done watch shows why it ended, and no toggle', async () => {
     byStatus = { active: [], paused: [], done: [watch({ status: 'done', end_date: '2020-01-01' })] };
     mount();
@@ -221,8 +210,6 @@ describe('the row actions', () => {
     expect(requests.some((r) => r.url.endsWith('/delete') && r.method === 'POST')).toBe(true);
   });
 
-  // The row itself opens the drawer, so a control that did not stop its click would
-  // pause the watch AND fly the map away from what the user was looking at.
   test('an action does not also open the POI', async () => {
     mount();
     await expand();
@@ -235,7 +222,6 @@ describe('the row actions', () => {
     expect(useMapStore.getState().selectedPoiId).toBeNull();
   });
 
-  // The editor is 4d's `WatchEditor` — the second consumer that port was written for.
   test('editing opens the watch editor for that row', async () => {
     mount();
     await expand();
@@ -267,8 +253,6 @@ describe('a Slack deep link', () => {
     expect(requests.some((r) => r.url.endsWith('/modify'))).toBe(false);
   });
 
-  // Stripped so a refresh or a back-nav does not re-focus, and only these two
-  // parameters — a shared route or an open drawer may be in the URL too.
   test('strips its own parameters and leaves the others', async () => {
     window.history.replaceState(null, '', '/?alert=9&alert_action=pause&route=abc');
     mount();
@@ -276,7 +260,6 @@ describe('a Slack deep link', () => {
     await waitFor(() => expect(window.location.search).toBe('?route=abc'));
   });
 
-  // Following a Slack card while signed out should offer a way in, not an empty nav.
   test('offers sign-in when the user is signed out', async () => {
     listStatus = 401;
     window.history.replaceState(null, '', '/?alert=9');

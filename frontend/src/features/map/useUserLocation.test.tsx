@@ -1,9 +1,3 @@
-// The locate-me control, the store it writes, and the puck that follows it.
-//
-// Worth its own suite because every consumer of a fix is somewhere else: the drawer's
-// distance line and the search box's proximity bias both read `mapStore.userLocation`,
-// so the only thing that proves this end works is that a `geolocate` event lands there
-// — and that a failure clears it rather than leaving a stale position behind.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createTestQueryClient } from '@/test/query-client';
 import { act, render, screen, waitFor } from '@testing-library/react';
@@ -118,8 +112,6 @@ describe('the controls', () => {
     expect(navigation.options).toEqual({ showCompass: false });
   });
 
-  // A single fix, cheaply: `trackUserLocation` would hold a `watchPosition` open for
-  // a value two surfaces read occasionally.
   test('locate-me asks for one low-accuracy fix', () => {
     mount();
 
@@ -146,8 +138,6 @@ describe('the controls', () => {
     expect(geolocate.listenerCount('error')).toBe(0);
   });
 
-  // Controls are chrome around the canvas, not layers in a style, so a basemap
-  // change must not take them with it — and must not add a second pair either.
   test('a style reload leaves them alone', async () => {
     mount();
 
@@ -183,7 +173,6 @@ describe('a fix', () => {
     expect(screen.getByRole('img', { name: 'Your location' })).toBeInTheDocument();
   });
 
-  // One marker, moved. A remove-and-re-add per position would flicker.
   test('a second fix moves the same puck', () => {
     mount();
 
@@ -194,9 +183,6 @@ describe('a fix', () => {
     expect(markers[0]!.lngLat).toEqual([-121.9, 37.3]);
   });
 
-  // The vanilla drew a puck only for its own control's event, so locating yourself
-  // from the topbar's button left the map with no "you are here" at all. The puck
-  // follows the store here, which covers every writer.
   test('a location from anywhere else gets a puck too', async () => {
     mount();
 
@@ -218,8 +204,6 @@ describe('a fix', () => {
 });
 
 describe('a failure', () => {
-  // A stale fix would quietly put wrong distances in the drawer, which is worse
-  // than showing none.
   test('clears the location and takes the puck away', async () => {
     mount();
     act(() => geolocate.fire('geolocate', position(-122.4, 37.8)));
@@ -230,8 +214,6 @@ describe('a failure', () => {
     await waitFor(() => expect(puck()).toBeNull());
   });
 
-  // Denied is the one failure the user can do something about, so it is the one
-  // that names the fix.
   test('a denied permission says how to grant it', async () => {
     mount();
 

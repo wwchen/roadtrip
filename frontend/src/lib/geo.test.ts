@@ -9,8 +9,6 @@ import {
 } from './geo';
 
 describe('distanceKm', () => {
-  // One degree of latitude along a meridian is exactly R × 1 rad/deg for
-  // haversine, which pins the earth radius and the radian conversion together.
   test('one degree of latitude is ~111.195 km', () => {
     expect(distanceKm(0, 0, 1, 0)).toBeCloseTo(111.19492664455873, 6);
   });
@@ -108,7 +106,6 @@ describe('geomCenter', () => {
     ).toBe(2.5);
   });
 
-  // PAD-US ships some parks as GeometryCollection with mixed polygon parts.
   test('a GeometryCollection spans all member geometries', () => {
     expect(
       geomCenter({
@@ -183,7 +180,6 @@ describe('hasCoordinates', () => {
     expect(hasCoordinates(geom as Parameters<typeof hasCoordinates>[0])).toBe(false);
   });
 
-  // Exactly the inputs the geomCenter fallback covers, so the two stay aligned.
   test('is false for everything geomCenter answers with the origin for', () => {
     for (const geom of [null, undefined, { type: 'Point' }, { type: 'Polygon', coordinates: [] }]) {
       expect(hasCoordinates(geom)).toBe(false);

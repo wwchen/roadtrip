@@ -1,13 +1,3 @@
-// The sanitiser, tested as the security boundary it is.
-//
-// Provider HTML reaches the page verbatim through `dangerouslySetInnerHTML`, so these
-// are the assertions that make that safe: an unknown tag keeps its words and loses its
-// markup, attributes are stripped to a whitelist, and no scheme other than the allowed
-// ones survives on an `href`.
-//
-// A parity suite against the vanilla `web/upstream-html.js` is not possible here — it
-// imports `escapeHtml` from `core.js` and builds whole HTML sections — so these test
-// the documented contract instead.
 import { describe, expect, test } from 'vitest';
 import { descriptionHtml, sanitizeUpstreamHtml, upstreamDecorations } from './upstream-html';
 
@@ -25,8 +15,6 @@ describe('sanitizeUpstreamHtml', () => {
     expect(sanitizeUpstreamHtml(html)).toBe(html);
   });
 
-  // Unwrap rather than delete: a provider wrapping a whole paragraph in
-  // `<span style=…>` should not lose the paragraph.
   test('unwraps a disallowed tag and keeps its text', () => {
     expect(sanitizeUpstreamHtml('<span style="color:red">Quiet hours</span>')).toBe('Quiet hours');
     expect(sanitizeUpstreamHtml('<font size="2"><p>Kept</p></font>')).toBe('<p>Kept</p>');
@@ -73,8 +61,6 @@ describe('sanitizeUpstreamHtml', () => {
     },
   );
 
-  // An event handler smuggled through a nested disallowed element still goes, because
-  // the walk is recursive rather than top-level only.
   test('sanitises nested content, not just the top level', () => {
     const result = sanitizeUpstreamHtml('<p><span><img src="x" onerror="alert(1)"></span></p>');
 
@@ -89,8 +75,6 @@ describe('descriptionHtml', () => {
     expect(descriptionHtml('<p onclick="x">Nice</p>')).toBe('<p>Nice</p>');
   });
 
-  // Plain text is the common case, and it has to keep its shape rather than
-  // collapsing into one run.
   test('paragraphs plain text on blank lines', () => {
     expect(descriptionHtml('First para.\n\nSecond para.')).toBe(
       '<p>First para.</p><p>Second para.</p>',
@@ -101,9 +85,6 @@ describe('descriptionHtml', () => {
     expect(descriptionHtml('Line one\nLine two')).toBe('<p>Line one<br>Line two</p>');
   });
 
-  // Routing, carried over from the legacy rule: anything that looks like a tag is
-  // treated as provider markup and goes through the sanitiser, so the tag is STRIPPED
-  // rather than escaped. Either way it cannot execute, and the words survive.
   test('text that looks like markup is sanitised, not escaped', () => {
     const result = descriptionHtml('Watch out for <script>alert(1)</script> here');
 
@@ -112,8 +93,6 @@ describe('descriptionHtml', () => {
     expect(result).toContain('here');
   });
 
-  // The genuine text path builds DOM nodes instead of concatenating strings, so
-  // escaping happens by construction — there is no hand-rolled escaper to get wrong.
   test('escapes special characters on the plain-text path', () => {
     expect(descriptionHtml('Sites 1 & 2 cost less than $30')).toBe(
       '<p>Sites 1 &amp; 2 cost less than $30</p>',

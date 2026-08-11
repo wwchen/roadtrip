@@ -2,14 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { token } from '@tokens';
 import { flattenHydratedPoi, type PoiFeature } from './poi';
 
-// ---------------------------------------------------------------------------
-// Fixtures: one per branch of the flattener, plus the awkward inputs.
-//
-// These were shared with a parity suite that ran this port and `web/core.js`'s
-// original over the same inputs and compared output. Phase 5 deleted `web/`, so
-// that suite is gone and the behaviour tests below are the contract. They are the
-// reason the fixtures are this exhaustive — keep them that way.
-// ---------------------------------------------------------------------------
+// One fixture per flattener branch, plus malformed and sparse inputs.
 
 const FIXTURES: Readonly<Record<string, PoiFeature>> = {
   campgroundNested: {
@@ -119,11 +112,6 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
 
 const flatten = (key: keyof typeof FIXTURES) =>
   flattenHydratedPoi(structuredClone(FIXTURES[key]!)).properties;
-
-// ---------------------------------------------------------------------------
-// Behavior. These pin the contract the popups and drawer depend on, and survive
-// the deletion of web/.
-// ---------------------------------------------------------------------------
 
 describe('campground promotion', () => {
   test('promotes management, contact, and location facts to flat names', () => {
@@ -304,11 +292,6 @@ describe('re-flattening', () => {
     expect(twice).toEqual(once);
   });
 
-  // The general rule: a field derived ONLY from `raw`, with no flat fallback,
-  // does not survive a second pass, because the first pass consumes `raw` and
-  // deletes it. Pinned per branch so the limitation is explicit rather than
-  // discovered in Phase 4. The legacy implementation behaves identically — the
-  // parity suite below runs re-flattening through both.
   test.each([
     ['nationalPark', 'GIS_Acres', 106589, null],
     ['nationalPark', 'Mang_Name', 'NPS', ''],

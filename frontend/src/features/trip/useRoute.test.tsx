@@ -1,9 +1,3 @@
-// The route request, driven through the real hook against a stubbed /api/route.
-//
-// The behaviours worth pinning are the ones the vanilla hand-rolled: that an
-// incomplete trip asks for nothing and clears the published route, that a routing
-// refusal becomes the right sentence, and that a radius change does not re-request
-// a road that cannot have changed.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createTestQueryClient } from '@/test/query-client';
@@ -83,8 +77,6 @@ describe('a complete trip', () => {
     expect(requests[0]).toContain('radius_miles=5');
   });
 
-  // The store is what `selectRouteActive` and the viewport loop read, and this
-  // hook is its only writer.
   test('publishes the route into the store', async () => {
     withTrip([A, B]);
     renderHook(() => useRoute(), { wrapper });
@@ -141,8 +133,6 @@ describe('an incomplete trip', () => {
     expect(requests).toHaveLength(0);
   });
 
-  // A stop the user emptied leaves a route that describes a trip they no longer
-  // have. This is the port of the vanilla's `removeRouteLayer()`.
   test('clears the published route', async () => {
     withTrip([A, B]);
     const { result } = renderHook(() => useRoute(), { wrapper });
@@ -156,8 +146,6 @@ describe('an incomplete trip', () => {
     expect(result.current.line).toBeNull();
   });
 
-  // A stop still resolving has (0, 0) coordinates; routing from null island is
-  // worse than waiting for the callback.
   test('waits for a stop that is still locating', async () => {
     withTrip([{ name: 'Locating you…', lng: 0, lat: 0, pending: true }, B]);
     renderHook(() => useRoute(), { wrapper });
@@ -177,8 +165,6 @@ describe('a routing failure', () => {
     expect(useTripStore.getState().route).toBeNull();
   });
 
-  // A proxy in front of the routing service answers HTML, and a SyntaxError from
-  // reading it as JSON must not escape as the user-facing message.
   test('falls back to the status when the body is not JSON', async () => {
     respond = () => new Response('<html>bad gateway</html>', { status: 502 });
     withTrip([A, B]);
@@ -199,9 +185,6 @@ describe('a routing failure', () => {
 });
 
 describe('the corridor radius', () => {
-  // The road does not depend on the radius — only the corridor polygon the
-  // response carries does, and the slider recomputes that locally. Keying on it
-  // would fire a routing request per slider settle.
   test('does not re-request the route', async () => {
     withTrip([A, B]);
     const { result } = renderHook(() => useRoute(), { wrapper });

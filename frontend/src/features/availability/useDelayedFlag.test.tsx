@@ -1,8 +1,3 @@
-// The skeleton delay.
-//
-// Small, and worth pinning: the whole reason it exists is that a cache hit must not
-// flash a skeleton table on its way to real data, and the failure mode — a trailing
-// timer that raises the flag *after* the fetch finished — is invisible in a screenshot.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
 import { useDelayedFlag } from './useDelayedFlag';
@@ -45,7 +40,6 @@ describe('the delayed flag', () => {
     expect(raised).toBe(true);
   });
 
-  // The point of the hook: work that finishes inside the delay shows nothing.
   test('never rises for work that finishes first', async () => {
     const { rerender } = render(<Harness active />);
 
@@ -70,7 +64,6 @@ describe('the delayed flag', () => {
     expect(raised).toBe(false);
   });
 
-  // A second slow fetch must get its own grace period, not inherit the first's.
   test('restarts the delay for the next run', async () => {
     const { rerender } = render(<Harness active />);
     await advance(DELAY);

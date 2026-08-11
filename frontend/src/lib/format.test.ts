@@ -10,14 +10,10 @@ describe('formatTimestamp', () => {
     expect(formatTimestamp('2026-07-08T14:30:00')).toBe('2026-07-08 14:30:00');
   });
 
-  // The whole point: this is string surgery, not date parsing. An operational
-  // dashboard beside UTC logs must not silently shift to the viewer's timezone.
   test('does not convert timezones', () => {
     expect(formatTimestamp('2026-01-01T00:00:00Z')).toBe('2026-01-01 00:00:00');
   });
 
-  // A non-Z offset is left in place rather than being normalised away, since
-  // only a trailing `Z` is stripped.
   test('leaves a numeric offset alone', () => {
     expect(formatTimestamp('2026-07-08T14:30:00+02:00')).toBe('2026-07-08 14:30:00+02:00');
   });
@@ -36,7 +32,6 @@ describe('formatDuration', () => {
     expect(formatDuration(3599)).toBe('59m 59s');
   });
 
-  // Kept from the original: hours drop seconds where minutes keep them.
   test('hours carry minutes but drop seconds', () => {
     expect(formatDuration(3600)).toBe('1h 0m');
     expect(formatDuration(8100)).toBe('2h 15m');
@@ -53,8 +48,6 @@ describe('truncate', () => {
     expect(truncate('abcde', 5)).toBe('abcde');
   });
 
-  // The ellipsis is inside the budget, not added on top of it — run-error cells
-  // are laid out against that width.
   test('clips to at most max characters including the ellipsis', () => {
     expect(truncate('abcdef', 5)).toBe('abcd…');
     expect(truncate('abcdef', 5)).toHaveLength(5);
@@ -67,8 +60,6 @@ describe('dayOfWeek', () => {
     expect(dayOfWeek('2026-07-12')).toBe('Sun');
   });
 
-  // Local, not UTC. Were this parsed as UTC, a viewer west of Greenwich would
-  // see the previous day's name against the date printed next to it.
   test('reads the date as local midnight', () => {
     expect(dayOfWeek('2026-01-01')).toBe(
       new Date(2026, 0, 1).toDateString().slice(0, 3),

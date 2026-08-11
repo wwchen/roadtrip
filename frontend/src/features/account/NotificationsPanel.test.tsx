@@ -1,10 +1,3 @@
-// The notifications panel and the write-only SecretField it drives.
-//
-// This is the highest-stakes port in Phase 3: the Slack token is a credential the
-// server never returns, and the whole contract rests on `null` meaning "leave
-// unchanged" all the way down to `updateNotifications` omitting the key. The legacy
-// panel had no tests, and porting it turned up two bugs in exactly that contract —
-// both pinned below.
 import { describe, expect, test, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -67,17 +60,12 @@ function renderPanel(
 }
 
 describe('SecretField — nothing stored', () => {
-  // BUG 1 in the original: with no hint the field opened in `replacing` mode, so
-  // getValue() returned '' rather than null. `updateNotifications` only omits the
-  // key when the value is null, so saving an unrelated field sent slack_token: "".
   test('an untouched token stays null, so it is omitted from the payload', () => {
     const { state } = renderPanel(settings());
     expect(state.values.slack_token).toBeNull();
     expect(buildNotificationsPayload(state.values).slack_token).toBeNull();
   });
 
-  // BUG 2: dirty was `getMode() === 'replacing'`, true from mount when nothing was
-  // stored — Save enabled on a form nobody had touched.
   test('an untouched panel is not dirty', () => {
     const s = settings();
     expect(isNotificationsDirty(s, notificationValuesOf(s))).toBe(false);
@@ -93,8 +81,6 @@ describe('SecretField — nothing stored', () => {
     expect(isNotificationsDirty(s, state.values)).toBe(true);
   });
 
-  // Clearing the input means "I supplied nothing", never "store an empty secret".
-  // Removing a stored token is a separate explicit action.
   test('clearing the input returns to null rather than an empty string', async () => {
     const { state } = renderPanel(settings());
     const input = screen.getByLabelText('Slack bot token');
@@ -122,7 +108,6 @@ describe('SecretField — a token already stored', () => {
     expect(screen.queryByLabelText('Slack bot token')).not.toBeInTheDocument();
   });
 
-  // The secret itself is never sent to the client, so it cannot leak into the DOM.
   test('the masked display reveals nothing but the hint', () => {
     const { container } = render(
       <NotificationsPanel
@@ -209,7 +194,6 @@ describe('test buttons', () => {
     }
   });
 
-  // The coded message is the only place the reason appears, so it stays put.
   test('a failure maps the backend code to an owned message and persists', async () => {
     const onTestSlack = vi.fn(async () => {
       throw Object.assign(new Error('nope'), { code: 'slack_invalid_auth' });
@@ -234,8 +218,6 @@ describe('test buttons', () => {
     ).toBeInTheDocument();
   });
 
-  // One status slot, so two stale results cannot sit side by side contradicting
-  // each other.
   test('a new test clears the previous result', async () => {
     const onTestSlack = vi.fn(async () => {
       throw Object.assign(new Error('nope'), { code: 'slack_invalid_auth' });

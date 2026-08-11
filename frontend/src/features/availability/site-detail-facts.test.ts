@@ -1,9 +1,3 @@
-// Reading a campsite row into facts.
-//
-// All of this is provider normalisation, so the tests are mostly "the same fact spelled
-// four ways yields one answer". The two rules worth reading are the image search (which
-// must not promote a booking link or a campground map to a photo) and the attribute
-// flattening (which must not print our own unresolved definition ids at a camper).
 import { describe, expect, test } from 'vitest';
 import type { Campsite } from '@/api/campsite-api';
 import {
@@ -31,7 +25,6 @@ describe('capacity', () => {
     expect(capacityLabel(site(), { min_capacity: 6, max_capacity: 6 })).toBe('Up to 6 people');
   });
 
-  // The same number from four vendors.
   test('accepts every spelling', () => {
     expect(capacityLabel(site(), { minCapacity: 2, maxCapacity: 6 })).toBe('2-6 people');
     expect(capacityLabel(site(), { min_num_people: 2, max_num_people: 6 })).toBe('2-6 people');
@@ -95,7 +88,6 @@ describe('the fact list', () => {
 });
 
 describe('feature chips', () => {
-  // Only `true`: in these rows `false` usually means "no data", not "no firepit".
   test('include a true column and omit a false one', () => {
     const labels = featureLabels(site({ firepit: true, picnic_table: false }));
 
@@ -129,7 +121,6 @@ describe('flattening provider attribute bags', () => {
     expect(attributeLabels([{ name: 'Shade', value: 'Full' }])).toEqual(['Shade: Full']);
   });
 
-  // "Pets allowed: true" reads worse than "Pets allowed".
   test('drops a redundant boolean value', () => {
     expect(attributeLabels([{ name: 'Pets allowed', value: true }])).toEqual(['Pets allowed']);
   });
@@ -142,7 +133,6 @@ describe('flattening provider attribute bags', () => {
     expect(attributeLabels(['Shade', ''])).toEqual(['Shade']);
   });
 
-  // Our own plumbing: an attribute that is only a reference we never resolved.
   test('skips an unresolved definition reference', () => {
     expect(attributeLabels([{ definition_id: 41, value: 'x' }])).toEqual([]);
     expect(attributeLabels([{ attributeDefinitionId: 41 }])).toEqual([]);
@@ -183,13 +173,10 @@ describe('finding an image', () => {
     );
   });
 
-  // A campground map is not a photo of the site.
   test('skips anything keyed as a map', () => {
     expect(findImageUrl(site({ source_payload: { map_url: 'https://cdn.example/m.png' } }))).toBe('');
   });
 
-  // Otherwise the first https string in the payload becomes the hero, and that is
-  // usually a booking link.
   test('ignores a plain link', () => {
     expect(findImageUrl(site({ source_payload: { url: 'https://recreation.gov/x' } }))).toBe('');
   });

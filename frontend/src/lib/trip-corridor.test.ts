@@ -1,9 +1,3 @@
-// The corridor polygon and the radius that shapes it.
-//
-// The vertex-count assertion is the load-bearing one: the same polygon is POSTed
-// to /api/pois/on-route, where the backend caps a request polygon at 2000
-// vertices, and an unsimplified 100-mile buffer of a cross-country line exceeds
-// that.
 import { describe, expect, test, vi } from 'vitest';
 import type { LineString, Polygon } from 'geojson';
 import { CORRIDOR_DEFAULT_MILES } from '@/stores/tripStore';
@@ -37,7 +31,6 @@ describe('clampCorridorMiles', () => {
     expect(clampCorridorMiles(500)).toBe(100);
   });
 
-  // A shared link can carry any number; the slider can only show notches.
   test('snaps to the slider step', () => {
     expect(clampCorridorMiles(37)).toBe(35);
     expect(clampCorridorMiles(38)).toBe(40);
@@ -68,7 +61,6 @@ describe('computeCorridor', () => {
     expect(spread(wide)).toBeGreaterThan(spread(narrow));
   });
 
-  // The reason simplification is not optional: this polygon is also a request body.
   test('keeps a cross-country corridor well under the backend"s vertex cap', () => {
     const corridor = computeCorridor(longLine, 100)!;
 
@@ -81,7 +73,6 @@ describe('computeCorridor', () => {
     expect(computeCorridor(undefined, 5)).toBeNull();
   });
 
-  // A missing fill is a much smaller problem than a planner that stops responding.
   test('survives a turf failure', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -96,8 +87,6 @@ describe('computeCorridor', () => {
 });
 
 describe('serverCorridor', () => {
-  // Preferred for the first render: it is the exact polygon the server filtered
-  // by, so drawing our own would show campgrounds outside the fill.
   test('finds the corridor feature by role', () => {
     const polygon: Polygon = {
       type: 'Polygon',
@@ -121,8 +110,6 @@ describe('serverCorridor', () => {
     expect(serverCorridor(null)).toBeNull();
   });
 
-  // A mocked or older response can carry the role on a geometry that is not a
-  // polygon; drawing that as a fill would throw inside MapLibre.
   test('ignores a corridor role on a non-polygon geometry', () => {
     expect(
       serverCorridor(routeResponse([{ properties: { role: 'corridor' }, geometry: shortLine }])),

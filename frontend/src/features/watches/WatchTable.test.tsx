@@ -36,8 +36,6 @@ function renderTable(watches: Watch[], overrides: Partial<Parameters<typeof Watc
 }
 
 describe('formatWatchDate', () => {
-  // A watch date is a calendar date. Formatting it in the viewer's zone would
-  // shift it a day west of UTC.
   test('formats in UTC, not the local zone', () => {
     expect(formatWatchDate('2026-07-08')).toBe('Jul 8');
     expect(formatWatchDate('2026-01-01')).toBe('Jan 1');
@@ -64,7 +62,6 @@ describe('relativeTime', () => {
     expect(relativeTime(iso, now)).toBe(expected);
   });
 
-  // A clock skew that puts the run in the future must not render "-2m ago".
   test('clamps a future timestamp to just now', () => {
     expect(relativeTime('2026-08-08T12:05:00Z', now)).toBe('just now');
   });
@@ -131,7 +128,6 @@ describe('rows', () => {
     expect(screen.getByText('Paused')).toBeInTheDocument();
   });
 
-  // A failed run is the thing a user most needs to see; it outranks the age.
   test('shows an error rather than an age for a failed run', () => {
     renderTable([
       watch({ last_run_at: '2026-08-08T11:00:00Z', last_run_status: 'failed', last_run_error: 'boom' }),
@@ -173,7 +169,6 @@ describe('actions', () => {
     expect(edited).toEqual([7]);
   });
 
-  // Delete is irreversible and sits next to Pause, so it double-confirms.
   test('requires a second click to delete', async () => {
     const deleted: number[] = [];
     renderTable([watch({ id: 7 })], { onDelete: (id) => deleted.push(id) });
@@ -214,7 +209,6 @@ describe('sorting', () => {
       .slice(1) // drop the header
       .map((row) => row.querySelectorAll('td')[0]?.textContent ?? '');
 
-  // Matches the legacy data-table's defaultSort of id desc.
   test('defaults to id descending', () => {
     renderTable(rows, { poiNames: new Map() });
 
@@ -244,7 +238,6 @@ describe('sorting', () => {
     expect(idCells()).toEqual(['2', '3', '1']);
   });
 
-  // An unchecked watch is not "oldest" — blanks sort last either way.
   test('keeps blanks last in both directions', async () => {
     const withBlanks = [
       watch({ id: 1, last_run_at: '2026-08-01T00:00:00Z' }),

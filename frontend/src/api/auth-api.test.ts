@@ -1,6 +1,3 @@
-// No node --test suite existed for this client. The return_to encoding is the
-// security-relevant part — it is re-validated server-side, but a client that
-// forgets to encode produces links that break on any path with a query string.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { fetchMe, signIn, signInWithConnection, signOut } from './auth-api';
 import { jsonResponse, stubFetch, textResponse } from '@/test/fetch-stub';
@@ -31,8 +28,6 @@ describe('fetchMe', () => {
     expect(me).toEqual({ authenticated: false, auth_enabled: true });
   });
 
-  // Anonymous is a normal answer, not an error: the backend answers 200 for
-  // everyone so 401 keeps meaning a real authorization failure.
   test('resolves for an anonymous visitor', async () => {
     stubFetch(jsonResponse({ authenticated: false, auth_enabled: true }));
 

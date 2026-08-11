@@ -1,4 +1,3 @@
-// The corridor's cards: their order, their copy, and what the legend hides.
 import { describe, expect, test } from 'vitest';
 import type { LineString } from 'geojson';
 import type { TripStop } from '@/stores/tripStore';
@@ -73,8 +72,6 @@ describe('distanceAlongRouteKm', () => {
     expect(distanceAlongRouteKm(index, -122.48, 48.75)).toBeCloseTo(index.cum[2]!, 1);
   });
 
-  // The point of the whole module: a campground beside the middle of the route reports
-  // roughly the distance driven to reach it, not its distance from the origin.
   test('projects a point beside the route onto it', () => {
     const km = distanceAlongRouteKm(index, -122.5, 48.0);
 
@@ -82,8 +79,6 @@ describe('distanceAlongRouteKm', () => {
     expect(km).toBeLessThan(index.cum[1]! + 15);
   });
 
-  // A campground behind the origin clamps to the start rather than reporting a
-  // negative distance, which would sort it above the origin itself.
   test('clamps a point before the start', () => {
     expect(distanceAlongRouteKm(index, -122.33, 47.0)).toBeCloseTo(0, 1);
   });
@@ -92,8 +87,6 @@ describe('distanceAlongRouteKm', () => {
     expect(distanceAlongRouteKm(null, -122, 47)).toBe(0);
   });
 
-  // Routing engines do emit duplicated vertices; the projection must not divide by a
-  // zero-length segment.
   test('survives a zero-length segment', () => {
     const doubled = buildRouteIndex({
       type: 'LineString',
@@ -111,8 +104,6 @@ describe('distanceAlongRouteKm', () => {
 describe('tripCardsFromFeatures', () => {
   const index = buildRouteIndex(line);
 
-  // The order the driver meets them — sorting by distance from the origin would put a
-  // campground 20km off the far end above one passed in the first hour.
   test('sorts by distance along the route, not from the origin', () => {
     const cards = tripCardsFromFeatures(
       [slim(1, -122.47, 48.7), slim(2, -122.33, 47.7)],
@@ -131,7 +122,6 @@ describe('tripCardsFromFeatures', () => {
     expect(only!.distKm).toBeGreaterThan(0);
   });
 
-  // The id is what hydration and the click-through both need.
   test('drops features with no id or no usable point', () => {
     const cards = tripCardsFromFeatures(
       [
@@ -202,8 +192,6 @@ describe('hydrateCard', () => {
 });
 
 describe('parseRating', () => {
-  // The field arrives as an array from one endpoint and a JSON string from some
-  // provider payloads; a card that loses its stars for one provider is worse.
   test('reads both shapes', () => {
     expect(parseRating([4.5, 100])).toEqual([4.5, 100]);
     expect(parseRating('[4.5,100]')).toEqual([4.5, 100]);
@@ -223,14 +211,11 @@ describe('compactSeasonLabel', () => {
     expect(compactSeasonLabel('Open May–Oct (boat access)', undefined)).toBe('Open May–Oct');
   });
 
-  // The year-round test comes before the parenthetical strip, as in the vanilla, so a
-  // qualifier on a year-round season is dropped along with the rest of the sentence.
   test('collapses any year-round phrasing to one word', () => {
     expect(compactSeasonLabel('Open year-round', undefined)).toBe('Year-round');
     expect(compactSeasonLabel('year round (boat access)', undefined)).toBe('Year-round');
   });
 
-  // The single most useful thing to know about a campground from a list.
   test('names a first-come campground when there is no season', () => {
     expect(compactSeasonLabel(null, false)).toBe('First-come');
     expect(compactSeasonLabel(null, true)).toBe('');
@@ -254,8 +239,6 @@ describe('visibleCards', () => {
     ).toEqual([1, 2]);
   });
 
-  // The list has to agree with the map: a row for a hidden pin flies the camera to
-  // nothing.
   test('drops the agencies the legend switched off', () => {
     expect(
       visibleCards(cards, { hiddenAgencies: ['WA Parks'], campgroundsHidden: false }).map(
@@ -272,7 +255,6 @@ describe('visibleCards', () => {
     ).toEqual([1]);
   });
 
-  // 4b's legend can switch campgrounds off wholesale, which the vanilla's could not.
   test('shows nothing when campgrounds are off entirely', () => {
     expect(visibleCards(cards, { hiddenAgencies: [], campgroundsHidden: true })).toEqual([]);
   });

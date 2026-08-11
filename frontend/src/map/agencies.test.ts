@@ -59,8 +59,6 @@ describe('agencyCounts', () => {
     expect(agencyCounts([supercharger]).size).toBe(0);
   });
 
-  // The legend is viewport-scoped with no accumulated set, so an empty view has
-  // no rows rather than the last view's rows.
   test('an empty viewport has no rows', () => {
     expect(agencyCounts([]).size).toBe(0);
   });
@@ -83,8 +81,6 @@ describe('sortedAgencies', () => {
 });
 
 describe('hiddenAgencyFilter', () => {
-  // MapLibre wants the filter removed, not set to a tautology, when nothing is
-  // hidden — and an "all-on" legend must not narrow the layer at all.
   test('nothing hidden means no filter', () => {
     expect(hiddenAgencyFilter([])).toBeNull();
   });
@@ -96,8 +92,6 @@ describe('hiddenAgencyFilter', () => {
     ]);
   });
 
-  // The sentinel is not a value on any feature: hiding it means excluding the
-  // features that have no agency property at all.
   test('hiding the sentinel requires the property to be present', () => {
     expect(hiddenAgencyFilter([UNCATEGORIZED_AGENCY])).toEqual(['all', ['has', 'agency']]);
   });

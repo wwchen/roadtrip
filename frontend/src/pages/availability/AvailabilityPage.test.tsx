@@ -1,10 +1,3 @@
-// Page-level tests for the rebuilt availability dashboard.
-//
-// The legacy tabs had NO tests — the only availability suites cover
-// `availability-week.js`, which belongs to the map drawer (Phase 4d). So there is
-// no parity baseline to check this port against, and these tests are the first
-// pinning of behaviour that until now lived only in the source. That makes them
-// the guard against silent drift rather than a formality.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { QueryClient } from '@tanstack/react-query';
 import { createTestQueryClient } from '@/test/query-client';
@@ -78,9 +71,7 @@ const stats = (fields: Partial<SnapshotStats> = {}): SnapshotStats => ({
   ...fields,
 });
 
-// ---------------------------------------------------------------------------
 // Fetch harness — responders claim a request by URL+method, first match wins.
-// ---------------------------------------------------------------------------
 
 interface Recorded {
   url: string;
@@ -189,7 +180,6 @@ describe('tab routing', () => {
     );
   });
 
-  // Real anchors, so the tabs are linkable, copyable and middle-clickable.
   test('the tabs are links carrying their own URL', async () => {
     stubApi(pollerList());
     renderPage();
@@ -224,8 +214,6 @@ describe('tab routing', () => {
 });
 
 describe('pollers tab', () => {
-  // Scoped to the Status panel: "active" also names the filter select and a value
-  // in the status column, so an unscoped query is ambiguous.
   test('shows the summary counters', async () => {
     stubApi(pollerSummary({ active: 5, dormant: 2, due_now: 1, claimed: 3 }));
     renderPage();
@@ -241,7 +229,6 @@ describe('pollers tab', () => {
     expect(panel.textContent).toMatch(/claimed\s*3/);
   });
 
-  // The legacy tab opened filtered to active, not to "any".
   test('requests the active filter by default', async () => {
     stubApi(pollerList(poller()));
     renderPage();
@@ -290,7 +277,6 @@ describe('pollers tab', () => {
     expect(await screen.findByText(/^Error:/)).toBeInTheDocument();
   });
 
-  // A failing summary must not take the table with it — they are separate queries.
   test('a summary error does not hide the table', async () => {
     stubApi(
       startsWith('/api/availability/pollers/summary', () => json({ error: 'boom' }, 500)),
@@ -352,7 +338,6 @@ describe('check now', () => {
     );
   });
 
-  // 429 carries the remaining cooldown, and the button stays usable.
   test('a cooldown reports the retry delay', async () => {
     stubApi(
       pollerList(poller({ id: 7 })),
@@ -380,8 +365,6 @@ describe('check now', () => {
     expect(await screen.findByText('try again in ?s')).toBeInTheDocument();
   });
 
-  // A 404 means the row is stale, so the answer is to reload the list rather than
-  // to blame the press.
   test('a missing poller refetches the list instead of showing an error', async () => {
     stubApi(
       pollerList(poller({ id: 7 })),
@@ -412,10 +395,6 @@ describe('check now', () => {
     expect(await screen.findByText('error (500)')).toBeInTheDocument();
   });
 
-  // The legacy tab's refresh() rebuilt innerHTML, destroying the feedback span
-  // along with the row. Holding it in React state instead means it outlives the
-  // data it described unless something clears it — a permanent "queued" badge
-  // beside a poller whose run happened long ago.
   test('the queued message clears once the refreshed list arrives', async () => {
     // shouldAdvanceTime keeps real time moving, so userEvent and waitFor still
     // work while the TTL timer stays under the test's control.
@@ -429,8 +408,6 @@ describe('check now', () => {
       await screen.findByRole('table');
 
       await userEvent.click(screen.getByRole('button', { name: 'check now' }));
-      // Readable first — clearing it on the invalidation refetch instead would make
-      // the confirmation flash past, which is the legacy tab's own flaw.
       await screen.findByText('queued');
 
       await act(async () => {
@@ -469,7 +446,6 @@ describe('runs tab', () => {
     expect(within(table).getByText('—')).toBeInTheDocument();
   });
 
-  // The runs response carries no total, so the count is of the rows returned.
   test('counts the rows returned', async () => {
     stubApi(runList(run({ id: 1 }), run({ id: 2 })));
     renderPage('?tab=runs');
@@ -530,7 +506,6 @@ describe('changes tab', () => {
     expect(asked('/changes')).toBeUndefined();
   });
 
-  // The backend rejects both-or-neither, so the form says so rather than 400ing.
   test('refuses both a POI and a campsite', async () => {
     stubApi();
     renderPage('?tab=changes');
@@ -588,7 +563,6 @@ describe('changes tab', () => {
     expect(await screen.findByText('∞')).toBeInTheDocument();
   });
 
-  // Context beside the list, so its failure hides the panel rather than the page.
   test('a failing stats summary leaves the change list alone', async () => {
     stubApi(
       changeList(change()),
