@@ -90,13 +90,13 @@ coming, and React is easier to hire/onboard for. TypeScript throughout.
 | Area | Decision |
 |---|---|
 | Framework | **React 18.3 + TypeScript** (18.3 chosen for max compatibility; `@lew-ds/lds-react` peers `^18 \|\| ^19`) |
-| Build | **Vite 6**, multi-page: 3 HTML entries mirroring `/`, `/availability`, `/watches` |
+| Build | **Vite 8**, multi-page: 3 HTML entries mirroring `/`, `/availability`, `/watches` |
 | Server state | **TanStack Query** (replaces the `roadtrip:*` custom-event refetch bus) |
 | Client state | **Zustand** (replaces `state`/`trip` singletons + `window.__rt*` global RPC bridge) |
 | Components/styling | **LDS** — consume `@lew-ds/lds-react` via a local `@ui` adapter; style with `@lew-ds/lds/css` + `theme-roadtrip` |
 | LDS consumption | **Published npm packages under `@lew-ds/*`**, with `@lew-ds/lds` pinned to 1.0.0 for the Roadtrip theme |
 | Rollout | **Strangler, page-by-page**: watches → availability → account → map app |
-| Tests | **Vitest 3** + jsdom + React Testing Library (ports the `node --test` `*.test.mjs` suites) |
+| Tests | **Vitest 4** + jsdom + React Testing Library (ports the `node --test` `*.test.mjs` suites) |
 
 ## LDS findings (inspected 2026-08-07)
 
@@ -1431,8 +1431,8 @@ Consequences worth knowing:
   never runs. Java has no function literals, so the Kotlin smoke's string form is the
   supported one there — but a JS harness mirroring it must pass real functions. Half a
   verification pass silently "passed" this way before it was noticed.
-- **Vitest must be v3 for Vite 6.** Vitest 2.x depends on Vite 5 and pulls a *nested* copy,
-  causing a `Plugin` type clash with `@vitejs/plugin-react`. Use Vitest 3 and import
+- **Vitest and Vite must share a compatible Vite range.** A mismatched Vitest pulls a *nested* copy,
+  causing a `Plugin` type clash with `@vitejs/plugin-react`. Use Vitest 4 with Vite 8 and import
   `defineConfig` from `vitest/config` (not `vite`).
 - **`tokens.css` and the sandbox chrome are intentionally not bundled**, and are injected
   by the `runtimeServedAssets` Vite plugin (`frontend/vite/runtime-served-assets.ts`)

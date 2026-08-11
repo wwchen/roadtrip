@@ -45,10 +45,6 @@ updates:
     ignore:
       - dependency-name: "@lew-ds/lds"
         versions: [">=1.1.0"]
-      # plugin-react 6 requires Vite 8. Keep Dependabot on the compatible 5.x
-      # line until Vite and Vitest are upgraded together.
-      - dependency-name: "@vitejs/plugin-react"
-        versions: [">=6.0.0"]
 
   # Rec.gov companion sidecar.
   - package-ecosystem: npm

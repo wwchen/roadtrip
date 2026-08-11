@@ -10,6 +10,8 @@ const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 // here too until the last three files under it moved into this tree. Override the
 // target with VITE_BACKEND_ORIGIN when the backend runs elsewhere.
 const BACKEND_ORIGIN = process.env.VITE_BACKEND_ORIGIN ?? 'http://localhost:8765';
+const MAPLIBRE_MODULE_PATH = '/maplibre-gl/';
+const MAPLIBRE_CHUNK_NAME = 'maplibre';
 const proxy = Object.fromEntries(
   ['/api', '/auth', '/data'].map((path) => [
     path,
@@ -52,7 +54,7 @@ export default defineConfig({
         // It still trips Rollup's 500kB chunk-size warning, and that is expected:
         // the warning names `maplibre` rather than an app chunk, which is the
         // point. A NEW warning naming something else is worth reading.
-        manualChunks: { maplibre: ['maplibre-gl'] },
+        manualChunks: (id) => id.includes(MAPLIBRE_MODULE_PATH) ? MAPLIBRE_CHUNK_NAME : undefined,
       },
     },
   },
