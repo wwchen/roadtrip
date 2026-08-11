@@ -88,6 +88,7 @@ private fun defaultSettingsDto(slackConfigured: Boolean = false): SettingsRespon
                 isEmailVerified = true,
                 roles = emptyList(),
                 providerLabel = null,
+                theme = "system",
             ),
         notifications =
             NotificationsDto(

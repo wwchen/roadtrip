@@ -47,6 +47,7 @@ private val stubUser =
         email = "sandbox-user@example.com",
         isEmailVerified = true,
         displayName = "Sandbox User",
+        theme = "system",
         status = UserStatus.ACTIVE,
         roles = setOf(Role.ADMIN),
         createdAt = OffsetDateTime.now(),

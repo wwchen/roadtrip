@@ -45,9 +45,11 @@ private class FakeUserRepo : UserRepo(ctx = detachedCtx) {
     override fun updateProfile(
         id: UserId,
         displayName: String?,
+        theme: String?,
     ): User? {
         val u = users[id.value] ?: return null
-        val updated = u.copy(displayName = displayName)
+        // Faithful to the real repo's coalesce semantics: null means "unchanged".
+        val updated = u.copy(displayName = displayName, theme = theme ?: u.theme)
         users[id.value] = updated
         return updated
     }
@@ -151,6 +153,7 @@ private fun testUser(
     userId: UserId = testUserId,
     email: String = "user@example.com",
     displayName: String? = "Alice",
+    theme: String = "system",
     roles: Set<Role> = emptySet(),
 ): User =
     User(
@@ -158,6 +161,7 @@ private fun testUser(
         email = email,
         isEmailVerified = true,
         displayName = displayName,
+        theme = theme,
         status = UserStatus.ACTIVE,
         roles = roles,
         createdAt = OffsetDateTime.parse("2026-01-01T00:00:00Z"),
@@ -263,6 +267,34 @@ class UserSettingsServiceTest {
         assertFailsWith<SettingsError.InvalidField> {
             settingsService.updateProfile(testUserId, UpdateProfileRequest(displayName = "   "))
         }
+    }
+
+    @Test
+    fun `updateProfile persists a valid theme`() {
+        val result = settingsService.updateProfile(testUserId, UpdateProfileRequest(displayName = "Wm", theme = "dark"))
+        assertEquals("dark", result.profile.theme)
+    }
+
+    @Test
+    fun `updateProfile leaves the theme unchanged when absent`() {
+        settingsService.updateProfile(testUserId, UpdateProfileRequest(displayName = "Wm", theme = "dark"))
+        val result = settingsService.updateProfile(testUserId, UpdateProfileRequest(displayName = "Wm2", theme = null))
+        assertEquals("dark", result.profile.theme)
+    }
+
+    @Test
+    fun `updateProfile rejects an unknown theme`() {
+        val error =
+            assertFailsWith<SettingsError.InvalidField> {
+                settingsService.updateProfile(testUserId, UpdateProfileRequest(displayName = "Wm", theme = "sepia"))
+            }
+        assertTrue(error.message!!.contains("theme"))
+    }
+
+    @Test
+    fun `read surfaces the stored theme`() {
+        settingsService.updateProfile(testUserId, UpdateProfileRequest(displayName = "Wm", theme = "light"))
+        assertEquals("light", settingsService.read(Principal.User(testUserId)).profile.theme)
     }
 
     // 3. updateNotifications() with a valid token: authTest called, seal stored, hint == last 4.

@@ -11,6 +11,7 @@ class UserTest {
             id = UserId(1),
             email = "a@example.com",
             displayName = null,
+            theme = "system",
             isEmailVerified = true,
             status = UserStatus.ACTIVE,
             roles = roles,

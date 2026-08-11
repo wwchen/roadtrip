@@ -18,6 +18,11 @@ import ca.floo.roadtrip.service.security.SecretCipher
 
 const val MAX_SLACK_CHANNEL_CHARS = 255
 
+/** The UI theme preference values. Mirrors the CHECK constraint in V51 and the
+ *  `ThemeChoice` union in frontend/src/lib/theme.ts. */
+@Suppress("TopLevelPropertyNaming")
+val THEME_VALUES = setOf("light", "dark", "system")
+
 private val emailRegex = Regex("""^[^@\s]+@[^@\s]+\.[^@\s]+$""")
 
 /**
@@ -126,7 +131,13 @@ class UserSettingsService(
         if (req.displayName != null && req.displayName.isBlank()) {
             throw SettingsError.InvalidField("display_name must not be blank")
         }
-        val user = requireNotNull(userRepo.updateProfile(userId, req.displayName)) { "user not found: $userId" }
+        if (req.theme != null && req.theme !in THEME_VALUES) {
+            throw SettingsError.InvalidField("theme must be one of ${THEME_VALUES.joinToString(", ")}")
+        }
+        val user =
+            requireNotNull(userRepo.updateProfile(userId, req.displayName, req.theme)) {
+                "user not found: $userId"
+            }
         val settings = settingsRepo.find(userId)
         val principal = Principal.User(userId, user.roles)
         return assembleDto(user, settings, principal)
@@ -248,6 +259,7 @@ class UserSettingsService(
                     isEmailVerified = user.isEmailVerified,
                     roles = principal.roles.map { it.wireValue },
                     providerLabel = providerLabel,
+                    theme = user.theme,
                 ),
             notifications =
                 NotificationsDto(
