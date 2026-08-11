@@ -168,7 +168,7 @@ dependencies {
     // version the agent embeds: opentelemetry-instrumentation-bom 2.29.0
     // (OTEL_JAVAAGENT_VERSION in the Dockerfile) imports opentelemetry-bom
     // 1.63.0. Bump both together.
-    implementation("io.opentelemetry:opentelemetry-api:1.64.0")
+    implementation("io.opentelemetry:opentelemetry-api:1.65.0")
 
     // Self-documenting /api/docs at runtime from Ktor's routing tree.
     implementation("io.ktor:ktor-server-swagger:$ktorVersion")
@@ -212,8 +212,8 @@ dependencies {
     testImplementation(kotlin("test"))
     // In-memory metric reader, so OtelRoadtripMetricsTest can assert the exact
     // instrument names and attributes the dashboards and alert rules query.
-    testImplementation("io.opentelemetry:opentelemetry-sdk-metrics:1.64.0")
-    testImplementation("io.opentelemetry:opentelemetry-sdk-testing:1.64.0")
+    testImplementation("io.opentelemetry:opentelemetry-sdk-metrics:1.65.0")
+    testImplementation("io.opentelemetry:opentelemetry-sdk-testing:1.65.0")
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
     testImplementation("io.ktor:ktor-client-cio:$ktorVersion")
     // MockEngine lets SlackNotifier / AvailabilityClient tests assert request
