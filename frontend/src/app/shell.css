@@ -16,6 +16,14 @@
   box-sizing: border-box;
 }
 
+:root {
+  /* Room a fixed deployment bar has claimed along the top of the viewport. Zero
+     unless something sets it — only the sandbox banner does, in sandbox.css.
+     Page chrome offsets by it so a fixed bar never covers app surfaces. */
+  --rt-chrome-top: 0px;
+  --rt-shell-pad: 20px;
+}
+
 html,
 body {
   margin: 0;
@@ -26,7 +34,8 @@ body {
 }
 
 body {
-  padding: 20px;
+  padding: var(--rt-shell-pad);
+  padding-top: calc(var(--rt-shell-pad) + var(--rt-chrome-top));
 }
 
 .shell {
@@ -63,8 +72,8 @@ body {
 }
 
 @media (max-width: 640px) {
-  body {
-    padding: 12px;
+  :root {
+    --rt-shell-pad: 12px;
   }
 
   .top {

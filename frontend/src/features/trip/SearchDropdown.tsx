@@ -3,6 +3,13 @@ import { useEffect, useRef } from 'react';
 import { token, KIND_TOKEN } from '@tokens';
 import { sectionHeaders, type SearchKind, type SearchResult } from './search-results';
 
+/**
+ * The popover's class, owned here because `useTopbarClearance` has to find this
+ * element to exclude it from the drawer's clearance. Renaming it in one place
+ * only would silently mis-measure rather than fail.
+ */
+export const SEARCH_POPOVER_CLASS = 'tb-dropdown';
+
 export interface SearchDropdownProps {
   results: readonly SearchResult[];
   /** The keyboard-selected row, or -1 when the mouse is in charge. */
@@ -38,7 +45,7 @@ export function SearchDropdown({ results, activeIndex, onPick }: SearchDropdownP
 
   return (
     <div
-      className="tb-dropdown open"
+      className={`${SEARCH_POPOVER_CLASS} open`}
       id="tb-dropdown"
       ref={listRef}
       role="listbox"

@@ -14,7 +14,10 @@
   right: 10px;
   z-index: 20;
   max-width: 260px;
-  max-height: calc(100vh - 20px);
+  /* Against the map shell, which a fixed deployment bar shortens by
+     `--rt-chrome-top` — a bare 100vh here overruns it and the shell's
+     `overflow: hidden` slices the bottom off with no affordance that it was cut. */
+  max-height: calc(100dvh - var(--rt-chrome-top) - 20px);
   overflow-y: auto;
   padding: 12px 14px;
   background: var(--rt-surface);

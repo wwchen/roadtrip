@@ -14,6 +14,11 @@
                topbar stays above it so search and trip navigation remain reachable
    --------------------------------------------------------------------------- */
 
+:root {
+  /* Breathing room between the search panel's lower edge and the drawer header. */
+  --rt-drawer-clearance-gap: 12px;
+}
+
 .rt-drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -112,11 +117,22 @@
   .rt-drawer {
     left: 0;
     right: auto;
-    top: 0;
+    /* Fixed to the viewport, not to the map shell, so it has to clear a fixed
+       deployment bar itself — the shell's own offset does not carry here. */
+    top: var(--rt-chrome-top);
     bottom: 0;
     width: clamp(520px, 44vw, 620px);
-    max-height: 100dvh;
+    max-height: calc(100dvh - var(--rt-chrome-top));
     padding: 0 24px 24px;
+    /* Start below the search panel, which is fixed to this same corner a layer
+       above and would otherwise hide the header. `--rt-topbar-bottom` is where
+       that panel's lower edge sits, published by the panel itself
+       (features/trip/useTopbarClearance.ts). There is no ceiling on purpose: a
+       clamp here silently puts the header back under the panel whenever the panel
+       is tall, which is exactly the bug this rule exists to fix. topbar.css caps
+       the panel's own height instead, so this value cannot run away. */
+    --rt-drawer-clearance: calc(var(--rt-topbar-bottom, 0px) + var(--rt-drawer-clearance-gap));
+    padding-top: var(--rt-drawer-clearance);
     border-radius: 0;
     box-shadow: 8px 0 32px rgba(var(--rt-c-shadow-rgb), 0.4);
     transform: translateX(-100%);
@@ -133,7 +149,10 @@
   .rt-drawer-close {
     display: block;
     position: absolute;
-    top: 12px;
+    /* Rides the clearance band with the header it closes. Pinned to the drawer's
+       own top edge it would sit alone in the empty strip beside the search panel,
+       far from the title whose `padding-right` reserves a gutter for it. */
+    top: calc(var(--rt-drawer-clearance, 0px) + 12px);
     right: 12px;
     z-index: 1;
     width: 36px;

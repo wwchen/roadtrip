@@ -33,6 +33,13 @@
 @media (min-width: 768px) {
   .tb-panel {
     z-index: 1000;
+    /* Bounded so the drawer underneath can always clear it. The drawer reserves
+       exactly this panel's height (drawer.css), so an unbounded panel would push
+       the drawer's contents off-screen — and clamping it there instead just puts
+       the drawer's header back under this panel. Bounding the panel keeps both
+       usable: the stops and results scroll within it. */
+    max-height: min(50dvh, calc(100dvh - var(--rt-chrome-top) - 20px));
+    overflow-y: auto;
   }
 }
 
