@@ -155,6 +155,22 @@ still fail the step, and a stop that found nothing leaves the PR comment alone.
 branch the run is launched from. Use it for sandboxes that are not tied to a PR
 — no status comment is posted, and the URL lands in the run summary.
 
+### Automatic teardown on PR close
+
+Closing a PR — merged or not — retires its sandbox immediately. The
+`teardown-on-close` job fires on `pull_request: [closed]` and calls the sandbox
+action with `require-existing: true`, so the many PRs that never had a sandbox
+cost a single SSH and post no comment.
+
+This is the event-driven path; the sweep below is the backstop for what an event
+cannot catch. Do not rely on the sweep alone for this case — `schedule` is
+best-effort and a newly added cron can take a while before GitHub first fires it.
+
+Note that the action itself is resolved from the **PR's own tree**, not from the
+default branch, so a change to `.github/actions/sandbox` only reaches a PR once
+that PR has the change merged into its branch. A long-lived branch keeps running
+the older action until it picks up master.
+
 ### Sweep (every 30 minutes)
 
 `sandbox-sweep.yml` is the safety net for anything the close path missed:
