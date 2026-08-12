@@ -71,8 +71,6 @@ roadtrip:
     env: "${ROADTRIP_BUILD_ENV:local}"
     sha: "${ROADTRIP_BUILD_SHA:unknown}"
     branch: "${ROADTRIP_BUILD_BRANCH:unknown}"
-  sandbox:
-    assume-user: "${ROADTRIP_SANDBOX_ASSUME_USER:false}"
   poi-registry:
     resource: poi-registry.yaml
     path:

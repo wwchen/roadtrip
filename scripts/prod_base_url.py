@@ -12,13 +12,16 @@ build "$base/path" without doubling up.
 
 from __future__ import annotations
 
+import os
 import pathlib
+import re
 import sys
 
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "backend" / "src" / "main" / "resources" / "application-prod.yaml"
+KTOR_ENV_DEFAULT = re.compile(r"^\$\{([A-Z][A-Z0-9_]*):(.*)\}$")
 
 
 def prod_base_url(config_text: str) -> str:
@@ -28,7 +31,11 @@ def prod_base_url(config_text: str) -> str:
     as a pile of confusing curl errors several deploy steps later.
     """
     config = yaml.safe_load(config_text) or {}
-    return str(config["roadtrip"]["web"]["root-url"]).rstrip("/")
+    raw = str(config["roadtrip"]["web"]["root-url"])
+    match = KTOR_ENV_DEFAULT.match(raw)
+    if match:
+        raw = os.environ.get(match.group(1), match.group(2))
+    return raw.rstrip("/")
 
 
 def main() -> int:

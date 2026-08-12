@@ -1052,8 +1052,8 @@ is dead code there and would have been dead code here.
 form instead of the `/index` that stripping `.html` produces; and the catch-all's
 `default(index.html)` came off so the explicit route is the only claimant on `/`. The
 `/preview/*` mount and `roadtrip.sandbox.preview-pages` were deleted with it — the map was
-the only page they ever carried — which also took out `SandboxConfig`'s field, the
-`application.yaml` key, the sandbox compose env var and the secret-registry entry.
+the only page they ever carried — which also took out the `application.yaml` key, the
+sandbox compose env var and the secret-registry entry.
 
 **The deploy health check now asserts `/` is the React shell**, not merely that it 200s.
 `/` is the one page that still has a legacy file, so a deploy whose frontend build was
@@ -1185,7 +1185,6 @@ Phase 5 kept three files and the plumbing that served them. This removed all of 
 | `web/design-system/tokens.css` | `frontend/src/tokens/tokens.css` | `@import` in `src/ui/styles.css` |
 | `web/design-system/tokens.js` | `frontend/src/tokens/tokens.ts` (typed) | the `@tokens` alias, unchanged at ~9 call sites |
 | `web/sandbox-banner.{js,css}` | `frontend/src/app/sandbox/sandbox-banner.ts` + `sandbox.css` | `initSandboxChrome()` from `mountPage` |
-| `web/sandbox-user-switcher.{js,css}` | `frontend/src/app/sandbox/sandbox-user-switcher.ts` + `sandbox.css` | same |
 | `web/design-system/tokens-usage.test.mjs` | `scripts/check-token-usage.mjs` | `make test` and CI |
 | the `runtimeServedAssets` plugin, the `/web` mount, the flat catch-all | *(deleted)* | — |
 
@@ -1207,19 +1206,13 @@ is gone with it.
 
 **The sandbox chrome swapped a build-time guarantee for a structural one.** The plugin
 existed because Vite treats `<script type="module" src>` in an entry as a build input and
-*fails* on a path outside its root, so the tags could not live in the HTML — and a page
-that silently forgot the user switcher looks signed-out in every sandbox, which is
-indistinguishable from a real auth failure. `runtime-served-assets.test.ts` pinned the tag
-list for that reason. `mountPage` now calls `initSandboxChrome()`, so a page that mounts
-at all has the chrome, and `src/app/mount.test.tsx` pins that instead. Three deliberate
-changes came with the port: no import-time auto-init (the vanilla modules ran `initX()` on
-import, which is how a bundled unit test ends up making three network calls); the fetches
-go through the API layer (`src/api/sandbox-api.ts`, DTOs pinned against `BuildInfoDto` and
-`SandboxUserDto`); and the suites drive jsdom rather than a hand-rolled `doc` stub, which
-is why the banner test can now see the classes and the commit link it renders. The one
-seam kept is `renderUserSwitcher`'s `loc` parameter — `window.location.reload` is not
-stubbable in jsdom — and the cookie's `path=/` is captured with a setter spy on
-`Document.prototype.cookie`, since jsdom's getter reports only `name=value`.
+*fails* on a path outside its root, so the tags could not live in the HTML. The
+build banner is deployment chrome rather than page UI, so `mountPage` now calls
+`initSandboxChrome()` and `src/app/mount.test.tsx` pins that every mounted page
+starts it. Two deliberate changes came with the port: no import-time auto-init
+(the vanilla modules ran `initX()` on import, which is how a bundled unit test
+ends up making extra network calls), and the fetch goes through the API layer
+(`src/api/sandbox-api.ts`, pinned against `BuildInfoDto`).
 
 **The last `node --test` suite became the third guardrail script.**
 `tokens-usage.test.mjs` catches `var(--rt-typo)`, which resolves to nothing rather than
@@ -1445,12 +1438,11 @@ Consequences worth knowing:
   reading rather than assuming it is this one.) Injecting with `order: 'post'` runs after
   Vite's own HTML transform, which is what leaves the references untouched.
 
-  **Every migrated shell needs the sandbox chrome.** An auth-disabled sandbox 401s every
-  API call until an `rt_session=sandbox:<id>` cookie is picked, and the user switcher is
-  the only page-local way to pick one — a page without it just looks signed-out, which is
-  indistinguishable from a real auth failure. The migrated watches page shipped without it
-  once. `vite/runtime-served-assets.test.ts` pins the tag set so a later phase cannot drop
-  it silently.
+  **Every migrated shell needs the sandbox chrome.** The build banner is how a reviewer
+  confirms the environment, SHA and branch they are looking at. The migrated watches page
+  shipped without the chrome once. `vite/runtime-served-assets.test.ts` pinned the tag set
+  in the vanilla phase so a later phase could not drop it silently; React pins the shared
+  mount instead.
 - **GateGuard fact-forcing hook is ON** in this environment: every file create/edit and first
   Bash call demands a "facts, then retry" cycle (and denies the first attempt). Batch writes;
   present importers/purpose/instruction, then retry. (Disable path if ever wanted:

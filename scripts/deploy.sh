@@ -197,32 +197,236 @@ SANDBOX_SNAPSHOT_PATH="${SANDBOX_SNAPSHOT_PATH:-}"
 SANDBOX_PORT_RANGE_START="${SANDBOX_PORT_RANGE_START:-41000}"
 SANDBOX_PORT_RANGE_END="${SANDBOX_PORT_RANGE_END:-41999}"
 
-SANDBOX_DB_PASSWORD="${SANDBOX_DB_PASSWORD:-sandbox}"
-
-SEED_SQL="${SEED_SQL:-${SCRIPT_DIR}/sandbox_seed_users.sql}"
-
 SCRUB_SQL="${SCRUB_SQL:-${SCRIPT_DIR}/sandbox_scrub.sql}"
 
-POSTGRES_DB="${POSTGRES_DB:-roadtrip}"
-POSTGRES_USER="${POSTGRES_USER:-roadtrip}"
+# Fixed, not env-overridable: docker-compose.sandbox.yml hardcodes the same two
+# values, so an override here would change only the host-side psql calls below
+# and silently disagree with the database Compose actually started.
+POSTGRES_DB="roadtrip"
+POSTGRES_USER="roadtrip"
 
 HEALTH_RETRIES="${HEALTH_RETRIES:-60}"
 
 POSTGRES_HEALTH_RETRIES="${POSTGRES_HEALTH_RETRIES:-30}"
 
+SANDBOX_SECRETS_ENV="local"
+SANDBOX_TEARDOWN_COMPOSE_SHA="0000000000000000000000000000000000000000"
+SANDBOX_SLOT_IDS=(1 2 3 4 5)
+
+_require_sandbox_owner_name() {
+    local value="$1"
+    local slot
+
+    _require_sandbox_name "${value}"
+    for slot in "${SANDBOX_SLOT_IDS[@]}"; do
+        if [[ "${value}" == "${slot}" ]]; then
+            echo "error: sandbox name '${value}' is reserved for public slot teardown; use a non-numeric owner name" >&2
+            exit 2
+        fi
+    done
+}
+
+_sandbox_compose() {
+    "${REPO_ROOT}/secrets/manage.py" exec "${SANDBOX_SECRETS_ENV}" -- docker compose "$@"
+}
+
+_marker_field() {
+    local marker="$1"
+    local key="$2"
+    sed -n "s/^${key}=//p" "${marker}" 2>/dev/null | head -1
+}
+
+_marker_for_slot() {
+    local slot="$1"
+    local marker
+
+    for marker in "${SANDBOX_STATE_DIR}"/*.meta; do
+        [[ -e "${marker}" ]] || continue
+        if [[ "$(_marker_field "${marker}" SLOT)" == "${slot}" ]]; then
+            printf '%s\n' "${marker}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+_slot_has_containers() {
+    local slot="$1"
+    [[ -n "$(docker ps -aq --filter "label=com.docker.compose.project=roadtrip-sb-${slot}")" ]]
+}
+
+_slot_available() {
+    local slot="$1"
+
+    if _marker_for_slot "${slot}" >/dev/null; then
+        return 1
+    fi
+    if [[ -f "${SANDBOX_CADDY_DIR}/sb-${slot}.caddy" ]]; then
+        return 1
+    fi
+    if _slot_has_containers "${slot}"; then
+        return 1
+    fi
+    return 0
+}
+
+_reserved_port() {
+    local port="$1"
+    local marker
+
+    for marker in "${SANDBOX_STATE_DIR}"/*.meta; do
+        [[ -e "${marker}" ]] || continue
+        if [[ "$(_marker_field "${marker}" PORT)" == "${port}" ]]; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+_port_in_use() {
+    local port="$1"
+    if command -v nc >/dev/null 2>&1; then
+        nc -z 127.0.0.1 "${port}" 2>/dev/null
+    elif command -v ss >/dev/null 2>&1; then
+        ss -tnl 2>/dev/null | grep -q ":${port} "
+    else
+        (echo >/dev/tcp/127.0.0.1/"${port}") 2>/dev/null
+    fi
+}
+
+_allocate_port() {
+    local port
+
+    for port in $(seq "${SANDBOX_PORT_RANGE_START}" "${SANDBOX_PORT_RANGE_END}"); do
+        if ! _port_in_use "${port}" && ! _reserved_port "${port}"; then
+            printf '%s\n' "${port}"
+            return 0
+        fi
+    done
+
+    echo "error: no free port in range ${SANDBOX_PORT_RANGE_START}-${SANDBOX_PORT_RANGE_END}" >&2
+    exit 1
+}
+
+_sandbox_lock_dir=""
+_sandbox_lock_release() {
+    if [[ -n "${_sandbox_lock_dir}" ]]; then
+        rmdir "${_sandbox_lock_dir}" 2>/dev/null || true
+        _sandbox_lock_dir=""
+    fi
+}
+
+_sandbox_lock_acquire() {
+    local lock="${SANDBOX_STATE_DIR}/.slot-lock"
+    local waited=0
+
+    mkdir -p "${SANDBOX_STATE_DIR}"
+    until mkdir "${lock}" 2>/dev/null; do
+        waited=$(( waited + 1 ))
+        if [[ ${waited} -ge 60 ]]; then
+            echo "error: timed out waiting for sandbox slot lock: ${lock}" >&2
+            exit 1
+        fi
+        sleep 1
+    done
+    _sandbox_lock_dir="${lock}"
+    trap _sandbox_lock_release EXIT
+}
+
+_resolve_sandbox_marker() {
+    local requested="$1"
+    local direct="${SANDBOX_STATE_DIR}/${requested}.meta"
+    local by_slot
+
+    if [[ -f "${direct}" ]]; then
+        printf '%s\n' "${direct}"
+        return 0
+    fi
+    by_slot="$(_marker_for_slot "${requested}" || true)"
+    if [[ -n "${by_slot}" ]]; then
+        printf '%s\n' "${by_slot}"
+        return 0
+    fi
+    return 1
+}
+
+_write_sandbox_marker() {
+    local status="$1"
+    local marker="${SANDBOX_STATE_DIR}/${SANDBOX_OWNER}.meta"
+
+    mkdir -p "${SANDBOX_STATE_DIR}"
+    printf 'NAME=%s\nSLOT=%s\nPORT=%s\nSTART_EPOCH=%s\nDATA_SHA=%s\nURL=%s\nSTATUS=%s\n' \
+        "${SANDBOX_OWNER}" \
+        "${SANDBOX_SLOT}" \
+        "${SANDBOX_PORT}" \
+        "$(date +%s)" \
+        "${ROADTRIP_DATA_SHA}" \
+        "${SANDBOX_URL}" \
+        "${status}" \
+        > "${marker}"
+    echo "==> wrote marker: ${marker}"
+}
+
 _sandbox_down() {
-    local sandbox_name="$1"
-    local compose_project="roadtrip-sb-${sandbox_name}"
-    local marker="${SANDBOX_STATE_DIR}/${sandbox_name}.meta"
+    local requested_name="$1"
+    local marker
+    local sandbox_owner
+    local sandbox_slot
+    local runtime_name
+    local compose_project
     local data_sha
-    local caddy_snippet="${SANDBOX_CADDY_DIR}/sb-${sandbox_name}.caddy"
+    local sandbox_port
+    local sandbox_fqdn
+    local sandbox_url
+    local caddy_snippet
+    local SANDBOX_NAME
+    local SANDBOX_SHA
+    local SANDBOX_BUILD_SHA
+    local SANDBOX_BRANCH
+    local SANDBOX_PORT
+    local ROADTRIP_DATA_VOLUME
+    local ROADTRIP_WEB_ROOT_URL
 
-    _require_sandbox_name "${sandbox_name}"
+    _require_sandbox_name "${requested_name}"
+    _sandbox_lock_acquire
+    marker="$(_resolve_sandbox_marker "${requested_name}" || true)"
+    if [[ -z "${marker}" ]]; then
+        echo "error: sandbox marker is required for teardown: ${SANDBOX_STATE_DIR}/${requested_name}.meta" >&2
+        exit 1
+    fi
+    sandbox_owner="$(basename "${marker}" .meta)"
+    sandbox_slot="$(_marker_field "${marker}" SLOT)"
+    runtime_name="${sandbox_slot:-${sandbox_owner}}"
     data_sha="$(sed -n 's/^DATA_SHA=//p' "${marker}" 2>/dev/null | head -1)"
-    export ROADTRIP_DATA_VOLUME="${ROADTRIP_DATA_VOLUME:-roadtrip-data-${data_sha:-legacy}}"
+    sandbox_port="$(sed -n 's/^PORT=//p' "${marker}" 2>/dev/null | head -1)"
+    if [[ -z "${data_sha}" || -z "${sandbox_port}" ]]; then
+        echo "error: sandbox marker is missing DATA_SHA or PORT: ${marker}" >&2
+        exit 1
+    fi
+    _require_sandbox_name "${runtime_name}"
+    compose_project="roadtrip-sb-${runtime_name}"
+    sandbox_fqdn="${SANDBOX_HOST_PREFIX}${runtime_name}.${SANDBOX_TUNNEL_ZONE}"
+    sandbox_url="https://${sandbox_fqdn}"
+    caddy_snippet="${SANDBOX_CADDY_DIR}/sb-${runtime_name}.caddy"
 
-    echo "==> tearing down sandbox: ${sandbox_name} (project: ${compose_project})"
-    docker compose -p "${compose_project}" -f "${REPO_ROOT}/docker-compose.sandbox.yml" down -v
+    SANDBOX_NAME="${runtime_name}"
+    SANDBOX_SHA="${SANDBOX_TEARDOWN_COMPOSE_SHA}"
+    SANDBOX_BUILD_SHA="${SANDBOX_TEARDOWN_COMPOSE_SHA}"
+    SANDBOX_BRANCH="${sandbox_owner}"
+    SANDBOX_PORT="${sandbox_port}"
+    ROADTRIP_DATA_VOLUME="roadtrip-data-${data_sha}"
+    ROADTRIP_WEB_ROOT_URL="${sandbox_url}"
+    export SANDBOX_NAME
+    export SANDBOX_SHA
+    export SANDBOX_BUILD_SHA
+    export SANDBOX_BRANCH
+    export SANDBOX_PORT
+    export ROADTRIP_DATA_VOLUME
+    export ROADTRIP_WEB_ROOT_URL
+
+    echo "Sandbox was: ${sandbox_url}"
+    echo "==> tearing down sandbox: ${sandbox_owner} (slot: ${runtime_name}, project: ${compose_project})"
+    _sandbox_compose -p "${compose_project}" -f "${REPO_ROOT}/docker-compose.sandbox.yml" down -v
 
     if [[ -f "${caddy_snippet}" ]]; then
         rm -f "${caddy_snippet}"
@@ -231,11 +435,12 @@ _sandbox_down() {
             || echo "==> warning: caddy reload failed; snippet was removed"
     fi
 
-    cf_sandbox_down "${SANDBOX_HOST_PREFIX}${sandbox_name}.${SANDBOX_TUNNEL_ZONE}" \
-        || echo "==> warning: Cloudflare teardown failed for ${sandbox_name}"
+    cf_sandbox_down "${sandbox_fqdn}" \
+        || echo "==> warning: Cloudflare teardown failed for ${sandbox_owner}"
     rm -f "${marker}"
+    _sandbox_lock_release
     _prune_roadtrip_images
-    echo "==> sandbox ${sandbox_name} is down"
+    echo "==> sandbox ${sandbox_owner} is down"
 }
 
 if [[ "${DEPLOY_ENV}" == "sandbox-down" ]]; then
@@ -257,32 +462,28 @@ case "${DEPLOY_ENV}" in
         ;;
 esac
 
-# ── Derive sandbox name ───────────────────────────────────────────────────────
+# ── Derive logical sandbox owner ──────────────────────────────────────────────
 if [[ -n "${NAME_OVERRIDE}" ]]; then
-    SANDBOX_NAME="${NAME_OVERRIDE}"
+    SANDBOX_OWNER="${NAME_OVERRIDE}"
 elif [[ "${REF}" =~ ^[0-9]+$ ]]; then
-    SANDBOX_NAME="pr${REF}"
+    SANDBOX_OWNER="pr${REF}"
 else
-    SANDBOX_NAME="$(printf '%s' "${REF}" \
+    SANDBOX_OWNER="$(printf '%s' "${REF}" \
         | tr '[:upper:]' '[:lower:]' \
         | sed 's/[^a-z0-9]\{1,\}/-/g' \
         | sed 's/^-//; s/-$//')"
 fi
 
-if [[ -z "${SANDBOX_NAME}" ]]; then
+if [[ -z "${SANDBOX_OWNER}" ]]; then
     echo "error: could not derive a sandbox name from ref '${REF}'" >&2
     exit 1
 fi
-_require_sandbox_name "${SANDBOX_NAME}"
-
-COMPOSE_PROJECT="roadtrip-sb-${SANDBOX_NAME}"
-
-echo "==> ${DEPLOY_ENV}: ${SANDBOX_NAME}  (project: ${COMPOSE_PROJECT})"
+_require_sandbox_owner_name "${SANDBOX_OWNER}"
 
 # ── Resolve the image SHA ─────────────────────────────────────────────────────
-SANDBOX_SHA="${SANDBOX_SHA:-${REF}}"
-SANDBOX_BRANCH="${SANDBOX_BRANCH:-${REF}}"
-SANDBOX_BUILD_SHA="${SANDBOX_BUILD_SHA:-${SANDBOX_SHA}}"
+: "${SANDBOX_SHA:?SANDBOX_SHA is required}"
+: "${SANDBOX_BRANCH:?SANDBOX_BRANCH is required}"
+SANDBOX_BUILD_SHA="${SANDBOX_SHA}"
 _require_sha "sandbox SHA" "${SANDBOX_SHA}"
 
 if [[ -z "${ROADTRIP_DATA_SHA:-}" ]]; then
@@ -294,49 +495,69 @@ if [[ -z "${ROADTRIP_DATA_SHA:-}" ]]; then
     fi
 fi
 _require_sha "data tree SHA" "${ROADTRIP_DATA_SHA}"
-ROADTRIP_DATA_VOLUME="${ROADTRIP_DATA_VOLUME:-roadtrip-data-${ROADTRIP_DATA_SHA}}"
+ROADTRIP_DATA_VOLUME="roadtrip-data-${ROADTRIP_DATA_SHA}"
 ROADTRIP_DATA_IMAGE="${ROADTRIP_DATA_IMAGE:-ghcr.io/wwchen/roadtrip/data:${ROADTRIP_DATA_SHA}}"
 
 _ensure_data_volume "${ROADTRIP_DATA_SHA}" >/dev/null
 
-# ── Allocate a free host-local port ──────────────────────────────────────────
-_port_in_use() {
-    local port="$1"
-    if command -v nc >/dev/null 2>&1; then
-        nc -z 127.0.0.1 "${port}" 2>/dev/null
-    elif command -v ss >/dev/null 2>&1; then
-        ss -tnl 2>/dev/null | grep -q ":${port} "
-    else
-        (echo >/dev/tcp/127.0.0.1/"${port}") 2>/dev/null
-    fi
-}
+# ── Allocate a fixed public slot + free host-local port ──────────────────────
+legacy_marker="${SANDBOX_STATE_DIR}/${SANDBOX_OWNER}.meta"
+if [[ -f "${legacy_marker}" && -z "$(_marker_field "${legacy_marker}" SLOT)" ]]; then
+    echo "==> retiring legacy per-name sandbox before assigning a numbered slot"
+    _sandbox_down "${SANDBOX_OWNER}"
+fi
 
-SANDBOX_PORT=""
-for port in $(seq "${SANDBOX_PORT_RANGE_START}" "${SANDBOX_PORT_RANGE_END}"); do
-    if ! _port_in_use "${port}"; then
-        SANDBOX_PORT="${port}"
-        break
+_sandbox_lock_acquire
+existing_marker="${SANDBOX_STATE_DIR}/${SANDBOX_OWNER}.meta"
+SANDBOX_SLOT=""
+if [[ -f "${existing_marker}" ]]; then
+    SANDBOX_SLOT="$(_marker_field "${existing_marker}" SLOT)"
+    case "${SANDBOX_SLOT}" in
+        1|2|3|4|5) ;;
+        *)
+            echo "error: sandbox marker has invalid SLOT: ${existing_marker}" >&2
+            exit 1
+            ;;
+    esac
+    conflicting_marker="$(_marker_for_slot "${SANDBOX_SLOT}" || true)"
+    if [[ -n "${conflicting_marker}" && "${conflicting_marker}" != "${existing_marker}" ]]; then
+        echo "error: slot ${SANDBOX_SLOT} is also claimed by ${conflicting_marker}" >&2
+        exit 1
     fi
-done
-
-if [[ -z "${SANDBOX_PORT}" ]]; then
-    echo "error: no free port in range ${SANDBOX_PORT_RANGE_START}–${SANDBOX_PORT_RANGE_END}" >&2
+else
+    for slot in "${SANDBOX_SLOT_IDS[@]}"; do
+        if _slot_available "${slot}"; then
+            SANDBOX_SLOT="${slot}"
+            break
+        fi
+    done
+fi
+if [[ -z "${SANDBOX_SLOT}" ]]; then
+    echo "error: no empty sandbox slots; checked ${SANDBOX_SLOT_IDS[*]}" >&2
     exit 1
 fi
 
+SANDBOX_NAME="${SANDBOX_SLOT}"
+COMPOSE_PROJECT="roadtrip-sb-${SANDBOX_NAME}"
+SANDBOX_FQDN="${SANDBOX_HOST_PREFIX}${SANDBOX_NAME}.${SANDBOX_TUNNEL_ZONE}"
+SANDBOX_URL="https://${SANDBOX_FQDN}"
+SANDBOX_PORT="$(_allocate_port)"
+echo "==> ${DEPLOY_ENV}: ${SANDBOX_OWNER}  (slot: ${SANDBOX_SLOT}, project: ${COMPOSE_PROJECT})"
 echo "==> allocated port ${SANDBOX_PORT}"
+_write_sandbox_marker "starting"
+_sandbox_lock_release
 
 # ── Export vars consumed by docker-compose.sandbox.yml ───────────────────────
 export SANDBOX_SHA
 export SANDBOX_BUILD_SHA
 export SANDBOX_BRANCH
 export SANDBOX_PORT
-export SANDBOX_DB_PASSWORD
-export POSTGRES_DB
-export POSTGRES_USER
 export SANDBOX_NAME
+export SANDBOX_OWNER
+export SANDBOX_SLOT
 export ROADTRIP_DATA_SHA
 export ROADTRIP_DATA_VOLUME
+export ROADTRIP_WEB_ROOT_URL="${SANDBOX_URL}"
 
 # ── Ensure the shared proxy network exists ───────────────────────────────────
 if [[ "${ROUTING}" == "caddy-vhost" ]]; then
@@ -357,13 +578,13 @@ fi
 
 if [[ "${HAVE_SNAPSHOT}" == "true" ]]; then
     echo "==> docker compose up postgres (snapshot path; starting DB before backend)"
-    docker compose \
+    _sandbox_compose \
         -p "${COMPOSE_PROJECT}" \
         -f "${COMPOSE_FILE}" \
         up -d postgres
 else
     echo "==> docker compose up (project ${COMPOSE_PROJECT})"
-    docker compose \
+    _sandbox_compose \
         -p "${COMPOSE_PROJECT}" \
         -f "${COMPOSE_FILE}" \
         up -d
@@ -371,10 +592,10 @@ fi
 
 # ── Wait for postgres init to COMPLETE, then be healthy ──────────────────────
 _postgres_log() {
-    docker compose -p "${COMPOSE_PROJECT}" -f "${COMPOSE_FILE}" logs postgres 2>/dev/null
+    _sandbox_compose -p "${COMPOSE_PROJECT}" -f "${COMPOSE_FILE}" logs postgres 2>/dev/null
 }
 _postgres_healthy() {
-    docker compose \
+    _sandbox_compose \
         -p "${COMPOSE_PROJECT}" \
         -f "${COMPOSE_FILE}" \
         exec -T postgres \
@@ -410,10 +631,10 @@ while ! _postgres_healthy; do
 done
 echo "==> postgres healthy"
 
-# ── Prepare DB (snapshot restore + user seed) ────────────────────────────────
+# ── Prepare DB (snapshot restore + PII scrub) ────────────────────────────────
 if [[ "${DO_DB_PREP}" == "true" ]]; then
     if [[ "${HAVE_SNAPSHOT}" == "true" ]]; then
-        already_initialized="$(docker compose \
+        already_initialized="$(_sandbox_compose \
             -p "${COMPOSE_PROJECT}" \
             -f "${COMPOSE_FILE}" \
             exec -T postgres \
@@ -422,10 +643,10 @@ if [[ "${DO_DB_PREP}" == "true" ]]; then
             2>/dev/null | tr -d '[:space:]')"
 
         if [[ "${already_initialized}" == "t" ]]; then
-            echo "==> DB already initialized (re-up); skipping restore+seed"
+            echo "==> DB already initialized (re-up); skipping restore"
         else
             echo "==> restoring snapshot: ${SANDBOX_SNAPSHOT_PATH}"
-            docker compose \
+            _sandbox_compose \
                 -p "${COMPOSE_PROJECT}" \
                 -f "${COMPOSE_FILE}" \
                 exec -T postgres \
@@ -439,7 +660,7 @@ if [[ "${DO_DB_PREP}" == "true" ]]; then
             echo "==> snapshot restored"
 
             echo "==> scrubbing PII columns (trigger_config)"
-            docker compose \
+            _sandbox_compose \
                 -p "${COMPOSE_PROJECT}" \
                 -f "${COMPOSE_FILE}" \
                 exec -T postgres \
@@ -450,23 +671,10 @@ if [[ "${DO_DB_PREP}" == "true" ]]; then
                     -v ON_ERROR_STOP=1 \
                 < "${SCRUB_SQL}"
             echo "==> PII scrubbed"
-
-            echo "==> seeding sandbox users"
-            docker compose \
-                -p "${COMPOSE_PROJECT}" \
-                -f "${COMPOSE_FILE}" \
-                exec -T postgres \
-                psql \
-                    --username="${POSTGRES_USER}" \
-                    --dbname="${POSTGRES_DB}" \
-                    --no-password \
-                    -v ON_ERROR_STOP=1 \
-                < "${SEED_SQL}"
-            echo "==> users seeded"
         fi
 
         echo "==> docker compose up (remaining services)"
-        docker compose \
+        _sandbox_compose \
             -p "${COMPOSE_PROJECT}" \
             -f "${COMPOSE_FILE}" \
             up -d
@@ -480,7 +688,6 @@ case "${ROUTING}" in
     caddy-vhost)
         CADDY_SNIPPET="${SANDBOX_CADDY_DIR}/sb-${SANDBOX_NAME}.caddy"
         mkdir -p "${SANDBOX_CADDY_DIR}"
-        SANDBOX_FQDN="${SANDBOX_HOST_PREFIX}${SANDBOX_NAME}.${SANDBOX_TUNNEL_ZONE}"
         cat > "${CADDY_SNIPPET}" <<CADDY
 http://${SANDBOX_FQDN} {
     reverse_proxy sb-${SANDBOX_NAME}-backend:${SANDBOX_BACKEND_PORT}
@@ -503,17 +710,6 @@ CADDY
         ;;
 esac
 
-# ── Write state marker (consumed by sandbox_reap.sh) ─────────────────────────
-mkdir -p "${SANDBOX_STATE_DIR}"
-MARKER="${SANDBOX_STATE_DIR}/${SANDBOX_NAME}.meta"
-printf 'NAME=%s\nPORT=%s\nSTART_EPOCH=%s\nDATA_SHA=%s\n' \
-    "${SANDBOX_NAME}" \
-    "${SANDBOX_PORT}" \
-    "$(date +%s)" \
-    "${ROADTRIP_DATA_SHA}" \
-    > "${MARKER}"
-echo "==> wrote marker: ${MARKER}"
-
 # ── Health-check the backend ──────────────────────────────────────────────────
 echo "==> waiting for backend to be ready"
 HEALTH_URL="http://127.0.0.1:${SANDBOX_PORT}/api/health/ready"
@@ -528,24 +724,10 @@ until curl -fsS "${HEALTH_URL}" >/dev/null 2>&1; do
 done
 echo "==> backend ready"
 
-# ── Step 4 (no-snapshot path): seed users after Flyway ───────────────────────
-if [[ "${DO_DB_PREP}" == "true" && "${HAVE_SNAPSHOT}" == "false" ]]; then
-    echo "==> seeding sandbox users (post-Flyway)"
-    docker compose \
-        -p "${COMPOSE_PROJECT}" \
-        -f "${COMPOSE_FILE}" \
-        exec -T postgres \
-        psql \
-            --username="${POSTGRES_USER}" \
-            --dbname="${POSTGRES_DB}" \
-            --no-password \
-            -v ON_ERROR_STOP=1 \
-        < "${SEED_SQL}"
-    echo "==> users seeded"
-fi
+# ── Mark the reserved slot live ───────────────────────────────────────────────
+_write_sandbox_marker "live"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 _prune_roadtrip_images
-SANDBOX_URL="https://${SANDBOX_HOST_PREFIX}${SANDBOX_NAME}.${SANDBOX_TUNNEL_ZONE}"
 echo ""
 echo "Sandbox is live: ${SANDBOX_URL}"

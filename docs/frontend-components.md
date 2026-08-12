@@ -154,12 +154,9 @@ in it.**
 - Styles come from `@ui/styles.css`, imported by each `pages/*/main.tsx`: the LDS
   cascade, the Roadtrip Zion theme, app-owned data tokens, then the Zion-to-app
   chrome-role bridge.
-- The **sandbox chrome** (build banner + assume-user switcher) is started by
-  `mountPage()`, so every page has it structurally. Load-bearing for review, not
-  decoration: an auth-disabled sandbox 401s every API call until an
-  `rt_session=sandbox:<id>` cookie is picked, and the switcher is the only page-local way
-  to pick one — a page without it looks signed-out, which is indistinguishable from a
-  real auth failure. `src/app/mount.test.tsx` pins it.
+- The **sandbox chrome** (build banner) is started by `mountPage()`, so every
+  page has the same deployment provenance indicator. Sandboxes use the normal
+  provider-backed auth flow; there is no page-local user switcher.
 
 Both used to be `<link>`/`<script>` tags injected into every entry by a Vite plugin and
 served by Ktor from `web/`. They are bundled now; the plugin is gone.

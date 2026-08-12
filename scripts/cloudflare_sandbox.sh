@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# cloudflare_sandbox.sh — per-sandbox Cloudflare DNS provisioning.
+# cloudflare_sandbox.sh — per-slot Cloudflare DNS provisioning.
 #
 # Sourced by deploy.sh for both sandbox up and down. NOT executable on
 # its own.  Provides two entrypoints:
@@ -8,8 +8,8 @@
 #   cf_sandbox_down <fqdn>   — delete it (idempotent; missing = success).
 #
 # Design (see docs/sandbox-deploys.md):
-#   * DNS is the only per-sandbox Cloudflare resource these scripts manage.  We
-#     create ONE explicit proxied CNAME per sandbox (roadtrip-sb-<name>.<zone> →
+#   * DNS is the only per-slot Cloudflare resource these scripts manage.  We
+#     create ONE explicit proxied CNAME per slot (roadtrip-sb-<slot>.<zone> →
 #     <tunnel-id>.cfargotunnel.com).  No wildcard DNS exists, so only sandboxes
 #     we made (plus explicit prod records) resolve to the tunnel.
 #   * The tunnel ingress rule (*.<zone> → caddy:80) is configured ONCE by hand,
