@@ -104,6 +104,20 @@ SHA: <12-char sha>  ·  stop with /sandbox stop
 The sandbox is named `pr<N>` (e.g. `pr532`) and is stable across
 re-runs of the same PR.
 
+### Automatic teardown on PR close
+
+Closing a PR — merged or not — tears its sandbox down. The `teardown-on-close`
+job in `sandbox.yml` fires on `pull_request: [closed]`, SSHes to the host, and
+runs `deploy.sh sandbox-down pr<N>`.
+
+It first checks for the `pr<N>.meta` marker in `SANDBOX_STATE_DIR` and exits
+without acting when there is none, so the vast majority of PRs — which never had
+a sandbox — cost one SSH and no Cloudflare or image-prune work. Only a real
+teardown updates the PR's status comment.
+
+Teardown needs the deploy secrets, so the job is limited to PRs whose head
+branch lives in this repository — the same restriction the `up` path enforces.
+
 Required secrets (same as `deploy.yml`): `DEPLOY_SSH_KEY`,
 `DEPLOY_KNOWN_HOSTS`, `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET`.
 Optional repo variable: `SANDBOX_TUNNEL_ZONE` (falls back to `floo.ca`).
@@ -291,6 +305,10 @@ parses the `START_EPOCH` field, and calls `deploy.sh sandbox-down` for any sandb
 whose age exceeds `SANDBOX_TTL_HOURS`. Fresh sandboxes are left running.
 Malformed markers emit a warning and are skipped; the script exits non-zero
 if any marker was malformed so cron/systemd can alert on it.
+
+Since PR close now tears sandboxes down directly, the reaper is the backstop
+for sandboxes on PRs that stay open past the TTL, and for any close-teardown
+that failed.
 
 Example cron entry (hourly):
 

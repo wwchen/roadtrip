@@ -3,6 +3,8 @@ name: Sandbox
 on:
   issue_comment:
     types: [created]
+  pull_request:
+    types: [closed]
 
 permissions:
   contents: read
@@ -10,7 +12,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: sandbox-pr-${{ github.event.issue.number }}
+  group: sandbox-pr-${{ github.event.issue.number || github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
@@ -331,3 +333,126 @@ jobs:
                 issue_number: context.issue.number, body,
               });
             }
+
+  # Closing a PR (merged or not) retires its sandbox, so a review environment
+  # never outlives the review. Complements the TTL reaper rather than replacing
+  # it: the reaper still catches sandboxes on PRs that stay open.
+  teardown-on-close:
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SANDBOX_HOST: mini@mini-ca
+      # Must match deploy.sh's SANDBOX_STATE_DIR default — the marker file it
+      # writes is how we tell "this PR had a sandbox" from "it never did".
+      SANDBOX_STATE_DIR: /var/lib/roadtrip-sandboxes
+      # Remote exit code meaning "no sandbox to tear down"; distinct from 0
+      # (torn down) and from any real failure.
+      SANDBOX_ABSENT_RC: 3
+
+    steps:
+      - name: Join tailnet
+        uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          version: 1.98.10
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Run on host (stop)
+        id: down
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -uo pipefail
+          if ! printf '%s' "$PR_NUMBER" | grep -qE '^[0-9]+$'; then
+            echo "::error::PR_NUMBER '$PR_NUMBER' is not numeric; aborting"
+            exit 1
+          fi
+          set +e
+          ssh -o BatchMode=yes "$SANDBOX_HOST" \
+            "bash -s -- '$PR_NUMBER' '$SANDBOX_STATE_DIR' '$SANDBOX_ABSENT_RC'" <<'REMOTE'
+          set -euo pipefail
+          pr_number="$1"
+          state_dir="$2"
+          absent_rc="$3"
+          name="pr${pr_number}"
+
+          # Tearing down unconditionally would prune images and issue Cloudflare
+          # deletes on every closed PR, most of which never had a sandbox.
+          if [[ ! -f "${state_dir}/${name}.meta" ]]; then
+            echo "==> no sandbox for ${name}; nothing to tear down"
+            exit "$absent_rc"
+          fi
+
+          cd "$HOME/.roadtrip/current"
+          SANDBOX_STATE_DIR="$state_dir" SANDBOX_CADDY_DIR="$HOME/.roadtrip/caddy/sandboxes" scripts/deploy.sh sandbox-down "$name"
+          REMOTE
+          rc=$?
+          set -e
+          case "$rc" in
+            0)                     echo "torn_down=true"  >> "$GITHUB_OUTPUT" ;;
+            "$SANDBOX_ABSENT_RC")  echo "torn_down=false" >> "$GITHUB_OUTPUT" ;;
+            *)                     exit "$rc" ;;
+          esac
+
+      - name: Status stopped
+        if: steps.down.outputs.torn_down == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const marker = `<!-- sandbox-status:pr${context.payload.pull_request.number} -->`;
+            const pr = process.env.PR_NUMBER;
+            const body = `${marker}\n### 🛑 Sandbox torn down\n` +
+              `- **Was:** \`roadtrip-sb-pr${pr}\`\n` +
+              `- Retired automatically when this PR closed  ·  [logs](${process.env.RUN_URL})`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: Number(pr), per_page: 100,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: Number(pr), body,
+              });
+            }
+
+      - name: Status failed
+        if: failure()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const pr = process.env.PR_NUMBER;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: Number(pr),
+              body: `### ❌ Sandbox teardown failed\n` +
+                `- \`roadtrip-sb-pr${pr}\` may still be running — stop it with \`/sandbox stop\`.\n` +
+                `- See the [workflow run](${process.env.RUN_URL}) for details.`,
+            });
