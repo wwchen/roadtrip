@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { DARK_MODE_CLASS, THEME_STORAGE_KEY } from '@/lib/theme';
+import { DARK_MODE_CLASS, THEME_COLORS, THEME_STORAGE_KEY } from '@/lib/theme';
 
 const SHELLS = ['index.html', 'watches.html', 'availability.html'];
 const shell = (name: string) => readFileSync(join(process.cwd(), name), 'utf8');
@@ -32,6 +32,11 @@ describe.each(SHELLS)('%s', (name) => {
 
   test('has a theme-color meta for the script to update', () => {
     expect(html).toContain('name="theme-color"');
+  });
+
+  // The one value the script can't import, so it can drift silently.
+  test('pins the dark theme-color to THEME_COLORS', () => {
+    expect(html).toContain(THEME_COLORS.dark);
   });
 });
 
