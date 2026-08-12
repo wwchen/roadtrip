@@ -10,13 +10,13 @@
 // re-fetch:
 //
 //   1. keep the newest data reachable from the install effect
-//   2. install     [map, styleReady]              — and reinstall after a basemap change
-//   3. paint       [map, styleReady, buckets]     — setData only, layers untouched
-//   4. visibility  [map, styleReady, hidden…]     — the legend's on/off toggles
-//   5. filter      [map, styleReady, hiddenAgencies] — the campground legend
-//   6. handlers    [map, styleReady, …actions]    — clicks and the cursor
+//   2. install     [map, styleEpoch]              — and reinstall after a basemap change
+//   3. paint       [map, styleEpoch, buckets]     — setData only, layers untouched
+//   4. visibility  [map, styleEpoch, hidden…]     — the legend's on/off toggles
+//   5. filter      [map, styleEpoch, hiddenAgencies] — the campground legend
+//   6. handlers    [map, styleEpoch, …actions]    — clicks and the cursor
 //
-// `styleReady` is in every one of them because `setStyle({ diff: false })`
+// `styleEpoch` is in every one of them because `setStyle({ diff: false })`
 // destroys every source and layer the app added; see `MapProvider`.
 import { useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -43,7 +43,7 @@ import { useMapContext } from './MapProvider';
 import type { ViewportPois } from './useViewportPois';
 
 export function useMapOverlays(pois: ViewportPois): void {
-  const { map, styleReady } = useMapContext();
+  const { map, styleEpoch } = useMapContext();
   const hiddenOverlays = useMapStore((s) => s.hiddenOverlays);
   const hiddenAgencies = useMapStore((s) => s.hiddenAgencies);
   const selectPoi = useMapStore((s) => s.selectPoi);
@@ -64,31 +64,31 @@ export function useMapOverlays(pois: ViewportPois): void {
   }, [pois.buckets]);
 
   useEffect(() => {
-    if (!map || !styleReady) return;
+    if (!map || !styleEpoch) return;
     for (const spec of POINT_OVERLAYS) installPointOverlay(map, spec, latest.current[spec.key]);
-  }, [map, styleReady]);
+  }, [map, styleEpoch]);
 
   useEffect(() => {
-    if (!map || !styleReady) return;
+    if (!map || !styleEpoch) return;
     for (const spec of POINT_OVERLAYS) setOverlayData(map, spec, pois.buckets[spec.key]);
-  }, [map, styleReady, pois.buckets]);
+  }, [map, styleEpoch, pois.buckets]);
 
   useEffect(() => {
-    if (!map || !styleReady) return;
+    if (!map || !styleEpoch) return;
     for (const spec of POINT_OVERLAYS) {
       setOverlayVisible(map, spec, !hiddenOverlays.includes(spec.key));
     }
-  }, [map, styleReady, hiddenOverlays]);
+  }, [map, styleEpoch, hiddenOverlays]);
 
   // Campgrounds have no on/off toggle — 50+ managing agencies cannot be a
   // checkbox — so their legend is a filter instead of a visibility switch.
   useEffect(() => {
-    if (!map || !styleReady) return;
+    if (!map || !styleEpoch) return;
     setOverlayFilter(map, overlaySpec('cg'), hiddenAgencyFilter(hiddenAgencies));
-  }, [map, styleReady, hiddenAgencies]);
+  }, [map, styleEpoch, hiddenAgencies]);
 
   useEffect(() => {
-    if (!map || !styleReady) return;
+    if (!map || !styleEpoch) return;
     const canvas = map.getCanvas();
     const unbind: Array<() => void> = [];
 
@@ -142,7 +142,7 @@ export function useMapOverlays(pois: ViewportPois): void {
     return () => {
       for (const off of unbind) off();
     };
-  }, [map, styleReady, selectPoi, clearSelectedPoi]);
+  }, [map, styleEpoch, selectPoi, clearSelectedPoi]);
 }
 
 /**
@@ -154,7 +154,7 @@ export function useMapOverlays(pois: ViewportPois): void {
  * logged and carried on.
  */
 export function useStateLines(): void {
-  const { map, styleReady } = useMapContext();
+  const { map, styleEpoch } = useMapContext();
 
   const { data } = useQuery({
     queryKey: queryKeys.staticGeoJson(STATE_LINES_URL),
@@ -166,10 +166,10 @@ export function useStateLines(): void {
   });
 
   useEffect(() => {
-    if (!map || !styleReady || !data) return;
+    if (!map || !styleEpoch || !data) return;
     // Under the pins. The boundaries land whenever their fetch resolves, which is
     // normally after the overlays are installed, so the anchor is what keeps a
     // line layer from drawing over every dot.
     installStateLines(map, data, firstInstalledPinLayerId(map));
-  }, [map, styleReady, data]);
+  }, [map, styleEpoch, data]);
 }

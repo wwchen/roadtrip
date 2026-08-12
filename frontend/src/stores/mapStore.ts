@@ -12,7 +12,7 @@
 //   bound        — which layers have had their handlers bound. Bookkeeping the
 //                  React port does not need: an effect unbinds what it bound.
 //   mapReady     — whether layers may be installed. <MapProvider> owns this as
-//                  `styleReady` in its context, because it is a lifecycle fact
+//                  `styleEpoch` in its context, because it is a lifecycle fact
 //                  about one map instance rather than UI state, and because two
 //                  sources of truth for "is the style up" is precisely how an
 //                  overlay ends up attached to a style that no longer describes

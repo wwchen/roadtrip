@@ -415,7 +415,7 @@ describe('painting', () => {
     }
   });
 
-  // The reason MapProvider tracks `styleReady` at all: a basemap change destroys
+  // The reason MapProvider tracks `styleEpoch` at all: a basemap change destroys
   // every source and layer the app added, and the overlays have to come back with
   // the pins they were showing — not empty, and not needing a fresh fetch.
   test('a basemap change reinstalls the overlays with the pins already loaded', async () => {

@@ -243,7 +243,7 @@ export function removeOverlay(map: MapLibreMap, spec: PointOverlaySpec): void {
  *
  * Must be called after every `style.load`, including the ones a basemap change
  * produces: `setStyle({ diff: false })` destroys every source and layer the app
- * added. `MapProvider`'s `styleReady` is the signal; see its doc comment.
+ * added. `MapProvider`'s `styleEpoch` is the signal; see its doc comment.
  */
 export function installPointOverlay(
   map: MapLibreMap,

@@ -31,7 +31,7 @@ import { useTripStore } from '@/stores/tripStore';
 import { useMapContext } from './MapProvider';
 
 export function useTripOverlay(): void {
-  const { map, styleReady } = useMapContext();
+  const { map, styleEpoch } = useMapContext();
   const route = useTripStore((s) => s.route);
   const stops = useTripStore((s) => s.stops);
   const corridorMiles = useTripStore((s) => s.corridorMiles);
@@ -78,12 +78,12 @@ export function useTripOverlay(): void {
   const corridorRef = useRef(corridor);
   corridorRef.current = corridor;
 
-  // Install: the route changed, or the style reloaded under it. `styleReady` is in
+  // Install: the route changed, or the style reloaded under it. `styleEpoch` is in
   // the deps because a basemap change wipes every app layer and flips it false→true;
   // without that the route would vanish on a basemap switch, which is the one
-  // behaviour `styleReady` exists for.
+  // behaviour `styleEpoch` exists for.
   useEffect(() => {
-    if (!map || !styleReady) return;
+    if (!map || !styleEpoch) return;
     if (!line) {
       removeRouteOverlay(map);
       return;
@@ -95,7 +95,7 @@ export function useTripOverlay(): void {
       // would double-draw for a frame.
       removeRouteOverlay(map);
     };
-  }, [map, styleReady, line]);
+  }, [map, styleEpoch, line]);
 
   // Update the fill without reinstalling the route layers. This runs on every
   // tick of the radius slider.
@@ -108,13 +108,13 @@ export function useTripOverlay(): void {
   // user's zoom every time they changed basemap.
   const fittedLine = useRef<unknown>(null);
   useEffect(() => {
-    if (!map || !styleReady || !line) return;
+    if (!map || !styleEpoch || !line) return;
     if (fittedLine.current === line) return;
     const bounds = routeBounds(line);
     if (!bounds) return;
     fittedLine.current = line;
     map.fitBounds(bounds, { padding: ROUTE_FIT_PADDING_PX, duration: ROUTE_FIT_DURATION_MS });
-  }, [map, styleReady, line]);
+  }, [map, styleEpoch, line]);
 
   // Markers: the stops changed, which includes a reorder relabelling them.
   const registryRef = useRef<TripMarkerRegistry>(undefined);

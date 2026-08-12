@@ -84,7 +84,7 @@ function countPins(buckets: Record<OverlayKey, PinCollection>): Record<OverlayKe
 }
 
 export function useViewportPois(): ViewportPois {
-  const { map, styleReady } = useMapContext();
+  const { map, styleEpoch } = useMapContext();
   const setViewport = useMapStore((s) => s.setViewport);
   const routeActive = useTripStore(selectRouteActive);
   const routePois = useTripStore((s) => s.routePois);
@@ -108,7 +108,7 @@ export function useViewportPois(): ViewportPois {
   const cache = cacheRef.current;
 
   useEffect(() => {
-    if (!map || !styleReady) return;
+    if (!map || !styleEpoch) return;
 
     let debounce: ReturnType<typeof setTimeout> | undefined;
 
@@ -137,7 +137,7 @@ export function useViewportPois(): ViewportPois {
       clearTimeout(debounce);
       map.off('moveend', schedule);
     };
-  }, [map, styleReady, setViewport]);
+  }, [map, styleEpoch, setViewport]);
 
   const query = useQuery({
     queryKey: request

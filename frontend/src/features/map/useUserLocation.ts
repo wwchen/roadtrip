@@ -54,7 +54,7 @@ export function useUserLocation(): void {
   const toastRef = useRef(toast);
   toastRef.current = toast;
 
-  // Not gated on `styleReady`: a control is chrome around the canvas, so it neither
+  // Not gated on `styleEpoch`: a control is chrome around the canvas, so it neither
   // waits for a style nor is destroyed by a reload — unlike every layer.
   useEffect(() => {
     if (!map) return;

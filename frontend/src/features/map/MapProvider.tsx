@@ -48,15 +48,17 @@ setWorkerUrl(maplibreWorkerUrl);
  * MapLibre is imperative and owns its own DOM, so this is the escape hatch the plan
  * prescribes: React owns *when* the map exists and what the current basemap is; the
  * map owns its canvas. Nothing here renders map content — layers and markers are
- * installed by hooks that wait on `styleReady`.
+ * installed by hooks that wait on `styleEpoch`.
  *
  * **The style lifecycle is the whole point of this component.** Changing basemap
  * calls `setStyle(..., { diff: false })`, and that full reload *destroys every source
  * and layer we added*. The vanilla app handled this with a `style.load` listener that
  * called `reinstallOverlays()` — a module-level registry of re-install callbacks.
- * Here the same fact is expressed as state: `styleReady` drops to false on a basemap
- * change and returns to true when the new style has loaded, so overlay hooks
- * reinstall by ordinary effect dependency rather than through a global hook.
+ * Here the same fact is expressed as state: `styleEpoch` drops to 0 on a basemap
+ * change and comes back as a NEW generation when the new style has loaded, so
+ * overlay hooks reinstall by ordinary effect dependency rather than through a
+ * global hook. It counts rather than toggling because for an inline style both
+ * halves land in one React batch; see `MapContextValue.styleEpoch`.
  *
  * `diff: false` is deliberate and load-bearing, not a performance choice. The default
  * incremental merge keeps our sources in place but does NOT fire `style.load`, so the
@@ -67,7 +69,18 @@ export function MapProvider({ children }: { children: ReactNode }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [map, setMap] = useState<MapLibreMap | null>(null);
-  const [styleReady, setStyleReady] = useState(false);
+  const [styleEpoch, setStyleEpoch] = useState(0);
+  /**
+   * The next generation number to hand out, counted OUTSIDE React state.
+   *
+   * This has to be a ref, and `setStyleEpoch((n) => n + 1)` is not an alternative:
+   * a functional update is applied to the value already queued in the batch, so it
+   * would compute 0 + 1 and land right back on the generation the reset was meant
+   * to leave — the same collapse the counter exists to prevent. Reading the next
+   * number from a ref makes the new generation independent of whatever else is
+   * queued alongside it.
+   */
+  const nextStyleEpoch = useRef(0);
   const mode = useThemeStore((s) => s.mode);
   const [basemapKey, setBasemapKey] = useState(() => initialBasemapKey(mode));
   // Read by the create-once effect, which must not depend on `basemapKey` —
@@ -92,7 +105,7 @@ export function MapProvider({ children }: { children: ReactNode }) {
 
     // `style.load` rather than `load`: it fires again after every setStyle, which
     // is exactly when overlays need reinstalling.
-    const onStyleLoad = () => setStyleReady(true);
+    const onStyleLoad = () => setStyleEpoch((nextStyleEpoch.current += 1));
     instance.on('style.load', onStyleLoad);
 
     mapRef.current = instance;
@@ -103,7 +116,7 @@ export function MapProvider({ children }: { children: ReactNode }) {
       instance.remove();
       mapRef.current = null;
       setMap(null);
-      setStyleReady(false);
+      setStyleEpoch(0);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -119,8 +132,11 @@ export function MapProvider({ children }: { children: ReactNode }) {
     const instance = mapRef.current;
     if (!instance) return;
     // Overlays are about to be destroyed by the reload, so stop anything from
-    // touching them before the new style announces itself.
-    setStyleReady(false);
+    // touching them before the new style announces itself. For a fetched style
+    // that gap is real and React commits this 0; for an inline one `style.load`
+    // fires inside the `setStyle` below and both land in the same batch, which is
+    // exactly why the epoch is a counter — see `MapContextValue.styleEpoch`.
+    setStyleEpoch(0);
     instance.setStyle(basemapStyle(key), { diff: false });
   }, []);
 
@@ -152,7 +168,7 @@ export function MapProvider({ children }: { children: ReactNode }) {
   // Satellite is an underlay, reinstalled on every style load because the reload
   // wipes it along with everything else.
   useEffect(() => {
-    if (!map || !styleReady) return;
+    if (!map || !styleEpoch) return;
 
     if (!satellite) {
       if (map.getLayer(SATELLITE_LAYER_ID)) map.removeLayer(SATELLITE_LAYER_ID);
@@ -168,12 +184,12 @@ export function MapProvider({ children }: { children: ReactNode }) {
       { id: SATELLITE_LAYER_ID, type: 'raster', source: SATELLITE_SOURCE_ID },
       firstNonBackground?.id,
     );
-  }, [map, styleReady, satellite]);
+  }, [map, styleEpoch, satellite]);
 
   const value = useMemo<MapContextValue>(
     () => ({
       map,
-      styleReady,
+      styleEpoch,
       basemapKey,
       setBasemap: changeBasemap,
       isAutoBasemap: storedBasemapKey() === null,
@@ -181,7 +197,7 @@ export function MapProvider({ children }: { children: ReactNode }) {
       satellite,
       setSatellite,
     }),
-    [map, styleReady, basemapKey, changeBasemap, resetBasemap, satellite],
+    [map, styleEpoch, basemapKey, changeBasemap, resetBasemap, satellite],
   );
 
   return (

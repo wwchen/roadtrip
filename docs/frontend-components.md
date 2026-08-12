@@ -86,6 +86,20 @@ drift apart. `MapProvider` re-styles the map on every mode change (even when the
 basemap key itself is unchanged), because overlay colours are cached by
 `tokens.ts` and a full `setStyle` is what makes them re-resolve.
 
+That reload destroys every source and layer the app added, so overlays reinstall
+off `styleEpoch` — the context's style-generation counter, 0 before any style has
+loaded and a fresh higher number on every `style.load`. It is falsy exactly when
+nothing may touch the map, so `if (!map || !styleEpoch) return;` is the guard, and
+it doubles as the effect dependency that drives reinstalls. **It is a counter and
+not a boolean on purpose.** For an inline style — which the `carto-dark` default is
+— MapLibre fires `style.load` synchronously inside `setStyle`, so the reset and the
+reload land in one React batch; a boolean going true → false → true inside a single
+batch is indistinguishable from one that never changed, React bails out, and every
+reinstall effect is skipped. That shipped once: flipping the OS to dark swapped the
+basemap and silently dropped every overlay while the legend still showed their
+counts. A counter cannot collapse that way, because the new generation is a value
+the old one never held.
+
 ## File structure
 
 | Path | Holds |

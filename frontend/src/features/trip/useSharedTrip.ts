@@ -10,7 +10,7 @@
 // counterpart here, and that is not an omission: restoring a route means writing
 // stops into the store, and the route request that follows is a fetch. Nothing about
 // it touches the map, so nothing has to wait for a style. The camera fit that DOES
-// need the map is `useTripOverlay`'s, and it is already gated on `styleReady`.
+// need the map is `useTripOverlay`'s, and it is already gated on `styleEpoch`.
 import { useEffect, useRef, useState } from 'react';
 import { decodeRouteState, setVisibleRouteParam } from '@/lib/share-links';
 import { CORRIDOR_DEFAULT_MILES, useTripStore } from '@/stores/tripStore';
