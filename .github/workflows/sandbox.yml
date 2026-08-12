@@ -120,6 +120,13 @@ jobs:
                     `- \`/sandbox stop\` — tear down the sandbox`,
             });
 
+      # Teardown runs the tooling from the branch this workflow was loaded from
+      # (the default branch, for issue_comment) rather than the PR head — the
+      # stop path never needs PR content.
+      - name: Check out sandbox tooling
+        if: steps.cmd.outputs.action == 'stop'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Resolve data tree SHA
         if: steps.cmd.outputs.action == 'up'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -245,19 +252,10 @@ jobs:
 
       - name: Run on host (stop)
         if: steps.cmd.outputs.action == 'stop'
-        env:
-          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
-        run: |
-          if ! printf '%s' "$PR_NUMBER" | grep -qE '^[0-9]+$'; then
-            echo "::error::PR_NUMBER '$PR_NUMBER' is not numeric; aborting"
-            exit 1
-          fi
-          ssh -o BatchMode=yes "$SANDBOX_HOST" "bash -s -- '$PR_NUMBER'" <<'REMOTE'
-          set -euo pipefail
-          pr_number="$1"
-          cd "$HOME/.roadtrip/current"
-          SANDBOX_CADDY_DIR="$HOME/.roadtrip/caddy/sandboxes" scripts/deploy.sh sandbox-down "pr${pr_number}"
-          REMOTE
+        uses: ./.github/actions/sandbox-stop
+        with:
+          host: ${{ env.SANDBOX_HOST }}
+          name: pr${{ steps.pr.outputs.pr_number }}
 
       - name: Status live
         if: steps.cmd.outputs.action == 'up' && steps.status.outputs.comment_id != ''
@@ -345,14 +343,11 @@ jobs:
     timeout-minutes: 15
     env:
       SANDBOX_HOST: mini@mini-ca
-      # Must match deploy.sh's SANDBOX_STATE_DIR default — the marker file it
-      # writes is how we tell "this PR had a sandbox" from "it never did".
-      SANDBOX_STATE_DIR: /var/lib/roadtrip-sandboxes
-      # Remote exit code meaning "no sandbox to tear down"; distinct from 0
-      # (torn down) and from any real failure.
-      SANDBOX_ABSENT_RC: 3
 
     steps:
+      - name: Check out sandbox tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
       - name: Join tailnet
         uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
         with:
@@ -373,45 +368,18 @@ jobs:
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
+      # Most closed PRs never had a sandbox, so require-existing keeps the
+      # common case down to a single SSH.
       - name: Run on host (stop)
         id: down
-        env:
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          set -uo pipefail
-          if ! printf '%s' "$PR_NUMBER" | grep -qE '^[0-9]+$'; then
-            echo "::error::PR_NUMBER '$PR_NUMBER' is not numeric; aborting"
-            exit 1
-          fi
-          set +e
-          ssh -o BatchMode=yes "$SANDBOX_HOST" \
-            "bash -s -- '$PR_NUMBER' '$SANDBOX_STATE_DIR' '$SANDBOX_ABSENT_RC'" <<'REMOTE'
-          set -euo pipefail
-          pr_number="$1"
-          state_dir="$2"
-          absent_rc="$3"
-          name="pr${pr_number}"
-
-          # Tearing down unconditionally would prune images and issue Cloudflare
-          # deletes on every closed PR, most of which never had a sandbox.
-          if [[ ! -f "${state_dir}/${name}.meta" ]]; then
-            echo "==> no sandbox for ${name}; nothing to tear down"
-            exit "$absent_rc"
-          fi
-
-          cd "$HOME/.roadtrip/current"
-          SANDBOX_STATE_DIR="$state_dir" SANDBOX_CADDY_DIR="$HOME/.roadtrip/caddy/sandboxes" scripts/deploy.sh sandbox-down "$name"
-          REMOTE
-          rc=$?
-          set -e
-          case "$rc" in
-            0)                     echo "torn_down=true"  >> "$GITHUB_OUTPUT" ;;
-            "$SANDBOX_ABSENT_RC")  echo "torn_down=false" >> "$GITHUB_OUTPUT" ;;
-            *)                     exit "$rc" ;;
-          esac
+        uses: ./.github/actions/sandbox-stop
+        with:
+          host: ${{ env.SANDBOX_HOST }}
+          name: pr${{ github.event.pull_request.number }}
+          require-existing: 'true'
 
       - name: Status stopped
-        if: steps.down.outputs.torn_down == 'true'
+        if: steps.down.outputs.torn-down == 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}

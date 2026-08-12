@@ -104,19 +104,71 @@ SHA: <12-char sha>  ·  stop with /sandbox stop
 The sandbox is named `pr<N>` (e.g. `pr532`) and is stable across
 re-runs of the same PR.
 
+### The shared stop step
+
+Every teardown path goes through one composite action,
+`.github/actions/sandbox-stop`, so there is a single definition of what stopping
+a sandbox means:
+
+| Input | Default | Meaning |
+|---|---|---|
+| `host` | — | SSH destination |
+| `name` | — | Sandbox name, e.g. `pr532` |
+| `state-dir` | `/var/lib/roadtrip-sandboxes` | Must match `SANDBOX_STATE_DIR` |
+| `require-existing` | `false` | Skip instead of tearing down when there is no marker |
+
+It outputs `torn-down` (`true`/`false`), letting callers tell "there was nothing
+to do" apart from a genuine failure — the remote signals absence with a
+dedicated exit code, so real errors still fail the step. Callers supply their
+own SSH and tailnet setup and check out the repo, since the action is referenced
+by path.
+
+Its three callers are `/sandbox stop`, the PR-close teardown, and the sweep.
+
 ### Automatic teardown on PR close
 
 Closing a PR — merged or not — tears its sandbox down. The `teardown-on-close`
-job in `sandbox.yml` fires on `pull_request: [closed]`, SSHes to the host, and
-runs `deploy.sh sandbox-down pr<N>`.
+job in `sandbox.yml` fires on `pull_request: [closed]` and calls the shared stop
+step with `require-existing: true`.
 
-It first checks for the `pr<N>.meta` marker in `SANDBOX_STATE_DIR` and exits
-without acting when there is none, so the vast majority of PRs — which never had
-a sandbox — cost one SSH and no Cloudflare or image-prune work. Only a real
+That flag matters: most closed PRs never had a sandbox, and tearing down blind
+is not free — it prunes images on the shared deploy host and issues a Cloudflare
+delete. With the marker check, the common case costs one SSH, and only a real
 teardown updates the PR's status comment.
 
 Teardown needs the deploy secrets, so the job is limited to PRs whose head
 branch lives in this repository — the same restriction the `up` path enforces.
+
+### Sweep (every 30 minutes)
+
+`sandbox-sweep.yml` is the safety net for anything the close path missed:
+teardowns that failed, PRs closed before that job existed, and sandboxes on PRs
+that simply stay open. It lists every marker on the host and tears down any
+sandbox that
+
+- belongs to a PR that is closed or no longer exists, or
+- has outlived `SANDBOX_TTL_HOURS` (repo variable, default **2**), or
+- has a marker whose `START_EPOCH` cannot be read — itself a sign of a stuck
+  sandbox.
+
+Sandboxes created by name via `make sandbox` are subject to the TTL but have no
+PR to check, and no comment is posted for them.
+
+The `plan` job decides; a matrix `stop` job runs the shared stop step once per
+doomed sandbox, serialised (`max-parallel: 1`) because teardown prunes images on
+the shared host, and with `fail-fast: false` so one bad sandbox cannot strand the
+rest. When a `pr<N>` sandbox is reaped its status comment is rewritten with the
+reason.
+
+Because it runs in Actions rather than host cron, it needs no host setup. Run it
+on demand with:
+
+```sh
+gh workflow run sandbox-sweep.yml
+```
+
+Note that scheduled and dispatchable workflows are only picked up from the
+default branch, so the sweep starts working once this is merged to `master`.
 
 Required secrets (same as `deploy.yml`): `DEPLOY_SSH_KEY`,
 `DEPLOY_KNOWN_HOSTS`, `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET`.
@@ -268,7 +320,7 @@ change.
 | `SANDBOX_PORT_RANGE_END` | `41999` | Last port in the range |
 | `SANDBOX_DB_PASSWORD` | `sandbox` | Throwaway Postgres password for the sandbox DB |
 | `POSTGRES_HEALTH_RETRIES` | `30` | Seconds to wait for `pg_isready` before failing |
-| `SANDBOX_TTL_HOURS` | `24` | Reaper: sandboxes older than this are torn down |
+| `SANDBOX_TTL_HOURS` | `2` | Reaper and sweep: sandboxes older than this are torn down. Override the sweep's value with the `SANDBOX_TTL_HOURS` repo variable |
 
 ## Scheduled jobs
 
@@ -306,9 +358,11 @@ whose age exceeds `SANDBOX_TTL_HOURS`. Fresh sandboxes are left running.
 Malformed markers emit a warning and are skipped; the script exits non-zero
 if any marker was malformed so cron/systemd can alert on it.
 
-Since PR close now tears sandboxes down directly, the reaper is the backstop
-for sandboxes on PRs that stay open past the TTL, and for any close-teardown
-that failed.
+This is the host-local equivalent of the sweep, and is now optional: the sweep
+enforces the same TTL from Actions without depending on cron being installed.
+Keep it if you want teardown to survive GitHub being unreachable; it is
+otherwise redundant. Run it more often than hourly if you rely on it, since a
+2-hour TTL checked hourly means a sandbox can live close to three hours.
 
 Example cron entry (hourly):
 
@@ -342,5 +396,5 @@ Checklist for a host that has not previously run sandboxes:
 - [ ] **Identity provider.** A Google and/or GitHub IdP configured in Zero Trust → Settings → Authentication, referenced by the Access app above.
 - [ ] **GHCR login.** Run `docker login ghcr.io` on the host with credentials that can pull from `ghcr.io/wwchen/roadtrip/backend`. A GitHub PAT with `read:packages` scope works; store it so `docker pull` runs unattended (e.g. `~/.docker/config.json`).
 - [ ] **State and snapshot directories.** Create `SANDBOX_STATE_DIR` (`/var/lib/roadtrip-sandboxes` by default) and ensure it is writable by the user running the sandbox scripts.
-- [ ] **Cron entries.** Add the snapshot (nightly) and reaper (hourly) cron entries from the Scheduled jobs section above, pointing to the scripts in the repo checkout.
+- [ ] **Cron entries.** Add the snapshot (nightly) cron entry from the Scheduled jobs section above, pointing to the script in the repo checkout. The reaper entry is optional — `sandbox-sweep.yml` enforces the same TTL from GitHub Actions — so add it only if you want teardown to keep working when GitHub is unreachable.
 - [ ] **`SANDBOX_SNAPSHOT_PATH` env var** (optional). Export it in the environment or set it in the cron entry if the default path is not desired.

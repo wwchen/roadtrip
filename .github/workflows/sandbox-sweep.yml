@@ -1,0 +1,219 @@
+name: Sandbox sweep
+
+# Backstop for sandboxes the close-teardown never retired: PRs closed before
+# that job existed, teardowns that failed, and sandboxes on PRs that stay open.
+# Runs entirely from GitHub Actions so it needs no host cron to be installed.
+on:
+  schedule:
+    # Every 30 minutes, so the TTL is enforced within ~30m of expiry.
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: sandbox-sweep
+  cancel-in-progress: false
+
+env:
+  SANDBOX_HOST: mini@mini-ca
+  # Must match deploy.sh's SANDBOX_STATE_DIR.
+  SANDBOX_STATE_DIR: /var/lib/roadtrip-sandboxes
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      targets: ${{ steps.decide.outputs.targets }}
+      count: ${{ steps.decide.outputs.count }}
+
+    steps:
+      - name: Join tailnet
+        uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          version: 1.98.10
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: List live sandboxes
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes "$SANDBOX_HOST" \
+            "bash -s -- '$SANDBOX_STATE_DIR'" > "$RUNNER_TEMP/sandboxes.tsv" <<'REMOTE'
+          set -euo pipefail
+          state_dir="$1"
+          shopt -s nullglob
+          for meta in "$state_dir"/*.meta; do
+            name="$(basename "$meta" .meta)"
+            start=""
+            while IFS='=' read -r key val; do
+              [[ "$key" == "START_EPOCH" ]] && start="$val"
+            done < "$meta"
+            printf '%s\t%s\n' "$name" "${start:-0}"
+          done
+          REMOTE
+          echo "==> live sandboxes (name, start epoch):"
+          cat "$RUNNER_TEMP/sandboxes.tsv"
+
+      - name: Decide what to reap
+        id: decide
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          SANDBOX_TTL_HOURS: ${{ vars.SANDBOX_TTL_HOURS || 2 }}
+        with:
+          script: |
+            const fs = require('fs');
+            const ttlHours = Number(process.env.SANDBOX_TTL_HOURS);
+            const ttlSeconds = ttlHours * 3600;
+            const now = Math.floor(Date.now() / 1000);
+            const lines = fs
+              .readFileSync(`${process.env.RUNNER_TEMP}/sandboxes.tsv`, 'utf8')
+              .split('\n')
+              .filter(line => line.trim());
+
+            const targets = [];
+            for (const line of lines) {
+              const [name, startRaw] = line.split('\t');
+              const start = Number(startRaw);
+              // A marker with no usable START_EPOCH is itself a dangling
+              // sandbox, so treat it as infinitely old rather than skipping it.
+              const age = Number.isFinite(start) && start > 0 ? now - start : Infinity;
+              let reason = null;
+
+              const pr = /^pr(\d+)$/.exec(name);
+              if (pr) {
+                try {
+                  const { data } = await github.rest.pulls.get({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    pull_number: Number(pr[1]),
+                  });
+                  if (data.state === 'closed') reason = 'its PR is closed';
+                } catch (error) {
+                  if (error.status !== 404) throw error;
+                  reason = 'its PR no longer exists';
+                }
+              }
+              if (!reason && age === Infinity) {
+                reason = 'its start time could not be read';
+              } else if (!reason && age > ttlSeconds) {
+                reason = `it passed the ${ttlHours}h limit`;
+              }
+
+              if (reason) {
+                targets.push({ name, reason });
+                core.info(`reap ${name} — ${reason}`);
+              } else {
+                core.info(`keep ${name} — age ${Math.round(age / 60)}m`);
+              }
+            }
+
+            core.setOutput('targets', JSON.stringify(targets));
+            core.setOutput('count', String(targets.length));
+            core.summary.addRaw(
+              targets.length
+                ? `Reaping ${targets.length}: ` +
+                    targets.map(t => `\`${t.name}\` (${t.reason})`).join(', ')
+                : 'No sandboxes to reap.',
+            );
+            await core.summary.write();
+
+  stop:
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # One bad sandbox must not strand the others, and teardown prunes images
+      # on the shared deploy host, so serialise.
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        target: ${{ fromJSON(needs.plan.outputs.targets) }}
+
+    steps:
+      - name: Check out sandbox tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Join tailnet
+        uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          version: 1.98.10
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      # The plan is a snapshot; require-existing keeps a sandbox torn down in
+      # the meantime from failing the sweep.
+      - name: Stop sandbox
+        id: down
+        uses: ./.github/actions/sandbox-stop
+        with:
+          host: ${{ env.SANDBOX_HOST }}
+          name: ${{ matrix.target.name }}
+          require-existing: 'true'
+
+      - name: Status swept
+        if: steps.down.outputs.torn-down == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          SANDBOX_NAME: ${{ matrix.target.name }}
+          REASON: ${{ matrix.target.reason }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            // Sandboxes created by name via `make sandbox` have no PR to update.
+            const pr = /^pr(\d+)$/.exec(process.env.SANDBOX_NAME);
+            if (!pr) return;
+
+            const number = Number(pr[1]);
+            const marker = `<!-- sandbox-status:pr${number} -->`;
+            const body = `${marker}\n### 🛑 Sandbox torn down\n` +
+              `- **Was:** \`roadtrip-sb-${process.env.SANDBOX_NAME}\`\n` +
+              `- Swept because ${process.env.REASON}  ·  [logs](${process.env.RUN_URL})\n` +
+              `- Re-create with \`/sandbox\``;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: number, per_page: 100,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: number, body,
+              });
+            }

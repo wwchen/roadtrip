@@ -20,8 +20,9 @@
 set -euo pipefail
 
 # ── Tunables ──────────────────────────────────────────────────────────────────
-# Maximum sandbox lifetime in hours before it is reaped.
-SANDBOX_TTL_HOURS="${SANDBOX_TTL_HOURS:-24}"
+# Maximum sandbox lifetime in hours before it is reaped.  Keep in step with the
+# SANDBOX_TTL_HOURS default in .github/workflows/sandbox-sweep.yml.
+SANDBOX_TTL_HOURS="${SANDBOX_TTL_HOURS:-2}"
 
 # Directory containing *.meta marker files (must match deploy.sh).
 SANDBOX_STATE_DIR="${SANDBOX_STATE_DIR:-/var/lib/roadtrip-sandboxes}"
