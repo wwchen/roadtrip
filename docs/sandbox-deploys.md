@@ -121,9 +121,11 @@ stopping mean:
 | `ts-oauth-client-id` / `ts-oauth-secret` | — | Tailscale OAuth credentials |
 | `ssh-private-key` / `ssh-known-hosts` | — | Deploy SSH credentials |
 | `github-token` | `''` | Token for status comments |
-| `host` | `mini@mini-ca` | SSH destination |
-| `tunnel-zone` | `floo.ca` | Zone the sandbox is published under |
-| `state-dir` | `/var/lib/roadtrip-sandboxes` | Must match `SANDBOX_STATE_DIR` |
+
+The deploy host, state directory, tunnel zone, and the tailnet tag and version
+are constants inside the action, not inputs. The credentials have to be inputs:
+a composite action cannot read the `secrets` context, so whatever it needs must
+be handed to it by the calling workflow.
 
 The action owns everything that touches the sandbox: joining the tailnet,
 configuring SSH, running `deploy.sh`, and posting the PR status comment as work

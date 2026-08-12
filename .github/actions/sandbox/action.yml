@@ -47,18 +47,6 @@ inputs:
     description: Token used to post status comments
     required: false
     default: ''
-  host:
-    description: SSH destination for the deploy host
-    required: false
-    default: mini@mini-ca
-  tunnel-zone:
-    description: DNS zone the sandbox is published under
-    required: false
-    default: floo.ca
-  state-dir:
-    description: Directory holding <slug>.meta markers; must match deploy.sh's SANDBOX_STATE_DIR
-    required: false
-    default: /var/lib/roadtrip-sandboxes
 
 outputs:
   torn-down:
@@ -95,11 +83,10 @@ runs:
       shell: bash
       env:
         SLUG: ${{ inputs.slug }}
-        ZONE: ${{ inputs.tunnel-zone }}
       run: |
         set -euo pipefail
         # SANDBOX_HOST_PREFIX (roadtrip-sb-) + the slug deploy.sh is given.
-        echo "url=https://roadtrip-sb-${SLUG}.${ZONE}" >> "$GITHUB_OUTPUT"
+        echo "url=https://roadtrip-sb-${SLUG}.floo.ca" >> "$GITHUB_OUTPUT"
 
     - name: Join tailnet
       uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
@@ -157,7 +144,7 @@ runs:
       if: inputs.operation == 'start'
       shell: bash
       env:
-        SANDBOX_HOST: ${{ inputs.host }}
+        SANDBOX_HOST: mini@mini-ca
         SLUG: ${{ inputs.slug }}
         BRANCH: ${{ inputs.branch }}
       run: |
@@ -198,9 +185,9 @@ runs:
       if: inputs.operation == 'stop'
       shell: bash
       env:
-        SANDBOX_HOST: ${{ inputs.host }}
+        SANDBOX_HOST: mini@mini-ca
         SLUG: ${{ inputs.slug }}
-        SANDBOX_STATE_DIR: ${{ inputs.state-dir }}
+        SANDBOX_STATE_DIR: /var/lib/roadtrip-sandboxes
         REQUIRE_EXISTING: ${{ inputs.require-existing }}
       run: |
         set -uo pipefail
