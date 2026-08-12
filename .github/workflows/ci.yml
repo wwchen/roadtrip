@@ -91,6 +91,20 @@ jobs:
               - '.editorconfig'
               - '.github/workflows/ci.yml'
 
+  migrations:
+    # Not gated on `changes`: the whole point is to notice a migration edit, so
+    # the check cannot depend on a filter that the same edit has to trip.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The base SHA has to be in the local object store to diff against.
+          fetch-depth: 0
+      - name: Check migration immutability
+        run: python3 scripts/check_migration_immutability.py "${{ github.event.pull_request.base.sha }}"
+
   lint:
     needs: changes
     if: needs.changes.outputs.scripts == 'true'
@@ -480,6 +494,7 @@ jobs:
   ci-passed:
     needs:
       - changes
+      - migrations
       - lint
       - gradle-lint
       - frontend-tests

@@ -103,6 +103,7 @@ _deploy_prod() {
     local branch="${4:-master}"
     local caddy_dir="${SANDBOX_CADDY_DIR:-${HOME}/.roadtrip/caddy/sandboxes}"
     local wait_seconds="${ROADTRIP_DEPLOY_WAIT_SECONDS:-180}"
+    local failure_log_lines="${ROADTRIP_DEPLOY_FAILURE_LOG_LINES:-120}"
     local -a compose=(docker compose -f docker-compose.yml -f docker-compose.secrets.yml --profile tunnel --profile pois --profile recgov-companion)
     local -a secret_exec=(./secrets/manage.py exec prod --)
 
@@ -131,7 +132,15 @@ _deploy_prod() {
     "${secret_exec[@]}" "${compose[@]}" up -d --force-recreate backend
     "${secret_exec[@]}" "${compose[@]}" up -d
     "${secret_exec[@]}" "${compose[@]}" restart grafana alloy tempo prometheus loki
-    "${secret_exec[@]}" "${compose[@]}" up -d --wait --wait-timeout "${wait_seconds}"
+    # Compose reports only "container X is unhealthy" when a dependency never
+    # comes up, which says nothing about why. The backend's own log holds the
+    # reason (a Flyway checksum mismatch, a bad secret), so surface it here
+    # rather than making someone SSH to the host to read it.
+    if ! "${secret_exec[@]}" "${compose[@]}" up -d --wait --wait-timeout "${wait_seconds}"; then
+        echo "==> deploy did not come up healthy; last ${failure_log_lines} backend lines:" >&2
+        "${secret_exec[@]}" "${compose[@]}" logs --tail "${failure_log_lines}" --no-color backend >&2 || true
+        exit 1
+    fi
     _prune_roadtrip_images
     echo "==> production deployed: ${app_sha}"
 }

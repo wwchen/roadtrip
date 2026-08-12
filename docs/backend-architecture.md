@@ -256,3 +256,23 @@ owning entity repo, not through a generic ETL-owned catalog writer.
 
 When adding data access, put SQL and jOOQ in `repo/`. Routes and services call
 repo methods rather than embedding persistence details.
+
+## Migrations
+
+When changing schema, add a new `V<next>__*.sql` under
+`backend/src/main/resources/db/migration`. Never edit a versioned migration
+master already carries — not even a comment. Flyway checksums the file's bytes,
+so a rewrite strands every database that recorded the old checksum, and the
+backend exits at boot with a mismatch on that version instead of serving.
+`scripts/check_migration_immutability.py` fails CI on the attempt. Repeatable
+`R__` migrations are exempt: re-running when their checksum changes is what
+they are for.
+
+A stranded database is repaired, not un-edited — editing the file back only
+strands the databases that agreed with it. The boot error names both values
+(`applied` and `resolved`); write the resolved one into the history row:
+
+```sh
+docker compose exec -T postgres psql -U roadtrip -d roadtrip \
+  -c "UPDATE flyway_schema_history SET checksum = <resolved> WHERE version = '<n>';"
+```
