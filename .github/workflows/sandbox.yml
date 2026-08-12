@@ -223,39 +223,22 @@ jobs:
 
       - name: Run on host (up)
         if: steps.cmd.outputs.action == 'up'
-        env:
-          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
-          HEAD_REF: ${{ steps.pr.outputs.head_ref }}
-          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
-          DATA_SHA: ${{ env.DATA_SHA }}
-        run: |
-          if ! printf '%s' "$HEAD_SHA" | grep -qE '^[0-9a-f]{40}$'; then
-            echo "::error::HEAD_SHA '$HEAD_SHA' is not a 40-hex SHA; aborting"
-            exit 1
-          fi
-          if ! printf '%s' "$PR_NUMBER" | grep -qE '^[0-9]+$'; then
-            echo "::error::PR_NUMBER '$PR_NUMBER' is not numeric; aborting"
-            exit 1
-          fi
-          HEAD_REF_B64="$(printf '%s' "$HEAD_REF" | base64 -w0)"
-          ssh -o BatchMode=yes "$SANDBOX_HOST" "bash -s -- '$HEAD_SHA' '$HEAD_REF_B64' '$PR_NUMBER' '$DATA_SHA'" <<'REMOTE'
-          set -euo pipefail
-          head_sha="$1"
-          head_ref="$(printf '%s' "$2" | base64 -d)"
-          pr_number="$3"
-          data_sha="$4"
-          release="$HOME/.roadtrip/releases/$head_sha"
-          cd "$release"
-
-          SANDBOX_SHA="$head_sha" SANDBOX_BUILD_SHA="$head_sha" SANDBOX_BRANCH="$head_ref" ROADTRIP_DATA_SHA="$data_sha" SANDBOX_CADDY_DIR="$HOME/.roadtrip/caddy/sandboxes" scripts/deploy.sh sandbox-up "$pr_number"
-          REMOTE
+        uses: ./.github/actions/sandbox
+        with:
+          operation: start
+          host: ${{ env.SANDBOX_HOST }}
+          slug: pr${{ steps.pr.outputs.pr_number }}
+          sha: ${{ steps.pr.outputs.head_sha }}
+          branch: ${{ steps.pr.outputs.head_ref }}
+          data-sha: ${{ env.DATA_SHA }}
 
       - name: Run on host (stop)
         if: steps.cmd.outputs.action == 'stop'
-        uses: ./.github/actions/sandbox-stop
+        uses: ./.github/actions/sandbox
         with:
+          operation: stop
           host: ${{ env.SANDBOX_HOST }}
-          name: pr${{ steps.pr.outputs.pr_number }}
+          slug: pr${{ steps.pr.outputs.pr_number }}
 
       - name: Status live
         if: steps.cmd.outputs.action == 'up' && steps.status.outputs.comment_id != ''
@@ -272,8 +255,8 @@ jobs:
             const zone = process.env.SANDBOX_TUNNEL_ZONE;
             const pr   = process.env.PR_NUMBER;
             const sha  = (process.env.HEAD_SHA || '').slice(0, 12);
-            // Must match deploy.sh's SANDBOX_HOST_PREFIX (roadtrip-sb-) + name
-            // (pr<N>) so the URL is the host the Caddy vhost serves.
+            // SANDBOX_HOST_PREFIX (roadtrip-sb-) + the slug passed to the
+            // sandbox action, which is the host the Caddy vhost serves.
             const url  = `https://roadtrip-sb-pr${pr}.${zone}`;
             await github.rest.issues.updateComment({
               owner: context.repo.owner, repo: context.repo.repo,
@@ -372,10 +355,11 @@ jobs:
       # common case down to a single SSH.
       - name: Run on host (stop)
         id: down
-        uses: ./.github/actions/sandbox-stop
+        uses: ./.github/actions/sandbox
         with:
+          operation: stop
           host: ${{ env.SANDBOX_HOST }}
-          name: pr${{ github.event.pull_request.number }}
+          slug: pr${{ github.event.pull_request.number }}
           require-existing: 'true'
 
       - name: Status stopped

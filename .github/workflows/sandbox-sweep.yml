@@ -175,10 +175,11 @@ jobs:
       # the meantime from failing the sweep.
       - name: Stop sandbox
         id: down
-        uses: ./.github/actions/sandbox-stop
+        uses: ./.github/actions/sandbox
         with:
+          operation: stop
           host: ${{ env.SANDBOX_HOST }}
-          name: ${{ matrix.target.name }}
+          slug: ${{ matrix.target.name }}
           require-existing: 'true'
 
       - name: Status swept

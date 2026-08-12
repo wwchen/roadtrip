@@ -92,9 +92,9 @@ The workflow (`sandbox.yml`) resolves the PR head SHA via the GitHub API,
 waits for the application and Git-tree-addressed data images to appear in GHCR,
 then SSHes to `mini@mini-ca` over Tailscale and installs the PR's
 release archive (no Git checkout), and runs
-`scripts/deploy.sh sandbox-up <pr_number>` (with `SANDBOX_SHA` set) or
-`scripts/deploy.sh sandbox-down pr<pr_number>`. On success it posts the sandbox
-URL as a PR comment:
+`scripts/deploy.sh sandbox-up pr<N> pr<N>` (with `SANDBOX_SHA` set) or
+`scripts/deploy.sh sandbox-down pr<N>`, both via the shared sandbox action
+described below. On success it posts the sandbox URL as a PR comment:
 
 ```
 Sandbox live: https://roadtrip-sb-pr<N>.floo.ca
@@ -104,26 +104,37 @@ SHA: <12-char sha>  ·  stop with /sandbox stop
 The sandbox is named `pr<N>` (e.g. `pr532`) and is stable across
 re-runs of the same PR.
 
-### The shared stop step
+### The sandbox action
 
-Every teardown path goes through one composite action,
-`.github/actions/sandbox-stop`, so there is a single definition of what stopping
-a sandbox means:
+Every path that touches a sandbox goes through one composite action,
+`.github/actions/sandbox`, so there is a single definition of what starting and
+stopping mean:
 
 | Input | Default | Meaning |
 |---|---|---|
+| `operation` | — | `start` or `stop` |
 | `host` | — | SSH destination |
-| `name` | — | Sandbox name, e.g. `pr532` |
+| `slug` | — | Sandbox slug, e.g. `pr532` |
+| `sha` | `''` | Commit SHA whose release and images to run (start) |
+| `branch` | `''` | Branch for the build-info banner; falls back to the slug (start) |
+| `data-sha` | `''` | Git tree SHA of `data/` (start) |
 | `state-dir` | `/var/lib/roadtrip-sandboxes` | Must match `SANDBOX_STATE_DIR` |
-| `require-existing` | `false` | Skip instead of tearing down when there is no marker |
+| `require-existing` | `false` | Skip instead of tearing down when there is no marker (stop) |
 
-It outputs `torn-down` (`true`/`false`), letting callers tell "there was nothing
-to do" apart from a genuine failure — the remote signals absence with a
-dedicated exit code, so real errors still fail the step. Callers supply their
-own SSH and tailnet setup and check out the repo, since the action is referenced
-by path.
+The slug is authoritative: it is passed to `deploy.sh sandbox-up` as both ref and
+explicit name, so the sandbox name is never re-derived and always matches the
+hostname the status comment advertises. Inputs are validated before anything
+reaches the host — the operation must be `start` or `stop`, the slug must satisfy
+`deploy.sh`'s own name rule, and `start` requires both SHAs to be 40 hex
+characters.
 
-Its three callers are `/sandbox stop`, the PR-close teardown, and the sweep.
+`stop` outputs `torn-down` (`true`/`false`), letting callers tell "there was
+nothing to do" apart from a genuine failure — the remote signals absence with a
+dedicated exit code, so real errors still fail the step.
+
+Callers supply their own SSH and tailnet setup and check out the repo, since the
+action is referenced by path. Its four call sites are `/sandbox`, `/sandbox
+stop`, the PR-close teardown, and the sweep.
 
 ### Automatic teardown on PR close
 

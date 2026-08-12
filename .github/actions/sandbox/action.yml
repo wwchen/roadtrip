@@ -1,0 +1,152 @@
+name: Sandbox
+description: Start or stop a sandbox on the deploy host
+
+inputs:
+  operation:
+    description: "'start' to bring a sandbox up, 'stop' to tear it down"
+    required: true
+  host:
+    description: SSH destination for the deploy host
+    required: true
+  slug:
+    description: >
+      Sandbox slug, e.g. pr532. Names the compose project, the Caddy vhost and
+      the hostname, and is passed to deploy.sh as an explicit name so it is
+      never re-derived.
+    required: true
+  sha:
+    description: 40-character commit SHA whose release and images to run (start only)
+    required: false
+    default: ''
+  branch:
+    description: Branch name for the build-info banner; defaults to the slug (start only)
+    required: false
+    default: ''
+  data-sha:
+    description: Git tree SHA of data/, selecting the data image and volume (start only)
+    required: false
+    default: ''
+  state-dir:
+    description: Directory holding <slug>.meta markers; must match deploy.sh's SANDBOX_STATE_DIR
+    required: false
+    default: /var/lib/roadtrip-sandboxes
+  require-existing:
+    description: >
+      Stop only. When true, skip instead of tearing down if the sandbox has no
+      marker. Tearing down unconditionally is not free — it prunes images on the
+      shared deploy host and issues a Cloudflare delete — so callers that fire
+      regardless of whether a sandbox exists should set this.
+    required: false
+    default: 'false'
+
+outputs:
+  torn-down:
+    description: "Stop only: 'true' when a sandbox was torn down, 'false' when there was none"
+    value: ${{ steps.stop.outputs.torn-down }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate inputs
+      shell: bash
+      env:
+        OPERATION: ${{ inputs.operation }}
+        SLUG: ${{ inputs.slug }}
+        SHA: ${{ inputs.sha }}
+        DATA_SHA: ${{ inputs.data-sha }}
+      run: |
+        set -euo pipefail
+
+        case "$OPERATION" in
+          start|stop) ;;
+          *) echo "::error::operation must be 'start' or 'stop', got '$OPERATION'"; exit 1 ;;
+        esac
+
+        # The rule deploy.sh enforces, applied before the value reaches the host.
+        if ! printf '%s' "$SLUG" | grep -qE '^[a-z0-9][a-z0-9-]{0,62}$'; then
+          echo "::error::slug '$SLUG' must be 1-63 lowercase letters, digits or hyphens"
+          exit 1
+        fi
+
+        if [[ "$OPERATION" == "start" ]]; then
+          if ! printf '%s' "$SHA" | grep -qE '^[0-9a-f]{40}$'; then
+            echo "::error::sha '$SHA' is not a 40-character commit SHA"
+            exit 1
+          fi
+          if ! printf '%s' "$DATA_SHA" | grep -qE '^[0-9a-f]{40}$'; then
+            echo "::error::data-sha '$DATA_SHA' is not a 40-character tree SHA"
+            exit 1
+          fi
+        fi
+
+    - name: Start sandbox
+      if: inputs.operation == 'start'
+      shell: bash
+      env:
+        SANDBOX_HOST: ${{ inputs.host }}
+        SLUG: ${{ inputs.slug }}
+        SHA: ${{ inputs.sha }}
+        BRANCH: ${{ inputs.branch }}
+        DATA_SHA: ${{ inputs.data-sha }}
+      run: |
+        set -euo pipefail
+        # Branch names may hold characters the remote shell would otherwise eat.
+        branch_b64="$(printf '%s' "$BRANCH" | base64 -w0)"
+        ssh -o BatchMode=yes "$SANDBOX_HOST" \
+          "bash -s -- '$SLUG' '$SHA' '$branch_b64' '$DATA_SHA'" <<'REMOTE'
+        set -euo pipefail
+        slug="$1"
+        sha="$2"
+        branch="$(printf '%s' "$3" | base64 -d)"
+        data_sha="$4"
+
+        cd "$HOME/.roadtrip/releases/$sha"
+        # Passing the slug as both ref and name pins the sandbox name instead of
+        # letting deploy.sh derive it; an empty branch falls back to the slug.
+        SANDBOX_SHA="$sha" SANDBOX_BUILD_SHA="$sha" SANDBOX_BRANCH="$branch" \
+          ROADTRIP_DATA_SHA="$data_sha" SANDBOX_CADDY_DIR="$HOME/.roadtrip/caddy/sandboxes" \
+          scripts/deploy.sh sandbox-up "$slug" "$slug"
+        REMOTE
+
+    - name: Stop sandbox
+      id: stop
+      if: inputs.operation == 'stop'
+      shell: bash
+      env:
+        SANDBOX_HOST: ${{ inputs.host }}
+        SLUG: ${{ inputs.slug }}
+        SANDBOX_STATE_DIR: ${{ inputs.state-dir }}
+        REQUIRE_EXISTING: ${{ inputs.require-existing }}
+      run: |
+        set -uo pipefail
+
+        # Remote exit code meaning "no sandbox to tear down"; distinct from 0
+        # (torn down) and from any real failure.
+        absent_rc=3
+
+        set +e
+        ssh -o BatchMode=yes "$SANDBOX_HOST" \
+          "bash -s -- '$SLUG' '$SANDBOX_STATE_DIR' '$REQUIRE_EXISTING' '$absent_rc'" <<'REMOTE'
+        set -euo pipefail
+        slug="$1"
+        state_dir="$2"
+        require_existing="$3"
+        absent_rc="$4"
+
+        if [[ "$require_existing" == "true" && ! -f "${state_dir}/${slug}.meta" ]]; then
+          echo "==> no sandbox named ${slug}; nothing to tear down"
+          exit "$absent_rc"
+        fi
+
+        cd "$HOME/.roadtrip/current"
+        SANDBOX_STATE_DIR="$state_dir" SANDBOX_CADDY_DIR="$HOME/.roadtrip/caddy/sandboxes" \
+          scripts/deploy.sh sandbox-down "$slug"
+        REMOTE
+        rc=$?
+        set -e
+
+        case "$rc" in
+          0)            echo "torn-down=true"  >> "$GITHUB_OUTPUT" ;;
+          "$absent_rc") echo "torn-down=false" >> "$GITHUB_OUTPUT" ;;
+          *)            exit "$rc" ;;
+        esac
