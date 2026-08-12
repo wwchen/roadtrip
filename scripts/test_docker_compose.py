@@ -121,10 +121,16 @@ class SandboxAuthConfigTest(unittest.TestCase):
 
         self.assertIn("SANDBOX_SLOT_IDS=(1 2 3 4 5)", deploy_script)
         self.assertIn("SLOT=%s", deploy_script)
+        self.assertIn("_require_sandbox_owner_name", deploy_script)
+        self.assertIn("reserved for public slot teardown", deploy_script)
         self.assertIn('local SANDBOX_SHA', deploy_script)
         self.assertNotIn('export SANDBOX_SHA="${SANDBOX_TEARDOWN_COMPOSE_SHA}"', deploy_script)
         self.assertIn("steps.start.outputs.url", sandbox_action)
         self.assertNotIn("url=https://roadtrip-sb-${SLUG}.floo.ca", sandbox_action)
+        self.assertIn(
+            "SANDBOX_SHA=<sha> SANDBOX_BRANCH=<branch> scripts/deploy.sh sandbox-up",
+            sandbox_docs,
+        )
         for slot in range(1, 6):
             self.assertIn(f"https://roadtrip-sb-{slot}.floo.ca/auth/callback", sandbox_docs)
 

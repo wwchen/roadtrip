@@ -213,6 +213,19 @@ SANDBOX_SECRETS_ENV="local"
 SANDBOX_TEARDOWN_COMPOSE_SHA="0000000000000000000000000000000000000000"
 SANDBOX_SLOT_IDS=(1 2 3 4 5)
 
+_require_sandbox_owner_name() {
+    local value="$1"
+    local slot
+
+    _require_sandbox_name "${value}"
+    for slot in "${SANDBOX_SLOT_IDS[@]}"; do
+        if [[ "${value}" == "${slot}" ]]; then
+            echo "error: sandbox name '${value}' is reserved for public slot teardown; use a non-numeric owner name" >&2
+            exit 2
+        fi
+    done
+}
+
 _sandbox_compose() {
     "${REPO_ROOT}/secrets/manage.py" exec "${SANDBOX_SECRETS_ENV}" -- docker compose "$@"
 }
@@ -465,7 +478,7 @@ if [[ -z "${SANDBOX_OWNER}" ]]; then
     echo "error: could not derive a sandbox name from ref '${REF}'" >&2
     exit 1
 fi
-_require_sandbox_name "${SANDBOX_OWNER}"
+_require_sandbox_owner_name "${SANDBOX_OWNER}"
 
 # ── Resolve the image SHA ─────────────────────────────────────────────────────
 : "${SANDBOX_SHA:?SANDBOX_SHA is required}"

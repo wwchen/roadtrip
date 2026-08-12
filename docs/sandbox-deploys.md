@@ -232,7 +232,7 @@ make sandbox-stop NAME=<name>
 `make sandbox` expands to:
 
 ```sh
-SANDBOX_SHA=<sha> scripts/deploy.sh sandbox-up <ref> [name]
+SANDBOX_SHA=<sha> SANDBOX_BRANCH=<branch> scripts/deploy.sh sandbox-up <ref> [name]
 ```
 
 where `<sha>` defaults to the current `git rev-parse HEAD` if `SHA` is
