@@ -19,6 +19,12 @@
 <!-- Nothing else belongs here. The `--rt-*` tokens are bundled through
      @ui/styles.css, and the sandbox chrome is started by mountPage(); both used to
      be tags injected into this shell by a Vite plugin and served from web/. -->
+<script>
+/* Applied before first paint, so a dark user never sees a white flash. Reads the
+   mirror src/lib/theme.ts writes; falls back to the OS. Duplicated in all three
+   shells and pinned by src/test/page-shells.test.ts — edit all three together. */
+(function(){try{var m=localStorage.getItem('rt-theme');if(m!=='light'&&m!=='dark'){m=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}if(m==='dark'){document.documentElement.classList.add('mode-dark');var t=document.querySelector('meta[name="theme-color"]');if(t){t.setAttribute('content','#101215');}}}catch(e){}})();
+</script>
 </head>
 <body>
 <div id="root"></div>

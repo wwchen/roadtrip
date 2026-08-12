@@ -3,10 +3,13 @@ import type { RasterSourceSpecification, StyleSpecification } from 'maplibre-gl'
 import {
   BASEMAPS,
   BASEMAP_STORAGE_KEY,
+  DARK_BASEMAP,
   DEFAULT_BASEMAP,
   basemapStyle,
+  forgetBasemapKey,
   initialBasemapKey,
   rememberBasemapKey,
+  storedBasemapKey,
 } from './basemaps';
 
 /** The `basemap` raster source of an inline style, narrowed for assertions. */
@@ -53,24 +56,61 @@ describe('the registry', () => {
 
 describe('initialBasemapKey', () => {
   test('defaults when nothing is remembered', () => {
-    expect(initialBasemapKey()).toBe(DEFAULT_BASEMAP);
+    expect(initialBasemapKey('light')).toBe(DEFAULT_BASEMAP);
   });
 
   test('honours a remembered choice', () => {
     window.localStorage.setItem(BASEMAP_STORAGE_KEY, 'carto-dark');
-    expect(initialBasemapKey()).toBe('carto-dark');
+    expect(initialBasemapKey('light')).toBe('carto-dark');
   });
 
   test('falls back when the remembered basemap no longer exists', () => {
     window.localStorage.setItem(BASEMAP_STORAGE_KEY, 'a-basemap-we-deleted');
-    expect(initialBasemapKey()).toBe(DEFAULT_BASEMAP);
+    expect(initialBasemapKey('light')).toBe(DEFAULT_BASEMAP);
   });
 
   test('survives localStorage throwing', () => {
     vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
       throw new Error('SecurityError');
     });
-    expect(initialBasemapKey()).toBe(DEFAULT_BASEMAP);
+    expect(initialBasemapKey('light')).toBe(DEFAULT_BASEMAP);
+  });
+});
+
+describe('theme-aware defaults', () => {
+  test('light mode with nothing stored uses the light default', () => {
+    expect(initialBasemapKey('light')).toBe(DEFAULT_BASEMAP);
+  });
+
+  test('dark mode with nothing stored uses the dark default', () => {
+    expect(initialBasemapKey('dark')).toBe(DARK_BASEMAP);
+  });
+
+  test('an explicit pick outranks the mode', () => {
+    rememberBasemapKey('osm');
+    expect(initialBasemapKey('dark')).toBe('osm');
+  });
+
+  test('a stored key that no longer exists falls back to the mode default', () => {
+    window.localStorage.setItem(BASEMAP_STORAGE_KEY, 'a-basemap-we-dropped');
+    expect(initialBasemapKey('dark')).toBe(DARK_BASEMAP);
+  });
+
+  test('storedBasemapKey reports whether the user has pinned one', () => {
+    expect(storedBasemapKey()).toBeNull();
+    rememberBasemapKey('osm');
+    expect(storedBasemapKey()).toBe('osm');
+  });
+
+  test('forgetBasemapKey returns to auto', () => {
+    rememberBasemapKey('osm');
+    forgetBasemapKey();
+    expect(storedBasemapKey()).toBeNull();
+    expect(initialBasemapKey('dark')).toBe(DARK_BASEMAP);
+  });
+
+  test('the dark default is a real registry entry', () => {
+    expect(BASEMAPS[DARK_BASEMAP]).toBeDefined();
   });
 });
 

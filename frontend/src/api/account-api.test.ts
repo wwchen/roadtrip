@@ -27,11 +27,11 @@ describe('updateProfile', () => {
   test('issues PUT /api/settings/profile with display_name', async () => {
     const fetchStub = stubFetch(jsonResponse({}));
 
-    await updateProfile({ display_name: 'Bob' });
+    await updateProfile({ display_name: 'Bob', theme: 'dark' });
 
     expect(fetchStub.last.url).toBe('/api/settings/profile');
     expect(fetchStub.last.method).toBe('PUT');
-    expect(fetchStub.last.body).toEqual({ display_name: 'Bob' });
+    expect(fetchStub.last.body).toEqual({ display_name: 'Bob', theme: 'dark' });
     expect(fetchStub.last.init.credentials).toBe('same-origin');
   });
 });
@@ -149,7 +149,7 @@ describe('error code surfacing', () => {
   test('a failing call surfaces .code from the error response body', async () => {
     stubFetch(jsonResponse({ error: 'invalid_field', detail: 'bad input' }, 422));
 
-    await expect(updateProfile({ display_name: '' })).rejects.toMatchObject({
+    await expect(updateProfile({ display_name: '', theme: 'system' })).rejects.toMatchObject({
       name: 'HttpError',
       status: 422,
       code: 'invalid_field',

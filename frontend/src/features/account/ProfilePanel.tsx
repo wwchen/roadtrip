@@ -1,24 +1,36 @@
 import { SeededTextField } from '@ui';
+import { coerceChoice, type ThemeChoice } from '@/lib/theme';
+import { useThemeStore } from '@/stores/themeStore';
+import { AppearanceField } from './AppearanceField';
 import type { Profile, SettingsResponse } from '@/api/account-api';
 import './account.css';
 
 /** The fields this panel can edit. */
 export interface ProfileValues {
   display_name: string;
+  theme: ThemeChoice;
 }
 
 /** The saved values, as this panel's editable shape. */
 export function profileValuesOf(settings: SettingsResponse): ProfileValues {
-  return { display_name: settings.profile.display_name || '' };
+  return {
+    display_name: settings.profile.display_name || '',
+    theme: coerceChoice(settings.profile.theme),
+  };
 }
 
 /** True when the edited values differ from what is saved. */
 export function isProfileDirty(settings: SettingsResponse, values: ProfileValues): boolean {
-  return values.display_name !== (settings.profile.display_name || '');
+  return (
+    values.display_name !== (settings.profile.display_name || '') ||
+    values.theme !== coerceChoice(settings.profile.theme)
+  );
 }
 
-export function buildProfilePayload(values: ProfileValues): { display_name: string } {
-  return { display_name: values.display_name };
+export function buildProfilePayload(
+  values: ProfileValues,
+): { display_name: string; theme: ThemeChoice } {
+  return { display_name: values.display_name, theme: values.theme };
 }
 
 export interface ProfilePanelProps {
@@ -30,7 +42,8 @@ export interface ProfilePanelProps {
 /**
  * Rebuild of web/account/profile-panel.js.
  *
- * Editable display name, read-only login email with a verified badge.
+ * Editable display name and appearance, read-only login email with a verified
+ * badge.
  *
  * **The values live in the parent**, which is the one structural change from the
  * original. That mounted a FormSection, kept the value in the DOM, and exposed
@@ -52,7 +65,18 @@ export function ProfilePanel({ profile, values, onChange }: ProfilePanelProps) {
         type="text"
         placeholder="Your name"
         seed={values.display_name}
-        onChange={(e) => onChange({ display_name: (e.target as HTMLInputElement).value })}
+        onChange={(e) =>
+          onChange({ ...values, display_name: (e.target as HTMLInputElement).value })
+        }
+      />
+
+      <AppearanceField
+        value={values.theme}
+        onChange={(theme) => {
+          // Preview, don't persist: Save commits it, SettingsModal reverts it.
+          useThemeStore.getState().previewChoice(theme);
+          onChange({ ...values, theme });
+        }}
       />
 
       <div className="rt-account-row">

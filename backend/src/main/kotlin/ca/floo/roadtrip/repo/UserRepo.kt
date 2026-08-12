@@ -90,10 +90,13 @@ open class UserRepo(
     open fun updateProfile(
         id: UserId,
         displayName: String?,
+        theme: String? = null,
     ): User? {
         ctx
             .update(APP_USER)
-            .set(APP_USER.DISPLAY_NAME, displayName)
+            // Null means unchanged, so both coalesce to the stored value.
+            .set(APP_USER.DISPLAY_NAME, DSL.coalesce(DSL.value(displayName), APP_USER.DISPLAY_NAME))
+            .set(APP_USER.THEME, DSL.coalesce(DSL.value(theme), APP_USER.THEME))
             .set(APP_USER.UPDATED_AT, OffsetDateTime.now())
             .where(APP_USER.ID.eq(id.value))
             .execute()
@@ -150,6 +153,7 @@ open class UserRepo(
             id = UserId(record.get(APP_USER.ID)!!),
             email = record.get(APP_USER.EMAIL)!!,
             displayName = record.get(APP_USER.DISPLAY_NAME),
+            theme = record.get(APP_USER.THEME)!!,
             isEmailVerified = record.get(APP_USER.EMAIL_VERIFIED)!!,
             // An unparseable status means the CHECK constraint and this enum have
             // drifted; failing loudly beats silently treating it as active.

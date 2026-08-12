@@ -1,6 +1,7 @@
 // Server state for the settings modal.
 //
 // Settings queries and mutations.
+import { useEffect } from 'react';
 import {
   useMutation,
   useQuery,
@@ -17,13 +18,29 @@ import {
   type SettingsResponse,
   type UpdateNotificationsFields,
 } from '@/api/account-api';
+import { coerceChoice } from '@/lib/theme';
 import { queryKeys } from '@/queries/keys';
+import { useThemeStore } from '@/stores/themeStore';
 
+/**
+ * The settings document. The server is the authority on theme: whenever a load
+ * or a save resolves it, its theme wins over any applied preview.
+ */
 export function useSettings(): UseQueryResult<SettingsResponse> {
-  return useQuery({
+  const query = useQuery({
     queryKey: queryKeys.settings(),
     queryFn: ({ signal }) => fetchSettings({ signal }),
   });
+
+  // Runs on each successful load and after each save, which is also what
+  // refreshes the localStorage mirror the boot script reads.
+  const serverTheme = query.data?.profile.theme;
+  useEffect(() => {
+    if (serverTheme === undefined) return;
+    useThemeStore.getState().setChoice(coerceChoice(serverTheme));
+  }, [serverTheme]);
+
+  return query;
 }
 
 /**
@@ -49,7 +66,7 @@ function useSettingsWrite<TInput>(mutationFn: (input: TInput) => Promise<Setting
 }
 
 export function useSaveProfile() {
-  return useSettingsWrite((input: { display_name: string }) => updateProfile(input));
+  return useSettingsWrite((input: { display_name: string; theme: string }) => updateProfile(input));
 }
 
 export function useSaveNotifications() {

@@ -53,4 +53,5 @@ data class MeUserDto(
     @SerialName("display_name") val displayName: String? = null,
     @SerialName("email_verified") val isEmailVerified: Boolean,
     val roles: List<String> = emptyList(),
+    val theme: String? = null,
 )

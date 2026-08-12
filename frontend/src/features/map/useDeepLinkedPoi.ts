@@ -37,7 +37,7 @@ const AREA_CATEGORIES = ['national-park', 'state-park'];
  * since panned away.
  */
 export function useDeepLinkedPoi(): void {
-  const { map, styleReady } = useMapContext();
+  const { map, styleEpoch } = useMapContext();
   const selectPoi = useMapStore((s) => s.selectPoi);
   const setOverlayHidden = useMapStore((s) => s.setOverlayHidden);
   const setAgencyHidden = useMapStore((s) => s.setAgencyHidden);
@@ -62,10 +62,10 @@ export function useDeepLinkedPoi(): void {
 
   const restored = useRef(false);
   useEffect(() => {
-    // `styleReady` is this port's `isMapReadyForSharedLink`: `flyTo` before the
+    // `styleEpoch` is this port's `isMapReadyForSharedLink`: `flyTo` before the
     // style is up is silently dropped, which is the bug the vanilla
     // `restoreAfterMapReady` dance existed to avoid.
-    if (!data || !map || !styleReady || restored.current) return;
+    if (!data || !map || !styleEpoch || restored.current) return;
 
     const properties = data.properties;
     const geometry = data.geometry as Parameters<typeof geomCenter>[0];
@@ -88,5 +88,5 @@ export function useDeepLinkedPoi(): void {
       zoom: isArea ? zoomForBbox(bbox) : SHARED_POINT_ZOOM,
       speed: SHARED_FLY_SPEED,
     });
-  }, [data, map, styleReady, setOverlayHidden, setAgencyHidden]);
+  }, [data, map, styleEpoch, setOverlayHidden, setAgencyHidden]);
 }

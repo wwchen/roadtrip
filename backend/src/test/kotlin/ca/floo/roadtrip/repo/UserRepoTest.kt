@@ -81,4 +81,58 @@ class UserRepoTest : SharedDbTest() {
         val reloaded = assertNotNull(userRepo.findById(user.id))
         assertEquals(UserStatus.DISABLED, reloaded.status)
     }
+
+    @Test
+    fun `a new user defaults to the system theme`() {
+        val user = userRepo.create(email = "theme-default@example.com", displayName = null, isEmailVerified = true)
+
+        assertEquals("system", user.theme)
+    }
+
+    @Test
+    fun `updateProfile persists a theme`() {
+        val user = userRepo.create(email = "theme-set@example.com", displayName = null, isEmailVerified = true)
+
+        val updated = userRepo.updateProfile(user.id, displayName = "Wm", theme = "dark")
+
+        assertEquals("dark", updated?.theme)
+        assertEquals("dark", userRepo.findById(user.id)?.theme)
+    }
+
+    @Test
+    fun `updateProfile with a null theme leaves the stored theme unchanged`() {
+        val user = userRepo.create(email = "theme-coalesce@example.com", displayName = null, isEmailVerified = true)
+        userRepo.updateProfile(user.id, displayName = "Wm", theme = "dark")
+
+        val updated = userRepo.updateProfile(user.id, displayName = "Wm2", theme = null)
+
+        assertEquals("dark", updated?.theme)
+        assertEquals("dark", userRepo.findById(user.id)?.theme)
+    }
+
+    @Test
+    fun `updateProfile with a null displayName leaves the stored display name unchanged`() {
+        val user = userRepo.create(email = "displayname-coalesce@example.com", displayName = null, isEmailVerified = true)
+        userRepo.updateProfile(user.id, displayName = "Wm", theme = "dark")
+
+        // A client updating only the theme (e.g. `{"theme":"dark"}`) must not
+        // silently wipe the display name it never mentioned.
+        val updated = userRepo.updateProfile(user.id, displayName = null, theme = "light")
+
+        assertEquals("Wm", updated?.displayName)
+        assertEquals("Wm", userRepo.findById(user.id)?.displayName)
+        assertEquals("light", updated?.theme)
+    }
+
+    @Test
+    fun `the theme CHECK constraint rejects an illegal value`() {
+        val user = userRepo.create(email = "theme-illegal@example.com", displayName = null, isEmailVerified = true)
+
+        val result =
+            runCatching {
+                ctx.execute("UPDATE app_user SET theme = 'sepia' WHERE id = ${user.id.value}")
+            }
+
+        assertTrue(result.isFailure, "expected app_user_theme_check to reject an illegal theme value")
+    }
 }

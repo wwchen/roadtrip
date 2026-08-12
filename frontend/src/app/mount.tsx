@@ -2,6 +2,7 @@ import { StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { AppProviders } from './AppProviders';
 import { initSandboxChrome } from './sandbox/sandbox-chrome';
+import { useThemeStore } from '@/stores/themeStore';
 import './shell.css';
 
 /** The mount point every page shell provides. */
@@ -26,6 +27,7 @@ const ROOT_ELEMENT_ID = 'root';
  */
 export function mountPage(node: ReactNode): void {
   initSandboxChrome();
+  useThemeStore.getState().initTheme();
 
   const el = document.getElementById(ROOT_ELEMENT_ID);
   if (!el) return;

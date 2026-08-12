@@ -19,6 +19,9 @@ export interface Profile {
   is_email_verified: boolean;
   roles: string[];
   provider_label: string | null;
+  /** One of ThemeChoice. Narrow with `coerceChoice` before use — an older
+   *  server may omit it. */
+  theme: string;
 }
 
 /**
@@ -69,10 +72,10 @@ export function fetchSettings({ signal }: RequestOptions = {}): Promise<Settings
 }
 
 export function updateProfile(
-  { display_name }: { display_name: string },
+  { display_name, theme }: { display_name: string; theme: string },
   options: RequestOptions = {},
 ): Promise<SettingsResponse> {
-  return jsonPutOk<SettingsResponse>(PROFILE_URL, { display_name }, options);
+  return jsonPutOk<SettingsResponse>(PROFILE_URL, { display_name, theme }, options);
 }
 
 /**

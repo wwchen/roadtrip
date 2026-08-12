@@ -5,5 +5,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class UpdateProfileRequest(
-    @SerialName("display_name") val displayName: String?,
+    // Null means unchanged, for both fields.
+    @SerialName("display_name") val displayName: String? = null,
+    val theme: String? = null,
 )

@@ -5,6 +5,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AppProviders } from '@/app/AppProviders';
 import type { SettingsResponse } from '@/api/account-api';
+import { useThemeStore } from '@/stores/themeStore';
 import { SettingsModal } from './SettingsModal';
 
 const settingsBody = (over: Partial<SettingsResponse['notifications']> = {}): SettingsResponse => ({
@@ -14,6 +15,7 @@ const settingsBody = (over: Partial<SettingsResponse['notifications']> = {}): Se
     is_email_verified: true,
     roles: [],
     provider_label: 'Clerk',
+    theme: 'system',
   },
   notifications: {
     notification_email: null,
@@ -23,6 +25,8 @@ const settingsBody = (over: Partial<SettingsResponse['notifications']> = {}): Se
     ...over,
   },
 });
+
+const profile: SettingsResponse['profile'] = settingsBody().profile;
 
 interface Recorded {
   url: string;
@@ -58,7 +62,29 @@ const putTo = (url: string): Recorded | undefined =>
 
 let client: QueryClient;
 
-function renderModal(onClose = vi.fn()) {
+interface RenderOptions {
+  onClose?: () => void;
+  /**
+   * Seeds the fetched document's profile and, unlike the module-level
+   * `getSettings`/`onPut` stubs, keeps GET and PUT in sync with each other: a
+   * PUT to `/api/settings/profile` updates the same document GET serves back.
+   * The theme-preview tests below save a theme and then need the reload the
+   * save triggers to echo it, not the fixed default.
+   */
+  profile?: SettingsResponse['profile'];
+}
+
+function renderSettingsModal({ onClose = vi.fn(), profile: profileOverride }: RenderOptions = {}) {
+  if (profileOverride) {
+    const doc: SettingsResponse = { ...settingsBody(), profile: profileOverride };
+    getSettings = () => json(doc);
+    onPut = (url, body) => {
+      if (url === '/api/settings/profile' && body && typeof body === 'object') {
+        doc.profile = { ...doc.profile, ...(body as Partial<SettingsResponse['profile']>) };
+      }
+      return json(doc);
+    };
+  }
   return render(
     <AppProviders client={client}>
       <SettingsModal onClose={onClose} />
@@ -81,13 +107,13 @@ afterEach(() => {
 
 describe('loading', () => {
   test('opens on the profile tab with the saved values', async () => {
-    renderModal();
+    renderSettingsModal();
     expect(await screen.findByLabelText('Display name')).toHaveValue('Ada');
   });
 
   test('a failed load reports a message instead of an empty form', async () => {
     getSettings = () => json({ error: 'encryption_unavailable' }, 500);
-    renderModal();
+    renderSettingsModal();
 
     expect(
       await screen.findByText("Secret storage isn't configured on the server."),
@@ -98,7 +124,7 @@ describe('loading', () => {
 
 describe('save', () => {
   test('Save is disabled until something changes', async () => {
-    renderModal();
+    renderSettingsModal();
     await screen.findByLabelText('Display name');
 
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
@@ -109,20 +135,23 @@ describe('save', () => {
   });
 
   test('saving the profile PUTs just the display name and confirms', async () => {
-    renderModal();
+    renderSettingsModal();
     await screen.findByLabelText('Display name');
 
     await userEvent.type(screen.getByLabelText('Display name'), ' Lovelace');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(putTo('/api/settings/profile')).toBeTruthy());
-    expect(putTo('/api/settings/profile')!.body).toEqual({ display_name: 'Ada Lovelace' });
+    expect(putTo('/api/settings/profile')!.body).toEqual({
+      display_name: 'Ada Lovelace',
+      theme: 'system',
+    });
     expect(await screen.findByText('Settings saved.')).toBeInTheDocument();
   });
 
   test('a failed save maps the code to a message and leaves Save reachable', async () => {
     onPut = () => json({ error: 'invalid_field' }, 400);
-    renderModal();
+    renderSettingsModal();
     await screen.findByLabelText('Display name');
 
     await userEvent.type(screen.getByLabelText('Display name'), 'x');
@@ -133,7 +162,7 @@ describe('save', () => {
   });
 
   test('after saving a token the masked hint reflects the server, not what was typed', async () => {
-    renderModal();
+    renderSettingsModal();
     await screen.findByLabelText('Display name');
 
     await userEvent.click(screen.getByRole('button', { name: 'Notifications' }));
@@ -151,7 +180,7 @@ describe('save', () => {
   });
 
   test('the notifications save omits an untouched token', async () => {
-    renderModal();
+    renderSettingsModal();
     await screen.findByLabelText('Display name');
 
     await userEvent.click(screen.getByRole('button', { name: 'Notifications' }));
@@ -167,7 +196,7 @@ describe('save', () => {
 
 describe('tabs', () => {
   test('the account tab has no Save button', async () => {
-    renderModal();
+    renderSettingsModal();
     await screen.findByLabelText('Display name');
 
     await userEvent.click(screen.getByRole('button', { name: 'Account' }));
@@ -177,7 +206,7 @@ describe('tabs', () => {
   });
 
   test('switching tabs clears a stale notice', async () => {
-    renderModal();
+    renderSettingsModal();
     await screen.findByLabelText('Display name');
     await userEvent.type(screen.getByLabelText('Display name'), 'x');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -189,7 +218,7 @@ describe('tabs', () => {
   });
 
   test('the active tab is marked for assistive tech', async () => {
-    renderModal();
+    renderSettingsModal();
     await screen.findByLabelText('Display name');
 
     const tabs = screen.getByRole('navigation', { name: 'Settings sections' });
@@ -206,7 +235,7 @@ describe('tabs', () => {
 describe('disconnect Slack', () => {
   test('clears the token and refreshes, so the danger zone goes away', async () => {
     getSettings = () => json(settingsBody({ slack_configured: true, slack_token_hint: 'ab12' }));
-    renderModal();
+    renderSettingsModal();
     await screen.findByLabelText('Display name');
 
     await userEvent.click(screen.getByRole('button', { name: 'Account' }));
@@ -223,5 +252,52 @@ describe('disconnect Slack', () => {
       expect(requests.some((r) => r.method === 'DELETE' && r.url.includes('/slack'))).toBe(true),
     );
     await waitFor(() => expect(screen.queryByText('Danger zone')).not.toBeInTheDocument());
+  });
+});
+
+// The guarantee: whenever the modal is closed, the applied theme equals the
+// saved one. The theme store is a module singleton never reset between tests,
+// so `afterEach` restores `choice` itself.
+describe('theme preview on close', () => {
+  afterEach(() => {
+    useThemeStore.getState().setChoice('system');
+  });
+
+  // The only test here that needs no interaction, so the only one that pins the
+  // "server is authoritative on load" half — the others would pass even if
+  // `useSettings` never pushed the loaded theme into the store.
+  test('applies the loaded theme with no interaction, even overriding what was already applied', async () => {
+    useThemeStore.getState().setChoice('light');
+
+    renderSettingsModal({ profile: { ...profile, theme: 'dark' } });
+    await screen.findByLabelText('Display name');
+
+    expect(useThemeStore.getState().choice).toBe('dark');
+    expect(document.documentElement.classList.contains('mode-dark')).toBe(true);
+  });
+
+  test('reverts an unsaved theme preview when the modal closes', async () => {
+    const { unmount } = renderSettingsModal({ profile: { ...profile, theme: 'light' } });
+
+    await userEvent.click(await screen.findByRole('radio', { name: 'Dark' }));
+    expect(document.documentElement.classList.contains('mode-dark')).toBe(true);
+
+    unmount();
+
+    expect(useThemeStore.getState().choice).toBe('light');
+    expect(document.documentElement.classList.contains('mode-dark')).toBe(false);
+  });
+
+  test('keeps a saved theme when the modal closes', async () => {
+    const { unmount } = renderSettingsModal({ profile: { ...profile, theme: 'light' } });
+
+    await userEvent.click(await screen.findByRole('radio', { name: 'Dark' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByText('Settings saved.');
+
+    unmount();
+
+    expect(useThemeStore.getState().choice).toBe('dark');
+    expect(document.documentElement.classList.contains('mode-dark')).toBe(true);
   });
 });

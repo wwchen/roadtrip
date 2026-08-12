@@ -16,6 +16,7 @@ data class ProfileDto(
     @SerialName("is_email_verified") val isEmailVerified: Boolean,
     val roles: List<String>,
     @SerialName("provider_label") val providerLabel: String?,
+    val theme: String,
 )
 
 @Serializable

@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Banner, Button, Modal, Skeleton } from '@ui';
 import { signOut } from '@/api/auth-api';
+import { coerceChoice } from '@/lib/theme';
 import { settingsErrorMessage } from '@/lib/settings-errors';
+import { useThemeStore } from '@/stores/themeStore';
 import { AccountPanel } from './AccountPanel';
 import {
   NotificationsPanel,
@@ -52,6 +54,21 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const settingsQuery = useSettings();
   const settings = settingsQuery.data;
   const version = settingsQuery.dataUpdatedAt;
+
+  // In a ref so the revert effect below arms once, on unmount, not per edit.
+  const savedChoice = settings ? coerceChoice(settings.profile.theme) : null;
+  const savedChoiceRef = useRef(savedChoice);
+  savedChoiceRef.current = savedChoice;
+
+  // An unsaved preview must not outlive the modal: on close, the applied theme
+  // goes back to the saved one. Unconditional because setChoice is idempotent.
+  useEffect(
+    () => () => {
+      const saved = savedChoiceRef.current;
+      if (saved) useThemeStore.getState().setChoice(saved);
+    },
+    [],
+  );
 
   const [activeTab, setActiveTab] = useState<TabId>(TAB_PROFILE);
   const [notice, setNotice] = useState<Notice | null>(null);

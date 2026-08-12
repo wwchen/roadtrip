@@ -12,6 +12,8 @@ const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const BACKEND_ORIGIN = process.env.VITE_BACKEND_ORIGIN ?? 'http://localhost:8765';
 const MAPLIBRE_MODULE_PATH = '/maplibre-gl/';
 const MAPLIBRE_CHUNK_NAME = 'maplibre';
+/** The CommonJS react-dom entry `@lew-ds/lds-react` reaches for; see `optimizeDeps`. */
+const REACT_DOM_SERVER_ENTRY = 'react-dom/server';
 const proxy = Object.fromEntries(
   ['/api', '/auth', '/data'].map((path) => [
     path,
@@ -22,6 +24,13 @@ const proxy = Object.fromEntries(
 export default defineConfig({
   root: here('.'),
   plugins: [react()],
+  optimizeDeps: {
+    // `@lew-ds/lds-react` imports `renderToStaticMarkup`, which react-dom 19
+    // ships as CommonJS. Without this the dev server serves the raw CJS and the
+    // browser rejects it, so nothing mounts. Dev-only — the production build
+    // interops it correctly.
+    include: [REACT_DOM_SERVER_ENTRY],
+  },
   resolve: {
     alias: {
       '@': here('./src'),

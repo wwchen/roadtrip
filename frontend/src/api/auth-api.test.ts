@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { fetchMe, signIn, signInWithConnection, signOut } from './auth-api';
+import { THEME_STORAGE_KEY } from '@/lib/theme';
 import { jsonResponse, stubFetch, textResponse } from '@/test/fetch-stub';
 
 const assign = vi.fn();
@@ -127,5 +128,26 @@ describe('signOut', () => {
     signOut();
 
     expect(assign).toHaveBeenCalledWith('/auth/logout');
+  });
+
+  // The next visitor at this browser is anonymous until proven otherwise, and
+  // an anonymous visitor follows their OS — leaving the mirror would hand them
+  // the previous user's preference.
+  //
+  // The shared `beforeEach` above replaces `window` wholesale (jsdom's
+  // `window.location` is not assignable, so the whole object is swapped), which
+  // drops the real `localStorage` `clearStoredMode` reads through `window`.
+  // Re-stubbing here with the real, bare `localStorage` — a separate global
+  // binding the outer stub never touched — restores it for this one test.
+  test('clears the theme mirror', () => {
+    vi.stubGlobal('window', {
+      location: { pathname: '/watches', search: '', hash: '', assign },
+      localStorage,
+    });
+    localStorage.setItem(THEME_STORAGE_KEY, 'dark');
+
+    signOut();
+
+    expect(localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
   });
 });

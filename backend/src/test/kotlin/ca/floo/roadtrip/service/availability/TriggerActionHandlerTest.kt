@@ -515,6 +515,7 @@ class TriggerActionHandlerTest {
                 id = id,
                 email = "owner@example.test",
                 displayName = null,
+                theme = "system",
                 isEmailVerified = true,
                 status = UserStatus.ACTIVE,
                 roles = emptySet(),

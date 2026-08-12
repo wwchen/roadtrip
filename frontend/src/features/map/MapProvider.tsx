@@ -10,15 +10,18 @@ import { Map as MapLibreMap, setWorkerUrl } from 'maplibre-gl';
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { MapRuntimeContext, type MapContextValue } from '@/map/context';
 export { useMapContext } from '@/map/context';
+import { useThemeStore } from '@/stores/themeStore';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import './map.css';
 import {
   SATELLITE_LAYER_ID,
   SATELLITE_SOURCE_ID,
   basemapStyle,
+  forgetBasemapKey,
   initialBasemapKey,
   rememberBasemapKey,
   satelliteSource,
+  storedBasemapKey,
 } from './basemaps';
 
 /**
@@ -40,32 +43,25 @@ const INITIAL_ZOOM = 3.6;
 setWorkerUrl(maplibreWorkerUrl);
 
 /**
- * The map instance, and the style lifecycle everything else hangs off.
+ * The map instance and its style lifecycle. React owns when the map exists and
+ * which basemap is current; the map owns its canvas. Layers and markers are
+ * installed by hooks that wait on `styleEpoch`.
  *
- * MapLibre is imperative and owns its own DOM, so this is the escape hatch the plan
- * prescribes: React owns *when* the map exists and what the current basemap is; the
- * map owns its canvas. Nothing here renders map content — layers and markers are
- * installed by hooks that wait on `styleReady`.
- *
- * **The style lifecycle is the whole point of this component.** Changing basemap
- * calls `setStyle(..., { diff: false })`, and that full reload *destroys every source
- * and layer we added*. The vanilla app handled this with a `style.load` listener that
- * called `reinstallOverlays()` — a module-level registry of re-install callbacks.
- * Here the same fact is expressed as state: `styleReady` drops to false on a basemap
- * change and returns to true when the new style has loaded, so overlay hooks
- * reinstall by ordinary effect dependency rather than through a global hook.
- *
- * `diff: false` is deliberate and load-bearing, not a performance choice. The default
- * incremental merge keeps our sources in place but does NOT fire `style.load`, so the
- * reinstall never runs and the overlays end up half-attached to a style that no longer
- * describes them.
+ * `diff: false` is load-bearing, not a performance choice: the default
+ * incremental merge does not fire `style.load`, so overlays never reinstall and
+ * end up half-attached to a style that no longer describes them.
  */
 export function MapProvider({ children }: { children: ReactNode }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [map, setMap] = useState<MapLibreMap | null>(null);
-  const [styleReady, setStyleReady] = useState(false);
-  const [basemapKey, setBasemapKey] = useState(initialBasemapKey);
+  const [styleEpoch, setStyleEpoch] = useState(0);
+  // Counted outside React state on purpose: `setStyleEpoch((n) => n + 1)` would
+  // apply to the 0 already queued in the batch and land back on the generation
+  // the reset meant to leave.
+  const nextStyleEpoch = useRef(0);
+  const mode = useThemeStore((s) => s.mode);
+  const [basemapKey, setBasemapKey] = useState(() => initialBasemapKey(mode));
   // Read by the create-once effect, which must not depend on `basemapKey` —
   // the basemap is applied via setStyle, never by recreating the map.
   const basemapKeyRef = useRef(basemapKey);
@@ -88,7 +84,7 @@ export function MapProvider({ children }: { children: ReactNode }) {
 
     // `style.load` rather than `load`: it fires again after every setStyle, which
     // is exactly when overlays need reinstalling.
-    const onStyleLoad = () => setStyleReady(true);
+    const onStyleLoad = () => setStyleEpoch((nextStyleEpoch.current += 1));
     instance.on('style.load', onStyleLoad);
 
     mapRef.current = instance;
@@ -99,27 +95,53 @@ export function MapProvider({ children }: { children: ReactNode }) {
       instance.remove();
       mapRef.current = null;
       setMap(null);
-      setStyleReady(false);
+      setStyleEpoch(0);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const changeBasemap = useCallback((key: string) => {
+  // Does not persist: the mode effect and `resetBasemap` resolve a key rather
+  // than choose one, and storing that would pin "auto" to it on first use. Only
+  // `changeBasemap` remembers.
+  const applyBasemap = useCallback((key: string) => {
     setBasemapKey(key);
     basemapKeyRef.current = key;
-    rememberBasemapKey(key);
     const instance = mapRef.current;
     if (!instance) return;
-    // Overlays are about to be destroyed by the reload, so stop anything from
-    // touching them before the new style announces itself.
-    setStyleReady(false);
+    // Stop anything touching the overlays the reload is about to destroy. For an
+    // inline style this 0 never commits on its own — see `styleEpoch`.
+    setStyleEpoch(0);
     instance.setStyle(basemapStyle(key), { diff: false });
   }, []);
+
+  const changeBasemap = useCallback(
+    (key: string) => {
+      rememberBasemapKey(key);
+      applyBasemap(key);
+    },
+    [applyBasemap],
+  );
+
+  const resetBasemap = useCallback(() => {
+    forgetBasemapKey();
+    applyBasemap(initialBasemapKey(mode));
+  }, [mode, applyBasemap]);
+
+  // Re-style on every mode change even when the key is unchanged: overlay
+  // colours come from `tokens.ts`, whose cache the theme store just reset, and a
+  // full setStyle is what reinstalls them.
+  const appliedMode = useRef(mode);
+  useEffect(() => {
+    if (appliedMode.current === mode) return;
+    appliedMode.current = mode;
+    if (!map) return;
+    applyBasemap(initialBasemapKey(mode));
+  }, [mode, map, applyBasemap]);
 
   // Satellite is an underlay, reinstalled on every style load because the reload
   // wipes it along with everything else.
   useEffect(() => {
-    if (!map || !styleReady) return;
+    if (!map || !styleEpoch) return;
 
     if (!satellite) {
       if (map.getLayer(SATELLITE_LAYER_ID)) map.removeLayer(SATELLITE_LAYER_ID);
@@ -135,11 +157,20 @@ export function MapProvider({ children }: { children: ReactNode }) {
       { id: SATELLITE_LAYER_ID, type: 'raster', source: SATELLITE_SOURCE_ID },
       firstNonBackground?.id,
     );
-  }, [map, styleReady, satellite]);
+  }, [map, styleEpoch, satellite]);
 
   const value = useMemo<MapContextValue>(
-    () => ({ map, styleReady, basemapKey, setBasemap: changeBasemap, satellite, setSatellite }),
-    [map, styleReady, basemapKey, changeBasemap, satellite],
+    () => ({
+      map,
+      styleEpoch,
+      basemapKey,
+      setBasemap: changeBasemap,
+      isAutoBasemap: storedBasemapKey() === null,
+      resetBasemap,
+      satellite,
+      setSatellite,
+    }),
+    [map, styleEpoch, basemapKey, changeBasemap, resetBasemap, satellite],
   );
 
   return (

@@ -11,7 +11,7 @@ import { FakeMap } from '@/test/fake-map';
 // flyTo calls a browse-mode pick makes.
 let fakeMap: FakeMap;
 vi.mock('@/map/context', () => ({
-  useMapContext: () => ({ map: fakeMap, styleReady: true }),
+  useMapContext: () => ({ map: fakeMap, styleEpoch: 1 }),
 }));
 
 const { TopBar } = await import('./TopBar');

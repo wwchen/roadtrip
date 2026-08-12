@@ -12,6 +12,7 @@ data class User(
     val id: UserId,
     val email: String,
     val displayName: String?,
+    val theme: String,
     val isEmailVerified: Boolean,
     val status: UserStatus,
     val roles: Set<Role>,

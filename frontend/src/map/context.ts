@@ -3,9 +3,24 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 
 export interface MapContextValue {
   map: MapLibreMap | null;
-  styleReady: boolean;
+  /**
+   * The installed style generation: 0 before the first load, a fresh higher
+   * number on every `style.load`. Falsy exactly when nothing may touch the map,
+   * and the effect dependency that drives overlay reinstalls.
+   *
+   * A counter, not a boolean: an inline style fires `style.load` synchronously
+   * inside `setStyle`, so reset and reload land in one React batch, and a
+   * boolean going true -> false -> true in one batch looks unchanged — React
+   * bails out and every reinstall is skipped.
+   */
+  styleEpoch: number;
   basemapKey: string;
   setBasemap: (key: string) => void;
+  /** True when the user has never explicitly picked a basemap — it is following
+   *  the theme rather than pinned to a choice. */
+  isAutoBasemap: boolean;
+  /** Drop the explicit pick and return to following the theme. */
+  resetBasemap: () => void;
   satellite: boolean;
   setSatellite: (on: boolean) => void;
 }

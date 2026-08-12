@@ -4,6 +4,7 @@
 //
 // Sign-in and sign-out are full-page navigations, not fetches. They end in a
 // cross-site redirect to the identity provider, which XHR cannot follow.
+import { clearStoredMode } from '@/lib/theme';
 import { jsonGetOk, type RequestOptions } from './http';
 
 const ME_URL = '/api/me';
@@ -20,6 +21,13 @@ export interface MeUser {
   display_name?: string | null;
   email_verified: boolean;
   roles: string[];
+  /**
+   * The saved appearance preference — one of the `ThemeChoice` values in
+   * `@/lib/theme`, but read as `unknown` shape here since an older/newer
+   * server or a hand-edited row is possible; `useMe` narrows it through
+   * `coerceChoice` before applying it. Absent for every anonymous caller.
+   */
+  theme?: string | null;
 }
 
 /**
@@ -71,6 +79,10 @@ export function signInWithConnection(connection: string, returnTo: string = curr
 }
 
 export function signOut(): void {
+  // The next visitor at this browser is anonymous until proven otherwise, and
+  // an anonymous visitor follows their OS. Leaving the mirror would hand them
+  // the previous user's preference.
+  clearStoredMode();
   window.location.assign(LOGOUT_URL);
 }
 
