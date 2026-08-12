@@ -12,6 +12,8 @@ const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const BACKEND_ORIGIN = process.env.VITE_BACKEND_ORIGIN ?? 'http://localhost:8765';
 const MAPLIBRE_MODULE_PATH = '/maplibre-gl/';
 const MAPLIBRE_CHUNK_NAME = 'maplibre';
+/** The CommonJS react-dom entry `@lew-ds/lds-react` reaches for; see `optimizeDeps`. */
+const REACT_DOM_SERVER_ENTRY = 'react-dom/server';
 const proxy = Object.fromEntries(
   ['/api', '/auth', '/data'].map((path) => [
     path,
@@ -22,6 +24,20 @@ const proxy = Object.fromEntries(
 export default defineConfig({
   root: here('.'),
   plugins: [react()],
+  optimizeDeps: {
+    // `@lew-ds/lds-react` ships JSX source rather than a build, and its runtime
+    // imports `renderToStaticMarkup` from `react-dom/server`. react-dom 19 ships
+    // that entry as CommonJS, and without this the dev server hands the raw CJS
+    // file to the browser, which rejects it: "does not provide an export named
+    // 'renderToStaticMarkup'" — an uncaught SyntaxError at module load, so the app
+    // never mounts and `npm run dev` is dead. Naming the entry here forces the
+    // pre-bundle that rewrites it to ESM with real named exports.
+    //
+    // Dev-only. The production build interops the same entry correctly without
+    // help, which is why the bundle Ktor serves was never affected — only the
+    // unbundled dev pipeline, which serves each dep to the browser as-is.
+    include: [REACT_DOM_SERVER_ENTRY],
+  },
   resolve: {
     alias: {
       '@': here('./src'),
