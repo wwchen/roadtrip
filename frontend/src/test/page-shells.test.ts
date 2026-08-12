@@ -1,7 +1,5 @@
-// The boot script is duplicated across the three page shells because it must run
-// before first paint: a module script is deferred until after the browser has
-// painted the body, and a <script src> costs a blocking request. Duplication is
-// the honest cost — this test is what stops the copies drifting.
+// The boot script is duplicated across the three shells because it must run
+// before first paint. This test is what stops the copies drifting.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';

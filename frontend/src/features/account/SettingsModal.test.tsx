@@ -255,26 +255,17 @@ describe('disconnect Slack', () => {
   });
 });
 
-// The guarantee this modal makes: the theme applied to the document equals the
-// theme saved on the server whenever the modal is closed. Previewing a theme
-// (ProfilePanel's Appearance control) applies it live, ahead of Save — these
-// tests are about what happens to that live preview when the modal goes away.
-//
-// `useThemeStore` is a module singleton, never reset between tests (see
-// themeStore.test.ts's own comment on this). Both tests below drive it for
-// real, so `afterEach` puts `choice` back to the default itself rather than
-// assume a clean store for whatever runs next.
+// The guarantee: whenever the modal is closed, the applied theme equals the
+// saved one. The theme store is a module singleton never reset between tests,
+// so `afterEach` restores `choice` itself.
 describe('theme preview on close', () => {
   afterEach(() => {
     useThemeStore.getState().setChoice('system');
   });
 
-  // The other tests in this block both exercise a preview started by clicking
-  // Appearance, so they'd pass even if `useSettings` never pushed the loaded
-  // document's theme into the store: the revert-on-close effect reads
-  // `settingsQuery.data` directly, not through the store. This test is the one
-  // that actually requires the load to apply itself with no interaction at all
-  // — the "server is the authority on load" half of the guarantee.
+  // The only test here that needs no interaction, so the only one that pins the
+  // "server is authoritative on load" half — the others would pass even if
+  // `useSettings` never pushed the loaded theme into the store.
   test('applies the loaded theme with no interaction, even overriding what was already applied', async () => {
     useThemeStore.getState().setChoice('light');
 

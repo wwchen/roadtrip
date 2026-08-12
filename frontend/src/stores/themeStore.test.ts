@@ -11,11 +11,7 @@ import {
 import { resetTokenCache } from '@/tokens/tokens';
 import { useThemeStore } from './themeStore';
 
-// `tokens.ts` memoizes every value it reads off the document root, so a mode
-// change that forgets to reset that cache leaves the map painting the previous
-// mode's colours. Mocked here so `applyMode`'s call to it is a real assertion,
-// not an incidental pass-through to the real (cache-only, side-effect-free)
-// implementation.
+// Mocked so `applyMode`'s call to it is a real assertion.
 vi.mock('@/tokens/tokens', () => ({
   resetTokenCache: vi.fn(),
 }));
@@ -47,11 +43,8 @@ function themeColor(): string | null {
 beforeEach(() => {
   document.documentElement.className = 'theme-roadtrip-zion';
   document.head.innerHTML = '<meta name="theme-color" content="#ffffff">';
-  // `useThemeStore` is a module singleton that vitest never rebuilds between
-  // tests, so without this the `choice` a test leaves behind is the `choice` the
-  // next one starts from — and several below only passed because of what ran
-  // before them. Resetting to the shipped defaults makes each test state its own
-  // starting point, so inserting one in the middle stops being a trap.
+  // The store is a module singleton vitest never rebuilds, so each test has to
+  // state its own starting point.
   useThemeStore.setState({ choice: DEFAULT_THEME_CHOICE, mode: 'light' });
 });
 
@@ -152,10 +145,8 @@ describe('initTheme', () => {
     stop();
   });
 
-  // The mirrors self-heal, because nothing else can heal them: the pre-paint
-  // boot script does one string comparison against `rt-theme` and has no way to
-  // notice it disagrees with `rt-theme-choice`. Left alone, drift survives every
-  // future load and keeps flashing the wrong mode before this module corrects it.
+  // Nothing else can heal drift: the boot script does one string comparison and
+  // cannot notice the two mirrors disagree.
   test('rewrites a mode mirror that has drifted from an explicit choice', () => {
     installMatchMedia(false);
     writeStoredChoice('dark');
@@ -174,8 +165,7 @@ describe('initTheme', () => {
 
     const stop = useThemeStore.getState().initTheme();
 
-    // Gone, not rewritten to 'dark' — a `system` user must leave the boot script
-    // with nothing to replay, so it asks the OS on the next load.
+    // Gone, not rewritten: the boot script must ask the OS again next load.
     expect(readStoredMode()).toBeNull();
     expect(readStoredChoice()).toBeNull();
     stop();
@@ -193,11 +183,8 @@ describe('initTheme', () => {
     stop();
   });
 
-  // Finding 1 (regression): a `system` user must never be pinned to a mode
-  // their OS has since moved on from. Simulates the exact repro — a mode
-  // mirror left over from a session where the OS said light, no explicit
-  // choice ever mirrored (the choice mirror is what actually governs), and
-  // the OS now saying dark on this load.
+  // Regression: a leftover mode mirror, no choice mirror, and an OS that has
+  // since flipped.
   test('a stale mode mirror never overrides a live OS change for a system user', () => {
     writeStoredMode('light'); // stale leftover; the choice mirror is what matters
     installMatchMedia(true); // the OS has since switched to dark
@@ -209,8 +196,7 @@ describe('initTheme', () => {
     stop();
   });
 
-  // The flip side: an explicit choice must survive regardless of what the OS
-  // says, including across a fresh `initTheme` seed (not just a live flip).
+  // The flip side: an explicit choice outranks the OS on a fresh seed too.
   test('an explicit light choice is not overridden by a dark OS on seed', () => {
     writeStoredMode('light');
     writeStoredChoice('light');
@@ -251,14 +237,9 @@ describe('initTheme', () => {
   });
 });
 
-// `tokens.ts` memoizes every value it reads off the document root, so a mode
-// change that forgets to reset that cache leaves the map painting the
-// previous mode's colours — silently, since nothing else observes the cache.
-// A separate, order-independent describe block: the tests above rely on
-// `choice` carrying over between cases (the store is a module singleton, not
-// reset per test), so new cases append here rather than interleave, and each
-// one restores `choice` back to the default afterwards to stay a no-op for
-// whatever runs next.
+// Forgetting this cache reset leaves the map painting the previous mode's
+// colours, silently. Kept in its own block so new cases append rather than
+// interleave with the ones above.
 describe('applyMode resets the token cache', () => {
   afterEach(() => {
     useThemeStore.getState().setChoice('system');

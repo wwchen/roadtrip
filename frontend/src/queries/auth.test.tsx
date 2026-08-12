@@ -1,8 +1,6 @@
-// `useMe` is fetched by every page (mounted via `AuthRow`), so it is the surface
-// that must apply a signed-in user's saved theme with no Settings interaction —
-// see the design doc's boot-time gap. These tests exercise the hook directly
-// rather than through a rendered page, since the behaviour under test is the
-// hook's side effect on `themeStore`, not any markup.
+// `useMe` runs on every page, so it is what applies a saved theme with no
+// Settings interaction. Tested directly: the behaviour is a side effect on
+// `themeStore`, not markup.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -71,8 +69,7 @@ describe('useMe applies a signed-in user’s saved theme', () => {
     expect(useThemeStore.getState().choice).toBe('dark');
   });
 
-  // An unknown/future theme value must degrade to the default rather than throw
-  // or apply nonsense — same rule as `coerceChoice` everywhere else it's used.
+  // An unknown theme degrades to the default rather than throwing.
   test('an unrecognized theme value degrades to system rather than throwing', async () => {
     // Starts on a value that is neither the pre-fetch default ('system', set in
     // beforeEach) nor the post-coercion answer, so the assertion below can only

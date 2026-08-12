@@ -105,8 +105,7 @@ let ctx: ReturnType<typeof useMapContext>;
 
 function Probe() {
   ctx = useMapContext();
-  // Rendered as a boolean because that is what the readiness assertions are about;
-  // the epoch's own value is asserted through `ctx` where a test needs it.
+  // A boolean here; the epoch's own value is asserted through `ctx`.
   return <span data-testid="ready">{String(Boolean(ctx.styleEpoch))}</span>;
 }
 
@@ -128,10 +127,8 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
-// useThemeStore is a module singleton, never reset between test files — any test
-// that moves the mode off its 'light' default has to put it back, or later tests
-// (in this file and any file that shares the module registry) inherit the wrong
-// starting mode.
+// The theme store is a module singleton, never reset between test files: a test
+// that moves the mode off 'light' has to put it back.
 afterEach(() => {
   useThemeStore.getState().setChoice('light');
 });
@@ -271,9 +268,8 @@ describe('following the theme', () => {
     expect(ctx.basemapKey).toBe(DARK_BASEMAP);
   });
 
-  // The trap this task's brief calls out by name: a mode change resolves a key,
-  // it does not choose one. Persisting it would pin "auto" to whatever mode was
-  // active the first time it fired.
+  // A mode change resolves a key, it does not choose one — persisting it would
+  // pin "auto" to whatever mode was active the first time it fired.
   test('does not persist the key the mode effect resolves', async () => {
     renderMap();
     await loadStyle();

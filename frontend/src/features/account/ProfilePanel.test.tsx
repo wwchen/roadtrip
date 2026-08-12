@@ -31,11 +31,8 @@ beforeEach(() => {
   }));
 });
 
-// `useThemeStore` is a module singleton, never reset between tests (see
-// themeStore.test.ts's own comment on this). The "picking Dark" test below
-// drives it for real, so it has to put `choice` back to the default itself
-// rather than assume a clean store for whatever runs next — in this file or
-// any other sharing the module registry.
+// The theme store is a module singleton, never reset between tests, and the
+// "picking Dark" test drives it for real — so it restores `choice` itself.
 afterEach(() => {
   useThemeStore.getState().setChoice('system');
   vi.unstubAllGlobals();
@@ -88,9 +85,8 @@ describe('the Appearance control', () => {
     expect(document.documentElement.classList.contains('mode-dark')).toBe(true);
   });
 
-  // aria-label names the group ("Appearance") but says nothing about the help
-  // text sitting after it — aria-describedby is what a screen reader actually
-  // announces alongside the control, so it has to point at a real element.
+  // aria-label names the group; aria-describedby is what pulls in the help text,
+  // so it has to point at a real element.
   test('describes the radiogroup with the help text, for assistive tech', () => {
     render(<ProfilePanel profile={profile} values={profileValuesOf(settings)} onChange={() => {}} />);
 
