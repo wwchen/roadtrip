@@ -65,6 +65,19 @@ const COMPONENT_LOCAL = new Set([
   // declared in CSS, and read with a fallback for the pre-measurement first paint.
   '--rt-site-dates-width',
   '--rt-site-matrix-viewport-width',
+  // Layout plumbing, not design tokens: geometry one fixed surface has to hand to
+  // another because CSS cannot read a sibling's box. See docs/frontend-components.md.
+  // Declared in shell.css (0 by default), set by sandbox.css when the banner is up,
+  // read by map.css, drawer.css and the body padding.
+  '--rt-chrome-top',
+  '--rt-shell-pad',
+  // Declared in sandbox.css; pins the banner's height and the room it claims.
+  '--rt-sandbox-banner-h',
+  // Published from JS by features/trip/useTopbarClearance.ts, read by drawer.css.
+  '--rt-topbar-h',
+  // Declared in drawer.css; bound the clearance it keeps from the search panel.
+  '--rt-drawer-clearance-gap',
+  '--rt-drawer-clearance-max',
 ]);
 
 const defined = new Set(

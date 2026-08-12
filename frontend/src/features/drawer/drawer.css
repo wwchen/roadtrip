@@ -14,6 +14,14 @@
                topbar stays above it so search and trip navigation remain reachable
    --------------------------------------------------------------------------- */
 
+:root {
+  /* Breathing room between the search panel's lower edge and the drawer header. */
+  --rt-drawer-clearance-gap: 12px;
+  /* Ceiling on that clearance: past this the panel overlaps the drawer body
+     instead, which is recoverable by scrolling. */
+  --rt-drawer-clearance-max: 40dvh;
+}
+
 .rt-drawer-backdrop {
   position: fixed;
   inset: 0;
@@ -112,11 +120,22 @@
   .rt-drawer {
     left: 0;
     right: auto;
-    top: 0;
+    /* Fixed to the viewport, not to the map shell, so it has to clear a fixed
+       deployment bar itself — the shell's own offset does not carry here. */
+    top: var(--rt-chrome-top);
     bottom: 0;
     width: clamp(520px, 44vw, 620px);
-    max-height: 100dvh;
+    max-height: calc(100dvh - var(--rt-chrome-top));
     padding: 0 24px 24px;
+    /* Start below the search panel, which is fixed to this same corner a layer
+       above and would otherwise hide the header. `--rt-topbar-h` is published by
+       the panel itself (features/trip/useTopbarClearance.ts); the ceiling keeps a
+       long trip-stops list from pushing the whole drawer off-screen, at the cost
+       of the panel overlapping the body — which scrolls — rather than the header. */
+    padding-top: min(
+      calc(var(--rt-topbar-h, 0px) + var(--rt-drawer-clearance-gap)),
+      var(--rt-drawer-clearance-max)
+    );
     border-radius: 0;
     box-shadow: 8px 0 32px rgba(var(--rt-c-shadow-rgb), 0.4);
     transform: translateX(-100%);

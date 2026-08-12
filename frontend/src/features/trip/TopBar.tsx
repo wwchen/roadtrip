@@ -1,6 +1,6 @@
 // Trip-planner composition. Local state is limited to drafts, focus, and keyboard
 // selection; route, corridor, and search data live in their respective hooks.
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { RouteStatus } from './RouteStatus';
 import { SearchDropdown } from './SearchDropdown';
 import { StopRow } from './StopRow';
@@ -14,6 +14,7 @@ import { useRoute } from './useRoute';
 import { useTripCards } from './useTripCards';
 import { useSearchResults } from './useSearchResults';
 import { useSharedTrip } from './useSharedTrip';
+import { useTopbarClearance } from './useTopbarClearance';
 import { useTripPlanner } from './useTripPlanner';
 import { MAX_STOPS } from '@/stores/tripStore';
 import './topbar.css';
@@ -27,6 +28,8 @@ export interface TopBarProps {
 }
 
 export function TopBar({ alerts, auth }: TopBarProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useTopbarClearance(panelRef);
   const planner = useTripPlanner();
   const route = useRoute();
   const corridor = useOnRoutePois();
@@ -96,7 +99,7 @@ export function TopBar({ alerts, auth }: TopBarProps) {
   };
 
   return (
-    <div className="tb-panel" id="topbar">
+    <div className="tb-panel" id="topbar" ref={panelRef}>
       <div className="tb-stops">
         {Array.from({ length: rowCount }, (_, index) => {
           const stop = planner.stops[index] ?? null;

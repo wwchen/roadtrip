@@ -180,6 +180,15 @@ from `@tokens` after a runtime swap so the map and charts re-resolve computed co
   more.
 - Prefer LDS's own classes and layout primitives before writing new CSS, and prefer
   extending an existing feature stylesheet before adding another one.
+- Two custom properties carry the geometry one fixed surface needs from another, because
+  CSS cannot read a sibling's box:
+  - `--rt-chrome-top` — room a fixed deployment bar has taken off the top of the viewport.
+    `app/shell.css` defaults it to `0px`; only `sandbox/sandbox.css` sets it, scoped to the
+    banner being in the DOM. The map shell, `body` padding and the desktop drawer offset by
+    it, so a new full-width fixed surface should honour it rather than assume `top: 0`.
+  - `--rt-topbar-h` — the search panel's own height, published by
+    `features/trip/useTopbarClearance.ts` and consumed by the desktop drawer so its header
+    is not hidden under the panel. The search popover is excluded on purpose.
 - `node scripts/check-css-blocks.mjs` fails on an unbalanced brace, and
   `node scripts/check-token-usage.mjs` fails on a `var(--rt-*)` naming a token that does
   not exist or a declaration whose parens do not balance. Both are cheap insurance for
