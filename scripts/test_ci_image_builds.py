@@ -36,9 +36,15 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn("pull backend recgov-companion", deploy)
 
     def test_prod_and_sandbox_share_one_runtime_release(self) -> None:
-        for name in ("deploy.yml", "sandbox.yml"):
-            text = (ROOT / ".github" / "workflows" / name).read_text()
-            self.assertIn("uses: ./.github/actions/install-release", text)
+        # Prod installs the release straight from its workflow. The sandbox path
+        # does it inside the sandbox action, which has to join the tailnet first.
+        for path in (
+            ROOT / ".github" / "workflows" / "deploy.yml",
+            ROOT / ".github" / "actions" / "sandbox" / "action.yml",
+        ):
+            self.assertIn(
+                "uses: ./.github/actions/install-release", path.read_text(), str(path)
+            )
 
         for retired in ("sandbox_up.sh", "sandbox_down.sh", "ensure_data_volume.sh"):
             self.assertFalse((ROOT / "scripts" / retired).exists())

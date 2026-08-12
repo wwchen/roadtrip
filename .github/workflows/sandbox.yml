@@ -159,8 +159,6 @@ jobs:
           printf 'Images were not published: %s\n' "${missing[*]}" >&2
           exit 1
 
-      # install-release packages the checkout, so it stays in the workflow; the
-      # action owns everything that touches the sandbox itself.
       - name: Sandbox
         if: steps.req.outputs.operation != 'unknown'
         uses: ./.github/actions/sandbox
