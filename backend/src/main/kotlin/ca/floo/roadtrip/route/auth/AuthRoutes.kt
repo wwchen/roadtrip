@@ -255,6 +255,7 @@ private fun meResponseForUser(
                     displayName = it.displayName,
                     isEmailVerified = it.isEmailVerified,
                     roles = principal.roles.map { role -> role.wireValue },
+                    theme = it.theme,
                 )
             },
         authClientId = authClientId,

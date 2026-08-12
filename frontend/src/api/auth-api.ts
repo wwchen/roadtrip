@@ -23,6 +23,13 @@ export interface MeUser {
   display_name?: string | null;
   email_verified: boolean;
   roles: string[];
+  /**
+   * The saved appearance preference — one of the `ThemeChoice` values in
+   * `@/lib/theme`, but read as `unknown` shape here since an older/newer
+   * server or a hand-edited row is possible; `useMe` narrows it through
+   * `coerceChoice` before applying it. Absent for every anonymous caller.
+   */
+  theme?: string | null;
 }
 
 /**

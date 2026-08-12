@@ -53,4 +53,14 @@ data class MeUserDto(
     @SerialName("display_name") val displayName: String? = null,
     @SerialName("email_verified") val isEmailVerified: Boolean,
     val roles: List<String> = emptyList(),
+    /**
+     * The user's saved appearance preference — one of
+     * [ca.floo.roadtrip.service.settings.THEME_VALUES]. Present only here, not
+     * on [MeResponseDto] itself, because it is meaningless without a signed-in
+     * user: an anonymous caller has nothing saved and follows
+     * `prefers-color-scheme` instead. Every page fetches `/api/me` via
+     * `useMe()`, so this is what lets a saved theme apply on first paint on a
+     * new device, without waiting for the Settings modal to open.
+     */
+    val theme: String? = null,
 )

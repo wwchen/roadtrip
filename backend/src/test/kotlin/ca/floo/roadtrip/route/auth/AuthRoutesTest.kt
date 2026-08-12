@@ -158,6 +158,7 @@ class AuthRoutesTest {
             assertEquals(stubUser.email, user["email"]!!.jsonPrimitive.content)
             assertEquals(stubUser.displayName, user["display_name"]!!.jsonPrimitive.contentOrNull)
             assertEquals(stubUser.isEmailVerified, user["email_verified"]!!.jsonPrimitive.boolean)
+            assertEquals(stubUser.theme, user["theme"]!!.jsonPrimitive.content)
         }
 
     @Test
@@ -172,6 +173,10 @@ class AuthRoutesTest {
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(false, obj["auth_enabled"]!!.jsonPrimitive.boolean)
             assertEquals(false, obj["authenticated"]!!.jsonPrimitive.boolean)
+            // Anonymous visitors follow prefers-color-scheme; the server has
+            // nothing to say about them, so no user (and therefore no theme)
+            // is ever present on this shape.
+            assertEquals(null, obj["user"])
         }
 
     // ── auth on ──────────────────────────────────────────────────────────────
@@ -194,6 +199,7 @@ class AuthRoutesTest {
             assertEquals(stubUser.email, user["email"]!!.jsonPrimitive.content)
             assertEquals(stubUser.displayName, user["display_name"]!!.jsonPrimitive.contentOrNull)
             assertEquals(stubUser.isEmailVerified, user["email_verified"]!!.jsonPrimitive.boolean)
+            assertEquals(stubUser.theme, user["theme"]!!.jsonPrimitive.content)
         }
 
     @Test
@@ -208,5 +214,6 @@ class AuthRoutesTest {
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(true, obj["auth_enabled"]!!.jsonPrimitive.boolean)
             assertEquals(false, obj["authenticated"]!!.jsonPrimitive.boolean)
+            assertEquals(null, obj["user"])
         }
 }
