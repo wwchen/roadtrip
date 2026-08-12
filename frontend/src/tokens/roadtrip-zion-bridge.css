@@ -1,6 +1,12 @@
 /* Maps app-owned chrome roles onto the mode-aware Roadtrip Zion theme.
-   Map layers, availability, status, signal, and chart roles remain app-owned
-   data semantics in tokens.css. This file loads last so bridge values win. */
+   Map layers, availability, status and chart roles remain app-owned data
+   semantics in tokens.css. This file loads last so bridge values win.
+
+   Signal used to be on that app-owned list and no longer is. It is not that
+   its MEANING moved — the buckets are still rec.gov's 0–4 scale — but that its
+   ramp is now built out of the ink rather than out of a hue, and which ink is
+   a mode question. A theme has to re-express it or paint five invisible
+   chips; see the block below. */
 
 .theme-roadtrip-zion {
   /* Type */
@@ -37,7 +43,29 @@
   --rt-brand-hover: var(--c-700);
   --rt-brand-press: var(--c-800);
   --rt-brand-tint: var(--rt-action-wash);
-  --rt-brand-text: var(--c-500);
+  /* Brand-coloured TEXT on the page, which is a different job from --rt-brand's
+     white-on-fill. --c-500 was serving both modes and passing in neither: 4.01:1
+     on the day page, 4.26:1 on the night one. The ramp has to be stepped per
+     mode — dark, further down. */
+  --rt-brand-text: var(--c-600);
+
+  /* Links. --rt-info-ink and not --rt-info: Zion's dark block re-lights the
+     `-ink` half of every status pair and leaves the base hue alone, so the ink
+     is the half that is mode-aware. Both modes land at ~8:1 on the page. */
+  --rt-link: var(--rt-info-ink);
+  /* Toward the body ink rather than a fixed lighter step, so hover darkens on
+     day and lightens on night without a second override. */
+  --rt-link-hover: color-mix(in srgb, var(--rt-info-ink) 78%, var(--rt-ink));
+
+  /* Signal magnitude. tokens.css builds this ramp from --rt-c-overlay-rgb,
+     which is fixed white for the app's own dark theme — on Zion's white page
+     that would paint five invisible chips. Re-expressed against --rt-ink at
+     the same five alphas so the ramp inverts with the mode. */
+  --rt-signal-0: color-mix(in srgb, var(--rt-ink) 6%, transparent);
+  --rt-signal-1: color-mix(in srgb, var(--rt-ink) 13%, transparent);
+  --rt-signal-2: color-mix(in srgb, var(--rt-ink) 20%, transparent);
+  --rt-signal-3: color-mix(in srgb, var(--rt-ink) 26%, transparent);
+  --rt-signal-4: color-mix(in srgb, var(--rt-ink) 32%, transparent);
 
   /* Zion has no distinct 2xl radius. */
   --rt-r-sm: var(--radius-sm);
@@ -52,4 +80,18 @@
   --rt-e2: var(--shadow-base);
   --rt-e3: var(--shadow-lg);
   --rt-e4: var(--shadow-lg);
+}
+
+/* Night.
+ *
+ * Almost nothing belongs here: every role above is written against --rt-ink or
+ * a --surface-* role, both of which Zion's own dark block flips, so the bridge
+ * inverts for free. What is left are the roles that name a fixed step of the
+ * BRAND ramp — a ramp Zion does not re-light — where one position cannot be
+ * legible on white and on near-black at once. */
+.mode-dark.theme-roadtrip-zion,
+.theme-roadtrip-zion .mode-dark {
+  /* --c-600 is 5.45:1 on the day page and 3.13:1 on the night one; --c-400
+     inverts that to 7.43:1 without leaving the persimmon ramp. */
+  --rt-brand-text: var(--c-400);
 }

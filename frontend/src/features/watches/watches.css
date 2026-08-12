@@ -75,12 +75,12 @@
 }
 
 .rt-watch-table-poi {
-  color: var(--rt-brand);
+  color: var(--rt-link);
   text-decoration: none;
 }
 
 .rt-watch-table-poi:hover {
-  color: var(--rt-brand-hover);
+  color: var(--rt-link-hover);
   text-decoration: underline;
 }
 
