@@ -18,8 +18,7 @@ import ca.floo.roadtrip.service.security.SecretCipher
 
 const val MAX_SLACK_CHANNEL_CHARS = 255
 
-/** The UI theme preference values. Mirrors the CHECK constraint in V51 and the
- *  `ThemeChoice` union in frontend/src/lib/theme.ts. */
+/** Mirrors the V51 CHECK constraint and `ThemeChoice` in frontend/src/lib/theme.ts. */
 @Suppress("TopLevelPropertyNaming")
 val THEME_VALUES = setOf("light", "dark", "system")
 

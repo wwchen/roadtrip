@@ -25,17 +25,10 @@ export default defineConfig({
   root: here('.'),
   plugins: [react()],
   optimizeDeps: {
-    // `@lew-ds/lds-react` ships JSX source rather than a build, and its runtime
-    // imports `renderToStaticMarkup` from `react-dom/server`. react-dom 19 ships
-    // that entry as CommonJS, and without this the dev server hands the raw CJS
-    // file to the browser, which rejects it: "does not provide an export named
-    // 'renderToStaticMarkup'" — an uncaught SyntaxError at module load, so the app
-    // never mounts and `npm run dev` is dead. Naming the entry here forces the
-    // pre-bundle that rewrites it to ESM with real named exports.
-    //
-    // Dev-only. The production build interops the same entry correctly without
-    // help, which is why the bundle Ktor serves was never affected — only the
-    // unbundled dev pipeline, which serves each dep to the browser as-is.
+    // `@lew-ds/lds-react` imports `renderToStaticMarkup`, which react-dom 19
+    // ships as CommonJS. Without this the dev server serves the raw CJS and the
+    // browser rejects it, so nothing mounts. Dev-only — the production build
+    // interops it correctly.
     include: [REACT_DOM_SERVER_ENTRY],
   },
   resolve: {

@@ -23,13 +23,8 @@ import { queryKeys } from '@/queries/keys';
 import { useThemeStore } from '@/stores/themeStore';
 
 /**
- * The settings document, plus the side effect of the server being the
- * authority on theme: whenever a load or a save resolves this document, the
- * document's theme wins over whatever preview is currently applied.
- *
- * Lives here rather than in a component so every consumer of this hook agrees
- * on the applied theme — there is exactly one place a `settings` load can
- * change the document, no matter how many components call `useSettings`.
+ * The settings document. The server is the authority on theme: whenever a load
+ * or a save resolves it, its theme wins over any applied preview.
  */
 export function useSettings(): UseQueryResult<SettingsResponse> {
   const query = useQuery({

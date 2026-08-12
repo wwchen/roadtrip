@@ -1,13 +1,6 @@
-// The live theme: the user's choice, the mode it resolves to, and the DOM that
-// reflects it.
-//
-// Zustand, like `mapStore`, because the choice is UI state several unrelated
-// surfaces read: the settings panel edits it, the map provider re-styles on it,
-// and the settings query pushes the server's answer into it.
-//
-// This module owns every side effect of a mode change — the class, the
-// `theme-color` meta, the memoized token cache. Doing two of the three is how a
-// stale map colour survives a switch, so nothing else should add the class.
+// The live theme, and the only writer of its side effects: the `mode-dark`
+// class, the `theme-color` meta, and the memoized token cache. Doing two of the
+// three is how a stale map colour survives a switch.
 import { create } from 'zustand';
 import {
   DARK_MODE_CLASS,
@@ -32,15 +25,11 @@ function osPrefersDark(): boolean {
 }
 
 /**
- * Put a mode on the document.
+ * Put a mode on the document. Touches no mirror — callers that know the choice
+ * do that.
  *
- * `resetTokenCache()` is not optional: `tokens.ts` memoizes every value it reads
- * off the root, so without it the map keeps painting the previous mode's colours.
- *
- * Does not touch either mirror — mode alone can't say whether it came from an
- * explicit choice or from `system`, and that distinction is exactly what keeps
- * a `system` user from being pinned to a stale mode (see `theme.ts`). Callers
- * that know the choice write the mirrors themselves.
+ * `resetTokenCache()` is not optional: `tokens.ts` memoizes values read off the
+ * root, so without it the map keeps painting the previous mode's colours.
  */
 export function applyMode(mode: ThemeMode): void {
   document.documentElement.classList.toggle(DARK_MODE_CLASS, mode === 'dark');
@@ -49,22 +38,12 @@ export function applyMode(mode: ThemeMode): void {
 }
 
 /**
- * Bring both mirrors into line with a choice and the mode it resolved to.
- *
- * Shared by `setChoice` and `initTheme`, and that second caller is the point:
- * running it on every boot makes the mirrors SELF-HEALING. They can only be read,
- * never validated, by the pre-paint boot script — it does one string comparison
- * and has no way to notice that `rt-theme` disagrees with `rt-theme-choice`. So
- * any drift (a mode left behind by an older build that wrote only the mode
- * mirror, or a half-completed write) would otherwise persist across every future
- * load, feeding the boot script a mode the choice no longer implies and flashing
- * the wrong one before this module corrects it.
+ * Bring both mirrors into line. Run on every boot too, so drift the boot script
+ * cannot detect — it does one string comparison — heals instead of persisting.
  */
 function persistChoice(choice: ThemeChoice, mode: ThemeMode): void {
   if (choice === 'system') {
-    // Nothing local is worth remembering for `system` — the next load (and the
-    // boot script before it) should ask the OS again, not replay whatever the OS
-    // said this session. Clearing is also what evicts a stale mode mirror.
+    // `system` asks the OS again next load rather than replaying this session.
     clearStoredMode();
     return;
   }
@@ -94,13 +73,8 @@ interface ThemeState {
    * closing a tab runs no revert cleanup.
    */
   previewChoice: (choice: ThemeChoice) => void;
-  /**
-   * Seed from the mirror (or the OS) and subscribe to OS changes.
-   *
-   * Returns an unsubscribe. Called once per page from `mountPage`; the listener
-   * is live for the page's lifetime but only *acts* while the choice is
-   * `system` — an explicit choice outranks the OS.
-   */
+  /** Seed from the mirror (or the OS), subscribe to OS changes, return an
+   *  unsubscribe. The listener only acts while the choice is `system`. */
   initTheme: () => () => void;
 }
 
@@ -117,17 +91,9 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   },
 
   initTheme: () => {
-    // The choice mirror — not the mode mirror — decides how to seed: only an
-    // explicit choice is trustworthy across sessions, because only an explicit
-    // choice can't go stale when the OS changes underneath it. `system` (the
-    // default when nothing is mirrored) always re-derives from the live OS, so
-    // a leftover mode string can never pin a `system` user to last session's
-    // mode. The boot script already reached the same mode independently, from
-    // the mode mirror or its own OS fallback, so this repaints nothing.
+    // The choice mirror, not the mode mirror: only an explicit choice can't go
+    // stale when the OS changes underneath it.
     const choice = readStoredChoice() ?? DEFAULT_THEME_CHOICE;
-    // Rewrite what we just resolved, so a mirror that had drifted out of line
-    // with the choice cannot keep misleading the boot script on every future
-    // load. Idempotent for a mirror that was already correct.
     persistChoice(choice, applyChoice(set, choice));
 
     if (typeof window.matchMedia !== 'function') return () => {};

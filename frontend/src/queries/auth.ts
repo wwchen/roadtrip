@@ -13,23 +13,12 @@ const ME_STALE_TIME_MS = 10_000;
 
 /**
  * Identity, plus the side effect of applying a signed-in user's saved theme.
+ * Every page fetches `/api/me` through this, so a saved preference shows up on
+ * a new device without opening Settings.
  *
- * `/api/me` is fetched by every page through this hook (mounted via
- * `AuthRow`), so this is what makes a saved preference visible on a new
- * device, in incognito, or after clearing storage — without waiting for the
- * user to open Settings, which `useSettings` (`features/account/useSettings.ts`)
- * only fetches once the modal is mounted.
- *
- * Both hooks push a server-reported theme into `themeStore`; that overlap is
- * deliberate rather than accidental, see `useSettings`'s docstring and the
- * design doc for the reasoning. What keeps this one from clobbering a live,
- * unsaved preview in `SettingsModal`: the effect depends on the *derived*
- * theme string, not on `dataUpdatedAt` or an `onSuccess` callback. A routine
- * refetch (window focus, staleness) that reports the same theme as before
- * leaves this dependency unchanged, so the effect does not re-run and the
- * preview survives. Only a theme that has genuinely changed server-side
- * re-fires it — matching `useSettings`'s own "the document's theme wins"
- * rule for its own fetches.
+ * The effect depends on the derived theme string, not `dataUpdatedAt`: a
+ * refetch reporting the same theme leaves it unchanged, so an unsaved preview
+ * in `SettingsModal` survives.
  */
 export function useMe(): UseQueryResult<Me> {
   const query = useQuery({

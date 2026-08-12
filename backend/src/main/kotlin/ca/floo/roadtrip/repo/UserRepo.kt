@@ -94,11 +94,7 @@ open class UserRepo(
     ): User? {
         ctx
             .update(APP_USER)
-            // Null means "unchanged" for both fields, so both coalesce to the
-            // stored value rather than overwriting it. `displayName` is nullable
-            // in the column, unlike `theme`'s NOT NULL, but the caller-facing
-            // contract is the same: a client can update one field without
-            // silently clearing the other.
+            // Null means unchanged, so both coalesce to the stored value.
             .set(APP_USER.DISPLAY_NAME, DSL.coalesce(DSL.value(displayName), APP_USER.DISPLAY_NAME))
             .set(APP_USER.THEME, DSL.coalesce(DSL.value(theme), APP_USER.THEME))
             .set(APP_USER.UPDATED_AT, OffsetDateTime.now())

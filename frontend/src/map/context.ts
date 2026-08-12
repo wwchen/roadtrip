@@ -4,22 +4,14 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 export interface MapContextValue {
   map: MapLibreMap | null;
   /**
-   * Which style generation is currently installed: 0 before the first one has
-   * loaded, then a fresh higher number on every `style.load`.
+   * The installed style generation: 0 before the first load, a fresh higher
+   * number on every `style.load`. Falsy exactly when nothing may touch the map,
+   * and the effect dependency that drives overlay reinstalls.
    *
-   * Falsy exactly when nothing may touch the map, so `if (!map || !styleEpoch)
-   * return;` is the guard — and because a reload always yields a NEW number, it is
-   * also the effect dependency that drives reinstalls.
-   *
-   * **It is a counter rather than a boolean for a reason, and turning it back into
-   * one reintroduces a silent bug.** `setStyle(..., { diff: false })` destroys every
-   * source and layer the app added; for an INLINE style (the dark default is one)
-   * MapLibre then fires `style.load` synchronously inside that same `setStyle` call.
-   * The reset and the reload therefore land in a single React batch, and a boolean
-   * that goes true -> false -> true inside one batch is indistinguishable from one
-   * that never changed — so React bails out and every reinstall effect is skipped,
-   * leaving the overlays destroyed with nothing to put them back. A counter cannot
-   * collapse that way: the new generation is a value the old one never held.
+   * A counter, not a boolean: an inline style fires `style.load` synchronously
+   * inside `setStyle`, so reset and reload land in one React batch, and a
+   * boolean going true -> false -> true in one batch looks unchanged — React
+   * bails out and every reinstall is skipped.
    */
   styleEpoch: number;
   basemapKey: string;

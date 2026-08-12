@@ -55,23 +55,16 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const settings = settingsQuery.data;
   const version = settingsQuery.dataUpdatedAt;
 
-  // The saved choice, tracked in a ref so the revert-on-close effect below runs
-  // its cleanup exactly once, on unmount, rather than on every edit.
+  // In a ref so the revert effect below arms once, on unmount, not per edit.
   const savedChoice = settings ? coerceChoice(settings.profile.theme) : null;
   const savedChoiceRef = useRef(savedChoice);
   savedChoiceRef.current = savedChoice;
 
-  // Previewing a theme (ProfilePanel's Appearance control) applies it to the
-  // document immediately, ahead of Save. If the modal closes without saving,
-  // that preview must not outlive it — the applied theme has to equal the saved
-  // theme whenever the modal is closed. `[]` deps: this arms the cleanup once,
-  // on unmount, reading the latest saved choice through the ref rather than
-  // re-subscribing on every keystroke.
+  // An unsaved preview must not outlive the modal: on close, the applied theme
+  // goes back to the saved one. Unconditional because setChoice is idempotent.
   useEffect(
     () => () => {
       const saved = savedChoiceRef.current;
-      // Unconditional: setChoice is idempotent, so a saved preview costs one
-      // no-op rather than an equality check that could go stale.
       if (saved) useThemeStore.getState().setChoice(saved);
     },
     [],
