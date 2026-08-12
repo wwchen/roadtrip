@@ -160,6 +160,9 @@
   flex-direction: column;
   gap: 6px;
   width: 100%;
+  /* Capped because the panel column is now `xl`-wide: three segments stretched
+     across the full width read as dead space, not as a denser control. */
+  max-width: 340px;
 }
 
 /* ---- settings modal ---- */
@@ -199,6 +202,10 @@
 
 @media (max-width: 560px) {
   .rt-settings-rail {
+    /* `flex` is re-set, not just `flex-direction`: the 168px basis above is a
+       column width, and once the parent stacks it would size the main axis —
+       i.e. reserve 168px of *height* for a one-line row of buttons. */
+    flex: 0 0 auto;
     flex-direction: row;
     flex-wrap: wrap;
     gap: 6px;
