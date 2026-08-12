@@ -92,9 +92,9 @@ The workflow (`sandbox.yml`) resolves the PR head SHA via the GitHub API,
 waits for the application and Git-tree-addressed data images to appear in GHCR,
 then SSHes to `mini@mini-ca` over Tailscale and installs the PR's
 release archive (no Git checkout), and runs
-`scripts/deploy.sh sandbox-up <pr_number>` (with `SANDBOX_SHA` set) or
-`scripts/deploy.sh sandbox-down pr<pr_number>`. On success it posts the sandbox
-URL as a PR comment:
+`scripts/deploy.sh sandbox-up pr<N> pr<N>` (with `SANDBOX_SHA` set) or
+`scripts/deploy.sh sandbox-down pr<N>`, both via the shared sandbox action
+described below. On success it posts the sandbox URL as a PR comment:
 
 ```
 Sandbox live: https://roadtrip-sb-pr<N>.floo.ca
@@ -104,9 +104,92 @@ SHA: <12-char sha>  ·  stop with /sandbox stop
 The sandbox is named `pr<N>` (e.g. `pr532`) and is stable across
 re-runs of the same PR.
 
+### The sandbox action
+
+Every path that touches a sandbox goes through one composite action,
+`.github/actions/sandbox`, so there is a single definition of what starting and
+stopping mean:
+
+| Input | Default | Meaning |
+|---|---|---|
+| `operation` | — | `start` or `stop` |
+| `slug` | — | Sandbox slug, e.g. `pr532` |
+| `branch` | `''` | Branch for the build-info banner; falls back to the slug (start) |
+| `pr-number` | `''` | PR to report status on; blank posts nothing |
+| `reason` | `''` | Why it was stopped, shown in the status comment |
+| `require-existing` | `false` | Skip instead of tearing down when there is no marker (stop) |
+| `ts-oauth-client-id` / `ts-oauth-secret` | — | Tailscale OAuth credentials |
+| `ssh-private-key` / `ssh-known-hosts` | — | Deploy SSH credentials |
+| `github-token` | `''` | Token for status comments |
+
+The deploy host, state directory, tunnel zone, and the tailnet tag and version
+are constants inside the action, not inputs. The credentials have to be inputs:
+a composite action cannot read the `secrets` context, so whatever it needs must
+be handed to it by the calling workflow.
+
+The action owns everything that touches the sandbox: joining the tailnet,
+configuring SSH, running `deploy.sh`, and posting the PR status comment as work
+progresses. Workflows are left responsible only for deciding *what* to do and
+checking out the tree. It outputs `url` and, for stop, `torn-down`.
+
+There is no `sha` input. For `start` the caller has already checked out the
+commit being deployed, so the action reads both the commit SHA and the `data/`
+tree SHA from that checkout rather than having them passed back in alongside it.
+The only thing it cannot recover from a detached checkout is the branch name,
+which is why `branch` is an input and `sha` is not.
+
+The slug is authoritative: it is passed to `deploy.sh sandbox-up` as both ref and
+explicit name, so the sandbox name is never re-derived and always matches the
+hostname the status comment advertises. The operation must be `start` or `stop`
+and the slug must satisfy `deploy.sh`'s own name rule, both checked before
+anything reaches the host.
+
+`torn-down` lets callers tell "there was nothing to do" apart from a genuine
+failure — the remote signals absence with a dedicated exit code, so real errors
+still fail the step, and a stop that found nothing leaves the PR comment alone.
+
+### Via the Actions UI
+
+`sandbox.yml` also has a `workflow_dispatch` with an **operation** dropdown
+(`start` / `stop`), a **slug**, and an optional **branch** that defaults to the
+branch the run is launched from. Use it for sandboxes that are not tied to a PR
+— no status comment is posted, and the URL lands in the run summary.
+
+### Sweep (every 30 minutes)
+
+`sandbox-sweep.yml` is the safety net for anything the close path missed:
+teardowns that failed, PRs closed before that job existed, and sandboxes on PRs
+that simply stay open. It lists every marker on the host and tears down any
+sandbox that
+
+- belongs to a PR that is closed or no longer exists, or
+- has outlived `SANDBOX_TTL_HOURS` (repo variable, default **2**), or
+- has a marker whose `START_EPOCH` cannot be read — itself a sign of a stuck
+  sandbox.
+
+Sandboxes created by name via `make sandbox` are subject to the TTL but have no
+PR to check, and no comment is posted for them.
+
+The `plan` job decides; a matrix `stop` job runs the shared stop step once per
+doomed sandbox, serialised (`max-parallel: 1`) because teardown prunes images on
+the shared host, and with `fail-fast: false` so one bad sandbox cannot strand the
+rest. When a `pr<N>` sandbox is reaped its status comment is rewritten with the
+reason.
+
+Because it runs in Actions rather than host cron, it needs no host setup. Run it
+on demand with:
+
+```sh
+gh workflow run sandbox-sweep.yml
+```
+
+Note that scheduled and dispatchable workflows are only picked up from the
+default branch, so the sweep starts working once this is merged to `master`.
+
 Required secrets (same as `deploy.yml`): `DEPLOY_SSH_KEY`,
 `DEPLOY_KNOWN_HOSTS`, `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET`.
-Optional repo variable: `SANDBOX_TUNNEL_ZONE` (falls back to `floo.ca`).
+The zone the workflow advertises is hardcoded to `floo.ca` in the sandbox action;
+on the host, `deploy.sh` still honours a `SANDBOX_TUNNEL_ZONE` override.
 
 ### Via CLI (on the deploy host)
 
@@ -254,7 +337,7 @@ change.
 | `SANDBOX_PORT_RANGE_END` | `41999` | Last port in the range |
 | `SANDBOX_DB_PASSWORD` | `sandbox` | Throwaway Postgres password for the sandbox DB |
 | `POSTGRES_HEALTH_RETRIES` | `30` | Seconds to wait for `pg_isready` before failing |
-| `SANDBOX_TTL_HOURS` | `24` | Reaper: sandboxes older than this are torn down |
+| `SANDBOX_TTL_HOURS` | `2` | Sweep: sandboxes older than this are torn down. Set as a repo variable, not on the host |
 
 ## Scheduled jobs
 
@@ -284,20 +367,6 @@ The script honours these tunables:
 | `SNAPSHOT_POSTGRES_USER` | `roadtrip` |
 | `SNAPSHOT_POSTGRES_DB` | `roadtrip` |
 
-### Reaper (hourly)
-
-`scripts/sandbox_reap.sh` reads every `*.meta` marker in `SANDBOX_STATE_DIR`,
-parses the `START_EPOCH` field, and calls `deploy.sh sandbox-down` for any sandbox
-whose age exceeds `SANDBOX_TTL_HOURS`. Fresh sandboxes are left running.
-Malformed markers emit a warning and are skipped; the script exits non-zero
-if any marker was malformed so cron/systemd can alert on it.
-
-Example cron entry (hourly):
-
-```
-0 * * * * mini $HOME/.roadtrip/current/scripts/sandbox_reap.sh >> $HOME/.roadtrip/sandbox-reap.log 2>&1
-```
-
 ## Moving sandboxes to a dedicated host
 
 All host coupling is in the env vars above plus the workflow's SSH target
@@ -324,5 +393,5 @@ Checklist for a host that has not previously run sandboxes:
 - [ ] **Identity provider.** A Google and/or GitHub IdP configured in Zero Trust → Settings → Authentication, referenced by the Access app above.
 - [ ] **GHCR login.** Run `docker login ghcr.io` on the host with credentials that can pull from `ghcr.io/wwchen/roadtrip/backend`. A GitHub PAT with `read:packages` scope works; store it so `docker pull` runs unattended (e.g. `~/.docker/config.json`).
 - [ ] **State and snapshot directories.** Create `SANDBOX_STATE_DIR` (`/var/lib/roadtrip-sandboxes` by default) and ensure it is writable by the user running the sandbox scripts.
-- [ ] **Cron entries.** Add the snapshot (nightly) and reaper (hourly) cron entries from the Scheduled jobs section above, pointing to the scripts in the repo checkout.
+- [ ] **Cron entries.** Add the snapshot (nightly) cron entry from the Scheduled jobs section above, pointing to the script in the repo checkout. No reaper entry is needed — `sandbox-sweep.yml` enforces the TTL from GitHub Actions.
 - [ ] **`SANDBOX_SNAPSHOT_PATH` env var** (optional). Export it in the environment or set it in the cron entry if the default path is not desired.

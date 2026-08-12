@@ -1,8 +1,29 @@
 name: Sandbox
 
+# Sandboxes are retired by sandbox-sweep.yml, which reaps any sandbox whose PR
+# has closed, so there is no teardown-on-close job here.
 on:
   issue_comment:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: What to do
+        type: choice
+        options:
+          - start
+          - stop
+        default: start
+        required: true
+      slug:
+        description: Sandbox slug, e.g. pr532 or demo
+        type: string
+        required: true
+      branch:
+        description: Branch to deploy; defaults to the branch this run was launched from (start only)
+        type: string
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -10,27 +31,50 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: sandbox-pr-${{ github.event.issue.number }}
+  group: sandbox-${{ github.event.issue.number || github.event.inputs.slug }}
   cancel-in-progress: false
 
 jobs:
   sandbox:
     if: >
-      github.event.issue.pull_request != null &&
-      (github.event.comment.author_association == 'OWNER' ||
-       github.event.comment.author_association == 'COLLABORATOR') &&
-      startsWith(github.event.comment.body, '/sandbox')
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.issue.pull_request != null &&
+       (github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'COLLABORATOR') &&
+       startsWith(github.event.comment.body, '/sandbox'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      SANDBOX_HOST: mini@mini-ca
 
     steps:
-      - name: Resolve PR head SHA
-        id: pr
+      # Collapses both entry points into one shape: what to do, to which slug,
+      # from which ref, and whether there is a PR to report back to.
+      - name: Resolve request
+        id: req
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
+            if (context.eventName === 'workflow_dispatch') {
+              const inputs = context.payload.inputs;
+              const branch = inputs.branch || context.ref.replace('refs/heads/', '');
+              core.setOutput('operation', inputs.operation);
+              core.setOutput('slug', inputs.slug);
+              core.setOutput('branch', branch);
+              core.setOutput('ref', branch);
+              core.setOutput('pr_number', '');
+              core.info(`dispatch: ${inputs.operation} ${inputs.slug} from ${branch}`);
+              return;
+            }
+
+            const body = (context.payload.comment.body || '').replace(/\r/g, '').trim();
+            const operation =
+              body === '/sandbox' ? 'start' : body === '/sandbox stop' ? 'stop' : 'unknown';
+            core.setOutput('operation', operation);
+            core.setOutput('pr_number', String(context.issue.number));
+            if (operation === 'unknown') {
+              core.info(`unrecognised command: ${body}`);
+              return;
+            }
+
             const { data: pr } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -40,72 +84,13 @@ jobs:
               core.setFailed('Sandboxes are limited to branches in this repository.');
               return;
             }
-            core.setOutput('head_sha', pr.head.sha);
-            core.setOutput('head_ref', pr.head.ref);
-            core.setOutput('pr_number', String(context.issue.number));
-            core.info(`PR #${context.issue.number} head SHA: ${pr.head.sha} ref: ${pr.head.ref}`);
-
-      - name: Parse command
-        id: cmd
-        env:
-          COMMENT_BODY: ${{ github.event.comment.body }}
-        run: |
-          body="$(printf '%s' "$COMMENT_BODY" | tr -d '\r' | xargs)"
-          case "$body" in
-            "/sandbox")
-              echo "action=up" >> "$GITHUB_OUTPUT"
-              echo "Parsed: up"
-              ;;
-            "/sandbox stop")
-              echo "action=stop" >> "$GITHUB_OUTPUT"
-              echo "Parsed: stop"
-              ;;
-            *)
-              echo "action=unknown" >> "$GITHUB_OUTPUT"
-              echo "Parsed: unknown (body: $body)"
-              ;;
-          esac
-
-      - name: Init status comment
-        id: status
-        if: steps.cmd.outputs.action == 'up' || steps.cmd.outputs.action == 'stop'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          ACTION: ${{ steps.cmd.outputs.action }}
-          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        with:
-          script: |
-            const marker = `<!-- sandbox-status:pr${context.issue.number} -->`;
-            const sha = (process.env.HEAD_SHA || '').slice(0, 12);
-            const verb = process.env.ACTION === 'stop' ? 'Tearing down' : 'Spinning up';
-            const body = `${marker}\n### 🔄 Sandbox: ${verb}…\n` +
-              `- **Commit:** \`${sha}\`\n` +
-              `- **Status:** triggered — [live logs](${process.env.RUN_URL})`;
-            // Reuse an existing status comment for this PR if present.
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.issue.number, per_page: 100,
-            });
-            const existing = comments.find(c => c.body && c.body.includes(marker));
-            let id;
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                comment_id: existing.id, body,
-              });
-              id = existing.id;
-            } else {
-              const { data: created } = await github.rest.issues.createComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                issue_number: context.issue.number, body,
-              });
-              id = created.id;
-            }
-            core.setOutput('comment_id', String(id));
+            core.setOutput('slug', `pr${context.issue.number}`);
+            core.setOutput('branch', pr.head.ref);
+            core.setOutput('ref', pr.head.sha);
+            core.info(`PR #${context.issue.number} head ${pr.head.sha} ref ${pr.head.ref}`);
 
       - name: Post unknown-command comment
-        if: steps.cmd.outputs.action == 'unknown'
+        if: steps.req.outputs.operation == 'unknown'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -118,18 +103,30 @@ jobs:
                     `- \`/sandbox stop\` — tear down the sandbox`,
             });
 
-      - name: Resolve data tree SHA
-        if: steps.cmd.outputs.action == 'up'
+      # Start checks out the commit being deployed — the sandbox action reads
+      # both SHAs from that tree. Stop needs only the tooling, so it takes the
+      # ref this workflow was loaded from.
+      - name: Check out commit to deploy
+        if: steps.req.outputs.operation == 'start'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ steps.pr.outputs.head_sha }}
+          ref: ${{ steps.req.outputs.ref }}
 
-      - name: Export data tree SHA
-        if: steps.cmd.outputs.action == 'up'
-        run: echo "DATA_SHA=$(git rev-parse HEAD:data)" >> "$GITHUB_ENV"
+      - name: Check out sandbox tooling
+        if: steps.req.outputs.operation == 'stop'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve image SHAs
+        if: steps.req.outputs.operation == 'start'
+        run: |
+          set -euo pipefail
+          {
+            echo "APP_SHA=$(git rev-parse HEAD)"
+            echo "DATA_SHA=$(git rev-parse HEAD:data)"
+          } >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
-        if: steps.cmd.outputs.action == 'up'
+        if: steps.req.outputs.operation == 'start'
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v3.4.0
         with:
           registry: ghcr.io
@@ -137,15 +134,15 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Wait for GHCR image
-        if: steps.cmd.outputs.action == 'up'
+        if: steps.req.outputs.operation == 'start'
         env:
-          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          APP_SHA: ${{ env.APP_SHA }}
           DATA_SHA: ${{ env.DATA_SHA }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           images=(
-            "ghcr.io/${REPO}/backend:${HEAD_SHA}"
+            "ghcr.io/${REPO}/backend:${APP_SHA}"
             "ghcr.io/${REPO}/data:${DATA_SHA}"
           )
           MAX_ATTEMPTS=60
@@ -162,172 +159,25 @@ jobs:
           printf 'Images were not published: %s\n' "${missing[*]}" >&2
           exit 1
 
-      - name: Join tailnet
-        if: steps.cmd.outputs.action == 'up' || steps.cmd.outputs.action == 'stop'
-        uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
-        with:
-          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-          tags: tag:ci
-          version: 1.98.10
-
-      - name: Configure SSH
-        if: steps.cmd.outputs.action == 'up' || steps.cmd.outputs.action == 'stop'
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          install -m 600 /dev/null ~/.ssh/id_ed25519
-          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
-          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
-
+      # install-release packages the checkout, so it stays in the workflow; the
+      # action owns everything that touches the sandbox itself.
       - name: Install runtime release
-        if: steps.cmd.outputs.action == 'up'
+        if: steps.req.outputs.operation == 'start'
         uses: ./.github/actions/install-release
         with:
-          host: ${{ env.SANDBOX_HOST }}
-          sha: ${{ steps.pr.outputs.head_sha }}
+          host: mini@mini-ca
+          sha: ${{ env.APP_SHA }}
 
-      - name: Status deploying
-        if: (steps.cmd.outputs.action == 'up' || steps.cmd.outputs.action == 'stop') && steps.status.outputs.comment_id != ''
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          ACTION: ${{ steps.cmd.outputs.action }}
-          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          COMMENT_ID: ${{ steps.status.outputs.comment_id }}
+      - name: Sandbox
+        if: steps.req.outputs.operation != 'unknown'
+        uses: ./.github/actions/sandbox
         with:
-          script: |
-            const marker = `<!-- sandbox-status:pr${context.issue.number} -->`;
-            const sha = (process.env.HEAD_SHA || '').slice(0, 12);
-            const verb = process.env.ACTION === 'stop' ? 'Tearing down' : 'Deploying to the host';
-            await github.rest.issues.updateComment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              comment_id: Number(process.env.COMMENT_ID),
-              body: `${marker}\n### 🔄 Sandbox: ${verb}…\n` +
-                `- **Commit:** \`${sha}\`\n` +
-                `- **Status:** deploying — [live logs](${process.env.RUN_URL})`,
-            });
-
-      - name: Run on host (up)
-        if: steps.cmd.outputs.action == 'up'
-        env:
-          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
-          HEAD_REF: ${{ steps.pr.outputs.head_ref }}
-          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
-          DATA_SHA: ${{ env.DATA_SHA }}
-        run: |
-          if ! printf '%s' "$HEAD_SHA" | grep -qE '^[0-9a-f]{40}$'; then
-            echo "::error::HEAD_SHA '$HEAD_SHA' is not a 40-hex SHA; aborting"
-            exit 1
-          fi
-          if ! printf '%s' "$PR_NUMBER" | grep -qE '^[0-9]+$'; then
-            echo "::error::PR_NUMBER '$PR_NUMBER' is not numeric; aborting"
-            exit 1
-          fi
-          HEAD_REF_B64="$(printf '%s' "$HEAD_REF" | base64 -w0)"
-          ssh -o BatchMode=yes "$SANDBOX_HOST" "bash -s -- '$HEAD_SHA' '$HEAD_REF_B64' '$PR_NUMBER' '$DATA_SHA'" <<'REMOTE'
-          set -euo pipefail
-          head_sha="$1"
-          head_ref="$(printf '%s' "$2" | base64 -d)"
-          pr_number="$3"
-          data_sha="$4"
-          release="$HOME/.roadtrip/releases/$head_sha"
-          cd "$release"
-
-          SANDBOX_SHA="$head_sha" SANDBOX_BUILD_SHA="$head_sha" SANDBOX_BRANCH="$head_ref" ROADTRIP_DATA_SHA="$data_sha" SANDBOX_CADDY_DIR="$HOME/.roadtrip/caddy/sandboxes" scripts/deploy.sh sandbox-up "$pr_number"
-          REMOTE
-
-      - name: Run on host (stop)
-        if: steps.cmd.outputs.action == 'stop'
-        env:
-          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
-        run: |
-          if ! printf '%s' "$PR_NUMBER" | grep -qE '^[0-9]+$'; then
-            echo "::error::PR_NUMBER '$PR_NUMBER' is not numeric; aborting"
-            exit 1
-          fi
-          ssh -o BatchMode=yes "$SANDBOX_HOST" "bash -s -- '$PR_NUMBER'" <<'REMOTE'
-          set -euo pipefail
-          pr_number="$1"
-          cd "$HOME/.roadtrip/current"
-          SANDBOX_CADDY_DIR="$HOME/.roadtrip/caddy/sandboxes" scripts/deploy.sh sandbox-down "pr${pr_number}"
-          REMOTE
-
-      - name: Status live
-        if: steps.cmd.outputs.action == 'up' && steps.status.outputs.comment_id != ''
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          SANDBOX_TUNNEL_ZONE: ${{ vars.SANDBOX_TUNNEL_ZONE || 'floo.ca' }}
-          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
-          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          COMMENT_ID: ${{ steps.status.outputs.comment_id }}
-        with:
-          script: |
-            const marker = `<!-- sandbox-status:pr${context.issue.number} -->`;
-            const zone = process.env.SANDBOX_TUNNEL_ZONE;
-            const pr   = process.env.PR_NUMBER;
-            const sha  = (process.env.HEAD_SHA || '').slice(0, 12);
-            // Must match deploy.sh's SANDBOX_HOST_PREFIX (roadtrip-sb-) + name
-            // (pr<N>) so the URL is the host the Caddy vhost serves.
-            const url  = `https://roadtrip-sb-pr${pr}.${zone}`;
-            await github.rest.issues.updateComment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              comment_id: Number(process.env.COMMENT_ID),
-              body: `${marker}\n### ✅ Sandbox live\n` +
-                `- **URL:** ${url}\n` +
-                `- **Commit:** \`${sha}\`\n` +
-                `- **Stop:** comment \`/sandbox stop\`  ·  [logs](${process.env.RUN_URL})`,
-            });
-
-      - name: Status stopped
-        if: steps.cmd.outputs.action == 'stop' && steps.status.outputs.comment_id != ''
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          COMMENT_ID: ${{ steps.status.outputs.comment_id }}
-        with:
-          script: |
-            const marker = `<!-- sandbox-status:pr${context.issue.number} -->`;
-            const pr = process.env.PR_NUMBER;
-            await github.rest.issues.updateComment({
-              owner: context.repo.owner, repo: context.repo.repo,
-              comment_id: Number(process.env.COMMENT_ID),
-              body: `${marker}\n### 🛑 Sandbox torn down\n` +
-                `- **Was:** \`roadtrip-sb-pr${pr}\`\n` +
-                `- Re-create with \`/sandbox\`  ·  [logs](${process.env.RUN_URL})`,
-            });
-
-      - name: Status failed
-        if: failure() && (steps.cmd.outputs.action == 'up' || steps.cmd.outputs.action == 'stop')
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        env:
-          ACTION: ${{ steps.cmd.outputs.action }}
-          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          COMMENT_ID: ${{ steps.status.outputs.comment_id }}
-        with:
-          script: |
-            const marker = `<!-- sandbox-status:pr${context.issue.number} -->`;
-            const sha = (process.env.HEAD_SHA || '').slice(0, 12);
-            const verb = process.env.ACTION === 'stop' ? 'teardown' : 'deploy';
-            const body = `${marker}\n### ❌ Sandbox ${verb} failed\n` +
-              `- **Commit:** \`${sha}\`\n` +
-              `- See the [workflow run](${process.env.RUN_URL}) for details.`;
-            const id = process.env.COMMENT_ID;
-            if (id) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                comment_id: Number(id), body,
-              });
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                issue_number: context.issue.number, body,
-              });
-            }
+          operation: ${{ steps.req.outputs.operation }}
+          slug: ${{ steps.req.outputs.slug }}
+          branch: ${{ steps.req.outputs.branch }}
+          pr-number: ${{ steps.req.outputs.pr_number }}
+          ts-oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          ts-oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          ssh-known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          github-token: ${{ github.token }}

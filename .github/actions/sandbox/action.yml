@@ -1,0 +1,305 @@
+name: Sandbox
+description: Start or stop a sandbox on the deploy host, including host access and status reporting
+
+inputs:
+  operation:
+    description: "'start' to bring a sandbox up, 'stop' to tear it down"
+    required: true
+  slug:
+    description: >
+      Sandbox slug, e.g. pr532. Names the compose project, the Caddy vhost and
+      the hostname, and is passed to deploy.sh as an explicit name so it is
+      never re-derived.
+    required: true
+  branch:
+    description: Branch name for the build-info banner; falls back to the slug (start only)
+    required: false
+    default: ''
+  pr-number:
+    description: PR to report status on. Omit for sandboxes with no PR — nothing is posted.
+    required: false
+    default: ''
+  reason:
+    description: Why the sandbox was stopped, shown in the status comment
+    required: false
+    default: ''
+  require-existing:
+    description: >
+      Stop only. When true, skip instead of tearing down if the sandbox has no
+      marker. Tearing down unconditionally is not free — it prunes images on the
+      shared deploy host and issues a Cloudflare delete — so callers that fire
+      regardless of whether a sandbox exists should set this.
+    required: false
+    default: 'false'
+  ts-oauth-client-id:
+    description: Tailscale OAuth client id
+    required: true
+  ts-oauth-secret:
+    description: Tailscale OAuth secret
+    required: true
+  ssh-private-key:
+    description: Deploy SSH private key
+    required: true
+  ssh-known-hosts:
+    description: Deploy SSH known_hosts
+    required: true
+  github-token:
+    description: Token used to post status comments
+    required: false
+    default: ''
+
+outputs:
+  torn-down:
+    description: "Stop only: 'true' when a sandbox was torn down, 'false' when there was none"
+    value: ${{ steps.stop.outputs.torn-down }}
+  url:
+    description: "Start only: the sandbox URL"
+    value: ${{ steps.url.outputs.url }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate inputs
+      shell: bash
+      env:
+        OPERATION: ${{ inputs.operation }}
+        SLUG: ${{ inputs.slug }}
+      run: |
+        set -euo pipefail
+
+        case "$OPERATION" in
+          start|stop) ;;
+          *) echo "::error::operation must be 'start' or 'stop', got '$OPERATION'"; exit 1 ;;
+        esac
+
+        # The rule deploy.sh enforces, applied before the value reaches the host.
+        if ! printf '%s' "$SLUG" | grep -qE '^[a-z0-9][a-z0-9-]{0,62}$'; then
+          echo "::error::slug '$SLUG' must be 1-63 lowercase letters, digits or hyphens"
+          exit 1
+        fi
+
+    - name: Resolve sandbox URL
+      id: url
+      shell: bash
+      env:
+        SLUG: ${{ inputs.slug }}
+      run: |
+        set -euo pipefail
+        # SANDBOX_HOST_PREFIX (roadtrip-sb-) + the slug deploy.sh is given.
+        echo "url=https://roadtrip-sb-${SLUG}.floo.ca" >> "$GITHUB_OUTPUT"
+
+    - name: Join tailnet
+      uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+      with:
+        oauth-client-id: ${{ inputs.ts-oauth-client-id }}
+        oauth-secret: ${{ inputs.ts-oauth-secret }}
+        tags: tag:ci
+        version: 1.98.10
+
+    - name: Configure SSH
+      shell: bash
+      env:
+        SSH_PRIVATE_KEY: ${{ inputs.ssh-private-key }}
+        SSH_KNOWN_HOSTS: ${{ inputs.ssh-known-hosts }}
+      run: |
+        mkdir -p ~/.ssh
+        chmod 700 ~/.ssh
+        install -m 600 /dev/null ~/.ssh/id_ed25519
+        printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+        printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+        chmod 600 ~/.ssh/known_hosts
+
+    - name: Status in progress
+      if: inputs.pr-number != ''
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const pr = Number('${{ inputs.pr-number }}');
+          const marker = `<!-- sandbox-status:pr${pr} -->`;
+          const verb = '${{ inputs.operation }}' === 'stop' ? 'Tearing down' : 'Spinning up';
+          const runUrl =
+            `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+          const body = `${marker}\n### 🔄 Sandbox: ${verb}…\n` +
+            `- **Status:** in progress — [live logs](${runUrl})`;
+          // Reuse this PR's existing status comment if there is one.
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner, repo: context.repo.repo,
+            issue_number: pr, per_page: 100,
+          });
+          const existing = comments.find(c => c.body && c.body.includes(marker));
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              comment_id: existing.id, body,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: pr, body,
+            });
+          }
+
+    - name: Start sandbox
+      if: inputs.operation == 'start'
+      shell: bash
+      env:
+        SANDBOX_HOST: mini@mini-ca
+        SLUG: ${{ inputs.slug }}
+        BRANCH: ${{ inputs.branch }}
+      run: |
+        set -euo pipefail
+
+        # The caller has already checked out the commit being deployed, so both
+        # SHAs come from that tree rather than being passed back in alongside it.
+        sha="$(git rev-parse HEAD)"
+        data_sha="$(git rev-parse HEAD:data)"
+        for pair in "commit:$sha" "data tree:$data_sha"; do
+          if ! printf '%s' "${pair#*:}" | grep -qE '^[0-9a-f]{40}$'; then
+            echo "::error::${pair%%:*} SHA '${pair#*:}' is not 40 hex characters"
+            exit 1
+          fi
+        done
+        echo "==> starting ${SLUG} at ${sha} (data ${data_sha})"
+
+        # Branch names may hold characters the remote shell would otherwise eat.
+        branch_b64="$(printf '%s' "$BRANCH" | base64 -w0)"
+        ssh -o BatchMode=yes "$SANDBOX_HOST" \
+          "bash -s -- '$SLUG' '$sha' '$branch_b64' '$data_sha'" <<'REMOTE'
+        set -euo pipefail
+        slug="$1"
+        sha="$2"
+        branch="$(printf '%s' "$3" | base64 -d)"
+        data_sha="$4"
+
+        cd "$HOME/.roadtrip/releases/$sha"
+        # Passing the slug as both ref and name pins the sandbox name instead of
+        # letting deploy.sh derive it; an empty branch falls back to the slug.
+        SANDBOX_SHA="$sha" SANDBOX_BUILD_SHA="$sha" SANDBOX_BRANCH="$branch" \
+          ROADTRIP_DATA_SHA="$data_sha" SANDBOX_CADDY_DIR="$HOME/.roadtrip/caddy/sandboxes" \
+          scripts/deploy.sh sandbox-up "$slug" "$slug"
+        REMOTE
+
+    - name: Stop sandbox
+      id: stop
+      if: inputs.operation == 'stop'
+      shell: bash
+      env:
+        SANDBOX_HOST: mini@mini-ca
+        SLUG: ${{ inputs.slug }}
+        SANDBOX_STATE_DIR: /var/lib/roadtrip-sandboxes
+        REQUIRE_EXISTING: ${{ inputs.require-existing }}
+      run: |
+        set -uo pipefail
+
+        # Remote exit code meaning "no sandbox to tear down"; distinct from 0
+        # (torn down) and from any real failure.
+        absent_rc=3
+
+        set +e
+        ssh -o BatchMode=yes "$SANDBOX_HOST" \
+          "bash -s -- '$SLUG' '$SANDBOX_STATE_DIR' '$REQUIRE_EXISTING' '$absent_rc'" <<'REMOTE'
+        set -euo pipefail
+        slug="$1"
+        state_dir="$2"
+        require_existing="$3"
+        absent_rc="$4"
+
+        if [[ "$require_existing" == "true" && ! -f "${state_dir}/${slug}.meta" ]]; then
+          echo "==> no sandbox named ${slug}; nothing to tear down"
+          exit "$absent_rc"
+        fi
+
+        cd "$HOME/.roadtrip/current"
+        SANDBOX_STATE_DIR="$state_dir" SANDBOX_CADDY_DIR="$HOME/.roadtrip/caddy/sandboxes" \
+          scripts/deploy.sh sandbox-down "$slug"
+        REMOTE
+        rc=$?
+        set -e
+
+        case "$rc" in
+          0)            echo "torn-down=true"  >> "$GITHUB_OUTPUT" ;;
+          "$absent_rc") echo "torn-down=false" >> "$GITHUB_OUTPUT" ;;
+          *)            exit "$rc" ;;
+        esac
+
+    - name: Report sandbox URL
+      if: inputs.operation == 'start'
+      shell: bash
+      env:
+        SANDBOX_URL: ${{ steps.url.outputs.url }}
+      run: |
+        echo "Sandbox live: ${SANDBOX_URL}" >> "$GITHUB_STEP_SUMMARY"
+
+    # A stop that found nothing leaves any existing comment alone — there was no
+    # sandbox to report on.
+    - name: Status done
+      if: >
+        inputs.pr-number != '' &&
+        (inputs.operation == 'start' || steps.stop.outputs.torn-down == 'true')
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const pr = Number('${{ inputs.pr-number }}');
+          const slug = '${{ inputs.slug }}';
+          const reason = '${{ inputs.reason }}';
+          const marker = `<!-- sandbox-status:pr${pr} -->`;
+          const runUrl =
+            `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+          const body = '${{ inputs.operation }}' === 'start'
+            ? `${marker}\n### ✅ Sandbox live\n` +
+              `- **URL:** ${{ steps.url.outputs.url }}\n` +
+              `- **Stop:** comment \`/sandbox stop\`  ·  [logs](${runUrl})`
+            : `${marker}\n### 🛑 Sandbox torn down\n` +
+              `- **Was:** \`roadtrip-sb-${slug}\`\n` +
+              (reason ? `- Stopped because ${reason}\n` : '') +
+              `- Re-create with \`/sandbox\`  ·  [logs](${runUrl})`;
+
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner, repo: context.repo.repo,
+            issue_number: pr, per_page: 100,
+          });
+          const existing = comments.find(c => c.body && c.body.includes(marker));
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              comment_id: existing.id, body,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: pr, body,
+            });
+          }
+
+    - name: Status failed
+      if: failure() && inputs.pr-number != ''
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const pr = Number('${{ inputs.pr-number }}');
+          const marker = `<!-- sandbox-status:pr${pr} -->`;
+          const verb = '${{ inputs.operation }}' === 'stop' ? 'teardown' : 'deploy';
+          const runUrl =
+            `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+          const body = `${marker}\n### ❌ Sandbox ${verb} failed\n` +
+            `- See the [workflow run](${runUrl}) for details.`;
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner, repo: context.repo.repo,
+            issue_number: pr, per_page: 100,
+          });
+          const existing = comments.find(c => c.body && c.body.includes(marker));
+          if (existing) {
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              comment_id: existing.id, body,
+            });
+          } else {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: pr, body,
+            });
+          }
