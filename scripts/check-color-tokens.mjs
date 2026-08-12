@@ -61,6 +61,8 @@ const EXEMPT = {
     'THEME_COLORS only — the <meta name="theme-color"> pair. Browser chrome reads it before any stylesheet loads, so it cannot be a var() or a token() call; the page shells inline the same two values, which LINE_EXEMPT already covers',
   'frontend/src/tokens/roadtrip-zion.css':
     'a full LDS theme direction, exported byte-identical from Claude Design and kept unedited so re-syncing the direction stays a trivial diff. roadtrip-zion-bridge.css repoints our own --rt-* chrome roles onto it without touching this file',
+  'frontend/src/tokens/roadtrip-zion-hues.css':
+    "the eight chromatic .hue-* ramps in Zion's voice, overriding the shared ones LDS ships at :root in apca-palette.css. Raw hex for the same reason tokens.css is exempt: these ARE the values, and there is no token above them to compose from. Every one is generated -- see the file header for the derivation, so a change means rerunning the script rather than hand-editing a hex",
 };
 
 /** Line-level escapes for cases a file-level exemption would over-grant. */
