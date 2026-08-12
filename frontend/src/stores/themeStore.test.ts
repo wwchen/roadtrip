@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   DARK_MODE_CLASS,
+  DEFAULT_THEME_CHOICE,
   THEME_COLORS,
   readStoredChoice,
   readStoredMode,
@@ -46,6 +47,12 @@ function themeColor(): string | null {
 beforeEach(() => {
   document.documentElement.className = 'theme-roadtrip-zion';
   document.head.innerHTML = '<meta name="theme-color" content="#ffffff">';
+  // `useThemeStore` is a module singleton that vitest never rebuilds between
+  // tests, so without this the `choice` a test leaves behind is the `choice` the
+  // next one starts from — and several below only passed because of what ran
+  // before them. Resetting to the shipped defaults makes each test state its own
+  // starting point, so inserting one in the middle stops being a trap.
+  useThemeStore.setState({ choice: DEFAULT_THEME_CHOICE, mode: 'light' });
 });
 
 afterEach(() => {
@@ -114,6 +121,47 @@ describe('initTheme', () => {
 
     const stop = useThemeStore.getState().initTheme();
     expect(useThemeStore.getState().mode).toBe('dark');
+    stop();
+  });
+
+  // The mirrors self-heal, because nothing else can heal them: the pre-paint
+  // boot script does one string comparison against `rt-theme` and has no way to
+  // notice it disagrees with `rt-theme-choice`. Left alone, drift survives every
+  // future load and keeps flashing the wrong mode before this module corrects it.
+  test('rewrites a mode mirror that has drifted from an explicit choice', () => {
+    installMatchMedia(false);
+    writeStoredChoice('dark');
+    writeStoredMode('light'); // drifted: the choice says dark
+
+    const stop = useThemeStore.getState().initTheme();
+
+    expect(readStoredMode()).toBe('dark');
+    expect(readStoredChoice()).toBe('dark');
+    stop();
+  });
+
+  test('evicts a leftover mode mirror for a system user', () => {
+    installMatchMedia(true);
+    writeStoredMode('light'); // leftover; no choice mirror, so the choice is system
+
+    const stop = useThemeStore.getState().initTheme();
+
+    // Gone, not rewritten to 'dark' — a `system` user must leave the boot script
+    // with nothing to replay, so it asks the OS on the next load.
+    expect(readStoredMode()).toBeNull();
+    expect(readStoredChoice()).toBeNull();
+    stop();
+  });
+
+  test('leaves an already-correct mirror pair alone', () => {
+    installMatchMedia(false);
+    writeStoredChoice('light');
+    writeStoredMode('light');
+
+    const stop = useThemeStore.getState().initTheme();
+
+    expect(readStoredMode()).toBe('light');
+    expect(readStoredChoice()).toBe('light');
     stop();
   });
 

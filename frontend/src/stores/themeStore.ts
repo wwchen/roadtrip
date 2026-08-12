@@ -48,6 +48,30 @@ export function applyMode(mode: ThemeMode): void {
   resetTokenCache();
 }
 
+/**
+ * Bring both mirrors into line with a choice and the mode it resolved to.
+ *
+ * Shared by `setChoice` and `initTheme`, and that second caller is the point:
+ * running it on every boot makes the mirrors SELF-HEALING. They can only be read,
+ * never validated, by the pre-paint boot script — it does one string comparison
+ * and has no way to notice that `rt-theme` disagrees with `rt-theme-choice`. So
+ * any drift (a mode left behind by an older build that wrote only the mode
+ * mirror, or a half-completed write) would otherwise persist across every future
+ * load, feeding the boot script a mode the choice no longer implies and flashing
+ * the wrong one before this module corrects it.
+ */
+function persistChoice(choice: ThemeChoice, mode: ThemeMode): void {
+  if (choice === 'system') {
+    // Nothing local is worth remembering for `system` — the next load (and the
+    // boot script before it) should ask the OS again, not replay whatever the OS
+    // said this session. Clearing is also what evicts a stale mode mirror.
+    clearStoredMode();
+    return;
+  }
+  writeStoredMode(mode);
+  writeStoredChoice(choice);
+}
+
 interface ThemeState {
   choice: ThemeChoice;
   mode: ThemeMode;
@@ -70,15 +94,7 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   setChoice: (choice) => {
     const mode = resolveMode(choice, osPrefersDark());
     applyMode(mode);
-    if (choice === 'system') {
-      // Nothing local is worth remembering for `system` — the next load (and
-      // the boot script before it) should ask the OS again, not replay
-      // whatever the OS said this session.
-      clearStoredMode();
-    } else {
-      writeStoredMode(mode);
-      writeStoredChoice(choice);
-    }
+    persistChoice(choice, mode);
     set({ choice, mode });
   },
 
@@ -93,6 +109,10 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     const choice = readStoredChoice() ?? DEFAULT_THEME_CHOICE;
     const mode = resolveMode(choice, osPrefersDark());
     applyMode(mode);
+    // Rewrite what we just resolved, so a mirror that had drifted out of line
+    // with the choice cannot keep misleading the boot script on every future
+    // load. Idempotent for a mirror that was already correct.
+    persistChoice(choice, mode);
     set({ choice, mode });
 
     if (typeof window.matchMedia !== 'function') return () => {};
