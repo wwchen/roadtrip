@@ -188,7 +188,8 @@ default branch, so the sweep starts working once this is merged to `master`.
 
 Required secrets (same as `deploy.yml`): `DEPLOY_SSH_KEY`,
 `DEPLOY_KNOWN_HOSTS`, `TS_OAUTH_CLIENT_ID`, `TS_OAUTH_SECRET`.
-Optional repo variable: `SANDBOX_TUNNEL_ZONE` (falls back to `floo.ca`).
+The zone the workflow advertises is hardcoded to `floo.ca` in the sandbox action;
+on the host, `deploy.sh` still honours a `SANDBOX_TUNNEL_ZONE` override.
 
 ### Via CLI (on the deploy host)
 
