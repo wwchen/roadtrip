@@ -1,5 +1,6 @@
--- 'system' follows the browser's prefers-color-scheme, and is the default so
--- existing rows keep today's behaviour.
+-- The UI theme preference, per user. 'system' means follow the browser's
+-- prefers-color-scheme; it is the default so every existing row keeps today's
+-- behaviour on a light-mode device.
 ALTER TABLE app_user
   ADD COLUMN theme TEXT NOT NULL DEFAULT 'system';
 
