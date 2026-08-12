@@ -4,12 +4,36 @@
 
 /* ── Build-info banner: fixed top bar ─────────────────────────────────────── */
 
+:root {
+  /* One line of 12px text plus its padding. Pinned rather than left to the
+     content so the page can reserve exactly this much room without measuring
+     the bar at runtime. */
+  --rt-sandbox-banner-h: 25px;
+}
+
+/* The bar is fixed, so it takes its room out of the app rather than the layout.
+   Handing that height back as `--rt-chrome-top` — the role app/shell.css defines
+   and the map shell, body padding, drawer and legend already honour — is what
+   stops it covering them. Keyed on a class rather than `:has(.sandbox-banner)`
+   so the room can be reserved from the mirror before the build-info fetch
+   answers (sandbox-banner.ts); every other deployment keeps the 0 default. */
+html.has-sandbox-chrome {
+  --rt-chrome-top: var(--rt-sandbox-banner-h);
+}
+
 .sandbox-banner {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
+  height: var(--rt-sandbox-banner-h);
   z-index: 9999;
+  /* The height above is what the app reserves, so the bar must not exceed it.
+     A second line — long branch name on a narrow phone, or a viewer with text
+     zoom or a minimum font size — would paint outside the bar, over the app, in
+     the space nothing reserved. Truncate instead. */
+  overflow: hidden;
+  white-space: nowrap;
   display: flex;
   gap: 1rem;
   align-items: center;
@@ -37,6 +61,15 @@
 
 .sandbox-banner__branch {
   opacity: 0.85;
+}
+
+/* Shrinkable and elided rather than wrapped: a branch name is the one item here
+   with no length bound, and it is the least load-bearing of the three. */
+.sandbox-banner__sha,
+.sandbox-banner__branch {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── Assume-user switcher: fixed bottom bar ───────────────────────────────── */

@@ -65,6 +65,21 @@ const COMPONENT_LOCAL = new Set([
   // declared in CSS, and read with a fallback for the pre-measurement first paint.
   '--rt-site-dates-width',
   '--rt-site-matrix-viewport-width',
+  // Layout plumbing, not design tokens: geometry one fixed surface has to hand to
+  // another because CSS cannot read a sibling's box. See docs/frontend-components.md.
+  // Declared 0 in shell.css, set by sandbox.css while the banner is up, and read by
+  // map.css, legend.css, topbar.css, drawer.css and the body padding.
+  '--rt-chrome-top',
+  // Declared in sandbox.css; pins the banner's height and the room it claims.
+  '--rt-sandbox-banner-h',
+  // Published from JS by features/trip/useTopbarClearance.ts, read by drawer.css.
+  '--rt-topbar-bottom',
+  // Declared and consumed entirely inside drawer.css.
+  '--rt-drawer-clearance',
+  '--rt-drawer-clearance-gap',
+  // Declared and consumed entirely inside shell.css — page padding, nothing hands
+  // it anywhere. Listed here only because it is not a design token.
+  '--rt-shell-pad',
 ]);
 
 const defined = new Set(
@@ -108,19 +123,23 @@ for (const file of files) {
 const broken = [];
 for (const file of files) {
   const source = readFileSync(join(ROOT, file), 'utf8');
-  source.split('\n').forEach((line, i) => {
-    if (!line.includes('var(--rt-')) return;
+  // Scanned over the whole source rather than line by line: a wrapped declaration
+  // like drawer.css's `padding-top: min(\n  calc(...),\n  ...\n)` puts the property
+  // and its parens on different lines, and a per-line scan matches neither half —
+  // so the declaration most in need of the check was the one exempt from it.
+  {
     // Only the value side of a real `prop: value` declaration. The property must sit
     // at a declaration boundary (line start, `;` or `{`), which is what keeps a TS
     // ternary's `cond ? a : 'var(--x)'` out of the scan.
-    for (const m of line.matchAll(/(?:^|[;{])\s*(?:--)?[a-z][a-z-]*\s*:([^;{}]*)/g)) {
+    for (const m of source.matchAll(/(?:^|[;{])\s*(?:--)?[a-z][a-z-]*\s*:([^;{}]*)/gm)) {
       const value = m[1];
       if (!value.includes('var(--rt-')) continue;
       const open = (value.match(/\(/g) || []).length;
       const close = (value.match(/\)/g) || []).length;
-      if (open !== close) broken.push(`${file}:${i + 1}: ${line.trim()}`);
+      const line = source.slice(0, m.index).split('\n').length;
+      if (open !== close) broken.push(`${file}:${line}: ${value.trim().split('\n')[0]}`);
     }
-  });
+  }
 }
 
 if (missing.length) {

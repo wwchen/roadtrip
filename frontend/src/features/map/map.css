@@ -33,7 +33,11 @@
    vanilla page. Caught in a browser; no unit test can see it. */
 .rt-map-shell {
   position: fixed;
-  inset: 0;
+  /* Full-bleed except for whatever a fixed deployment bar has taken off the top
+     (`--rt-chrome-top`, 0 outside a sandbox). Everything on this page — topbar,
+     legend, drawer — positions against this shell, so offsetting it here is what
+     keeps the sandbox banner off all three. */
+  inset: var(--rt-chrome-top) 0 0 0;
   overflow: hidden;
 }
 
