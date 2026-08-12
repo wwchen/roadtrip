@@ -70,12 +70,17 @@ export function countByStatus(watches: readonly Watch[]): AlertCounts {
  * The collapsed bar's label: "3 availability alerts · 1 paused · 2 done".
  *
  * The extras are only named when they exist, so the common case reads as one clause.
+ *
+ * Counts `active`, not `total`: a done watch isn't being watched anymore, so it must
+ * not inflate "N availability alerts" — that phrase means "N things I'm waiting on".
+ * When nothing is active, there is no base clause to lead with, just the extras.
  */
-export function barLabel({ paused, done, total }: AlertCounts): string {
-  const base = `${total} availability alert${total === 1 ? '' : 's'}`;
+export function barLabel({ active, paused, done }: AlertCounts): string {
   const extra: string[] = [];
   if (paused > 0) extra.push(`${paused} paused`);
   if (done > 0) extra.push(`${done} done`);
+  if (active === 0 && extra.length) return extra.join(' · ');
+  const base = `${active} availability alert${active === 1 ? '' : 's'}`;
   return extra.length ? `${base} · ${extra.join(' · ')}` : base;
 }
 
