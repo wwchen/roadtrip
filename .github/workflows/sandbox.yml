@@ -1,10 +1,10 @@
 name: Sandbox
 
-# Sandboxes are retired by sandbox-sweep.yml, which reaps any sandbox whose PR
-# has closed, so there is no teardown-on-close job here.
 on:
   issue_comment:
     types: [created]
+  pull_request:
+    types: [closed]
   workflow_dispatch:
     inputs:
       operation:
@@ -31,7 +31,9 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: sandbox-${{ github.event.issue.number || github.event.inputs.slug }}
+  group: >-
+    sandbox-${{ github.event.issue.number || github.event.pull_request.number
+    || github.event.inputs.slug }}
   cancel-in-progress: false
 
 jobs:
@@ -167,6 +169,36 @@ jobs:
           slug: ${{ steps.req.outputs.slug }}
           branch: ${{ steps.req.outputs.branch }}
           pr-number: ${{ steps.req.outputs.pr_number }}
+          ts-oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          ts-oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          ssh-known-hosts: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          github-token: ${{ github.token }}
+
+  # Closing a PR retires its sandbox immediately. The sweep still catches what
+  # this cannot: teardowns that failed, sandboxes on PRs that stay open past the
+  # TTL, and markers with no readable start time.
+  teardown-on-close:
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out sandbox tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Most closed PRs never had a sandbox, so require-existing keeps the
+      # common case down to a single SSH and posts no comment.
+      - name: Sandbox
+        uses: ./.github/actions/sandbox
+        with:
+          operation: stop
+          slug: pr${{ github.event.pull_request.number }}
+          require-existing: 'true'
+          pr-number: ${{ github.event.pull_request.number }}
+          reason: this PR closed
           ts-oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           ts-oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
