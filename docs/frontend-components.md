@@ -235,12 +235,22 @@ from `@tokens` after a runtime swap so the map and charts re-resolve computed co
 - Two custom properties carry the geometry one fixed surface needs from another, because
   CSS cannot read a sibling's box:
   - `--rt-chrome-top` — room a fixed deployment bar has taken off the top of the viewport.
-    `app/shell.css` defaults it to `0px`; only `sandbox/sandbox.css` sets it, scoped to the
-    banner being in the DOM. The map shell, `body` padding and the desktop drawer offset by
-    it, so a new full-width fixed surface should honour it rather than assume `top: 0`.
-  - `--rt-topbar-h` — the search panel's own height, published by
-    `features/trip/useTopbarClearance.ts` and consumed by the desktop drawer so its header
-    is not hidden under the panel. The search popover is excluded on purpose.
+    `app/shell.css` defaults it to `0px`; only `sandbox/sandbox.css` sets it, keyed on the
+    `has-sandbox-chrome` class so the room can be reserved from a mirror before the
+    build-info fetch answers. The map shell, `body` padding, the desktop drawer, the legend
+    and the topbar's max-height all offset by it — a new fixed surface, or anything sized
+    against `100dvh` inside the map shell, should honour it rather than assume `top: 0`.
+  - `--rt-topbar-bottom` — where the search panel's lower edge sits, relative to the map
+    shell, published by `features/trip/useTopbarClearance.ts` and consumed by the desktop
+    drawer so its header is not hidden under the panel. It is the panel's bottom edge and
+    not its height because the panel is itself inset from the top. The search popover is
+    excluded on purpose, so typing does not move the drawer.
+
+    The drawer reserves this much room **uncapped**, which only works because
+    `topbar.css` bounds the panel's own height at `min(50dvh, …)` and scrolls it
+    internally. Do not add a ceiling on the drawer side: clamping there silently returns
+    the drawer's header to underneath the panel whenever the panel is tall — a route with
+    a corridor results list is enough — which is the bug the clearance exists to prevent.
 - `node scripts/check-css-blocks.mjs` fails on an unbalanced brace, and
   `node scripts/check-token-usage.mjs` fails on a `var(--rt-*)` naming a token that does
   not exist or a declaration whose parens do not balance. Both are cheap insurance for
