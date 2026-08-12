@@ -104,6 +104,34 @@ describe('setChoice', () => {
   });
 });
 
+describe('previewChoice', () => {
+  test('applies the mode to the document', () => {
+    installMatchMedia(false);
+    useThemeStore.getState().previewChoice('dark');
+    expect(document.documentElement.classList.contains(DARK_MODE_CLASS)).toBe(true);
+    expect(themeColor()).toBe(THEME_COLORS.dark);
+    expect(useThemeStore.getState().mode).toBe('dark');
+  });
+
+  test('writes neither mirror', () => {
+    installMatchMedia(false);
+    useThemeStore.getState().previewChoice('dark');
+    expect(readStoredMode()).toBeNull();
+    expect(readStoredChoice()).toBeNull();
+  });
+
+  test('leaves a saved choice mirrored as it was', () => {
+    installMatchMedia(false);
+    useThemeStore.getState().setChoice('light');
+
+    useThemeStore.getState().previewChoice('dark');
+
+    expect(document.documentElement.classList.contains(DARK_MODE_CLASS)).toBe(true);
+    expect(readStoredMode()).toBe('light');
+    expect(readStoredChoice()).toBe('light');
+  });
+});
+
 describe('initTheme', () => {
   test('seeds from an explicit choice mirror', () => {
     installMatchMedia(false);

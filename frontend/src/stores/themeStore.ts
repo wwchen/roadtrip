@@ -72,11 +72,28 @@ function persistChoice(choice: ThemeChoice, mode: ThemeMode): void {
   writeStoredChoice(choice);
 }
 
+type SetThemeState = (partial: Pick<ThemeState, 'choice' | 'mode'>) => void;
+
+/** Resolve, apply to the document, record. Touches neither mirror. */
+function applyChoice(set: SetThemeState, choice: ThemeChoice): ThemeMode {
+  const mode = resolveMode(choice, osPrefersDark());
+  applyMode(mode);
+  set({ choice, mode });
+  return mode;
+}
+
 interface ThemeState {
   choice: ThemeChoice;
   mode: ThemeMode;
   /** Set the preference and apply it immediately. */
   setChoice: (choice: ThemeChoice) => void;
+  /**
+   * Apply a choice without mirroring it, for previewing ahead of Save.
+   *
+   * The mirrors mean "what is saved": the boot script paints from them, and
+   * closing a tab runs no revert cleanup.
+   */
+  previewChoice: (choice: ThemeChoice) => void;
   /**
    * Seed from the mirror (or the OS) and subscribe to OS changes.
    *
@@ -92,10 +109,11 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
   mode: 'light',
 
   setChoice: (choice) => {
-    const mode = resolveMode(choice, osPrefersDark());
-    applyMode(mode);
-    persistChoice(choice, mode);
-    set({ choice, mode });
+    persistChoice(choice, applyChoice(set, choice));
+  },
+
+  previewChoice: (choice) => {
+    applyChoice(set, choice);
   },
 
   initTheme: () => {
@@ -107,13 +125,10 @@ export const useThemeStore = create<ThemeState>((set, get) => ({
     // mode. The boot script already reached the same mode independently, from
     // the mode mirror or its own OS fallback, so this repaints nothing.
     const choice = readStoredChoice() ?? DEFAULT_THEME_CHOICE;
-    const mode = resolveMode(choice, osPrefersDark());
-    applyMode(mode);
     // Rewrite what we just resolved, so a mirror that had drifted out of line
     // with the choice cannot keep misleading the boot script on every future
     // load. Idempotent for a mirror that was already correct.
-    persistChoice(choice, mode);
-    set({ choice, mode });
+    persistChoice(choice, applyChoice(set, choice));
 
     if (typeof window.matchMedia !== 'function') return () => {};
 

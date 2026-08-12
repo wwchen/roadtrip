@@ -81,10 +81,8 @@ export function ProfilePanel({ profile, values, onChange }: ProfilePanelProps) {
       <AppearanceField
         value={values.theme}
         onChange={(theme) => {
-          // Preview immediately: a whole-page visual choice made blind is not a
-          // choice. Save commits it; SettingsModal reverts an unsaved preview
-          // when it closes.
-          useThemeStore.getState().setChoice(theme);
+          // Preview, don't persist: Save commits it, SettingsModal reverts it.
+          useThemeStore.getState().previewChoice(theme);
           onChange({ ...values, theme });
         }}
       />

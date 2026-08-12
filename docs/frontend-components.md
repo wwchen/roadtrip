@@ -68,7 +68,16 @@ mode is dark. Three things own this and nothing else should touch it:
   painting the previous mode's colours.
 - The inline script in each of the three page shells, which applies the mirrored
   mode before first paint. It is duplicated on purpose and pinned by
-  `src/test/page-shells.test.ts` — edit all three together.
+  `src/test/page-shells.test.ts` — edit all three together, and note that the
+  dark `theme-color` is a literal there because the script cannot import; that
+  test pins it against `THEME_COLORS.dark` so the two cannot drift.
+
+The mirrors mean **what is saved**, which is what lets the boot script paint from
+them before anything can correct it. So a preview goes through `previewChoice`,
+which applies a mode without mirroring it, and only `setChoice` persists.
+Previewing through `setChoice` would let an unsaved choice survive a closed tab —
+`SettingsModal`'s revert-on-close is a React unmount cleanup, and closing a tab
+runs no cleanup at all.
 
 A signed-in user's choice lives on `profile.theme`; anonymous visitors follow
 `prefers-color-scheme`. New colours must come from mode-aware `--rt-*` roles, not
