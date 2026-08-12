@@ -1,6 +1,4 @@
-/* Sandbox chrome — the build banner and the assume-user switcher.
-   Both are fixed bars outside #root, visible only in a sandbox deployment.
-   One stylesheet because one module renders both; loaded by sandbox-chrome.ts. */
+/* Sandbox chrome — the build banner outside #root, visible only in a sandbox deployment. */
 
 /* ── Build-info banner: fixed top bar ─────────────────────────────────────── */
 
@@ -70,52 +68,4 @@ html.has-sandbox-chrome {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-/* ── Assume-user switcher: fixed bottom bar ───────────────────────────────── */
-
-.sandbox-user-switcher {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 9999;
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  flex-wrap: wrap;
-  padding: 6px 12px;
-  font-family: var(--rt-sans);
-  font-size: 12px;
-  line-height: 1.4;
-  /* The bar's own ground is a one-off translucent surface with no role to map
-     onto; the tints over it compose from the overlay primitive, which is
-     `255,255,255` today and is what a light theme would flip. */
-  background: rgba(30, 32, 40, 0.95);
-  border-top: 1px solid rgba(var(--rt-c-overlay-rgb), 0.10);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-
-.sandbox-user-switcher__btn {
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 6px;
-  border: 1px solid rgba(var(--rt-c-overlay-rgb), 0.15);
-  background: rgba(var(--rt-c-overlay-rgb), 0.07);
-  color: var(--rt-text);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 100ms ease, border-color 100ms ease;
-}
-
-.sandbox-user-switcher__btn:hover {
-  background: rgba(var(--rt-c-overlay-rgb), 0.14);
-  border-color: rgba(var(--rt-c-overlay-rgb), 0.28);
-}
-
-.sandbox-user-switcher__btn:active {
-  background: rgba(var(--rt-c-overlay-rgb), 0.20);
 }

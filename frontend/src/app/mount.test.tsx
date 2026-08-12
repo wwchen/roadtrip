@@ -10,7 +10,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const chromeUrls = ['/api/build-info', '/api/me', '/api/sandbox/users'];
+const chromeUrls = ['/api/build-info'];
 
 test('mounting a page starts the sandbox chrome', async () => {
   const fetched = stubFetch(jsonResponse({ env: 'prod', sha: 'abc', branch: 'master' }));

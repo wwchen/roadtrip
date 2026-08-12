@@ -18,42 +18,57 @@ services:
       - -c
       - maintenance_work_mem=256MB
     environment:
-      - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
-      - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
-      - POSTGRES_PASSWORD=${SANDBOX_DB_PASSWORD:-sandbox}
+      - POSTGRES_DB=roadtrip
+      - POSTGRES_USER=roadtrip
+      - POSTGRES_PASSWORD=sandbox
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-roadtrip} -d $${POSTGRES_DB:-roadtrip}"]
+      test: ["CMD-SHELL", "pg_isready -U roadtrip -d roadtrip"]
       interval: 5s
       timeout: 3s
       retries: 10
 
   backend:
-    image: ghcr.io/wwchen/roadtrip/backend:${SANDBOX_SHA}
+    image: ghcr.io/wwchen/roadtrip/backend:${SANDBOX_SHA:?SANDBOX_SHA is required}
     restart: "no"
     hostname: backend
     mem_limit: 4g
     ports:
-      - "127.0.0.1:${SANDBOX_PORT}:8765"
+      - "127.0.0.1:${SANDBOX_PORT:?SANDBOX_PORT is required}:8765"
     networks:
       default: {}
       roadtrip-sandbox:
         aliases:
-          - sb-${SANDBOX_NAME}-backend
+          - sb-${SANDBOX_NAME:?SANDBOX_NAME is required}-backend
     environment:
-      - ROADTRIP_PROFILE=${SANDBOX_PROFILE:-compose-local}
+      - ROADTRIP_PROFILE=prod
       - ROADTRIP_BUILD_ENV=sandbox
-      - ROADTRIP_BUILD_SHA=${SANDBOX_BUILD_SHA:-${SANDBOX_SHA}}
-      - ROADTRIP_BUILD_BRANCH=${SANDBOX_BRANCH}
-      - ROADTRIP_SANDBOX_ASSUME_USER=true
-      - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
-      - POSTGRES_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-roadtrip}
-      - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
-      - POSTGRES_PASSWORD=${SANDBOX_DB_PASSWORD:-sandbox}
+      - ROADTRIP_BUILD_SHA=${SANDBOX_BUILD_SHA:?SANDBOX_BUILD_SHA is required}
+      - ROADTRIP_BUILD_BRANCH=${SANDBOX_BRANCH:?SANDBOX_BRANCH is required}
+      - ROADTRIP_WEB_ROOT_URL=${ROADTRIP_WEB_ROOT_URL:?ROADTRIP_WEB_ROOT_URL is required}
+      - AUTH_PROVIDER=clerk
+      - POSTGRES_DB=roadtrip
+      - POSTGRES_URL=jdbc:postgresql://postgres:5432/roadtrip
+      - POSTGRES_USER=roadtrip
+      - POSTGRES_PASSWORD=sandbox
       - OTEL_TRACES_EXPORTER=none
       - OTEL_METRICS_EXPORTER=none
       - OTEL_LOGS_EXPORTER=none
+    secrets:
+      - auth_auth0_client_id
+      - auth_auth0_client_secret
+      - auth_auth0_issuer
+      - auth_clerk_client_id
+      - auth_clerk_client_secret
+      - auth_clerk_issuer
+      - campflare_api_key
+      - mapbox_token
+      - postgres_password
+      - resend_api_key
+      - slack_alert_channel
+      - slack_bot_token
+      - slack_signing_secret
     volumes:
       - roadtrip-data:/app/static/data:ro
     healthcheck:
@@ -69,8 +84,36 @@ services:
 volumes:
   roadtrip-data:
     external: true
-    name: ${ROADTRIP_DATA_VOLUME}
+    name: ${ROADTRIP_DATA_VOLUME:?ROADTRIP_DATA_VOLUME is required}
   postgres-data:
+
+secrets:
+  auth_auth0_client_id:
+    environment: AUTH_AUTH0_CLIENT_ID
+  auth_auth0_client_secret:
+    environment: AUTH_AUTH0_CLIENT_SECRET
+  auth_auth0_issuer:
+    environment: AUTH_AUTH0_ISSUER
+  auth_clerk_client_id:
+    environment: AUTH_CLERK_CLIENT_ID
+  auth_clerk_client_secret:
+    environment: AUTH_CLERK_CLIENT_SECRET
+  auth_clerk_issuer:
+    environment: AUTH_CLERK_ISSUER
+  campflare_api_key:
+    environment: CAMPFLARE_API_KEY
+  mapbox_token:
+    environment: MAPBOX_TOKEN
+  postgres_password:
+    environment: POSTGRES_PASSWORD
+  resend_api_key:
+    environment: RESEND_API_KEY
+  slack_alert_channel:
+    environment: SLACK_ALERT_CHANNEL
+  slack_bot_token:
+    environment: SLACK_BOT_TOKEN
+  slack_signing_secret:
+    environment: SLACK_SIGNING_SECRET
 
 networks:
   default:

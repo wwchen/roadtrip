@@ -75,6 +75,60 @@ class BackendAuthProviderPassthroughTest(unittest.TestCase):
         )
 
 
+class SandboxAuthConfigTest(unittest.TestCase):
+    def test_sandbox_deploy_uses_dev_auth_secrets(self):
+        deploy_script = (ROOT / "scripts" / "deploy.sh").read_text()
+        makefile = (ROOT / "Makefile").read_text()
+        release_manifest = (ROOT / "deploy" / "release-manifest.txt").read_text().splitlines()
+
+        self.assertIn('SANDBOX_SECRETS_ENV="local"', deploy_script)
+        self.assertIn('exec "${SANDBOX_SECRETS_ENV}" -- docker compose', deploy_script)
+        self.assertNotIn("exec prod -- docker compose", deploy_script)
+        self.assertIn("SANDBOX_BRANCH=", makefile)
+        self.assertIn("secrets/local.enc.env", release_manifest)
+
+    def test_sandbox_backend_uses_real_auth_flow(self):
+        backend = compose("docker-compose.sandbox.yml")["services"]["backend"]
+        env = backend["environment"]
+
+        self.assertIn("ROADTRIP_PROFILE=prod", env)
+        self.assertIn("ROADTRIP_WEB_ROOT_URL=${ROADTRIP_WEB_ROOT_URL:?ROADTRIP_WEB_ROOT_URL is required}", env)
+        self.assertIn("AUTH_PROVIDER=clerk", env)
+        self.assertFalse(
+            any(e.startswith("ROADTRIP_SANDBOX_ASSUME_USER=") for e in env),
+            "sandbox must not enable the removed assume-user auth bypass",
+        )
+
+    def test_sandbox_compose_does_not_use_fallback_interpolation(self):
+        sandbox_compose = (ROOT / "docker-compose.sandbox.yml").read_text()
+
+        self.assertNotIn(":-", sandbox_compose)
+
+    def test_sandbox_backend_receives_same_secret_mounts_as_prod_backend(self):
+        sandbox = compose("docker-compose.sandbox.yml")["services"]["backend"]
+        prod_secrets = compose("docker-compose.secrets.yml")["services"]["backend"]["secrets"]
+
+        self.assertEqual(
+            sorted(prod_secrets),
+            sorted(sandbox["secrets"]),
+            "sandbox backend secret mounts must stay aligned with the generated prod backend mounts",
+        )
+
+    def test_sandbox_public_hosts_come_from_fixed_slots(self):
+        deploy_script = (ROOT / "scripts" / "deploy.sh").read_text()
+        sandbox_action = (ROOT / ".github" / "actions" / "sandbox" / "action.yml").read_text()
+        sandbox_docs = (ROOT / "docs" / "sandbox-deploys.md").read_text()
+
+        self.assertIn("SANDBOX_SLOT_IDS=(1 2 3 4 5)", deploy_script)
+        self.assertIn("SLOT=%s", deploy_script)
+        self.assertIn('local SANDBOX_SHA', deploy_script)
+        self.assertNotIn('export SANDBOX_SHA="${SANDBOX_TEARDOWN_COMPOSE_SHA}"', deploy_script)
+        self.assertIn("steps.start.outputs.url", sandbox_action)
+        self.assertNotIn("url=https://roadtrip-sb-${SLUG}.floo.ca", sandbox_action)
+        for slot in range(1, 6):
+            self.assertIn(f"https://roadtrip-sb-{slot}.floo.ca/auth/callback", sandbox_docs)
+
+
 class ImmutableApplicationImageTest(unittest.TestCase):
     def test_deploy_uses_images_and_versioned_data_while_local_uses_bind_mounts(self):
         base = compose("docker-compose.yml")

@@ -44,7 +44,7 @@ private val stubUserId = UserId(1L)
 private val stubUser =
     User(
         id = stubUserId,
-        email = "sandbox-user@example.com",
+        email = "test-user@example.com",
         isEmailVerified = true,
         displayName = "Sandbox User",
         theme = "system",
@@ -136,30 +136,6 @@ private fun authOnWiring(): AuthRouteWiring {
 
 class AuthRoutesTest {
     // ── auth off ─────────────────────────────────────────────────────────────
-
-    @Test
-    fun `GET me with sandbox principal and auth off reports user but auth disabled`() =
-        testApplication {
-            application {
-                install(roadtripAuthorization) {
-                    resolvePrincipal = { token ->
-                        if (token == "sandbox:1") Principal.User(stubUserId, setOf(Role.ADMIN)) else Principal.Anonymous
-                    }
-                }
-                routing { authRoutes(wiring = null, userRepo = stubUserRepo) }
-            }
-            val resp = client.get("/api/me") { header(HttpHeaders.Cookie, "$SESSION_COOKIE=sandbox:1") }
-            assertEquals(HttpStatusCode.OK, resp.status)
-            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals(false, obj["auth_enabled"]!!.jsonPrimitive.boolean)
-            assertEquals(true, obj["authenticated"]!!.jsonPrimitive.boolean)
-            val user = obj["user"]!!.jsonObject
-            assertEquals(stubUserId.value, user["id"]!!.jsonPrimitive.long)
-            assertEquals(stubUser.email, user["email"]!!.jsonPrimitive.content)
-            assertEquals(stubUser.displayName, user["display_name"]!!.jsonPrimitive.contentOrNull)
-            assertEquals(stubUser.isEmailVerified, user["email_verified"]!!.jsonPrimitive.boolean)
-            assertEquals(stubUser.theme, user["theme"]!!.jsonPrimitive.content)
-        }
 
     @Test
     fun `GET me with no cookie and auth off reports not authenticated`() =
