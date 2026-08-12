@@ -109,6 +109,35 @@ runs:
         printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
         chmod 600 ~/.ssh/known_hosts
 
+    # The caller has already checked out the commit being deployed, so both SHAs
+    # come from that tree rather than being passed back in alongside it.
+    - name: Resolve commit SHAs
+      id: shas
+      if: inputs.operation == 'start'
+      shell: bash
+      run: |
+        set -euo pipefail
+        sha="$(git rev-parse HEAD)"
+        data_sha="$(git rev-parse HEAD:data)"
+        for pair in "commit:$sha" "data tree:$data_sha"; do
+          if ! printf '%s' "${pair#*:}" | grep -qE '^[0-9a-f]{40}$'; then
+            echo "::error::${pair%%:*} SHA '${pair#*:}' is not 40 hex characters"
+            exit 1
+          fi
+        done
+        {
+          echo "sha=$sha"
+          echo "data-sha=$data_sha"
+        } >> "$GITHUB_OUTPUT"
+
+    # Must run after the tailnet join and SSH setup above — it SSHes to the host.
+    - name: Install runtime release
+      if: inputs.operation == 'start'
+      uses: ./.github/actions/install-release
+      with:
+        host: mini@mini-ca
+        sha: ${{ steps.shas.outputs.sha }}
+
     - name: Status in progress
       if: inputs.pr-number != ''
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -147,19 +176,12 @@ runs:
         SANDBOX_HOST: mini@mini-ca
         SLUG: ${{ inputs.slug }}
         BRANCH: ${{ inputs.branch }}
+        SHA: ${{ steps.shas.outputs.sha }}
+        DATA_SHA: ${{ steps.shas.outputs.data-sha }}
       run: |
         set -euo pipefail
-
-        # The caller has already checked out the commit being deployed, so both
-        # SHAs come from that tree rather than being passed back in alongside it.
-        sha="$(git rev-parse HEAD)"
-        data_sha="$(git rev-parse HEAD:data)"
-        for pair in "commit:$sha" "data tree:$data_sha"; do
-          if ! printf '%s' "${pair#*:}" | grep -qE '^[0-9a-f]{40}$'; then
-            echo "::error::${pair%%:*} SHA '${pair#*:}' is not 40 hex characters"
-            exit 1
-          fi
-        done
+        sha="$SHA"
+        data_sha="$DATA_SHA"
         echo "==> starting ${SLUG} at ${sha} (data ${data_sha})"
 
         # Branch names may hold characters the remote shell would otherwise eat.

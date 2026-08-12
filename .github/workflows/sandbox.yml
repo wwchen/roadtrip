@@ -161,13 +161,6 @@ jobs:
 
       # install-release packages the checkout, so it stays in the workflow; the
       # action owns everything that touches the sandbox itself.
-      - name: Install runtime release
-        if: steps.req.outputs.operation == 'start'
-        uses: ./.github/actions/install-release
-        with:
-          host: mini@mini-ca
-          sha: ${{ env.APP_SHA }}
-
       - name: Sandbox
         if: steps.req.outputs.operation != 'unknown'
         uses: ./.github/actions/sandbox
