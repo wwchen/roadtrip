@@ -2,10 +2,13 @@
    The layers panel: legend, filters and basemap picker.
 
    Ported from index.html's inline <style> for `#panel` and its buttons. The
-   geometry, breakpoint and safe-area handling are carried over as-is; what
-   changed is that the rows are LDS `Checkbox` components now, so the box, the
-   focus ring and the touch target come from the design system instead of from
-   `accent-color` on a bare input.
+   desktop geometry is carried over as-is; the rows are LDS `Checkbox`
+   components now, so the box, the focus ring and the touch target come from
+   the design system instead of from `accent-color` on a bare input. Mobile no
+   longer is: it was a top sheet dropping under the account button, and a tall
+   search/nav panel above the map could put its close button right on top of
+   that panel. It is a bottom sheet now, shaped like `.rt-drawer` in
+   drawer.css, which needs no coordination with anything else on the page.
    --------------------------------------------------------------------------- */
 
 /* Clears the account pill (`auth-row.css`), which occupies this same corner
@@ -172,6 +175,16 @@
   cursor: pointer;
 }
 
+/* Non-interactive scrim behind the mobile sheet, matching `.rt-drawer-backdrop`
+   in drawer.css: the map must keep receiving pan and zoom while the sheet is
+   open, so "tap outside to dismiss" is a map click hitting no pin (the
+   existing `map.on('click', close)` effect above), not this element eating
+   the touch. Desktop never renders it open — the panel there is docked, not a
+   modal sheet — so it is hidden outside the breakpoint. */
+.rt-legend-backdrop {
+  display: none;
+}
+
 @media (max-width: 640px) {
   .rt-legend-toggle {
     display: grid;
@@ -182,21 +195,45 @@
     display: none;
   }
 
-  /* A top sheet: full width, slid out of view until opened. */
+  .rt-legend-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    background: rgba(var(--rt-c-shadow-rgb), 0.32);
+    opacity: 0;
+    transition: opacity 220ms cubic-bezier(0.32, 0.72, 0, 1);
+    pointer-events: none;
+  }
+
+  .rt-legend-backdrop--open {
+    opacity: 1;
+  }
+
+  /* A bottom sheet, not a top one. The top-right corner already holds the
+     account button and, above the map, the search/nav panel — a sheet
+     anchored there had no shared geometry with either, so its own close
+     button could land right on top of the nav panel whenever that panel grew
+     tall. Anchoring to the viewport's bottom instead (the same shape
+     `.rt-drawer` uses on mobile) needs no coordination with anything above
+     the map, because nothing else on this page lives there. */
   .rt-legend {
-    top: max(var(--rt-acct-clearance), calc(env(safe-area-inset-top) + 48px));
-    right: 10px;
-    left: 10px;
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
     max-width: none;
-    max-height: 75vh;
+    max-height: 70dvh;
+    padding: 12px 16px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    border-radius: var(--rt-r-2xl) var(--rt-r-2xl) 0 0;
+    box-shadow: 0 -12px 32px rgba(var(--rt-c-shadow-rgb), 0.4);
     font-size: 14px;
     line-height: 1.5;
-    /* A fixed buffer, not a percentage: `top` now varies with
-       `--rt-acct-clearance` and the safe-area inset, and a percentage of the
-       panel's own height does not scale with that — it left the panel's tail
-       poking below the viewport top on a short panel. 200px clears both. */
-    transform: translateY(calc(-100% - 200px));
-    transition: transform 0.2s ease;
+    transform: translateY(100%);
+    transition: transform 240ms cubic-bezier(0.32, 0.72, 0, 1);
   }
 
   .rt-legend--open {

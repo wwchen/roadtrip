@@ -62,6 +62,11 @@ export function LegendPanel({ pois }: LegendPanelProps) {
 
   return (
     <>
+      {/* Mobile only (hidden by default in legend.css); non-interactive so the
+          map underneath keeps taking pan and zoom, same reasoning as
+          `.rt-drawer-backdrop` in drawer.css. */}
+      <div className={`rt-legend-backdrop${open ? ' rt-legend-backdrop--open' : ''}`} aria-hidden="true" />
+
       <button
         type="button"
         className="rt-legend-toggle"
