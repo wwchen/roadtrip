@@ -4,11 +4,28 @@
 
 /* ── Build-info banner: fixed top bar ─────────────────────────────────────── */
 
+:root {
+  /* One line of 12px text plus its padding. Pinned rather than left to the
+     content so the page can reserve exactly this much room without measuring
+     the bar at runtime. */
+  --rt-sandbox-banner-h: 25px;
+}
+
+/* The bar is fixed, so it takes its room out of the app rather than the layout.
+   Handing that height back as `--rt-chrome-top` — the role app/shell.css defines
+   and the map shell and body padding already honour — is what stops it covering
+   the search panel and the legend. Scoped to the banner actually being in the
+   DOM, which is sandbox-only; every other deployment keeps the 0 default. */
+html:has(.sandbox-banner) {
+  --rt-chrome-top: var(--rt-sandbox-banner-h);
+}
+
 .sandbox-banner {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
+  height: var(--rt-sandbox-banner-h);
   z-index: 9999;
   display: flex;
   gap: 1rem;
