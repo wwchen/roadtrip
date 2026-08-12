@@ -113,42 +113,45 @@ stopping mean:
 | Input | Default | Meaning |
 |---|---|---|
 | `operation` | — | `start` or `stop` |
-| `host` | — | SSH destination |
 | `slug` | — | Sandbox slug, e.g. `pr532` |
-| `sha` | `''` | Commit SHA whose release and images to run (start) |
 | `branch` | `''` | Branch for the build-info banner; falls back to the slug (start) |
-| `data-sha` | `''` | Git tree SHA of `data/` (start) |
-| `state-dir` | `/var/lib/roadtrip-sandboxes` | Must match `SANDBOX_STATE_DIR` |
+| `pr-number` | `''` | PR to report status on; blank posts nothing |
+| `reason` | `''` | Why it was stopped, shown in the status comment |
 | `require-existing` | `false` | Skip instead of tearing down when there is no marker (stop) |
+| `ts-oauth-client-id` / `ts-oauth-secret` | — | Tailscale OAuth credentials |
+| `ssh-private-key` / `ssh-known-hosts` | — | Deploy SSH credentials |
+| `github-token` | `''` | Token for status comments |
+| `host` | `mini@mini-ca` | SSH destination |
+| `tunnel-zone` | `floo.ca` | Zone the sandbox is published under |
+| `state-dir` | `/var/lib/roadtrip-sandboxes` | Must match `SANDBOX_STATE_DIR` |
+
+The action owns everything that touches the sandbox: joining the tailnet,
+configuring SSH, running `deploy.sh`, and posting the PR status comment as work
+progresses. Workflows are left responsible only for deciding *what* to do and
+checking out the tree. It outputs `url` and, for stop, `torn-down`.
+
+There is no `sha` input. For `start` the caller has already checked out the
+commit being deployed, so the action reads both the commit SHA and the `data/`
+tree SHA from that checkout rather than having them passed back in alongside it.
+The only thing it cannot recover from a detached checkout is the branch name,
+which is why `branch` is an input and `sha` is not.
 
 The slug is authoritative: it is passed to `deploy.sh sandbox-up` as both ref and
 explicit name, so the sandbox name is never re-derived and always matches the
-hostname the status comment advertises. Inputs are validated before anything
-reaches the host — the operation must be `start` or `stop`, the slug must satisfy
-`deploy.sh`'s own name rule, and `start` requires both SHAs to be 40 hex
-characters.
+hostname the status comment advertises. The operation must be `start` or `stop`
+and the slug must satisfy `deploy.sh`'s own name rule, both checked before
+anything reaches the host.
 
-`stop` outputs `torn-down` (`true`/`false`), letting callers tell "there was
-nothing to do" apart from a genuine failure — the remote signals absence with a
-dedicated exit code, so real errors still fail the step.
+`torn-down` lets callers tell "there was nothing to do" apart from a genuine
+failure — the remote signals absence with a dedicated exit code, so real errors
+still fail the step, and a stop that found nothing leaves the PR comment alone.
 
-Callers supply their own SSH and tailnet setup and check out the repo, since the
-action is referenced by path. Its four call sites are `/sandbox`, `/sandbox
-stop`, the PR-close teardown, and the sweep.
+### Via the Actions UI
 
-### Automatic teardown on PR close
-
-Closing a PR — merged or not — tears its sandbox down. The `teardown-on-close`
-job in `sandbox.yml` fires on `pull_request: [closed]` and calls the shared stop
-step with `require-existing: true`.
-
-That flag matters: most closed PRs never had a sandbox, and tearing down blind
-is not free — it prunes images on the shared deploy host and issues a Cloudflare
-delete. With the marker check, the common case costs one SSH, and only a real
-teardown updates the PR's status comment.
-
-Teardown needs the deploy secrets, so the job is limited to PRs whose head
-branch lives in this repository — the same restriction the `up` path enforces.
+`sandbox.yml` also has a `workflow_dispatch` with an **operation** dropdown
+(`start` / `stop`), a **slug**, and an optional **branch** that defaults to the
+branch the run is launched from. Use it for sandboxes that are not tied to a PR
+— no status comment is posted, and the URL lands in the run summary.
 
 ### Sweep (every 30 minutes)
 
@@ -331,7 +334,7 @@ change.
 | `SANDBOX_PORT_RANGE_END` | `41999` | Last port in the range |
 | `SANDBOX_DB_PASSWORD` | `sandbox` | Throwaway Postgres password for the sandbox DB |
 | `POSTGRES_HEALTH_RETRIES` | `30` | Seconds to wait for `pg_isready` before failing |
-| `SANDBOX_TTL_HOURS` | `2` | Reaper and sweep: sandboxes older than this are torn down. Override the sweep's value with the `SANDBOX_TTL_HOURS` repo variable |
+| `SANDBOX_TTL_HOURS` | `2` | Sweep: sandboxes older than this are torn down. Set as a repo variable, not on the host |
 
 ## Scheduled jobs
 
@@ -361,26 +364,6 @@ The script honours these tunables:
 | `SNAPSHOT_POSTGRES_USER` | `roadtrip` |
 | `SNAPSHOT_POSTGRES_DB` | `roadtrip` |
 
-### Reaper (hourly)
-
-`scripts/sandbox_reap.sh` reads every `*.meta` marker in `SANDBOX_STATE_DIR`,
-parses the `START_EPOCH` field, and calls `deploy.sh sandbox-down` for any sandbox
-whose age exceeds `SANDBOX_TTL_HOURS`. Fresh sandboxes are left running.
-Malformed markers emit a warning and are skipped; the script exits non-zero
-if any marker was malformed so cron/systemd can alert on it.
-
-This is the host-local equivalent of the sweep, and is now optional: the sweep
-enforces the same TTL from Actions without depending on cron being installed.
-Keep it if you want teardown to survive GitHub being unreachable; it is
-otherwise redundant. Run it more often than hourly if you rely on it, since a
-2-hour TTL checked hourly means a sandbox can live close to three hours.
-
-Example cron entry (hourly):
-
-```
-0 * * * * mini $HOME/.roadtrip/current/scripts/sandbox_reap.sh >> $HOME/.roadtrip/sandbox-reap.log 2>&1
-```
-
 ## Moving sandboxes to a dedicated host
 
 All host coupling is in the env vars above plus the workflow's SSH target
@@ -407,5 +390,5 @@ Checklist for a host that has not previously run sandboxes:
 - [ ] **Identity provider.** A Google and/or GitHub IdP configured in Zero Trust → Settings → Authentication, referenced by the Access app above.
 - [ ] **GHCR login.** Run `docker login ghcr.io` on the host with credentials that can pull from `ghcr.io/wwchen/roadtrip/backend`. A GitHub PAT with `read:packages` scope works; store it so `docker pull` runs unattended (e.g. `~/.docker/config.json`).
 - [ ] **State and snapshot directories.** Create `SANDBOX_STATE_DIR` (`/var/lib/roadtrip-sandboxes` by default) and ensure it is writable by the user running the sandbox scripts.
-- [ ] **Cron entries.** Add the snapshot (nightly) cron entry from the Scheduled jobs section above, pointing to the script in the repo checkout. The reaper entry is optional — `sandbox-sweep.yml` enforces the same TTL from GitHub Actions — so add it only if you want teardown to keep working when GitHub is unreachable.
+- [ ] **Cron entries.** Add the snapshot (nightly) cron entry from the Scheduled jobs section above, pointing to the script in the repo checkout. No reaper entry is needed — `sandbox-sweep.yml` enforces the TTL from GitHub Actions.
 - [ ] **`SANDBOX_SNAPSHOT_PATH` env var** (optional). Export it in the environment or set it in the cron entry if the default path is not desired.
