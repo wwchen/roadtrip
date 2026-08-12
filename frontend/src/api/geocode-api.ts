@@ -1,4 +1,3 @@
-// Client for /api/geocode. Typed port of web/api/geocode-api.js.
 import type { RequestOptions } from './http';
 
 const GEOCODE_URL = '/api/geocode';

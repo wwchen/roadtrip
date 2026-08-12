@@ -1,9 +1,3 @@
-// The availability grid, driven through its real hooks against stubbed endpoints.
-//
-// The pure rules are covered in fuse/matrix-rows/watch-windows tests; this checks the
-// wiring the vanilla controller hand-rolled — that a superseded week cannot paint, that
-// changing week clears an armed booking cell, that a 401 on watches degrades to "sign
-// in" rather than an error, and that the two-tap booking flow needs both taps.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
@@ -132,11 +126,6 @@ const cell = (siteLabel: string, date: string) =>
   screen.getByRole('button', { name: new RegExp(`^${siteLabel} ${date}:`) });
 
 describe('the week grid', () => {
-  // Every request here is keyed on the POI id, so without one the queries stay
-  // `enabled: false` — which reads as permanently pending. Before the guard this
-  // rendered a skeleton that could never resolve, and the drawer's own gate
-  // (`properties.availability_supported`) says nothing about the id, so the two can
-  // disagree on a body that carries the flag and no top-level `id`.
   test('renders nothing at all for a feature with no id, rather than a skeleton', async () => {
     render(
       <AppProviders client={testClient()}>
@@ -271,8 +260,6 @@ describe('switching campgrounds', () => {
     expect(window.open).not.toHaveBeenCalled();
   });
 
-  // The filter is POI-scoped for the same reason: site names do not carry over, so an
-  // inherited "Site 1" filter can hide every row the new campground has.
   test('drops the previous campground"s site filter', async () => {
     const view = await mount();
 
@@ -308,7 +295,6 @@ describe('the week"s states', () => {
     );
   });
 
-  // Different from "no data": this one has a date attached.
   test('a closed season reports when it reopens', async () => {
     stubs.availability = () =>
       json(
@@ -325,8 +311,6 @@ describe('the week"s states', () => {
     await waitFor(() => expect(screen.getByText(/Reopens 2027-05-01/)).toBeInTheDocument());
   });
 
-  // The copy names the actual fault rather than "upstream unavailable", which is the
-  // whole reason the error table exists.
   test('a provider fault says which fault, and offers a retry', async () => {
     stubs.availability = () => json({ error: 'rate_limited', upstream_status: 429 }, 503);
     render(
@@ -344,11 +328,6 @@ describe('the week"s states', () => {
 });
 
 describe('the calendar popover', () => {
-  // The bug this pins: `.cg-cal-host` positions itself with `position: absolute; top:
-  // 100%`, so it must be a child of `.cg-week-nav` — the one positioned ancestor in
-  // the grid. Rendered at the section root instead, it resolved against the drawer and
-  // opened ~620px below the viewport: present in the DOM, invisible to the user. jsdom
-  // does no layout, so the assertion is structural.
   test('renders inside the week nav, which is what anchors it', async () => {
     await mount();
 
@@ -376,7 +355,6 @@ describe('the calendar popover', () => {
     expect(screen.queryByRole('dialog', { name: 'Pick a week' })).toBeNull();
   });
 
-  // The provider will not quote before the earliest date, so those days are inert.
   test('disables days before the earliest bookable date', async () => {
     await mount();
 
@@ -407,7 +385,6 @@ describe('paging weeks', () => {
     );
   });
 
-  // The Earliest jump only appears once there is somewhere to jump back to.
   test('offers Earliest only after paging away', async () => {
     await mount();
     expect(screen.queryByRole('button', { name: 'Jump to earliest date' })).toBeNull();
@@ -453,8 +430,6 @@ describe('booking a cell', () => {
     );
   });
 
-  // No template means no link to build, so the cell is inert rather than a button
-  // that opens a blank tab.
   test('an available cell with no booking template is not a button', async () => {
     stubs.campsites = () => json(catalogBody([catalogRow(1)], {}));
     await mount();
@@ -480,7 +455,6 @@ describe('selecting a day', () => {
     );
   });
 
-  // A day with nothing open gets the day panel instead, which is where a watch is set.
   test('a full day offers a watch instead of a list', async () => {
     await mount();
 
@@ -521,8 +495,6 @@ describe('watches', () => {
     });
   });
 
-  // A 401 is the answer for an anonymous visitor, not a fault: the grid stays and the
-  // copy changes to something actionable.
   test('an anonymous visitor is asked to sign in, with no error banner', async () => {
     stubs.watches = () => json({ error: 'unauthorized' }, 401);
     await mount();
@@ -536,8 +508,6 @@ describe('watches', () => {
     expect(screen.getByText(/Sites by date/)).toBeInTheDocument();
   });
 
-  // A request in flight is not an anonymous visitor. Both used to read as `canManage:
-  // false`, so every slow watch list showed a signed-in user "Sign in" until it landed.
   test('says it is still checking while the watch list is in flight', async () => {
     stubs.watches = () => new Promise<Response>(() => {});
     await mount();
@@ -550,8 +520,6 @@ describe('watches', () => {
     expect(screen.queryByRole('button', { name: 'Set watch' })).toBeNull();
   });
 
-  // Nor is a 500 an anonymous visitor — and that one never resolves on its own, so
-  // before this it showed a signed-in user "Sign in" permanently.
   test('a failed watch list says so, and the retry recovers', async () => {
     stubs.watches = () => json({ error: 'boom' }, 500);
     await mount();
@@ -572,9 +540,6 @@ describe('watches', () => {
     );
   });
 
-  // Email-only providers pass `supportsWatchAlerts`, so the day panel offers the
-  // toggle — and the toggle's one-tap default is a Slack watch, which this provider
-  // cannot service. It used to return silently: a button that did nothing, forever.
   test('an email-only provider opens the editor instead of doing nothing', async () => {
     stubs.availability = () =>
       json(
@@ -619,7 +584,6 @@ describe('watches', () => {
     });
   });
 
-  // Different sentence, different cause: this provider cannot notify anyone at all.
   test('a provider with no alert capability says so instead', async () => {
     stubs.availability = () =>
       json(
@@ -638,10 +602,6 @@ describe('watches', () => {
     ).toBeInTheDocument();
   });
 
-  // A dead session mid-session has to withdraw the control, not leave a button that
-  // cannot work. The vanilla cleared its watch state here; this is the same outcome —
-  // and note what it implies: the affordance disappearing takes the popover's anchor
-  // cell with it, so the popover closes too.
   test('a session that expires mid-save withdraws the affordance', async () => {
     await mount();
     await act(async () => {
@@ -661,9 +621,6 @@ describe('watches', () => {
     expect(screen.queryByRole('button', { name: 'Set watch' })).toBeNull();
   });
 
-  // The withdrawal above unmounts whatever control was clicked, so an inline message
-  // would be raised into a component that is about to disappear. A toast outlives it,
-  // and "sign in" is the only useful thing to say — retrying fails identically.
   test('raises a toast naming the expired session', async () => {
     stubs.watches = () =>
       json({
@@ -714,7 +671,6 @@ describe('watches', () => {
     expect(screen.getByText('Tue, Aug 11')).toBeInTheDocument();
   });
 
-  // Reserved and first-come can open up; closed and unknown cannot.
   test('closed and unknown cells are not watchable', async () => {
     await mount();
 
@@ -795,8 +751,6 @@ describe('the site row', () => {
 });
 
 describe('the catalog', () => {
-  // The catalog and the availability window are separate requests, so the grid still
-  // draws from the days alone when the catalog fails.
   test('a failed catalog still shows the dates', async () => {
     stubs.campsites = () => json({ error: 'boom' }, 500);
     render(

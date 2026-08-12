@@ -1,12 +1,4 @@
 // Display formatters for the availability dashboard.
-//
-// Each of these was duplicated verbatim across the three legacy tab modules
-// (`web/components/availability/{pollers,runs,snapshots}-tab.js`) — three copies
-// of `formatTimestamp`, two of nothing else in common. Ported once here.
-//
-// `escapeHtml` is deliberately NOT ported: it existed because those modules built
-// HTML strings, and React escapes text nodes itself. Porting it would invite
-// double-escaping.
 import { parseLocalYmd } from './local-date';
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;

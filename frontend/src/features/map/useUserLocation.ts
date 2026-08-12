@@ -1,23 +1,5 @@
-// "Where am I" — the map's locate-me control, the store it writes, and the puck.
-//
-// Port of the `geolocate` / `error` handlers and `showUserLocationMarker` from
-// web/app.js. Three things changed shape on the way over, and all three are
-// deliberate:
-//
-//   the puck follows the STORE, not the control event. `mapStore.userLocation` has
-//       two writers now (this control and the topbar's locate button), and the
-//       vanilla only drew a puck
-//       for the first of them — so locating yourself from the topbar left the map
-//       with no "you are here" at all. One effect on one field fixes that for free,
-//       and keeps "single source of truth for where am I" true rather than aspirational.
-//   the error goes to a TOAST. The vanilla appended a `div.geo-banner` to the body
-//       and `web/` has no `.geo-banner` rule anywhere, so that message has been
-//       rendering as unstyled text at the top of the document. `<ToastProvider>` is
-//       already mounted app-wide (`AppProviders`), which is what the design system
-//       offers for exactly this.
-//   `rerenderSearchResults()` is gone. The vanilla poked the search list by hand
-//       after a fix landed; `useSearchResults` subscribes to `userLocation` for its
-//       proximity bias, so React re-renders it by ordinary subscription.
+// Both locate controls write the store; the puck and proximity-biased search
+// subscribe to that shared location.
 import { useEffect, useRef } from 'react';
 import { useToast } from '@ui';
 import { installMapControls } from '@/map/controls';

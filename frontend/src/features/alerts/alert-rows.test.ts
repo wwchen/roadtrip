@@ -1,4 +1,3 @@
-// The alerts panel's rules: ordering, counts, copy, and the Slack deep-link contract.
 import { afterEach, describe, expect, test } from 'vitest';
 import type { Watch } from '@/api/watches-api';
 import {
@@ -30,7 +29,6 @@ const watch = (over: Partial<Watch> = {}): Watch =>
   }) as Watch;
 
 describe('byStartDate', () => {
-  // The nearest window is the one the user is about to act on.
   test('sorts soonest first', () => {
     const sorted = [watch({ id: 2, start_date: '2026-09-01' }), watch({ id: 1, start_date: '2026-08-10' })]
       .sort(byStartDate)
@@ -49,8 +47,6 @@ describe('byStartDate', () => {
 });
 
 describe('alertRows', () => {
-  // One list across all statuses, not three sections: the question is "what am I
-  // waiting on, soonest first".
   test('flattens the three status lists into one sorted list', () => {
     const rows = alertRows([
       [watch({ id: 3, start_date: '2026-09-05' })],
@@ -87,7 +83,6 @@ describe('alertName', () => {
     expect(alertName(watch(), new Map([[232447, 'Bowman Bay']]))).toBe('Bowman Bay');
   });
 
-  // A row has to be identifiable even before its name lands.
   test('falls back to the id while the name is unknown', () => {
     expect(alertName(watch(), new Map())).toBe('POI 232447');
   });
@@ -100,7 +95,6 @@ describe('alertName', () => {
 });
 
 describe('doneKind', () => {
-  // The list payload does not carry the trigger flag, so the window is the evidence.
   test('a window that has passed expired', () => {
     expect(doneKind(watch({ end_date: '2026-08-01' }), '2026-08-09')).toBe('expired');
   });
@@ -121,7 +115,6 @@ describe('the Slack deep link', () => {
     });
   });
 
-  // An unknown action is dropped rather than pulsing nothing: the row still focuses.
   test('keeps the row but drops an action it does not know', () => {
     expect(readAlertDeepLink('?alert=9&alert_action=explode')).toEqual({
       watchId: '9',
@@ -134,8 +127,6 @@ describe('the Slack deep link', () => {
     expect(readAlertDeepLink('')).toBeNull();
   });
 
-  // Stripped so a refresh or a back-nav does not re-focus the row — and only the two
-  // alert parameters, because a shared route or an open drawer may be in there too.
   test('clearing takes both parameters and leaves the rest', () => {
     window.history.replaceState(null, '', '/?alert=9&alert_action=pause&route=abc&poi=5');
 

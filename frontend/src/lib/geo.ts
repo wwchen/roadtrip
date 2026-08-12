@@ -1,10 +1,4 @@
-// Pure geometry helpers. Typed port of the geometry section of web/core.js —
-// behavior preserved exactly.
-//
-// Split out of core.js because core.js also owns the mutable `state` singleton
-// and the MapLibre popup, neither of which survives the migration: `state`
-// becomes mapStore and the popup becomes a React-owned overlay. These four
-// functions are pure and move as-is.
+// Pure geometry helpers shared by map and drawer code.
 
 /** `[[west, south], [east, north]]` — the bbox order core.js and the API use. */
 export type Bbox = [[number, number], [number, number]];

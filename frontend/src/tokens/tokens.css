@@ -28,7 +28,7 @@
 
    JS consumers (MapLibre paint properties, canvas charts) cannot read
    CSS custom properties directly — they go through
-   `web/design-system/tokens.js`, which resolves these at runtime.
+   `tokens.ts`, which resolves these at runtime.
    ============================================================ */
 
 :root {

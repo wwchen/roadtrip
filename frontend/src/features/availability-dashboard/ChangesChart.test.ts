@@ -1,6 +1,3 @@
-// The chart's substance is its grouping and its stepping, both of which are pure.
-// The canvas itself is not testable in jsdom (no 2D context), so the component's
-// effect is verified by hand in a browser and the data shaping is pinned here.
 import { describe, expect, test } from 'vitest';
 import type { AvailabilityChange } from '@/api/availability-dashboard-api';
 import { buildDatasets } from './ChangesChart';
@@ -35,8 +32,6 @@ describe('buildDatasets', () => {
     expect(dataset.label).toBe('42 @ 2026-07-08');
   });
 
-  // Readings can arrive in any order; a line drawn out of order zig-zags back
-  // through time.
   test('sorts each series chronologically', () => {
     const [dataset] = buildDatasets([
       change({ observed_at: '2026-07-03T00:00:00Z', to_status: 'reserved' }),
@@ -61,8 +56,6 @@ describe('buildDatasets', () => {
     expect(datasets.map((d) => d.data[0].y)).toEqual([2, 1.5, 1, 0]);
   });
 
-  // first_come sits BETWEEN reserved and available deliberately: it is a weaker
-  // form of "you can camp here", not a rung of its own.
   test('places first_come between reserved and available', () => {
     const [[fc], [reserved], [available]] = [
       buildDatasets([change({ to_status: 'first_come' })]),
@@ -80,8 +73,6 @@ describe('buildDatasets', () => {
     expect(dataset.data[0].y).toBe(-1);
   });
 
-  // A status holds from when it was observed until the next observation, so the
-  // step belongs at the new reading rather than interpolated toward it.
   test('steps before each reading', () => {
     const [dataset] = buildDatasets([change()]);
     expect(dataset.stepped).toBe('before');

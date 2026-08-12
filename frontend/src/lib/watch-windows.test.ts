@@ -1,5 +1,3 @@
-// The watch rules. These gates decide what a user is offered, and offering a watch
-// a provider cannot service is a promise we cannot keep — so each one is pinned.
 import { describe, expect, test } from 'vitest';
 import type { Watch } from '@/api/watches-api';
 import {
@@ -55,16 +53,12 @@ describe('capabilities', () => {
     expect(normalizeWatchCapabilities({} as never).triggerKinds.size).toBe(0);
   });
 
-  // Either channel counts: gating on Slack alone would hide alerts from anyone
-  // whose provider is configured for email.
   test('either notify channel means alerts are supported', () => {
     expect(supportsWatchAlerts(normalizeWatchCapabilities({ trigger_kinds: ['slack_notify'], booking_actions: [] }))).toBe(true);
     expect(supportsWatchAlerts(normalizeWatchCapabilities({ trigger_kinds: ['email_notify'], booking_actions: [] }))).toBe(true);
     expect(supportsWatchAlerts(NO_WATCH_CAPABILITIES)).toBe(false);
   });
 
-  // Add-to-cart alone is not a capability: the action says the provider has a
-  // cart, the trigger says our poller may drive it. One without the other fails.
   test('add to cart needs both the action and the trigger', () => {
     const both = normalizeWatchCapabilities({ trigger_kinds: ['atc'], booking_actions: ['add_to_cart'] });
     const actionOnly = normalizeWatchCapabilities({ trigger_kinds: [], booking_actions: ['add_to_cart'] });
@@ -75,8 +69,6 @@ describe('capabilities', () => {
     expect(supportsAddToCart(triggerOnly)).toBe(false);
   });
 
-  // A watch alert is not implied by a cart: a provider may hold sites without
-  // being able to tell anyone.
   test('a cart-only provider still supports no alerts', () => {
     expect(supportsWatchAlerts(normalizeWatchCapabilities({ trigger_kinds: ['atc'], booking_actions: ['add_to_cart'] }))).toBe(false);
   });
@@ -92,8 +84,6 @@ describe('the watch window', () => {
     expect(stayEndDate('2026-12-31')).toBe('2027-01-01');
   });
 
-  // A spring-forward day is 23 hours long, which is where naive date maths lands
-  // back on the same day.
   test('survives a DST transition', () => {
     expect(stayEndDate('2026-03-08')).toBe('2026-03-09');
   });
@@ -110,8 +100,6 @@ describe('indexing the user"s watches', () => {
     expect(index.get('2026-08-11|2026-08-12')?.id).toBe(1);
   });
 
-  // A fired watch is history. Showing its cell as watched invites someone to wait
-  // for an alert that has already been sent.
   test('drops watches that are done', () => {
     expect(indexWatchesByWindow([watch({ status: 'done' })], 42).size).toBe(0);
   });
@@ -120,9 +108,6 @@ describe('indexing the user"s watches', () => {
     expect(indexWatchesByWindow([watch({ status: 'paused' })], 42).size).toBe(1);
   });
 
-  // Filtered here rather than trusted from the query parameter: the response is
-  // the user's watches, and one for a different campground must not mark this
-  // grid's cells.
   test('ignores watches for another POI', () => {
     expect(indexWatchesByWindow([watch({ poi_id: 99 })], 42).size).toBe(0);
   });
@@ -141,7 +126,6 @@ describe('indexing the user"s watches', () => {
     expect(indexWatchesByWindow([watch({ poi_id: 42 })], '42').size).toBe(1);
   });
 
-  // Single-day watches, so the start date is the watched column.
   test('reduces to the set of watched days', () => {
     const index = indexWatchesByWindow(
       [watch(), watch({ id: 2, start_date: '2026-08-14', end_date: '2026-08-15' })],

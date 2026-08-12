@@ -23,12 +23,6 @@ describe('formatPhone', () => {
   });
 });
 
-// These two carried no tests of their own: every rule below was asserted through
-// `callButtonsHTML`, the HTML-string builder that went with `web/`. Restated
-// directly rather than dropped, since `CallButtons` in `features/drawer/parts.tsx`
-// depends on exactly these rules. The one assertion that did NOT survive is the
-// escaping of provider data into markup — React escapes what it renders, so there
-// is no longer any hand-built markup here to escape into.
 describe('phoneNumbers', () => {
   test('reads a single number as one entry', () => {
     expect(phoneNumbers('530.336.5521')).toEqual(['530.336.5521']);

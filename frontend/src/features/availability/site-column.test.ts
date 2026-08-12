@@ -1,9 +1,3 @@
-// The persisted width of the matrix's frozen Site column.
-//
-// Worth its own suite for the legacy-default migration, which is a product decision
-// hiding in a storage read: everyone who had used the grid before the column was
-// narrowed had the old default persisted, and honouring it would have left them all on
-// a width nobody chose.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   DEFAULT_SITE_COLUMN_WIDTH,
@@ -46,7 +40,6 @@ describe('loading', () => {
     expect(loadSiteColumnWidth()).toBe(200);
   });
 
-  // The migration: the old default reads as "never resized".
   test('treats the legacy default as unset', () => {
     window.localStorage.setItem(KEY, String(LEGACY_DEFAULT));
 
@@ -65,8 +58,6 @@ describe('loading', () => {
     expect(loadSiteColumnWidth()).toBe(DEFAULT_SITE_COLUMN_WIDTH);
   });
 
-  // Safari's private mode throws on access rather than returning null, and a grid
-  // that will not render because of a storage preference would be a poor trade.
   test('defaults when storage throws', () => {
     vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
       throw new Error('SecurityError');
@@ -89,7 +80,6 @@ describe('saving', () => {
     expect(loadSiteColumnWidth()).toBe(190);
   });
 
-  // A blocked write must not break a drag that is otherwise working.
   test('is silent when storage throws', () => {
     vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
       throw new Error('QuotaExceededError');

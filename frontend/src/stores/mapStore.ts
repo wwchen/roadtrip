@@ -1,22 +1,7 @@
 // Map UI state: viewport, layer filters, and the selected POI / drawer.
 //
-// Replaces the `state` singleton in web/core.js, minus the parts that are not
-// state. Deliberately absent, and why:
-//   map          — the MapLibre instance. Owned by <MapProvider> in a ref; a
-//                  mutable non-serialisable handle in a store would re-render
-//                  every subscriber on any map change.
-//   activePopup  — a MapLibre Popup handle. Same reason.
-//   overlayData  — per-layer FeatureCollections. These are server data behind a
-//                  viewport cache, so TanStack Query and the imperative
-//                  `src/map/` layer module own them, not this store.
-//   bound        — which layers have had their handlers bound. Bookkeeping the
-//                  React port does not need: an effect unbinds what it bound.
-//   mapReady     — whether layers may be installed. <MapProvider> owns this as
-//                  `styleEpoch` in its context, because it is a lifecycle fact
-//                  about one map instance rather than UI state, and because two
-//                  sources of truth for "is the style up" is precisely how an
-//                  overlay ends up attached to a style that no longer describes
-//                  it. Phase 0 had it here with nothing writing it.
+// MapLibre handles and overlay data intentionally stay in MapProvider, map
+// modules, and queries; they are lifecycle/server state rather than UI state.
 import { create } from 'zustand';
 import type { ViewportBbox } from '@/map/viewport';
 import type { OverlayKey } from '@/map/overlays';
@@ -41,8 +26,7 @@ export interface MapState {
   /**
    * Overlays the user switched OFF.
    *
-   * Stored as the hidden set, not the visible one, so a legend row defaults to on
-   * — matching the legacy panel, whose checkboxes ship `checked`.
+   * Stored as the hidden set so newly introduced overlays default to visible.
    */
   hiddenOverlays: OverlayKey[];
   /**

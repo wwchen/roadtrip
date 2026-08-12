@@ -1,6 +1,3 @@
-// The stop list's rules, which in the vanilla were four intertwined branches of
-// one DOM handler. Each case here is a rule someone would otherwise have to
-// rediscover by dragging rows around in a browser.
 import { describe, expect, test } from 'vitest';
 import type { TripStop } from '@/stores/tripStore';
 import {
@@ -34,8 +31,6 @@ describe('isLocated', () => {
     expect(isLocated(null)).toBe(false);
   });
 
-  // (0, 0) is a coordinate in the Gulf of Guinea, and it passes every finite
-  // check — routing from it is worse than waiting for the callback.
   test('a pending placeholder is not, despite having coordinates', () => {
     expect(isLocated(locating())).toBe(false);
   });
@@ -63,8 +58,6 @@ describe('roles and labels', () => {
     expect(stopRole(2, 3)).toBe('destination');
   });
 
-  // A one-row list is browse mode's search box; role() answers origin for it,
-  // and the placeholder is what says it is a search box rather than a trip.
   test('browse mode names its one row a search box', () => {
     expect(stopPlaceholder(0, 1, 'browse')).toBe('Search a place or pin…');
     expect(stopPlaceholder(0, 2, 'directions')).toBe('Origin');
@@ -77,7 +70,6 @@ describe('roles and labels', () => {
     expect(markerLabel(1, 2)).toBe('B');
   });
 
-  // The alphabet runs out long before MAX_STOPS does.
   test('the destination letter stops at Z', () => {
     expect(markerLabel(29, 30)).toBe('Z');
   });
@@ -108,8 +100,6 @@ describe('withStopAt', () => {
 });
 
 describe('entering directions', () => {
-  // The search the user already typed becomes the origin — they searched for
-  // where they are, then asked for directions from it.
   test('keeps a filled search row as the origin and focuses the destination', () => {
     expect(enterDirections([A])).toEqual({
       stops: [A, null],
@@ -122,8 +112,6 @@ describe('entering directions', () => {
     expect(enterDirections([]).focusRow).toBe(0);
   });
 
-  // Reached from a shared link, which arrives with both ends already set. Nothing
-  // asks for the route: the trip is complete, and `useRoute` is keyed on the stops.
   test('leaves a complete trip alone, with nothing to focus', () => {
     const result = enterDirections([A, B]);
 
@@ -150,8 +138,6 @@ describe('adding an empty stop', () => {
 });
 
 describe('removing a stop', () => {
-  // Origin and destination are structural: directions mode with one end is not a
-  // state the rows can render, so the X clears the slot and keeps the row.
   test('clears a filled destination in place, and focuses it', () => {
     expect(removeStopAt([A, B], 1, 'directions')).toEqual({
       stops: [A, null],
@@ -168,9 +154,6 @@ describe('removing a stop', () => {
     expect(removeStopAt([A, C, B], 1, 'directions').stops).toEqual([A, B]);
   });
 
-  // Removing a via from a complete trip leaves a complete trip — a different one,
-  // so a different route. Nothing here says "re-route": the stops are the query
-  // key, so the new list is the new request.
   test('leaves a complete trip complete after removing a via', () => {
     expect(allStopsFilled(removeStopAt([A, C, B], 1, 'directions').stops)).toBe(true);
   });
@@ -179,8 +162,6 @@ describe('removing a stop', () => {
     expect(allStopsFilled(removeStopAt([A, C, null], 1, 'directions').stops)).toBe(false);
   });
 
-  // Browse mode's row is the search box, so its X clears the text and the box
-  // stays — the same rule as an endpoint, for the same reason.
   test('clears browse mode"s search row in place', () => {
     expect(removeStopAt([A], 0, 'browse')).toEqual({
       stops: [null],
@@ -197,8 +178,6 @@ describe('removing a stop', () => {
     });
   });
 
-  // One waypoint is not a route, so the survivor becomes the browse selection.
-  // Reached from a stop list left over from a previous directions session.
   test('falls back to browse mode when only one stop would remain', () => {
     expect(removeStopAt([A, null], 1, 'browse')).toEqual({
       stops: [A],
@@ -207,9 +186,6 @@ describe('removing a stop', () => {
     });
   });
 
-  // Directions mode has no state with fewer than two rows, so an empty endpoint's
-  // X has nothing to do. The vanilla re-rendered, cleared a route layer that
-  // could not exist, and — on desktop — stole focus back into the row.
   test('an empty endpoint in a two-row trip changes nothing', () => {
     expect(removeStopAt([null, B], 0, 'directions')).toEqual({
       stops: [null, B],
@@ -240,8 +216,6 @@ describe('reordering', () => {
     expect(result.focusRow).toBeNull();
   });
 
-  // A drop can carry a stale index — the row that started the drag may have been
-  // removed by the time it lands.
   test('ignores an out-of-range or non-numeric source', () => {
     expect(reorderStops([A, B], 5, 0).stops).toEqual([A, B]);
     expect(reorderStops([A, B], Number.NaN, 0).stops).toEqual([A, B]);
@@ -253,8 +227,6 @@ describe('reordering', () => {
 });
 
 describe('a stop added from the drawer', () => {
-  // The POI is the destination; the origin is the user's business. On desktop we
-  // focus it, on a phone we offer to fill it from the device's location.
   test('browse mode becomes a two-row trip with the POI as destination', () => {
     expect(addExternalStop([A], 'browse', B, { autoFocusOrigin: true })).toEqual({
       stops: [null, B],
@@ -280,7 +252,6 @@ describe('a stop added from the drawer', () => {
     expect(allStopsFilled(result.stops)).toBe(true);
   });
 
-  // The endpoint the user chose stays the endpoint.
   test('inserts before the destination when that slot is taken', () => {
     const result = addExternalStop([A, B], 'directions', C, { autoFocusOrigin: true });
 
@@ -295,9 +266,7 @@ describe('a stop added from the drawer', () => {
   });
 });
 
-// Regressions from an adversarial review of 4e. Each of these was wrong in a way no
-// existing test noticed.
-describe('review regressions', () => {
+describe('edge cases', () => {
   test('a pending stop cannot be shared, even though (0, 0) is finite', () => {
     // Covered end to end in share-links.test.ts; asserted here because `isLocated` is
     // the predicate the planner gates on and the encoder now mirrors it.

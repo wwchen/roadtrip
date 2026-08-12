@@ -1,8 +1,3 @@
-// Availability error copy.
-//
-// The table exists because the UI used to say "Upstream unavailable" for four unrelated
-// faults, one of which happened while the booking site was fine. Each string here tells
-// the user whether retrying is worth it, so each one is pinned.
 import { describe, expect, test } from 'vitest';
 import { formatAvailabilityError } from './availability-errors';
 
@@ -22,16 +17,12 @@ describe('formatting a provider fault', () => {
     }
   });
 
-  // "blocked (upstream HTTP 403)" and "blocked (upstream HTTP 503)" are different
-  // conversations with the provider.
   test('appends the upstream status when there is one', () => {
     expect(formatAvailabilityError({ error: 'upstream_blocked', upstream_status: 403 }, 502)).toBe(
       'Booking site blocked the request (upstream HTTP 403)',
     );
   });
 
-  // A code we have not written prose for is still the most useful thing in a
-  // screenshot — more useful than "something went wrong".
   test('shows an unrecognised code verbatim', () => {
     expect(formatAvailabilityError({ error: 'captcha_wall' }, 503)).toBe('captcha_wall');
   });

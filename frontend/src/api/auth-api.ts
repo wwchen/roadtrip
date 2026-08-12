@@ -1,5 +1,3 @@
-// Client for the auth surface. Typed port of web/api/auth-api.js.
-//
 // The session lives in an HttpOnly cookie, so the page cannot read who it is —
 // it asks /api/me instead. That is the point of HttpOnly: a missed escape
 // somewhere must not be able to exfiltrate a session.

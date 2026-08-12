@@ -1,5 +1,3 @@
-// Search-as-you-type: the debounce, the two parallel sources, and what happens
-// when one of them fails.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createTestQueryClient } from '@/test/query-client';
@@ -86,7 +84,6 @@ describe('typing a query', () => {
     expect(result.current.isEmpty).toBe(false);
   });
 
-  // Every keystroke would otherwise be two requests.
   test('debounces a burst of keystrokes into one round of requests', async () => {
     const { rerender } = renderHook(({ q }: { q: string }) => useSearchResults(q), {
       wrapper,
@@ -103,8 +100,6 @@ describe('typing a query', () => {
     expect(urls.find((u) => u.includes('/api/pois/search'))).toContain('q=upper+p');
   });
 
-  // Deleting the query has to close the dropdown at once: waiting out the debounce
-  // to remove results the user just cleared reads as lag.
   test('clears immediately when the box is emptied', async () => {
     const { result, rerender } = renderHook(({ q }: { q: string }) => useSearchResults(q), {
       wrapper,
@@ -137,7 +132,6 @@ describe('proximity bias', () => {
     expect(urls.find((u) => u.includes('/api/geocode'))).toContain('proximity=-122.0000%2C47.0000');
   });
 
-  // Legitimate on first paint, before the map has reported a viewport.
   test('asks without a bias when neither is known', async () => {
     renderHook(() => useSearchResults('upper pines'), { wrapper });
 
@@ -147,13 +141,6 @@ describe('proximity bias', () => {
 });
 
 describe('when a source fails', () => {
-  // A red banner over a search box the user is still typing in is worse than fewer
-  // results, so the other source's rows still show.
-  //
-  // Note which layer absorbs this: `geocode()` resolves to an empty result list on a
-  // failed response rather than throwing (its own documented contract, since it backs
-  // a type-ahead), so the hook sees a successful query with nothing in it. The POI
-  // client throws, which is the case the next test covers.
   test('still shows the POI hits when geocoding fails', async () => {
     geocodeStatus = 500;
     const { result } = renderHook(() => useSearchResults('upper pines'), { wrapper });

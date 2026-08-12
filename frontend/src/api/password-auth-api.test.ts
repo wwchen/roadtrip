@@ -1,6 +1,3 @@
-// Ports web/api/password-auth-api.test.mjs to Vitest. Keeps the `_fetch`
-// injection the original tests used rather than stubbing the global, because that
-// seam is part of this module's contract (see password-auth-api.ts).
 import { describe, expect, test, vi } from 'vitest';
 import {
   beginPasswordLogin,

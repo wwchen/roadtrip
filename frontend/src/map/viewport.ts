@@ -1,17 +1,10 @@
 // What to ask `POST /api/pois` for, given where the map is looking.
-//
-// Port of the request-shaping half of web/app.js's `refreshBbox`: read the
-// viewport, decide which categories to request, and derive the cache key. Pure,
-// so the zoom gate and the key are pinned by tests rather than by driving a map.
 
 /** `[west, south, east, north]` — the flat order the endpoint takes. */
 export type ViewportBbox = [number, number, number, number];
 
 /**
- * One round-trip per pan, debounced so a drag does not fire mid-gesture.
- *
- * The vanilla loop's value. It is a floor on how fast pins can follow the map,
- * so it is deliberately short.
+ * One round-trip per pan, with a short debounce so a drag does not fire mid-gesture.
  */
 export const VIEWPORT_DEBOUNCE_MS = 250;
 

@@ -1,4 +1,3 @@
-// Row content for the selected-day site list.
 import { describe, expect, test } from 'vitest';
 import type { Campsite } from '@/api/campsite-api';
 import {
@@ -19,8 +18,6 @@ describe('resolving a day"s ids to rows', () => {
     expect(rows.map((row) => row.id)).toEqual([3, 1]);
   });
 
-  // The header's count comes from the availability response. Dropping a row the
-  // catalog is missing would make that count look wrong.
   test('stubs a row the catalog does not have', () => {
     const rows = campsitesForIds([site(1)], ['1', '99']);
 
@@ -44,7 +41,6 @@ describe('the row summary', () => {
     ).toEqual(['Sleeps up to 6', 'By the water.']);
   });
 
-  // Three different claims, phrased differently on purpose.
   test('phrases capacity by what is known', () => {
     expect(rowDetails(site(1, { source_payload: { min_capacity: 2, max_capacity: 6 } }))).toEqual([
       'Sleeps 2-6',
@@ -106,7 +102,6 @@ describe('row order', () => {
     expect(rows.map((row) => row.name)).toEqual(['Site 1', 'Site 9', 'Site 10']);
   });
 
-  // Aspira's resource-id-only rows are the least identifiable, so they go last.
   test('puts loop-less rows last', () => {
     const rows = [site(1, { name: 'Zed' }), site(2, { name: 'Aaa', loop_name: 'B' })].sort(
       compareListRows,

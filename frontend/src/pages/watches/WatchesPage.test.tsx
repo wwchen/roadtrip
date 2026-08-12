@@ -1,11 +1,3 @@
-// Page-level tests for the rebuilt watches page.
-//
-// These replace web/watches/watches-page.test.mjs. That suite existed mostly to
-// guard one bug — a `finally` block that repainted the form over the signed-out
-// message after a 401 — plus the `isUnauthorized` predicate. The bug cannot recur
-// here: signed-out is derived from the query error, so there is no imperative
-// repaint to race with. What is worth testing instead is the behavior the user
-// sees, which is what these cover.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { QueryClient } from '@tanstack/react-query';
 import { createTestQueryClient } from '@/test/query-client';
@@ -32,9 +24,7 @@ const watch = (fields: Partial<Watch> = {}): Watch => ({
   ...fields,
 });
 
-// ---------------------------------------------------------------------------
 // Fetch harness. Responders claim a request by URL+method; first match wins.
-// ---------------------------------------------------------------------------
 
 interface Recorded {
   url: string;
@@ -215,7 +205,6 @@ describe('loading', () => {
 });
 
 describe('signed out', () => {
-  // A 401 is a normal state for this page, not an error.
   test('a 401 prompts for sign-in and hides the form', async () => {
     stubApi(watchListFails(401, { error: 'unauthenticated' }));
     renderPage();
@@ -245,7 +234,6 @@ describe('create', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Create' }));
 
     await waitFor(() => expect(postedTo('/api/watches')).toBeTruthy());
-    // poi_id goes out as a number, not the raw input string the vanilla form sent.
     expect(postedTo('/api/watches')!.body).toMatchObject({
       poi_id: 42,
       trigger_kinds: ['slack_notify'],
@@ -289,8 +277,6 @@ describe('create', () => {
     expect(screen.queryByLabelText('Email address')).toBeNull();
   });
 
-  // createWatch attaches the raw response text as `.body`; it carries the
-  // backend's validation detail, which beats the bare status line.
   test('surfaces the backend validation detail in the form', async () => {
     stubApi(
       watchList(),
@@ -352,7 +338,6 @@ describe('edit', () => {
     });
   });
 
-  // The only reason to edit a finished watch is to run it again.
   test('reactivates a done watch on save', async () => {
     stubApi(listWith7({ status: 'done' }), getWatch7({ status: 'done' }), modifyOk());
     await openEditor();
@@ -373,10 +358,6 @@ describe('edit', () => {
     expect(postedTo(MODIFY_WATCH_7)!.body).not.toHaveProperty('status');
   });
 
-  // The same conditional-remount trap as in `create`, but for a field that opened
-  // with a value — the case that sends mail to the wrong place. Editing `#alerts`
-  // to `#new` and then toggling Slack off and on used to redisplay `#alerts` while
-  // the payload still carried `#new`.
   test('an edited channel survives its toggle being switched off and on', async () => {
     stubApi(listWith7(), getWatch7(), modifyOk());
     await openEditor();
@@ -457,8 +438,6 @@ describe('pause and delete', () => {
     expect(await screen.findByText('Watch #7 deleted.')).toBeInTheDocument();
   });
 
-  // A session that expires between load and click used to fail silently: the
-  // lists had already succeeded, so nothing re-derived the signed-out state.
   test('a 401 on delete surfaces the sign-in prompt instead of failing silently', async () => {
     let sessionValid = true;
     stubApi(
@@ -505,7 +484,6 @@ describe('pause and delete', () => {
     expect(await screen.findByText('Could not delete watch.')).toBeInTheDocument();
   });
 
-  // Deleting the watch being edited would leave the form pointing at nothing.
   test('deleting the watch under edit falls back to create', async () => {
     stubApi(
       watchList(watch({ id: 7 })),
@@ -559,9 +537,6 @@ describe('deep links', () => {
     expect(await screen.findByText('Watch #7 deleted.')).toBeInTheDocument();
   });
 
-  // A settled 5xx is not permission to act. The page says "Could not load
-  // watches." at the same time, so firing the delete would destroy a watch the
-  // user was never shown.
   test('a deep-linked delete does not run when the list failed to load', async () => {
     window.history.replaceState(null, '', '/watches.html?action=delete&id=7');
     stubApi(watchListFails(500, { error: 'boom' }), route(DELETE_WATCH_7, 'POST', noContent));
@@ -571,8 +546,6 @@ describe('deep links', () => {
     expect(requests.find((r) => r.url.includes('/delete'))).toBeUndefined();
   });
 
-  // And it stays dropped rather than staying armed: pressing Retry asks to reload
-  // the list, not to delete anything.
   test('a deep-linked delete does not fire when a later retry succeeds', async () => {
     window.history.replaceState(null, '', '/watches.html?action=delete&id=7');
     let failing = true;
@@ -597,8 +570,6 @@ describe('deep links', () => {
     expect(requests.find((r) => r.url.includes('/delete'))).toBeUndefined();
   });
 
-  // The legacy page skipped applyUrlAction entirely when signed out, so a
-  // notification link followed by an expired session cannot delete a watch.
   test('a deep-linked delete does not run when signed out', async () => {
     window.history.replaceState(null, '', '/watches.html?action=delete&id=7');
     stubApi(watchListFails(401, { error: 'unauthenticated' }));
@@ -608,7 +579,6 @@ describe('deep links', () => {
     expect(requests.find((r) => r.url.includes('/delete'))).toBeUndefined();
   });
 
-  // And it stays dropped if the watch queries are refreshed after sign-in.
   test('a dropped deep-linked delete does not fire after signing in later', async () => {
     window.history.replaceState(null, '', '/watches.html?action=delete&id=7');
     let signedIn = false;

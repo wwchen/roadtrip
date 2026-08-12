@@ -1,7 +1,7 @@
 // Week navigation: back, the date-range label that opens a calendar, forward, and
 // an "Earliest" jump.
 //
-// Port of `renderWeekNav` in web/availability/site-matrix.js. The Earliest button
+// The Earliest button
 // appears only when the user has paged away from the earliest bookable date — a
 // permanent "today" button that does nothing most of the time trains people to
 // ignore it, and the grid layout shifts to a three-column grid without it (see the

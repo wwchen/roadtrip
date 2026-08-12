@@ -1,20 +1,5 @@
-// The trigger form for one availability watch.
-//
-// Port of web/availability/watch-editor.js. Two things about that module are worth
-// knowing, because both change here:
-//
-//   - It injected its own ~150 lines of CSS into `document.head` from JS, guarded by
-//     an id check. That is gone: the rules live in `availability.css` with everything
-//     else, which is also how they become subject to the colour guardrail.
-//   - Its trigger state was a hand-rolled `{slackNotify, emailNotify, addToCart, …}`
-//     object with its own payload builder. `lib/watch-triggers.ts` already holds that
-//     shape and its `buildTriggerPayload`, ported in Phase 1 for the watches page, so
-//     this form uses it rather than restating the mapping. Both surfaces emit the same
-//     payload by construction now, which is what the vanilla comment said it wanted.
-//
-// The capability gates are honoured as the original had them: a trigger the provider
-// does not support is hidden, *unless* the watch being edited already uses it — an
-// existing watch must never be silently stripped of a trigger by opening its editor.
+// Unsupported triggers stay visible when an existing watch already uses them so
+// opening the editor can never silently strip its configuration.
 import { useState } from 'react';
 import { HttpError } from '@/api/http';
 import type { Watch } from '@/api/watches-api';

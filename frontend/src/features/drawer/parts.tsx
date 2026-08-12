@@ -1,9 +1,4 @@
 // The pieces every drawer type shares.
-//
-// Port of the composers in web/drawer/shared.js — `drawerHeader`, `buildSubline`,
-// `distanceTo`, `directionsButtonHTML`, `upstreamHTML`. They were HTML-string
-// builders with hand-rolled `escapeHtml` at every interpolation; as components,
-// escaping is the renderer's job and the injection risk goes away with it.
 import type { ReactNode } from 'react';
 import { Button } from '@ui';
 import { distanceKm, formatDistance } from '@/lib/geo';

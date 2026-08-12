@@ -1,6 +1,3 @@
-// No node --test suite existed for this client. These pin the two things most
-// easily broken in a port: the differing failure modes of the four read paths,
-// and the categories serialisation.
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   fetchOnRoutePois,
@@ -53,7 +50,6 @@ describe('poiSearchUrl', () => {
 });
 
 describe('searchPois', () => {
-  // The typeahead limit is deliberately lower than the catalog default.
   test('uses the typeahead limit of 8', async () => {
     const fetchStub = stubFetch(jsonResponse({ results: [] }));
 
@@ -62,8 +58,6 @@ describe('searchPois', () => {
     expect(fetchStub.last.url).toBe('/api/pois/search?q=lassen&limit=8');
   });
 
-  // Swallowing failure is the point: a typeahead should read "no matches", not
-  // blow up mid-keystroke.
   test.each([
     ['a 500', textResponse('boom', 500)],
     ['a 404', jsonResponse({ error: 'nope' }, 404)],
@@ -151,8 +145,6 @@ describe('POI detail', () => {
 });
 
 describe('POST search paths', () => {
-  // Flat [west, south, east, north], which is what PoisRequestSchema takes — the
-  // nested pair this test used to send never matched the wire.
   test('fetchViewportPois posts bbox, zoom, and categories', async () => {
     const fetchStub = stubFetch(jsonResponse({ type: 'FeatureCollection', truncated: false, features: [] }));
     const bbox = [-122, 40, -121, 41];
@@ -164,7 +156,6 @@ describe('POST search paths', () => {
     expect(fetchStub.last.body).toEqual({ bbox, zoom: 9, categories: ['campground'] });
   });
 
-  // radiusMiles is renamed to the wire's snake_case radius_miles.
   test('fetchOnRoutePois posts waypoints and radius_miles', async () => {
     const fetchStub = stubFetch(jsonResponse({ results: [] }));
     const waypoints = [

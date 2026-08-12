@@ -1,9 +1,5 @@
 // What the topbar says about a computed route.
 //
-// The formatting half of `showRouteSummary` / `formatRouteKm` / `formatDuration`
-// and the error mapping inside `tryFetchRoute` in web/topbar.js. Pure, so the copy
-// can be tested without a route request.
-//
 // `formatDrivingTime` is deliberately NOT `lib/format.ts`'s `formatDuration`,
 // which renders `45s` / `3m 20s` for the operations dashboard. A routing engine's
 // seconds are noise, and showing them invites the user to trust them.

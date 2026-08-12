@@ -1,9 +1,5 @@
 // The corridor's campgrounds, as cards.
 //
-// Port of `setTripPois` / `hydrateTripCards`' merge step / `compactSeasonLabel` /
-// `visibleCards` from web/topbar.js. Pure: the fetching is `useTripCards`, and the
-// rendering is `TripResults`.
-//
 // The shape of the problem is why this is split out. `/api/pois/on-route` answers with
 // SLIM features — an id, a point, a category, an agency — so a card starts as a
 // placeholder and gains its name, site count, season and rating when

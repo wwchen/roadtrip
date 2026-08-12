@@ -1,5 +1,3 @@
-// The settings modal: three tabs over one document, per-tab save, and the reseed
-// that keeps the masked Slack hint honest after a save.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { QueryClient } from '@tanstack/react-query';
 import { createTestQueryClient } from '@/test/query-client';
@@ -163,8 +161,6 @@ describe('save', () => {
     expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
   });
 
-  // The whole reason the legacy modal re-read settings after saving: storing a token
-  // produces a new hint, and the masked field has to show the new one.
   test('after saving a token the masked hint reflects the server, not what was typed', async () => {
     renderSettingsModal();
     await screen.findByLabelText('Display name');
@@ -172,10 +168,7 @@ describe('save', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Notifications' }));
     await userEvent.type(await screen.findByLabelText('Slack bot token'), 'xoxb-brand-new');
 
-    // The save stores the token, so both the PUT response and the subsequent GET
-    // carry the new hint. The GET is authoritative — as in the original, which
-    // re-read settings after saving and only fell back to the mutation response
-    // when that re-read failed.
+    // The subsequent GET is authoritative over the mutation response.
     const stored = () => json(settingsBody({ slack_configured: true, slack_token_hint: 'nnew' }));
     onPut = stored;
     getSettings = stored;

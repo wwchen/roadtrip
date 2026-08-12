@@ -28,8 +28,6 @@ describe('readMapViewport', () => {
     expect(readMapViewport(fakeMap([-124, 32, -114, 42], 7.4)).bbox).toEqual([-124, 32, -114, 42]);
   });
 
-  // The endpoint's zoom gate compares integers, and the cache key is derived
-  // from the same number — so the fractional zoom never reaches either.
   test('floors the zoom', () => {
     expect(readMapViewport(fakeMap([0, 0, 1, 1], 7.9)).zoom).toBe(7);
   });
@@ -45,9 +43,6 @@ describe('categories', () => {
     expect(request(CG_ZOOM_THRESHOLD).categories).toContain('campground');
   });
 
-  // Once a user has seen campgrounds, zooming back out must not make them
-  // vanish — the vanilla loop's `cgUnlocked` latch, expressed as a value in and
-  // a value out.
   test('an unlocked view keeps requesting campgrounds after zooming out', () => {
     const zoomedOut = request(3, true);
 
@@ -68,9 +63,6 @@ describe('the cache key', () => {
     );
   });
 
-  // The distinction the key exists for: below the threshold the server strips
-  // campgrounds from the response even though the client asked for them, so an
-  // unlocked low-zoom response must not satisfy a contained high-zoom view.
   test('separates a request that will get campgrounds from one that will not', () => {
     const unlockedButTooFarOut = request(3, true);
     const closeEnough = request(CG_ZOOM_THRESHOLD, true);

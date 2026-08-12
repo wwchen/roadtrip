@@ -30,10 +30,7 @@ import {
 import type { DrawerContentProps } from './registry';
 
 /**
- * Campground drawer. Port of web/drawer/campground.js plus the card sections from
- * web/campground-card.js (RFC 0003 + 0007).
- *
- * Above-the-fold order is deliberate and carried over: name → containing park →
+ * Above-the-fold order is deliberate: name → containing park →
  * agency → region and distance → season verdict → availability → actions. On a phone
  * that is about 310px of headroom, so anything below "More details" is collapsed.
  *

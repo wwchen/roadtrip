@@ -1,5 +1,3 @@
-// Notification links point at these URLs, so their shapes are a published
-// contract, not an internal detail.
 import { describe, expect, test } from 'vitest';
 import { readUrlAction } from './useUrlAction';
 
@@ -38,8 +36,6 @@ describe('readUrlAction', () => {
     expect(readUrlAction('?action=delete&id=7')).toEqual({ kind: 'delete', id: '7' });
   });
 
-  // Both need something to act on; a link without an id is malformed, and acting
-  // on it would be guessing.
   test.each([['?action=modify'], ['?action=delete'], ['?action=delete&id=']])(
     'returns null for %j, which has no id',
     (search) => {

@@ -1,8 +1,3 @@
-// Which rows the matrix shows, in what order, and what each cell means.
-//
-// `cellState` gets the most attention: it decides whether someone is shown a
-// booking button, so a wrong answer either hides a real opening or sends a user to
-// a booking page for a site that is taken.
 import { describe, expect, test } from 'vitest';
 import type { Campsite } from '@/api/campsite-api';
 import type { FusedDay } from './fuse';
@@ -44,8 +39,6 @@ describe('naming a site', () => {
     expect(siteName(site(1, { name: 'Bowman 12' }))).toBe('Bowman 12');
   });
 
-  // Aspira's availability map ships resource ids and no names; the number is what
-  // is printed on the post at the site, so it is the useful fallback.
   test('falls back to the provider ref, then the id', () => {
     expect(siteName(site(1, { data_provider_ref: '4321' }))).toBe('Site #4321');
     expect(siteName(site(7))).toBe('Site #7');
@@ -71,15 +64,12 @@ describe('the row set', () => {
     expect(rows.map((row) => row.name)).toEqual(['Site 1', 'Site 9', 'Site 10']);
   });
 
-  // Loop-less rows sort last rather than first: they are the least identifiable.
   test('puts loop-less rows last', () => {
     const rows = sortedCampsites([site(1, { name: 'Zed' }), site(2, { name: 'Aaa', loop_name: 'B' })]);
 
     expect(rows.map((row) => row.name)).toEqual(['Aaa', 'Zed']);
   });
 
-  // The catalog and the availability window are separate requests. The grid must
-  // still draw when the catalog is slower, or failed.
   test('synthesises rows from the days when the catalog is empty', () => {
     const rows = sortedCampsites([], [day('2026-08-10', { 5: 'available', 3: 'reserved' })]);
 
@@ -193,7 +183,6 @@ describe('counting a row"s open days', () => {
     ).toBe(1);
   });
 
-  // The derived id list fills in for a day that carried no per-site statuses...
   test('falls back to the day"s id list when the site has no explicit status', () => {
     const days = [
       day('2026-08-10', {}, { available_campsite_ids: [1], campsite_statuses: {} }),
@@ -204,7 +193,6 @@ describe('counting a row"s open days', () => {
     ).toBe(1);
   });
 
-  // ...but must never override one that said otherwise.
   test('an explicit reserved beats the id list', () => {
     const days = [day('2026-08-10', { 1: 'reserved' }, { available_campsite_ids: [1] })];
 
@@ -229,8 +217,6 @@ describe('what a cell means', () => {
     expect(cellState(site(1), d, ids(d)).value).toBe('available');
   });
 
-  // The subtle one: the day rolled up to available, but this site is not in the
-  // list of what is open — so it is taken, not open.
   test('a site absent from an available day"s id list reads reserved', () => {
     const d = day('2026-08-10', {}, {
       status: 'available',
@@ -241,8 +227,6 @@ describe('what a cell means', () => {
     expect(cellState(site(1), d, ids(d)).value).toBe('reserved');
   });
 
-  // Without an id list there is nothing to infer from, so the day's own status
-  // stands rather than being downgraded to a claim we cannot support.
   test('with no id list at all the day"s status stands', () => {
     const d = day('2026-08-10', {}, {
       status: 'available',
@@ -267,21 +251,17 @@ describe('what a cell means', () => {
 });
 
 describe('which cells can be watched', () => {
-  // Occupied now, but able to open up.
   test('reserved and first-come are watchable', () => {
     expect(isWatchableKind('reserved')).toBe(true);
     expect(isWatchableKind('first-come')).toBe(true);
   });
 
-  // Available is already bookable, and there is nothing to wait for on the rest.
   test('nothing else is', () => {
     for (const kind of ['available', 'closed', 'unknown', 'past']) {
       expect(isWatchableKind(kind)).toBe(false);
     }
   });
 
-  // These are `kind` values, not wire values: `first_come` renders `first-come`,
-  // and matching on the wire form would silently disable watches on those cells.
   test('matches the CSS kind, not the wire value', () => {
     expect(isWatchableKind('first_come')).toBe(false);
   });

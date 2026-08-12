@@ -1,9 +1,7 @@
 // Installing, painting and filtering the map's overlays.
 //
 // The React half of the imperative escape hatch: `src/map/overlays.ts` knows what
-// to do to the map, and this decides when. Port of the `style.load` reinstall
-// block in web/app.js plus the filter/visibility wiring scattered through
-// web/layers.js.
+// to do to the map, and this decides when.
 //
 // Five effects instead of one, on purpose — each keyed on exactly what it
 // depends on, so a pan does not rebuild layers and a legend click does not

@@ -1,13 +1,7 @@
 // Which rows the matrix shows, in what order, and what each cell means.
 //
-// The logic half of web/availability/site-matrix.js, extracted from the rendering
-// half. Everything here is pure: given a campsite catalog, the fused days and the
+// Given a campsite catalog, the fused days and the
 // filter state, it answers "which rows, in which order" and "what is this cell".
-// The component below it only draws.
-//
-// Worth separating rather than leaving inline, because these are the rules a
-// reviewer needs to check independently of any markup — particularly `cellState`,
-// which decides whether someone is shown a booking button.
 import { availabilityStatusMeta, normalizeAvailabilityStatus } from '@/lib/availability-status';
 import type { AvailabilityStatusMeta } from '@/lib/availability-status';
 import type { Campsite } from '@/api/campsite-api';

@@ -1,6 +1,3 @@
-// The two account panels. The legacy modules had no tests, so this is the first
-// pinning of their behaviour — including the one that matters operationally:
-// "Disconnect Slack" only exists when a token is actually stored.
 import { describe, expect, test, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -57,7 +54,6 @@ describe('AccountPanel', () => {
     expect(onSignOut).toHaveBeenCalledTimes(1);
   });
 
-  // Offering to disconnect nothing reads as a broken button.
   test('the danger zone is absent when no Slack token is stored', () => {
     render(
       <AccountPanel settings={settings()} onSignOut={vi.fn()} onDisconnectSlack={vi.fn()} />,
@@ -117,11 +113,6 @@ describe('ProfilePanel', () => {
     expect(screen.queryByLabelText('Verified')).not.toBeInTheDocument();
   });
 
-  // Wired to real state, not a bare spy. A spy that never re-renders cannot catch
-  // the LDS caret bug: the parent owns the value, so if it were fed back as a
-  // changing `value` prop the input's DOM would be swapped on every keystroke and
-  // only the first character would survive. Typing several characters through a
-  // re-rendering parent is the only way this shows up.
   test('reports every keystroke to its parent, not just the first', async () => {
     const s = settings({ profile: { display_name: '' } });
     const state = { values: profileValuesOf(s) };
@@ -158,7 +149,6 @@ describe('profile dirty tracking', () => {
     expect(isProfileDirty(settings(), { display_name: 'Grace', theme: 'system' })).toBe(true);
   });
 
-  // Clearing a name is an edit, so Save has to stay reachable.
   test('clearing a set name is dirty', () => {
     expect(isProfileDirty(settings(), { display_name: '', theme: 'system' })).toBe(true);
   });

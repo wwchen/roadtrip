@@ -1,6 +1,3 @@
-// The basemap registry. Pure, so it is pinned directly — the DOM half of
-// web/basemap.js (a <select> and a checkbox wired by id) is React's job now and is
-// not ported.
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { RasterSourceSpecification, StyleSpecification } from 'maplibre-gl';
 import {
@@ -50,7 +47,6 @@ describe('the registry', () => {
     }
   });
 
-  // Retina tiles, or the Carto basemaps look soft on a 2x display.
   test('the Carto tiles request @2x', () => {
     for (const url of rasterSource('carto-voyager').tiles ?? []) {
       expect(url).toContain('@2x');
@@ -68,14 +64,11 @@ describe('initialBasemapKey', () => {
     expect(initialBasemapKey('light')).toBe('carto-dark');
   });
 
-  // A stored key outlives the registry. Handing setStyle an undefined style would
-  // leave a blank map, so an unknown key has to fall back.
   test('falls back when the remembered basemap no longer exists', () => {
     window.localStorage.setItem(BASEMAP_STORAGE_KEY, 'a-basemap-we-deleted');
     expect(initialBasemapKey('light')).toBe(DEFAULT_BASEMAP);
   });
 
-  // Safari's private mode throws on localStorage rather than returning null.
   test('survives localStorage throwing', () => {
     vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => {
       throw new Error('SecurityError');
@@ -127,7 +120,6 @@ describe('rememberBasemapKey', () => {
     expect(window.localStorage.getItem(BASEMAP_STORAGE_KEY)).toBe('osm');
   });
 
-  // A blocked write must not break the map, only the persistence.
   test('a failed write does not throw', () => {
     vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
       throw new Error('QuotaExceededError');

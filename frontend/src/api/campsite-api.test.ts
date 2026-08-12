@@ -1,6 +1,3 @@
-// Ports web/campsite-api.test.mjs to Vitest. Covers both clients it exercised —
-// the availability window and the canonical campsite catalog — because the pair
-// is the contract the Phase-4 drawer reads.
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { requestPoiCampsitesAvailability } from './availability-api';
 import { fetchPoiCampsites, poiCampsitesUrl } from './campsite-api';
@@ -42,7 +39,6 @@ describe('requestPoiCampsitesAvailability', () => {
     expect(fetchStub.last.url).toBe('/api/pois/42/campsites/availability?start_date=2026-07-08');
   });
 
-  // Returns the Response, not parsed JSON — the week grid branches on status.
   test('resolves to the raw Response', async () => {
     stubFetch(jsonResponse({ poi_id: 42 }, 404));
 

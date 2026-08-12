@@ -1,21 +1,4 @@
-// Phone parsing and formatting. Typed port of the phone section of web/core.js —
-// behaviour preserved exactly. `features/drawer/parts.tsx`'s `CallButtons` is the
-// consumer; these three are the shared rule it renders from.
-//
-// Was `lib/html.ts`, and carried two markup builders that Phase 5 took with `web/`:
-//
-//   - `callButtonsHTML` built `<a class="cg-btn …">Call …</a>` strings for the
-//     vanilla drawer. `CallButtons` renders the same thing as components, so once
-//     the vanilla tree was gone the string builder had no caller.
-//   - `escapeHtml` never had one at all: `git log -S` finds no non-test importer in
-//     `frontend/src` since Phase 0 ported it. It was ported for the MapLibre popups
-//     and the campground card, and 4b/4c built both as components instead. Meanwhile
-//     `format.ts` recorded why it should not exist ("React escapes text nodes itself.
-//     Porting it would invite double-escaping"), and the one place markup IS built by
-//     hand — `descriptionHtml` in `upstream-html.ts` — escapes *by construction*,
-//     setting text nodes and reading back `outerHTML` precisely so there is no
-//     hand-rolled escaper to get wrong. Its tests went with it; `upstream-html`'s own
-//     suite covers the sanitiser that actually guards `dangerouslySetInnerHTML`.
+// Shared phone parsing and formatting for drawer call actions.
 //
 // Which left a file named `html.ts` containing no HTML. Hence the rename.
 

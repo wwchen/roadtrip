@@ -1,11 +1,8 @@
-// Client for the account settings surface. Typed port of web/api/account-api.js.
-//
 // All mutations return the updated settings object so callers can refresh state
 // without a second round-trip.
 //
 // Error responses carry `{ error: "<code>", detail }`. The thrown HttpError has
-// `.code` set to that string so callers can surface a specific message — Phase 3
-// ports `web/account/settings-errors.js` to map codes to copy.
+// `.code` set to that string so callers can map it to specific copy.
 import { jsonDeleteOk, jsonGetOk, jsonPostOk, jsonPutOk, type RequestOptions } from './http';
 
 const SETTINGS_URL = '/api/settings';

@@ -4,8 +4,7 @@
 // **in UTC**. That looks wrong and is not: an ISO date with no time is a calendar
 // date, not an instant, and parsing it in the browser's zone makes `2026-08-11`
 // render as "Aug 10" for every user west of Greenwich. Pinning `timeZone: 'UTC'`
-// keeps the label equal to the string. Carried over from the vanilla renderers,
-// which did the same at four separate call sites — this is those four, deduplicated.
+// keeps the rendered label equal to the source string.
 const UTC = 'UTC';
 
 /** Column headers, indexed by `Date#getUTCDay`. */

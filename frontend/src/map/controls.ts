@@ -1,22 +1,12 @@
 // MapLibre's own controls: zoom, and locate-me.
-//
-// Port of the two `map.addControl` calls in web/app.js. They live here rather than in
-// `MapProvider` for the reason every other `src/map/` module does: the provider owns
-// *when* a map exists, and what gets attached to one is a map concern.
-//
-// The geolocate control is returned rather than only added, because its `geolocate`
-// and `error` events are the only writer of `mapStore.userLocation` that the user can
-// reach from the map — `useUserLocation` subscribes to them.
 import { GeolocateControl, NavigationControl, type IControl, type Map as MapLibreMap } from 'maplibre-gl';
 
 /** Bottom-right, out of the way of the topbar and of the drawer's left panel. */
 const CONTROL_POSITION = 'bottom-right' as const;
 
 /**
- * `enableHighAccuracy: false` and a single fix, as the vanilla settled on: at a
- * 50km "which campground" decision scale, GPS warm-up and its battery cost buy
- * nothing, and `trackUserLocation` would hold a `watchPosition` open for a value
- * two surfaces read occasionally.
+ * A coarse single fix is sufficient at trip-planning scale and avoids holding a
+ * watchPosition open.
  */
 const GEOLOCATE_TIMEOUT_MS = 8_000;
 /** Close enough to see the neighbourhood, far enough to still see the region. */

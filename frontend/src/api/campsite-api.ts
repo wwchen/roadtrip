@@ -1,5 +1,3 @@
-// Client for a POI's canonical campsite catalog. Typed port of
-// web/api/campsite-api.js.
 import { jsonGetOk, type RequestOptions } from './http';
 
 /**
@@ -7,10 +5,8 @@ import { jsonGetOk, type RequestOptions } from './http';
  * which vendor owns this site and its id there (see
  * docs/reservation-providers.md).
  *
- * Kept open beyond those fields: the backend's `Campsite` model is wide and its
- * consumers are the Phase-4 drawer and campground card, which pin the fields
- * they actually render. Adding a narrow guess here would be a second, wrong
- * source of truth.
+ * Kept open beyond those fields because the backend model is wide and consumers
+ * pin the fields they render.
  */
 export interface Campsite {
   id: number;

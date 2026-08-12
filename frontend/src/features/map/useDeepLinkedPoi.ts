@@ -1,15 +1,11 @@
 // Opening the map on a shared pin: `/map?poi=<id>`.
 //
-// Port of the POI half of `restoreSharedLinkFromUrl` / `openPoiById` /
-// `openSharedPoiFeature` in web/topbar.js. (The `?route=` half is Phase 4e; it
-// restores a whole trip, which needs the topbar's stop list to exist first.)
-//
 // `poi-url.ts` writes the parameter; this reads it. Both halves are needed for the
 // link to be a link — without this the URL updates as you click pins but pasting one
 // back opens a bare map, which is how the parameter behaved in 4c before this hook
 // and is what the smoke suite's `/?poi=…` load catches.
 //
-// Three things happen on restore, and the order is the original's: make the pin's
+// Three things happen on restore: make the pin's
 // overlay visible, move the camera to it, open the drawer. The first matters because
 // a shared link can point at a category — or, for a campground, an agency — the
 // recipient has switched off, and a drawer for an invisible pin reads as a bug.
@@ -24,7 +20,7 @@ import { useMapContext } from './MapProvider';
 
 /** Zoom for a shared point pin. A campground or a charger is a place, not a region. */
 const SHARED_POINT_ZOOM = 13;
-/** `flyTo` speed, matching the vanilla restore — brisk enough not to feel like a tour. */
+/** Brisk enough not to feel like a tour. */
 const SHARED_FLY_SPEED = 1.6;
 /** Categories whose geometry is an area, so the camera frames it instead of zooming in. */
 const AREA_CATEGORIES = ['national-park', 'state-park'];

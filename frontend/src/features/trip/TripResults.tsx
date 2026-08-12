@@ -1,20 +1,7 @@
 // The campgrounds along the route.
 //
-// Port of `renderResults` / `bindResultsHead` from web/topbar.js. Three pieces of that
-// function are gone rather than translated:
-//
-//   - **The scroll save/restore is gone.** `renderResults` rewrote the list's
-//     `innerHTML` on every corridor refresh and had to put `scrollTop` back, or a
-//     background refresh would yank the user to the top mid-scan. React keeps the node.
-//   - **`bindResultsHead`'s re-binding is gone.** It re-attached the collapse listener
-//     after every render and used a `data-bound` attribute to avoid stacking handlers.
-//   - **`tripResults.legendBound` is gone.** It subscribed once to the legend's change
-//     event to re-filter the list; the hidden-agency set is store state here, so the
-//     list re-renders because it reads it.
-//
-// The collapse state stays local and starts collapsed on a phone, which is a product
-// decision the vanilla made for a good reason: an expanded list eats the whole screen
-// right after the user asked to see a route on the map.
+// Collapse state stays local and defaults closed on phones so results do not cover
+// the route immediately after it is computed.
 import { useState } from 'react';
 import { token } from '@tokens';
 import { useMapContext } from '@/map/context';

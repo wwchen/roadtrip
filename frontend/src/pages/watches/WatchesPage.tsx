@@ -45,14 +45,6 @@ function formKey(editor: Editor, seq: number): string {
   return `create:${poi_id}:${start_date}:${seq}`;
 }
 
-/**
- * Rebuild of web/watches/watches-page.js on React + LDS + TanStack Query.
- *
- * The legacy page's regression test guarded a bug where the `finally` block
- * repainted the form over the signed-out message after a 401. That class of bug
- * is gone by construction here: signed-out is derived from the query error, so
- * there is no imperative repaint to race with it.
- */
 export function WatchesPage() {
   const { watches, isPending, isSignedOut, error: listError, refetch } = useWatches();
   const poiNames = usePoiNames(watches);

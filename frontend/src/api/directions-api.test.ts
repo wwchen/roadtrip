@@ -1,5 +1,3 @@
-// No node --test suite existed for this client. The coordinate encoding is the
-// whole contract, so that is what these pin.
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { requestRoute } from './directions-api';
 import { jsonResponse, stubFetch } from '@/test/fetch-stub';
@@ -12,8 +10,6 @@ describe('requestRoute', () => {
     { lng: -121.6, lat: 40.35 },
   ];
 
-  // lng,lat pairs joined by ';' — the upstream directions format, and the easy
-  // thing to get backwards.
   test('encodes stops as lng,lat pairs joined by semicolons', async () => {
     const fetchStub = stubFetch(jsonResponse({}));
 
@@ -49,8 +45,6 @@ describe('requestRoute', () => {
     expect(fetchStub.last.init.signal).toBe(controller.signal);
   });
 
-  // Returns the Response, not parsed JSON — the trip planner reads the failure
-  // body to tell "no route exists" from a transport error.
   test('resolves to the raw Response, even on failure', async () => {
     stubFetch(jsonResponse({ error: 'no_route' }, 422));
 

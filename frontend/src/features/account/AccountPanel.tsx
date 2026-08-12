@@ -8,17 +8,7 @@ export interface AccountPanelProps {
   onDisconnectSlack: () => void;
 }
 
-/**
- * Rebuild of web/account/account-panel.js.
- *
- * Shows who is signed in and offers the two irreversible actions: sign out, and —
- * only when a Slack token is actually stored — disconnect Slack.
- *
- * This panel has no editable fields. The original still implemented the panel
- * contract with `getPayload() => ({})` and `isDirty() => false`; here it simply has
- * no value props, so there is nothing for the modal to collect and nothing that can
- * report itself dirty by mistake.
- */
+/** Identity summary and irreversible account actions. */
 export function AccountPanel({ settings, onSignOut, onDisconnectSlack }: AccountPanelProps) {
   // Gated on a token actually being stored: offering to disconnect nothing reads
   // as a broken button.

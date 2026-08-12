@@ -1,9 +1,3 @@
-// Opening the map on a shared link.
-//
-// Worth its own suite because the failure is invisible: with the write half of
-// `?poi=` in place and the read half missing, clicking pins updates the URL
-// correctly and every shared link still opens a bare map. `SmokeTest.kt` loads
-// `/?poi=…` directly, so this is also the contract that keeps the smoke honest.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createTestQueryClient } from '@/test/query-client';
 import { act, render, waitFor } from '@testing-library/react';
@@ -89,8 +83,6 @@ describe('a shared POI link', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  // An `?route=` alongside it is Phase 4e's, and the two are independent: a link
-  // can carry both, and this half must not care.
   test('reads the parameter out of a query that carries others', async () => {
     await openOn(`/?route=abc&poi=${CG_ID}`);
 
@@ -104,8 +96,6 @@ describe('a shared POI link', () => {
     expect(instance.flyToCalls[0]).toMatchObject({ center: [-122.64, 48.41], zoom: 13 });
   });
 
-  // The camera move is a courtesy on arrival. Re-running it whenever the query
-  // re-settles would yank the map away from wherever the user had panned to.
   test('flies once, not on every re-render', async () => {
     const view = await openOn(`/?poi=${CG_ID}`);
     await waitFor(() => expect(instance.flyToCalls).toHaveLength(1));
@@ -116,8 +106,6 @@ describe('a shared POI link', () => {
     expect(instance.flyToCalls).toHaveLength(1);
   });
 
-  // `flyTo` before the style is up is silently dropped by MapLibre, which is the
-  // bug `restoreAfterMapReady` existed to avoid in the vanilla tree.
   test('waits for the style before moving the camera', async () => {
     await openOn(`/?poi=${CG_ID}`, { readyStyle: false });
 
@@ -130,8 +118,6 @@ describe('a shared POI link', () => {
     await waitFor(() => expect(instance.flyToCalls).toHaveLength(1));
   });
 
-  // A recipient with the campground layer switched off would otherwise get a
-  // drawer for a pin that is not on the map.
   test('reveals the overlay and the agency the shared pin needs', async () => {
     act(() => {
       useMapStore.getState().setOverlayHidden('cg', true);
@@ -159,8 +145,6 @@ describe('a shared POI link', () => {
     expect(useMapStore.getState().hiddenAgencies).toEqual(['WA Parks']);
   });
 
-  // Park polygons are not painted by this build, so there is no overlay to reveal —
-  // but the camera should still frame the area rather than zoom to its centroid.
   test('frames a shared park instead of zooming to a point', async () => {
     respond = () =>
       json({
@@ -180,8 +164,6 @@ describe('a shared POI link', () => {
     expect(instance.flyToCalls[0]).toMatchObject({ center: [-123, 48], zoom: 7 });
   });
 
-  // The drawer renders its own error banner with a retry, so the restore has
-  // nothing to add — but it must not leave the camera or the legend half-moved.
   test('a POI that fails to hydrate moves nothing', async () => {
     respond = () => json({ error: 'nope' }, 500);
 
@@ -191,8 +173,6 @@ describe('a shared POI link', () => {
     expect(instance.flyToCalls).toHaveLength(0);
   });
 
-  // Geometry comes back as whatever the provider stored, and a restore is exactly
-  // where a bad one shows up.
   test('a POI with unusable geometry opens the drawer without a camera move', async () => {
     respond = () => json({ ...feature(), geometry: null });
 

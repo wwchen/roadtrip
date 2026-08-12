@@ -1,14 +1,3 @@
-// Drag-to-dismiss.
-//
-// This suite exists because the gesture shipped bound to nothing: the hook read its
-// elements from refs inside an effect whose deps were those (stable) ref objects, and
-// `<Drawer>` renders null until its `mounted` state flips — so on the first commit
-// the refs were empty, the effect bailed, and it never re-ran. Every unit test passed
-// and no drawer on a phone could be dismissed. So the first thing asserted here is
-// the binding itself, through the real `<Drawer>` rather than a hand-made harness.
-//
-// jsdom has no TouchEvent, and it does no layout. What that means for the tests:
-// touches are synthesised below, and heights are stubbed where a threshold needs one.
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { Drawer } from './Drawer';
@@ -94,7 +83,6 @@ const open = (onClose = vi.fn()) => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('the drag gesture', () => {
-  // The regression this suite was written for: a listener that is never attached.
   test('is bound to the panel once it mounts', () => {
     const onClose = open();
 
@@ -103,8 +91,6 @@ describe('the drag gesture', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  // The panel appears a render after `<Drawer>` first commits, so a gesture must
-  // work on a drawer that was opened rather than one that mounted open.
   test('is bound when the drawer opens later, not only when it mounts open', () => {
     const onClose = vi.fn();
     const { rerender } = render(
@@ -155,7 +141,6 @@ describe('the drag gesture', () => {
     expect(root.style.height).toBe('');
   });
 
-  // iOS rubber-bands the page behind the sheet unless the move is claimed.
   test('claims the gesture it is handling', () => {
     open();
 
@@ -173,7 +158,6 @@ describe('the drag gesture', () => {
     expect(panel().className).toContain('rt-drawer--full');
   });
 
-  // 40px up is under FULL_SNAP_PX, so it is a nudge, not a request for more sheet.
   test('a small upward nudge does not snap', () => {
     open();
 
@@ -184,8 +168,6 @@ describe('the drag gesture', () => {
 });
 
 describe('telling a drag from a scroll', () => {
-  // A body drag has to travel past the slop before the sheet claims it, or reading
-  // the drawer would dismiss it.
   test('a body drag past the slop dismisses', () => {
     const onClose = open();
 
@@ -203,7 +185,6 @@ describe('telling a drag from a scroll', () => {
     expect(panel().style.height).toBe('');
   });
 
-  // Mid-scroll content keeps its scroll: only a sheet already at the top drags.
   test('a downward drag on scrolled content scrolls instead of dismissing', () => {
     const onClose = open();
     Object.defineProperty(panel(), 'scrollTop', { value: 120, configurable: true });
@@ -213,8 +194,6 @@ describe('telling a drag from a scroll', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  // The availability matrix (4d) pans sideways inside the sheet, so horizontal
-  // intent has to be released rather than swallowed.
   test('a sideways pan is released to whatever scrolls horizontally', () => {
     const onClose = open();
 
@@ -224,8 +203,6 @@ describe('telling a drag from a scroll', () => {
     expect(move.defaultPrevented).toBe(false);
   });
 
-  // Dragging off a button is how a mis-aimed tap on the CTA reads; the control
-  // keeps it so focus and activation behave.
   test('a drag that began on a control belongs to the control', () => {
     const onClose = open();
 
@@ -237,8 +214,6 @@ describe('telling a drag from a scroll', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  // An upward flick in the body is a scroll, and the sheet must let go of it
-  // rather than half-owning the gesture.
   test('a body drag that flips upward is handed back', () => {
     const onClose = open();
     const root = panel();
@@ -256,7 +231,6 @@ describe('telling a drag from a scroll', () => {
     expect(root.style.height).toBe('');
   });
 
-  // Two fingers is a pinch on the map behind, or a text selection. Not a dismiss.
   test('a two-finger touch is ignored', () => {
     const onClose = open();
     const root = panel();

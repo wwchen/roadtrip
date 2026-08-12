@@ -1,10 +1,3 @@
-// The topbar, driven through its real hooks against stubbed endpoints.
-//
-// The pure rules are covered in stops/search-results/route-summary; this checks the
-// wiring the vanilla hand-rolled in DOM handlers — that typing searches, that a pick
-// fills the row it was typed in, that entering directions keeps the search as the
-// origin, that the keyboard picks the same row the highlight shows, and that a
-// complete trip requests a route without anything asking it to.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createTestQueryClient } from '@/test/query-client';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
@@ -122,7 +115,6 @@ describe('browse mode', () => {
     const options = screen.getAllByRole('option');
     expect(options[0]).toHaveTextContent('Bowman Bay');
     expect(options[1]).toHaveTextContent('Seattle, WA');
-    // The section headers the vanilla tracked with a prevSection variable.
     expect(screen.getByText('POIs')).toBeInTheDocument();
     expect(screen.getByText('Places')).toBeInTheDocument();
   });
@@ -145,8 +137,6 @@ describe('browse mode', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
   });
 
-  // A geocoded place has no drawer to open, so the Directions button is the only way
-  // into a trip from one.
   test('offers Directions once the search row is filled', async () => {
     mount();
     await type(searchBox(), 'seattle');
@@ -229,8 +219,6 @@ describe('entering directions', () => {
     expect(rows()).toHaveLength(2);
   });
 
-  // Clearing an endpoint empties it in place: directions mode has no state with
-  // fewer than two rows.
   test('clearing the destination keeps its row', async () => {
     useTripStore.setState({
       mode: 'directions',
@@ -291,8 +279,6 @@ describe('the keyboard', () => {
     expect(searchBox()).toHaveValue('Seattle, WA');
   });
 
-  // Enter with nothing highlighted takes the first row, which is what someone who
-  // typed a full name and pressed Enter means.
   test('Enter with no highlight takes the first result', async () => {
     mount();
     await type(searchBox(), 'bowman');
@@ -463,8 +449,6 @@ describe('a shared link', () => {
     );
   });
 
-  // The writer preserves other parameters, so a drawer opened over a trip stays
-  // shareable — the vanilla's whole-URL replace dropped `?poi=`.
   test('writes the trip into the URL without dropping an open drawer', async () => {
     at('/?poi=99');
     useTripStore.setState({
@@ -500,7 +484,6 @@ describe('a shared link', () => {
 });
 
 describe('the smoke suite selectors', () => {
-  // The rows keep `data-i`, which is how the smoke suite addresses them.
   test('rows carry the index the smoke selectors use', () => {
     useTripStore.setState({
       mode: 'directions',
@@ -513,9 +496,7 @@ describe('the smoke suite selectors', () => {
   });
 });
 
-// Regressions an adversarial review of 4e found. Each was wrong in a way the rest of
-// this suite did not notice.
-describe('review regressions', () => {
+describe('edge cases', () => {
   test('an empty endpoint in a two-row trip offers no X at all', async () => {
     useTripStore.setState({
       mode: 'directions',
@@ -541,8 +522,6 @@ describe('review regressions', () => {
     expect(screen.getByLabelText('Remove stop 1')).toBeInTheDocument();
   });
 
-  // `Number('')` is 0, so a drag carrying no `text/plain` — a file, an image, a text
-  // selection from another window — moved row 0 onto whichever row it landed on.
   test('a drop with no row payload moves nothing', async () => {
     useTripStore.setState({
       mode: 'directions',
@@ -565,8 +544,6 @@ describe('review regressions', () => {
     expect(useTripStore.getState().stops.map((s) => s?.name)).toEqual(['A', 'B']);
   });
 
-  // The writer's first pass sees the pre-restore store, so it used to DELETE the
-  // parameter it was mounted with and put it back on the next render.
   test('a shared link is not briefly stripped from the address bar', async () => {
     const encoded = encodeRouteState(
       [
@@ -596,8 +573,6 @@ describe('review regressions', () => {
     window.history.replaceState(null, '', '/');
   });
 
-  // An invalid link is worth keeping in the address bar: the user may want to look at
-  // what they pasted, and a reload should not silently become a blank map.
   test('an unreadable link is left in the address bar', async () => {
     window.history.replaceState(null, '', '/?route=not-a-real-payload');
     mount();
@@ -707,7 +682,6 @@ describe('the results list', () => {
     expect(screen.queryByText('Denny Creek')).toBeNull();
   });
 
-  // The list has to agree with the map: clicking a card flies to its pin.
   test('says so when the legend has hidden everything', async () => {
     withCorridor();
     mount();
@@ -731,8 +705,6 @@ describe('the results list', () => {
       screen.getByRole('button', { name: /Bowman Bay/ }).click();
     });
 
-    // The vanilla synthesised a map click to get here, and needed a suppression flag
-    // so that synthetic click did not also rewrite the destination input.
     expect(fakeMap.flyToCalls.at(-1)).toMatchObject({ center: [-122.64, 48.4], zoom: 13 });
     expect(useMapStore.getState().selectedPoiId).toBe(11);
   });
@@ -747,8 +719,6 @@ describe('the results list', () => {
     expect(screen.getByRole('button', { expanded: false })).toBeInTheDocument();
   });
 
-  // The corridor slider belongs to this list, and `SmokeTest.kt` asserts that nesting:
-  // `#tb-results .tb-results-body #tb-corridor` must be visible.
   test('holds the corridor slider inside its body', async () => {
     withCorridor();
     mount();

@@ -1,11 +1,5 @@
 // Fetching one visible week of availability.
 //
-// Replaces `fetchWeek` in web/availability/availability-week.js, which hand-rolled
-// what a query key gives for free: a `weekRequestSeq` counter compared at three
-// separate await points, so a slow response for last week could not paint over this
-// one. The key changes with the week, so a superseded response cannot reach the
-// component at all.
-//
 // The response is not cached client-side beyond Query's own cache on purpose: the
 // *backend* caches these upstream calls and reports the age of what it served, which
 // is what the freshness pill shows. A second, invisible client-side TTL on top would

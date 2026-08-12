@@ -1,5 +1,3 @@
-// Ports web/api/account-api.test.mjs to Vitest, assertion for assertion, plus
-// coverage for sendEmailTest (which the node suite did not reach).
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import {
   clearSlack,
@@ -57,8 +55,6 @@ describe('updateNotifications', () => {
     });
   });
 
-  // The backend reads a missing slack_token as "unchanged". Sending null would
-  // be a write, so the key has to be absent, not present-and-null.
   test('drops a null slack_token', async () => {
     const fetchStub = stubFetch(jsonResponse({}));
 
@@ -92,8 +88,6 @@ describe('updateNotifications', () => {
     expect(fetchStub.last.body).toEqual({});
   });
 
-  // An empty string is a real value — clearing the notification email — and must
-  // survive, unlike null/undefined.
   test('keeps an empty-string field', async () => {
     const fetchStub = stubFetch(jsonResponse({}));
 

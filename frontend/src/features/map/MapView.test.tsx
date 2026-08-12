@@ -1,15 +1,3 @@
-// The map page's viewport loop, overlays and legend, end to end.
-//
-// These are deliberately integration-shaped rather than one suite per hook: the
-// behaviour worth pinning is the round trip — the map moves, a request goes out
-// (or does not), pins land in the right source, the legend counts them, and a
-// legend click filters the layer without refetching. Testing the hooks in
-// isolation would assert the wiring twice and the behaviour never.
-//
-// The pure pieces have their own suites, where the rules are cheaper to pin:
-// `map/viewport.test.ts` (the zoom gate and cache key), `map/viewport-cache.test.ts`
-// (containment and expiry), `map/agencies.test.ts` (the filter expression) and
-// `map/overlays.test.ts` (paint, ids, idempotence).
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -64,9 +52,7 @@ const { MapView } = await import('./MapView');
 const { PoiDrawer } = await import('@/features/drawer/PoiDrawer');
 const { TopBar } = await import('@/features/trip/TopBar');
 
-// ---------------------------------------------------------------------------
 // Fixtures
-// ---------------------------------------------------------------------------
 
 interface TestPin {
   type: 'Feature';
@@ -91,9 +77,7 @@ const collection = (pins: TestPin[], truncated = false) => ({
 const CALIFORNIA: [number, number, number, number] = [-124, 32, -114, 42];
 const BAY_AREA: [number, number, number, number] = [-123, 37, -121, 38];
 
-// ---------------------------------------------------------------------------
 // Fetch harness
-// ---------------------------------------------------------------------------
 
 interface Recorded {
   url: string;
@@ -250,7 +234,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// ---------------------------------------------------------------------------
 
 describe('the viewport request', () => {
   test('asks for the visible bbox, the floored zoom and the point categories', async () => {
@@ -264,8 +247,6 @@ describe('the viewport request', () => {
     });
   });
 
-  // Painting needs the layers, and the layers need the style — so the loop starts
-  // when MapLibre says the style is up, not when the map object exists.
   test('nothing is requested before the style is ready', async () => {
     renderPage();
     await settle();
@@ -273,8 +254,6 @@ describe('the viewport request', () => {
     expect(poiRequests()).toHaveLength(0);
   });
 
-  // The debounce exists so dragging does not fire a request per frame. What
-  // matters is that a burst collapses, not the exact delay.
   test('a burst of pans collapses into one request', async () => {
     await renderMap();
     await waitFor(() => expect(poiRequests()).toHaveLength(1));
@@ -289,8 +268,6 @@ describe('the viewport request', () => {
     expect(poiRequests()[1]?.body.bbox).toEqual([-121, 36, -118, 39]);
   });
 
-  // The containment cache: a pan INTO a bbox already fetched needs no round trip,
-  // because the response covers more ground than the new viewport.
   test('a pan into an already-fetched bbox is served from memory', async () => {
     // A distinct second response, so a sneaked-in refetch would show up as pin 2.
     poiResponses = [collection([pin(1, 'tesla_supercharger')]), collection([pin(2, 'tesla_supercharger')])];
@@ -307,8 +284,6 @@ describe('the viewport request', () => {
     expect(pinIdsIn('sc')).toEqual([1]);
   });
 
-  // truncated:true means the server dropped features past its budget, so the
-  // response does not describe the bbox it was asked about.
   test('a truncated response is not cached', async () => {
     poiResponses = [collection([pin(1, 'tesla_supercharger')], true)];
     await renderMap();
@@ -330,8 +305,6 @@ describe('the viewport request', () => {
     expect(poiRequests()[1]?.body.categories).toContain('campground');
   });
 
-  // The `cgUnlocked` latch: having once shown campgrounds, zooming out must not
-  // make them disappear.
   test('zooming back out keeps requesting campgrounds', async () => {
     await renderMap();
     await panTo(BAY_AREA, 6);
@@ -345,10 +318,6 @@ describe('the viewport request', () => {
 });
 
 describe('painting', () => {
-  // Repaint on success only. A new bbox is a new query key, so `useQuery` has no
-  // data for it yet — painting that would blank the map for the length of every
-  // round trip. The vanilla loop awaited the response and only then called
-  // paintPois.
   test('the pins already on the map survive while the next viewport loads', async () => {
     poiResponses = [collection([pin(1, 'tesla_supercharger')]), collection([pin(2, 'tesla_supercharger')])];
     await renderMap();
@@ -365,8 +334,6 @@ describe('painting', () => {
     await waitFor(() => expect(pinIdsIn('sc')).toEqual([2]));
   });
 
-  // Vanilla logged the failure and returned, leaving the previous pins up. The
-  // failure mode to avoid is a map that silently empties itself.
   test('a failed viewport fetch leaves the pins alone', async () => {
     const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
     poiResponses = [collection([pin(1, 'tesla_supercharger')]), { error: 'boom' }];
@@ -380,7 +347,6 @@ describe('painting', () => {
     expect(pinIdsIn('sc')).toEqual([1]);
   });
 
-  // An empty response is an answer, not a failure: the viewport really has no pins.
   test('an empty response does clear the pins', async () => {
     poiResponses = [collection([pin(1, 'tesla_supercharger')]), collection([])];
     await renderMap();
@@ -415,9 +381,6 @@ describe('painting', () => {
     }
   });
 
-  // The reason MapProvider tracks `styleEpoch` at all: a basemap change destroys
-  // every source and layer the app added, and the overlays have to come back with
-  // the pins they were showing — not empty, and not needing a fresh fetch.
   test('a basemap change reinstalls the overlays with the pins already loaded', async () => {
     poiResponses = [collection([pin(1, 'tesla_supercharger')])];
     await renderMap();
@@ -443,9 +406,6 @@ describe('painting', () => {
     expect(requests.some((r) => r.url === '/data/us-states.geojson')).toBe(true);
   });
 
-  // They arrive after the overlays are installed, so without an explicit anchor a
-  // line layer would be appended last and drawn over every pin. Vanilla installed
-  // the boundaries first and the pins on top of them.
   test('the boundaries go beneath the pins, not over them', async () => {
     await renderMap();
 
@@ -478,9 +438,6 @@ describe('the legend', () => {
     await renderMap({ zoom: 8 });
 
     await waitFor(() => expect(screen.getByLabelText(/BC Parks \(2\)/)).toBeInTheDocument());
-    // Locale collation, as the vanilla legend used: "Uncategorized" sorts in among
-    // the real names rather than being pinned last, and lands before "US Forest
-    // Service" because the comparison is not raw ASCII.
     expect(checkboxLabels().filter((label) => label.includes('('))).toEqual([
       'Superchargers (0)',
       'BC Parks (2)',
@@ -512,8 +469,6 @@ describe('the legend', () => {
     expect(instance.layer('pf-points')?.layout.visibility).toBe('visible');
   });
 
-  // Campgrounds have no on/off switch: their legend sets a layer filter, and it
-  // has to reach the hit layer too or a hidden pin stays clickable.
   test('unticking an agency filters the campground layers without refetching', async () => {
     poiResponses = [collection([pin(1, 'campground', 'BC Parks')])];
     await renderMap({ zoom: 8 });
@@ -589,9 +544,6 @@ describe('selection', () => {
 });
 
 describe('route mode', () => {
-  // With a route up, the corridor owns which POIs exist: the trip planner
-  // publishes them and the viewport query stands down, so a late bbox response
-  // cannot repaint over the route's POIs.
   test('paints the corridor POIs and stops requesting viewports', async () => {
     onRouteResponse = collection([pin(9, 'campground', 'BC Parks')]);
     await renderMap();
@@ -619,8 +571,6 @@ describe('route mode', () => {
     expect(pinIdsIn('cg')).toEqual([9]);
   });
 
-  // The corridor supplies campgrounds at any zoom, so telling the user to zoom in
-  // while listing the corridor's agencies right below it is a contradiction.
   test('the zoom hint is gone while a route supplies campgrounds', async () => {
     await renderMap();
     expect(screen.getByText('(zoom in to load)')).toBeInTheDocument();
@@ -646,7 +596,6 @@ describe('route mode', () => {
   });
 });
 
-// The route's own layers, and the bug an adversarial review of 4e found in them.
 describe('the trip overlay', () => {
   /** A route response whose second feature is the server's corridor polygon. */
   const routeWithServerCorridor = {
@@ -719,8 +668,6 @@ describe('the trip overlay', () => {
     ]);
   });
 
-  // A basemap change must not throw the camera back to the whole route when the user
-  // has zoomed into one campground.
   test('a basemap change does not refit the camera', async () => {
     routeResponse = routeWithServerCorridor;
     await renderMap();
@@ -738,10 +685,6 @@ describe('the trip overlay', () => {
     expect(instance.fitBoundsCalls).toHaveLength(1);
   });
 
-  // The bug: the install effect re-preferred the server's polygon on a style reload
-  // and then recorded the current radius as installed, so the radius effect had
-  // nothing to repair — the fill stayed at the radius the route was fetched at while
-  // the slider said something else, permanently.
   test('a basemap change keeps the corridor at the radius the slider is on', async () => {
     routeResponse = routeWithServerCorridor;
     await renderMap();
@@ -772,8 +715,6 @@ describe('the trip overlay', () => {
     await renderMap();
     await withRoute();
 
-    // Emptying a stop is what clears the route: `useRoute` publishes null for a trip
-    // it cannot request, which is the port of `removeRouteLayer()`.
     await act(async () => {
       useTripStore.getState().setStopAt(1, null);
     });

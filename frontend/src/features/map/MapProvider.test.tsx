@@ -1,13 +1,4 @@
-// The style lifecycle, which is the whole reason MapProvider exists.
-//
-// A basemap change calls setStyle(..., { diff: false }), and that full reload destroys
-// every source and layer the app added. The vanilla app coped with a module-level
-// `reinstallOverlays()` registry driven by a `style.load` listener; here the same fact
-// is `styleEpoch` state, so overlays reinstall by ordinary effect dependency. If that
-// signal is wrong, every overlay in Phase 4b–4e silently ends up attached to a style
-// that no longer describes it — so it is pinned here, before any of them exist.
-//
-// MapLibre needs WebGL, which jsdom has none of, so the instance is faked. The fake
+// MapLibre needs WebGL, which jsdom lacks, so the instance is faked. The fake
 // records the calls that matter and lets tests fire `style.load` by hand.
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
@@ -156,16 +147,11 @@ describe('setup', () => {
     expect(screen.getByTestId('map-canvas')).toBeInTheDocument();
   });
 
-  // MapLibre measures its container, so an unsized ancestor gives a 0x0 canvas: a
-  // map that initialises cleanly, passes every test, and draws nothing. The provider
-  // supplies the sized frame itself so a host page cannot forget to.
   test('wraps the canvas in its own sized frame', () => {
     renderMap();
     expect(screen.getByTestId('map-canvas').parentElement).toHaveClass('rt-map-shell');
   });
 
-  // Children render above the canvas — that is what lets the drawer and topbar
-  // overlay the map rather than sit below it.
   test('renders children inside the frame, after the canvas', () => {
     renderMap();
     const shell = screen.getByTestId('map-canvas').parentElement!;
@@ -185,7 +171,6 @@ describe('setup', () => {
     expect(ctx.basemapKey).toBe(DEFAULT_BASEMAP);
   });
 
-  // Overlays must not touch the map before the style exists.
   test('is not style-ready until MapLibre says so', async () => {
     renderMap();
     expect(screen.getByTestId('ready')).toHaveTextContent('false');
@@ -218,12 +203,8 @@ describe('changing basemap', () => {
     expect(instance.setStyleCalls[0].options).toEqual({ diff: false });
   });
 
-  // The reload destroys every source and layer we added, so nothing may consider
-  // itself installed until the new style announces itself.
-  //
-  // Pinned on a style URL specifically. That gap is only OBSERVABLE when the new
-  // style has to be fetched; an inline style closes it inside `setStyle` itself,
-  // which is the case the epoch below exists for.
+  // Pinned on a style URL: the gap is only observable when the style must be
+  // fetched, since an inline style closes it inside `setStyle` itself.
   test('drops style-ready until a fetched style loads', async () => {
     renderMap();
     await loadStyle();
@@ -350,7 +331,6 @@ describe('satellite underlay', () => {
     expect(instance.getLayer(SATELLITE_LAYER_ID)).toBeUndefined();
   });
 
-  // Inserted above the background so roads, parks and labels still draw on top.
   test('inserts above the basemap background, not on top of everything', async () => {
     renderMap();
     await loadStyle();
@@ -378,8 +358,6 @@ describe('satellite underlay', () => {
     expect(instance.getLayer(SATELLITE_LAYER_ID)).toBeUndefined();
   });
 
-  // The exact thing the style signal exists for: a basemap change wipes the
-  // underlay, and it has to come back by itself.
   test('reinstalls itself after a fetched basemap change wipes it', async () => {
     renderMap();
     await loadStyle();
@@ -438,7 +416,6 @@ describe('satellite underlay', () => {
 });
 
 describe('useMapContext', () => {
-  // A silent null would surface as a map that simply never shows anything.
   test('throws outside the provider', () => {
     const Outside = () => {
       useMapContext();

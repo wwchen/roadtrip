@@ -1,7 +1,6 @@
 // The site-by-date grid.
 //
-// Rendering half of web/availability/site-matrix.js; the row rules live in
-// `matrix-rows.ts`. Three behaviours here are worth reading before changing anything:
+// Row rules live in `matrix-rows.ts`. Three behaviours matter here:
 //
 // **A cell is a button only when tapping it can do something.** An available cell with
 // a bookable deep link becomes a booking button; a reserved or first-come cell becomes

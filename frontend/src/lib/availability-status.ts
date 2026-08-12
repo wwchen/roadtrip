@@ -1,6 +1,3 @@
-// Availability status vocabulary. Typed port of web/utils/availability-status.js
-// — behavior preserved exactly.
-//
 // The six values are the backend's `AvailabilityStatus` wire values
 // (backend/.../model/availability/AvailabilityStatus.kt). This module is the
 // single place that maps them to display strings, so the API layer imports the

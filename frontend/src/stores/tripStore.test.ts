@@ -45,8 +45,6 @@ describe('stops', () => {
     expect(trip().stops).toEqual([null, stop('Mineral')]);
   });
 
-  // Slot position has to stay stable while the user edits, so setting a slot
-  // beyond the current length pads with empty slots rather than shifting.
   test('setStopAt pads with empty slots when the index is past the end', () => {
     trip().setStopAt(2, stop('Redding'));
 
@@ -82,7 +80,6 @@ describe('stops', () => {
     expect(trip().stops.at(-1)?.name).toBe(`s${MAX_STOPS - 1}`);
   });
 
-  // An empty slot below the cap is still fillable even at MAX_STOPS length.
   test('addStop fills an empty slot even at MAX_STOPS length', () => {
     const stops: (TripStop | null)[] = Array.from({ length: MAX_STOPS }, (_, i) => stop(`s${i}`));
     stops[3] = null;
@@ -150,8 +147,6 @@ describe('selectAllStopsFilled', () => {
 });
 
 describe('selectRouteActive', () => {
-  // Route activity requires directions mode, a
-  // fetched route, and every slot filled.
   test('needs all three conditions', () => {
     trip().setStops([stop('a'), stop('b')]);
     trip().setRoute({ type: 'FeatureCollection', features: [] });

@@ -1,17 +1,5 @@
-// One row of the trip planner: a dot, an input, a locate button and an X.
-//
-// Port of `renderRows`' per-row markup and `bindRowDrag` from web/topbar.js. Two
-// pieces of the vanilla are gone because React makes them unnecessary, and one is
-// kept for a reason worth stating:
-//
-//   - **The focus/caret restoration is gone.** `renderRows` rebuilt every row's
-//     HTML on any state change, so it had to record which input was focused and its
-//     selection range, then restore both afterwards. The node survives here.
-//   - **The `data-i` attribute round-trip is gone.** Handlers closed over nothing,
-//     so each one re-read its row index off the DOM. These take it as a prop.
-//   - **HTML5 drag-and-drop is kept**, rather than swapped for a pointer-based
-//     library. It is what the vanilla used, it is what makes a row draggable with
-//     no dependencies, and the reorder logic it feeds is already pure and tested.
+// One trip-planner row. HTML drag-and-drop keeps reordering dependency-free; the
+// resulting transition is handled by pure domain logic.
 import { useEffect, useRef, useState } from 'react';
 import type { TripMode } from '@/stores/tripStore';
 import { isStructuralRow, stopPlaceholder, stopRole, type StopSlot } from '@/domain/trip/stops';

@@ -1,9 +1,6 @@
 // How wide the matrix's frozen "Site" column is.
 //
-// Port of the `siteColumnWidth` helpers in web/availability/availability-week.js.
-// A separate module because it is the only persisted piece of matrix state, and
-// because the legacy-default migration below is the kind of rule that gets deleted
-// by accident when it lives inside a component.
+// This is the matrix's only persisted UI state.
 const STORAGE_KEY = 'cg.siteMatrix.siteColumnWidth';
 
 export const DEFAULT_SITE_COLUMN_WIDTH = 128;

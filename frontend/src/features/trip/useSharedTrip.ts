@@ -1,16 +1,5 @@
-// The `?route=` half of a shared link, both directions.
-//
-// Port of `restoreSharedLinkFromUrl`'s route branch and `updateRouteAddressUrl`
-// from web/topbar.js. The counterpart for `?poi=` is 4c's `useDeepLinkedPoi`; this
-// is deliberately a separate hook, because the two parameters are independent — a
-// link can carry either, or both, and neither reader may clobber the other's value.
-//
-// The vanilla's map-readiness dance (`restoreAfterMapReady`, `isMapReadyForSharedLink`,
-// `deferSharedLinkRestore` — three functions and a `once('style.load')` pair) has no
-// counterpart here, and that is not an omission: restoring a route means writing
-// stops into the store, and the route request that follows is a fetch. Nothing about
-// it touches the map, so nothing has to wait for a style. The camera fit that DOES
-// need the map is `useTripOverlay`'s, and it is already gated on `styleEpoch`.
+// Reads and writes the independent `?route=` share parameter without clobbering
+// `?poi=`. Camera fitting is handled separately once the map style is ready.
 import { useEffect, useRef, useState } from 'react';
 import { decodeRouteState, setVisibleRouteParam } from '@/lib/share-links';
 import { CORRIDOR_DEFAULT_MILES, useTripStore } from '@/stores/tripStore';

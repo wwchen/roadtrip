@@ -67,8 +67,6 @@ describe('bucketPins', () => {
     expect(buckets.pf.features.map((f) => f.id)).toEqual([3]);
   });
 
-  // Both the canonical category name and the alias reach the client depending on
-  // which endpoint answered, and the vanilla bucketing accepted both.
   test('accepts the alias category names', () => {
     const buckets = bucketPins([pin('supercharger', 1), pin('planet-fitness', 2)]);
 
@@ -112,9 +110,6 @@ describe('installPointOverlay', () => {
     expect(fake.layer('cg-points-hit')?.type).toBe('circle');
   });
 
-  // The hit layer is transparent and generous so a pin is tappable on a phone;
-  // MapLibre dispatches the click to the topmost layer, which is why handlers
-  // bind there and the visual layer never sees one.
   test('the hit layer is invisible and bigger than the pin', () => {
     installPointOverlay(asMapLibre(fake), overlaySpec('pf'));
 
@@ -124,9 +119,6 @@ describe('installPointOverlay', () => {
     });
   });
 
-  // MapLibre paint cannot resolve var(), so colors come through the token bridge
-  // — asserted against the bridge rather than a literal, which would also trip
-  // the color-token checker.
   test('resolves colors through the token bridge', () => {
     installPointOverlay(asMapLibre(fake), overlaySpec('sc'));
 
@@ -136,9 +128,6 @@ describe('installPointOverlay', () => {
     });
   });
 
-  // StrictMode runs an effect twice on mount, and a basemap change reinstalls
-  // everything — so a second install must not throw "source already exists" or
-  // leave a duplicate layer behind.
   test('is idempotent', () => {
     const cg = overlaySpec('cg');
 
@@ -175,8 +164,6 @@ describe('setOverlayData', () => {
     expect(fake.layers).toHaveLength(layersBefore);
   });
 
-  // The first response can land before the style is ready; that is a no-op, and
-  // the install picks the data up from the caller's cache.
   test('is a no-op before the install', () => {
     expect(() =>
       setOverlayData(asMapLibre(fake), overlaySpec('cg'), pinCollection([])),
@@ -206,8 +193,6 @@ describe('visibility and filters', () => {
     expect(fake.layer('cg-points-hit')?.filter).toBe(filter);
   });
 
-  // Between a basemap change and the reinstall there are no layers at all, and
-  // MapLibre throws on an unknown layer id.
   test('both are no-ops when the layers are gone', () => {
     const cg = overlaySpec('cg');
     installPointOverlay(asMapLibre(fake), cg);

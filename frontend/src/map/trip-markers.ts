@@ -1,10 +1,7 @@
 // The A / 1 / B markers on the trip's stops.
 //
-// Port of `syncMarkers` / `removeAllMarkers` from web/topbar.js. Markers are DOM
-// handles rather than state — the same reason the map instance itself stays out of
-// `mapStore` — so this module owns a registry the React effect drives, and the
-// registry is passed in rather than module-global so two maps (or two tests)
-// cannot collide.
+// Markers are DOM handles rather than state. A caller-owned registry prevents two
+// maps or tests from sharing module-global handles.
 import { Marker, type Map as MapLibreMap } from 'maplibre-gl';
 import { markerLabel, stopRole, type StopSlot } from '@/domain/trip/stops';
 

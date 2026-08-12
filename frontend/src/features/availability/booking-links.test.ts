@@ -1,8 +1,3 @@
-// Booking deep links.
-//
-// The backend hands out a *template*, not a URL, because the link depends on the stay
-// window. The rule that matters most is the refusal: a template with placeholders and
-// no dates yields nothing, because a half-substituted URL would book the wrong nights.
 import { describe, expect, test } from 'vitest';
 import type { Campsite } from '@/api/campsite-api';
 import {
@@ -37,8 +32,6 @@ describe('building the URL', () => {
     ).toBe('https://parks.example/site/7');
   });
 
-  // The refusal. A link built without dates would send someone to a booking page for
-  // whatever nights the provider defaults to.
   test('refuses to fill a dated template without dates', () => {
     expect(reservationUrlFromTemplate(site(7), { reservationUrlTemplates: { 7: RECGOV } })).toBe('');
     expect(
@@ -61,7 +54,6 @@ describe('building the URL', () => {
     expect(window('2026-08-13', '2026-08-11')).toBe('');
   });
 
-  // Nights are counted in UTC so a DST boundary cannot round a night to zero.
   test('counts nights across a DST transition', () => {
     expect(
       reservationUrlFromTemplate(site(7), {
@@ -86,8 +78,6 @@ describe('building the URL', () => {
     ).toBe('https://parks.example/7');
   });
 
-  // Templates arrive off a JSON body, so a plain-object lookup would resolve
-  // prototype members.
   test('does not resolve inherited object members', () => {
     expect(
       reservationUrlFromTemplate({ id: 'constructor' as unknown as number }, {
@@ -106,7 +96,6 @@ describe('building the URL', () => {
 });
 
 describe('whether a row could ever be booked', () => {
-  // Asked before a date is chosen, which is why it is separate from building a URL.
   test('is true for a dated template with no dates supplied', () => {
     expect(hasReservationUrlTemplate(site(7), { 7: RECGOV })).toBe(true);
     expect(reservationUrlFromTemplate(site(7), { reservationUrlTemplates: { 7: RECGOV } })).toBe('');
