@@ -197,12 +197,13 @@ SANDBOX_SNAPSHOT_PATH="${SANDBOX_SNAPSHOT_PATH:-}"
 SANDBOX_PORT_RANGE_START="${SANDBOX_PORT_RANGE_START:-41000}"
 SANDBOX_PORT_RANGE_END="${SANDBOX_PORT_RANGE_END:-41999}"
 
-SANDBOX_DB_PASSWORD="${SANDBOX_DB_PASSWORD:-sandbox}"
-
 SCRUB_SQL="${SCRUB_SQL:-${SCRIPT_DIR}/sandbox_scrub.sql}"
 
-POSTGRES_DB="${POSTGRES_DB:-roadtrip}"
-POSTGRES_USER="${POSTGRES_USER:-roadtrip}"
+# Fixed, not env-overridable: docker-compose.sandbox.yml hardcodes the same two
+# values, so an override here would change only the host-side psql calls below
+# and silently disagree with the database Compose actually started.
+POSTGRES_DB="roadtrip"
+POSTGRES_USER="roadtrip"
 
 HEALTH_RETRIES="${HEALTH_RETRIES:-60}"
 
@@ -538,9 +539,6 @@ export SANDBOX_SHA
 export SANDBOX_BUILD_SHA
 export SANDBOX_BRANCH
 export SANDBOX_PORT
-export SANDBOX_DB_PASSWORD
-export POSTGRES_DB
-export POSTGRES_USER
 export SANDBOX_NAME
 export SANDBOX_OWNER
 export SANDBOX_SLOT

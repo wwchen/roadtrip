@@ -375,7 +375,6 @@ change.
 | `SANDBOX_SNAPSHOT_PATH` | _(empty)_ | Path to a `pg_dump -Fc` archive; if blank or absent, sandboxes start with an empty Flyway-migrated schema. `scripts/sandbox_snapshot.sh` defaults this to `/var/lib/roadtrip-sandboxes/snapshot.dump` when the var is unset |
 | `SANDBOX_PORT_RANGE_START` | `41000` | First port in the host-local range allocated to sandboxes |
 | `SANDBOX_PORT_RANGE_END` | `41999` | Last port in the range |
-| `SANDBOX_DB_PASSWORD` | `sandbox` | Throwaway Postgres password for the sandbox DB |
 | `POSTGRES_HEALTH_RETRIES` | `30` | Seconds to wait for `pg_isready` before failing |
 | `SANDBOX_TTL_HOURS` | `2` | Sweep: sandboxes older than this are torn down. Set as a repo variable, not on the host |
 

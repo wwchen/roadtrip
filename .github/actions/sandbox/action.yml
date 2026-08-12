@@ -262,7 +262,12 @@ runs:
           0)
             echo "torn-down=true"  >> "$GITHUB_OUTPUT"
             url="$(printf '%s\n' "$output" | sed -n 's/^Sandbox was: //p' | tail -1)"
-            [[ -n "$url" ]] && echo "url=$url" >> "$GITHUB_OUTPUT"
+            # An if-block, not `[[ ... ]] && echo`: this is the last command in
+            # the branch and `esac` ends the step, so a false test under `set -e`
+            # would fail a teardown that actually succeeded.
+            if [[ -n "$url" ]]; then
+              echo "url=$url" >> "$GITHUB_OUTPUT"
+            fi
             ;;
           "$absent_rc") echo "torn-down=false" >> "$GITHUB_OUTPUT" ;;
           *)            exit "$rc" ;;
