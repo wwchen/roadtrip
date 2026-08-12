@@ -1,7 +1,5 @@
 import { Icon, SeededTextField } from '@ui';
 import { coerceChoice, type ThemeChoice } from '@/lib/theme';
-import { useThemeStore } from '@/stores/themeStore';
-import { AppearanceField } from './AppearanceField';
 import type { Profile, SettingsResponse } from '@/api/account-api';
 import './account.css';
 
@@ -19,12 +17,25 @@ export function profileValuesOf(settings: SettingsResponse): ProfileValues {
   };
 }
 
-/** True when the edited values differ from what is saved. */
+/** True when the edited display name differs from what is saved. */
+export function isDisplayNameDirty(settings: SettingsResponse, values: ProfileValues): boolean {
+  return values.display_name !== (settings.profile.display_name || '');
+}
+
+/** True when the edited theme differs from what is saved. */
+export function isThemeDirty(settings: SettingsResponse, values: ProfileValues): boolean {
+  return values.theme !== coerceChoice(settings.profile.theme);
+}
+
+/**
+ * True when the edited values differ from what is saved.
+ *
+ * The two slices are also exported separately because Profile and Appearance are
+ * their own rail sections but share one payload: each section's Save button gates
+ * on its own slice, while `buildProfilePayload` still sends both.
+ */
 export function isProfileDirty(settings: SettingsResponse, values: ProfileValues): boolean {
-  return (
-    values.display_name !== (settings.profile.display_name || '') ||
-    values.theme !== coerceChoice(settings.profile.theme)
-  );
+  return isDisplayNameDirty(settings, values) || isThemeDirty(settings, values);
 }
 
 export function buildProfilePayload(
@@ -42,8 +53,12 @@ export interface ProfilePanelProps {
 /**
  * Rebuild of web/account/profile-panel.js.
  *
- * Editable display name and appearance, read-only login email with a verified
- * badge.
+ * Editable display name, read-only login email with a verified badge.
+ *
+ * Theme still travels in `ProfileValues` and this panel's payload — it is one
+ * profile document server-side — but it is *edited* in `AppearancePanel`, its own
+ * rail section, so the two are split by where they read rather than by what they
+ * save.
  *
  * **The values live in the parent**, which is the one structural change from the
  * original. That mounted a FormSection, kept the value in the DOM, and exposed
@@ -68,15 +83,6 @@ export function ProfilePanel({ profile, values, onChange }: ProfilePanelProps) {
         onChange={(e) =>
           onChange({ ...values, display_name: (e.target as HTMLInputElement).value })
         }
-      />
-
-      <AppearanceField
-        value={values.theme}
-        onChange={(theme) => {
-          // Preview, don't persist: Save commits it, SettingsModal reverts it.
-          useThemeStore.getState().previewChoice(theme);
-          onChange({ ...values, theme });
-        }}
       />
 
       <div className="rt-account-row">

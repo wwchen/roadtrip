@@ -6,6 +6,7 @@ import { coerceChoice } from '@/lib/theme';
 import { settingsErrorMessage } from '@/lib/settings-errors';
 import { useThemeStore } from '@/stores/themeStore';
 import { AccountPanel } from './AccountPanel';
+import { AppearancePanel } from './AppearancePanel';
 import {
   NotificationsPanel,
   buildNotificationsPayload,
@@ -16,7 +17,8 @@ import {
 import {
   ProfilePanel,
   buildProfilePayload,
-  isProfileDirty,
+  isDisplayNameDirty,
+  isThemeDirty,
   profileValuesOf,
   type ProfileValues,
 } from './ProfilePanel';
@@ -29,11 +31,15 @@ import {
 } from './useSettings';
 
 const TAB_PROFILE = 'profile';
+const TAB_APPEARANCE = 'appearance';
 const TAB_NOTIFICATIONS = 'notifications';
 const TAB_ACCOUNT = 'account';
 
+// Order is the rail's reading order. Appearance sits next to Profile because it
+// saves the same document; Account last because it only fires actions.
 const TABS = [
   { id: TAB_PROFILE, label: 'Profile' },
+  { id: TAB_APPEARANCE, label: 'Appearance' },
   { id: TAB_NOTIFICATIONS, label: 'Notifications' },
   { id: TAB_ACCOUNT, label: 'Account' },
 ] as const;
@@ -48,8 +54,20 @@ export interface SettingsModalProps {
   onClose: () => void;
 }
 
-// dataUpdatedAt keys editable panels so a save remounts fields from the server's
-// answer, including a newly generated Slack-token hint.
+/**
+ * Four sections over a side rail. Profile and Appearance edit two slices of the
+ * one profile document and each save it; Notifications saves its own slice;
+ * Account only fires actions and so has no Save.
+ *
+ * The rail is buttons, not the anchor pattern the availability dashboard uses:
+ * these sections are modal-local state with no URL of their own, so there is
+ * nothing to link to. (LDS's `Tabs` still cannot report which tab was clicked —
+ * see `TabNav.tsx` — so the buttons are hand-rolled either way, same reasoning as
+ * the horizontal tab bar before it, just stacked vertically now.)
+ *
+ * dataUpdatedAt keys editable panels so a save remounts fields from the server's
+ * answer, including a newly generated Slack-token hint.
+ */
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const settingsQuery = useSettings();
   const settings = settingsQuery.data;
@@ -92,9 +110,16 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   const saving = saveProfile.isPending || saveNotifications.isPending;
 
+  // Each section gates on its own slice: Profile and Appearance share the profile
+  // payload, so without the split either one would light up the other's Save.
   const dirty =
     settings != null &&
-    ((activeTab === TAB_PROFILE && profileValues != null && isProfileDirty(settings, profileValues)) ||
+    ((activeTab === TAB_PROFILE &&
+      profileValues != null &&
+      isDisplayNameDirty(settings, profileValues)) ||
+      (activeTab === TAB_APPEARANCE &&
+        profileValues != null &&
+        isThemeDirty(settings, profileValues)) ||
       (activeTab === TAB_NOTIFICATIONS &&
         notificationValues != null &&
         isNotificationsDirty(settings, notificationValues)));
@@ -109,7 +134,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     if (!settings || saving || !dirty) return;
     setNotice(null);
     try {
-      if (activeTab === TAB_PROFILE && profileValues) {
+      if ((activeTab === TAB_PROFILE || activeTab === TAB_APPEARANCE) && profileValues) {
         await saveProfile.mutateAsync(buildProfilePayload(profileValues));
       } else if (activeTab === TAB_NOTIFICATIONS && notificationValues) {
         await saveNotifications.mutateAsync(buildNotificationsPayload(notificationValues));
@@ -140,6 +165,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   return createPortal(
     <Modal
       title="Settings"
+      size="xl"
       onClose={onClose}
       actions={
         // Account has nothing to save, so it gets no button rather than a
@@ -158,57 +184,68 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           </Banner>
         )}
 
-        <nav className="rt-settings-tabs" aria-label="Settings sections">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              aria-current={tab.id === activeTab ? 'true' : undefined}
-              onClick={() => {
-                setActiveTab(tab.id);
-                setNotice(null);
-              }}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+        <div className="rt-settings-body">
+          <nav className="rt-settings-rail" aria-label="Settings sections">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                aria-current={tab.id === activeTab ? 'true' : undefined}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  setNotice(null);
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
 
-        {settingsQuery.isPending ? (
-          <Skeleton aria-label="Loading settings" />
-        ) : settingsQuery.isError || !settings ? (
-          <Banner status="error">
-            {settingsErrorMessage((settingsQuery.error as { code?: string } | null)?.code)}
-          </Banner>
-        ) : (
-          <>
-            {activeTab === TAB_PROFILE && profileValues && (
-              <ProfilePanel
-                key={`profile:${version}`}
-                profile={settings.profile}
-                values={profileValues}
-                onChange={setProfileValues}
-              />
+          <div className="rt-settings-panel">
+            {settingsQuery.isPending ? (
+              <Skeleton aria-label="Loading settings" />
+            ) : settingsQuery.isError || !settings ? (
+              <Banner status="error">
+                {settingsErrorMessage((settingsQuery.error as { code?: string } | null)?.code)}
+              </Banner>
+            ) : (
+              <>
+                {activeTab === TAB_PROFILE && profileValues && (
+                  <ProfilePanel
+                    key={`profile:${version}`}
+                    profile={settings.profile}
+                    values={profileValues}
+                    onChange={setProfileValues}
+                  />
+                )}
+                {activeTab === TAB_APPEARANCE && profileValues && (
+                  <AppearancePanel
+                    key={`appearance:${version}`}
+                    values={profileValues}
+                    onChange={setProfileValues}
+                  />
+                )}
+                {activeTab === TAB_NOTIFICATIONS && notificationValues && (
+                  <NotificationsPanel
+                    key={`notifications:${version}`}
+                    settings={settings}
+                    values={notificationValues}
+                    onChange={setNotificationValues}
+                    onTestSlack={testSlack}
+                    onTestEmail={testEmail}
+                  />
+                )}
+                {activeTab === TAB_ACCOUNT && (
+                  <AccountPanel
+                    settings={settings}
+                    onSignOut={signOut}
+                    onDisconnectSlack={() => void handleDisconnectSlack()}
+                  />
+                )}
+              </>
             )}
-            {activeTab === TAB_NOTIFICATIONS && notificationValues && (
-              <NotificationsPanel
-                key={`notifications:${version}`}
-                settings={settings}
-                values={notificationValues}
-                onChange={setNotificationValues}
-                onTestSlack={testSlack}
-                onTestEmail={testEmail}
-              />
-            )}
-            {activeTab === TAB_ACCOUNT && (
-              <AccountPanel
-                settings={settings}
-                onSignOut={signOut}
-                onDisconnectSlack={() => void handleDisconnectSlack()}
-              />
-            )}
-          </>
-        )}
+          </div>
+        </div>
       </div>
     </Modal>,
     document.body,
