@@ -91,6 +91,7 @@ class DeploymentContractTest(unittest.TestCase):
     def test_sandbox_status_comment_updates_before_image_wait(self) -> None:
         sandbox = workflow("sandbox.yml")
         sweep = workflow("sandbox-sweep.yml")
+        sandbox_action = (ROOT / ".github" / "actions" / "sandbox" / "action.yml").read_text()
         sandbox_job = sandbox["jobs"]["sandbox"]
         step_names = [step["name"] for step in sandbox_job["steps"]]
         status_step = step_by_name(sandbox_job, "Status workflow started")
@@ -108,6 +109,8 @@ class DeploymentContractTest(unittest.TestCase):
         )
         self.assertIn("workflow started", status_script)
         self.assertIn("SANDBOX_TRIGGER", status_step["env"])
+        self.assertNotIn("SANDBOX_PR_NUMBER", status_step["env"])
+        self.assertNotIn("SANDBOX_PR_NUMBER", sandbox_action)
 
 
 if __name__ == "__main__":

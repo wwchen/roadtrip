@@ -133,13 +133,12 @@ runs:
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         SANDBOX_OPERATION: ${{ inputs.operation }}
-        SANDBOX_PR_NUMBER: ${{ inputs.pr-number }}
         SANDBOX_SHA: ${{ steps.shas.outputs.sha }}
         SANDBOX_BRANCH: ${{ inputs.branch }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
-          const pr = Number(process.env.SANDBOX_PR_NUMBER);
+          const pr = Number('${{ inputs.pr-number }}');
           const isStop = process.env.SANDBOX_OPERATION === 'stop';
           const marker = `<!-- sandbox-status:pr${pr} -->`;
           const runUrl =
@@ -305,7 +304,6 @@ runs:
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         SANDBOX_OPERATION: ${{ inputs.operation }}
-        SANDBOX_PR_NUMBER: ${{ inputs.pr-number }}
         SANDBOX_SLUG: ${{ inputs.slug }}
         SANDBOX_REASON: ${{ inputs.reason }}
         SANDBOX_SHA: ${{ steps.shas.outputs.sha }}
@@ -315,7 +313,7 @@ runs:
       with:
         github-token: ${{ inputs.github-token }}
         script: |
-          const pr = Number(process.env.SANDBOX_PR_NUMBER);
+          const pr = Number('${{ inputs.pr-number }}');
           const operation = process.env.SANDBOX_OPERATION;
           const slug = process.env.SANDBOX_SLUG;
           const reason = process.env.SANDBOX_REASON;
