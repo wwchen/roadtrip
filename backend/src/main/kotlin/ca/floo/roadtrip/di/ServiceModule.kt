@@ -9,6 +9,7 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.DataProvider
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.observability.RoadtripMetrics
+import ca.floo.roadtrip.repo.AtlasRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -23,6 +24,7 @@ import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
+import ca.floo.roadtrip.service.atlas.AtlasService
 import ca.floo.roadtrip.service.auth.ClaimsDialectRegistry
 import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
@@ -333,6 +335,7 @@ val serviceModule =
                 detailServices = get(named("poiDetailServices")),
             )
         }
+        single { AtlasService(get<AtlasRepo>()) }
         single<PoiReader> { get<PoiService>() }
         single<ReadinessService> { ReadinessServiceImpl(databaseHealthRepo = get()) }
         single {

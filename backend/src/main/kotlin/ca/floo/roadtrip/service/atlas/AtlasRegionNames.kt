@@ -1,0 +1,82 @@
+package ca.floo.roadtrip.service.atlas
+
+/**
+ * Maps a two-letter state/province code (as stored in
+ * `campgrounds.location->>'region'` / `...->'address'->>'state_code'`) to a
+ * display name. Codes not in the table fall back to the raw code, so an
+ * unexpected value still renders rather than vanishing.
+ */
+internal object AtlasRegionNames {
+    private val NAMES =
+        mapOf(
+            "AL" to "Alabama",
+            "AK" to "Alaska",
+            "AZ" to "Arizona",
+            "AR" to "Arkansas",
+            "CA" to "California",
+            "CO" to "Colorado",
+            "CT" to "Connecticut",
+            "DE" to "Delaware",
+            "DC" to "District of Columbia",
+            "FL" to "Florida",
+            "GA" to "Georgia",
+            "HI" to "Hawaii",
+            "ID" to "Idaho",
+            "IL" to "Illinois",
+            "IN" to "Indiana",
+            "IA" to "Iowa",
+            "KS" to "Kansas",
+            "KY" to "Kentucky",
+            "LA" to "Louisiana",
+            "ME" to "Maine",
+            "MD" to "Maryland",
+            "MA" to "Massachusetts",
+            "MI" to "Michigan",
+            "MN" to "Minnesota",
+            "MS" to "Mississippi",
+            "MO" to "Missouri",
+            "MT" to "Montana",
+            "NE" to "Nebraska",
+            "NV" to "Nevada",
+            "NH" to "New Hampshire",
+            "NJ" to "New Jersey",
+            "NM" to "New Mexico",
+            "NY" to "New York",
+            "NC" to "North Carolina",
+            "ND" to "North Dakota",
+            "OH" to "Ohio",
+            "OK" to "Oklahoma",
+            "OR" to "Oregon",
+            "PA" to "Pennsylvania",
+            "RI" to "Rhode Island",
+            "SC" to "South Carolina",
+            "SD" to "South Dakota",
+            "TN" to "Tennessee",
+            "TX" to "Texas",
+            "UT" to "Utah",
+            "VT" to "Vermont",
+            "VA" to "Virginia",
+            "WA" to "Washington",
+            "WV" to "West Virginia",
+            "WI" to "Wisconsin",
+            "WY" to "Wyoming",
+            "PR" to "Puerto Rico",
+            "VI" to "U.S. Virgin Islands",
+            "GU" to "Guam",
+            "AB" to "Alberta",
+            "BC" to "British Columbia",
+            "MB" to "Manitoba",
+            "NB" to "New Brunswick",
+            "NL" to "Newfoundland and Labrador",
+            "NS" to "Nova Scotia",
+            "NT" to "Northwest Territories",
+            "NU" to "Nunavut",
+            "ON" to "Ontario",
+            "PE" to "Prince Edward Island",
+            "QC" to "Quebec",
+            "SK" to "Saskatchewan",
+            "YT" to "Yukon",
+        )
+
+    fun label(code: String): String = NAMES[code] ?: code
+}

@@ -14,6 +14,7 @@ import ca.floo.roadtrip.repo.RefLinkRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSessionRepo
 import ca.floo.roadtrip.route.api.admin.adminIngestRoutes
+import ca.floo.roadtrip.route.api.atlas.atlasRoutes
 import ca.floo.roadtrip.route.api.availability.availabilityDashboardRoutes
 import ca.floo.roadtrip.route.api.availability.availabilityWatchRoutes
 import ca.floo.roadtrip.route.api.buildInfoRoutes
@@ -32,6 +33,7 @@ import ca.floo.roadtrip.route.auth.authRoutes
 import ca.floo.roadtrip.route.auth.roadtripAuthorization
 import ca.floo.roadtrip.route.common.undeclaredAccessRoutes
 import ca.floo.roadtrip.route.static.staticSiteRoutes
+import ca.floo.roadtrip.service.atlas.AtlasService
 import ca.floo.roadtrip.service.auth.AuthController
 import ca.floo.roadtrip.service.auth.ClaimsDialectRegistry
 import ca.floo.roadtrip.service.auth.IdTokenVerifier
@@ -92,6 +94,7 @@ internal fun Application.registerKoinRoutes() {
     val userSettings: UserSettingsService by inject()
     val userRepo: UserRepo by inject()
     val slackInteractivity: SlackInteractivityWiring? = getKoin().getOrNull()
+    val atlasService: AtlasService by inject()
     val readiness: ReadinessService by inject()
     val schedulerScope: CoroutineScope by inject()
     val staticDir: File by inject(named("staticDir"))
@@ -138,6 +141,7 @@ internal fun Application.registerKoinRoutes() {
         routeRoutes(routeCache, routeCorridorService, config.route)
         geocodeRoutes(mapboxGeocoder)
         buildInfoRoutes(config.buildInfo)
+        atlasRoutes(atlasService)
         sandboxRoutes(config.sandbox, userRepo)
         healthRoutes(readiness)
         adminIngestRoutes(ingestController, ctx)

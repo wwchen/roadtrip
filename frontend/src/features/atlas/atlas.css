@@ -1,0 +1,104 @@
+/* The Atlas index: a dense, hairline-ruled text hierarchy.
+ *
+ * Deliberately plain — a Craigslist / Experimental Jetset register: monospace
+ * labels, tight rows, a single hairline between them, indentation the only
+ * ornament. Every colour is a semantic `--rt-*` role so the whole thing themes
+ * itself in light and dark; `scripts/check-color-tokens.mjs` enforces that.
+ */
+
+.atlas-tree {
+  --atlas-indent: 18px;
+  --atlas-row-pad: 5px;
+  border-top: 1px solid var(--rt-border);
+  font-family: var(--rt-mono);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.atlas-node {
+  /* `--atlas-depth` is set inline per row; the indent is applied to the row so
+     the hairline separators still span the full width. */
+}
+
+.atlas-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: var(--atlas-row-pad) 0;
+  padding-left: calc(var(--atlas-depth, 0) * var(--atlas-indent));
+  border-bottom: 1px solid var(--rt-border);
+}
+
+.atlas-disclosure {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--rt-muted);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.atlas-disclosure:hover { color: var(--rt-text); }
+.atlas-disclosure-leaf { cursor: default; }
+
+.atlas-chevron {
+  font-size: 10px;
+}
+
+.atlas-label {
+  color: var(--rt-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.atlas-label-link {
+  color: var(--rt-brand-text);
+  text-decoration: none;
+}
+.atlas-label-link:hover {
+  color: var(--rt-brand);
+  text-decoration: underline;
+}
+
+.atlas-count {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.atlas-teaser {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--rt-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-children {
+  /* Rows carry their own indent from `--atlas-depth`, so the group is a plain
+     wrapper — no extra padding, which would double the offset. */
+}
+
+.atlas-status {
+  padding: var(--atlas-row-pad) 0;
+  padding-left: calc((var(--atlas-depth, 0) + 1) * var(--atlas-indent));
+  color: var(--rt-muted);
+  font-size: 12px;
+  border-bottom: 1px solid var(--rt-border);
+}
+.atlas-status-error { color: var(--rt-error); }
+.atlas-retry {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--rt-error);
+  text-decoration: underline;
+  cursor: pointer;
+}

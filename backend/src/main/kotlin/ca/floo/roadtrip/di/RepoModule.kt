@@ -2,6 +2,7 @@ package ca.floo.roadtrip.di
 
 import ca.floo.roadtrip.repo.AdminIngestReadRepo
 import ca.floo.roadtrip.repo.ApiCacheRepo
+import ca.floo.roadtrip.repo.AtlasRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -43,4 +44,5 @@ val repoModule =
         single { UserRepo(get()) }
         single { UserSettingsRepo(get()) }
         single { DatabaseHealthRepo(get()) }
+        single { AtlasRepo(get()) }
     }

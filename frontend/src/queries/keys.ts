@@ -42,6 +42,21 @@ export const queryKeys = {
     forPoi: (poiId: string | number) => ['campsites', String(poiId)] as const,
   },
 
+  /**
+   * The Atlas index tree, one node per key.
+   *
+   * Keyed on the node's dot-delimited `key` (the root is the empty string), which
+   * is exactly the `path` the request takes — so a node's cache entry and its
+   * fetch cannot drift. Hierarchical under `['atlas']` so the whole tree can be
+   * invalidated at once, but a node's own key is opaque to prefix-matching (the
+   * keys are dot-joined strings, not array segments), which is intended: expanding
+   * one node must not refetch another.
+   */
+  atlas: {
+    all: () => ['atlas'] as const,
+    node: (path: string) => ['atlas', 'node', path] as const,
+  },
+
   availability: {
     all: () => ['availability'] as const,
     forPoi: (poiId: string | number, startDate?: string, endDate?: string, siteType?: string) =>
