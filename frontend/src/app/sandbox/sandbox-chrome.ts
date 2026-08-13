@@ -1,5 +1,4 @@
-// The deployment chrome every page carries: the sandbox build banner and the
-// assume-user switcher.
+// The deployment chrome every page carries: the sandbox build banner.
 //
 // One entry point rather than two imports per page, because the failure mode of
 // forgetting one is invisible. `mountPage` calls this, so the guarantee is
@@ -10,7 +9,6 @@
 // same guarantee without a build-time indirection.)
 import './sandbox.css';
 import { initSandboxBanner } from './sandbox-banner';
-import { initUserSwitcher } from './sandbox-user-switcher';
 
 /**
  * Render the sandbox chrome if this deployment is a sandbox.
@@ -21,5 +19,4 @@ import { initUserSwitcher } from './sandbox-user-switcher';
  */
 export function initSandboxChrome(): void {
   void initSandboxBanner();
-  void initUserSwitcher();
 }

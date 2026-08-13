@@ -2,7 +2,8 @@
 
 A sandbox is a throwaway live environment for a PR or branch: backend +
 Postgres only, no observability, no companion, no Cloudflare tunnel of its
-own. It is reachable at `https://roadtrip-sb-<name>.floo.ca`.
+own. It is reachable through one of five fixed public slots:
+`https://roadtrip-sb-1.floo.ca` through `https://roadtrip-sb-5.floo.ca`.
 
 The zone is `floo.ca` (one label under the apex) on purpose: the free
 Cloudflare Universal SSL cert `*.floo.ca` covers sandbox hostnames. A deeper
@@ -14,9 +15,9 @@ Advanced Certificate Manager.
 
 Each sandbox is reached through the **main `roadtrip` Cloudflare tunnel** (the
 retired `roadtrip sandbox` tunnel is unused). Three layers, provisioned
-per-sandbox by `scripts/cloudflare_sandbox.sh` except where noted:
+per-slot by `scripts/cloudflare_sandbox.sh` except where noted:
 
-- **DNS** — a per-sandbox **explicit proxied CNAME** `roadtrip-sb-<name>.floo.ca
+- **DNS** — a per-slot **explicit proxied CNAME** `roadtrip-sb-<slot>.floo.ca
   → <main-tunnel-id>.cfargotunnel.com`, created on up and deleted on down.
   There is **no wildcard DNS**, so only sandboxes we created (plus prod records)
   resolve to the tunnel. (Cloudflare rejects partial-label wildcards like
@@ -26,11 +27,10 @@ per-sandbox by `scripts/cloudflare_sandbox.sh` except where noted:
   http://caddy:80`, ordered after the explicit `roadtrip.floo.ca` rules and
   before the `404` catch-all. Automation never mutates the tunnel config, so a
   sandbox op cannot break the prod site. `roadtrip.floo.ca` matches its own
-  rules first; only the per-sandbox CNAMEs reach the wildcard.
-- **Caddy** — filters to the `roadtrip-sb-<name>` vhost and reverse-proxies to
+  rules first; only the per-slot CNAMEs reach the wildcard.
+- **Caddy** — filters to the `roadtrip-sb-<slot>` vhost and reverse-proxies to
   the backend.
-- **Access** — because sandboxes disable app auth and resolve every request to
-  a seeded **admin** user (below), the hosts sit behind Cloudflare Access. This
+- **Access** — sandbox hosts sit behind Cloudflare Access as an outer gate. This
   is a **single static, human-configured** self-hosted application whose domain
   is the wildcard `roadtrip-sb-*.floo.ca` (Access apps accept partial-label
   wildcards even though DNS/tunnel rules don't). Its policy restricts entry to
@@ -49,7 +49,7 @@ Before publishing DNS, `cf_sandbox_up` **verifies the Access gate exists**: it
 looks up the wildcard Access app covering the host and confirms it has at least
 one `allow` policy (read-only). If that check fails — app missing, mistyped, or
 no allow policy — it refuses to create DNS rather than expose an ungated
-seed-admin backend. `CF_SKIP_ACCESS_CHECK=1` overrides (discouraged). A DNS or
+sandbox backend. `CF_SKIP_ACCESS_CHECK=1` overrides (discouraged). A DNS or
 gate failure on a token-configured host is **fatal**: the deploy aborts instead
 of printing "Sandbox is live" for a URL that can't resolve.
 
@@ -61,13 +61,22 @@ plus the API token file `cloudflare_api_token` — which needs **`Zone:DNS:Edit`
 Access). Without the token file, DNS provisioning is a logged no-op — the
 sandbox still comes up host-locally, just not publicly reachable.
 
-Auth is disabled in every sandbox (no `AUTH_<vendor>_ISSUER` is passed, so the
-active provider's issuer is blank, and `ROADTRIP_SANDBOX_ASSUME_USER=true`).
-Instead the backend resolves every request to one of two seeded users selected
-via a header:
+App auth is enabled in every sandbox and uses the same provider-backed login,
+session cookie, user provisioning, and `/api/settings/profile` path as local and
+production. The sandbox deploy keeps the production-like app profile and public
+HTTPS root URL, but wraps Compose in `secrets/manage.py exec local --` so auth
+uses the dev provider app credentials. Each sandbox sets
+`roadtrip.web.root-url` to its public URL, so the OIDC callback is
+`https://roadtrip-sb-<slot>.floo.ca/auth/callback`. The dev Clerk OAuth app
+must allow all five exact callback URLs:
 
-- **Will** (id 90001) — admin role
-- **Matt** (id 90002) — regular user (no role)
+```
+https://roadtrip-sb-1.floo.ca/auth/callback
+https://roadtrip-sb-2.floo.ca/auth/callback
+https://roadtrip-sb-3.floo.ca/auth/callback
+https://roadtrip-sb-4.floo.ca/auth/callback
+https://roadtrip-sb-5.floo.ca/auth/callback
+```
 
 The build-info banner visible in the UI (`/api/build-info`) shows the
 environment (`sandbox`), commit SHA, and branch so reviewers can confirm
@@ -94,15 +103,17 @@ then SSHes to `mini@mini-ca` over Tailscale and installs the PR's
 release archive (no Git checkout), and runs
 `scripts/deploy.sh sandbox-up pr<N> pr<N>` (with `SANDBOX_SHA` set) or
 `scripts/deploy.sh sandbox-down pr<N>`, both via the shared sandbox action
-described below. On success it posts the sandbox URL as a PR comment:
+described below. `sandbox-up` reuses that PR's existing slot when it has one, or
+claims the first empty slot from 1-5. On success it posts the allocated sandbox
+URL as a PR comment:
 
 ```
-Sandbox live: https://roadtrip-sb-pr<N>.floo.ca
+Sandbox live: https://roadtrip-sb-<slot>.floo.ca
 SHA: <12-char sha>  ·  stop with /sandbox stop
 ```
 
-The sandbox is named `pr<N>` (e.g. `pr532`) and is stable across
-re-runs of the same PR.
+The sandbox marker is named `pr<N>` (e.g. `pr532`) and records its `SLOT`. Re-runs
+of the same PR keep the same slot until the sandbox is torn down.
 
 ### The sandbox action
 
@@ -113,7 +124,7 @@ stopping mean:
 | Input | Default | Meaning |
 |---|---|---|
 | `operation` | — | `start` or `stop` |
-| `slug` | — | Sandbox slug, e.g. `pr532` |
+| `slug` | — | Sandbox owner slug, e.g. `pr532`; deploy maps it to an empty numeric slot |
 | `branch` | `''` | Branch for the build-info banner; falls back to the slug (start) |
 | `pr-number` | `''` | PR to report status on; blank posts nothing |
 | `reason` | `''` | Why it was stopped, shown in the status comment |
@@ -138,11 +149,12 @@ tree SHA from that checkout rather than having them passed back in alongside it.
 The only thing it cannot recover from a detached checkout is the branch name,
 which is why `branch` is an input and `sha` is not.
 
-The slug is authoritative: it is passed to `deploy.sh sandbox-up` as both ref and
-explicit name, so the sandbox name is never re-derived and always matches the
-hostname the status comment advertises. The operation must be `start` or `stop`
-and the slug must satisfy `deploy.sh`'s own name rule, both checked before
-anything reaches the host.
+The slug is authoritative as the sandbox owner: it is passed to
+`deploy.sh sandbox-up` as both ref and explicit name, so teardown and sweep keep a
+stable handle even though the public hostname is a numeric slot. The action reads
+the actual URL from `deploy.sh` output after slot allocation. The operation must
+be `start` or `stop` and the slug must satisfy `deploy.sh`'s own name rule, both
+checked before anything reaches the host.
 
 `torn-down` lets callers tell "there was nothing to do" apart from a genuine
 failure — the remote signals absence with a dedicated exit code, so real errors
@@ -175,8 +187,8 @@ the older action until it picks up master.
 
 `sandbox-sweep.yml` is the safety net for anything the close path missed:
 teardowns that failed, PRs closed before that job existed, and sandboxes on PRs
-that simply stay open. It lists every marker on the host and tears down any
-sandbox that
+that simply stay open. It lists every logical-owner marker on the host and tears
+down any sandbox that
 
 - belongs to a PR that is closed or no longer exists, or
 - has outlived `SANDBOX_TTL_HOURS` (repo variable, default **2**), or
@@ -184,7 +196,8 @@ sandbox that
   sandbox.
 
 Sandboxes created by name via `make sandbox` are subject to the TTL but have no
-PR to check, and no comment is posted for them.
+PR to check, and no comment is posted for them. Their markers also claim a
+numeric slot.
 
 The `plan` job decides; a matrix `stop` job runs the shared stop step once per
 doomed sandbox, serialised (`max-parallel: 1`) because teardown prunes images on
@@ -219,14 +232,17 @@ make sandbox-stop NAME=<name>
 `make sandbox` expands to:
 
 ```sh
-SANDBOX_SHA=<sha> scripts/deploy.sh sandbox-up <ref> [name]
+SANDBOX_SHA=<sha> SANDBOX_BRANCH=<branch> scripts/deploy.sh sandbox-up <ref> [name]
 ```
 
 where `<sha>` defaults to the current `git rev-parse HEAD` if `SHA` is
-not set, and `<ref>` defaults to the current branch if `REF` is not set.
+not set, and `<ref>` defaults to the current branch if `REF` is not set. The
+chosen name is a logical owner; `deploy.sh` assigns it the first empty slot from
+1-5 unless it already has a slot marker.
 
 `make sandbox-stop` calls `scripts/deploy.sh sandbox-down <name>` directly;
-`NAME` is required.
+`NAME` is required. `sandbox-down` also accepts a numeric slot and resolves it
+back to the owning marker.
 
 This path is gated by SSH access to the deploy host — no GitHub identity
 check.
@@ -247,17 +263,17 @@ volume read-only. Nothing is built or checked out on the deploy host.
 
 A **containerized Caddy** (the `caddy` service in the base `roadtrip`
 Compose project, profile `tunnel`, alongside `cloudflared`) holds
-per-sandbox virtual-hosts for `roadtrip-sb-<name>.floo.ca`. It runs
+per-slot virtual-hosts for `roadtrip-sb-<slot>.floo.ca`. It runs
 `caddy:2-alpine`, publishes **no host ports** (pihole owns 80/443 on the
 deploy host), listens on `:80` inside the Docker network (each vhost uses an
 `http://` site address; a scheme-less one would bind `:443`), and terminates
 no TLS of its own (`auto_https off`).
 
-`deploy.sh` writes a per-sandbox snippet:
+`deploy.sh` writes a per-slot snippet:
 
 ```
-http://roadtrip-sb-<name>.<zone> {
-    reverse_proxy sb-<name>-backend:8765
+http://roadtrip-sb-<slot>.<zone> {
+    reverse_proxy sb-<slot>-backend:8765
 }
 ```
 
@@ -268,7 +284,7 @@ into the caddy container at `/etc/caddy/sandboxes`, imported by
 required.
 
 The `reverse_proxy` target is the backend's **network alias**
-(`sb-<name>-backend`) on the shared `roadtrip-sandbox` Docker network, not
+(`sb-<slot>-backend`) on the shared `roadtrip-sandbox` Docker network, not
 a host port — the caddy container cannot reach the host's
 `127.0.0.1:<port>` loopback bind. Each sandbox backend joins
 `roadtrip-sandbox` (declared `external: true` in
@@ -288,10 +304,16 @@ tunnel to the caddy container at `http://caddy:80`.
 
 ### Compose project isolation
 
-Each sandbox runs as a separate Compose project `roadtrip-sb-<name>` with
-its own named volume (`roadtrip-sb-<name>_postgres-data`). Database volumes are
+Each occupied slot runs as a separate Compose project `roadtrip-sb-<slot>` with
+its own named volume (`roadtrip-sb-<slot>_postgres-data`). Database volumes are
 never shared. Sandboxes do share the immutable, read-only
 `roadtrip-data-<data-tree-sha>` dataset volume with production.
+
+The owner marker stays logical (`pr638.meta`, `my-branch.meta`, etc.) and records
+the numeric `SLOT`, host-local `PORT`, dataset SHA, URL, and status. Slot
+allocation holds a small lock in `SANDBOX_STATE_DIR`, reserves the marker before
+Compose starts, and skips slots that already have a marker, Caddy snippet, or
+running Compose project.
 
 ### Database
 
@@ -299,9 +321,6 @@ never shared. Sandboxes do share the immutable, read-only
 2. If `SANDBOX_SNAPSHOT_PATH` points to a readable `pg_dump -Fc` archive,
    `deploy.sh` restores it with `pg_restore --no-owner --no-acl
    --exit-on-error` into the fresh database.
-3. `scripts/sandbox_seed_users.sql` is applied unconditionally after the
-   restore (or immediately after Flyway if there is no snapshot), inserting
-   Will and Matt with `ON CONFLICT DO NOTHING`.
 
 The snapshot is taken from the running production Postgres instance by
 `scripts/sandbox_snapshot.sh` (see Scheduled jobs below).
@@ -312,12 +331,17 @@ The backend container runs with:
 
 | Variable | Value |
 |---|---|
-| `ROADTRIP_PROFILE` | `compose-local` (Docker-network-aware DB URL, no prod-secret validation) |
+| `ROADTRIP_PROFILE` | `prod` |
 | `ROADTRIP_BUILD_ENV` | `sandbox` |
 | `ROADTRIP_BUILD_SHA` | `<sha>` |
 | `ROADTRIP_BUILD_BRANCH` | `<branch>` |
-| `ROADTRIP_SANDBOX_ASSUME_USER` | `true` (auth bypass; no OIDC issuer is passed, so auth is off) |
+| `ROADTRIP_WEB_ROOT_URL` | `https://roadtrip-sb-<slot>.floo.ca` |
+| `AUTH_PROVIDER` | `clerk` |
 | `OTEL_*_EXPORTER` | `none` (no Alloy collector in a sandbox) |
+
+Sandbox deploys run `secrets/manage.py exec local -- docker compose ...`, so the
+same dev Clerk credentials used by local development reach the backend while the
+app still runs the production-like profile and public callback URL.
 
 ### The React pages
 
@@ -340,18 +364,17 @@ change.
 
 | Variable | Default | Notes |
 |---|---|---|
-| `SANDBOX_TUNNEL_ZONE` | `floo.ca` | DNS zone; sandbox URLs become `<prefix><name>.<zone>`. Kept one label under the apex so the free `*.floo.ca` cert covers it |
-| `SANDBOX_HOST_PREFIX` | `roadtrip-sb-` | Hostname prefix; full host is `<prefix><name>.<zone>`. Must match the tunnel's `roadtrip-sb-*` public-hostname rule |
-| `SANDBOX_CADDY_DIR` | `<repo>/caddy/sandboxes` | Host side of the caddy container bind-mount; per-sandbox `.caddy` snippet files land here and are imported by `caddy/Caddyfile` |
+| `SANDBOX_TUNNEL_ZONE` | `floo.ca` | DNS zone; sandbox URLs become `<prefix><slot>.<zone>`. Kept one label under the apex so the free `*.floo.ca` cert covers it |
+| `SANDBOX_HOST_PREFIX` | `roadtrip-sb-` | Hostname prefix; full host is `<prefix><slot>.<zone>`. Must match the tunnel's `roadtrip-sb-*` public-hostname rule |
+| `SANDBOX_CADDY_DIR` | `<repo>/caddy/sandboxes` | Host side of the caddy container bind-mount; per-slot `.caddy` snippet files land here and are imported by `caddy/Caddyfile` |
 | `SANDBOX_CADDY_CONFIG` | `/etc/caddy/Caddyfile` | Root Caddyfile path **inside the container**; passed to `caddy reload --config <path>` |
 | `SANDBOX_CADDY_CONTAINER` | `roadtrip-caddy-1` | Container reloaded via `docker exec <name> caddy reload` — no host `caddy` binary needed |
 | `SANDBOX_NETWORK` | `roadtrip-sandbox` | Shared Docker network the proxy and every sandbox backend join; must match the `name:` in `docker-compose.yml` |
 | `SANDBOX_BACKEND_PORT` | `8765` | Backend in-container port the proxy forwards to |
-| `SANDBOX_STATE_DIR` | `/var/lib/roadtrip-sandboxes` | Holds `<name>.meta` marker files consumed by the reaper |
+| `SANDBOX_STATE_DIR` | `/var/lib/roadtrip-sandboxes` | Holds `<owner>.meta` marker files consumed by allocation and the reaper |
 | `SANDBOX_SNAPSHOT_PATH` | _(empty)_ | Path to a `pg_dump -Fc` archive; if blank or absent, sandboxes start with an empty Flyway-migrated schema. `scripts/sandbox_snapshot.sh` defaults this to `/var/lib/roadtrip-sandboxes/snapshot.dump` when the var is unset |
 | `SANDBOX_PORT_RANGE_START` | `41000` | First port in the host-local range allocated to sandboxes |
 | `SANDBOX_PORT_RANGE_END` | `41999` | Last port in the range |
-| `SANDBOX_DB_PASSWORD` | `sandbox` | Throwaway Postgres password for the sandbox DB |
 | `POSTGRES_HEALTH_RETRIES` | `30` | Seconds to wait for `pg_isready` before failing |
 | `SANDBOX_TTL_HOURS` | `2` | Sweep: sandboxes older than this are torn down. Set as a repo variable, not on the host |
 
@@ -392,7 +415,7 @@ sandbox tier off the production box:
 1. Provision the new host with Docker and `docker compose` (v2 plugin). No host `caddy` binary is needed — the proxy is the `caddy` container.
 2. Log in to GHCR on the new host so `docker pull ghcr.io/wwchen/roadtrip/backend:<sha>` succeeds — the same `GHCR_TOKEN` / `GITHUB_TOKEN` already used by the deploy host works.
 3. Bring up the base stack with the `tunnel` profile (`make run env=prod`, or at minimum `docker compose --profile tunnel --profile pois up -d caddy cloudflared`) so the `caddy` container and the `roadtrip-sandbox` network exist.
-4. Route sandboxes through the new host's tunnel: the one-time `*.floo.ca → http://caddy:80` ingress rule, the one-time wildcard Access app for `roadtrip-sb-*.floo.ca`, and the CF API token + `cloudflare.env` (with that host's tunnel id). Per-sandbox DNS is then automatic. See First-time host setup.
+4. Route sandboxes through the new host's tunnel: the one-time `*.floo.ca → http://caddy:80` ingress rule, the one-time wildcard Access app for `roadtrip-sb-*.floo.ca`, and the CF API token + `cloudflare.env` (with that host's tunnel id). Per-slot DNS is then automatic. See First-time host setup.
 5. Update `SANDBOX_HOST` in `.github/workflows/sandbox.yml` to the new host and add its Tailscale address to `DEPLOY_KNOWN_HOSTS`.
 6. Set the `SANDBOX_*` env vars in the host's environment (or export them before the SSH call) for any non-default values.
 
@@ -403,10 +426,11 @@ No script changes are required.
 Checklist for a host that has not previously run sandboxes:
 
 - [ ] **Base stack up with the `tunnel` profile.** The `caddy` container and the `roadtrip-sandbox` network both come from the base `roadtrip` project. Run `make run env=prod` (or `docker compose --profile tunnel --profile pois up -d caddy cloudflared`) once so they exist before the first `/sandbox`. No host `caddy` install and no `/etc/caddy` setup is required — the container carries `caddy/Caddyfile` and imports the bind-mounted `caddy/sandboxes/`.
-- [ ] **One-time tunnel ingress rule.** On the main `roadtrip` tunnel, add a public-hostname rule subdomain `*` (→ `*.floo.ca`) → `http://caddy:80`, ordered after the explicit `roadtrip.floo.ca` rules and before the `404` catch-all. This is the ONLY tunnel edit; per-sandbox automation never touches it. (Applying via API: `PUT .../cfd_tunnel/<id>/configurations` with the full ingress list — insert the one rule, preserve the rest.)
-- [ ] **CF API token + config.** Place a token with **`Zone:DNS:Edit`** and **`Access: Apps: Read`** for `floo.ca`/the account at `/var/lib/roadtrip-sandboxes/cloudflare_api_token` (chmod 600), and write `/var/lib/roadtrip-sandboxes/cloudflare.env` with `CF_TUNNEL_ID` (main tunnel). Per-sandbox DNS is then created/deleted automatically; `cf_sandbox_up` uses the Access read to verify the gate before publishing DNS. No wildcard DNS record is needed — each sandbox gets its own explicit CNAME.
+- [ ] **One-time tunnel ingress rule.** On the main `roadtrip` tunnel, add a public-hostname rule subdomain `*` (→ `*.floo.ca`) → `http://caddy:80`, ordered after the explicit `roadtrip.floo.ca` rules and before the `404` catch-all. This is the ONLY tunnel edit; per-slot automation never touches it. (Applying via API: `PUT .../cfd_tunnel/<id>/configurations` with the full ingress list — insert the one rule, preserve the rest.)
+- [ ] **CF API token + config.** Place a token with **`Zone:DNS:Edit`** and **`Access: Apps: Read`** for `floo.ca`/the account at `/var/lib/roadtrip-sandboxes/cloudflare_api_token` (chmod 600), and write `/var/lib/roadtrip-sandboxes/cloudflare.env` with `CF_TUNNEL_ID` (main tunnel). Per-slot DNS is then created/deleted automatically; `cf_sandbox_up` uses the Access read to verify the gate before publishing DNS. No wildcard DNS record is needed — each occupied slot gets its own explicit CNAME.
 - [ ] **One-time Access app.** In Zero Trust → Access → Applications, create ONE self-hosted app with domain `roadtrip-sb-*.floo.ca` and a policy that **allows only your identity providers** (Google/GitHub) — e.g. an Allow policy including your email(s) or a Groups/IdP selector. This one wildcard app gates every sandbox; automation never touches it. NOTE: an app with `allowed_idps` but an empty `policies` array does not admit anyone — you must add at least one Allow policy.
 - [ ] **Identity provider.** A Google and/or GitHub IdP configured in Zero Trust → Settings → Authentication, referenced by the Access app above.
+- [ ] **App auth callbacks.** Configure the Roadtrip dev Clerk OAuth app to allow all five exact callback URLs: `https://roadtrip-sb-1.floo.ca/auth/callback`, `https://roadtrip-sb-2.floo.ca/auth/callback`, `https://roadtrip-sb-3.floo.ca/auth/callback`, `https://roadtrip-sb-4.floo.ca/auth/callback`, and `https://roadtrip-sb-5.floo.ca/auth/callback`.
 - [ ] **GHCR login.** Run `docker login ghcr.io` on the host with credentials that can pull from `ghcr.io/wwchen/roadtrip/backend`. A GitHub PAT with `read:packages` scope works; store it so `docker pull` runs unattended (e.g. `~/.docker/config.json`).
 - [ ] **State and snapshot directories.** Create `SANDBOX_STATE_DIR` (`/var/lib/roadtrip-sandboxes` by default) and ensure it is writable by the user running the sandbox scripts.
 - [ ] **Cron entries.** Add the snapshot (nightly) cron entry from the Scheduled jobs section above, pointing to the script in the repo checkout. No reaper entry is needed — `sandbox-sweep.yml` enforces the TTL from GitHub Actions.

@@ -24,20 +24,6 @@ import java.time.OffsetDateTime
 open class UserRepo(
     private val ctx: DSLContext,
 ) {
-    /**
-     * Lists only the seeded sandbox users (those whose email ends with
-     * `@sandbox.local`).  Used by [sandboxRoutes] so that even a mis-scoped
-     * snapshot cannot leak real user rows through the `/api/sandbox/users`
-     * endpoint.
-     */
-    open fun listSandboxUsers(): List<User> =
-        ctx
-            .select(APP_USER.fields().toList())
-            .from(APP_USER)
-            .where(DSL.lower(APP_USER.EMAIL).like("%@sandbox.local"))
-            .fetch()
-            .map { fromRecord(it, rolesFor(UserId(it.get(APP_USER.ID)!!))) }
-
     open fun findById(id: UserId): User? =
         ctx
             .select(APP_USER.fields().toList())

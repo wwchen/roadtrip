@@ -25,7 +25,6 @@ import ca.floo.roadtrip.route.api.pois.campsiteRoutes
 import ca.floo.roadtrip.route.api.pois.poiRoutes
 import ca.floo.roadtrip.route.api.pois.poisOnRouteRoutes
 import ca.floo.roadtrip.route.api.route.routeRoutes
-import ca.floo.roadtrip.route.api.sandboxRoutes
 import ca.floo.roadtrip.route.api.settings.settingsRoutes
 import ca.floo.roadtrip.route.api.slack.slackInteractivityRoute
 import ca.floo.roadtrip.route.auth.AuthRouteWiring
@@ -43,7 +42,6 @@ import ca.floo.roadtrip.service.auth.LoginFlowState
 import ca.floo.roadtrip.service.auth.OidcIdentityProvider
 import ca.floo.roadtrip.service.auth.SessionService
 import ca.floo.roadtrip.service.auth.UserProvisioningService
-import ca.floo.roadtrip.service.auth.sandboxPrincipal
 import ca.floo.roadtrip.service.availability.AvailabilityDashboardController
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
@@ -106,11 +104,7 @@ internal fun Application.registerKoinRoutes() {
     install(roadtripAuthorization) {
         resolvePrincipal = { token ->
             when {
-                authWiring != null -> authWiring.authController.resolve(token) ?: Principal.Anonymous
-                // Auth off. Only here can the sandbox sentinel be honored — a real
-                // AuthConfig makes authWiring non-null and this branch unreachable.
-                config.sandbox.assumeUserEnabled ->
-                    sandboxPrincipal(token) { id -> userRepo.findById(id)?.roles }
+                authWiring != null -> authWiring.authController.resolve(token)
                 else -> Principal.Anonymous
             }
         }
@@ -142,7 +136,6 @@ internal fun Application.registerKoinRoutes() {
         geocodeRoutes(mapboxGeocoder)
         buildInfoRoutes(config.buildInfo)
         atlasRoutes(atlasService)
-        sandboxRoutes(config.sandbox, userRepo)
         healthRoutes(readiness)
         adminIngestRoutes(ingestController, ctx)
         // No /test/* notification routes: they took a caller-supplied recipient

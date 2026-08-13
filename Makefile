@@ -160,7 +160,7 @@ grafana-export:
 	./scripts/sync_grafana_dashboard_links.py
 
 sandbox:
-	SANDBOX_SHA=$(or $(SHA),$(shell git rev-parse HEAD)) scripts/deploy.sh sandbox-up $(or $(REF),$(shell git rev-parse --abbrev-ref HEAD)) $(NAME)
+	SANDBOX_SHA=$(or $(SHA),$(shell git rev-parse HEAD)) SANDBOX_BRANCH=$(or $(REF),$(shell git rev-parse --abbrev-ref HEAD)) scripts/deploy.sh sandbox-up $(or $(REF),$(shell git rev-parse --abbrev-ref HEAD)) $(NAME)
 
 sandbox-stop:
 	scripts/deploy.sh sandbox-down $(NAME)

@@ -21,9 +21,6 @@
 # Every derived table must be COVERED by either appearing in this roots list
 # or being the scrub target (availability_watch via sandbox_scrub.sql).
 #
-# After restore, scripts/sandbox_seed_users.sql re-seeds app_user and
-# user_role with two fixed sandbox-only users (will/matt @sandbox.local).
-
 # ── Identity / session ────────────────────────────────────────────────────────
 app_user
 user_identity

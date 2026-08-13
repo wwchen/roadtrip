@@ -10,7 +10,6 @@ import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.describeApi
-import ca.floo.roadtrip.route.common.principal
 import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
@@ -192,14 +191,10 @@ internal fun Route.authRoutes(
     route("/api") {
         get("/me") {
             if (wiring == null) {
-                // Auth off. Normally Anonymous, but a sandbox may have assumed a user
-                // via the ambient principal. Report it, while keeping auth "disabled".
-                return@get when (val p = call.principal()) {
-                    is Principal.User ->
-                        call.respondEncodedJson(roadtripApiJson, meResponseForUser(userRepo, p, isAuthEnabled = false))
-                    else ->
-                        call.respondEncodedJson(roadtripApiJson, MeResponseDto(isAuthenticated = false, isAuthEnabled = false))
-                }
+                return@get call.respondEncodedJson(
+                    roadtripApiJson,
+                    MeResponseDto(isAuthenticated = false, isAuthEnabled = false),
+                )
             }
             when (val principal = wiring.authController.resolve(call.request.sessionToken())) {
                 is Principal.User -> call.respondEncodedJson(roadtripApiJson, wiring.meResponse(principal))

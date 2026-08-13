@@ -14,4 +14,4 @@ roadtrip:
   grafana:
     root-url: "https://roadtrip.floo.ca/dash/"
   web:
-    root-url: "https://roadtrip.floo.ca/"
+    root-url: "${ROADTRIP_WEB_ROOT_URL:https://roadtrip.floo.ca/}"
