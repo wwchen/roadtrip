@@ -111,7 +111,7 @@
   margin-bottom: 6px;
 }
 
-/* Hide (desktop) / close (mobile), over the panel's top-right corner. */
+/* Hide (desktop) / close (mobile), over the panel's own top-right corner. */
 .rt-legend__hide {
   position: absolute;
   top: 8px;
@@ -164,6 +164,7 @@
   top: max(var(--rt-acct-clearance), calc(env(safe-area-inset-top) + 48px));
   right: 10px;
   z-index: 20;
+  place-items: center;
   width: 40px;
   height: 40px;
   padding: 0;
@@ -188,7 +189,6 @@
 @media (max-width: 640px) {
   .rt-legend-toggle {
     display: grid;
-    place-items: center;
   }
 
   .rt-legend-show {

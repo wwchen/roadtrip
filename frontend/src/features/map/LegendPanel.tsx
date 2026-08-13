@@ -8,7 +8,7 @@ import { useMapContext } from './MapProvider';
 import type { ViewportPois } from './useViewportPois';
 import './legend.css';
 
-/** Below this width the panel is a top sheet behind a hamburger. Matches legend.css. */
+/** Below this width the panel is a bottom sheet behind a toggle button. Matches legend.css. */
 const MOBILE_QUERY = '(max-width: 640px)';
 
 const isMobile = (): boolean => window.matchMedia?.(MOBILE_QUERY).matches ?? false;
@@ -85,7 +85,11 @@ export function LegendPanel({ pois }: LegendPanelProps) {
           title="Show layers"
           onClick={() => setCollapsed(false)}
         >
-          <Icon name="list" aria-hidden="true" />
+          {/* Open Icons has no dedicated "layers" glyph (flagged when the icon
+              migration landed); stacked squares is the closest stand-in and the
+              same choice the map-chrome mockup used. Size comes from
+              `.rt-legend-show`'s own `--icon-size`, not a prop. */}
+          <Icon name="photo-stack" aria-hidden="true" />
         </button>
       )}
 
