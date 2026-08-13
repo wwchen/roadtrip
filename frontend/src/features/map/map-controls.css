@@ -3,10 +3,15 @@
    in map.css — see the note on `.maplibregl-ctrl-geolocate`; zoom's
    `NavigationControl` isn't installed at all any more, see map/controls.ts).
 
-   Locate-me sits above the zoom group, matching the order MapLibre's own
-   controls used. legend.css's mobile toggle sits above this whole stack in
-   turn — its `bottom` offset is computed from the sizes below, so a change
-   here means updating the comment (and the number) over there too.
+   Desktop: one flex column, locate-me above the zoom group — nothing else
+   shares this corner there, so the two can just stack.
+
+   Mobile: a third control, the layers toggle (a different component —
+   legend.css), sits between them: locate-me, then layers, then zoom. That
+   can't be one flex column across two files, so on mobile each of the three
+   gets its own absolute position instead, computed bottom-up from the same
+   numbers legend.css's comment repeats. A size change here means updating
+   both files' numbers.
    --------------------------------------------------------------------------- */
 
 .rt-mapctl {
@@ -67,6 +72,33 @@
 }
 
 @media (max-width: 640px) {
+  /* The flex column is a desktop-only convenience — see the header note.
+     Each control positions itself here, in the same coordinate system
+     `.rt-legend-toggle` already uses (against `.rt-map-shell`, effectively
+     the viewport for right/bottom purposes). */
+  .rt-mapctl {
+    position: static;
+  }
+
+  .rt-mapctl-locate,
+  .rt-mapctl-zoom {
+    position: absolute;
+    right: 10px;
+  }
+
+  /* Bottom-up: zoom's own 10px margin, then a 48px button, a 10px gap, the
+     layers toggle (48px, legend.css), another 10px gap, then this — 10 + 96
+     (the zoom group, two 48px buttons) + 10 + 48 + 10 = 174. */
+  .rt-mapctl-locate {
+    bottom: 174px;
+  }
+
+  /* Unchanged from desktop's implicit 10px margin — zoom is still the
+     bottommost control either way. */
+  .rt-mapctl-zoom {
+    bottom: 10px;
+  }
+
   /* iOS HIG / Material both land on 48px as the comfortable mobile touch
      target — the same size legend.css's mobile toggle uses, for the same
      reason: these are controls a thumb has to find without looking. */

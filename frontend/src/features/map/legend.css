@@ -188,21 +188,19 @@
 @media (max-width: 640px) {
   .rt-legend-toggle {
     display: grid;
-    /* Bottom-right, stacked above our own zoom/locate-me buttons
+    /* Bottom-right, between our own locate-me and zoom buttons
        (MapControlButtons.tsx, map-controls.css) rather than the account
-       button's top-right corner. Thumb reach on a phone is the bottom of the
-       screen, and layers is the control a driver reaches for mid-trip the
-       way locate-me already is — the two belong in the same stack, not
-       opposite corners.
+       button's top-right corner: locate-me, then layers, then zoom,
+       top-to-bottom. Thumb reach on a phone is the bottom of the screen, and
+       layers is the control a driver reaches for mid-trip the way locate-me
+       already is — the two belong in the same stack, not opposite corners.
 
-       174px clears that stack, computed from map-controls.css's own numbers
-       now that both buttons are ours rather than reverse-engineered from
-       MapLibre's DOM: 48px locate-me + 10px gap + 96px zoom group (two 48px
-       buttons) + 10px that group's own offset from the viewport edge = 164px
-       to the top of locate-me, +10px more so this button doesn't crowd it.
-       A size change in either file means updating both comments. */
+       116px clears the zoom group below it, computed from map-controls.css's
+       own numbers: 10px that group's own offset from the viewport edge +
+       96px (two 48px buttons) + 10px gap. A size change in either file means
+       updating both comments. */
     right: 10px;
-    bottom: 174px;
+    bottom: 116px;
     /* Larger than the 40px desktop pop-out: this is the one control on the
        page a thumb has to find without looking, stacked directly over two
        29px MapLibre buttons that are themselves too small to be the bar —
