@@ -151,10 +151,10 @@ a composite action cannot read the `secrets` context, so whatever it needs must
 be handed to it by the calling workflow.
 
 The action owns everything that touches the sandbox: joining the tailnet,
-configuring SSH, waiting for image manifests, running `deploy.sh`, and posting
-the PR status comment as work progresses. Workflows are left responsible only
-for deciding *what* to do and checking out the tree. It outputs `url` and, for
-stop, `torn-down`.
+configuring SSH, waiting for image manifests, and running `deploy.sh`. Workflows
+are left responsible for deciding *what* to do, checking out the tree, and
+posting the initial PR status; the action posts final and failed states. It
+outputs `url` and, for stop, `torn-down`.
 
 There is no `sha` input. For `start` the caller has already checked out the
 commit being deployed, so the action reads both the commit SHA and the `data/`

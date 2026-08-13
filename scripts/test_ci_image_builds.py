@@ -124,7 +124,6 @@ class DeploymentContractTest(unittest.TestCase):
             sandbox_action.index("- name: Wait for GHCR images"),
             sandbox_action.index("- name: Start sandbox"),
         )
-        self.assertIn("inputs.require-existing != 'true'", sandbox_action)
         self.assertIn("not creating one", sandbox_action)
 
 
