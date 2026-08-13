@@ -166,6 +166,12 @@ export function TopBar({ alerts, auth }: TopBarProps) {
           </span>
         ) : null}
 
+        {/* The map has no other route into the multi-day planner, and the planner
+            is where a trip that needs campsites and charging actually gets made. */}
+        <a className="tb-add" href="/plan.html" title="Browse multi-day trip plans">
+          Plan a trip
+        </a>
+
         <div className="tb-actions-spacer" />
 
         {/* The entry point into directions mode from the search bar. It is the only

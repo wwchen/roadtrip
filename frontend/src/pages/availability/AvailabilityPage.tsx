@@ -25,6 +25,7 @@ export function AvailabilityPage() {
         </div>
         <nav className="nav" aria-label="Page links">
           <Link href="/">Map</Link>
+          <Link href="/plan.html">Plan</Link>
           <Link href="/api/docs">API docs</Link>
         </nav>
       </header>

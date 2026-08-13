@@ -173,6 +173,7 @@ export function WatchesPage() {
         </div>
         <nav className="nav">
           <Link href="/">Map</Link>
+          <Link href="/plan.html">Plan</Link>
           <Link href="/availability.html">Dashboard</Link>
         </nav>
       </header>
