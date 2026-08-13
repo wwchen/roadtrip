@@ -156,17 +156,16 @@
   cursor: pointer;
 }
 
-/* The mobile drawer handle. Hidden on desktop, where the panel is always up. */
+/* The mobile drawer handle. Hidden on desktop, where the panel is always up.
+   Position (bottom-right, above MapLibre's own controls) is mobile-only — see
+   the media query below — so this base rule only carries what both would
+   share if desktop ever used it, which today it does not. */
 .rt-legend-toggle {
   --icon-size: 20px;
   display: none;
   position: absolute;
-  top: max(var(--rt-acct-clearance), calc(env(safe-area-inset-top) + 48px));
-  right: 10px;
   z-index: 20;
   place-items: center;
-  width: 40px;
-  height: 40px;
   padding: 0;
   background: var(--rt-surface);
   color: var(--rt-text);
@@ -189,6 +188,34 @@
 @media (max-width: 640px) {
   .rt-legend-toggle {
     display: grid;
+    /* Bottom-right, stacked above MapLibre's own controls (installMapControls
+       in map/controls.ts: a locate-me button over a two-button zoom group)
+       rather than the account button's top-right corner. Thumb reach on a
+       phone is the bottom of the screen, and layers is the control a driver
+       reaches for mid-trip the way locate-me already is — the two belong in
+       the same stack, not opposite corners.
+
+       164px clears that stack. Measured against the live DOM rather than
+       computed from maplibre-gl.css's own numbers: the geolocate button, the
+       two-button zoom group below it, AND the attribution control below
+       that (a compact, collapsible badge whose own height isn't a fixed
+       constant) all share this corner, and the attribution control's margin
+       to its neighbours didn't match the 10px every `.maplibregl-ctrl-group`
+       otherwise uses. 151px was the geolocate button's measured distance
+       from the viewport's bottom edge; +13px more so this button doesn't
+       crowd it. Coupled to MapLibre's own control geometry, not derived from
+       it — a maplibre-gl upgrade or an attribution-text change means
+       re-measuring this against the running app, not recomputing from the
+       library's CSS. */
+    right: 10px;
+    bottom: 164px;
+    /* Larger than the 40px desktop pop-out: this is the one control on the
+       page a thumb has to find without looking, stacked directly over two
+       29px MapLibre buttons that are themselves too small to be the bar —
+       matching them down would only compound it. 48px is the standard
+       comfortable mobile touch target (iOS HIG / Material both land here). */
+    width: 48px;
+    height: 48px;
   }
 
   .rt-legend-show {
