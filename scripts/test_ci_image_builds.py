@@ -13,8 +13,20 @@ def workflow(name: str) -> dict:
     return yaml.safe_load((ROOT / ".github" / "workflows" / name).read_text())
 
 
+def workflow_triggers(config: dict) -> dict:
+    # PyYAML still treats unquoted `on` as a YAML 1.1 boolean.
+    return config.get("on") or config.get(True)
+
+
 def job_commands(job: dict) -> str:
     return "\n".join(str(step.get("run", "")) for step in job.get("steps", []))
+
+
+def step_by_name(job: dict, name: str) -> dict:
+    for step in job.get("steps", []):
+        if step.get("name") == name:
+            return step
+    raise AssertionError(f"missing step {name!r}")
 
 
 class DeploymentContractTest(unittest.TestCase):
@@ -61,6 +73,41 @@ class DeploymentContractTest(unittest.TestCase):
         self.assertIn("FROM backend-base AS backend-local", dockerfile)
         self.assertIn("FROM backend-base AS backend", dockerfile)
         self.assertIn("target='backend-local'", tiltfile)
+
+    def test_sandbox_redeploys_active_pr_sandbox_on_new_commits(self) -> None:
+        sandbox = workflow("sandbox.yml")
+        triggers = workflow_triggers(sandbox)
+        sandbox_job = sandbox["jobs"]["sandbox"]
+        resolve_script = step_by_name(sandbox_job, "Resolve request")["with"]["script"]
+
+        self.assertEqual(["closed", "synchronize"], triggers["pull_request"]["types"])
+        self.assertIn("github.event.action == 'synchronize'", sandbox_job["if"])
+        self.assertIn("context.eventName === 'pull_request'", resolve_script)
+        self.assertIn("sandbox-status:pr${pr.number}", resolve_script)
+        self.assertIn("SANDBOX_TORN_DOWN_HEADING", resolve_script)
+        self.assertIn("core.setOutput('operation', 'skip')", resolve_script)
+        self.assertIn("core.setOutput('operation', 'start')", resolve_script)
+
+    def test_sandbox_status_comment_updates_before_image_wait(self) -> None:
+        sandbox = workflow("sandbox.yml")
+        sweep = workflow("sandbox-sweep.yml")
+        sandbox_job = sandbox["jobs"]["sandbox"]
+        step_names = [step["name"] for step in sandbox_job["steps"]]
+        status_step = step_by_name(sandbox_job, "Status workflow started")
+        status_script = status_step["with"]["script"]
+
+        self.assertEqual("write", sandbox["permissions"]["issues"])
+        self.assertEqual("write", sweep["permissions"]["issues"])
+        self.assertLess(
+            step_names.index("Status workflow started"),
+            step_names.index("Check out commit to deploy"),
+        )
+        self.assertLess(
+            step_names.index("Status workflow started"),
+            step_names.index("Wait for GHCR image"),
+        )
+        self.assertIn("workflow started", status_script)
+        self.assertIn("SANDBOX_TRIGGER", status_step["env"])
 
 
 if __name__ == "__main__":

@@ -98,9 +98,10 @@ workflow; comments from other identities are silently ignored before any
 step runs.
 
 The workflow (`sandbox.yml`) resolves the PR head SHA via the GitHub API,
-waits for the application and Git-tree-addressed data images to appear in GHCR,
-then SSHes to `mini@mini-ca` over Tailscale and installs the PR's
-release archive (no Git checkout), and runs
+updates the PR status comment immediately so reviewers can see that the workflow
+started before the image wait, then waits for the application and
+Git-tree-addressed data images to appear in GHCR. It SSHes to `mini@mini-ca`
+over Tailscale, installs the PR's release archive (no Git checkout), and runs
 `scripts/deploy.sh sandbox-up pr<N> pr<N>` (with `SANDBOX_SHA` set) or
 `scripts/deploy.sh sandbox-down pr<N>`, both via the shared sandbox action
 described below. `sandbox-up` reuses that PR's existing slot when it has one, or
@@ -108,12 +109,22 @@ claims the first empty slot from 1-5. On success it posts the allocated sandbox
 URL as a PR comment:
 
 ```
-Sandbox live: https://roadtrip-sb-<slot>.floo.ca
-SHA: <12-char sha>  ·  stop with /sandbox stop
+### ✅ Sandbox live
+- URL: https://roadtrip-sb-<slot>.floo.ca
+- Commit: <12-char sha>
+- Branch: <branch>
+- Stop: comment /sandbox stop
 ```
 
 The sandbox marker is named `pr<N>` (e.g. `pr532`) and records its `SLOT`. Re-runs
 of the same PR keep the same slot until the sandbox is torn down.
+
+After a PR has a sandbox status comment that has not been torn down, pushing a
+new commit to that PR automatically reruns the sandbox workflow for the new head
+SHA. The redeploy uses the same `pr<N>` slug and slot, so the old sandbox is
+replaced in place rather than accumulating a second environment. A PR whose
+status comment says the sandbox was torn down is ignored on new commits until
+someone comments `/sandbox` again.
 
 ### The sandbox action
 

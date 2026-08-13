@@ -4,7 +4,7 @@ on:
   issue_comment:
     types: [created]
   pull_request:
-    types: [closed]
+    types: [closed, synchronize]
   workflow_dispatch:
     inputs:
       operation:
@@ -27,6 +27,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
   packages: read
   pull-requests: write
 
@@ -40,7 +41,11 @@ jobs:
   sandbox:
     if: >
       github.event_name == 'workflow_dispatch' ||
-      (github.event.issue.pull_request != null &&
+      (github.event_name == 'pull_request' &&
+       github.event.action == 'synchronize' &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
        (github.event.comment.author_association == 'OWNER' ||
         github.event.comment.author_association == 'COLLABORATOR') &&
        startsWith(github.event.comment.body, '/sandbox'))
@@ -55,6 +60,8 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
+            const SANDBOX_TORN_DOWN_HEADING = '### 🛑 Sandbox torn down';
+
             if (context.eventName === 'workflow_dispatch') {
               const inputs = context.payload.inputs;
               const branch = inputs.branch || context.ref.replace('refs/heads/', '');
@@ -63,7 +70,34 @@ jobs:
               core.setOutput('branch', branch);
               core.setOutput('ref', branch);
               core.setOutput('pr_number', '');
+              core.setOutput('trigger', 'manual dispatch');
               core.info(`dispatch: ${inputs.operation} ${inputs.slug} from ${branch}`);
+              return;
+            }
+
+            if (context.eventName === 'pull_request') {
+              const pr = context.payload.pull_request;
+              const marker = `<!-- sandbox-status:pr${pr.number} -->`;
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                per_page: 100,
+              });
+              const existing = comments.find(c => c.body && c.body.includes(marker));
+              core.setOutput('pr_number', String(pr.number));
+              if (!existing || existing.body.includes(SANDBOX_TORN_DOWN_HEADING)) {
+                core.setOutput('operation', 'skip');
+                core.info(`PR #${pr.number} has no active sandbox status comment; skipping redeploy.`);
+                return;
+              }
+
+              core.setOutput('operation', 'start');
+              core.setOutput('slug', `pr${pr.number}`);
+              core.setOutput('branch', pr.head.ref);
+              core.setOutput('ref', pr.head.sha);
+              core.setOutput('trigger', 'new commit');
+              core.info(`PR #${pr.number} new head ${pr.head.sha}; redeploying existing sandbox.`);
               return;
             }
 
@@ -72,6 +106,7 @@ jobs:
               body === '/sandbox' ? 'start' : body === '/sandbox stop' ? 'stop' : 'unknown';
             core.setOutput('operation', operation);
             core.setOutput('pr_number', String(context.issue.number));
+            core.setOutput('trigger', 'PR comment');
             if (operation === 'unknown') {
               core.info(`unrecognised command: ${body}`);
               return;
@@ -104,6 +139,65 @@ jobs:
                     `- \`/sandbox\` — spin up a sandbox for this PR\n` +
                     `- \`/sandbox stop\` — tear down the sandbox`,
             });
+
+      - name: Status workflow started
+        if: >
+          steps.req.outputs.pr_number != '' &&
+          (steps.req.outputs.operation == 'start' || steps.req.outputs.operation == 'stop')
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          SANDBOX_OPERATION: ${{ steps.req.outputs.operation }}
+          SANDBOX_PR_NUMBER: ${{ steps.req.outputs.pr_number }}
+          SANDBOX_REF: ${{ steps.req.outputs.ref }}
+          SANDBOX_BRANCH: ${{ steps.req.outputs.branch }}
+          SANDBOX_TRIGGER: ${{ steps.req.outputs.trigger }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const pr = Number(process.env.SANDBOX_PR_NUMBER);
+            const operation = process.env.SANDBOX_OPERATION;
+            const isStop = operation === 'stop';
+            const marker = `<!-- sandbox-status:pr${pr} -->`;
+            const runUrl =
+              `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const inlineCode = value => `\`${String(value).replace(/`/g, '\\`')}\``;
+            const lines = [
+              `- **Status:** workflow started — [live logs](${runUrl})`,
+            ];
+            if (!isStop && process.env.SANDBOX_REF) {
+              lines.push(`- **Commit:** ${inlineCode(process.env.SANDBOX_REF.slice(0, 12))}`);
+            }
+            if (!isStop && process.env.SANDBOX_BRANCH) {
+              lines.push(`- **Branch:** ${inlineCode(process.env.SANDBOX_BRANCH)}`);
+            }
+            if (process.env.SANDBOX_TRIGGER) {
+              lines.push(`- **Trigger:** ${process.env.SANDBOX_TRIGGER}`);
+            }
+            const body = `${marker}\n### 🔄 Sandbox: ${isStop ? 'Tearing down' : 'Deploying'}…\n` +
+              lines.join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr,
+              per_page: 100,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr,
+                body,
+              });
+            }
 
       # Start checks out the commit being deployed — the sandbox action reads
       # both SHAs from that tree. Stop needs only the tooling, so it takes the
@@ -162,7 +256,7 @@ jobs:
           exit 1
 
       - name: Sandbox
-        if: steps.req.outputs.operation != 'unknown'
+        if: steps.req.outputs.operation == 'start' || steps.req.outputs.operation == 'stop'
         uses: ./.github/actions/sandbox
         with:
           operation: ${{ steps.req.outputs.operation }}

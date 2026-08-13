@@ -131,16 +131,31 @@ runs:
     - name: Status in progress
       if: inputs.pr-number != ''
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        SANDBOX_OPERATION: ${{ inputs.operation }}
+        SANDBOX_PR_NUMBER: ${{ inputs.pr-number }}
+        SANDBOX_SHA: ${{ steps.shas.outputs.sha }}
+        SANDBOX_BRANCH: ${{ inputs.branch }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
-          const pr = Number('${{ inputs.pr-number }}');
+          const pr = Number(process.env.SANDBOX_PR_NUMBER);
+          const isStop = process.env.SANDBOX_OPERATION === 'stop';
           const marker = `<!-- sandbox-status:pr${pr} -->`;
-          const verb = '${{ inputs.operation }}' === 'stop' ? 'Tearing down' : 'Spinning up';
           const runUrl =
             `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-          const body = `${marker}\n### 🔄 Sandbox: ${verb}…\n` +
-            `- **Status:** in progress — [live logs](${runUrl})`;
+          const inlineCode = value => `\`${String(value).replace(/`/g, '\\`')}\``;
+          const lines = [
+            `- **Status:** in progress — [live logs](${runUrl})`,
+          ];
+          if (!isStop && process.env.SANDBOX_SHA) {
+            lines.push(`- **Commit:** ${inlineCode(process.env.SANDBOX_SHA.slice(0, 12))}`);
+          }
+          if (!isStop && process.env.SANDBOX_BRANCH) {
+            lines.push(`- **Branch:** ${inlineCode(process.env.SANDBOX_BRANCH)}`);
+          }
+          const body = `${marker}\n### 🔄 Sandbox: ${isStop ? 'Tearing down' : 'Deploying'}…\n` +
+            lines.join('\n');
           // Reuse this PR's existing status comment if there is one.
           const { data: comments } = await github.rest.issues.listComments({
             owner: context.repo.owner, repo: context.repo.repo,
@@ -288,21 +303,40 @@ runs:
         inputs.pr-number != '' &&
         (inputs.operation == 'start' || steps.stop.outputs.torn-down == 'true')
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        SANDBOX_OPERATION: ${{ inputs.operation }}
+        SANDBOX_PR_NUMBER: ${{ inputs.pr-number }}
+        SANDBOX_SLUG: ${{ inputs.slug }}
+        SANDBOX_REASON: ${{ inputs.reason }}
+        SANDBOX_SHA: ${{ steps.shas.outputs.sha }}
+        SANDBOX_BRANCH: ${{ inputs.branch }}
+        SANDBOX_START_URL: ${{ steps.start.outputs.url }}
+        SANDBOX_STOPPED_URL: ${{ steps.stop.outputs.url }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
-          const pr = Number('${{ inputs.pr-number }}');
-          const slug = '${{ inputs.slug }}';
-          const reason = '${{ inputs.reason }}';
-          const stoppedUrl = '${{ steps.stop.outputs.url }}';
+          const pr = Number(process.env.SANDBOX_PR_NUMBER);
+          const operation = process.env.SANDBOX_OPERATION;
+          const slug = process.env.SANDBOX_SLUG;
+          const reason = process.env.SANDBOX_REASON;
+          const sha = process.env.SANDBOX_SHA;
+          const branch = process.env.SANDBOX_BRANCH;
+          const startUrl = process.env.SANDBOX_START_URL;
+          const stoppedUrl = process.env.SANDBOX_STOPPED_URL;
           const stoppedLabel = stoppedUrl || `\`${slug}\``;
           const marker = `<!-- sandbox-status:pr${pr} -->`;
           const runUrl =
             `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+          const inlineCode = value => `\`${String(value).replace(/`/g, '\\`')}\``;
+          const buildLines = [
+            sha ? `- **Commit:** ${inlineCode(sha.slice(0, 12))}` : '',
+            branch ? `- **Branch:** ${inlineCode(branch)}` : '',
+          ].filter(Boolean).join('\n');
 
-          const body = '${{ inputs.operation }}' === 'start'
+          const body = operation === 'start'
             ? `${marker}\n### ✅ Sandbox live\n` +
-              `- **URL:** ${{ steps.start.outputs.url }}\n` +
+              `- **URL:** ${startUrl}\n` +
+              (buildLines ? `${buildLines}\n` : '') +
               `- **Stop:** comment \`/sandbox stop\`  ·  [logs](${runUrl})`
             : `${marker}\n### 🛑 Sandbox torn down\n` +
               `- **Was:** ${stoppedLabel}\n` +
