@@ -78,19 +78,22 @@ class DeploymentContractTest(unittest.TestCase):
         sandbox = workflow("sandbox.yml")
         triggers = workflow_triggers(sandbox)
         sandbox_job = sandbox["jobs"]["sandbox"]
-        teardown_job = sandbox["jobs"]["teardown-on-close"]
         resolve_script = step_by_name(sandbox_job, "Resolve request")["with"]["script"]
 
         self.assertEqual(["closed", "synchronize"], triggers["pull_request"]["types"])
+        self.assertNotIn("teardown-on-close", sandbox["jobs"])
         self.assertIn("github.event.action == 'synchronize'", sandbox_job["if"])
-        self.assertIn("github.event.action == 'closed'", teardown_job["if"])
+        self.assertIn("github.event.action == 'closed'", sandbox_job["if"])
         self.assertIn("context.eventName === 'pull_request'", resolve_script)
+        self.assertIn("context.payload.action === 'closed'", resolve_script)
+        self.assertIn("requireExisting: 'true'", resolve_script)
+        self.assertIn("reason: 'this PR closed'", resolve_script)
         self.assertIn("sandbox-status:pr${pr.number}", resolve_script)
         self.assertIn("SANDBOX_TORN_DOWN_HEADING", resolve_script)
         self.assertIn("SANDBOX_TEARING_DOWN_HEADING", resolve_script)
         self.assertIn("SANDBOX_TEARDOWN_FAILED_HEADING", resolve_script)
-        self.assertIn("core.setOutput('operation', 'skip')", resolve_script)
-        self.assertIn("core.setOutput('operation', 'start')", resolve_script)
+        self.assertIn("setRequest({ operation: 'skip'", resolve_script)
+        self.assertIn("operation: 'start'", resolve_script)
 
     def test_sandbox_status_comment_updates_before_image_wait(self) -> None:
         sandbox = workflow("sandbox.yml")
@@ -109,12 +112,20 @@ class DeploymentContractTest(unittest.TestCase):
         )
         self.assertLess(
             step_names.index("Status workflow started"),
-            step_names.index("Wait for GHCR image"),
+            step_names.index("Sandbox"),
         )
         self.assertIn("workflow started", status_script)
         self.assertIn("SANDBOX_TRIGGER", status_step["env"])
         self.assertNotIn("SANDBOX_PR_NUMBER", status_step["env"])
         self.assertNotIn("SANDBOX_PR_NUMBER", sandbox_action)
+        self.assertIn("Log in to GHCR", sandbox_action)
+        self.assertIn("Wait for GHCR images", sandbox_action)
+        self.assertLess(
+            sandbox_action.index("- name: Wait for GHCR images"),
+            sandbox_action.index("- name: Start sandbox"),
+        )
+        self.assertIn("inputs.require-existing != 'true'", sandbox_action)
+        self.assertIn("not creating one", sandbox_action)
 
 
 if __name__ == "__main__":
