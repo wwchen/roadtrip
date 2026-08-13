@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The Index — roadtrip (preview)</title>
+<style>
+  :root {
+    --bg: #f4f2ec; --fg: #14130f; --dim: #7a756a; --line: #d8d3c7;
+    --accent: #1a4d2e; --hover: #ece8df; --tagbg: #e4e0d5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12110f; --fg: #eae7df; --dim: #8c887d; --line: #2a2823;
+      --accent: #8fc9a3; --hover: #1c1a16; --tagbg: #23211c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 13px/1.5 ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 40px 20px 120px; }
+  header { border-bottom: 2px solid var(--fg); padding-bottom: 14px; margin-bottom: 4px; }
+  h1 { font-size: 15px; letter-spacing: .14em; text-transform: uppercase; margin: 0 0 6px; }
+  .lede { color: var(--dim); font-size: 12px; max-width: 60ch; }
+  .lede b { color: var(--fg); font-weight: 600; }
+  .tree { margin-top: 6px; }
+  .row {
+    display: flex; align-items: baseline; gap: 8px;
+    padding: 5px 6px; border-bottom: 1px solid var(--line);
+    cursor: default; white-space: nowrap;
+  }
+  .row.clickable { cursor: pointer; }
+  .row.clickable:hover { background: var(--hover); }
+  .chev { width: 12px; color: var(--dim); flex: 0 0 12px; text-align: center; }
+  .label { flex: 0 0 auto; }
+  .row.region > .label { text-transform: uppercase; letter-spacing: .06em; }
+  .row.classification > .label { color: var(--accent); }
+  .row.campsite > .label { color: var(--dim); }
+  .link { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--dim); }
+  .link:hover { border-bottom-color: var(--accent); }
+  .teaser {
+    color: var(--dim); overflow: hidden; text-overflow: ellipsis;
+    flex: 1 1 auto; min-width: 0; font-size: 12px;
+  }
+  .count {
+    flex: 0 0 auto; margin-left: auto; color: var(--dim);
+    background: var(--tagbg); border-radius: 2px; padding: 0 6px; font-size: 11px;
+  }
+  .children { margin-left: 15px; border-left: 1px solid var(--line); }
+  .foot { color: var(--dim); font-size: 11px; margin-top: 26px; line-height: 1.7; }
+  .pill { display:inline-block; border:1px solid var(--line); border-radius:2px; padding:0 5px; margin-right:4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>The&nbsp;Index</h1>
+    <div class="lede">
+      Every park &amp; campground as an expandable text atlas — <b>State → Classification → Campground → Campsite</b>.
+      Counts roll up from the leaves; a collapsed node teases what's inside. Preview built from
+      <b>real roadtrip data</b> (Utah is fully drillable to campsites). Click any row with a ▸.
+    </div>
+  </header>
+  <div id="tree" class="tree"></div>
+  <div class="foot">
+    <span class="pill">preview</span> Static mock of the <code>/atlas.html</code> page — the shipped version fetches
+    <code>GET /api/atlas/node?path=…</code> lazily per expand. Classification order is National Parks →
+    State &amp; Provincial Parks → Open Lands → Other. The <b>Unknown location</b> bucket is the ~14% of
+    campgrounds with no resolvable state — shown honestly rather than dropped.
+  </div>
+</div>
+<script>
+// Real-derived demo tree. kind in region|classification|campground|campsite.
+// counts/names taken from the live DB validation (Utah slice + campsite loops).
+const TREE = [
+  { label:"California", kind:"region", count:816, teaser:"National Parks · State & Provincial Parks · Open Lands" },
+  { label:"Oregon", kind:"region", count:435, teaser:"Open Lands · State & Provincial Parks · National Parks" },
+  { label:"Utah", kind:"region", count:750, teaser:"National Parks · State & Provincial Parks · Open Lands", children:[
+    { label:"National Parks", kind:"classification", count:36, teaser:"Devils Garden · Canyonlands Needles · Capitol Reef Group …", children:[
+      { label:"Devils Garden Campground", kind:"campground", count:51, poi:8646, children:[
+        { label:"Loop A · 001", kind:"campsite" },
+        { label:"Loop A · 002", kind:"campsite" },
+        { label:"Loop A · 003", kind:"campsite" },
+        { label:"Loop A · 004", kind:"campsite" },
+        { label:"Loop B · 022", kind:"campsite" },
+        { label:"Loop B · 023", kind:"campsite" },
+      ]},
+      { label:"Canyonlands Needles District Campground", kind:"campground", count:26, poi:8252 },
+      { label:"Capitol Reef Group Campground", kind:"campground", count:5, poi:11963 },
+      { label:"Echo Park Campground", kind:"campground", count:22, poi:14266 },
+    ]},
+    { label:"State & Provincial Parks", kind:"classification", count:29, teaser:"Dead Horse Point · Goblin Valley · Kodachrome Basin …", children:[
+      { label:"Dead Horse Point State Park", kind:"campground", count:21, poi:0 },
+      { label:"Goblin Valley State Park", kind:"campground", count:26, poi:0 },
+      { label:"Kodachrome Basin State Park", kind:"campground", count:27, poi:0 },
+      { label:"Sand Hollow State Park", kind:"campground", count:50, poi:0 },
+    ]},
+    { label:"Open Lands", kind:"classification", count:685, teaser:"USDA Forest Service · Bureau of Land Management · Fish & Wildlife", children:[
+      { label:"Lodgepole Campground", kind:"campground", count:35, poi:0 },
+      { label:"Ledgefork Campground", kind:"campground", count:73, poi:0 },
+      { label:"Lonesome Beaver Campground (BLM)", kind:"campground", count:5, poi:0 },
+      { label:"…479 Forest Service + 205 BLM + 1 F&W", kind:"campground", count:0 },
+    ]},
+  ]},
+  { label:"Montana", kind:"region", count:345, teaser:"Open Lands · National Parks · State & Provincial Parks" },
+  { label:"Colorado", kind:"region", count:309, teaser:"Open Lands · State & Provincial Parks · National Parks" },
+  { label:"Washington", kind:"region", count:213, teaser:"National Parks · Open Lands · State & Provincial Parks" },
+  { label:"Texas", kind:"region", count:188, teaser:"State & Provincial Parks · Open Lands" },
+  { label:"British Columbia", kind:"region", count:143, teaser:"State & Provincial Parks · National Parks" },
+  { label:"Unknown location", kind:"region", count:2362, teaser:"campgrounds with no resolvable state", unknown:true },
+];
+
+function makeRow(node, depth) {
+  const hasKids = Array.isArray(node.children) && node.children.length > 0;
+  const el = document.createElement("div");
+  const row = document.createElement("div");
+  row.className = "row " + node.kind + (hasKids ? " clickable" : "");
+
+  const chev = document.createElement("span");
+  chev.className = "chev";
+  chev.textContent = hasKids ? "▸" : (node.kind === "campsite" ? "·" : "");
+  row.appendChild(chev);
+
+  const label = document.createElement("span");
+  label.className = "label";
+  if (node.kind === "campground" && node.poi) {
+    const a = document.createElement("a");
+    a.className = "link"; a.href = "/?poi=" + node.poi; a.textContent = node.label;
+    a.title = "Deep-links into the map";
+    a.addEventListener("click", e => e.stopPropagation());
+    label.appendChild(a);
+  } else {
+    label.textContent = node.label;
+  }
+  row.appendChild(label);
+
+  if (node.teaser) {
+    const t = document.createElement("span");
+    t.className = "teaser"; t.textContent = "· " + node.teaser;
+    row.appendChild(t);
+  }
+  if (node.count) {
+    const c = document.createElement("span");
+    c.className = "count";
+    c.textContent = node.count.toLocaleString() + (node.kind === "campground" ? " sites" : "");
+    row.appendChild(c);
+  }
+  el.appendChild(row);
+
+  if (hasKids) {
+    const kids = document.createElement("div");
+    kids.className = "children"; kids.style.display = "none";
+    node.children.forEach(ch => kids.appendChild(makeRow(ch, depth + 1)));
+    el.appendChild(kids);
+    row.addEventListener("click", () => {
+      const open = kids.style.display === "block";
+      kids.style.display = open ? "none" : "block";
+      chev.textContent = open ? "▸" : "▾";
+      const teaserEl = row.querySelector(".teaser");
+      if (teaserEl) teaserEl.style.display = open ? "" : "none";
+    });
+  }
+  return el;
+}
+
+const root = document.getElementById("tree");
+TREE.forEach(n => root.appendChild(makeRow(n, 0)));
+</script>
+</body>
+</html>
