@@ -73,6 +73,13 @@ export const queryKeys = {
       ['dashboard', 'changes', 'summary', String(poiId), dates ?? null] as const,
   },
 
+  planning: {
+    all: () => ['planning'] as const,
+    templates: () => ['planning', 'templates'] as const,
+    timeline: (templateId: string, start: string) =>
+      ['planning', 'timeline', templateId, start] as const,
+  },
+
   /**
    * A static GeoJSON asset served by the backend (state lines).
    *

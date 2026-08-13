@@ -21,6 +21,7 @@ import ca.floo.roadtrip.db.dataSourceFor
 import ca.floo.roadtrip.db.dsl
 import ca.floo.roadtrip.db.migrate
 import ca.floo.roadtrip.model.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.model.metadata.registry.TripTemplateRegistry
 import ca.floo.roadtrip.observability.OtelRoadtripMetrics
 import ca.floo.roadtrip.observability.RoadtripMetrics
 import ca.floo.roadtrip.repo.ApiCacheRepo
@@ -45,6 +46,8 @@ private const val POI_REGISTRY_RESOURCE_KEY = "resource"
 private const val POI_REGISTRY_PATH_KEY = "path"
 private const val MAPBOX_TOKEN_KEY = "token"
 private const val DEFAULT_POI_REGISTRY_RESOURCE = "poi-registry.yaml"
+
+private const val TRIP_TEMPLATES_RESOURCE = "trip-templates.yaml"
 private const val RAW_DATA_DIR = "data/raw"
 
 fun infraModule(baseConfig: ApplicationConfig) =
@@ -85,6 +88,10 @@ fun infraModule(baseConfig: ApplicationConfig) =
                     config.valueOrDefault(POI_REGISTRY_RESOURCE_KEY, DEFAULT_POI_REGISTRY_RESOURCE),
                 )
             }
+        }
+
+        single<TripTemplateRegistry> {
+            TripTemplateRegistry.loadResource(TRIP_TEMPLATES_RESOURCE)
         }
 
         single<RecGovAvailabilityClient> { HttpRecgovAvailabilityClient() }

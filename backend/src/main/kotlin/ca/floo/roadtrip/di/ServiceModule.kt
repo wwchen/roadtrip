@@ -61,6 +61,8 @@ import ca.floo.roadtrip.service.notification.common.NotificationFanout
 import ca.floo.roadtrip.service.notification.email.EmailNotificationService
 import ca.floo.roadtrip.service.notification.slack.SlackInteractivityHandler
 import ca.floo.roadtrip.service.notification.slack.SlackNotificationService
+import ca.floo.roadtrip.service.planning.PlanningCampgroundLookup
+import ca.floo.roadtrip.service.planning.PlanningService
 import ca.floo.roadtrip.service.poi.CampgroundService
 import ca.floo.roadtrip.service.poi.PlanetFitnessLocationService
 import ca.floo.roadtrip.service.poi.PoiReader
@@ -99,6 +101,14 @@ val serviceModule =
         single {
             NotificationFanout(
                 listOf(get<SlackNotificationService>(), get<EmailNotificationService>()),
+            )
+        }
+
+        single {
+            val campgroundRepo: CampgroundRepo = get()
+            PlanningService(
+                tripTemplateRegistry = get(),
+                campgroundLookup = PlanningCampgroundLookup(campgroundRepo::findByDataProviderRef),
             )
         }
 

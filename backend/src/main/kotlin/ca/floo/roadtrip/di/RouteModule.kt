@@ -20,6 +20,7 @@ import ca.floo.roadtrip.route.api.buildInfoRoutes
 import ca.floo.roadtrip.route.api.docs.apiDocsRoutes
 import ca.floo.roadtrip.route.api.geocode.geocodeRoutes
 import ca.floo.roadtrip.route.api.health.healthRoutes
+import ca.floo.roadtrip.route.api.planningRoutes
 import ca.floo.roadtrip.route.api.pois.campsiteRoutes
 import ca.floo.roadtrip.route.api.pois.poiRoutes
 import ca.floo.roadtrip.route.api.pois.poisOnRouteRoutes
@@ -57,6 +58,7 @@ import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.health.ReadinessService
+import ca.floo.roadtrip.service.planning.PlanningService
 import ca.floo.roadtrip.service.poi.PoiReader
 import ca.floo.roadtrip.service.poi.PoisOnRouteService
 import ca.floo.roadtrip.service.ref.DbRefResolver
@@ -92,6 +94,7 @@ internal fun Application.registerKoinRoutes() {
     val userSettings: UserSettingsService by inject()
     val userRepo: UserRepo by inject()
     val slackInteractivity: SlackInteractivityWiring? = getKoin().getOrNull()
+    val planningService: PlanningService by inject()
     val readiness: ReadinessService by inject()
     val schedulerScope: CoroutineScope by inject()
     val staticDir: File by inject(named("staticDir"))
@@ -137,6 +140,7 @@ internal fun Application.registerKoinRoutes() {
         poisOnRouteRoutes(poisOnRouteService, config.route)
         routeRoutes(routeCache, routeCorridorService, config.route)
         geocodeRoutes(mapboxGeocoder)
+        planningRoutes(planningService)
         buildInfoRoutes(config.buildInfo)
         sandboxRoutes(config.sandbox, userRepo)
         healthRoutes(readiness)

@@ -1,0 +1,376 @@
+# Authored trip templates for Planning Mode (RFC 0011, M1).
+# Templates are content, not user data: routes, distances, charger stops, and
+# grades are authored here once; the app computes only dates and booking state.
+# Campground refs resolve against the canonical catalog by (booking provider,
+# provider-native ref); unresolved refs degrade to name-only display.
+templates:
+  - id: mighty-five-classic
+    name: "Mighty 5 Classic"
+    tagline: "All five Utah national parks in one arc, Vegas to Moab"
+    origin: "Las Vegas, NV"
+    terminus: "Moab, UT"
+    days: 8
+    total_miles: 1050
+    avg_drive_minutes_per_day: 95
+    longest_drive_minutes: 210
+    season:
+      prime_months: [4, 5, 9, 10]
+      notes: "UT-12 summit at 9,600 ft — early/late season snow possible. Summer is hot but workable at elevation."
+    ev:
+      grade: yellow
+      max_supercharger_gap_mi: 190
+      hookup_critical_days: [3]
+      notes: "No Supercharger between Bryce and Torrey; a 50A hookup night at Bryce covers the gap."
+    booking:
+      grade: red
+      lead_time_days: 150
+      notes: "Watchman and Devils Garden book out ~5 months ahead; watch both early."
+    budget_usd:
+      camp_fees: 240
+      charging: 85
+      entry_fees: 80
+      notes: "Entry assumes America the Beautiful pass ($80) beating 5 separate gates."
+    itinerary:
+      - day: 1
+        title: "Las Vegas → Zion"
+        ev_status: green
+        drive:
+          from: "Las Vegas, NV"
+          to: "Springdale, UT"
+          miles: 160
+          minutes: 170
+          superchargers: ["St. George, UT", "Hurricane, UT"]
+        stay:
+          name: "Watchman Campground"
+          campground: { provider: recgov, ref: "232445" }
+        highlights: ["Canyon Overlook sunset"]
+        sidequests: ["Valley of Fire SP (+40 min)"]
+      - day: 2
+        title: "Zion"
+        ev_status: green
+        stay:
+          name: "Watchman Campground"
+          campground: { provider: recgov, ref: "232445" }
+        highlights: ["The Narrows or Angels Landing (permit lottery)", "Springdale shuttle day"]
+        sidequests: ["Kolob Canyons (+50 min)"]
+      - day: 3
+        title: "Zion → Bryce Canyon"
+        ev_status: yellow
+        drive:
+          from: "Springdale, UT"
+          to: "Bryce Canyon City, UT"
+          miles: 85
+          minutes: 110
+          superchargers: []
+        stay:
+          name: "Ruby's Inn RV Park (50A hookup)"
+          manual:
+            name: "Ruby's Inn RV Park & Campground"
+            phone: "+1 866-878-9373"
+            url: "https://www.brycecanyoncampgrounds.com"
+        highlights: ["Sunset Point amphitheater", "Hookup night before the Supercharger gap"]
+        sidequests: ["Red Canyon (+15 min)"]
+      - day: 4
+        title: "Bryce → Capitol Reef via Scenic Byway 12"
+        ev_status: yellow
+        drive:
+          from: "Bryce Canyon City, UT"
+          to: "Fruita, UT"
+          miles: 120
+          minutes: 180
+          superchargers: []
+        stay:
+          name: "Fruita Campground"
+          campground: { provider: recgov, ref: "232490" }
+        highlights: ["Byway 12 over Boulder Mountain", "Hell's Backbone Grill (Boulder, UT)"]
+        sidequests: ["Kodachrome Basin SP (+35 min)"]
+      - day: 5
+        title: "Capitol Reef"
+        ev_status: green
+        stay:
+          name: "Fruita Campground"
+          campground: { provider: recgov, ref: "232490" }
+        highlights: ["Gifford House pie", "Scenic Drive + Capitol Gorge"]
+        sidequests: ["Goblin Valley SP (+50 min)"]
+      - day: 6
+        title: "Capitol Reef → Moab"
+        ev_status: green
+        drive:
+          from: "Torrey, UT"
+          to: "Moab, UT"
+          miles: 145
+          minutes: 150
+          superchargers: ["Green River, UT"]
+        stay:
+          name: "Wingate Campground (Dead Horse Point SP, electric sites)"
+          campground: { provider: reserveamerica, ref: "UT-DEADHORSE-WINGATE" }
+        highlights: ["Green River Supercharger lunch stop", "Dead Horse Point sunset"]
+        sidequests: []
+      - day: 7
+        title: "Arches"
+        ev_status: green
+        drive:
+          from: "Dead Horse Point, UT"
+          to: "Arches NP, UT"
+          miles: 35
+          minutes: 50
+          superchargers: ["Moab, UT"]
+        stay:
+          name: "Wingate Campground (Dead Horse Point SP, electric sites)"
+          campground: { provider: reserveamerica, ref: "UT-DEADHORSE-WINGATE" }
+        highlights: ["Timed entry Apr–Oct", "Delicate Arch sunset", "Devils Garden trail"]
+        sidequests: ["Milt's Stop & Eat"]
+      - day: 8
+        title: "Canyonlands → home"
+        ev_status: green
+        drive:
+          from: "Moab, UT"
+          to: "Island in the Sky, UT"
+          miles: 35
+          minutes: 45
+          superchargers: ["Moab, UT"]
+        highlights: ["Mesa Arch (morning)", "Grand View Point", "Leave region at 100% from Moab Supercharger"]
+        sidequests: []
+
+  - id: monument-valley-loop
+    name: "LV Loop + Monument Valley"
+    tagline: "The Mighty 5 plus Monument Valley, returning as a loop"
+    origin: "Las Vegas, NV"
+    terminus: "Las Vegas, NV"
+    days: 9
+    total_miles: 1380
+    avg_drive_minutes_per_day: 150
+    longest_drive_minutes: 330
+    season:
+      prime_months: [9, 10]
+      notes: "Fall is prime: Monument Valley heat fades and park crowds thin."
+    ev:
+      grade: yellow
+      max_supercharger_gap_mi: 210
+      hookup_critical_days: [3, 7]
+      notes: "Two sparse stretches: Bryce→Torrey and the Monument Valley leg (Blanding/Page chargers matter)."
+    booking:
+      grade: red
+      lead_time_days: 150
+      notes: "Same scarce camps as the classic, plus The View (Navajo Nation) books fast."
+    budget_usd:
+      camp_fees: 310
+      charging: 115
+      entry_fees: 88
+      notes: "Monument Valley is a Navajo Tribal Park — separate $8/person entry, not covered by the federal pass."
+    itinerary:
+      - day: 1
+        title: "Las Vegas → Zion"
+        ev_status: green
+        drive:
+          from: "Las Vegas, NV"
+          to: "Springdale, UT"
+          miles: 160
+          minutes: 170
+          superchargers: ["St. George, UT", "Hurricane, UT"]
+        stay:
+          name: "Watchman Campground"
+          campground: { provider: recgov, ref: "232445" }
+        highlights: ["Canyon Overlook sunset"]
+        sidequests: ["Valley of Fire SP (+40 min)"]
+      - day: 2
+        title: "Zion"
+        ev_status: green
+        stay:
+          name: "Watchman Campground"
+          campground: { provider: recgov, ref: "232445" }
+        highlights: ["The Narrows or Angels Landing (permit lottery)"]
+        sidequests: []
+      - day: 3
+        title: "Zion → Bryce Canyon"
+        ev_status: yellow
+        drive:
+          from: "Springdale, UT"
+          to: "Bryce Canyon City, UT"
+          miles: 85
+          minutes: 110
+          superchargers: []
+        stay:
+          name: "Ruby's Inn RV Park (50A hookup)"
+          manual:
+            name: "Ruby's Inn RV Park & Campground"
+            phone: "+1 866-878-9373"
+            url: "https://www.brycecanyoncampgrounds.com"
+        highlights: ["Sunset Point amphitheater"]
+        sidequests: []
+      - day: 4
+        title: "Bryce → Capitol Reef via Scenic Byway 12"
+        ev_status: yellow
+        drive:
+          from: "Bryce Canyon City, UT"
+          to: "Fruita, UT"
+          miles: 120
+          minutes: 180
+          superchargers: []
+        stay:
+          name: "Fruita Campground"
+          campground: { provider: recgov, ref: "232490" }
+        highlights: ["Byway 12 over Boulder Mountain"]
+        sidequests: ["Kodachrome Basin SP (+35 min)"]
+      - day: 5
+        title: "Capitol Reef → Moab"
+        ev_status: green
+        drive:
+          from: "Torrey, UT"
+          to: "Moab, UT"
+          miles: 145
+          minutes: 150
+          superchargers: ["Green River, UT"]
+        stay:
+          name: "Wingate Campground (Dead Horse Point SP, electric sites)"
+          campground: { provider: reserveamerica, ref: "UT-DEADHORSE-WINGATE" }
+        highlights: ["Dead Horse Point sunset"]
+        sidequests: []
+      - day: 6
+        title: "Arches + Canyonlands"
+        ev_status: green
+        drive:
+          from: "Dead Horse Point, UT"
+          to: "Moab, UT"
+          miles: 70
+          minutes: 100
+          superchargers: ["Moab, UT"]
+        stay:
+          name: "Wingate Campground (Dead Horse Point SP, electric sites)"
+          campground: { provider: reserveamerica, ref: "UT-DEADHORSE-WINGATE" }
+        highlights: ["Delicate Arch sunset", "Mesa Arch"]
+        sidequests: ["Milt's Stop & Eat"]
+      - day: 7
+        title: "Moab → Monument Valley"
+        ev_status: red
+        drive:
+          from: "Moab, UT"
+          to: "Oljato-Monument Valley, UT"
+          miles: 150
+          minutes: 160
+          superchargers: ["Blanding, UT"]
+        stay:
+          name: "The View Campground (Navajo Nation)"
+          manual:
+            name: "The View Campground"
+            phone: "+1 435-727-5555"
+            url: "https://monumentvalleyview.com"
+        highlights: ["Forrest Gump Point", "Valley Drive at golden hour", "Charge in Blanding — the valley has no fast charging"]
+        sidequests: ["Goosenecks SP (+25 min)"]
+      - day: 8
+        title: "Monument Valley → Page"
+        ev_status: yellow
+        drive:
+          from: "Oljato-Monument Valley, UT"
+          to: "Page, AZ"
+          miles: 125
+          minutes: 140
+          superchargers: ["Page, AZ"]
+        stay:
+          name: "Wahweap Campground (Lake Powell)"
+          manual:
+            name: "Wahweap RV & Campground"
+            phone: "+1 888-896-3829"
+            url: "https://www.lakepowell.com"
+        highlights: ["Horseshoe Bend sunset"]
+        sidequests: ["Antelope Canyon (book a tour ahead)"]
+      - day: 9
+        title: "Page → Las Vegas"
+        ev_status: green
+        drive:
+          from: "Page, AZ"
+          to: "Las Vegas, NV"
+          miles: 275
+          minutes: 330
+          superchargers: ["Kanab, UT", "St. George, UT"]
+        highlights: ["Long day — two drivers recommended"]
+        sidequests: []
+
+  - id: zion-bryce-slow
+    name: "Zion & Bryce Slow"
+    tagline: "Five easy days, two parks, no charging anxiety"
+    origin: "Las Vegas, NV"
+    terminus: "Las Vegas, NV"
+    days: 5
+    total_miles: 620
+    avg_drive_minutes_per_day: 95
+    longest_drive_minutes: 250
+    season:
+      prime_months: [3, 4, 5, 9, 10, 11]
+      notes: "Widest season window of the three — both parks work spring through late fall."
+    ev:
+      grade: green
+      max_supercharger_gap_mi: 90
+      hookup_critical_days: []
+      notes: "Superchargers bracket the whole route; no hookup nights required."
+    booking:
+      grade: yellow
+      lead_time_days: 90
+      notes: "Watchman is competitive; everything else is relaxed."
+    budget_usd:
+      camp_fees: 160
+      charging: 55
+      entry_fees: 70
+      notes: "Two parks — separate gates ($35 each) beat the annual pass."
+    itinerary:
+      - day: 1
+        title: "Las Vegas → Zion"
+        ev_status: green
+        drive:
+          from: "Las Vegas, NV"
+          to: "Springdale, UT"
+          miles: 160
+          minutes: 170
+          superchargers: ["St. George, UT", "Hurricane, UT"]
+        stay:
+          name: "Watchman Campground"
+          campground: { provider: recgov, ref: "232445" }
+        highlights: ["Pa'rus trail at dusk"]
+        sidequests: ["Valley of Fire SP (+40 min)"]
+      - day: 2
+        title: "Zion"
+        ev_status: green
+        stay:
+          name: "Watchman Campground"
+          campground: { provider: recgov, ref: "232445" }
+        highlights: ["The Narrows or Angels Landing (permit lottery)"]
+        sidequests: ["Oscar's Cafe (Springdale)"]
+      - day: 3
+        title: "Zion → Bryce Canyon"
+        ev_status: green
+        drive:
+          from: "Springdale, UT"
+          to: "Bryce Canyon City, UT"
+          miles: 85
+          minutes: 110
+          superchargers: []
+        stay:
+          name: "Ruby's Inn RV Park (50A hookup)"
+          manual:
+            name: "Ruby's Inn RV Park & Campground"
+            phone: "+1 866-878-9373"
+            url: "https://www.brycecanyoncampgrounds.com"
+        highlights: ["Sunset Point amphitheater"]
+        sidequests: ["Red Canyon (+15 min)"]
+      - day: 4
+        title: "Bryce Canyon"
+        ev_status: green
+        stay:
+          name: "Ruby's Inn RV Park (50A hookup)"
+          manual:
+            name: "Ruby's Inn RV Park & Campground"
+            phone: "+1 866-878-9373"
+            url: "https://www.brycecanyoncampgrounds.com"
+        highlights: ["Queen's Garden / Navajo Loop"]
+        sidequests: ["Kodachrome Basin SP (+35 min)"]
+      - day: 5
+        title: "Bryce → Las Vegas"
+        ev_status: green
+        drive:
+          from: "Bryce Canyon City, UT"
+          to: "Las Vegas, NV"
+          miles: 260
+          minutes: 250
+          superchargers: ["Cedar City, UT", "St. George, UT"]
+        highlights: ["Kolob Canyons overlook (+50 min)"]
+        sidequests: []

@@ -61,6 +61,22 @@ class CampgroundRepo(
                 id,
             )?.let(::fromRecord)
 
+    /**
+     * Point lookup on the catalog's natural key. `(data_provider,
+     * data_provider_ref)` is the upsert conflict key, so at most one live row
+     * matches. Used by Planning Mode to resolve authored template stays.
+     */
+    fun findByDataProviderRef(
+        provider: String,
+        ref: String,
+    ): Campground? =
+        ctx
+            .fetchOne(
+                "$baseSelect WHERE cg.data_provider = ? AND cg.data_provider_ref = ? AND cg.deleted_at IS NULL",
+                provider,
+                ref,
+            )?.let(::fromRecord)
+
     fun findAll(): List<Campground> =
         ctx
             .fetch(
