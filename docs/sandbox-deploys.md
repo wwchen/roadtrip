@@ -119,12 +119,13 @@ URL as a PR comment:
 The sandbox marker is named `pr<N>` (e.g. `pr532`) and records its `SLOT`. Re-runs
 of the same PR keep the same slot until the sandbox is torn down.
 
-After a PR has a sandbox status comment that has not been torn down, pushing a
-new commit to that PR automatically reruns the sandbox workflow for the new head
-SHA. The redeploy uses the same `pr<N>` slug and slot, so the old sandbox is
-replaced in place rather than accumulating a second environment. A PR whose
-status comment says the sandbox was torn down is ignored on new commits until
-someone comments `/sandbox` again.
+After a PR has a sandbox status comment that has not been torn down or started
+teardown, pushing a new commit to that PR automatically reruns the sandbox
+workflow for the new head SHA. The redeploy uses the same `pr<N>` slug and slot,
+so the old sandbox is replaced in place rather than accumulating a second
+environment. A PR whose status comment says the sandbox was torn down, is
+tearing down, or failed teardown is ignored on new commits until someone comments
+`/sandbox` again.
 
 ### The sandbox action
 

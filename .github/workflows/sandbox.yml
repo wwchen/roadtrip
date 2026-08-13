@@ -61,6 +61,8 @@ jobs:
         with:
           script: |
             const SANDBOX_TORN_DOWN_HEADING = '### 🛑 Sandbox torn down';
+            const SANDBOX_TEARING_DOWN_HEADING = '### 🔄 Sandbox: Tearing down';
+            const SANDBOX_TEARDOWN_FAILED_HEADING = '### ❌ Sandbox teardown failed';
 
             if (context.eventName === 'workflow_dispatch') {
               const inputs = context.payload.inputs;
@@ -86,7 +88,12 @@ jobs:
               });
               const existing = comments.find(c => c.body && c.body.includes(marker));
               core.setOutput('pr_number', String(pr.number));
-              if (!existing || existing.body.includes(SANDBOX_TORN_DOWN_HEADING)) {
+              const teardownStatus = existing && (
+                existing.body.includes(SANDBOX_TORN_DOWN_HEADING) ||
+                existing.body.includes(SANDBOX_TEARING_DOWN_HEADING) ||
+                existing.body.includes(SANDBOX_TEARDOWN_FAILED_HEADING)
+              );
+              if (!existing || teardownStatus) {
                 core.setOutput('operation', 'skip');
                 core.info(`PR #${pr.number} has no active sandbox status comment; skipping redeploy.`);
                 return;
@@ -274,6 +281,7 @@ jobs:
   teardown-on-close:
     if: >
       github.event_name == 'pull_request' &&
+      github.event.action == 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15

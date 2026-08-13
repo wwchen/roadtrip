@@ -78,13 +78,17 @@ class DeploymentContractTest(unittest.TestCase):
         sandbox = workflow("sandbox.yml")
         triggers = workflow_triggers(sandbox)
         sandbox_job = sandbox["jobs"]["sandbox"]
+        teardown_job = sandbox["jobs"]["teardown-on-close"]
         resolve_script = step_by_name(sandbox_job, "Resolve request")["with"]["script"]
 
         self.assertEqual(["closed", "synchronize"], triggers["pull_request"]["types"])
         self.assertIn("github.event.action == 'synchronize'", sandbox_job["if"])
+        self.assertIn("github.event.action == 'closed'", teardown_job["if"])
         self.assertIn("context.eventName === 'pull_request'", resolve_script)
         self.assertIn("sandbox-status:pr${pr.number}", resolve_script)
         self.assertIn("SANDBOX_TORN_DOWN_HEADING", resolve_script)
+        self.assertIn("SANDBOX_TEARING_DOWN_HEADING", resolve_script)
+        self.assertIn("SANDBOX_TEARDOWN_FAILED_HEADING", resolve_script)
         self.assertIn("core.setOutput('operation', 'skip')", resolve_script)
         self.assertIn("core.setOutput('operation', 'start')", resolve_script)
 
