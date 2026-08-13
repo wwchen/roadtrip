@@ -1,28 +1,30 @@
 /* Planning Mode layout. Only what LDS primitives don't already cover: the
-   card grid, the tag cluster in a Row trail, and the start-date control. */
+   card grid, the tag cluster in a Row trail, and the start-date control.
+   Spacing is literal here, matching shell.css and dashboard.css — the
+   --rt-* token layer is colours only. */
 
 .rt-plan-shelf {
   display: grid;
-  gap: var(--rt-space-4);
+  gap: 16px;
   grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
 }
 
 .rt-plan-tags {
   display: inline-flex;
   flex-wrap: wrap;
-  gap: var(--rt-space-2);
+  gap: 8px;
 }
 
 .rt-plan-controls {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
-  gap: var(--rt-space-3);
-  margin-block: var(--rt-space-4);
+  gap: 12px;
+  margin-block: 16px;
 }
 
 .rt-plan-date {
   display: flex;
   flex-direction: column;
-  gap: var(--rt-space-1);
+  gap: 4px;
 }
