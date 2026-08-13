@@ -98,22 +98,34 @@ workflow; comments from other identities are silently ignored before any
 step runs.
 
 The workflow (`sandbox.yml`) resolves the PR head SHA via the GitHub API,
-waits for the application and Git-tree-addressed data images to appear in GHCR,
-then SSHes to `mini@mini-ca` over Tailscale and installs the PR's
-release archive (no Git checkout), and runs
-`scripts/deploy.sh sandbox-up pr<N> pr<N>` (with `SANDBOX_SHA` set) or
-`scripts/deploy.sh sandbox-down pr<N>`, both via the shared sandbox action
-described below. `sandbox-up` reuses that PR's existing slot when it has one, or
-claims the first empty slot from 1-5. On success it posts the allocated sandbox
-URL as a PR comment:
+updates the PR status comment immediately so reviewers can see that the workflow
+started before the image wait, checks out the tree it is deploying, and then
+hands off to the shared sandbox action described below. The action waits for the
+application and Git-tree-addressed data images to appear in GHCR, SSHes to
+`mini@mini-ca` over Tailscale, installs the PR's release archive (no Git
+checkout), and runs `scripts/deploy.sh sandbox-up pr<N> pr<N>` (with
+`SANDBOX_SHA` set) or `scripts/deploy.sh sandbox-down pr<N>`. `sandbox-up`
+reuses that PR's existing slot when it has one, or claims the first empty slot
+from 1-5. On success it posts the allocated sandbox URL as a PR comment:
 
 ```
-Sandbox live: https://roadtrip-sb-<slot>.floo.ca
-SHA: <12-char sha>  ·  stop with /sandbox stop
+### ✅ Sandbox live
+- URL: https://roadtrip-sb-<slot>.floo.ca
+- Commit: <12-char sha>
+- Branch: <branch>
+- Stop: comment /sandbox stop
 ```
 
 The sandbox marker is named `pr<N>` (e.g. `pr532`) and records its `SLOT`. Re-runs
 of the same PR keep the same slot until the sandbox is torn down.
+
+After a PR has a sandbox status comment that has not been torn down or started
+teardown, pushing a new commit to that PR automatically reruns the sandbox
+workflow for the new head SHA. The redeploy uses the same `pr<N>` slug and slot,
+so the old sandbox is replaced in place rather than accumulating a second
+environment. A PR whose status comment says the sandbox was torn down, is
+tearing down, or failed teardown is ignored on new commits until someone comments
+`/sandbox` again.
 
 ### The sandbox action
 
@@ -131,7 +143,7 @@ stopping mean:
 | `require-existing` | `false` | Skip instead of tearing down when there is no marker (stop) |
 | `ts-oauth-client-id` / `ts-oauth-secret` | — | Tailscale OAuth credentials |
 | `ssh-private-key` / `ssh-known-hosts` | — | Deploy SSH credentials |
-| `github-token` | `''` | Token for status comments |
+| `github-token` | — | Token for GHCR reads and status comments |
 
 The deploy host, state directory, tunnel zone, and the tailnet tag and version
 are constants inside the action, not inputs. The credentials have to be inputs:
@@ -139,9 +151,10 @@ a composite action cannot read the `secrets` context, so whatever it needs must
 be handed to it by the calling workflow.
 
 The action owns everything that touches the sandbox: joining the tailnet,
-configuring SSH, running `deploy.sh`, and posting the PR status comment as work
-progresses. Workflows are left responsible only for deciding *what* to do and
-checking out the tree. It outputs `url` and, for stop, `torn-down`.
+configuring SSH, waiting for image manifests, and running `deploy.sh`. Workflows
+are left responsible for deciding *what* to do, checking out the tree, and
+posting the initial PR status; the action posts final and failed states. It
+outputs `url` and, for stop, `torn-down`.
 
 There is no `sha` input. For `start` the caller has already checked out the
 commit being deployed, so the action reads both the commit SHA and the `data/`
@@ -170,9 +183,11 @@ branch the run is launched from. Use it for sandboxes that are not tied to a PR
 ### Automatic teardown on PR close
 
 Closing a PR — merged or not — retires its sandbox immediately. The
-`teardown-on-close` job fires on `pull_request: [closed]` and calls the sandbox
-action with `require-existing: true`, so the many PRs that never had a sandbox
-cost a single SSH and post no comment.
+same `sandbox` job handles `pull_request: [closed]`: request resolution turns
+an active sandbox status comment into a `stop` operation with
+`require-existing: true`. PRs without an active sandbox status comment are
+skipped before checkout, and a required-existing stop that races with another
+teardown updates an existing status comment but does not create a new one.
 
 This is the event-driven path; the sweep below is the backstop for what an event
 cannot catch. Do not rely on the sweep alone for this case — `schedule` is
