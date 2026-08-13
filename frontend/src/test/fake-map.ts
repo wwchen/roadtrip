@@ -197,6 +197,18 @@ export class FakeMap {
     this.flyToCalls.push(options);
   }
 
+  /** Calls the app's own zoom buttons make. Recorded, not simulated — the
+      fake has no real zoom level beyond what `setViewport` seeds. */
+  zoomInCalls = 0;
+  zoomIn() {
+    this.zoomInCalls += 1;
+  }
+
+  zoomOutCalls = 0;
+  zoomOut() {
+    this.zoomOutCalls += 1;
+  }
+
   fitBounds(bounds: unknown, options: unknown) {
     this.fitBoundsCalls.push({ bounds, options });
   }
@@ -262,6 +274,13 @@ export class FakeGeolocateControl {
 
   private handlers = new Map<string, Set<(payload: unknown) => void>>();
 
+  /** What `MapControlButtons`' locate-me button calls. */
+  triggerCalls = 0;
+  trigger() {
+    this.triggerCalls += 1;
+    return true;
+  }
+
   on(type: string, fn: (payload: unknown) => void) {
     const set = this.handlers.get(type) ?? new Set();
     set.add(fn);
@@ -282,9 +301,4 @@ export class FakeGeolocateControl {
   listenerCount(type: string): number {
     return this.handlers.get(type)?.size ?? 0;
   }
-}
-
-/** MapLibre's `NavigationControl`. It has no behaviour we drive, only options. */
-export class FakeNavigationControl {
-  constructor(readonly options: unknown = {}) {}
 }

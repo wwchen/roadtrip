@@ -1,0 +1,78 @@
+/* ---------------------------------------------------------------------------
+   Zoom and locate-me, replacing MapLibre's own bottom-right controls (hidden
+   in map.css — see the note on `.maplibregl-ctrl-geolocate`; zoom's
+   `NavigationControl` isn't installed at all any more, see map/controls.ts).
+
+   Locate-me sits above the zoom group, matching the order MapLibre's own
+   controls used. legend.css's mobile toggle sits above this whole stack in
+   turn — its `bottom` offset is computed from the sizes below, so a change
+   here means updating the comment (and the number) over there too.
+   --------------------------------------------------------------------------- */
+
+.rt-mapctl {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.rt-mapctl-locate,
+.rt-mapctl-zoom button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: var(--rt-surface);
+  color: var(--rt-text);
+  border: 0;
+  cursor: pointer;
+}
+
+.rt-mapctl-locate:hover,
+.rt-mapctl-zoom button:hover {
+  background: var(--rt-fill-hover);
+}
+
+.rt-mapctl-locate:focus-visible,
+.rt-mapctl-zoom button:focus-visible {
+  outline: 2px solid var(--rt-brand);
+  outline-offset: -2px;
+}
+
+.rt-mapctl-locate {
+  border: 1px solid var(--rt-border-strong);
+  border-radius: var(--rt-r-md);
+  box-shadow: var(--rt-e2);
+}
+
+/* One rounded, bordered group of two buttons — MapLibre's own zoom control
+   read as one control for the same reason: they're a single "how far in" axis,
+   not two independent actions. */
+.rt-mapctl-zoom {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--rt-border-strong);
+  border-radius: var(--rt-r-md);
+  box-shadow: var(--rt-e2);
+  overflow: hidden;
+}
+
+.rt-mapctl-zoom button:first-child {
+  border-bottom: 1px solid var(--rt-border);
+}
+
+@media (max-width: 640px) {
+  /* iOS HIG / Material both land on 48px as the comfortable mobile touch
+     target — the same size legend.css's mobile toggle uses, for the same
+     reason: these are controls a thumb has to find without looking. */
+  .rt-mapctl-locate,
+  .rt-mapctl-zoom button {
+    width: 48px;
+    height: 48px;
+  }
+}

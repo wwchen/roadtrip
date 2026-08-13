@@ -1,8 +1,8 @@
 // Both locate controls write the store; the puck and proximity-biased search
 // subscribe to that shared location.
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useToast } from '@ui';
-import { installMapControls } from '@/map/controls';
+import { installMapControls, type MapControls } from '@/map/controls';
 import {
   createUserLocationRegistry,
   hideUserLocation,
@@ -18,13 +18,21 @@ export const GEOLOCATION_DENIED_MESSAGE =
   'Turn on location access to see distances and nearer search results.';
 export const GEOLOCATION_UNAVAILABLE_MESSAGE = 'Try again, or type a place name instead.';
 
+export interface UseUserLocationApi {
+  /** Ask for a fresh fix, the way MapLibre's own (now-hidden) button did.
+      `MapControlButtons`' locate button is the caller. */
+  locate: () => void;
+}
+
 /**
  * The map's controls and the location they produce.
  *
- * Called once, by `MapView`. Nothing is returned: both consumers of a fix — the
- * drawer's distance line and the search box's proximity bias — read the store.
+ * Called once, by `MapView`. Only `locate` is returned: the puck and the
+ * store update are side effects nothing downstream needs a handle to — the
+ * drawer's distance line and the search box's proximity bias both read the
+ * store directly.
  */
-export function useUserLocation(): void {
+export function useUserLocation(): UseUserLocationApi {
   const { map } = useMapContext();
   const { toast } = useToast();
   const setUserLocation = useMapStore((s) => s.setUserLocation);
@@ -36,12 +44,21 @@ export function useUserLocation(): void {
   const toastRef = useRef(toast);
   toastRef.current = toast;
 
+  // Read by `locate`, which a click can fire before or after the install effect
+  // has run depending on how fast the map appeared — a ref rather than state
+  // because nothing should re-render when the control itself is (re)installed.
+  const controlsRef = useRef<MapControls | null>(null);
+  const locate = useCallback(() => {
+    controlsRef.current?.geolocate.trigger();
+  }, []);
+
   // Not gated on `styleEpoch`: a control is chrome around the canvas, so it neither
   // waits for a style nor is destroyed by a reload — unlike every layer.
   useEffect(() => {
     if (!map) return;
 
     const controls = installMapControls(map);
+    controlsRef.current = controls;
 
     const onGeolocate = (event: unknown) => {
       const coords = (event as GeolocationPosition | undefined)?.coords;
@@ -72,6 +89,7 @@ export function useUserLocation(): void {
       controls.geolocate.off('geolocate', onGeolocate);
       controls.geolocate.off('error', onError);
       controls.remove();
+      controlsRef.current = null;
     };
   }, [map, setUserLocation]);
 
@@ -92,4 +110,6 @@ export function useUserLocation(): void {
   }, [map, userLocation]);
 
   useEffect(() => () => hideUserLocation(registry.current), []);
+
+  return { locate };
 }

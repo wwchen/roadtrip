@@ -188,27 +188,21 @@
 @media (max-width: 640px) {
   .rt-legend-toggle {
     display: grid;
-    /* Bottom-right, stacked above MapLibre's own controls (installMapControls
-       in map/controls.ts: a locate-me button over a two-button zoom group)
-       rather than the account button's top-right corner. Thumb reach on a
-       phone is the bottom of the screen, and layers is the control a driver
-       reaches for mid-trip the way locate-me already is — the two belong in
-       the same stack, not opposite corners.
+    /* Bottom-right, stacked above our own zoom/locate-me buttons
+       (MapControlButtons.tsx, map-controls.css) rather than the account
+       button's top-right corner. Thumb reach on a phone is the bottom of the
+       screen, and layers is the control a driver reaches for mid-trip the
+       way locate-me already is — the two belong in the same stack, not
+       opposite corners.
 
-       164px clears that stack. Measured against the live DOM rather than
-       computed from maplibre-gl.css's own numbers: the geolocate button, the
-       two-button zoom group below it, AND the attribution control below
-       that (a compact, collapsible badge whose own height isn't a fixed
-       constant) all share this corner, and the attribution control's margin
-       to its neighbours didn't match the 10px every `.maplibregl-ctrl-group`
-       otherwise uses. 151px was the geolocate button's measured distance
-       from the viewport's bottom edge; +13px more so this button doesn't
-       crowd it. Coupled to MapLibre's own control geometry, not derived from
-       it — a maplibre-gl upgrade or an attribution-text change means
-       re-measuring this against the running app, not recomputing from the
-       library's CSS. */
+       174px clears that stack, computed from map-controls.css's own numbers
+       now that both buttons are ours rather than reverse-engineered from
+       MapLibre's DOM: 48px locate-me + 10px gap + 96px zoom group (two 48px
+       buttons) + 10px that group's own offset from the viewport edge = 164px
+       to the top of locate-me, +10px more so this button doesn't crowd it.
+       A size change in either file means updating both comments. */
     right: 10px;
-    bottom: 164px;
+    bottom: 174px;
     /* Larger than the 40px desktop pop-out: this is the one control on the
        page a thumb has to find without looking, stacked directly over two
        29px MapLibre buttons that are themselves too small to be the bar —
