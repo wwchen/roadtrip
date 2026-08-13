@@ -235,7 +235,11 @@
 
 .rt-settings-rail button[aria-current='true'] {
   background: var(--rt-brand-tint);
-  color: var(--rt-brand);
+  /* --rt-brand-text, not --rt-brand: this is brand-coloured TEXT, and
+     --rt-brand is tuned for white-on-fill — 3.13:1 as text on the night
+     page, worse against this tint. See the role comment in
+     roadtrip-zion-bridge.css. */
+  color: var(--rt-brand-text);
   font-weight: 500;
 }
 

@@ -186,7 +186,9 @@
 .cg-cal-day.cg-cal-faint { color: var(--rt-faint); }
 .cg-cal-day.cg-cal-today {
   box-shadow: inset 0 0 0 1px var(--rt-brand);
-  color: var(--rt-brand); font-weight: 600;
+  /* --rt-brand-text for the text, --rt-brand stays for the ring — see the
+     role comment in roadtrip-zion-bridge.css. */
+  color: var(--rt-brand-text); font-weight: 600;
 }
 .cg-cal-day.cg-cal-selected {
   background: var(--rt-brand);
@@ -261,7 +263,8 @@
   font-size: 13px; font-weight: 600;
   cursor: pointer;
 }
-.cg-sites-toggle:hover:not(:disabled) { color: var(--rt-brand); }
+/* --rt-brand-text: brand-coloured text — see the role comment in roadtrip-zion-bridge.css. */
+.cg-sites-toggle:hover:not(:disabled) { color: var(--rt-brand-text); }
 .cg-sites-toggle:disabled { color: var(--rt-faint); cursor: default; }
 .cg-sites-chevron { --icon-size: 14px; color: var(--rt-faint); }
 .cg-sites-rows {
@@ -674,7 +677,9 @@
   cursor: pointer;
 }
 .cg-site-matrix-site-button:hover .cg-site-matrix-name {
-  color: var(--rt-brand);
+  /* --rt-brand-text: brand-coloured text — see the role comment in
+     roadtrip-zion-bridge.css. */
+  color: var(--rt-brand-text);
   text-decoration: underline;
 }
 .cg-site-matrix-site-button:focus-visible {
@@ -767,7 +772,10 @@
   position: relative;
 }
 .cg-site-matrix-cell-watch.is-watched {
-  color: var(--rt-brand);
+  /* --rt-brand-text: brand-coloured text — see the role comment in
+     roadtrip-zion-bridge.css. The dot below it is a real fill and correctly
+     keeps --rt-brand. */
+  color: var(--rt-brand-text);
 }
 .cg-site-matrix-cell-watch.is-watched::after {
   content: '';
