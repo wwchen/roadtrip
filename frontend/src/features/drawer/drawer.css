@@ -85,6 +85,9 @@
   flex: 0 0 auto;
   margin: 10px auto 4px;
   background: rgba(var(--rt-c-overlay-rgb), 0.18);
+  /* Off-scale, and it has to be: the pill is 4px tall, so any radius above 2px
+     is clamped to half the short side anyway. The scale's 8px floor would be a
+     no-op that reads as an error. */
   border-radius: 2px;
   cursor: grab;
   /* The gesture is ours; the browser must not also pan the page. */
@@ -347,6 +350,10 @@
 .rt-sc-bar {
   flex: 1 1 0;
   min-width: 0;
+  /* Off-scale: 24 bars share the row's width, so each is a few px wide and the
+     shortest hours are a few px tall. This is a hairline softening of a data
+     mark, not a surface corner — the scale has no step this small, and taking
+     its floor would round the low bars away into dots. */
   border-radius: 1px;
 }
 
