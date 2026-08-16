@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Button, EmptyState, Table, Tag } from '@ui';
+import { Button, EmptyState, Icon, Table, Tag } from '@ui';
 import type { Watch, WatchStatus } from '@/api/watches-api';
 import { formatWatchDate, relativeTime, watchFallbackName } from '@/lib/watch-format';
 import {
@@ -96,7 +96,13 @@ export function WatchTable({
       onClick={() => toggleSort(key)}
     >
       {label}
-      {sort.key === key && <span aria-hidden="true">{sort.dir === 'asc' ? ' ↑' : ' ↓'}</span>}
+      {sort.key === key && (
+        <Icon
+          name={sort.dir === 'asc' ? 'arrow-up' : 'arrow-down'}
+          className="rt-watch-table-sort-dir"
+          aria-hidden="true"
+        />
+      )}
     </button>
   );
 

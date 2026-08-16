@@ -116,8 +116,6 @@
   color: var(--rt-muted);
   border: 0;
   border-radius: var(--rt-r-sm);
-  font-size: 16px;
-  line-height: 1;
   cursor: pointer;
 }
 
@@ -129,6 +127,9 @@
 /* Brings the panel back once hidden. Desktop only — on mobile the hamburger is
    the only affordance, and two floating buttons in one corner is one too many. */
 .rt-legend-show {
+  /* Icon size is the LDS `--icon-size` token, turned down on the button that
+     owns it, rather than a `width`/`height` rule reaching into the svg. */
+  --icon-size: 18px;
   position: absolute;
   top: max(10px, env(safe-area-inset-top));
   right: 10px;
@@ -146,13 +147,9 @@
   cursor: pointer;
 }
 
-.rt-legend-show svg {
-  width: 18px;
-  height: 18px;
-}
-
 /* The mobile drawer handle. Hidden on desktop, where the panel is always up. */
 .rt-legend-toggle {
+  --icon-size: 20px;
   display: none;
   position: absolute;
   top: max(10px, env(safe-area-inset-top));
@@ -166,13 +163,13 @@
   border: 1px solid var(--rt-border-strong);
   border-radius: var(--rt-r-md);
   box-shadow: var(--rt-e2);
-  font-size: 20px;
   cursor: pointer;
 }
 
 @media (max-width: 640px) {
   .rt-legend-toggle {
-    display: block;
+    display: grid;
+    place-items: center;
   }
 
   .rt-legend-show {
@@ -201,13 +198,13 @@
   }
 
   .rt-legend__hide {
+    --icon-size: 20px;
     top: 8px;
     right: 10px;
     width: 40px;
     height: 40px;
     background: var(--rt-fill-subtle);
     border: 1px solid var(--rt-border-strong);
-    font-size: 22px;
   }
 
   /* Back to the touch floor: a thumb needs the height a mouse does not. */

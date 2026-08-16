@@ -168,7 +168,9 @@
   }
 
   .rt-drawer-close {
-    display: block;
+    --icon-size: 18px;
+    display: grid;
+    place-items: center;
     position: absolute;
     /* Back on the drawer's own top edge. It had to ride the clearance band while
        that band was padding inside this box; now the box starts below the panel,
@@ -184,8 +186,6 @@
     color: rgba(var(--rt-c-overlay-rgb), 0.85);
     border: 1px solid rgba(var(--rt-c-overlay-rgb), 0.1);
     border-radius: 50%;
-    font-size: 20px;
-    line-height: 1;
     cursor: pointer;
   }
 

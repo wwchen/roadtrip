@@ -8,6 +8,10 @@
      4. `../tokens/roadtrip-zion-bridge.css` — repoints `--rt-*` chrome roles
         onto roadtrip-zion.css. Loads last so it wins any name collision with
         tokens.css (`--rt-scrim`).
+     5. `./icons.css`                        — how an Open Icons glyph takes its
+        colour inside a control this app draws rather than LDS. After the bridge
+        because it corrects an LDS rule rather than a token; its own comment
+        explains why one rule beats six.
 
    `tokens.css` is bundled here, not linked at runtime, so the dev server
    doesn't need the backend up to render styled.
@@ -16,3 +20,4 @@
 @import '../tokens/roadtrip-zion.css';
 @import '../tokens/tokens.css';
 @import '../tokens/roadtrip-zion-bridge.css';
+@import './icons.css';

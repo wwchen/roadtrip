@@ -3,6 +3,7 @@
 // Collapse state stays local and defaults closed on phones so results do not cover
 // the route immediately after it is computed.
 import { useState } from 'react';
+import { Icon } from '@ui';
 import { token } from '@tokens';
 import { useMapContext } from '@/map/context';
 import { useMapStore } from '@/stores/mapStore';
@@ -72,7 +73,8 @@ export function TripResults({
               number is noise. */}
           · {visible.length === total ? total : `${visible.length} of ${total}`}
         </span>
-        <ChevronIcon />
+        {/* Points up when expanded; `.tb-results.collapsed` rotates it. */}
+        <Icon name="chevron-up" className="tb-results-chevron" aria-hidden="true" />
       </div>
 
       <div className="tb-results-body">
@@ -128,22 +130,4 @@ export function TripResults({
 function CardSeason({ card }: { card: TripCard }) {
   const label = compactSeasonLabel(card.season, card.reservable);
   return label ? <span className="tb-card-season">{label}</span> : null;
-}
-
-/** Points down when collapsed, up when expanded — the CSS rotates it. */
-function ChevronIcon() {
-  return (
-    <svg
-      className="tb-results-chevron"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <polyline points="6 15 12 9 18 15" />
-    </svg>
-  );
 }

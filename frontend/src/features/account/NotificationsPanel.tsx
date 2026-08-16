@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, SecretField, SeededTextField } from '@ui';
+import { Button, Icon, SecretField, SeededTextField } from '@ui';
 import type { SettingsResponse } from '@/api/account-api';
 import { settingsErrorMessage } from '@/lib/settings-errors';
 import './account.css';
 
-/** How long a "✓ Sent" confirmation stays up. */
+/** How long a "Sent" confirmation stays up. */
 const SENT_CLEAR_MS = 4000;
 
 export interface NotificationValues {
@@ -94,10 +94,12 @@ export function NotificationsPanel({
     setStatus(null);
     try {
       await send();
-      setStatus({ target, ok: true, message: '✓ Sent' });
+      // The outcome glyph is `TestStatusText`'s to draw, from `ok` — a message
+      // that carries its own tick cannot be read out or restyled as one.
+      setStatus({ target, ok: true, message: 'Sent' });
     } catch (err) {
       const code = (err as { code?: string } | null)?.code;
-      setStatus({ target, ok: false, message: `✕ ${settingsErrorMessage(code)}` });
+      setStatus({ target, ok: false, message: settingsErrorMessage(code) });
     } finally {
       setPending(false);
     }
@@ -178,7 +180,7 @@ function TestStatusText({ status, target }: { status: TestStatus | null; target:
       className={`rt-notif-status ${status.ok ? 'rt-notif-status--ok' : 'rt-notif-status--err'}`}
       role="status"
     >
-      {status.message}
+      <Icon name={status.ok ? 'check' : 'close'} aria-hidden="true" /> {status.message}
     </span>
   );
 }

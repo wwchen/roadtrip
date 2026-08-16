@@ -184,12 +184,12 @@ describe('test buttons', () => {
       renderPanel(settings());
 
       await userEvent.click(screen.getByRole('button', { name: 'Send test email' }));
-      expect(await screen.findByText('✓ Sent')).toBeInTheDocument();
+      expect(await screen.findByText('Sent')).toBeInTheDocument();
 
       await act(async () => {
         vi.advanceTimersByTime(SENT_CLEAR_MS);
       });
-      expect(screen.queryByText('✓ Sent')).not.toBeInTheDocument();
+      expect(screen.queryByText('Sent')).not.toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }
@@ -203,7 +203,7 @@ describe('test buttons', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Send test message' }));
 
-    expect(await screen.findByText('✕ Slack rejected this token.')).toBeInTheDocument();
+    expect(await screen.findByText('Slack rejected this token.')).toBeInTheDocument();
   });
 
   test('an unknown failure code still says something', async () => {
@@ -215,7 +215,7 @@ describe('test buttons', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Send test email' }));
 
     expect(
-      await screen.findByText('✕ Something went wrong. Please try again.'),
+      await screen.findByText('Something went wrong. Please try again.'),
     ).toBeInTheDocument();
   });
 
@@ -226,12 +226,12 @@ describe('test buttons', () => {
     renderPanel(settings(), { onTestSlack });
 
     await userEvent.click(screen.getByRole('button', { name: 'Send test message' }));
-    await screen.findByText('✕ Slack rejected this token.');
+    await screen.findByText('Slack rejected this token.');
 
     await userEvent.click(screen.getByRole('button', { name: 'Send test email' }));
 
-    expect(screen.queryByText('✕ Slack rejected this token.')).not.toBeInTheDocument();
-    expect(await screen.findByText('✓ Sent')).toBeInTheDocument();
+    expect(screen.queryByText('Slack rejected this token.')).not.toBeInTheDocument();
+    expect(await screen.findByText('Sent')).toBeInTheDocument();
   });
 
   test('both buttons are disabled while a test is in flight', async () => {

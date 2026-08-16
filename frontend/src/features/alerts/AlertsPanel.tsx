@@ -8,6 +8,7 @@
 // for: the vanilla mounted the same `mountWatchEditor` controller here and in the
 // availability grid.
 import { useEffect, useRef, useState } from 'react';
+import { Icon } from '@ui';
 import { signIn } from '@/api/auth-api';
 import { getWatch, updateWatch, type Watch } from '@/api/watches-api';
 import { useQuery } from '@tanstack/react-query';
@@ -91,11 +92,9 @@ export function AlertsPanel() {
         aria-expanded={expanded}
         onClick={() => setExpanded((current) => !current)}
       >
-        <span className="tb-alerts-bell" aria-hidden="true">
-          🔔
-        </span>
+        <Icon name="bell" className="tb-alerts-bell" aria-hidden="true" />
         <span className="tb-alerts-label">{barLabel(counts)}</span>
-        <ChevronIcon />
+        <Icon name="chevron-down" className="tb-alerts-chevron" aria-hidden="true" />
       </button>
 
       {expanded ? (
@@ -190,11 +189,11 @@ function RowActions({
       {watch.status === 'done' ? (
         doneKind(watch) === 'expired' ? (
           <span className="tb-alerts-status" title="Watch window ended without availability">
-            ⌛
+            <Icon name="clock" aria-hidden="true" />
           </span>
         ) : (
-          <span className="tb-alerts-status" title="Availability found">
-            ✅
+          <span className="tb-alerts-status tb-alerts-status-found" title="Availability found">
+            <Icon name="check-circle" aria-hidden="true" />
           </span>
         )
       ) : (
@@ -207,7 +206,7 @@ function RowActions({
             disabled={busy}
             onClick={stop(() => onSetStatus(watch.status === 'paused' ? 'active' : 'paused'))}
           >
-            {watch.status === 'paused' ? '▶' : '⏸'}
+            <Icon name={watch.status === 'paused' ? 'play' : 'pause'} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -216,7 +215,7 @@ function RowActions({
             aria-label="Edit watch"
             onClick={stop(onEdit)}
           >
-            ⚙
+            <Icon name="settings" aria-hidden="true" />
           </button>
         </>
       )}
@@ -228,7 +227,7 @@ function RowActions({
         disabled={busy}
         onClick={stop(onDelete)}
       >
-        🗑
+        <Icon name="trash" aria-hidden="true" />
       </button>
     </>
   );
@@ -317,8 +316,16 @@ function Triggers({ watch }: { watch: Watch }) {
 
 function TriggerIcon({ kind }: { kind: string }) {
   if (kind === TRIGGER_KIND_SLACK_NOTIFY) return <SlackIcon />;
-  if (kind === TRIGGER_KIND_EMAIL_NOTIFY) return <EmailIcon />;
-  if (kind === TRIGGER_KIND_ATC) return <span title="Add to cart">🛒 ATC</span>;
+  if (kind === TRIGGER_KIND_EMAIL_NOTIFY) {
+    return <Icon name="mail" className="tb-alerts-trigger-icon" role="img" aria-label="Email" />;
+  }
+  if (kind === TRIGGER_KIND_ATC) {
+    return (
+      <span className="tb-alerts-atc" title="Add to cart">
+        <Icon name="cart" className="tb-alerts-trigger-icon" aria-hidden="true" /> ATC
+      </span>
+    );
+  }
   return <span>{kind}</span>;
 }
 
@@ -326,7 +333,7 @@ function LastChecked({ watch }: { watch: Watch }) {
   if (watch.last_run_status === 'failed') {
     return (
       <span className="tb-alerts-err" title={watch.last_run_error ?? undefined}>
-        ⚠ error
+        <Icon name="warning" className="tb-alerts-err-icon" aria-hidden="true" /> error
       </span>
     );
   }
@@ -350,26 +357,12 @@ function SignInPrompt() {
 const statusClass = (watch: Watch): string =>
   watch.status === 'paused' ? ' is-paused' : watch.status === 'done' ? ' is-done' : '';
 
-function ChevronIcon() {
-  return (
-    <svg
-      className="tb-alerts-chevron"
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
-  );
-}
-
-/** Slack's four-colour mark, inline so the row needs no network fetch. */
+/**
+ * Slack's four-colour mark, inline so the row needs no network fetch.
+ *
+ * The one icon in this file that is NOT from Open Icons, and deliberately so: a
+ * third-party brand mark is not ours to redraw at our own weight and colour.
+ */
 function SlackIcon() {
   return (
     <svg className="tb-alerts-slack" viewBox="0 0 122.8 122.8" role="img" aria-label="Slack">
@@ -390,26 +383,6 @@ function SlackIcon() {
         fill="#ECB22E"
         d="M77.6 97c7.1 0 12.9 5.8 12.9 12.9s-5.8 12.9-12.9 12.9-12.9-5.8-12.9-12.9V97h12.9zm0-6.5c-7.1 0-12.9-5.8-12.9-12.9s5.8-12.9 12.9-12.9h32.3c7.1 0 12.9 5.8 12.9 12.9s-5.8 12.9-12.9 12.9H77.6z"
       />
-    </svg>
-  );
-}
-
-function EmailIcon() {
-  return (
-    <svg
-      className="tb-alerts-email"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      role="img"
-      aria-label="Email"
-    >
-      <title>Email</title>
-      <rect width="20" height="16" x="2" y="4" rx="2" />
-      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
     </svg>
   );
 }

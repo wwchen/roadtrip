@@ -1,0 +1,29 @@
+/* ---------------------------------------------------------------------------
+   Icon colour for the controls this app draws itself.
+
+   Every icon on the page is an Open Icons symbol rendered by LDS's `Icon`
+   (`@lew/open-icons` — a 24px grid at stroke 2, referenced out of one sprite).
+   `.lds-icon` paints itself `color: var(--icon)`, LDS's deliberately muted icon
+   token, and because that is a declaration rather than inheritance it wins over
+   whatever colour the surrounding control set. Inside LDS's own components that
+   is handled per component — `.lds-btn__icon .lds-icon` sets `color:
+   currentColor`, `.lds-inline__icon` sets `--icon: currentColor` — but this app
+   still draws a number of its own icon buttons (`.tb-icon-btn`,
+   `.tb-alerts-act`, `.rt-legend__hide`, `.rt-drawer-close`, …), and in those the
+   icon has to follow the button: hover, disabled, `--rt-error` on delete.
+
+   So: an icon inside an app control takes that control's colour. One rule rather
+   than `--icon: currentColor` repeated in six feature stylesheets, and scoped to
+   interactive elements rather than applied to `.lds-icon` globally — a blanket
+   rule would also un-mute the icons LDS mutes on purpose (tabs, tags, rows).
+
+   Low specificity on purpose (0,1,1): LDS's own per-component rules still win.
+
+   NB: never add a `stroke-width` rule here. The set's geometry is weight-aware
+   and 54 symbols carry masks whose strokes are 5–6 units wide on purpose;
+   restyling the weight closes every one of them. See @lew/open-icons' README.
+   --------------------------------------------------------------------------- */
+button .lds-icon,
+a .lds-icon {
+  --icon: currentColor;
+}

@@ -129,7 +129,7 @@ describe('the table', () => {
     mount();
     await expand();
 
-    const error = await waitFor(() => screen.getByText('⚠ error'));
+    const error = await waitFor(() => screen.getByText('error'));
     expect(error).toHaveAttribute('title', 'provider 500');
   });
 
