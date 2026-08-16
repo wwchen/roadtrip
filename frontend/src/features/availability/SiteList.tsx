@@ -7,6 +7,7 @@
 // Each row links straight into the provider's booking flow for that exact night,
 // which is only possible because a day is selected — the same row in the matrix
 // cannot, which is why the matrix arms a cell before opening it.
+import { Icon } from '@ui';
 import type { Campsite, PoiCampsitesResponse } from '@/api/campsite-api';
 import { availableCampsiteIds, availableCount } from '@/lib/day-fields';
 import type { FusedDay } from './fuse';
@@ -135,9 +136,11 @@ function Header({
       onClick={onToggle}
     >
       <span className="cg-sites-label">{label}</span>
-      <span className="cg-sites-chevron" aria-hidden="true">
-        {expanded ? '▾' : '▸'}
-      </span>
+      <Icon
+        name={expanded ? 'caret-down' : 'caret-right'}
+        className="cg-sites-chevron"
+        aria-hidden="true"
+      />
     </button>
   );
 }

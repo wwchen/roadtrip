@@ -1,6 +1,7 @@
 // Unsupported triggers stay visible when an existing watch already uses them so
 // opening the editor can never silently strip its configuration.
 import { useState } from 'react';
+import { Icon } from '@ui';
 import { HttpError } from '@/api/http';
 import type { Watch } from '@/api/watches-api';
 import {
@@ -89,7 +90,7 @@ export function WatchEditor({
             aria-label="Close"
             onClick={onClose}
           >
-            ×
+            <Icon name="close" aria-hidden="true" />
           </button>
         ) : null}
       </div>

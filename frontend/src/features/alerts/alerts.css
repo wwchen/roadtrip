@@ -19,6 +19,9 @@
   color: var(--rt-text); font: inherit; font-size: 12px; text-align: left;
 }
 .tb-alerts-bar:hover { background: var(--rt-fill-hover); }
+/* A 12px row, so the bell and the disclosure chevron are set below the 16px
+   token default rather than towering over the label between them. */
+.tb-alerts-bar { --icon-size: 14px; }
 .tb-alerts-bell { flex-shrink: 0; }
 .tb-alerts-label { flex: 1; min-width: 0; font-weight: 500; }
 .tb-alerts-chevron { flex-shrink: 0; transition: transform 150ms ease; }
@@ -47,16 +50,23 @@
 .tb-alerts-row.is-paused, .tb-alerts-row.is-done { opacity: 0.55; }
 .tb-alerts-poi { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--rt-text); }
 .tb-alerts-date, .tb-alerts-trigger { white-space: nowrap; color: var(--rt-muted); }
-.tb-alerts-slack,
-.tb-alerts-email { width: 14px; height: 14px; vertical-align: -2px; }
+/* The trigger column sets icons inline with text at 14px rather than the 16px
+   token default, because Slack's brand mark is drawn at 14 and the two sit side
+   by side in one cell. `--icon` follows the cell's colour: these are not inside
+   a control, so `ui/icons.css` does not reach them. */
+.tb-alerts-trigger-icon { --icon-size: 14px; --icon: currentColor; vertical-align: -2px; }
+.tb-alerts-slack { width: 14px; height: 14px; vertical-align: -2px; }
+.tb-alerts-atc { display: inline-flex; align-items: center; gap: 3px; }
 .tb-alerts-checked { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--rt-muted); }
 .tb-alerts-err { color: var(--rt-warn); }
+.tb-alerts-err-icon { --icon-size: 13px; --icon: currentColor; vertical-align: -2px; }
 .tb-alerts-faint { color: var(--rt-faint); }
 .tb-alerts-actions { display: flex; gap: 2px; justify-self: end; }
 .tb-alerts-act {
+  --icon-size: 15px;
   width: 24px; height: 24px;
   background: transparent; border: 0; color: var(--rt-faint);
-  border-radius: var(--rt-r-sm); cursor: pointer; font-size: 12px;
+  border-radius: var(--rt-r-sm); cursor: pointer;
   display: grid; place-items: center;
 }
 .tb-alerts-act:hover { background: var(--rt-fill-hover); color: var(--rt-text); }
@@ -73,10 +83,16 @@
 @media (prefers-reduced-motion: reduce) {
   .tb-alerts-act.is-armed { animation: none; background: var(--rt-fill-hover); }
 }
+/* The terminal-state glyph occupies one action slot, so it matches their size.
+   Not a button, so it names its own `--icon`: expired reads as muted-as-the-row,
+   found reads as the success colour. */
 .tb-alerts-status {
+  --icon-size: 15px;
+  --icon: var(--rt-faint);
   width: 24px; height: 24px;
-  display: grid; place-items: center; font-size: 12px;
+  display: grid; place-items: center;
 }
+.tb-alerts-status-found { --icon: var(--rt-success); }
 .tb-alerts-editor-row {
   padding: 8px 12px 12px 12px;
   border-bottom: 1px solid var(--rt-border);

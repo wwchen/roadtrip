@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Checkbox } from '@ui';
+import { Checkbox, Icon } from '@ui';
 import { sortedAgencies } from '@/map/agencies';
 import { overlaySpec, type PointOverlaySpec } from '@/map/overlays';
 import { useMapStore } from '@/stores/mapStore';
@@ -69,7 +69,7 @@ export function LegendPanel({ pois }: LegendPanelProps) {
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        {open ? '✕' : '☰'}
+        <Icon name={open ? 'close' : 'menu'} aria-hidden="true" />
       </button>
 
       {collapsed && (
@@ -80,7 +80,7 @@ export function LegendPanel({ pois }: LegendPanelProps) {
           title="Show layers"
           onClick={() => setCollapsed(false)}
         >
-          <LayersIcon />
+          <Icon name="list" aria-hidden="true" />
         </button>
       )}
 
@@ -94,7 +94,7 @@ export function LegendPanel({ pois }: LegendPanelProps) {
           title="Hide"
           onClick={hide}
         >
-          ×
+          <Icon name="close" aria-hidden="true" />
         </button>
         <h1 className="rt-legend__title">Roadtrip Map</h1>
 
@@ -186,23 +186,4 @@ function LegendDot({ colorToken }: { colorToken: string }) {
 /** A viewport count, in the panel's parenthesised style. */
 function Count({ value }: { value: number }) {
   return <span className="rt-legend__count">({value.toLocaleString()})</span>;
-}
-
-/** The stacked-layers glyph on the pop-out button, from index.html. */
-function LayersIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <polygon points="12 2 2 7 12 12 22 7 12 2" />
-      <polyline points="2 17 12 22 22 17" />
-      <polyline points="2 12 12 17 22 12" />
-    </svg>
-  );
 }

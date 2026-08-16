@@ -57,11 +57,20 @@
   font-size: 14px;
 }
 
+/* `--icon` follows the badge's own colour: the tick is part of the assertion,
+   not a neutral adornment, and this is a span rather than a control so
+   `ui/icons.css` does not reach it. */
 .rt-account-verified {
+  --icon-size: 13px;
+  --icon: currentColor;
   margin-left: 6px;
   color: var(--rt-success);
   font-size: 12px;
   white-space: nowrap;
+}
+
+.rt-account-verified .lds-icon {
+  vertical-align: -2px;
 }
 
 /* Separated by a rule rather than a color wash: the section holds one
@@ -95,8 +104,14 @@
 }
 
 .rt-notif-status {
+  --icon-size: 13px;
+  --icon: currentColor;
   font-size: 12px;
   white-space: nowrap;
+}
+
+.rt-notif-status .lds-icon {
+  vertical-align: -2px;
 }
 
 .rt-notif-status--ok {

@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { Icon } from '@ui';
 import { useDrawerDrag } from './useDrawerDrag';
 import './drawer.css';
 
@@ -67,7 +68,7 @@ export function Drawer({ open, onClose, children }: DrawerProps) {
         {/* Grab bar: always drag-eligible, and sized for a thumb in CSS. */}
         <div className="rt-drawer-handle" ref={setHandle} aria-hidden="true" />
         <button type="button" className="rt-drawer-close" aria-label="Close" onClick={onClose}>
-          ×
+          <Icon name="close" aria-hidden="true" />
         </button>
         <div className="rt-drawer-content">{children}</div>
       </aside>

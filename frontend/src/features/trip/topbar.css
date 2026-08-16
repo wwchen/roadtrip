@@ -131,6 +131,7 @@
 
 .tb-x,
 .tb-locate {
+  --icon-size: 15px;
   flex-shrink: 0;
   width: 24px;
   height: 24px;
@@ -206,6 +207,7 @@
 }
 
 .tb-icon-btn {
+  --icon-size: 18px;
   width: 36px;
   height: 36px;
   background: var(--rt-fill-subtle);
@@ -370,9 +372,11 @@
 }
 
 .tb-results-chevron {
+  /* `--icon-size` rather than `width`/`height`: both would be specificity 0,1,0
+     against `.lds-icon`'s own sizing rule, so which won would come down to
+     stylesheet import order. The token is the seam LDS actually offers. */
+  --icon-size: 14px;
   flex-shrink: 0;
-  width: 14px;
-  height: 14px;
   transition: transform 150ms ease;
 }
 

@@ -102,3 +102,11 @@
 .rt-watch-table-sort:hover {
   color: var(--rt-brand);
 }
+
+/* The direction arrow sits after the label at text scale, and follows the
+   header's colour through `:hover` (see `ui/icons.css`). */
+.rt-watch-table-sort-dir {
+  --icon-size: 13px;
+  margin-left: 2px;
+  vertical-align: -2px;
+}

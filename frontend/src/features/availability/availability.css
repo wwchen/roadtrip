@@ -242,6 +242,7 @@
   text-align: center; color: var(--rt-muted); font-size: 14px;
   line-height: 1.4;
 }
+.cg-closed-banner-icon { --icon: currentColor; vertical-align: -3px; }
 
 /* ---- Reservable site list (RFC 0008) ----
    Hidden until a day is selected, then expands to that day's available
@@ -262,7 +263,7 @@
 }
 .cg-sites-toggle:hover:not(:disabled) { color: var(--rt-brand); }
 .cg-sites-toggle:disabled { color: var(--rt-faint); cursor: default; }
-.cg-sites-chevron { color: var(--rt-faint); font-size: 11px; }
+.cg-sites-chevron { --icon-size: 14px; color: var(--rt-faint); }
 .cg-sites-rows {
   list-style: none;
   margin: 6px 0 0; padding: 0;
@@ -1151,7 +1152,9 @@
 .rt-watch-editor-title { font-weight: 700; font-size: 13px; }
 .rt-watch-editor-subtitle { color: var(--rt-muted); margin-top: 2px; }
 .rt-watch-editor-icon {
+  --icon-size: 15px;
   width: 24px; height: 24px;
+  display: grid; place-items: center;
   border: 0; background: transparent; color: var(--rt-muted);
   border-radius: var(--rt-r-sm); cursor: pointer;
 }

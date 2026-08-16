@@ -1,6 +1,6 @@
 // The availability grid, mounted inside the campground drawer.
 import { useCallback, useMemo } from 'react';
-import { useToast } from '@ui';
+import { Icon, useToast } from '@ui';
 import type { PoiFeature } from '@/lib/poi';
 import { availableCount } from '@/lib/day-fields';
 import { addLocalDays, localToday, localYmd, parseLocalYmd, sameLocalDay } from '@/lib/local-date';
@@ -398,7 +398,12 @@ function WeekSurface({
   if (week.data?.state === 'closed_for_season') {
     const reopens = week.data.season?.reopens_on;
     return (
-      <div className="cg-closed-banner">⛰️ {reopens ? `Reopens ${reopens}` : 'Closed for season'}</div>
+      <div className="cg-closed-banner">
+        {/* A calendar rather than the ⛰️ this shipped with: both messages this
+            banner can carry are about dates, and Open Icons has no mountain. */}
+        <Icon name="calendar" className="cg-closed-banner-icon" aria-hidden="true" />{' '}
+        {reopens ? `Reopens ${reopens}` : 'Closed for season'}
+      </div>
     );
   }
 

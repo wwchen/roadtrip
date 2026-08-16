@@ -1,4 +1,4 @@
-import { SeededTextField } from '@ui';
+import { Icon, SeededTextField } from '@ui';
 import { coerceChoice, type ThemeChoice } from '@/lib/theme';
 import { useThemeStore } from '@/stores/themeStore';
 import { AppearanceField } from './AppearanceField';
@@ -87,7 +87,7 @@ export function ProfilePanel({ profile, values, onChange }: ProfilePanelProps) {
               than in its own column. */}
           {profile.is_email_verified && (
             <span className="rt-account-verified" aria-label="Verified">
-              ✓ verified
+              <Icon name="check" aria-hidden="true" /> verified
             </span>
           )}
         </span>

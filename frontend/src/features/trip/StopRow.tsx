@@ -1,6 +1,7 @@
 // One trip-planner row. HTML drag-and-drop keeps reordering dependency-free; the
 // resulting transition is handled by pure domain logic.
 import { useEffect, useRef, useState } from 'react';
+import { Icon } from '@ui';
 import type { TripMode } from '@/stores/tripStore';
 import { isStructuralRow, stopPlaceholder, stopRole, type StopSlot } from '@/domain/trip/stops';
 
@@ -125,7 +126,7 @@ export function StopRow({
         disabled={locating}
         onClick={onUseCurrentLocation}
       >
-        <LocateIcon />
+        <Icon name="location" aria-hidden="true" />
       </button>
       {/* An empty structural row has nothing to clear and cannot be removed, so it
           gets no button rather than a button that does nothing.
@@ -144,7 +145,7 @@ export function StopRow({
           } ${rowName(index, count, mode)}`}
           onClick={onRemove}
         >
-          <CloseIcon />
+          <Icon name="close" aria-hidden="true" />
         </button>
       ) : null}
     </div>
@@ -167,50 +168,4 @@ function rowName(index: number, count: number, mode: TripMode): string {
     default:
       return `stop ${index}`;
   }
-}
-
-/** Inline SVGs, as in the vanilla: two icons do not justify a sprite fetch. */
-function LocateIcon() {
-  return (
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 2v3" />
-      <path d="M12 19v3" />
-      <path d="M2 12h3" />
-      <path d="M19 12h3" />
-      <path d="M18.4 5.6l-2.1 2.1" />
-      <path d="M7.7 16.3l-2.1 2.1" />
-      <path d="M5.6 5.6l2.1 2.1" />
-      <path d="M16.3 16.3l2.1 2.1" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  );
 }
