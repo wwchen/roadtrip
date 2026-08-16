@@ -239,15 +239,22 @@ from `@tokens` after a runtime swap so the map and charts re-resolve computed co
     against `100dvh` inside the map shell, should honour it rather than assume `top: 0`.
   - `--rt-topbar-bottom` — where the search panel's lower edge sits, relative to the map
     shell, published by `features/trip/useTopbarClearance.ts` and consumed by the desktop
-    drawer so its header is not hidden under the panel. It is the panel's bottom edge and
-    not its height because the panel is itself inset from the top. The search popover is
-    excluded on purpose, so typing does not move the drawer.
+    drawer, which starts below it. It is the panel's bottom edge and not its height
+    because the panel is itself inset from the top. The search popover is excluded on
+    purpose, so typing does not move the drawer.
+
+    The drawer spends it on `top`, not `padding-top`: the two surfaces **tile**, so the
+    drawer's box is the container for its contents and resizes with whatever the panel
+    above is doing — expanding the alerts list or opening the corridor results shortens
+    the drawer, collapsing them gives the height back. As padding the drawer's surface
+    ran the full viewport height behind the panel, which read as one sheet with an
+    unexplained empty band and hid the map above it.
 
     The drawer reserves this much room **uncapped**, which only works because
     `topbar.css` bounds the panel's own height at `min(50dvh, …)` and scrolls it
     internally. Do not add a ceiling on the drawer side: clamping there silently returns
-    the drawer's header to underneath the panel whenever the panel is tall — a route with
-    a corridor results list is enough — which is the bug the clearance exists to prevent.
+    the drawer to underneath the panel whenever the panel is tall — a route with a
+    corridor results list is enough — which is the bug the clearance exists to prevent.
 - `node scripts/check-css-blocks.mjs` fails on an unbalanced brace, and
   `node scripts/check-token-usage.mjs` fails on a `var(--rt-*)` naming a token that does
   not exist or a declaration whose parens do not balance. Both are cheap insurance for
