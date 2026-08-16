@@ -115,7 +115,7 @@
   background: transparent;
   color: var(--rt-muted);
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--rt-r-sm);
   font-size: 16px;
   line-height: 1;
   cursor: pointer;

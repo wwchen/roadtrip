@@ -21,7 +21,7 @@
   width: min(420px, calc(100vw - 80px));
   background: var(--rt-surface);
   border: 1px solid var(--rt-border);
-  border-radius: 10px;
+  border-radius: var(--rt-r-lg);
   box-shadow: var(--rt-e3);
   -webkit-font-smoothing: antialiased;
   font-family: inherit;
@@ -57,7 +57,7 @@
   gap: 8px;
   background: var(--rt-fill-subtle);
   border: 1px solid var(--rt-border-strong);
-  border-radius: 8px;
+  border-radius: var(--rt-r-md);
   padding: 0 6px 0 10px;
   transition: border-color 100ms ease, background 100ms ease, opacity 120ms ease;
 }
@@ -98,6 +98,11 @@
   box-shadow: 0 0 0 2px var(--rt-fill-subtle);
 }
 
+/* Deliberately off the radius scale, both of them. These are 12px marks, and the
+   shape IS the meaning: `.tb-icon` is a circle (50%) for an ordinary stop, and
+   these two are rounded SQUARES for a waypoint and the destination. The scale's
+   smallest step is 8px under zion, and 8px on a 12px box is a circle in all but
+   name — it would erase the distinction the colour alone does not carry. */
 .tb-icon.via {
   background: var(--rt-map-waypoint);
   border-radius: 2px;
@@ -132,7 +137,7 @@
   background: transparent;
   border: 0;
   color: var(--rt-faint);
-  border-radius: 4px;
+  border-radius: var(--rt-r-sm);
   cursor: pointer;
   display: grid;
   place-items: center;
@@ -167,7 +172,7 @@
   border: 1px dashed var(--rt-border-strong);
   color: var(--rt-muted);
   padding: 6px 10px;
-  border-radius: 6px;
+  border-radius: var(--rt-r-sm);
   font-size: 12px;
   font-family: inherit;
   cursor: pointer;
@@ -206,7 +211,7 @@
   background: var(--rt-fill-subtle);
   border: 1px solid var(--rt-border-strong);
   color: var(--rt-text);
-  border-radius: 8px;
+  border-radius: var(--rt-r-md);
   cursor: pointer;
   display: grid;
   place-items: center;
@@ -257,7 +262,7 @@
   cursor: pointer;
   color: var(--rt-text);
   font-size: 12px;
-  border-radius: 6px;
+  border-radius: var(--rt-r-sm);
 }
 
 .tb-result:hover,
@@ -270,6 +275,9 @@
   font-size: 9px;
   text-transform: uppercase;
   padding: 2px 6px;
+  /* Off-scale: a 9px uppercase chip is ~15px tall, so the scale's 8px floor
+     would pill it. A pill here would read as a status tag rather than the
+     type prefix it is. */
   border-radius: 3px;
   color: var(--rt-on-accent);
   font-weight: 600;
