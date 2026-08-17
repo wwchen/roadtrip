@@ -29,7 +29,7 @@ plugins {
     kotlin("jvm")
     kotlin("plugin.serialization")
     id("io.ktor.plugin") version "3.5.2"
-    id("org.flywaydb.flyway") version "13.2.0"
+    id("org.flywaydb.flyway") version "13.3.0"
     id("nu.studer.jooq") version "10.2.1"
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0"
     id("dev.detekt") version "2.0.0-alpha.6"
@@ -155,7 +155,7 @@ dependencies {
     implementation("io.ktor:ktor-client-core:$ktorVersion")
     implementation("io.ktor:ktor-client-cio:$ktorVersion")
     implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
-    implementation("ch.qos.logback:logback-classic:1.6.1")
+    implementation("ch.qos.logback:logback-classic:1.6.3")
     // JSON log encoder that emits the fully-formatted message (SLF4J {}
     // placeholders interpolated). Replaces Logback's built-in JsonEncoder,
     // which logged the raw pattern + a separate arguments array. 8.x targets
