@@ -25,10 +25,9 @@ const NO_ACTIVE_RESULT = -1;
 
 export interface TopBarProps {
   alerts?: ReactNode;
-  auth?: ReactNode;
 }
 
-export function TopBar({ alerts, auth }: TopBarProps) {
+export function TopBar({ alerts }: TopBarProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   useTopbarClearance(panelRef);
   const planner = useTripPlanner();
@@ -143,10 +142,6 @@ export function TopBar({ alerts, auth }: TopBarProps) {
       {/* `#tb-alerts` sat here in the vanilla DOM too: under the rows, above the
           actions. It renders nothing at all for a user with no watches. */}
       {alerts}
-
-      {/* Where the vanilla topbar kept `#tb-auth`: sign-in, who you are, and the
-          trigger for the settings modal Phase 3 built and nothing mounted. */}
-      {auth}
 
       {/* The ids on this row and the controls below it are the smoke suite's
           selectors (`#tb-actions`, `#tb-directions`, `#tb-route-summary`,

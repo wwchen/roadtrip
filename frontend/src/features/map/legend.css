@@ -8,9 +8,15 @@
    `accent-color` on a bare input.
    --------------------------------------------------------------------------- */
 
+/* Clears the account pill (`auth-row.css`), which occupies this same corner
+   above it: pill height (40px) + its 10px inset + an 8px gap. */
+:root {
+  --rt-acct-clearance: 58px;
+}
+
 .rt-legend {
   position: absolute;
-  top: 10px;
+  top: var(--rt-acct-clearance);
   right: 10px;
   z-index: 20;
   max-width: 260px;
@@ -131,7 +137,7 @@
      owns it, rather than a `width`/`height` rule reaching into the svg. */
   --icon-size: 18px;
   position: absolute;
-  top: max(10px, env(safe-area-inset-top));
+  top: max(var(--rt-acct-clearance), calc(env(safe-area-inset-top) + 48px));
   right: 10px;
   z-index: 20;
   display: grid;
@@ -152,7 +158,7 @@
   --icon-size: 20px;
   display: none;
   position: absolute;
-  top: max(10px, env(safe-area-inset-top));
+  top: max(var(--rt-acct-clearance), calc(env(safe-area-inset-top) + 48px));
   right: 10px;
   z-index: 20;
   width: 40px;
@@ -178,14 +184,18 @@
 
   /* A top sheet: full width, slid out of view until opened. */
   .rt-legend {
-    top: max(10px, env(safe-area-inset-top));
+    top: max(var(--rt-acct-clearance), calc(env(safe-area-inset-top) + 48px));
     right: 10px;
     left: 10px;
     max-width: none;
     max-height: 75vh;
     font-size: 14px;
     line-height: 1.5;
-    transform: translateY(-110%);
+    /* A fixed buffer, not a percentage: `top` now varies with
+       `--rt-acct-clearance` and the safe-area inset, and a percentage of the
+       panel's own height does not scale with that — it left the panel's tail
+       poking below the viewport top on a short panel. 200px clears both. */
+    transform: translateY(calc(-100% - 200px));
     transition: transform 0.2s ease;
   }
 

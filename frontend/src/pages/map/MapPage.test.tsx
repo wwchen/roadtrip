@@ -11,12 +11,7 @@ vi.mock('@/features/map/MapProvider', () => ({
 }));
 vi.mock('@/features/map/MapView', () => ({ MapView: () => <span>map view</span> }));
 vi.mock('@/features/trip/TopBar', () => ({
-  TopBar: ({ alerts, auth }: { alerts?: ReactNode; auth?: ReactNode }) => (
-    <header>
-      {alerts}
-      {auth}
-    </header>
-  ),
+  TopBar: ({ alerts }: { alerts?: ReactNode }) => <header>{alerts}</header>,
 }));
 vi.mock('@/features/availability/AvailabilityWeek', () => ({
   AvailabilityWeek: ({ feature }: { feature: FlatPoiFeature }) => (

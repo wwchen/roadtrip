@@ -1,43 +1,79 @@
-/* The topbar's auth row.
+/* The account control: a floating top-right pill.
  *
- * Lifted out of `injectAuthStyles()` in web/topbar/auth.js, which built these rules
- * as a template string and injected a <style> tag guarded by an id check — the same
- * pattern the 4d watch editor used, and the same reason it is now a stylesheet: only
- * here are the rules under the colour-token and CSS-block checkers.
+ * Same corner treatment as the layers panel (`legend.css`): raised surface,
+ * hairline border, large shadow, pill/rounded radius, 16px inset from the map
+ * edge. It sits above the layers panel in that corner — see the
+ * `--rt-acct-clearance` offset legend.css adds to its own top position.
  */
 
-.tb-auth {
+.acct-pill {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  right: 10px;
+  z-index: 21;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 8px;
-  padding: 4px 8px 0;
-  font-size: 13px;
-}
-
-.tb-auth-btn {
-  background: none;
-  border: none;
-  padding: 2px 4px;
-  color: var(--rt-brand-text);
-  cursor: pointer;
+  height: 40px;
+  padding: 0 14px 0 6px;
+  background: var(--rt-surface);
+  color: var(--rt-text);
+  border: 1px solid var(--rt-border);
+  border-radius: var(--rt-r-pill);
+  box-shadow: var(--rt-e3);
   font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-font-smoothing: antialiased;
 }
 
-.tb-auth-btn:hover {
-  text-decoration: underline;
+.acct-pill:hover {
+  background: var(--rt-fill-hover);
 }
 
-.tb-auth-btn:focus-visible {
+.acct-pill:focus-visible {
   outline: 2px solid var(--rt-brand);
   outline-offset: 2px;
 }
 
-/* The signed-in label is the settings trigger, and an email can be long. */
-.tb-auth-who {
-  color: var(--rt-muted);
-  max-width: 180px;
+.acct-pill--signin {
+  padding: 0 16px;
+}
+
+.acct-avatar {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--rt-brand);
+  color: var(--rt-on-accent);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.acct-name {
+  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The name is the first thing to go: a phone gets the avatar alone, matching
+   the layers toggle it stacks above. */
+@media (max-width: 640px) {
+  .acct-pill {
+    padding-right: 6px;
+  }
+
+  .acct-pill--signin {
+    padding: 0 14px;
+  }
+
+  .acct-name {
+    display: none;
+  }
 }

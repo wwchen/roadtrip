@@ -78,3 +78,76 @@
   border: 3px solid var(--rt-map-pin-stroke);
   box-shadow: var(--rt-e2);
 }
+
+/* ---------------------------------------------------------------------------
+   Zoom and locate-me controls (`src/map/controls.ts`, MapLibre's own
+   `NavigationControl` + `GeolocateControl`).
+
+   Two groups stack in this corner: the zoom in/out pair (one `NavigationControl`,
+   fused into a single rounded rectangle with a hairline divider — MapLibre's own
+   grouping, just retokenized) and locate-me above it as its own separate square,
+   with a real gap between the two groups. Matches the layers panel's collapsed
+   button (`legend.css` `.rt-legend-show`) for surface, border, and shadow.
+
+   The rounding lives on the GROUP, not each button: MapLibre's own CSS rounds
+   only the group's first/last child, so overriding radius on `button` directly
+   left the top and bottom buttons inconsistent (only one had rounded corners)
+   while the two stayed visually fused. `overflow: hidden` on the group clips
+   both buttons to one consistent radius instead.
+   --------------------------------------------------------------------------- */
+
+.maplibregl-ctrl-bottom-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 0 10px 10px 0;
+}
+
+.maplibregl-ctrl-bottom-right .maplibregl-ctrl {
+  margin: 0;
+  float: none;
+}
+
+.maplibregl-ctrl-group {
+  background: var(--rt-surface);
+  border: 1px solid var(--rt-border-strong);
+  border-radius: var(--rt-r-md);
+  box-shadow: var(--rt-e2);
+  overflow: hidden;
+}
+
+.maplibregl-ctrl-group:not(:empty) {
+  box-shadow: var(--rt-e2);
+}
+
+.maplibregl-ctrl-group button {
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  color: var(--rt-text);
+  border: 0;
+  border-radius: 0;
+}
+
+.maplibregl-ctrl-group button + button {
+  /* The real divider between the fused zoom-in and zoom-out buttons. */
+  border-top: 1px solid var(--rt-border-strong);
+}
+
+.maplibregl-ctrl-group button:hover {
+  background: var(--rt-fill-hover);
+}
+
+.maplibregl-ctrl-group button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.maplibregl-ctrl-group button:focus-visible {
+  outline: 2px solid var(--rt-brand);
+  outline-offset: -2px;
+}
+
+/* MapLibre's own zoom/locate glyphs are dark-on-transparent SVGs, which read
+   fine against `--rt-surface` in both themes without a token bridge. */
