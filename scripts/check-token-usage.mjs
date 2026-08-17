@@ -80,6 +80,11 @@ const COMPONENT_LOCAL = new Set([
   // Declared and consumed entirely inside shell.css — page padding, nothing hands
   // it anywhere. Listed here only because it is not a design token.
   '--rt-shell-pad',
+  // Declared and consumed entirely inside legend.css — clears the account pill
+  // above it, not a design token.
+  '--rt-acct-clearance',
+  // Published from JS by features/account/useAcctClearance.ts, read by topbar.css.
+  '--rt-acct-left',
 ]);
 
 const defined = new Set(
