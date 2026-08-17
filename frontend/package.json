@@ -18,7 +18,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@lew-ds/lds": "1.0.0",
+    "@lew-ds/lds": "1.1.0",
     "@lew-ds/lds-react": "1.0.1",
     "@lew-ds/open-icons": "1.0.0",
     "@tanstack/react-query": "^5.62.0",
@@ -30,15 +30,15 @@
     "maplibre-gl": "^6.3.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "zustand": "^5.0.2"
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
-    "@storybook/addon-a11y": "^10.5.7",
-    "@storybook/addon-docs": "^10.5.7",
-    "@storybook/react-vite": "^10.5.7",
-    "@testing-library/jest-dom": "^7.0.0",
+    "@storybook/addon-a11y": "^10.5.8",
+    "@storybook/addon-docs": "^10.5.8",
+    "@storybook/react-vite": "^10.5.8",
+    "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.1.0",
-    "@testing-library/user-event": "^14.5.2",
+    "@testing-library/user-event": "^14.6.4",
     "@types/geojson": "^7946.0.16",
     "@types/node": "^26.2.0",
     "@types/react": "^19.2.18",
