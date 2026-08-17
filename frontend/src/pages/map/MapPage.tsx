@@ -10,7 +10,8 @@ import { TopBar } from '@/features/trip/TopBar';
 export function MapPage() {
   return (
     <MapProvider>
-      <TopBar alerts={<AlertsPanel />} auth={<AuthRow />} />
+      <TopBar alerts={<AlertsPanel />} />
+      <AuthRow />
       <MapView />
       <PoiDrawer
         renderCampgroundAvailability={(feature) => <AvailabilityWeek feature={feature} />}
