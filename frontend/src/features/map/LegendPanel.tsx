@@ -148,7 +148,7 @@ function OverlayRow({ spec, count }: { spec: PointOverlaySpec; count?: number })
       </span>
       <Toggle
         id={`rt-layer-${spec.key}`}
-        aria-label={spec.label}
+        aria-label={count != null ? `${spec.label} (${count})` : spec.label}
         checked={visible}
         onChange={() => toggleOverlay(spec.key)}
       />

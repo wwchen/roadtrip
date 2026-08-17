@@ -422,8 +422,11 @@ class SmokeTest {
 
         try {
             page.navigate("/")
+            // The row's visible count is a bare LDS `Tag` now, not parenthesised text
+            // inside the label — the count reaches assistive tech (and this probe)
+            // through the toggle's `aria-label` instead.
             page.waitForFunction(
-                "() => document.querySelector('.rt-legend')?.textContent?.includes('Planet Fitness (1)')",
+                "() => document.querySelector('.rt-legend [aria-label=\"Planet Fitness (1)\"]') != null",
                 null,
                 Page.WaitForFunctionOptions().setTimeout(MAP_READY_TIMEOUT_MS),
             )
@@ -928,14 +931,11 @@ class SmokeTest {
                 viewportPoiCalls.get(),
                 "viewport /api/pois should not refetch while a route is active",
             )
-            // LDS keeps the native checkbox in the accessibility tree but makes it
-            // visually hidden; the wrapping label is the control a person sees and
-            // clicks. Assert that public surface, including the route-scoped count.
-            assertThat(
-                page
-                    .locator(".rt-legend label")
-                    .filter(Locator.FilterOptions().setHasText(Pattern.compile("Superchargers \\(0\\)"))),
-            ).isVisible()
+            // Superchargers is an LDS `Toggle` now: its visible label and count live
+            // outside the control's own wrapping `<label>`, so the accessible name
+            // (via `aria-label`) is the public surface a person's assistive tech
+            // sees — assert through that, including the route-scoped count.
+            assertThat(page.getByLabel(Pattern.compile("Superchargers \\(0\\)"))).isVisible()
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors during route smoke: ${pageErrors.joinToString(" | ")}",
@@ -982,7 +982,7 @@ class SmokeTest {
                 // The map's only heading is the legend's title. It renders whether or
                 // not the style ever loads, which is what makes it the right probe
                 // here: this test is about the bundle mounting, not about MapLibre.
-                "/" to "Roadtrip Map",
+                "/" to "Layers",
             )
 
         try {
