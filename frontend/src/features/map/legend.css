@@ -58,6 +58,43 @@
   margin-top: 4px;
 }
 
+/* One purpose group: a section label plus its rows. Replaces the old flat
+   per-vendor sections so "why does this layer exist" reads from the group,
+   not the row. */
+.rt-legend__group {
+  display: grid;
+  gap: 8px;
+}
+
+.rt-legend__group + .rt-legend__group {
+  margin-top: 10px;
+}
+
+.rt-legend__divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--rt-border);
+}
+
+/* An on/off row: leading dot + label (+ optional count), trailing toggle. */
+.rt-legend__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 32px;
+}
+
+.rt-legend__row-title {
+  font-weight: 600;
+  color: var(--rt-text);
+}
+
+.rt-legend__row-subtitle {
+  font-size: 11px;
+  color: var(--rt-muted);
+}
+
 /* Sentence-case, un-tracked aside inside an uppercase section label. */
 .rt-legend__hint {
   text-transform: none;
@@ -98,8 +135,67 @@
   overflow-y: auto;
 }
 
-.rt-legend__basemap {
-  margin-bottom: 6px;
+.rt-legend__basemap-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.rt-legend__basemap-tile {
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.rt-legend__basemap-swatch {
+  width: 100%;
+  aspect-ratio: 5 / 4;
+  border-radius: 9px;
+  border: 1px solid var(--rt-border);
+}
+
+.rt-legend__basemap-swatch--selected {
+  border-color: transparent;
+  box-shadow: 0 0 0 2px var(--rt-brand), 0 0 0 4px var(--rt-brand-tint);
+}
+
+.rt-legend__basemap-label {
+  font-size: 11px;
+  color: var(--rt-muted);
+}
+
+.rt-legend__basemap-label--selected {
+  font-weight: 600;
+  color: var(--rt-text);
+}
+
+.rt-legend__basemap-reset {
+  justify-self: start;
+  padding: 0;
+  margin-top: -2px;
+  background: none;
+  border: 0;
+  color: var(--rt-brand);
+  font-size: 11px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.rt-legend__satellite {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.rt-legend__satellite-copy {
+  display: grid;
+  gap: 2px;
 }
 
 /* Hide (desktop) / close (mobile), over the panel's top-right corner. */

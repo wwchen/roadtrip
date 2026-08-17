@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Checkbox, Icon } from '@ui';
+import { Checkbox, Icon, Tag, Toggle } from '@ui';
 import { sortedAgencies } from '@/map/agencies';
 import { overlaySpec, type PointOverlaySpec } from '@/map/overlays';
 import { useMapStore } from '@/stores/mapStore';
@@ -7,6 +7,8 @@ import { BasemapPicker } from './BasemapPicker';
 import { useMapContext } from './MapProvider';
 import type { ViewportPois } from './useViewportPois';
 import './legend.css';
+
+const checkedOf = (e: Event): boolean => (e.target as HTMLInputElement).checked;
 
 /** Below this width the panel is a top sheet behind a hamburger. Matches legend.css. */
 const MOBILE_QUERY = '(max-width: 640px)';
@@ -96,53 +98,61 @@ export function LegendPanel({ pois }: LegendPanelProps) {
         >
           <Icon name="close" aria-hidden="true" />
         </button>
-        <h1 className="rt-legend__title">Roadtrip Map</h1>
+        <h1 className="rt-legend__title">Layers</h1>
 
-        <div className="rt-legend__section">Superchargers</div>
-        <OverlayRow spec={overlaySpec('sc')} count={pois.counts.sc} />
-
-        <div className="rt-legend__section">
-          Campgrounds{' '}
-          {!pois.campgroundsRequested && (
-            <span className="rt-legend__hint">(zoom in to load)</span>
-          )}
-        </div>
-        {/* Viewport-scoped: rows come from the campgrounds currently in view, so
-            panning away from a region drops its agencies rather than accumulating
-            every agency ever seen. */}
-        <div className="rt-legend__agencies">
-          {agencies.map((agency) => (
-            <AgencyRow key={agency} agency={agency} count={pois.agencies.get(agency) ?? 0} />
-          ))}
+        <div className="rt-legend__group">
+          <div className="rt-legend__section">Places to sleep</div>
+          <OverlayRow spec={overlaySpec('cg')} />
+          {/* Viewport-scoped: rows come from the campgrounds currently in view, so
+              panning away from a region drops its agencies rather than accumulating
+              every agency ever seen. */}
+          <div className="rt-legend__agencies">
+            {agencies.map((agency) => (
+              <AgencyRow key={agency} agency={agency} count={pois.agencies.get(agency) ?? 0} />
+            ))}
+          </div>
         </div>
 
-        <div className="rt-legend__section">Other</div>
-        <OverlayRow spec={overlaySpec('pf')} count={pois.counts.pf} />
+        <div className="rt-legend__group">
+          <div className="rt-legend__section">Stops along the way</div>
+          <OverlayRow spec={overlaySpec('sc')} count={pois.counts.sc} />
+          <OverlayRow spec={overlaySpec('pf')} count={pois.counts.pf} />
+        </div>
 
-        <div className="rt-legend__section">Basemap</div>
-        <BasemapPicker />
+        <div className="rt-legend__divider" />
+
+        <div className="rt-legend__group">
+          <div className="rt-legend__section">Basemap</div>
+          <BasemapPicker />
+        </div>
       </div>
     </>
   );
 }
 
 /** An overlay's on/off row. */
-function OverlayRow({ spec, count }: { spec: PointOverlaySpec; count: number }) {
+function OverlayRow({ spec, count }: { spec: PointOverlaySpec; count?: number }) {
   const visible = useMapStore((s) => !s.hiddenOverlays.includes(spec.key));
   const toggleOverlay = useMapStore((s) => s.toggleOverlay);
 
   return (
-    <Checkbox
-      id={`rt-layer-${spec.key}`}
-      checked={visible}
-      onChange={() => toggleOverlay(spec.key)}
-      label={
-        <span className="rt-legend__row-label">
-          <LegendDot colorToken={spec.legendColorToken} />
-          {spec.label} <Count value={count} />
-        </span>
-      }
-    />
+    <div className="rt-legend__row">
+      <span className="rt-legend__row-label">
+        <LegendDot colorToken={spec.legendColorToken} />
+        <span className="rt-legend__row-title">{spec.label}</span>
+        {count != null && (
+          <Tag size="sm" emphasis="subtle">
+            {count.toLocaleString()}
+          </Tag>
+        )}
+      </span>
+      <Toggle
+        id={`rt-layer-${spec.key}`}
+        aria-label={spec.label}
+        checked={visible}
+        onChange={() => toggleOverlay(spec.key)}
+      />
+    </div>
   );
 }
 
@@ -161,7 +171,7 @@ function AgencyRow({ agency, count }: { agency: string; count: number }) {
       // No `id`: LDS wraps the input in its own <label>, so the association is
       // implicit — and an agency name is not a safe source for an element id.
       checked={visible}
-      onChange={(e) => setAgencyHidden(agency, !(e.target as HTMLInputElement).checked)}
+      onChange={(e) => setAgencyHidden(agency, !checkedOf(e))}
       label={
         <span className="rt-legend__row-label">
           <LegendDot colorToken={overlaySpec('cg').legendColorToken} />

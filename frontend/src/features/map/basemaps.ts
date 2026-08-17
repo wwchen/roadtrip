@@ -37,31 +37,46 @@ const cartoStyle = (variant: string): StyleSpecification =>
   );
 
 export interface Basemap {
+  /** The picker's tile label — a visual category, not the tile provider's own name. */
   name: string;
   /** A style URL for the vector basemaps, or an inline style for the raster ones. */
   style: string | StyleSpecification;
+  /** The picker tile's swatch preview, as a CSS `background` value. */
+  swatch: string;
 }
 
-/** Every basemap on offer. Free and key-less. */
+/** Every basemap on offer. Free and key-less, named by visual category so the
+ *  picker reads as "what will this look like" rather than "whose tiles are these". */
 export const BASEMAPS: Readonly<Record<string, Basemap>> = {
   'openfreemap-liberty': {
-    name: 'OpenFreeMap Liberty',
+    name: 'Streets',
     style: 'https://tiles.openfreemap.org/styles/liberty',
+    swatch: 'linear-gradient(150deg, #EFEAE2, #D9D3C8)',
   },
   'openfreemap-bright': {
-    name: 'OpenFreeMap Bright',
+    name: 'Outdoors',
     style: 'https://tiles.openfreemap.org/styles/bright',
+    swatch: 'linear-gradient(150deg, #E4EBDD, #C4CFB4)',
   },
-  'openfreemap-positron': {
-    name: 'OpenFreeMap Positron',
-    style: 'https://tiles.openfreemap.org/styles/positron',
+  'carto-voyager': {
+    name: 'Terrain',
+    style: cartoStyle('voyager'),
+    swatch: 'linear-gradient(150deg, #EDE3D4, #CBB394)',
   },
-  'carto-voyager': { name: 'Carto Voyager', style: cartoStyle('voyager') },
-  'carto-positron': { name: 'Carto Positron', style: cartoStyle('light_all') },
-  'carto-dark': { name: 'Carto Dark Matter', style: cartoStyle('dark_all') },
+  'carto-positron': {
+    name: 'Light',
+    style: cartoStyle('light_all'),
+    swatch: '#FAFBFC',
+  },
+  'carto-dark': {
+    name: 'Dark',
+    style: cartoStyle('dark_all'),
+    swatch: '#232A33',
+  },
   osm: {
-    name: 'OpenStreetMap',
+    name: 'Transit',
     style: rasterStyle(['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], OSM_ATTRIBUTION),
+    swatch: 'linear-gradient(150deg, #DEEEFE, #B9D8F6)',
   },
 };
 
