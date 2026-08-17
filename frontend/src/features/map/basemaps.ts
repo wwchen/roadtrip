@@ -51,32 +51,32 @@ export const BASEMAPS: Readonly<Record<string, Basemap>> = {
   'openfreemap-liberty': {
     name: 'Streets',
     style: 'https://tiles.openfreemap.org/styles/liberty',
-    swatch: 'linear-gradient(150deg, #EFEAE2, #D9D3C8)',
+    swatch: 'var(--rt-basemap-streets)',
   },
   'openfreemap-bright': {
     name: 'Outdoors',
     style: 'https://tiles.openfreemap.org/styles/bright',
-    swatch: 'linear-gradient(150deg, #E4EBDD, #C4CFB4)',
+    swatch: 'var(--rt-basemap-outdoors)',
   },
   'carto-voyager': {
     name: 'Terrain',
     style: cartoStyle('voyager'),
-    swatch: 'linear-gradient(150deg, #EDE3D4, #CBB394)',
+    swatch: 'var(--rt-basemap-terrain)',
   },
   'carto-positron': {
     name: 'Light',
     style: cartoStyle('light_all'),
-    swatch: '#FAFBFC',
+    swatch: 'var(--rt-basemap-light)',
   },
   'carto-dark': {
     name: 'Dark',
     style: cartoStyle('dark_all'),
-    swatch: '#232A33',
+    swatch: 'var(--rt-basemap-dark)',
   },
   osm: {
     name: 'Transit',
     style: rasterStyle(['https://tile.openstreetmap.org/{z}/{x}/{y}.png'], OSM_ATTRIBUTION),
-    swatch: 'linear-gradient(150deg, #DEEEFE, #B9D8F6)',
+    swatch: 'var(--rt-basemap-transit)',
   },
 };
 
