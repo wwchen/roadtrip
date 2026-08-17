@@ -48,6 +48,8 @@ export class AvailabilityRequestError extends Error {
   constructor(
     message: string,
     readonly httpStatus: number,
+    /** The backend's `error` code, when it sent one — `null` for a bare HTTP failure. */
+    readonly code: string | null = null,
   ) {
     super(message);
     this.name = 'AvailabilityRequestError';
@@ -79,6 +81,7 @@ export function useWeekAvailability(
         throw new AvailabilityRequestError(
           formatAvailabilityError(body, response.status),
           response.status,
+          typeof body?.error === 'string' ? body.error : null,
         );
       }
       const json = (await response.json()) as PoiCampsitesAvailabilityResponse;

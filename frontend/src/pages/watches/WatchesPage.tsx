@@ -68,6 +68,15 @@ export function WatchesPage() {
     setFormSeq((n) => n + 1);
   }, []);
 
+  /** Empty-state "New watch": the create form is always mounted above the table, so
+   * this just brings it into view and focuses its first field rather than opening
+   * a second one. */
+  const focusNewWatchForm = useCallback(() => {
+    const host = document.getElementById('rt-watches-form-host');
+    host?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    host?.querySelector<HTMLElement>('input, textarea, select')?.focus();
+  }, []);
+
   const startEdit = useCallback(
     async (id: number | string) => {
       try {
@@ -190,7 +199,7 @@ export function WatchesPage() {
         />
       ) : (
         <>
-          <div className="rt-watches-form-host">
+          <div className="rt-watches-form-host" id="rt-watches-form-host">
             <WatchForm
               key={formKey(editor, formSeq)}
               mode={editor.mode}
@@ -223,6 +232,7 @@ export function WatchesPage() {
               onEdit={startEdit}
               onSetStatus={handleSetStatus}
               onDelete={removeWatch}
+              onNewWatch={focusNewWatchForm}
               busy={setWatchStatus.isPending || deleteWatch.isPending}
             />
           )}

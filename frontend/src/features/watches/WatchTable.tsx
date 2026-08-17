@@ -24,6 +24,7 @@ export interface WatchTableProps {
   onEdit: (id: number) => void;
   onSetStatus: (id: number, status: WatchStatus) => void;
   onDelete: (id: number) => void;
+  onNewWatch: () => void;
   busy?: boolean;
 }
 
@@ -74,6 +75,7 @@ export function WatchTable({
   onEdit,
   onSetStatus,
   onDelete,
+  onNewWatch,
   busy = false,
 }: WatchTableProps) {
   const [sort, setSort] = useState(DEFAULT_SORT);
@@ -107,7 +109,19 @@ export function WatchTable({
   );
 
   if (watches.length === 0) {
-    return <EmptyState title="No watches yet" body="Create one above to be told when a site opens." />;
+    return (
+      <EmptyState
+        icon="bell"
+        expressive
+        title="No watches yet"
+        body="A watch keeps checking a campground for the nights you want and messages you the moment a site opens."
+        actions={
+          <Button variant="primary" size="sm" iconStart="add" onClick={onNewWatch}>
+            New watch
+          </Button>
+        }
+      />
+    );
   }
 
   const columns = [

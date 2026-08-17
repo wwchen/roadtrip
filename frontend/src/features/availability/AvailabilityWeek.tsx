@@ -1,6 +1,6 @@
 // The availability grid, mounted inside the campground drawer.
-import { useCallback, useMemo } from 'react';
-import { Icon, useToast } from '@ui';
+import { useCallback, useMemo, useState } from 'react';
+import { Button, EmptyState, Icon, useToast } from '@ui';
 import type { PoiFeature } from '@/lib/poi';
 import { availableCount } from '@/lib/day-fields';
 import { addLocalDays, localToday, localYmd, parseLocalYmd, sameLocalDay } from '@/lib/local-date';
@@ -10,7 +10,7 @@ import { SiteList } from './SiteList';
 import { SiteMatrix, SiteMatrixSkeleton } from './SiteMatrix';
 import { WatchPopover } from './WatchPopover';
 import { WeekNav } from './WeekNav';
-import { GENERIC_AVAILABILITY_ERROR } from './availability-errors';
+import { GENERIC_AVAILABILITY_ERROR, classifyAvailabilityErrorCode } from './availability-errors';
 import { reservationUrlFromTemplate } from './booking-links';
 import type { FusedDay } from './fuse';
 import { DEFAULT_SITE_COLUMN_WIDTH } from './site-column';
@@ -18,6 +18,7 @@ import { useAvailabilityController } from './availability-controller';
 import { useCampsites } from './useCampsites';
 import { useDelayedFlag } from './useDelayedFlag';
 import {
+  AvailabilityRequestError,
   SKELETON_RENDER_DELAY_MS,
   STALE_THRESHOLD_MIN,
   WEEK_DAYS,
@@ -252,6 +253,14 @@ function AvailabilityWeekView({
         showSkeleton={showSkeleton}
         siteColumnWidth={siteColumnWidth}
         weekNav={weekNav}
+        onOpenWatch={(anchor) => actions.openWatch(anchor, selectedDate ?? localYmd(weekStart))}
+        onReport={() => {
+          const detail = `Recreation.gov error for ${poiName} (POI ${poiId}): ${week.error?.message ?? 'unknown'}`;
+          void navigator.clipboard
+            ?.writeText(detail)
+            .then(() => toast({ status: 'success', title: 'Copied the details', children: 'Send them to the team when you report it.' }))
+            .catch(() => toast({ status: 'warning', title: "Couldn't copy the details", children: detail }));
+        }}
         matrix={
           <SiteMatrix
             days={days}
@@ -361,13 +370,23 @@ function WeekSurface({
   siteColumnWidth,
   weekNav,
   matrix,
+  onOpenWatch,
+  onReport,
 }: {
   week: ReturnType<typeof useWeekAvailability>;
   showSkeleton: boolean;
   siteColumnWidth: number;
   weekNav: React.ReactNode;
   matrix: React.ReactNode;
+  onOpenWatch: (anchor: HTMLElement) => void;
+  onReport: () => void;
 }) {
+  // The card a booking-site failure gets stays mounted, not the matrix behind it —
+  // except when this campground's own last successful fetch is still in cache
+  // (React Query keeps `data` around across a same-key refetch failure), in which
+  // case "Show what we last saw" reveals it without a second request.
+  const [showStale, setShowStale] = useState(false);
+
   if (week.isPending) {
     // Before the delay elapses: the nav only, so a cache hit does not flash a
     // skeleton table on its way to real data.
@@ -380,7 +399,102 @@ function WeekSurface({
     );
   }
 
-  if (week.error) {
+  if (week.error && !(showStale && week.data)) {
+    const code = week.error instanceof AvailabilityRequestError ? week.error.code : null;
+    const kind =
+      week.error instanceof AvailabilityRequestError
+        ? classifyAvailabilityErrorCode(code)
+        : 'unreachable';
+    const hasStaleData = week.data != null;
+
+    if (kind === 'throttled') {
+      const ageMin =
+        week.data?.state === 'success' ? cacheAgeMinutes(week.data.cacheBlock?.age_seconds) : null;
+      return (
+        <EmptyState
+          icon="lock"
+          title="Recreation.gov is limiting our checks"
+          body={
+            hasStaleData
+              ? `They've throttled us, so we're holding off. The availability below is from ${ageMin} minute${ageMin === 1 ? '' : 's'} ago and won't update until they let us back in.`
+              : "They've throttled us, so we're holding off."
+          }
+          actions={
+            <>
+              {hasStaleData ? (
+                <Button variant="secondary" size="sm" onClick={() => setShowStale(true)}>
+                  Show what we last saw
+                </Button>
+              ) : null}
+              <Button
+                variant="primary"
+                size="sm"
+                iconStart="bell"
+                onClick={(event) => onOpenWatch(event.currentTarget as HTMLElement)}
+              >
+                Watch these dates instead
+              </Button>
+            </>
+          }
+        />
+      );
+    }
+
+    if (kind === 'server_error') {
+      return (
+        <EmptyState
+          icon="warning-fill"
+          title="Recreation.gov returned an error"
+          body="Their end failed on this request. Your dates are fine — this one is theirs."
+          actions={
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                iconStart="refresh"
+                onClick={() => void week.refetch()}
+              >
+                Try again
+              </Button>
+              <Button variant="tertiary" size="sm" onClick={onReport}>
+                Report it
+              </Button>
+            </>
+          }
+        />
+      );
+    }
+
+    if (kind === 'unreachable') {
+      return (
+        <EmptyState
+          icon="warning"
+          title="We can't reach Recreation.gov"
+          body="The request timed out. Outages like this usually clear within a few minutes."
+          actions={
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                iconStart="refresh"
+                onClick={() => void week.refetch()}
+              >
+                Try again
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                iconStart="bell"
+                onClick={(event) => onOpenWatch(event.currentTarget as HTMLElement)}
+              >
+                Tell me when it's back
+              </Button>
+            </>
+          }
+        />
+      );
+    }
+
     return (
       <div className="cg-summary">
         <span className="cg-error">{week.error.message || GENERIC_AVAILABILITY_ERROR}</span> ·{' '}

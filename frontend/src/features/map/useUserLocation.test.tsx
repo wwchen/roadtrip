@@ -233,9 +233,11 @@ describe('a failure', () => {
 
     act(() => geolocate.fire('error', { code: 1 }));
 
-    expect(await screen.findByText('Location permission denied')).toBeInTheDocument();
+    expect(await screen.findByText("We can't use your location")).toBeInTheDocument();
     expect(
-      screen.getByText('Turn on location access to see distances and nearer search results.'),
+      screen.getByText(
+        "Your browser blocked the request, so we can't centre the map on you. Searching for a place works just as well.",
+      ),
     ).toBeInTheDocument();
   });
 

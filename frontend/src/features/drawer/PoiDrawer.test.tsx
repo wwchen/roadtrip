@@ -121,7 +121,7 @@ describe('opening', () => {
 
     await select(PARK_ID);
 
-    await waitFor(() => expect(screen.getByText('Could not load this place')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("This place didn't load")).toBeInTheDocument());
     expect(screen.queryByText('Loading…')).toBeNull();
 
     respond = () => json(park());

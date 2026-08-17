@@ -311,7 +311,7 @@ describe('the week"s states', () => {
     await waitFor(() => expect(screen.getByText(/Reopens 2027-05-01/)).toBeInTheDocument());
   });
 
-  test('a provider fault says which fault, and offers a retry', async () => {
+  test('a rate limit offers to watch instead, with no stale data to show', async () => {
     stubs.availability = () => json({ error: 'rate_limited', upstream_status: 429 }, 503);
     render(
       <AppProviders client={testClient()}>
@@ -320,9 +320,52 @@ describe('the week"s states', () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByText(/Booking site rate-limited us/)).toBeInTheDocument(),
+      expect(screen.getByText('Recreation.gov is limiting our checks')).toBeInTheDocument(),
     );
-    expect(screen.getByText(/upstream HTTP 429/)).toBeInTheDocument();
+    expect(screen.getByText("They've throttled us, so we're holding off.")).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show what we last saw' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Watch these dates instead' })).toBeInTheDocument();
+  });
+
+  test('a server fault names the fault and offers to report it', async () => {
+    stubs.availability = () => json({ error: 'upstream_5xx' }, 502);
+    render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature()} />
+      </AppProviders>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText('Recreation.gov returned an error')).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Report it' })).toBeInTheDocument();
+  });
+
+  test('an unreachable provider offers a retry and a watch', async () => {
+    stubs.availability = () => json({ error: 'upstream_unreachable' }, 504);
+    render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature()} />
+      </AppProviders>,
+    );
+
+    await waitFor(() => expect(screen.getByText("We can't reach Recreation.gov")).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: "Tell me when it's back" })).toBeInTheDocument();
+  });
+
+  test('an unclassified fault falls back to the plain retry line', async () => {
+    stubs.availability = () => json({ error: 'provider_misconfigured' }, 500);
+    render(
+      <AppProviders client={testClient()}>
+        <AvailabilityWeek feature={feature()} />
+      </AppProviders>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText(/Provider misconfigured — we are on it/)).toBeInTheDocument(),
+    );
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 });

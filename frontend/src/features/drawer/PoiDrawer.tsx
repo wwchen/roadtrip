@@ -1,5 +1,5 @@
 import { useCallback, useEffect, type ReactNode } from 'react';
-import { Banner, Button } from '@ui';
+import { Banner, Button, EmptyState } from '@ui';
 import type { FlatPoiFeature } from '@/lib/poi';
 import { useMapStore } from '@/stores/mapStore';
 import { Drawer } from './Drawer';
@@ -54,12 +54,21 @@ export function PoiDrawer({ renderCampgroundAvailability }: PoiDrawerProps = {})
         // The legacy path had no error branch at all: `openHydratedDrawer` had no
         // `.catch`, so a failed hydration left "Loading…" on screen indefinitely.
         <div className="rt-drawer-error">
-          <Banner status="error" title="Could not load this place">
-            <p>The details request failed. The pin is still on the map.</p>
-            <Button variant="secondary" onClick={() => void query.refetch()}>
-              Try again
-            </Button>
-          </Banner>
+          <EmptyState
+            icon="close-circle-fill"
+            title="This place didn't load"
+            body="We couldn't fetch its details. The map and everything else on it still work."
+            actions={
+              <>
+                <Button variant="secondary" size="sm" iconStart="refresh" onClick={() => void query.refetch()}>
+                  Try again
+                </Button>
+                <Button variant="tertiary" size="sm" iconStart="chevron-left" onClick={close}>
+                  Back to the map
+                </Button>
+              </>
+            }
+          />
         </div>
       ) : null}
 

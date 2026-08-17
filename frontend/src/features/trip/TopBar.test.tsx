@@ -691,8 +691,9 @@ describe('the results list', () => {
       useMapStore.getState().setOverlayHidden('cg', true);
     });
 
+    expect(screen.getByText('Campgrounds are switched off')).toBeInTheDocument();
     expect(
-      screen.getByText('All campgrounds hidden — re-enable a category in the legend.'),
+      screen.getByRole('button', { name: 'Turn campgrounds back on' }),
     ).toBeInTheDocument();
   });
 
