@@ -40,6 +40,7 @@ class StaticSiteRoutesTest {
             File(this, "index.html").writeText(BUILT_MAP)
             File(this, "watches.html").writeText(BUILT_WATCHES)
             File(this, "availability.html").writeText(BUILT_AVAILABILITY)
+            File(this, "poi.html").writeText(BUILT_POI)
             File(this, "assets").mkdirs()
             File(this, "assets/watches-abc123.js").writeText(BUNDLE)
         }
@@ -65,6 +66,8 @@ class StaticSiteRoutesTest {
                     "/watches.html" to BUILT_WATCHES,
                     "/availability" to BUILT_AVAILABILITY,
                     "/availability.html" to BUILT_AVAILABILITY,
+                    "/poi" to BUILT_POI,
+                    "/poi.html" to BUILT_POI,
                     // The root page's second form is `/`, not the `/index` that
                     // stripping `.html` would produce.
                     "/" to BUILT_MAP,
@@ -145,6 +148,7 @@ class StaticSiteRoutesTest {
         const val BUILT_MAP = """<html><body><div id="root">react map</div></body></html>"""
         const val BUILT_WATCHES = """<html><body><div id="root">watches</div></body></html>"""
         const val BUILT_AVAILABILITY = """<html><body><div id="root">availability</div></body></html>"""
+        const val BUILT_POI = """<html><body><div id="root">poi</div></body></html>"""
         const val BUNDLE = "console.log('bundle')"
     }
 }

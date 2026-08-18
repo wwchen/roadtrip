@@ -1,0 +1,18 @@
+/* The routed POI page's own frame — background and centring only.
+   Everything inside the card is `domain/poi/poi-page.css`, unchanged from the
+   drawer. */
+
+.rt-poi-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100dvh;
+  padding: 24px 16px 48px;
+  background: var(--rt-bg);
+}
+
+@media (min-width: 768px) {
+  .rt-poi-page {
+    padding: 40px 24px 64px;
+  }
+}

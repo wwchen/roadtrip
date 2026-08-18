@@ -38,7 +38,7 @@ one collapses every named prop to `any`. Widen by intersection instead.
 ### Domain components (`frontend/src/features/<feature>/`)
 
 Compose primitives into feature-specific UI — `features/watches/WatchTable.tsx`,
-`features/trip/TopBar.tsx`, `features/drawer/CampgroundDrawer.tsx`. They import
+`features/trip/TopBar.tsx`, `features/drawer/PoiDrawer.tsx`. They import
 primitives from `@ui`, clients from `@/api`, stores from `@/stores`, and **never from
 another feature directory**. A thing two features need moves to `@/lib`, `@/ui` or a
 store.
@@ -57,6 +57,37 @@ features, features and pages may import domains, and domains never import featur
 compose multiple features to exercise a page, but production composition belongs in
 `pages/`.
 
+## The POI page (`src/domain/poi/`)
+
+Every pin opens the same page. The type decides which blocks appear, and nothing
+else about the page changes — that is the rule the whole directory exists to keep,
+and it comes from the M0 screens doc (4a, "One order, thirteen blocks").
+
+- `blocks.ts` is the **only** place the order lives: thirteen ids, grouped by
+  hairline, with `RULE_BEFORE_GROUP` marking the fold between "can I stay here, and
+  when" and "tell me more". Nothing else may express an order.
+- `PoiPageShell.tsx` takes a bag of blocks keyed by id and renders them in that
+  order. A type omits a block by leaving the key out; a group with nothing in it
+  draws no band and no stray rule. `variant` is `panel` (the map drawer, ~520px) or
+  `page` (the routed detail page, with breadcrumbs) — CSS and one nav, not
+  structure.
+- `PoiBlocks.tsx` is the block vocabulary — identity, actions, glance, prose, specs,
+  contact, links, nearby, the footer stamp and the provenance disclosure. They
+  render shapes from `model.ts` and know nothing about any provider.
+- `fields.tsx` is extraction and the two shared controls (`DirectionsButton`,
+  `CallButtons`); `campground-detail.ts` and `supercharger-detail.ts` are the
+  per-provider extractors.
+- `types/` holds one component per POI type plus `registry.ts`, a category → page
+  `Map`. Types whose page is identity, actions and one spec list — gym, trailhead,
+  town stop, dropped pin, state — are rows in `place.tsx`'s descriptor table rather
+  than components of their own.
+
+Two surfaces consume it and neither adds anything: `features/drawer/PoiDrawer`
+(the shell, the drag gesture, and the two states that have no page to show) and
+`pages/poi/PoiPage` (the routed `?poi=<id>` page). **If one shows a block the other
+does not, that is a bug in one of them.** Adding a type is a row in `registry.ts`;
+adding a block is an id in `blocks.ts` and a component beside its neighbours.
+
 ## Theme
 
 `<html>` carries `theme-roadtrip-zion` always, and `mode-dark` when the resolved
@@ -66,9 +97,9 @@ mode is dark. Three things own this and nothing else should touch it:
 - `src/stores/themeStore.ts` — the only writer of the class, the `theme-color`
   meta and `resetTokenCache()`. Adding the class anywhere else leaves the map
   painting the previous mode's colours.
-- The inline script in each of the three page shells, which applies the mirrored
+- The inline script in each page shell, which applies the mirrored
   mode before first paint. It is duplicated on purpose and pinned by
-  `src/test/page-shells.test.ts` — edit all three together, and note that the
+  `src/test/page-shells.test.ts` — edit them all together, and note that the
   dark `theme-color` is a literal there because the script cannot import; that
   test pins it against `THEME_COLORS.dark` so the two cannot drift.
 

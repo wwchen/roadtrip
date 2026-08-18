@@ -83,9 +83,11 @@ describe('opening', () => {
 
     await waitFor(() => expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Yosemite National Park'));
     expect(detailRequests()[0]?.url).toBe(`/api/pois/${PARK_ID}`);
-    // Park-specific: the subline names the kind and the state.
-    expect(screen.getByText(/National Park · CA/)).toBeInTheDocument();
-    // And the acreage pill, formatted.
+    // Park-specific: the eyebrow names the kind, the subtitle the state.
+    expect(screen.getByText('National park')).toBeInTheDocument();
+    // Scoped: the state is also a row in the spec block below.
+    expect(document.querySelector('.rt-poi-subtitle')?.textContent).toBe('CA');
+    // And the acreage, formatted, in the type's one spec block.
     expect(screen.getByText('761,747 acres')).toBeInTheDocument();
   });
 
@@ -154,9 +156,9 @@ describe('opening', () => {
       expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Clear Lake SP Cabins'),
     );
     expect(screen.queryByText('No detail view for this place yet')).toBeNull();
-    // Campground-specific, so this cannot pass with any other panel: the agency line
-    // above the name is `CampgroundDrawer`'s.
-    expect(document.querySelector('.rt-cg-agency')?.textContent).toBe('California State Parks');
+    // Campground-specific, so this cannot pass with any other page: the park page's
+    // eyebrow is the kind alone, and only the campground's carries the agency.
+    expect(screen.getByText(/Campground · California State Parks/)).toBeInTheDocument();
   });
 
   test('an unrendered category says so instead of showing an empty panel', async () => {

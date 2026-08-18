@@ -4,15 +4,34 @@
     {
       "name": "app",
       "runtimeExecutable": "tilt",
-      "runtimeArgs": ["up"],
+      "runtimeArgs": [
+        "up"
+      ],
       "port": 8765,
       "autoPort": false
     },
     {
       "name": "frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "dev"
+      ],
       "port": 5173,
+      "autoPort": false
+    },
+    {
+      "name": "storybook",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "frontend",
+        "run",
+        "storybook"
+      ],
+      "port": 6006,
       "autoPort": false
     }
   ]
