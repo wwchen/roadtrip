@@ -1,11 +1,11 @@
-// The boot script is duplicated across the three shells because it must run
+// The boot script is duplicated across every shell because it must run
 // before first paint. This test is what stops the copies drifting.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { DARK_MODE_CLASS, THEME_COLORS, THEME_STORAGE_KEY } from '@/lib/theme';
 
-const SHELLS = ['index.html', 'watches.html', 'availability.html'];
+const SHELLS = ['index.html', 'watches.html', 'availability.html', 'poi.html'];
 const shell = (name: string) => readFileSync(join(process.cwd(), name), 'utf8');
 
 describe.each(SHELLS)('%s', (name) => {
@@ -38,7 +38,7 @@ describe.each(SHELLS)('%s', (name) => {
   });
 });
 
-test('all three shells carry byte-identical boot scripts', () => {
+test('every shell carries a byte-identical boot script', () => {
   const scripts = SHELLS.map((name) => {
     const match = shell(name).match(/<script>[\s\S]*?<\/script>/);
     expect(match, `${name} has no inline <script>`).not.toBeNull();

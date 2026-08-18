@@ -1,5 +1,7 @@
-// The pieces every drawer type shares.
-import type { ReactNode } from 'react';
+// The field helpers and shared controls every POI type reads.
+//
+// Extraction and small controls only — anything that renders a *block* lives in
+// `PoiBlocks.tsx`, so a type component composes blocks here and never markup.
 import { Button, Icon } from '@ui';
 import { distanceKm, formatDistance } from '@/lib/geo';
 import type { PoiFeature } from '@/lib/poi';
@@ -45,30 +47,6 @@ export function useDistanceTo(lng: number | undefined, lat: number | undefined):
   return formatDistance(distanceKm(userLocation.lat, userLocation.lng, lat as number, lng as number));
 }
 
-export interface DrawerHeaderProps {
-  name: string;
-  sub?: string;
-  /**
-   * Rows between the title and the subline — the campground's containing park and
-   * managing agency. They sit above `sub` because they identify the place, where the
-   * subline only locates it.
-   */
-  above?: ReactNode;
-  /** The campground drawer's season verdict. */
-  verdict?: ReactNode;
-}
-
-export function DrawerHeader({ name, sub, above, verdict }: DrawerHeaderProps) {
-  return (
-    <header className="rt-drawer-head">
-      <h2>{name}</h2>
-      {above}
-      {sub ? <div className="rt-drawer-sub">{sub}</div> : null}
-      {verdict ? <div className="rt-drawer-verdict">{verdict}</div> : null}
-    </header>
-  );
-}
-
 /**
  * Sanitised provider markup.
  *
@@ -78,7 +56,7 @@ export function DrawerHeader({ name, sub, above, verdict }: DrawerHeaderProps) {
  * to this — if a value did not come out of that module, it is not sanitised.
  */
 export function ProviderHtml({ html, inline = false }: { html: string; inline?: boolean }) {
-  const className = inline ? 'rt-drawer-html rt-drawer-html--inline' : 'rt-drawer-html';
+  const className = inline ? 'rt-poi-html rt-poi-html--inline' : 'rt-poi-html';
   return <div className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
@@ -130,21 +108,6 @@ export function DirectionsButton({ name, lng, lat, kind = 'PLACE', onAdded }: Di
   );
 }
 
-/** A row of small labels. Empty entries drop out, so sparse data renders sparse. */
-export function Pills({ items }: { items: (string | null | undefined | false)[] }) {
-  const present = items.filter((item): item is string => Boolean(item));
-  if (present.length === 0) return null;
-  return (
-    <div className="rt-drawer-pills">
-      {present.map((item) => (
-        <span className="rt-drawer-pill" key={item}>
-          {item}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 /**
  * Whatever the ETL did not promote, as a collapsed key/value table.
  *
@@ -166,9 +129,9 @@ export function UpstreamTable({ upstream }: { upstream: unknown }) {
   if (entries.length === 0) return null;
 
   return (
-    <details className="rt-drawer-upstream">
+    <details className="rt-poi-upstream">
       <summary>Upstream data ({entries.length})</summary>
-      <table className="rt-drawer-upstream-table">
+      <table className="rt-poi-upstream-table">
         <tbody>
           {entries.map(([key, value]) => (
             <tr key={key}>
@@ -226,18 +189,3 @@ export function CallButtons({ phone }: { phone: unknown }) {
   );
 }
 
-/**
- * MapLibre stringifies nested-object properties on the way out of a GeoJSON
- * source, so `upstream` can arrive as JSON text.
- *
- * Kept as a function rather than folded into the flattener: it is a MapLibre
- * artifact, and `lib/poi.ts` is shared with paths that never touch the map.
- */
-export function reviveJson(value: unknown): unknown {
-  if (typeof value !== 'string') return value;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-}

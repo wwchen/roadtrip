@@ -4,7 +4,7 @@ import type { FlatPoiFeature } from '@/lib/poi';
 import { useMapStore } from '@/stores/mapStore';
 import { Drawer } from './Drawer';
 import { clearPoiFromUrl, showPoiInUrl } from '@/lib/poi-url';
-import { drawerFor } from './registry';
+import { poiPageFor } from '@/domain/poi/types/registry';
 import { usePoiDetail } from '@/queries/poi-detail';
 
 /**
@@ -39,7 +39,7 @@ export function PoiDrawer({ renderCampgroundAvailability }: PoiDrawerProps = {})
 
   const open = selectedPoiId != null;
   const feature = query.data;
-  const registration = drawerFor(feature?.properties);
+  const PoiPage = poiPageFor(feature?.properties);
 
   return (
     <Drawer open={open} onClose={close}>
@@ -63,19 +63,19 @@ export function PoiDrawer({ renderCampgroundAvailability }: PoiDrawerProps = {})
         </div>
       ) : null}
 
-      {feature && registration ? (
-        registration.kind === 'campground' ? (
-          <registration.Content
-            feature={feature}
-            onClose={close}
-            availability={renderCampgroundAvailability?.(feature)}
-          />
-        ) : (
-          <registration.Content feature={feature} onClose={close} />
-        )
+      {feature && PoiPage ? (
+        // Every type takes the same props; a type that has no availability slot
+        // simply never reads the node. That is what lets one call site serve seven
+        // pages — see `domain/poi/types/registry.ts`.
+        <PoiPage
+          feature={feature}
+          variant="panel"
+          onClose={close}
+          availability={renderCampgroundAvailability?.(feature)}
+        />
       ) : null}
 
-      {feature && !registration ? (
+      {feature && !PoiPage ? (
         // A category with no renderer is a gap in the registry, not a state to
         // paper over — say so rather than showing an empty panel.
         <div className="rt-drawer-error">

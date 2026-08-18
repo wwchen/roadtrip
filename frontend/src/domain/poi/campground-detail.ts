@@ -92,16 +92,36 @@ const NEGATIVE_AMENITY_LABELS = new Map<string, string>([
  * ("Vault toilets" rather than "Toilets" + "Vault").
  */
 export function amenityList(p: Props): string[] {
+  return amenityTags(p).map((tag) => tag.label);
+}
+
+/** An amenity, and whether the label states its absence ("No showers"). */
+export interface AmenityTag {
+  label: string;
+  absent: boolean;
+}
+
+/**
+ * The same labels as `amenityList`, with the absences still identifiable.
+ *
+ * The at-a-glance block gives an absence a hue and leaves every other tag neutral,
+ * and by the time a label reads "No showers" that distinction has been flattened
+ * into prose. Both functions come off this one so the two can never disagree about
+ * which amenities are worth naming.
+ */
+export function amenityTags(p: Props): AmenityTag[] {
   const value = p.amenities;
-  if (Array.isArray(value)) return stringList(value);
+  // The legacy array shape carries labels only — nothing says whether one is an
+  // absence, so none of them are.
+  if (Array.isArray(value)) return stringList(value).map((label) => ({ label, absent: false }));
   if (!value || typeof value !== 'object') return [];
 
   const record = value as Record<string, unknown>;
-  const out: string[] = [];
+  const out: AmenityTag[] = [];
   for (const [key, raw] of Object.entries(record)) {
     if (key === 'toilets' && record.toilet_kind) continue;
     const label = amenityLabel(key, raw);
-    if (label) out.push(label);
+    if (label) out.push({ label, absent: raw === false });
   }
   return out;
 }
@@ -577,6 +597,15 @@ export interface StructuredDetails {
 }
 
 /**
+ * The group titles, as constants: the POI page maps each of these onto one of its
+ * blocks (stay details, contact, provenance), so the strings are a contract
+ * between this module and `types/campground.tsx` rather than three labels.
+ */
+export const STAY_DETAILS_GROUP = 'Stay details';
+export const CONTACT_GROUP = 'Contact';
+export const SOURCE_GROUP = 'Source metadata';
+
+/**
  * The "More details" body, as groups of rows.
  *
  * Empty rows and empty groups drop out, so a sparse pin renders a short section
@@ -618,9 +647,9 @@ export function structuredDetails(p: Props): StructuredDetails {
 
   return {
     groups: [
-      { title: 'Stay details', rows: stay },
-      { title: 'Contact', rows: contact },
-      { title: 'Source metadata', rows: source },
+      { title: STAY_DETAILS_GROUP, rows: stay },
+      { title: CONTACT_GROUP, rows: contact },
+      { title: SOURCE_GROUP, rows: source },
     ].filter((group) => group.rows.length > 0),
     links: campgroundLinks(p.links),
     alerts: campgroundAlerts(p.alerts),

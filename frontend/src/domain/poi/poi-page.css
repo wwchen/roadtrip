@@ -1,0 +1,602 @@
+/* ---------------------------------------------------------------------------
+   The POI page.
+
+   One stylesheet for both variants, because they are one page at two widths:
+     .rt-poi--panel  — the map drawer, ~520px, edge-to-edge inside the drawer
+     .rt-poi--page   — the routed detail page, centred with a max measure
+
+   Only the container query-ish bits differ. Everything below the header — block
+   headings, spec rows, tags, the carousel — is identical, which is what makes the
+   drawer and the page the same page rather than two that resemble each other.
+
+   Colour comes from `--rt-*` roles only. A literal grey step is correct-looking
+   in light mode and unreadable in dark; see docs/frontend-components.md.
+   --------------------------------------------------------------------------- */
+
+:root {
+  /* The page's own rhythm: one gutter, one block gap, one hairline. */
+  --rt-poi-gutter: 20px;
+  --rt-poi-block-gap: 16px;
+  --rt-poi-hero-height: 176px;
+  --rt-poi-measure: 960px;
+  --rt-poi-card-width: 168px;
+}
+
+.rt-poi {
+  display: flex;
+  flex-direction: column;
+  color: var(--rt-text);
+  font-family: var(--rt-sans);
+}
+
+.rt-poi--page {
+  width: 100%;
+  max-width: var(--rt-poi-measure);
+  margin: 0 auto;
+  background: var(--rt-surface);
+  border: 1px solid var(--rt-border);
+  border-radius: var(--rt-r-2xl);
+  overflow: hidden;
+}
+
+@media (min-width: 768px) {
+  .rt-poi--page {
+    --rt-poi-gutter: 28px;
+    --rt-poi-hero-height: 280px;
+  }
+}
+
+/* --- breadcrumbs --------------------------------------------------------- */
+
+.rt-poi-crumbs {
+  padding: 14px var(--rt-poi-gutter) 0;
+  font-size: 12px;
+}
+
+.rt-poi-crumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rt-poi-crumbs li + li::before {
+  content: '/';
+  margin-right: 6px;
+  color: var(--rt-faint);
+}
+
+.rt-poi-crumbs a {
+  color: var(--rt-brand-text);
+}
+
+.rt-poi-crumbs li:last-child span {
+  color: var(--rt-muted);
+}
+
+/* --- groups and rules ---------------------------------------------------- */
+
+.rt-poi-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.rt-poi-rule {
+  height: 1px;
+  margin: var(--rt-poi-block-gap) 0;
+  background: var(--rt-border);
+}
+
+/* The fold between "can I stay here, and when" and "tell me more". Same hairline,
+   more air — a camper who stops scrolling here has lost nothing. */
+.rt-poi-rule--fold {
+  margin-top: calc(var(--rt-poi-block-gap) + 6px);
+  background: var(--rt-border-strong);
+}
+
+.rt-poi-slot {
+  padding: 0 var(--rt-poi-gutter);
+}
+
+.rt-poi-slot + .rt-poi-slot {
+  margin-top: var(--rt-poi-block-gap);
+}
+
+/* The hero is flush to the page edges; everything else sits in the gutter. */
+.rt-poi-slot--hero {
+  padding: 0;
+}
+
+/* --- hero ---------------------------------------------------------------- */
+
+.rt-poi-hero {
+  height: var(--rt-poi-hero-height);
+  background: var(--rt-bg-sunken) center / cover no-repeat;
+}
+
+/* --- identity ------------------------------------------------------------ */
+
+.rt-poi-identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-top: 16px;
+}
+
+.rt-poi-slot--hero + .rt-poi-slot .rt-poi-identity {
+  padding-top: 18px;
+}
+
+.rt-poi-identity-text {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.rt-poi-eyebrow {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rt-faint);
+}
+
+.rt-poi-eyebrow a {
+  color: var(--rt-brand-text);
+}
+
+.rt-poi-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--rt-text);
+  text-wrap: balance;
+}
+
+.rt-poi--page .rt-poi-title {
+  font-size: 30px;
+}
+
+.rt-poi-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--rt-muted);
+}
+
+.rt-poi-verdict {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* --- actions ------------------------------------------------------------- */
+
+.rt-poi-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+/* --- block furniture ----------------------------------------------------- */
+
+.rt-poi-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rt-poi-block-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rt-poi-block-meta {
+  font-size: 12px;
+  color: var(--rt-faint);
+}
+
+.rt-poi-heading {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rt-faint);
+}
+
+.rt-poi-prose {
+  font-size: 14px;
+  line-height: 1.5;
+  /* Body copy, so the full text role rather than --rt-hint: "Getting there" and
+     "Good to know" are the two blocks a camper actually reads, and zion's hint step
+     is legible on a dark surface but washes out on a light one. */
+  color: var(--rt-text);
+  text-wrap: pretty;
+}
+
+.rt-poi-prose p {
+  margin: 0 0 8px;
+}
+
+.rt-poi-prose p:last-child {
+  margin-bottom: 0;
+}
+
+/* --- at a glance --------------------------------------------------------- */
+
+.rt-poi-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rt-poi-tag {
+  padding: 3px 9px;
+  border-radius: var(--rt-r-pill);
+  background: var(--rt-fill-active);
+  font-size: 12px;
+  color: var(--rt-hint);
+}
+
+/* An absence is the only thing in this row that takes a hue: "no showers" changes
+   what you pack, where "showers" is just one more amenity. */
+.rt-poi-tag--absent {
+  background: var(--rt-fill-subtle);
+  color: var(--rt-warn);
+}
+
+/* --- spec / contact rows ------------------------------------------------- */
+
+.rt-poi-specs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.rt-poi-spec {
+  display: grid;
+  grid-template-columns: minmax(0, 96px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  font-size: 13px;
+}
+
+.rt-poi--page .rt-poi-spec {
+  grid-template-columns: minmax(0, 160px) minmax(0, 1fr);
+}
+
+.rt-poi-spec dt {
+  color: var(--rt-faint);
+}
+
+.rt-poi-spec dd {
+  margin: 0;
+  color: var(--rt-text);
+}
+
+/* --- links --------------------------------------------------------------- */
+
+.rt-poi-links {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.rt-poi-links a {
+  color: var(--rt-brand-text);
+}
+
+/* --- nearby carousel ----------------------------------------------------- */
+
+.rt-poi-carousel {
+  display: flex;
+  gap: 10px;
+  margin: 0 calc(var(--rt-poi-gutter) * -1);
+  padding: 2px var(--rt-poi-gutter);
+  list-style: none;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.rt-poi-card {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: var(--rt-poi-card-width);
+  padding: 10px 12px;
+  border: 1px solid var(--rt-border);
+  border-radius: var(--rt-r-lg);
+  background: var(--rt-surface-raised);
+  scroll-snap-align: start;
+}
+
+.rt-poi-card a,
+.rt-poi-card-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--rt-text);
+  text-wrap: pretty;
+}
+
+.rt-poi-card a {
+  color: var(--rt-brand-text);
+}
+
+.rt-poi-card-meta,
+.rt-poi-card-status {
+  font-size: 11px;
+  color: var(--rt-faint);
+}
+
+/* --- footer -------------------------------------------------------------- */
+
+.rt-poi-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: var(--rt-poi-block-gap);
+  padding: 12px var(--rt-poi-gutter);
+  border-top: 1px solid var(--rt-border);
+  background: var(--rt-surface-inset);
+  font-size: 12px;
+  color: var(--rt-muted);
+}
+
+.rt-poi-footer .rt-poi-slot {
+  padding: 0;
+  margin: 0;
+}
+
+.rt-poi-slot--provenance {
+  margin-left: auto;
+}
+
+.rt-poi-verified--stale {
+  color: var(--rt-warn);
+}
+
+.rt-poi-provenance summary {
+  cursor: pointer;
+  color: var(--rt-muted);
+}
+
+.rt-poi-provenance[open] {
+  width: 100%;
+}
+
+/* --- verdict, disabled CTA ----------------------------------------------- */
+
+.rt-poi-verdict-tone {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: var(--rt-r-pill);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.rt-poi-verdict-tone--open {
+  background: var(--rt-avail-bg);
+  color: var(--rt-avail);
+}
+
+.rt-poi-verdict-tone--closed,
+.rt-poi-verdict-tone--fcfs {
+  background: var(--rt-first-come-bg);
+  color: var(--rt-warn);
+}
+
+.rt-poi-cta-disabled {
+  align-self: center;
+  color: var(--rt-muted);
+  font-size: 13px;
+}
+
+.rt-poi-faint {
+  color: var(--rt-faint);
+}
+
+/* --- carrier signals ------------------------------------------------------
+   Neutral at every strength, deliberately: length encodes the bucket and hue
+   encodes nothing. A weak signal is information, not an error, and the red/amber/
+   green vocabulary stays reserved for status. */
+
+.rt-poi-signals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rt-poi-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--rt-muted);
+}
+
+.rt-poi-signal-carrier {
+  font-weight: 500;
+}
+
+.rt-poi-signal-bar {
+  display: inline-block;
+  height: 4px;
+  border-radius: var(--rt-r-sm);
+  background: var(--rt-fill-active);
+}
+
+.rt-poi-signal-bar[data-bucket='0'] { width: 6px; }
+.rt-poi-signal-bar[data-bucket='1'] { width: 14px; }
+.rt-poi-signal-bar[data-bucket='2'] { width: 22px; }
+.rt-poi-signal-bar[data-bucket='3'] { width: 30px; }
+.rt-poi-signal-bar[data-bucket='4'] { width: 38px; }
+
+.rt-poi-signal-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* --- busy hours ---------------------------------------------------------- */
+
+.rt-poi-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 1.5px;
+  height: 28px;
+}
+
+.rt-poi-bar {
+  flex: 1 1 0;
+  min-width: 0;
+  /* Off-scale: 24 bars share the row's width, so each is a few px wide and the
+     shortest hours are a few px tall. This is a hairline softening of a data
+     mark, not a surface corner — the scale has no step this small, and taking
+     its floor would round the low bars away into dots. */
+  border-radius: 1px;
+}
+
+.rt-poi-bar[data-bucket='low'] {
+  background: var(--rt-avail);
+}
+
+.rt-poi-bar[data-bucket='medium'] {
+  background: var(--rt-warn);
+}
+
+.rt-poi-bar[data-bucket='high'] {
+  background: var(--rt-error);
+}
+
+.rt-poi-bar[data-now] {
+  outline: 2px solid var(--rt-brand);
+  outline-offset: 1px;
+}
+
+.rt-poi-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+  color: var(--rt-muted);
+  font-size: 10px;
+}
+
+/* --- alerts and chips ---------------------------------------------------- */
+
+.rt-poi-alert {
+  display: block;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  background: var(--rt-first-come-bg);
+  border-radius: var(--rt-r-sm);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.rt-poi-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-right: 8px;
+}
+
+.rt-poi-chip code {
+  font-size: 11px;
+}
+
+/* --- sanitised provider markup ------------------------------------------- */
+
+.rt-poi-html {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.rt-poi-html--inline {
+  display: inline;
+}
+
+.rt-poi-html p {
+  margin: 0 0 8px;
+}
+
+.rt-poi-html ul,
+.rt-poi-html ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.rt-poi-html a {
+  color: var(--rt-brand-text);
+}
+
+/* --- the raw upstream record --------------------------------------------- */
+
+.rt-poi-upstream summary {
+  cursor: pointer;
+  color: var(--rt-muted);
+  font-size: 12px;
+}
+
+.rt-poi-upstream-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+  color: var(--rt-text);
+}
+
+.rt-poi-upstream-table th,
+.rt-poi-upstream-table td {
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+  border-top: 1px solid var(--rt-border);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.rt-poi-upstream-table th {
+  width: 40%;
+  color: var(--rt-muted);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.rt-poi-upstream-table td a {
+  color: var(--rt-brand-text);
+  text-decoration: none;
+}
+
+.rt-poi-upstream-table td a:hover {
+  text-decoration: underline;
+}
+
+.rt-poi-upstream-table pre {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

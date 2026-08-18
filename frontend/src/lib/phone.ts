@@ -28,7 +28,7 @@ export function formatPhone(s: string): string {
  *
  * Provider data puts several numbers in one string, delimited by a slash, comma or
  * semicolon (`"530.336.5521/530.257.2151"` → two). Read by the React `CallButtons`
- * in `features/drawer/parts.tsx`, and by `telHref` below for each result.
+ * in `domain/poi/fields.tsx`, and by `telHref` below for each result.
  */
 export function phoneNumbers(phoneRaw: string | null | undefined): string[] {
   if (!phoneRaw) return [];
