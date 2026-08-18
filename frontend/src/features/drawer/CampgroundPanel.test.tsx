@@ -207,6 +207,31 @@ describe('the campground page, at panel width', () => {
     ).toBeInTheDocument();
   });
 
+  // Pins the shape the Playwright smoke suite reaches into, in a place that runs on
+  // every frontend CI job: promoted source fields and the verbatim upstream record
+  // share the provenance disclosure, and only the first half is sourced from the DTO.
+  test('separates promoted source metadata from the verbatim upstream record', async () => {
+    await openCampground({
+      source: 'reservecalifornia',
+      source_id: 'rc-629',
+      upstream: { description: 'Raw-only description', media: 'raw-only.jpg' },
+    });
+
+    const provenance = panel().querySelector('.rt-poi-provenance')!;
+    expect(provenance).not.toBeNull();
+
+    const promoted = provenance.querySelector('section.rt-poi-block')!;
+    expect(promoted.querySelector(':scope > h3')).toHaveTextContent('Source metadata');
+    expect(promoted.textContent).toContain('rc-629');
+    // The raw record is legitimately visible in the disclosure — that is what a
+    // provenance surface is for — but never as the source of a promoted field.
+    expect(promoted.textContent).not.toContain('Raw-only description');
+    expect(promoted.textContent).not.toContain('raw-only.jpg');
+    expect(provenance.querySelector('.rt-poi-upstream-table')!.textContent).toContain(
+      'Raw-only description',
+    );
+  });
+
   test('a stale verification date warns', async () => {
     await openCampground({ last_verified: '2020-01-01' });
 
