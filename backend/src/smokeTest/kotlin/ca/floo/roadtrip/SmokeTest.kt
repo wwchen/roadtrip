@@ -616,17 +616,23 @@ class SmokeTest {
             )
             // Provenance is what is left once everything that is trip content has been
             // promoted into a block above it — collapsed, and the last thing on the page.
-            val details = drawer.locator(".rt-poi-provenance")
+            val provenance = drawer.locator(".rt-poi-provenance")
+            assertThat(provenance).hasCount(1)
+            // Scoped to the PROMOTED half of the disclosure. The raw upstream table
+            // sits in here too and shows every field the provider sent, verbatim and
+            // as text — "Raw-only description" is legitimately visible there, which is
+            // the whole point of a provenance surface. What must not happen is a
+            // promoted field being sourced from raw, so that is what this asserts.
+            val details = provenance.locator("section.rt-poi-block:has(> h3:text-is('Source metadata'))")
             assertThat(details).hasCount(1)
-            assertThat(details).containsText("Source metadata")
             assertThat(details).containsText("rc-629")
             assertFalse(
                 details.textContent().contains("Raw-only description"),
-                "provenance should not render raw upstream description",
+                "source metadata should not render raw upstream description",
             )
             assertFalse(
                 details.textContent().contains("raw-only.jpg"),
-                "provenance should not render raw upstream media",
+                "source metadata should not render raw upstream media",
             )
             val heroImage =
                 page.evaluate(
