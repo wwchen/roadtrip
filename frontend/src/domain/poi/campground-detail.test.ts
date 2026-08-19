@@ -119,6 +119,34 @@ describe('rating', () => {
   });
 });
 
+describe('parentParkName', () => {
+  const linked = (...titles: string[]) => ({
+    name: 'Tuff Campground',
+    links: titles.map((title) => ({ title, url: 'https://example.test' })),
+  });
+
+  test('infers the containing park from an official link title', () => {
+    expect(parentParkName(linked('Inyo National Forest'))).toBe('Inyo National Forest');
+  });
+
+  // "Forest Service Concessionaire" matches `forest`, and camprrm.com is an operator
+  // rather than a place — this was showing up as Tuff Campground's parent park.
+  test('an operator is not a parent, however park-shaped its name', () => {
+    expect(parentParkName(linked('Forest Service Concessionaire'))).toBe('');
+  });
+
+  test('state services that mention a place are not the place', () => {
+    expect(parentParkName(linked('California State Road Conditions'))).toBe('');
+    expect(parentParkName(linked('California State Tourism'))).toBe('');
+  });
+
+  test('the real parent still wins when both kinds of link are present', () => {
+    expect(parentParkName(linked('Forest Service Concessionaire', 'Inyo National Forest'))).toBe(
+      'Inyo National Forest',
+    );
+  });
+});
+
 describe('verified', () => {
   const NOW = new Date('2026-08-09T00:00:00Z');
 
