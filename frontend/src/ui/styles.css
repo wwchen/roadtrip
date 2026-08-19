@@ -4,8 +4,12 @@
    Load order:
      1. `@lew-ds/lds/css`                     — LDS component cascade.
      2. `../tokens/roadtrip-zion.css`        — the roadtrip-zion theme.
-     3. `../tokens/tokens.css`               — the app's own `--rt-*` tokens.
-     4. `../tokens/roadtrip-zion-bridge.css` — repoints `--rt-*` chrome roles
+     3. `../tokens/roadtrip-zion-hues.css`   — Zion's own `.hue-*` ramps,
+        overriding the shared ones in LDS's `apca-palette.css`. After LDS on
+        purpose: `.theme-roadtrip-zion` and `:root` have equal specificity, so
+        source order is what decides this.
+     4. `../tokens/tokens.css`               — the app's own `--rt-*` tokens.
+     5. `../tokens/roadtrip-zion-bridge.css` — repoints `--rt-*` chrome roles
         onto roadtrip-zion.css. Loads last so it wins any name collision with
         tokens.css (`--rt-scrim`).
      5. `./icons.css`                        — how an Open Icons glyph takes its
@@ -18,6 +22,7 @@
    --------------------------------------------------------------------------- */
 @import '@lew-ds/lds/css';
 @import '../tokens/roadtrip-zion.css';
+@import '../tokens/roadtrip-zion-hues.css';
 @import '../tokens/tokens.css';
 @import '../tokens/roadtrip-zion-bridge.css';
 @import './icons.css';

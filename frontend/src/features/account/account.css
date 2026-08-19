@@ -160,6 +160,9 @@
   flex-direction: column;
   gap: 6px;
   width: 100%;
+  /* Capped because the panel column is now `xl`-wide: three segments stretched
+     across the full width read as dead space, not as a denser control. */
+  max-width: 340px;
 }
 
 /* ---- settings modal ---- */
@@ -171,31 +174,76 @@
   min-width: 0;
 }
 
-/* Buttons, not anchors: these tabs are modal-local state with no URL of their own,
-   so unlike the dashboard's tab bar there is nothing to link to. */
-.rt-settings-tabs {
+/* Rail + panel, side by side. Stacks below the width at which a rail can no
+   longer earn its own column — the same breakpoint the mobile sheet assumes. */
+.rt-settings-body {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  gap: 20px;
+  min-height: 0;
 }
 
-.rt-settings-tabs button {
-  border: 1px solid var(--rt-border-strong);
-  background: var(--rt-fill-subtle);
-  color: var(--rt-text);
+@media (max-width: 560px) {
+  .rt-settings-body {
+    flex-direction: column;
+    gap: 14px;
+  }
+}
+
+/* Buttons, not anchors: these sections are modal-local state with no URL of
+   their own, so unlike the dashboard's tab bar there is nothing to link to. */
+.rt-settings-rail {
+  flex: 0 0 168px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 16px;
+  border-right: 1px solid var(--rt-border);
+}
+
+@media (max-width: 560px) {
+  .rt-settings-rail {
+    /* `flex` is re-set, not just `flex-direction`: the 168px basis above is a
+       column width, and once the parent stacks it would size the main axis —
+       i.e. reserve 168px of *height* for a one-line row of buttons. */
+    flex: 0 0 auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-right: 0;
+    padding-bottom: 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--rt-border);
+  }
+}
+
+.rt-settings-rail button {
+  border: none;
+  background: transparent;
+  color: var(--rt-muted);
   border-radius: var(--rt-r-md);
-  height: 30px;
-  padding: 0 12px;
+  height: 34px;
+  padding: 0 10px;
   font-size: 13px;
+  text-align: left;
   cursor: pointer;
 }
 
-.rt-settings-tabs button:hover {
+.rt-settings-rail button:hover {
   background: var(--rt-fill-hover);
+  color: var(--rt-text);
 }
 
-.rt-settings-tabs button[aria-current='true'] {
-  border-color: var(--rt-brand);
+.rt-settings-rail button[aria-current='true'] {
   background: var(--rt-brand-tint);
-  color: var(--rt-brand);
+  /* --rt-brand-text, not --rt-brand: this is brand-coloured TEXT, and
+     --rt-brand is tuned for white-on-fill — 3.13:1 as text on the night
+     page, worse against this tint. See the role comment in
+     roadtrip-zion-bridge.css. */
+  color: var(--rt-brand-text);
+  font-weight: 500;
+}
+
+.rt-settings-panel {
+  flex: 1;
+  min-width: 0;
 }

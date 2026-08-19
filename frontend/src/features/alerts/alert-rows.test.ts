@@ -73,8 +73,15 @@ describe('counts and the bar label', () => {
     expect(barLabel({ active: 1, paused: 0, done: 0, total: 1 })).toBe('1 availability alert');
     expect(barLabel({ active: 2, paused: 0, done: 0, total: 2 })).toBe('2 availability alerts');
     expect(barLabel({ active: 2, paused: 1, done: 3, total: 6 })).toBe(
-      '6 availability alerts · 1 paused · 3 done',
+      '2 availability alerts · 1 paused · 3 done',
     );
+  });
+
+  test('does not count done watches as alerts', () => {
+    // A done watch is not being watched anymore — it must not inflate the headline
+    // number, which is what `total` (active+paused+done) used to do.
+    expect(barLabel({ active: 0, paused: 0, done: 2, total: 2 })).toBe('2 done');
+    expect(barLabel({ active: 0, paused: 1, done: 2, total: 3 })).toBe('1 paused · 2 done');
   });
 });
 

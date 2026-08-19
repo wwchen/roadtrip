@@ -36,7 +36,32 @@ export { SecretField, type SecretFieldProps } from './SecretField';
 // to delete when upstream tightens this up.
 // ---------------------------------------------------------------------------
 import type { ForwardRefExoticComponent, ReactNode, RefAttributes } from 'react';
-import { Table as LdsTable, type TableProps as LdsTableProps } from '@lew-ds/lds-react';
+import {
+  Modal as LdsModal,
+  Table as LdsTable,
+  type ModalProps as LdsModalProps,
+  type Size,
+  type TableProps as LdsTableProps,
+} from '@lew-ds/lds-react';
+
+/**
+ * `Modal`, with `size` widened to include `xl`/`2xl`.
+ *
+ * `@lew-ds/lds`'s CSS ships `.lds-modal--xl` and `.lds-modal--2xl`
+ * (`--modal-xl`/`--modal-2xl`, in `css/lds.css`), but `ModalProps.size` is `Size`
+ * (`'sm' | 'md' | 'lg'`) — the same shared type `Button` and `TextField` use,
+ * which genuinely has no `xl`/`2xl`. Modal's own range is wider than the shared
+ * type, so only Modal is corrected here.
+ */
+export type ModalSize = Size | 'xl' | '2xl';
+
+export interface ModalProps extends Omit<LdsModalProps, 'size'> {
+  size?: ModalSize;
+}
+
+export const Modal = LdsModal as unknown as ForwardRefExoticComponent<
+  ModalProps & RefAttributes<HTMLDivElement>
+>;
 
 /**
  * `Table`, with column labels and cell values widened to React nodes.

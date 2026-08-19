@@ -81,7 +81,7 @@ describe('the bar', () => {
     mount();
 
     await waitFor(() =>
-      expect(screen.getByText('2 availability alerts · 1 paused')).toBeInTheDocument(),
+      expect(screen.getByText('1 availability alert · 1 paused')).toBeInTheDocument(),
     );
   });
 

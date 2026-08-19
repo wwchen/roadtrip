@@ -154,7 +154,9 @@
 }
 
 .tb-locate:hover {
-  color: var(--rt-brand);
+  /* --rt-brand-text: this is brand-coloured text, not a fill — see the role
+     comment in roadtrip-zion-bridge.css. */
+  color: var(--rt-brand-text);
   background: var(--rt-fill-hover);
 }
 
@@ -185,7 +187,10 @@
 }
 
 .tb-add:hover {
-  color: var(--rt-brand);
+  /* --rt-brand-text for the text, --rt-brand stays for the border: a border
+     is a UI-component boundary (3:1), not text (4.5:1), and doesn't need the
+     same night correction. See the role comment in roadtrip-zion-bridge.css. */
+  color: var(--rt-brand-text);
   border-color: var(--rt-brand);
 }
 

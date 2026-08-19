@@ -1,0 +1,110 @@
+/* ---------------------------------------------------------------------------
+   Zoom and locate-me, replacing MapLibre's own bottom-right controls (hidden
+   in map.css — see the note on `.maplibregl-ctrl-geolocate`; zoom's
+   `NavigationControl` isn't installed at all any more, see map/controls.ts).
+
+   Desktop: one flex column, locate-me above the zoom group — nothing else
+   shares this corner there, so the two can just stack.
+
+   Mobile: a third control, the layers toggle (a different component —
+   legend.css), sits between them: locate-me, then layers, then zoom. That
+   can't be one flex column across two files, so on mobile each of the three
+   gets its own absolute position instead, computed bottom-up from the same
+   numbers legend.css's comment repeats. A size change here means updating
+   both files' numbers.
+   --------------------------------------------------------------------------- */
+
+.rt-mapctl {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.rt-mapctl-locate,
+.rt-mapctl-zoom button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: var(--rt-surface);
+  color: var(--rt-text);
+  border: 0;
+  cursor: pointer;
+}
+
+.rt-mapctl-locate:hover,
+.rt-mapctl-zoom button:hover {
+  background: var(--rt-fill-hover);
+}
+
+.rt-mapctl-locate:focus-visible,
+.rt-mapctl-zoom button:focus-visible {
+  outline: 2px solid var(--rt-brand);
+  outline-offset: -2px;
+}
+
+.rt-mapctl-locate {
+  border: 1px solid var(--rt-border-strong);
+  border-radius: var(--rt-r-md);
+  box-shadow: var(--rt-e2);
+}
+
+/* One rounded, bordered group of two buttons — MapLibre's own zoom control
+   read as one control for the same reason: they're a single "how far in" axis,
+   not two independent actions. */
+.rt-mapctl-zoom {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--rt-border-strong);
+  border-radius: var(--rt-r-md);
+  box-shadow: var(--rt-e2);
+  overflow: hidden;
+}
+
+.rt-mapctl-zoom button:first-child {
+  border-bottom: 1px solid var(--rt-border);
+}
+
+@media (max-width: 640px) {
+  /* The flex column is a desktop-only convenience — see the header note.
+     Each control positions itself here, in the same coordinate system
+     `.rt-legend-toggle` already uses (against `.rt-map-shell`, effectively
+     the viewport for right/bottom purposes). */
+  .rt-mapctl {
+    position: static;
+  }
+
+  .rt-mapctl-locate,
+  .rt-mapctl-zoom {
+    position: absolute;
+    right: 10px;
+  }
+
+  /* Bottom-up: zoom's own 10px margin, then a 48px button, a 10px gap, the
+     layers toggle (48px, legend.css), another 10px gap, then this — 10 + 96
+     (the zoom group, two 48px buttons) + 10 + 48 + 10 = 174. */
+  .rt-mapctl-locate {
+    bottom: 174px;
+  }
+
+  /* Unchanged from desktop's implicit 10px margin — zoom is still the
+     bottommost control either way. */
+  .rt-mapctl-zoom {
+    bottom: 10px;
+  }
+
+  /* iOS HIG / Material both land on 48px as the comfortable mobile touch
+     target — the same size legend.css's mobile toggle uses, for the same
+     reason: these are controls a thumb has to find without looking. */
+  .rt-mapctl-locate,
+  .rt-mapctl-zoom button {
+    width: 48px;
+    height: 48px;
+  }
+}

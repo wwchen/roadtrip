@@ -75,12 +75,12 @@
 }
 
 .rt-watch-table-poi {
-  color: var(--rt-brand);
+  color: var(--rt-link);
   text-decoration: none;
 }
 
 .rt-watch-table-poi:hover {
-  color: var(--rt-brand-hover);
+  color: var(--rt-link-hover);
   text-decoration: underline;
 }
 
@@ -100,7 +100,9 @@
 }
 
 .rt-watch-table-sort:hover {
-  color: var(--rt-brand);
+  /* --rt-brand-text: this is brand-coloured text, not a fill — see the role
+     comment in roadtrip-zion-bridge.css. */
+  color: var(--rt-brand-text);
 }
 
 /* The direction arrow sits after the label at text scale, and follows the
