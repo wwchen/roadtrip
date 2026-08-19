@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Checkbox, Icon } from '@ui';
 import { sortedAgencies } from '@/map/agencies';
 import { overlaySpec, type PointOverlaySpec } from '@/map/overlays';
@@ -36,6 +36,8 @@ export function LegendPanel({ pois }: LegendPanelProps) {
   const { map } = useMapContext();
   const [collapsed, setCollapsed] = useState(false);
   const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [panelHeight, setPanelHeight] = useState<number | null>(null);
 
   // Tapping the map closes the sheet, as it did on the vanilla page. Bound only
   // while it is open so an ordinary map click does no work.
@@ -47,6 +49,22 @@ export function LegendPanel({ pois }: LegendPanelProps) {
       map.off('click', close);
     };
   }, [map, open]);
+
+  // Mobile only: .rt-legend-morph has no intrinsic height (its children are
+  // absolutely positioned so they can cross-fade in place), so the open
+  // height is measured off the panel's own natural content height and fed
+  // back in as an inline style. Re-measures on every content change (More
+  // options, agency list growing/shrinking) via ResizeObserver.
+  useLayoutEffect(() => {
+    if (!open || !panelRef.current) return
+    const el = panelRef.current
+    const measure = () => setPanelHeight(el.offsetHeight)
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [open])
 
   // One button, two meanings, exactly as the original: on a phone the panel is a
   // sheet and this closes it; on a desktop it collapses to the pop-out button.
@@ -62,15 +80,66 @@ export function LegendPanel({ pois }: LegendPanelProps) {
 
   return (
     <>
-      <button
-        type="button"
-        className="rt-legend-toggle"
-        aria-label="Toggle layers panel"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
+      {/* Mobile: the toggle button IS the closed panel — `data-open` morphs this
+          box's size/radius from the 40px button into the full sheet, while the
+          button and the panel cross-fade inside it (see .rt-legend-morph in
+          legend.css). Desktop takes `display: contents` here and is untouched:
+          the panel is always up there, gated only by `collapsed`. */}
+      <div
+        className="rt-legend-morph"
+        data-open={open}
+        style={open && panelHeight ? { height: panelHeight } : undefined}
       >
-        <Icon name={open ? 'close' : 'menu'} aria-hidden="true" />
-      </button>
+        <button
+          type="button"
+          className="rt-legend-toggle"
+          aria-label="Toggle layers panel"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          <Icon name={open ? 'close' : 'menu'} aria-hidden="true" />
+        </button>
+
+        <div
+          ref={panelRef}
+          className={`rt-legend${collapsed ? ' rt-legend--collapsed' : ''}${open ? ' rt-legend--open' : ''}`}
+        >
+          <button
+            type="button"
+            className="rt-legend__hide"
+            aria-label="Hide layers panel"
+            title="Hide"
+            onClick={hide}
+          >
+            <Icon name="close" aria-hidden="true" />
+          </button>
+          <h1 className="rt-legend__title">Roadtrip Map</h1>
+
+          <div className="rt-legend__section">Superchargers</div>
+          <OverlayRow spec={overlaySpec('sc')} count={pois.counts.sc} />
+
+          <div className="rt-legend__section">
+            Campgrounds{' '}
+            {!pois.campgroundsRequested && (
+              <span className="rt-legend__hint">(zoom in to load)</span>
+            )}
+          </div>
+          {/* Viewport-scoped: rows come from the campgrounds currently in view, so
+              panning away from a region drops its agencies rather than accumulating
+              every agency ever seen. */}
+          <div className="rt-legend__agencies">
+            {agencies.map((agency) => (
+              <AgencyRow key={agency} agency={agency} count={pois.agencies.get(agency) ?? 0} />
+            ))}
+          </div>
+
+          <div className="rt-legend__section">Other</div>
+          <OverlayRow spec={overlaySpec('pf')} count={pois.counts.pf} />
+
+          <div className="rt-legend__section">Basemap</div>
+          <BasemapPicker />
+        </div>
+      </div>
 
       {collapsed && (
         <button
@@ -83,45 +152,6 @@ export function LegendPanel({ pois }: LegendPanelProps) {
           <Icon name="list" aria-hidden="true" />
         </button>
       )}
-
-      <div
-        className={`rt-legend${collapsed ? ' rt-legend--collapsed' : ''}${open ? ' rt-legend--open' : ''}`}
-      >
-        <button
-          type="button"
-          className="rt-legend__hide"
-          aria-label="Hide layers panel"
-          title="Hide"
-          onClick={hide}
-        >
-          <Icon name="close" aria-hidden="true" />
-        </button>
-        <h1 className="rt-legend__title">Roadtrip Map</h1>
-
-        <div className="rt-legend__section">Superchargers</div>
-        <OverlayRow spec={overlaySpec('sc')} count={pois.counts.sc} />
-
-        <div className="rt-legend__section">
-          Campgrounds{' '}
-          {!pois.campgroundsRequested && (
-            <span className="rt-legend__hint">(zoom in to load)</span>
-          )}
-        </div>
-        {/* Viewport-scoped: rows come from the campgrounds currently in view, so
-            panning away from a region drops its agencies rather than accumulating
-            every agency ever seen. */}
-        <div className="rt-legend__agencies">
-          {agencies.map((agency) => (
-            <AgencyRow key={agency} agency={agency} count={pois.agencies.get(agency) ?? 0} />
-          ))}
-        </div>
-
-        <div className="rt-legend__section">Other</div>
-        <OverlayRow spec={overlaySpec('pf')} count={pois.counts.pf} />
-
-        <div className="rt-legend__section">Basemap</div>
-        <BasemapPicker />
-      </div>
     </>
   );
 }
