@@ -86,6 +86,10 @@ const COMPONENT_LOCAL = new Set([
   '--rt-poi-hero-height',
   '--rt-poi-measure',
   '--rt-poi-card-width',
+  // Declared and consumed entirely inside the nights table's own rules in
+  // poi-page.css — column geometry, not colour or a scale step.
+  '--rt-poi-night-col',
+  '--rt-poi-place-col',
   // Declared and consumed entirely inside shell.css — page padding, nothing hands
   // it anywhere. Listed here only because it is not a design token.
   '--rt-shell-pad',

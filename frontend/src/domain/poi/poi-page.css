@@ -621,3 +621,181 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* --- the nights table ----------------------------------------------------
+   One row per place, one column per night. The comparison this block exists for
+   only fits at page width, so the table — and only the table — scrolls sideways
+   inside its own box. The page body never does.
+
+   Every cell prints a glyph as well as a colour. The colours here are the same
+   availability roles the site matrix uses, and none of them is load-bearing: cover
+   the colour and the table still reads. */
+
+.rt-poi-nights {
+  --rt-poi-night-col: 44px;
+  --rt-poi-place-col: 168px;
+}
+
+.rt-poi-nights-caption,
+.rt-poi-nights-empty {
+  margin: 4px 0 0;
+  color: var(--rt-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.rt-poi-nights-scroll {
+  margin-top: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.rt-poi-nights-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  color: var(--rt-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.rt-poi-nights-table th,
+.rt-poi-nights-table td {
+  border-bottom: 1px solid var(--rt-border);
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* The place column stays put while the nights scroll under it — a row whose name
+   has scrolled away is a row you cannot read. */
+.rt-poi-nights-place-head,
+.rt-poi-nights-place {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: var(--rt-poi-place-col);
+  min-width: var(--rt-poi-place-col);
+  padding: 8px 10px 8px 0;
+  background: var(--rt-surface);
+  text-align: left;
+  font-weight: 500;
+}
+
+.rt-poi-nights-place-head {
+  color: var(--rt-muted);
+  font-weight: 500;
+}
+
+.rt-poi-nights-place a {
+  color: var(--rt-link);
+  text-decoration: none;
+}
+
+.rt-poi-nights-place a:hover {
+  color: var(--rt-link-hover);
+  text-decoration: underline;
+}
+
+.rt-poi-nights-place-note {
+  display: block;
+  margin-top: 2px;
+  color: var(--rt-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.rt-poi-nights-night-head {
+  width: var(--rt-poi-night-col);
+  min-width: var(--rt-poi-night-col);
+  padding: 6px 4px;
+  color: var(--rt-muted);
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.rt-poi-nights-night-label {
+  display: block;
+}
+
+.rt-poi-nights-night-sublabel {
+  display: block;
+  font-size: 10px;
+  color: var(--rt-faint);
+}
+
+.rt-poi-nights-cell {
+  padding: 6px 4px;
+  border-left: 1px solid var(--rt-border);
+}
+
+.rt-poi-nights-glyph {
+  font-weight: 700;
+}
+
+.rt-poi-nights-count {
+  margin-left: 3px;
+  font-size: 11px;
+  color: var(--rt-muted);
+}
+
+/* --- the six states ------------------------------------------------------
+   Background is a tint, foreground is the role. `unknown` and `past` are
+   deliberately unpainted: an absent answer should not look like an answer. */
+
+.rt-poi-nights-cell--available {
+  background: var(--rt-avail-bg);
+  color: var(--rt-avail);
+}
+
+.rt-poi-nights-cell--first-come {
+  background: var(--rt-first-come-bg);
+  color: var(--rt-first-come);
+}
+
+.rt-poi-nights-cell--reserved {
+  color: var(--rt-reserved);
+}
+
+.rt-poi-nights-cell--closed {
+  color: var(--rt-faint);
+}
+
+.rt-poi-nights-cell--unknown,
+.rt-poi-nights-cell--past {
+  color: var(--rt-faint);
+}
+
+/* --- the key ------------------------------------------------------------- */
+
+.rt-poi-nights-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--rt-muted);
+  font-size: 11px;
+}
+
+.rt-poi-nights-key {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.rt-poi-nights-key--available .rt-poi-nights-glyph {
+  color: var(--rt-avail);
+}
+
+.rt-poi-nights-key--first-come .rt-poi-nights-glyph {
+  color: var(--rt-first-come);
+}
+
+.rt-poi-nights-key--reserved .rt-poi-nights-glyph {
+  color: var(--rt-reserved);
+}
+
+.rt-poi-nights-key--closed .rt-poi-nights-glyph,
+.rt-poi-nights-key--unknown .rt-poi-nights-glyph,
+.rt-poi-nights-key--past .rt-poi-nights-glyph {
+  color: var(--rt-faint);
+}
