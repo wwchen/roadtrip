@@ -10,6 +10,22 @@ const park = (properties: Record<string, unknown>): FlatPoiFeature => ({
   properties,
 });
 
+/** The same park, but as the polygon PAD-US actually ships. */
+const mappedPark = (properties: Record<string, unknown>): FlatPoiFeature => ({
+  ...park(properties),
+  geometry: {
+    type: 'Polygon',
+    coordinates: [
+      [
+        [-119.6, 37.7],
+        [-119.5, 37.7],
+        [-119.5, 37.8],
+        [-119.6, 37.7],
+      ],
+    ],
+  },
+});
+
 const parentStep = () => screen.getByLabelText('Breadcrumb').textContent;
 
 describe('the park page’s ancestry', () => {
@@ -111,5 +127,111 @@ describe('the park page’s ancestry', () => {
     );
 
     expect(screen.queryByLabelText('Breadcrumb')).toBeNull();
+  });
+});
+
+describe('the park page’s body', () => {
+  // The photo is promoted onto every category's detail, so a park with one fills
+  // the hero slot with the same component the campground page uses.
+  test('a park with a photo fills the hero', () => {
+    render(
+      <ParkPoiPage
+        variant="page"
+        feature={park({
+          category: 'national-park',
+          Unit_Nm: 'Yosemite National Park',
+          State_Nm: 'California',
+          photo_url: 'https://example.test/half-dome.jpg',
+        })}
+      />,
+    );
+
+    const hero = screen.getByRole('img', { name: 'Yosemite National Park' });
+    expect(hero).toHaveClass('rt-poi-hero');
+    expect(hero).toHaveStyle({ backgroundImage: "url('https://example.test/half-dome.jpg')" });
+  });
+
+  // No photo, no band: an empty hero is worse than a page that starts at the title.
+  test('a park without a photo has no hero', () => {
+    render(
+      <ParkPoiPage
+        variant="page"
+        feature={park({ category: 'national-park', Unit_Nm: 'Zion National Park', State_Nm: 'Utah' })}
+      />,
+    );
+
+    expect(document.querySelector('.rt-poi-hero')).toBeNull();
+  });
+
+  test('the description becomes the good-to-know block', () => {
+    render(
+      <ParkPoiPage
+        variant="page"
+        feature={park({
+          category: 'state-park',
+          Unit_Nm: 'Silver Falls State Park',
+          State_Nm: 'Oregon',
+          description: '<p>Ten waterfalls on one loop.</p><script>alert(1)</script>',
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Good to know')).toBeInTheDocument();
+    expect(screen.getByText('Ten waterfalls on one loop.')).toBeInTheDocument();
+    // The prose goes through the upstream sanitiser, so provider markup is words.
+    expect(document.querySelector('script')).toBeNull();
+  });
+
+  test('a park with no description has no good-to-know block', () => {
+    render(
+      <ParkPoiPage
+        variant="page"
+        feature={park({
+          category: 'state-park',
+          Unit_Nm: 'Silver Falls State Park',
+          State_Nm: 'Oregon',
+        })}
+      />,
+    );
+
+    expect(screen.queryByText('Good to know')).toBeNull();
+  });
+});
+
+// Inside-vs-outside is only a fact when the record carries a boundary to be inside
+// of. A polygon can be asked; a centroid can only ever say "near".
+describe('the park page’s boundary', () => {
+  test('a park that arrived as a polygon says its boundary is mapped', () => {
+    render(
+      <ParkPoiPage
+        variant="page"
+        feature={mappedPark({
+          category: 'national-park',
+          Unit_Nm: 'Yosemite National Park',
+          State_Nm: 'California',
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Boundary')).toBeInTheDocument();
+    expect(screen.getByText('Mapped')).toBeInTheDocument();
+  });
+
+  test('a park that arrived as a point claims nothing', () => {
+    render(
+      <ParkPoiPage
+        variant="page"
+        feature={park({
+          category: 'national-park',
+          Unit_Nm: 'Yosemite National Park',
+          State_Nm: 'California',
+          GIS_Acres: 761747,
+        })}
+      />,
+    );
+
+    // The area still prints — only the containment claim is withheld.
+    expect(screen.getByText('761,747 acres')).toBeInTheDocument();
+    expect(screen.queryByText('Boundary')).toBeNull();
   });
 });
