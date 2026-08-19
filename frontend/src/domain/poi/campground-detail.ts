@@ -544,8 +544,11 @@ function regionalParkSearch(p: Props): { url: string; label: string } | null {
 const PARENT_PARK_TITLE =
   /\b(park|preserve|forest|recreation area|recreation site|conservation area|wilderness|monument|seashore|lakeshore|reserve)\b/i;
 const GENERIC_TITLE = /^(official\s+(page|site|website)|website|home|homepage|map|directions?)$/i;
+// Whoever runs the place is not the place. "Forest Service Concessionaire" links to
+// camprrm.com and matches `forest` below, so without this it was inferred as Tuff
+// Campground's containing park — an operator's trade name presented as a location.
 const NON_PARENT_TITLE =
-  /\b(reservations?|booking|fees?|passes?|permits?|map|directions?|calendar|alerts?|brochure|guide)\b/i;
+  /\b(reservations?|booking|fees?|passes?|permits?|map|directions?|calendar|alerts?|brochure|guide|concessionaires?|conditions?|tourism|weather)\b/i;
 
 /**
  * The containing park, inferred from official-link titles.

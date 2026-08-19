@@ -72,7 +72,10 @@
   color: var(--rt-brand-text);
 }
 
-.rt-poi-crumbs li:last-child span {
+/* A step with no destination is text, and must not read as a link the reader can
+   click. Only the ancestors that actually have a page take the interactive colour;
+   the rest — including the current page, which is the last one — stay muted. */
+.rt-poi-crumbs span {
   color: var(--rt-muted);
 }
 

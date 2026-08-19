@@ -57,8 +57,8 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability }: P
   const decorations = upstreamDecorations(p.upstream);
   // Parent context precedence, unchanged: the upstream record's own parent, then a
   // promoted field, then an inference from official-link titles.
-  const parent =
-    decorations.parentName || text(p.parent_name) || parentParkName(p) || text(p.typeLabel);
+  const knownParent = decorations.parentName || text(p.parent_name);
+  const parent = knownParent || parentParkName(p) || text(p.typeLabel);
   const agency = text(p.agency).trim();
   const region = text(p.state) || text(p.country);
 
@@ -175,7 +175,11 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability }: P
       : null),
   };
 
-  const crumbs = presentCrumbs(region, parent, name);
+  // The INFERRED parent is deliberately not a crumb. `parentParkName` guesses a
+  // containing park from official-link titles, and a subline that names it is a
+  // hint the reader can discount, where a breadcrumb asserts containment. Only a
+  // parent the record actually states earns a step in the trail.
+  const crumbs = presentCrumbs(region, knownParent, name);
 
   return <PoiPageShell variant={variant} crumbs={crumbs} blocks={blocks} />;
 }
