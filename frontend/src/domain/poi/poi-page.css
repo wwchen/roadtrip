@@ -11,6 +11,11 @@
 
    Colour comes from `--rt-*` roles only. A literal grey step is correct-looking
    in light mode and unreadable in dark; see docs/frontend-components.md.
+
+   Links take `--rt-link`, never `--rt-brand-text`: zion's brand is persimmon, so
+   a link painted from the brand reads as an action and every hyperlink on the page
+   turns orange. Links are navigation; the two roles only look alike in a theme
+   whose brand happens to be blue.
    --------------------------------------------------------------------------- */
 
 :root {
@@ -57,7 +62,12 @@
 }
 
 .rt-poi-crumbs a {
-  color: var(--rt-brand-text);
+  color: var(--rt-link);
+}
+
+.rt-poi-crumbs a:hover {
+  color: var(--rt-link-hover);
+  text-decoration: underline;
 }
 
 /* A step with no destination is text, and must not read as a link the reader can
@@ -136,7 +146,11 @@
 }
 
 .rt-poi-eyebrow a {
-  color: var(--rt-brand-text);
+  color: var(--rt-link);
+}
+
+.rt-poi-eyebrow a:hover {
+  color: var(--rt-link-hover);
 }
 
 .rt-poi-title {
@@ -289,7 +303,14 @@
 }
 
 .rt-poi-links a {
-  color: var(--rt-brand-text);
+  color: var(--rt-link);
+  text-decoration: none;
+}
+
+/* Colour alone carrying "link" is the one cue a colour-blind reader does not get. */
+.rt-poi-links a:hover {
+  color: var(--rt-link-hover);
+  text-decoration: underline;
 }
 
 /* --- nearby carousel ----------------------------------------------------- */
@@ -328,7 +349,12 @@
 }
 
 .rt-poi-card a {
-  color: var(--rt-brand-text);
+  color: var(--rt-link);
+}
+
+.rt-poi-card a:hover {
+  color: var(--rt-link-hover);
+  text-decoration: underline;
 }
 
 .rt-poi-card-meta,
@@ -540,7 +566,11 @@
 }
 
 .rt-poi-html a {
-  color: var(--rt-brand-text);
+  color: var(--rt-link);
+}
+
+.rt-poi-html a:hover {
+  color: var(--rt-link-hover);
 }
 
 /* --- the raw upstream record --------------------------------------------- */
@@ -577,11 +607,12 @@
 }
 
 .rt-poi-upstream-table td a {
-  color: var(--rt-brand-text);
+  color: var(--rt-link);
   text-decoration: none;
 }
 
 .rt-poi-upstream-table td a:hover {
+  color: var(--rt-link-hover);
   text-decoration: underline;
 }
 
