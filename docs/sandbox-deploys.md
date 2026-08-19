@@ -220,6 +220,25 @@ the shared host, and with `fail-fast: false` so one bad sandbox cannot strand th
 rest. When a `pr<N>` sandbox is reaped its status comment is rewritten with the
 reason.
 
+A `reclaim` job runs alongside `plan` on the same schedule and frees derived
+Docker data on the deploy host: build cache, stopped containers, and dangling
+images. It is a separate job rather than a step on `stop` because the host can
+run out of disk with no sandbox due for reaping, and `stop` runs only when there
+are targets. It warns when the host is left under `RECLAIM_FREE_TARGET_GB`
+(repo variable, default **20**).
+
+Volumes are deliberately never pruned. A stopped stack's named volume looks
+dangling to `docker volume prune` but holds real state, so reclamation is
+limited to data that can be rebuilt.
+
+This matters because a full disk does not make Docker return an error, it
+deadlocks the daemon: Docker Desktop wedges on its own `ENOSPC` and every later
+`docker` call blocks forever on a socket that accepts connections but never
+answers. `deploy.sh` therefore refuses to start when the host has less than
+`ROADTRIP_MIN_FREE_DISK_GB` (default **20**) free, and clears abandoned deploy
+process trees older than `ROADTRIP_STALE_DEPLOY_SECONDS` (default **2400**,
+above `deploy.yml`'s 30-minute timeout) so hung deploys cannot pile up unseen.
+
 Because it runs in Actions rather than host cron, it needs no host setup. Run it
 on demand with:
 

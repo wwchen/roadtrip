@@ -24,6 +24,65 @@ env:
   SANDBOX_STATE_DIR: /var/lib/roadtrip-sandboxes
 
 jobs:
+  # Reclaiming disk is its own job, not a step on `stop`: the daemon deadlocks
+  # on a full disk whether or not any sandbox needs reaping, and `stop` runs
+  # only when there are targets. No `needs`, so it never delays a reap.
+  reclaim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Join tailnet
+        uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          version: 1.98.10
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      # Build cache, stopped containers, and dangling images are derived data,
+      # so they go unconditionally. Volumes are deliberately NOT pruned: a
+      # stopped stack's named volume reads as dangling but holds real state
+      # (teslamate's database did), and `docker volume prune` would delete it.
+      # Only reclaim what can be rebuilt.
+      - name: Reclaim disk on the deploy host
+        env:
+          RECLAIM_FREE_TARGET_GB: ${{ vars.RECLAIM_FREE_TARGET_GB || 20 }}
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes "$SANDBOX_HOST" \
+            "bash -s -- '$RECLAIM_FREE_TARGET_GB'" <<'REMOTE'
+          set -euo pipefail
+          target_gb="$1"
+          free_gb() { df -Pk "$HOME" | awk 'NR==2 {print int($4 / 1024 / 1024)}'; }
+
+          before="$(free_gb)"
+          echo "==> free before: ${before}GB (target ${target_gb}GB)"
+
+          docker builder prune -af >/dev/null 2>&1 || true
+          docker container prune -f >/dev/null 2>&1 || true
+          docker image prune -f >/dev/null 2>&1 || true
+
+          after="$(free_gb)"
+          echo "==> free after: ${after}GB (reclaimed $(( after - before ))GB)"
+          docker system df
+          if [ "$after" -lt "$target_gb" ]; then
+            echo "::warning::deploy host has ${after}GB free, under the ${target_gb}GB target; deploys will fail preflight until space is reclaimed"
+          fi
+          REMOTE
+
   plan:
     runs-on: ubuntu-latest
     timeout-minutes: 10
