@@ -10,7 +10,7 @@ import './legend.css';
 
 const checkedOf = (e: Event): boolean => (e.target as HTMLInputElement).checked;
 
-/** Below this width the panel is a top sheet behind a hamburger. Matches legend.css. */
+/** Below this width the panel is a bottom sheet behind a toggle button. Matches legend.css. */
 const MOBILE_QUERY = '(max-width: 640px)';
 
 const isMobile = (): boolean => window.matchMedia?.(MOBILE_QUERY).matches ?? false;
@@ -64,6 +64,11 @@ export function LegendPanel({ pois }: LegendPanelProps) {
 
   return (
     <>
+      {/* Mobile only (hidden by default in legend.css); non-interactive so the
+          map underneath keeps taking pan and zoom, same reasoning as
+          `.rt-drawer-backdrop` in drawer.css. */}
+      <div className={`rt-legend-backdrop${open ? ' rt-legend-backdrop--open' : ''}`} aria-hidden="true" />
+
       <button
         type="button"
         className="rt-legend-toggle"
@@ -82,7 +87,11 @@ export function LegendPanel({ pois }: LegendPanelProps) {
           title="Show layers"
           onClick={() => setCollapsed(false)}
         >
-          <Icon name="list" aria-hidden="true" />
+          {/* Open Icons has no dedicated "layers" glyph (flagged when the icon
+              migration landed); stacked squares is the closest stand-in and the
+              same choice the map-chrome mockup used. Size comes from
+              `.rt-legend-show`'s own `--icon-size`, not a prop. */}
+          <Icon name="photo-stack" aria-hidden="true" />
         </button>
       )}
 

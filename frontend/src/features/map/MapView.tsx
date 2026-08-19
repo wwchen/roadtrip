@@ -1,4 +1,5 @@
 import { LegendPanel } from './LegendPanel';
+import { MapControlButtons } from './MapControlButtons';
 import { useDeepLinkedPoi } from './useDeepLinkedPoi';
 import { useMapOverlays, useStateLines } from './useMapOverlays';
 import { useTripOverlay } from './useTripOverlay';
@@ -23,10 +24,12 @@ export function MapView() {
   useStateLines();
   useDeepLinkedPoi();
   useTripOverlay();
-  // Zoom + locate-me, and the puck for whatever fix the app is holding.
-  useUserLocation();
+  // The puck for whatever fix the app is holding, and locate-me's trigger —
+  // MapControlButtons owns the zoom/locate-me buttons themselves.
+  const { locate } = useUserLocation();
   return (
     <>
+      <MapControlButtons onLocate={locate} />
       <LegendPanel pois={pois} />
     </>
   );

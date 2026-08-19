@@ -18,7 +18,11 @@
   top: max(10px, env(safe-area-inset-top));
   left: 10px;
   z-index: 5;
-  width: min(420px, calc(100vw - 80px));
+  /* The third term keeps clear of the account pill (`useAcctClearance.ts`
+     publishes its left edge into `--rt-acct-left`): 10px is this panel's own
+     left inset, 8px is the gap before the pill. Falls back to 100vw — no
+     constraint — when auth is disabled and the var is never published. */
+  width: min(420px, calc(100vw - 80px), calc(var(--rt-acct-left, 100vw) - 18px));
   background: var(--rt-surface);
   border: 1px solid var(--rt-border);
   border-radius: var(--rt-r-lg);
@@ -150,7 +154,9 @@
 }
 
 .tb-locate:hover {
-  color: var(--rt-brand);
+  /* --rt-brand-text: this is brand-coloured text, not a fill — see the role
+     comment in roadtrip-zion-bridge.css. */
+  color: var(--rt-brand-text);
   background: var(--rt-fill-hover);
 }
 
@@ -181,7 +187,10 @@
 }
 
 .tb-add:hover {
-  color: var(--rt-brand);
+  /* --rt-brand-text for the text, --rt-brand stays for the border: a border
+     is a UI-component boundary (3:1), not text (4.5:1), and doesn't need the
+     same night correction. See the role comment in roadtrip-zion-bridge.css. */
+  color: var(--rt-brand-text);
   border-color: var(--rt-brand);
 }
 
@@ -555,12 +564,12 @@
 }
 
 @media (max-width: 768px) {
-  /* Reserve room on the right for the layers panel's hamburger: without this the
-     panel spans the full width and covers the toggle. */
+  /* Reserve room on the right for the layers panel's hamburger, and — via
+     `--rt-acct-left` — for the account pill, which sits above the hamburger
+     in the same corner and can be wider than its 56px. */
   .tb-panel {
     left: 8px;
-    right: 56px;
-    width: auto;
+    width: min(calc(100vw - 8px - 56px), calc(var(--rt-acct-left, 100vw) - 8px - 8px));
     max-width: none;
   }
 

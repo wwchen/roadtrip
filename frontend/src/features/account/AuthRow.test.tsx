@@ -64,24 +64,28 @@ describe('the auth row', () => {
 
     await waitFor(() => expect(fetch).toHaveBeenCalled());
     // Not `toBeEmptyDOMElement`: AppProviders renders a toast viewport of its own.
-    expect(container.querySelector('.tb-auth')).toBeNull();
+    expect(container.querySelector('.acct-pill')).toBeNull();
     expect(screen.queryByRole('button')).toBeNull();
   });
 
-  test('names a signed-in user and offers sign-out', async () => {
+  test('names a signed-in user with their first name and initials', async () => {
     me = {
       authenticated: true,
       auth_enabled: true,
-      user: { id: 1, email: 'bo@example.com', display_name: 'Bo', email_verified: true, roles: [] },
+      user: {
+        id: 1,
+        email: 'bo@example.com',
+        display_name: 'Bo Carter',
+        email_verified: true,
+        roles: [],
+      },
     };
     mount();
 
+    // The avatar's initials are `aria-hidden`, so the button's accessible name
+    // is the first name alone.
     await waitFor(() => expect(screen.getByRole('button', { name: 'Bo' })).toBeInTheDocument());
-    await act(async () => {
-      screen.getByRole('button', { name: 'Sign out' }).click();
-    });
-
-    expect(signOut).toHaveBeenCalled();
+    expect(screen.getByText('BC')).toBeInTheDocument();
   });
 
   test('falls back to the email address', async () => {

@@ -41,6 +41,24 @@
   overflow: hidden;
 }
 
+/* MapLibre's own locate-me button, hidden. `map/controls.ts` still adds the
+   control (GeolocateControl.trigger() needs onAdd to have run), but the
+   visible button is ours now — `.rt-mapctl-locate` in map-controls.css,
+   sized to match this app's other touch targets and using an Open Icons
+   glyph rather than the library's built-in crosshair. Scoped to the button
+   alone, not the whole `.maplibregl-ctrl-bottom-right` corner: attribution
+   is a legal requirement and still renders there.
+
+   The extra ancestor in the selector is load-bearing, not decoration:
+   maplibre-gl.css's own `.maplibregl-ctrl-group button` rule sets `display:
+   block` at specificity (0,1,1), which beats a bare `.maplibregl-ctrl-geolocate
+   { display: none }` at (0,1,0) even though this file loads after
+   maplibre-gl.css — specificity outranks source order. This selector matches
+   at (0,2,0) instead, which wins on specificity alone. */
+.maplibregl-ctrl-bottom-right .maplibregl-ctrl-geolocate {
+  display: none;
+}
+
 /* ---------------------------------------------------------------------------
    The user-location puck.
 

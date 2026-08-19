@@ -134,6 +134,42 @@ describe('save', () => {
     expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
   });
 
+  // Profile and Appearance share one payload, so each Save has to gate on its own
+  // slice — otherwise editing here would arm the other section's button.
+  test('a display-name edit leaves Appearance clean', async () => {
+    renderSettingsModal();
+    await screen.findByLabelText('Display name');
+    await userEvent.type(screen.getByLabelText('Display name'), 'x');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Appearance' }));
+
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
+
+  test('a theme edit leaves Profile clean', async () => {
+    renderSettingsModal();
+    await userEvent.click(await screen.findByRole('button', { name: 'Appearance' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Dark' }));
+    expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Profile' }));
+
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  });
+
+  test('saving from Appearance PUTs the whole profile payload', async () => {
+    renderSettingsModal();
+    await userEvent.click(await screen.findByRole('button', { name: 'Appearance' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Dark' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(putTo('/api/settings/profile')).toBeTruthy());
+    expect(putTo('/api/settings/profile')!.body).toEqual({
+      display_name: 'Ada',
+      theme: 'dark',
+    });
+  });
+
   test('saving the profile PUTs just the display name and confirms', async () => {
     renderSettingsModal();
     await screen.findByLabelText('Display name');
@@ -279,7 +315,8 @@ describe('theme preview on close', () => {
   test('reverts an unsaved theme preview when the modal closes', async () => {
     const { unmount } = renderSettingsModal({ profile: { ...profile, theme: 'light' } });
 
-    await userEvent.click(await screen.findByRole('radio', { name: 'Dark' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Appearance' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Dark' }));
     expect(document.documentElement.classList.contains('mode-dark')).toBe(true);
 
     unmount();
@@ -291,7 +328,8 @@ describe('theme preview on close', () => {
   test('keeps a saved theme when the modal closes', async () => {
     const { unmount } = renderSettingsModal({ profile: { ...profile, theme: 'light' } });
 
-    await userEvent.click(await screen.findByRole('radio', { name: 'Dark' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Appearance' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'Dark' }));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findByText('Settings saved.');
 

@@ -17,7 +17,8 @@
 
    Four semantic families, kept strictly apart:
      • Neutrals    → every surface
-     • Brand blue  → the ONLY interactive color (CTA, focus, links, route)
+     • Brand blue  → the ONE action color (CTA, focus, route). Links are
+                     NOT part of this family — see --rt-link.
      • Layer hues  → map data identity (pins + legend)
      • Availability / status → meaning, never decoration
 
@@ -68,6 +69,7 @@
   --rt-c-amber-400-rgb: 241,160,74;
 
   /* Blue ramp */
+  --rt-c-blue-200: #8ab6fa;
   --rt-c-blue-300: #5b9cf8;
   --rt-c-blue-500: #3b82f6;
   --rt-c-blue-600: #2b6dd1;
@@ -76,25 +78,20 @@
   --rt-c-blue-slate: #5a6a8a;
   --rt-c-blue-ios:   #0a84ff;
 
-  /* Green ramp */
-  --rt-c-lime-400:  #cddc39;
-  --rt-c-green-200: #9ccc65;
+  /* Green ramp. Terrain and status only: retiring the red/amber/green signal
+     ramp and the agency-shaded campground pins left lime-400, green-200,
+     green-500 and green-800 with no role pointing at them, and a tier-1 value
+     no role names is just a hex waiting to be reached for directly. */
   --rt-c-green-400: #4cb96a;
-  --rt-c-green-500: #558b2f;
   --rt-c-green-600: #2e7d32;
-  --rt-c-green-800: #1f5e2a;
   --rt-c-green-900: #1b5e20;
 
-  /* Amber / red / purple / brown */
+  /* Amber / red / brown. amber-700, red-600 and red-800 went with the signal
+     ramp; purple-500/600 went with the Planet Fitness pin — see above. */
   --rt-c-amber-300: #f5a623;
   --rt-c-amber-400: #f1a04a;
   --rt-c-amber-500: #e0a543;
-  --rt-c-amber-700: #b07e1d;
   --rt-c-red-400:   #f56565;
-  --rt-c-red-600:   #c62828;
-  --rt-c-red-800:   #7a2828;
-  --rt-c-purple-500: #7b4bb5;
-  --rt-c-purple-600: #7f3d97;
   --rt-c-brown-400: #8d6e63;
   --rt-c-brown-600: #5d4037;
 
@@ -110,10 +107,26 @@
   --rt-c-series-8: #58595b;
   --rt-c-series-9: #8549ba;
 
-  /* Fixed brand marks. Not themeable — these belong to someone else.
-     A theme must NOT redefine these; a Tesla pin is Tesla red. */
-  --rt-c-brand-tesla: #e82127;
-  --rt-c-brand-tesla-pin: #e31937;
+  /* Map pin ramp — categorical, status-free, equal-weight.
+
+     One hex per hue serves every basemap. The basemap is the user's pick, not
+     the mode's (`basemaps.ts` only chooses the DEFAULT by mode), so a pin can
+     land on Positron or on Dark Matter in either theme and has to hold against
+     both. That pins the usable luminance to a narrow band — above ~0.115 or it
+     dies on black, below ~0.283 or it dies on white — and all three sit inside
+     it at L 0.206–0.219, clearing 3:1 on both:
+
+       teal   3.73 on Positron · 4.74 on Dark Matter
+       gold   3.58 · 4.95
+       violet 3.75 · 4.71
+
+     Equal luminance is the point, not a side effect. The old ramp mixed
+     Tesla red (L 0.24) with green-600 (L 0.16), so the layers differed in
+     WEIGHT as well as hue and the heavier one read as more important than the
+     others at every zoom. */
+  --rt-c-map-teal:   #2a8b8a;
+  --rt-c-map-gold:   #a87826;
+  --rt-c-map-violet: #8b6ec4;
 
   /* ==========================================================
      TIER 2 — SEMANTIC ROLES. What components actually use.
@@ -163,24 +176,52 @@
      Contrast: --rt-bg 6.4:1 · --rt-surface 5.4:1 · --rt-surface-raised 4.7:1. */
   --rt-brand-text:  var(--rt-c-blue-300);
 
-  /* Map data layers.
-     NOTE: pin fills and legend swatches diverged before tokens existed —
-     --rt-layer-supercharger (legend) vs --rt-layer-supercharger-pin, and
-     --rt-layer-pf vs --rt-layer-pf-pin. Both are preserved here rather than
-     silently unified; reconciling them is a visual change, not a refactor. */
-  --rt-layer-supercharger:     var(--rt-c-brand-tesla);
-  --rt-layer-supercharger-pin: var(--rt-c-brand-tesla-pin);
-  --rt-layer-cg:            var(--rt-c-green-600);
-  --rt-layer-cg-federal:    var(--rt-c-green-600);
-  --rt-layer-cg-state:      var(--rt-c-green-500);
-  --rt-layer-cg-provincial: var(--rt-c-green-600);
-  --rt-layer-cg-local:      var(--rt-c-green-200);
-  --rt-layer-cg-other:      var(--rt-c-green-600);
-  /* Trip-result dots render unclassified campgrounds in lime while the map
-     folds them into federal green. Preserved, not unified — see the note above. */
-  --rt-layer-cg-unclassified: var(--rt-c-lime-400);
-  --rt-layer-pf:            var(--rt-c-purple-500);
-  --rt-layer-pf-pin:        var(--rt-c-purple-600);
+  /* Links — their own role, not an alias of the brand.
+     In this theme the brand IS blue, so a link reading `--rt-brand` looked
+     correct and hid the coupling. A theme whose brand is not blue (Zion's
+     persimmon) then repainted every link the action colour: hyperlinks that
+     read as buttons, at --c-600's 3.1:1 against the night page. Links are
+     navigation, not action, and the two roles diverge under any brand that is
+     not already link-blue — so they are separate tokens and a theme maps them
+     separately. */
+  --rt-link:       var(--rt-c-blue-300);
+  --rt-link-hover: var(--rt-c-blue-200);
+
+  /* Map data layers — pin identity.
+
+     A pin's hue names WHAT THE PLACE IS. It never names a brand and it never
+     borrows from the status vocabulary, because on a map those two are the
+     same mistake: the reader cannot tell a category apart from a condition.
+
+     Both rules were broken. Superchargers were Tesla red — a vendor's mark
+     standing in for "fast charger", and the densest layer over every city, so
+     the map's loudest colour was also the one that means "unavailable"
+     everywhere else in the app. Campgrounds were green-600, one step off
+     --rt-avail, so the second-densest layer read as "sites free".
+
+     Now: teal = somewhere to stay, gold = energy, violet = amenity. Red and
+     green appear nowhere in the pin layer, which is what makes them reliable
+     as status. Terrain green stays in the basemap, where the Zion theme's own
+     rule already puts it.
+
+     Legend swatch and pin fill are still separate roles — they diverged before
+     tokens existed and the split is kept — but each pair now resolves to one
+     value, so a swatch and its dots match. */
+  --rt-layer-supercharger:     var(--rt-c-map-gold);
+  --rt-layer-supercharger-pin: var(--rt-c-map-gold);
+  --rt-layer-cg:            var(--rt-c-map-teal);
+  --rt-layer-cg-federal:    var(--rt-c-map-teal);
+  --rt-layer-cg-state:      var(--rt-c-map-teal);
+  --rt-layer-cg-provincial: var(--rt-c-map-teal);
+  --rt-layer-cg-local:      var(--rt-c-map-teal);
+  --rt-layer-cg-other:      var(--rt-c-map-teal);
+  /* Agency is a legend filter, not a hue: 50+ values cannot be colour-coded
+     legibly, so every campground is one colour and the legend row carries the
+     agency. The per-agency roles are kept as the seam for a future map that
+     does encode it, and all resolve to the layer colour until then. */
+  --rt-layer-cg-unclassified: var(--rt-c-map-teal);
+  --rt-layer-pf:            var(--rt-c-map-violet);
+  --rt-layer-pf-pin:        var(--rt-c-map-violet);
   --rt-layer-np:            var(--rt-c-green-600);
   --rt-layer-sp:            var(--rt-c-brown-400);
 
@@ -228,26 +269,34 @@
      rendered as chips on the campground drawer card. NOT availability:
      this is the only consumer, and it is a magnitude, not a status.
 
-     Two known defects, preserved at their shipped values because fixing
-     them is a visual change and not a refactor:
+     This is the single-hue neutral ramp the previous red→amber→green
+     version's own note prescribed. That version had two defects:
 
-     1. NON-MONOTONIC. OKLCH lightness runs 0.401 → 0.539 → 0.628 → 0.523
-        → 0.428, so it rises then falls. Bucket 4 (excellent) is nearly as
+     1. NON-MONOTONIC. OKLCH lightness ran 0.401 → 0.539 → 0.628 → 0.523
+        → 0.428, rising then falling. Bucket 4 (excellent) was nearly as
         dark as bucket 0 (none) — in greyscale or for a red-green colour-
-        blind reader, best and worst signal are almost the same chip.
-     2. COLLIDES WITH STATUS. Buckets 0–1 sit at hue 24–27°, the same hue
+        blind reader, best and worst signal were almost the same chip.
+     2. COLLIDED WITH STATUS. Buckets 0–1 sat at hue 24–27°, the same hue
         as --rt-error (23°); buckets 3–4 at 144–147°, the same as
-        --rt-avail (150°). A red chip on a campground card cannot be told
-        apart from "unavailable", nor a green one from "available".
+        --rt-avail (150°). A red chip on a campground card could not be
+        told apart from "unavailable", nor a green one from "available".
 
-     The fix is a single-hue lightness ramp — one neutral or brand hue,
-     five monotonically lighter steps — so magnitude reads as magnitude
-     and the red/amber/green vocabulary stays reserved for status. */
-  --rt-signal-0: var(--rt-c-red-800);
-  --rt-signal-1: var(--rt-c-red-600);
-  --rt-signal-2: var(--rt-c-amber-700);
-  --rt-signal-3: var(--rt-c-green-600);
-  --rt-signal-4: var(--rt-c-green-800);
+     Both are gone: the ramp is now one ink tint at five rising alphas, so
+     magnitude reads as magnitude — monotonic by construction, legible in
+     greyscale, and carrying no hue the status vocabulary needs.
+
+     The alphas stop at 32% rather than running to 100% because the label
+     is --rt-signal-fg at every step: past roughly a third the tint stops
+     being a wash and starts contending with its own text. 6% is likewise a
+     floor, not a zero — bucket 0 still has to read as a chip, which is why
+     the chip also draws --rt-signal-border. */
+  --rt-signal-0: rgba(var(--rt-c-overlay-rgb), 0.06);
+  --rt-signal-1: rgba(var(--rt-c-overlay-rgb), 0.13);
+  --rt-signal-2: rgba(var(--rt-c-overlay-rgb), 0.20);
+  --rt-signal-3: rgba(var(--rt-c-overlay-rgb), 0.26);
+  --rt-signal-4: rgba(var(--rt-c-overlay-rgb), 0.32);
+  --rt-signal-fg: var(--rt-text);
+  --rt-signal-border: var(--rt-border);
 
   /* Status */
   --rt-success: var(--rt-c-green-400);

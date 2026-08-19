@@ -1,0 +1,64 @@
+/* ==========================================================================
+   Zion's nine hues.
+
+   LDS resolves `.hue-*` by remapping the whole --c-* scale onto a named ramp,
+   and those ramps ship in `apca-palette.css` at :root, shared by every LDS
+   theme. That is deliberate upstream: it is what makes a person the same
+   colour in every app. It also means an avatar under roadtrip-zion can show a
+   saturation nothing else in this theme uses.
+
+   This file re-states the eight chromatic ramps in Zion's own voice. It does
+   NOT touch roadtrip-zion.css, which is kept byte-identical to the exported
+   direction (see the exemption in scripts/check-color-tokens.mjs), and it does
+   not touch --gray-*, which that theme already owns. Same division of labour
+   as roadtrip-zion-bridge.css.
+
+   HOW THE VALUES WERE DERIVED, so the next person regenerates rather than
+   eyeballs:
+
+   1. Zion's five highlight hues were measured in OKLCH, and four land on LDS's
+      own hue angles almost exactly: sky 247.5 vs blue 249.8, lilac 297.9 vs
+      violet 299.7, sage 138.3 vs green 150.2, rose 22.1 vs red 29.2. So Zion
+      is not a different set of hues. It is the same hues at lower chroma,
+      which is what the theme means by "mid-tone, half chroma".
+   2. Each ramp therefore keeps APCA's LIGHTNESS PER STEP untouched, rotating
+      only to Zion's angle and scaling chroma. Holding L is what preserves
+      LDS's contrast calibration.
+   3. Out-of-gamut results are resolved by reducing chroma alone, never
+      lightness, for the same reason.
+   4. Two hues have no Zion source and are interpolated between the neighbours
+      that do: cyan between sage and sky, pink between lilac and rose.
+
+   There is no dark block, and that is not an omission -- apca-palette.css has
+   none either. LDS handles mode by reading a DIFFERENT STEP of the same ramp
+   (an avatar is --c-800 on --c-100 in light and the reverse at night), so a
+   ramp that keeps APCA's lightness curve inverts correctly for free.
+
+   VERIFIED (regenerate with the script in this commit's message):
+   - avatar pair --c-100/--c-800: 7.62:1 worst case (on APCA: 7.70:1)
+   - tag pair    --c-100/--c-700: 5.31:1 worst case
+   - closest two hues at step 800: dE 0.034 (on APCA: 0.044)
+
+   THE COST, stated plainly: muting chroma costs separability. These are about
+   77% as far apart as APCA's at the step avatars use. That is the trade the
+   theme asks for. At 40px with initials on top, identity is carried by the
+   letters and the hue reinforces it.
+   ========================================================================== */
+.theme-roadtrip-zion{
+  /* red 20 deg, chroma x0.62 -- Zion --rt-rose is 22.1 deg */
+  --red-50:#F9ECEB;--red-100:#F8E8E8;--red-200:#F3D9D8;--red-300:#EDC4C2;--red-400:#E5A7A5;--red-500:#CF8080;--red-600:#A66262;--red-700:#874E4F;--red-800:#683B3B;--red-900:#432525;--red-950:#321A1A;
+  /* orange 48 deg, chroma x0.7 -- clay -- brand persimmon is 39-44 deg, so this holds about half its chroma */
+  --orange-50:#FBECE4;--orange-100:#FAE8E0;--orange-200:#F6D9CA;--orange-300:#F3C4AC;--orange-400:#ECA581;--orange-500:#C0876A;--orange-600:#966C56;--orange-700:#775747;--orange-800:#5D4335;--orange-900:#3C2A21;--orange-950:#2C1E17;
+  /* yellow 88 deg, chroma x0.88 -- Zion --rt-butter is 83.6 deg */
+  --yellow-50:#FFEDC2;--yellow-100:#FFEAB8;--yellow-200:#FFD97B;--yellow-300:#F1C75D;--yellow-400:#D5B050;--yellow-500:#AE9043;--yellow-600:#88723A;--yellow-700:#6D5C32;--yellow-800:#544725;--yellow-900:#362C15;--yellow-950:#27200F;
+  /* green 140 deg, chroma x0.6 -- Zion --rt-sage is 138.3 deg */
+  --green-50:#E4F2E1;--green-100:#D9F1D4;--green-200:#C5E6BE;--green-300:#ADD5A5;--green-400:#92BD89;--green-500:#729B69;--green-600:#577B4F;--green-700:#45643F;--green-800:#354C30;--green-900:#20301C;--green-950:#172414;
+  /* cyan 198 deg, chroma x0.58 -- interpolated, sage -> sky; Zion ships no cyan */
+  --cyan-50:#DEF3F3;--cyan-100:#D0F2F2;--cyan-200:#B7E5E6;--cyan-300:#9AD5D7;--cyan-400:#7CBEC0;--cyan-500:#609C9D;--cyan-600:#4B7A7C;--cyan-700:#3B6364;--cyan-800:#2C4B4C;--cyan-900:#1B3031;--cyan-950:#102222;
+  /* blue 247.5 deg, chroma x0.52 -- Zion --rt-sky is 247.5 deg */
+  --blue-50:#E8EFF7;--blue-100:#E5EDF5;--blue-200:#D1E0EE;--blue-300:#B8CFE5;--blue-400:#95B9DB;--blue-500:#6A99C5;--blue-600:#4F789E;--blue-700:#3F6180;--blue-800:#2F4A62;--blue-900:#1D2F41;--blue-950:#13212F;
+  /* violet 299 deg, chroma x0.48 -- Zion --rt-lilac is 297.9 deg */
+  --violet-50:#F0EEF7;--violet-100:#EEEBF6;--violet-200:#E2DCEF;--violet-300:#D2CAE6;--violet-400:#BDB1D9;--violet-500:#A28ECB;--violet-600:#806FA4;--violet-700:#685986;--violet-800:#4F4366;--violet-900:#332B43;--violet-950:#251F31;
+  /* pink 338 deg, chroma x0.55 -- interpolated, lilac -> rose; Zion ships no pink */
+  --pink-50:#F8EBF4;--pink-100:#F6E9F2;--pink-200:#F0D9E8;--pink-300:#E9C3DD;--pink-400:#E0A5CE;--pink-500:#C780B3;--pink-600:#A0628E;--pink-700:#824F74;--pink-800:#633B58;--pink-900:#402539;--pink-950:#2F1929;
+}

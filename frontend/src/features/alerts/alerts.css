@@ -121,7 +121,7 @@
 }
 .tb-alerts-signin-btn {
   background: var(--rt-brand);
-  color: var(--rt-brand-text);
+  color: var(--rt-on-accent);
   border: 0;
   padding: 8px 16px;
   border-radius: var(--rt-r-sm);

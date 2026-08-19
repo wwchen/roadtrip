@@ -288,11 +288,12 @@
 }
 
 .rt-drawer-upstream-table td a {
-  color: var(--rt-brand);
+  color: var(--rt-link);
   text-decoration: none;
 }
 
 .rt-drawer-upstream-table td a:hover {
+  color: var(--rt-link-hover);
   text-decoration: underline;
 }
 
@@ -543,11 +544,12 @@
 }
 
 .rt-cg-row-value a {
-  color: var(--rt-brand);
+  color: var(--rt-link);
   text-decoration: none;
 }
 
 .rt-cg-row-value a:hover {
+  color: var(--rt-link-hover);
   text-decoration: underline;
 }
 
@@ -569,9 +571,16 @@
 }
 
 .rt-cg-links a {
-  color: var(--rt-brand);
+  color: var(--rt-link);
   font-size: 13px;
   text-decoration: none;
+}
+
+/* This list had no hover state at all — colour alone carried "link", which is
+   the one cue a colour-blind reader does not get. */
+.rt-cg-links a:hover {
+  color: var(--rt-link-hover);
+  text-decoration: underline;
 }
 
 .rt-cg-alerts {
@@ -606,6 +615,12 @@
   padding: 3px 8px;
   border-radius: var(--rt-r-pill);
   font-size: 11px;
+  /* One foreground for all five buckets. The ramp is a tint of the ink at
+     rising alpha, so the ink itself stays the contrasting colour at every step
+     — which is the property the old saturated ramp did not have, and why it
+     needed no border and got none. */
+  color: var(--rt-signal-fg);
+  border: 1px solid var(--rt-signal-border);
 }
 
 .rt-cg-signal[data-bucket='0'] {
@@ -704,5 +719,5 @@
 }
 
 .rt-drawer-html a {
-  color: var(--rt-brand);
+  color: var(--rt-link);
 }

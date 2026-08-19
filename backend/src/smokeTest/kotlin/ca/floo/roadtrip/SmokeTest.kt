@@ -341,7 +341,7 @@ class SmokeTest {
 
             // A real map interaction causes a viewport refresh; the agency choice
             // must survive the response and legend rebuild.
-            page.locator(".maplibregl-ctrl-zoom-in").click()
+            page.getByLabel("Zoom in").click()
             page.waitForFunction(
                 "() => document.querySelectorAll('.rt-legend__agencies input[type=\"checkbox\"]').length >= 3",
                 null,
@@ -921,7 +921,7 @@ class SmokeTest {
             assertThat(firstCard.locator(".tb-card-location")).containsText("WA")
 
             val viewportCallsAfterRoute = viewportPoiCalls.get()
-            page.locator(".maplibregl-ctrl-zoom-in").click()
+            page.getByLabel("Zoom in").click()
             page.waitForTimeout(750.0)
 
             assertEquals(1, routeCalls.get(), "route should be fetched once")

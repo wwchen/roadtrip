@@ -3,7 +3,7 @@ import { createTestQueryClient } from '@/test/query-client';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { AppProviders } from '@/app/AppProviders';
 import { useMapStore } from '@/stores/mapStore';
-import { FakeGeolocateControl, FakeMap, FakeNavigationControl } from '@/test/fake-map';
+import { FakeGeolocateControl, FakeMap } from '@/test/fake-map';
 
 let instance: FakeMap;
 class TestMap extends FakeMap {
@@ -64,7 +64,6 @@ vi.mock('maplibre-gl', () => ({
   Marker: TestMarker,
   setWorkerUrl: vi.fn(),
   GeolocateControl: TestGeolocateControl,
-  NavigationControl: FakeNavigationControl,
 }));
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
 
@@ -74,9 +73,15 @@ const { USER_LOCATION_CLASS } = await import('@/map/user-location');
 const { MapProvider } = await import('./MapProvider');
 const { useUserLocation } = await import('./useUserLocation');
 
+/** A button standing in for `MapControlButtons`' real one, so a test can fire
+    the hook's returned `locate` the same way a click would. */
 function Harness() {
-  useUserLocation();
-  return null;
+  const { locate } = useUserLocation();
+  return (
+    <button type="button" onClick={locate}>
+      locate
+    </button>
+  );
 }
 
 const mount = () =>
@@ -103,13 +108,22 @@ afterEach(() => {
 });
 
 describe('the controls', () => {
-  test('zoom and locate-me are added, bottom-right, with no compass', () => {
+  test('the geolocate control is added, bottom-right', () => {
     mount();
 
-    expect(instance.controls).toHaveLength(2);
-    expect(instance.controls.map((c) => c.position)).toEqual(['bottom-right', 'bottom-right']);
-    const navigation = instance.controls[0]!.control as FakeNavigationControl;
-    expect(navigation.options).toEqual({ showCompass: false });
+    // Zoom is no longer a MapLibre control at all — MapControlButtons calls
+    // map.zoomIn()/zoomOut() directly. Only geolocate is still MapLibre's,
+    // added (but hidden — see map.css) so trigger() has something to call.
+    expect(instance.controls).toHaveLength(1);
+    expect(instance.controls[0]!.position).toBe('bottom-right');
+  });
+
+  test('locate() triggers the hidden geolocate control', () => {
+    mount();
+
+    act(() => screen.getByRole('button', { name: 'locate' }).click());
+
+    expect(geolocate.triggerCalls).toBe(1);
   });
 
   test('locate-me asks for one low-accuracy fix', () => {
@@ -128,7 +142,7 @@ describe('the controls', () => {
     expect(options.showUserLocation).toBe(false);
   });
 
-  test('both come off with the page', () => {
+  test('comes off with the page', () => {
     const view = mount();
 
     view.unmount();
@@ -138,14 +152,14 @@ describe('the controls', () => {
     expect(geolocate.listenerCount('error')).toBe(0);
   });
 
-  test('a style reload leaves them alone', async () => {
+  test('a style reload leaves it alone', async () => {
     mount();
 
     await act(async () => {
       instance.fire('style.load');
     });
 
-    expect(instance.controls).toHaveLength(2);
+    expect(instance.controls).toHaveLength(1);
   });
 });
 

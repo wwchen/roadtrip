@@ -46,7 +46,9 @@
 .rt-dash-tabs a[aria-current='page'] {
   border-color: var(--rt-brand);
   background: var(--rt-brand-tint);
-  color: var(--rt-brand);
+  /* --rt-brand-text, not --rt-brand: this is brand-coloured text against a
+     tint, not a fill. See the role comment in roadtrip-zion-bridge.css. */
+  color: var(--rt-brand-text);
 }
 
 /* ---- panels ---- */

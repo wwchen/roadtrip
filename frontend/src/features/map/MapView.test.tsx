@@ -5,7 +5,7 @@ import { AppProviders } from '@/app/AppProviders';
 import { UNCATEGORIZED_AGENCY } from '@/map/agencies';
 import { useMapStore } from '@/stores/mapStore';
 import { useTripStore } from '@/stores/tripStore';
-import { FakeGeolocateControl, FakeMap, FakeNavigationControl } from '@/test/fake-map';
+import { FakeGeolocateControl, FakeMap } from '@/test/fake-map';
 import { createTestQueryClient } from '@/test/query-client';
 
 // MapLibre needs WebGL, which jsdom has none of, so the map is the fake recorder.
@@ -40,10 +40,10 @@ vi.mock('maplibre-gl', () => ({
   Map: TestMap,
   Marker: TestMarker,
   setWorkerUrl: vi.fn(),
-  // The map's own controls. What they do with a fix is `useUserLocation.test.tsx`;
-  // here they only have to exist, because `MapView` installs them.
+  // The (hidden) geolocate control. What it does with a fix is
+  // `useUserLocation.test.tsx`; here it only has to exist, because `MapView`
+  // installs it. Zoom is no longer a MapLibre control — see MapControlButtons.
   GeolocateControl: FakeGeolocateControl,
-  NavigationControl: FakeNavigationControl,
 }));
 vi.mock('maplibre-gl/dist/maplibre-gl.css', () => ({}));
 
@@ -503,6 +503,34 @@ describe('the legend', () => {
     });
     expect(screen.queryByLabelText('Show layers panel')).toBeNull();
     expect(panel().className).not.toContain('rt-legend--collapsed');
+  });
+});
+
+describe('the map controls', () => {
+  test('zoom in and out call the map directly, not a MapLibre control', async () => {
+    await renderMap();
+
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'Zoom in' }));
+    });
+    expect(instance.zoomInCalls).toBe(1);
+
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'Zoom out' }));
+    });
+    expect(instance.zoomOutCalls).toBe(1);
+  });
+
+  test('locate-me triggers the hidden geolocate control', async () => {
+    await renderMap();
+
+    const geolocate = instance.controls[0]!.control as FakeGeolocateControl;
+
+    await act(async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'Use my location' }));
+    });
+
+    expect(geolocate.triggerCalls).toBe(1);
   });
 });
 
