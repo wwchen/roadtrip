@@ -83,10 +83,11 @@ describe('opening', () => {
 
     await waitFor(() => expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Yosemite National Park'));
     expect(detailRequests()[0]?.url).toBe(`/api/pois/${PARK_ID}`);
-    // Park-specific: the eyebrow names the kind, the subtitle the state.
-    expect(screen.getByText('National park')).toBeInTheDocument();
-    // Scoped: the state is also a row in the spec block below.
-    expect(document.querySelector('.rt-poi-subtitle')?.textContent).toBe('CA');
+    // Park-specific. "Yosemite National Park" already ends in its own type, so the
+    // eyebrow has nothing left to add and the block is omitted; the subtitle carries
+    // the state and the agency, which is 4c's own subtitle.
+    expect(document.querySelector('.rt-poi-eyebrow')).toBeNull();
+    expect(document.querySelector('.rt-poi-subtitle')?.textContent).toContain('CA');
     // And the acreage, formatted, in the type's one spec block.
     expect(screen.getByText('761,747 acres')).toBeInTheDocument();
   });

@@ -46,26 +46,14 @@
   }
 }
 
-/* --- breadcrumbs --------------------------------------------------------- */
+/* --- the step above ------------------------------------------------------
+   One line, not a chain: the parent, and nothing else. The title says where you
+   are and the subtitle says the rest, so a full ancestry would spend three lines
+   repeating them. */
 
 .rt-poi-crumbs {
   padding: 14px var(--rt-poi-gutter) 0;
   font-size: 12px;
-}
-
-.rt-poi-crumbs ol {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.rt-poi-crumbs li + li::before {
-  content: '/';
-  margin-right: 6px;
-  color: var(--rt-faint);
 }
 
 .rt-poi-crumbs a {
@@ -73,8 +61,7 @@
 }
 
 /* A step with no destination is text, and must not read as a link the reader can
-   click. Only the ancestors that actually have a page take the interactive colour;
-   the rest — including the current page, which is the last one — stay muted. */
+   click. Only a parent that actually has a page takes the interactive colour. */
 .rt-poi-crumbs span {
   color: var(--rt-muted);
 }

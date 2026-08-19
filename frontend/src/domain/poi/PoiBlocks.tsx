@@ -12,22 +12,20 @@ export function PoiBlockHeading({ children }: { children: ReactNode }) {
 }
 
 /**
- * The ancestry trail — state → park → this place.
+ * One step up: the thing this place is inside.
  *
- * The last crumb is the current page and carries no href, so it renders as text.
- * Absent entirely on a type with no parent: a trail of one is not a trail.
+ * Not a chain. A full ancestry — state / park / campground — spends three lines
+ * restating what the title and the subtitle already say, and the deepest step is
+ * always the page you are looking at. The parent is the only step that tells you
+ * something you cannot already see, so it is the only one printed.
+ *
+ * Renders as text until that parent has a page; `PoiPageShell` only shows it on the
+ * routed page, since the drawer has no room and the map is already the context.
  */
-export function PoiBreadcrumbs({ crumbs }: { crumbs: PoiCrumb[] }) {
-  if (crumbs.length < 2) return null;
+export function PoiParentLink({ parent }: { parent: PoiCrumb }) {
   return (
     <nav className="rt-poi-crumbs" aria-label="Breadcrumb">
-      <ol>
-        {crumbs.map((crumb) => (
-          <li key={crumb.label}>
-            {crumb.href ? <a href={crumb.href}>{crumb.label}</a> : <span>{crumb.label}</span>}
-          </li>
-        ))}
-      </ol>
+      {parent.href ? <a href={parent.href}>{parent.label}</a> : <span>{parent.label}</span>}
     </nav>
   );
 }

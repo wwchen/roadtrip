@@ -27,6 +27,7 @@ import {
   ProviderHtml,
   UpstreamTable,
   coordinatesOf,
+  eyebrowFor,
   subline,
   text,
   useDistanceTo,
@@ -72,6 +73,22 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability }: P
   const photo = text(p.photo_url);
   const sites = Number(p.sites);
 
+  // The step above this page: the containing park when the record states one, the
+  // region otherwise. The INFERRED parent never qualifies — `parentParkName` guesses
+  // from official-link titles, and a subline naming a guess is a hint the reader can
+  // discount, where the step above asserts containment.
+  const parentStep = knownParent || region;
+  // Whatever that step already says comes out of the subtitle, so the two lines do
+  // not print the same word twice — but ONLY where the step is actually on screen.
+  // The drawer omits it (no room, and the map is the context), so there the subtitle
+  // is still the only thing carrying the region.
+  const stepShown = variant === 'page' ? parentStep : '';
+  const subtitle = subline([
+    parent === stepShown ? '' : parent,
+    region === stepShown ? '' : region,
+    distance,
+  ]);
+
   const tags: PoiTag[] = [
     ...amenityTags(p),
     ...activityList(p).map((label) => ({ label, absent: false })),
@@ -95,9 +112,11 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability }: P
     ...(photo ? { hero: <PoiHero url={photo} alt={name} /> } : null),
     identity: (
       <PoiIdentity
-        eyebrow={agency ? <>Campground · {agency}</> : 'Campground'}
+        // "Campground · USDA Forest Service" over "Tuff Campground" says campground
+        // twice; a name that does not carry its own type keeps the word.
+        eyebrow={eyebrowFor('Campground', name, agency)}
         title={name}
-        subtitle={subline([parent, region, distance])}
+        subtitle={subtitle}
         verdict={
           verdict ? (
             <span className={`rt-poi-verdict-tone rt-poi-verdict-tone--${verdict.tone}`}>
@@ -175,24 +194,13 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability }: P
       : null),
   };
 
-  // The INFERRED parent is deliberately not a crumb. `parentParkName` guesses a
-  // containing park from official-link titles, and a subline that names it is a
-  // hint the reader can discount, where a breadcrumb asserts containment. Only a
-  // parent the record actually states earns a step in the trail.
-  const crumbs = presentCrumbs(region, knownParent, name);
-
-  return <PoiPageShell variant={variant} crumbs={crumbs} blocks={blocks} />;
-}
-
-/**
- * State → park → campground.
- *
- * Only the steps that exist appear, and the trail renders at all only when there is
- * more than one — which is `PoiBreadcrumbs`' own rule. Neither ancestor has a page
- * to link to yet, so both are plain text; the trail still says where you are.
- */
-function presentCrumbs(region: string, parent: string, name: string) {
-  return [region, parent, name].filter(Boolean).map((label) => ({ label }));
+  return (
+    <PoiPageShell
+      variant={variant}
+      parent={parentStep ? { label: parentStep } : undefined}
+      blocks={blocks}
+    />
+  );
 }
 
 /** The directions button always dismisses after adding; a routed page has nothing to dismiss. */

@@ -69,8 +69,15 @@ and it comes from the M0 screens doc (4a, "One order, thirteen blocks").
 - `PoiPageShell.tsx` takes a bag of blocks keyed by id and renders them in that
   order. A type omits a block by leaving the key out; a group with nothing in it
   draws no band and no stray rule. `variant` is `panel` (the map drawer, ~520px) or
-  `page` (the routed detail page, with breadcrumbs) — CSS and one nav, not
-  structure.
+  `page` (the routed detail page, which also shows the step above) — CSS and one
+  nav, not structure.
+- **Nothing is printed twice.** The trail is one step, not a chain: the title says
+  where you are, so an ancestry would spend three lines restating it. Whatever that
+  step names comes out of the subtitle — but only on `page`, since the panel does
+  not render the step and would otherwise lose the region entirely. `eyebrowFor`
+  drops a type word the name already carries, so "Campground · USDA Forest Service"
+  over **Tuff Campground** loses the first half and "State park" over **Silver Falls
+  State Park** disappears.
 - `PoiBlocks.tsx` is the block vocabulary — identity, actions, glance, prose, specs,
   contact, links, nearby, the footer stamp and the provenance disclosure. They
   render shapes from `model.ts` and know nothing about any provider.
