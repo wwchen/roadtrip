@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import type { FlatPoiFeature } from '@/lib/poi';
 import type { PoiPageVariant } from '../PoiPageShell';
 import type { DetailGroup, DetailValue, StructuredDetails } from '../campground-detail';
-import type { PoiSpec } from '../model';
+import type { PoiNeighbour, PoiSpec } from '../model';
 
 export interface PoiTypeProps {
   feature: FlatPoiFeature;
@@ -22,6 +22,30 @@ export interface PoiTypeProps {
    * feature. The type decides whether the slot is used at all.
    */
   availability?: ReactNode;
+  /**
+   * The neighbours carousel's rows, injected by whichever surface can supply them.
+   *
+   * Injected data rather than a render prop, which is the difference from
+   * `availability`: `PoiNeighbour` is already a domain shape, so the type keeps the
+   * heading and the decision to render at all, and the injector only has to answer
+   * "which places, how far, in what order".
+   *
+   * NOTHING SUPPLIES THIS YET, and that is deliberate — no surface passes it, so the
+   * block is absent on every real record. What is missing is a proximity source:
+   * - the API has no neighbours endpoint. `POST /api/pois` is bbox + zoom and ships
+   *   `SlimPoiProperties` (category, subcategory, agency — no name), `GET
+   *   /api/pois/search` ranks by name text and not by distance, and `POST
+   *   /api/pois/on-route` is a route corridor, not a radius around one pin. The only
+   *   proximity in the backend is Mapbox's `proximity=` geocoding bias, which biases
+   *   address search and returns no POIs.
+   * - so a client-side fallback would have to fetch a bbox of pins and then one
+   *   `GET /api/pois/{id}` per pin just to learn the names, which is a request storm
+   *   standing in for a query the server should answer.
+   *
+   * Filling it means a real "n closest to this POI" read, and the seam is here so
+   * that lands as one caller passing this prop rather than as a rewrite of the block.
+   */
+  nearby?: PoiNeighbour[];
 }
 
 /** A type component. The registry maps a category onto one of these. */

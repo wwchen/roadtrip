@@ -327,6 +327,23 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* The scroller is a tab stop, so it needs a visible one. */
+.rt-poi-carousel:focus-visible {
+  outline: 2px solid var(--rt-brand);
+  outline-offset: 2px;
+}
+
+/*
+ * Snapping is motion the reader did not ask for: it moves the row after the scroll
+ * has stopped. The overflow still scrolls, it just lands where it was let go.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .rt-poi-carousel {
+    scroll-behavior: auto;
+    scroll-snap-type: none;
+  }
+}
+
 .rt-poi-card {
   flex: none;
   display: flex;
