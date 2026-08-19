@@ -18,21 +18,34 @@ import { PlacePoiPage, type PlaceTypeSpec } from './place';
  * omits the rest, so a category whose provider ships none of them still renders a
  * page — identity, one action, provenance — rather than an error.
  */
+/** Planet Fitness's own gym finder — where a record with no page of its own points. */
+const PLANET_FITNESS_GYM_FINDER = 'https://www.planetfitness.com/gyms';
+
 const PLACE_TYPES: Record<string, PlaceTypeSpec> = {
+  // Only reached by the two Planet Fitness categories, and `fallbackSearch` sends
+  // people to planetfitness.com, so this row is the Planet Fitness row rather than
+  // a generic gym one. A second chain is another row here — not a component — but
+  // it would not share this one.
+  //
+  // No spec block: the record carries hours, phone, address and a website, and all
+  // four are already shown above the rule (glance, call button, subtitle, action).
+  // A gym is a shower on a long drive; "where, open when, route me, call it" is the
+  // whole job, and the page is honest about having nothing more.
   gym: {
-    eyebrow: 'Gym · Planet Fitness',
+    // Not 'Gym · Planet Fitness': the title is the record's `name`, which the ETL
+    // defaults to "Planet Fitness", so the brand was printed twice on every gym.
+    eyebrow: 'Gym',
     fallbackName: 'Planet Fitness',
     kind: 'PF',
-    heading: 'This location',
-    fields: [
-      { label: 'Hours', key: 'opening_hours' },
-      { label: 'Phone', key: 'phone' },
-    ],
     websiteLabel: 'Planet Fitness page',
-    fallbackSearch: (p) =>
-      `https://www.planetfitness.com/gyms?q=${encodeURIComponent(
-        [p.city, p.state].filter((part) => typeof part === 'string' && part).join(' '),
-      )}`,
+    fallbackSearch: (p) => {
+      const query = [p.city, p.state].filter((part) => typeof part === 'string' && part).join(' ');
+      // A record with no city and no state used to produce a bare `?q=`, which is a
+      // search for nothing. The finder itself is the better landing place.
+      return query
+        ? `${PLANET_FITNESS_GYM_FINDER}?q=${encodeURIComponent(query)}`
+        : PLANET_FITNESS_GYM_FINDER;
+    },
     call: true,
   },
   trailhead: {

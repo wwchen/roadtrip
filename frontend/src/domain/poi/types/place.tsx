@@ -48,10 +48,18 @@ export interface PlaceTypeSpec {
   fallbackName: string;
   /** The trip store's pin kind, which decides the marker colour once it is a stop. */
   kind: string;
-  /** The heading on the type's one spec block. */
-  heading: string;
+  /**
+   * The heading on the type's one spec block.
+   *
+   * Optional, with `fields`, because a type can legitimately have no spec block:
+   * every fact a gym carries — hours, phone, address, website — is already shown
+   * by a block above the rule, and a "This location" heading over a lone row that
+   * repeats the call button is a heading for its own sake. Omit both, and the
+   * block drops out the same way an absent property drops a row.
+   */
+  heading?: string;
   /** The fields that block shows, in order. Absent properties drop out. */
-  fields: readonly PlaceField[];
+  fields?: readonly PlaceField[];
   /** Label for the record's own `website`, when it has one. */
   websiteLabel?: string;
   /** A search URL to fall back to when it does not. */
@@ -94,7 +102,7 @@ export function PlacePoiPage({ feature, variant, onClose, spec }: PlacePoiPagePr
   const photo = text(p.photo_url);
 
   const specs = presentSpecs(
-    spec.fields.map((field) => {
+    (spec.fields ?? []).map((field) => {
       const value = text(p[field.key]);
       return value ? { label: field.label, value } : null;
     }),
@@ -132,7 +140,9 @@ export function PlacePoiPage({ feature, variant, onClose, spec }: PlacePoiPagePr
       </PoiActions>
     ),
     ...(tags.length > 0 ? { glance: <PoiGlance tags={tags} /> } : null),
-    ...(specs.length > 0 ? { specs: <PoiSpecs list={{ heading: spec.heading, rows: specs }} /> } : null),
+    ...(spec.heading && specs.length > 0
+      ? { specs: <PoiSpecs list={{ heading: spec.heading, rows: specs }} /> }
+      : null),
     ...(links.length > 0 ? { links: <PoiLinks links={links} /> } : null),
     ...(p.upstream
       ? {

@@ -138,13 +138,31 @@ export function flattenHydratedPoi(f: PoiFeature): FlatPoiFeature {
     flat.Mang_Name = raw.Mang_Name || raw.designation || '';
   }
   if (PLANET_FITNESS_CATEGORIES.includes(p.category as string)) {
-    flat.opening_hours = raw.opening_hours || '';
+    promotePlanetFitnessFields(flat, raw);
   }
   if (SUPERCHARGER_CATEGORIES.includes(p.category as string)) {
     promoteSuperchargerFields(flat, p, raw);
   }
   flat.name = p.name || raw.name || flat.name;
   return { ...f, properties: flat };
+}
+
+/**
+ * The OSM tag bag, which is where everything interesting about a gym actually is.
+ *
+ * `raw` for a Planet Fitness pin is `to_jsonb(planet_fitness_locations)` — the row,
+ * not the upstream record — so it has `payload`, `phone`, `info_url` and no
+ * `opening_hours` at the top level. Overpass ships hours as a tag, and the ETL parks
+ * the whole tag map at `payload.tags` (`PlanetFitnessEtl.elementExtras`), so the old
+ * `raw.opening_hours` read resolved to `''` on every gym in production and both the
+ * glance chip and the "Upstream data" accordion the ETL comment promises were dead.
+ * The fixture that made this look fine put `opening_hours` at the top of `raw`,
+ * which is a shape the backend never sends.
+ */
+function promotePlanetFitnessFields(flat: Props, raw: Props): void {
+  const tags = objectValue(objectValue(raw.payload)?.tags) || {};
+  flat.opening_hours = firstText(raw.opening_hours, tags.opening_hours);
+  if (!objectValue(flat.upstream) && Object.keys(tags).length > 0) flat.upstream = tags;
 }
 
 function promoteSuperchargerFields(flat: Props, p: Props, raw: Props): void {
