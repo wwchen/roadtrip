@@ -85,9 +85,35 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
     properties: { category: 'supercharger' },
   },
 
+  // `raw` is `to_jsonb(planet_fitness_locations)` — the canonical ROW, not the
+  // upstream record — so the OSM facts sit under `payload.tags` and nothing named
+  // `opening_hours` exists at the top of it. The old fixture put it there, which is
+  // a shape the backend has never sent.
   planetFitness: {
     id: 'pf-1',
-    properties: { category: 'planet-fitness', raw: { opening_hours: 'Mo-Su 00:00-24:00' } },
+    properties: {
+      category: 'planet-fitness',
+      raw: {
+        location_id: 'node-123',
+        name: 'Planet Fitness',
+        phone: '+1 515-555-0113',
+        payload: {
+          type: 'node',
+          id: 123,
+          tags: {
+            name: 'Planet Fitness',
+            brand: 'Planet Fitness',
+            opening_hours: 'Mo-Su 00:00-24:00',
+          },
+        },
+      },
+    },
+  },
+
+  // An OSM element with no tags at all — the sparse end of the same dataset.
+  planetFitnessBare: {
+    id: 'pf-2',
+    properties: { category: 'planet_fitness_location', raw: { payload: { type: 'node', id: 9 } } },
   },
 
   nestedAddress: {
@@ -227,6 +253,25 @@ describe('supercharger promotion', () => {
     expect(p.status).toBe('OPEN');
     expect(p.stallCount).toBe(0);
     expect(p.powerKilowatt).toBe(0);
+  });
+});
+
+describe('planet fitness promotion', () => {
+  test('reads opening hours out of the OSM tag bag, not the top of the row', () => {
+    expect(flatten('planetFitness').opening_hours).toBe('Mo-Su 00:00-24:00');
+  });
+
+  test('surfaces the whole tag map as upstream, which is what the ETL captured it for', () => {
+    expect(flatten('planetFitness').upstream).toMatchObject({
+      brand: 'Planet Fitness',
+      opening_hours: 'Mo-Su 00:00-24:00',
+    });
+  });
+
+  test('a record with no tags gets empty hours rather than undefined', () => {
+    const p = flatten('planetFitnessBare');
+    expect(p.opening_hours).toBe('');
+    expect(p.upstream).toBeUndefined();
   });
 });
 
