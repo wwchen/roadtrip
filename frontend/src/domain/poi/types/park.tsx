@@ -28,6 +28,16 @@ const ABOUT_HEADING = 'About the park';
 
 const NPS_MANAGER = 'National Park Service';
 
+/**
+ * The group page each kind of park is listed on, which is the step above it.
+ *
+ * A national park's parent is the park system, not the state it happens to sit in:
+ * 4f groups them by country and agency because that is what changes the booking
+ * site, and a park spanning a state line has one system and two states. A state
+ * park's parent IS its state — that is the 4e page, and the one thing that lists it.
+ */
+const PARK_SYSTEM_CRUMB = 'National parks';
+
 const NPS_HOST = 'nps.gov';
 
 export function ParkPoiPage({ feature, variant, onClose }: PoiTypeProps) {
@@ -87,7 +97,11 @@ export function ParkPoiPage({ feature, variant, onClose }: PoiTypeProps) {
       : null),
   };
 
-  const crumbs = [stateName, name].filter(Boolean).map((label) => ({ label }));
+  // Neither ancestor has a page to link to yet — 4e and 4f are the two this
+  // milestone leaves without data — so both render as text. `PoiBreadcrumbs` styles
+  // an unlinked step as text rather than as a link nothing happens to.
+  const parentCrumb = national ? PARK_SYSTEM_CRUMB : stateName;
+  const crumbs = [parentCrumb, name].filter(Boolean).map((label) => ({ label }));
 
   return <PoiPageShell variant={variant} crumbs={crumbs} blocks={blocks} />;
 }
