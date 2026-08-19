@@ -132,6 +132,7 @@ local_resource(
         'frontend/index.html',
         'frontend/availability.html',
         'frontend/watches.html',
+        'frontend/poi.html',
         'frontend/vite.config.ts',
         'frontend/tsconfig.json',
     ],
