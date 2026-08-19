@@ -10,6 +10,7 @@ import {
   DirectionsButton,
   UpstreamTable,
   coordinatesOf,
+  eyebrowFor,
   subline,
   text,
   useDistanceTo,
@@ -26,8 +27,6 @@ import { presentSpecs, type PoiTypeProps } from './common';
 /** The heading the park's one spec block carries. */
 const ABOUT_HEADING = 'About the park';
 
-const NPS_MANAGER = 'National Park Service';
-
 /**
  * The group page each kind of park is listed on, which is the step above it.
  *
@@ -36,7 +35,7 @@ const NPS_MANAGER = 'National Park Service';
  * site, and a park spanning a state line has one system and two states. A state
  * park's parent IS its state — that is the 4e page, and the one thing that lists it.
  */
-const PARK_SYSTEM_CRUMB = 'National parks';
+const PARK_SYSTEM_PARENT = 'National parks';
 
 const NPS_HOST = 'nps.gov';
 
@@ -52,21 +51,32 @@ export function ParkPoiPage({ feature, variant, onClose }: PoiTypeProps) {
 
   const [url, host] = externalParkLink(national, name, stateName);
 
+  // The step above this page, and the only one printed: a chain would restate the
+  // title, and for a state park it would restate the subtitle too.
+  const parent = national ? PARK_SYSTEM_PARENT : stateName;
+
+  // Whatever the parent step already says comes out of the subtitle, and the agency
+  // reads here rather than as a spec row — 4c's subtitle is exactly "California ·
+  // National Park Service". Only where the step is on screen, though: the drawer
+  // omits it, so there the subtitle stays the one line that names the state.
+  const stepShown = variant === 'page' ? parent : '';
+  const subtitle = subline([stateName === stepShown ? '' : stateName, manager, distance]);
+
   const specs = presentSpecs([
-    // Redundant on an NPS park — every one of them is managed by the NPS.
-    manager && manager !== NPS_MANAGER ? { label: 'Managed by', value: manager } : null,
     Number.isFinite(acres) && acres > 0
       ? { label: 'Area', value: `${Math.round(acres).toLocaleString()} acres` }
       : null,
-    stateName ? { label: 'State', value: stateName } : null,
   ]);
 
   const blocks: PoiBlockSlots = {
     identity: (
       <PoiIdentity
-        eyebrow={national ? 'National park' : 'State park'}
+        // Almost every park's name ends in its own type, so this is usually empty
+        // and the block is omitted — "National park" over "Yosemite National Park"
+        // is the page saying the same word twice.
+        eyebrow={eyebrowFor(national ? 'National park' : 'State park', name)}
         title={name}
-        subtitle={subline([stateName, distance])}
+        subtitle={subtitle}
       />
     ),
     actions: (
@@ -97,13 +107,15 @@ export function ParkPoiPage({ feature, variant, onClose }: PoiTypeProps) {
       : null),
   };
 
-  // Neither ancestor has a page to link to yet — 4e and 4f are the two this
-  // milestone leaves without data — so both render as text. `PoiBreadcrumbs` styles
-  // an unlinked step as text rather than as a link nothing happens to.
-  const parentCrumb = national ? PARK_SYSTEM_CRUMB : stateName;
-  const crumbs = [parentCrumb, name].filter(Boolean).map((label) => ({ label }));
-
-  return <PoiPageShell variant={variant} crumbs={crumbs} blocks={blocks} />;
+  // No href yet: 4e and 4f are the two pages this milestone leaves without data, and
+  // an unlinked step renders as text rather than as a link nothing happens to.
+  return (
+    <PoiPageShell
+      variant={variant}
+      parent={parent ? { label: parent } : undefined}
+      blocks={blocks}
+    />
+  );
 }
 
 /**

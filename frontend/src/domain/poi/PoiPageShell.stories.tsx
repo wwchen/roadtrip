@@ -121,11 +121,12 @@ export const CampgroundPanel: Story = {
   args: { variant: 'panel', blocks: campgroundBlocks },
 };
 
-/** The same blocks at page width, with the ancestry trail the drawer has no room for. */
+/** The same blocks at page width, with the one step up that the drawer has no room
+ *  for. A parent with a page is a link; one without is text. */
 export const CampgroundPage: Story = {
   args: {
     variant: 'page',
-    crumbs: [{ label: 'Oregon', href: '#' }, { label: 'Jasper State Recreation Site' }],
+    parent: { label: 'Willamette Valley', href: '#' },
     blocks: campgroundBlocks,
   },
 };

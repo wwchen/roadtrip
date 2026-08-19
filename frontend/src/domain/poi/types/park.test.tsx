@@ -10,8 +10,7 @@ const park = (properties: Record<string, unknown>): FlatPoiFeature => ({
   properties,
 });
 
-const crumbs = () =>
-  [...screen.getByLabelText('Breadcrumb').querySelectorAll('li')].map((li) => li.textContent);
+const parentStep = () => screen.getByLabelText('Breadcrumb').textContent;
 
 describe('the park page’s ancestry', () => {
   // The step above a national park is the system that lists it, not the state it
@@ -29,7 +28,7 @@ describe('the park page’s ancestry', () => {
       />,
     );
 
-    expect(crumbs()).toEqual(['National parks', 'Yosemite National Park']);
+    expect(parentStep()).toBe('National parks');
   });
 
   // A state park's parent IS its state — that is the 4e page, and the one thing
@@ -46,7 +45,46 @@ describe('the park page’s ancestry', () => {
       />,
     );
 
-    expect(crumbs()).toEqual(['Oregon', 'Silver Falls State Park']);
+    expect(parentStep()).toBe('Oregon');
+  });
+
+  // Every one of these was on screen at once: "Oregon" as the step above, as the
+  // subtitle and as a spec row; "State Park" in both the eyebrow and the title.
+  test('says nothing twice', () => {
+    render(
+      <ParkPoiPage
+        variant="page"
+        feature={park({
+          category: 'state-park',
+          Unit_Nm: 'Silver Falls State Park',
+          State_Nm: 'Oregon',
+          Mang_Name: 'Oregon Parks and Recreation Department',
+          GIS_Acres: 9200,
+        })}
+      />,
+    );
+
+    // The name already ends in its own type, so the eyebrow has nothing to add.
+    expect(document.querySelector('.rt-poi-eyebrow')).toBeNull();
+    // The state is the step above, so the subtitle names the agency instead.
+    expect(document.querySelector('.rt-poi-subtitle')).toHaveTextContent(
+      'Oregon Parks and Recreation Department',
+    );
+    // …and it is not repeated a third time as a spec row.
+    expect(screen.queryByText('State')).toBeNull();
+    expect(screen.getByText('9,200 acres')).toBeInTheDocument();
+  });
+
+  // A name that does NOT carry its type still earns the word.
+  test('a park whose name omits its type keeps the eyebrow', () => {
+    render(
+      <ParkPoiPage
+        variant="page"
+        feature={park({ category: 'national-park', Unit_Nm: 'Craters of the Moon', State_Nm: 'Idaho' })}
+      />,
+    );
+
+    expect(document.querySelector('.rt-poi-eyebrow')).toHaveTextContent('National park');
   });
 
   // Neither group page exists yet, so every step is text. A crumb that renders as a
@@ -60,6 +98,7 @@ describe('the park page’s ancestry', () => {
     );
 
     expect(screen.getByLabelText('Breadcrumb').querySelectorAll('a')).toHaveLength(0);
+    expect(parentStep()).toBe('National parks');
   });
 
   // The drawer has no room for a trail, and the map is already the context.

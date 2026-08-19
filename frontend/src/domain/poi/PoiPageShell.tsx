@@ -15,7 +15,7 @@ import {
   RULE_BEFORE_GROUP,
   type PoiBlockId,
 } from './blocks';
-import { PoiBreadcrumbs } from './PoiBlocks';
+import { PoiParentLink } from './PoiBlocks';
 import type { PoiCrumb } from './model';
 import './poi-page.css';
 
@@ -29,12 +29,12 @@ export type PoiPageVariant = 'panel' | 'page';
 
 export interface PoiPageShellProps {
   variant?: PoiPageVariant;
-  /** Ancestry, nearest last. Rendered on the routed page; the drawer has no room. */
-  crumbs?: PoiCrumb[];
+  /** The one thing this place is inside. Routed page only — the drawer has no room. */
+  parent?: PoiCrumb;
   blocks: PoiBlockSlots;
 }
 
-export function PoiPageShell({ variant = 'panel', crumbs, blocks }: PoiPageShellProps) {
+export function PoiPageShell({ variant = 'panel', parent, blocks }: PoiPageShellProps) {
   // A group renders only if something in it does, so a type that omits a whole
   // group leaves no empty band and no stray hairline behind it.
   const groups = POI_BLOCK_GROUPS.map((ids, index) => ({
@@ -46,7 +46,7 @@ export function PoiPageShell({ variant = 'panel', crumbs, blocks }: PoiPageShell
 
   return (
     <article className={`rt-poi rt-poi--${variant}`}>
-      {variant === 'page' && crumbs ? <PoiBreadcrumbs crumbs={crumbs} /> : null}
+      {variant === 'page' && parent ? <PoiParentLink parent={parent} /> : null}
 
       {groups.map((group, position) => (
         <div className="rt-poi-group" key={group.index}>

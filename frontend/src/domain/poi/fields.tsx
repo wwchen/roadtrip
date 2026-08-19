@@ -189,3 +189,20 @@ export function CallButtons({ phone }: { phone: unknown }) {
   );
 }
 
+
+/**
+ * The eyebrow, minus whatever the title already says.
+ *
+ * "Campground · USDA Forest Service" above a place called **Tuff Campground** says
+ * "campground" twice, and so does "State park" above **Silver Falls State Park** —
+ * the type word is only worth printing when the name does not already carry it.
+ * Names that do not (Jasper State Recreation Site, Camp 4) keep it, which is the
+ * case the eyebrow exists for.
+ *
+ * Returns '' when there is nothing left to say, and the block is then omitted.
+ */
+export function eyebrowFor(typeLabel: string, name: string, agency?: string): string {
+  const escaped = typeLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const alreadySaid = new RegExp(`\\b${escaped}\\s*$`, 'i').test(name.trim());
+  return [alreadySaid ? '' : typeLabel, (agency ?? '').trim()].filter(Boolean).join(' · ');
+}

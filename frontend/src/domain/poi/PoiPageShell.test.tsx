@@ -90,15 +90,15 @@ describe('the POI page shell', () => {
     expect(footer!.querySelector('[data-block="verified"]')).not.toBeNull();
   });
 
-  test('the breadcrumb trail is the routed page’s, not the panel’s', () => {
-    const crumbs = [{ label: 'Oregon' }, { label: 'Jasper SRS' }];
+  test('the parent step is the routed page’s, not the panel’s', () => {
+    const parent = { label: 'Oregon' };
     const blocks: PoiBlockSlots = { identity: <span data-block="identity">Jasper</span> };
 
-    const { rerender } = render(<PoiPageShell variant="panel" crumbs={crumbs} blocks={blocks} />);
+    const { rerender } = render(<PoiPageShell variant="panel" parent={parent} blocks={blocks} />);
     expect(screen.queryByLabelText('Breadcrumb')).toBeNull();
 
-    rerender(<PoiPageShell variant="page" crumbs={crumbs} blocks={blocks} />);
-    expect(screen.getByLabelText('Breadcrumb')).toBeInTheDocument();
+    rerender(<PoiPageShell variant="page" parent={parent} blocks={blocks} />);
+    expect(screen.getByLabelText('Breadcrumb')).toHaveTextContent('Oregon');
   });
 });
 
