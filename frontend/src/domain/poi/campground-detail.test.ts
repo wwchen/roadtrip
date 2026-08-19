@@ -122,11 +122,23 @@ describe('rating', () => {
 describe('verified', () => {
   const NOW = new Date('2026-08-09T00:00:00Z');
 
-  test('fresh data is not flagged', () => {
+  test('fresh data is not flagged, and reads as a date', () => {
     expect(verified({ last_verified: '2026-08-01' }, NOW)).toEqual({
-      date: '2026-08-01',
+      date: '1 Aug',
       stale: false,
     });
+  });
+
+  // Providers disagree about the shape of this field — a bare day from one, a
+  // full timestamp from another — and the stamp is one line in a footer.
+  test('a provider timestamp reads the same as a provider date', () => {
+    expect(verified({ last_verified: '2026-05-06T23:47:29Z' }, NOW)?.date).toBe('6 May');
+  });
+
+  // "6 May" for a date two years old reads as this spring, which is the wrong
+  // impression for the one value that says how much to trust the page.
+  test('an older year is named', () => {
+    expect(verified({ last_verified: '2024-05-06' }, NOW)?.date).toBe('6 May 2024');
   });
 
   test('data older than the threshold is stale', () => {

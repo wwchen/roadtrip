@@ -251,9 +251,32 @@ export function verified(p: Props, now: Date = new Date()): Verified | null {
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return null;
   return {
-    date: raw,
+    date: verifiedLabel(parsed, now),
     stale: (now.getTime() - parsed.getTime()) / MS_PER_DAY > STALE_AFTER_DAYS,
   };
+}
+
+/**
+ * "23 May", or "23 May 2024" once the year stops being obvious.
+ *
+ * The field arrives as whatever the provider stored — a bare `2026-08-01` from
+ * one, a full `2026-05-06T23:47:29Z` from another — and this used to render that
+ * string verbatim. A second of a timestamp is not freshness, and the two shapes
+ * side by side read as two different kinds of fact; the stamp is one line in the
+ * footer, so it says the day and stops.
+ *
+ * The year is dropped only for the current one. A date from two years ago shown
+ * as "6 May" reads as this spring, which is exactly the wrong impression for a
+ * value whose whole job is to say how much to trust the page.
+ */
+function verifiedLabel(parsed: Date, now: Date): string {
+  const sameYear = parsed.getUTCFullYear() === now.getUTCFullYear();
+  return parsed.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    ...(sameYear ? null : { year: 'numeric' }),
+    timeZone: 'UTC',
+  });
 }
 
 // ---------------------------------------------------------------------------
