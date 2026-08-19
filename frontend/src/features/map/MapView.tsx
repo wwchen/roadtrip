@@ -2,6 +2,7 @@ import { LegendPanel } from './LegendPanel';
 import { MapControlButtons } from './MapControlButtons';
 import { useDeepLinkedPoi } from './useDeepLinkedPoi';
 import { useMapOverlays, useStateLines } from './useMapOverlays';
+import { useRegionBoundary } from './useRegionBoundary';
 import { useTripOverlay } from './useTripOverlay';
 import { useUserLocation } from './useUserLocation';
 import { useViewportPois } from './useViewportPois';
@@ -22,6 +23,7 @@ export function MapView() {
   const pois = useViewportPois();
   useMapOverlays(pois);
   useStateLines();
+  useRegionBoundary();
   useDeepLinkedPoi();
   useTripOverlay();
   // The puck for whatever fix the app is holding, and locate-me's trigger —

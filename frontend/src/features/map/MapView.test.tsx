@@ -104,6 +104,15 @@ let onRouteResponse: unknown = null;
  * endpoint says as soon as the stops make a complete trip.
  */
 let routeResponse: unknown = null;
+
+/**
+ * What `/data/us-states.geojson` answers with.
+ *
+ * Empty by default — the state-lines tests only care that the request resolves.
+ * The region-boundary tests put a real polygon in it, because looking a region's
+ * geometry up out of this file IS the thing they are about.
+ */
+let statesResponse: unknown = { type: 'FeatureCollection', features: [] };
 /** Status per POI response, for the failure paths. */
 let poiStatuses: number[] = [];
 /**
@@ -150,8 +159,8 @@ function stubApi() {
         const status = poiStatuses[nth - 1] ?? 200;
         return json(poiResponses[index] ?? collection([]), status);
       }
-      // State lines: shape does not matter here, only that the request resolves.
-      return json({ type: 'FeatureCollection', features: [] });
+      // State lines and region boundaries share this one static file.
+      return json(statesResponse);
     }),
   );
 }
@@ -223,6 +232,7 @@ beforeEach(() => {
   poiResponses = [collection([])];
   onRouteResponse = null;
   routeResponse = null;
+  statesResponse = { type: 'FeatureCollection', features: [] };
   poiStatuses = [];
   hold = null;
   stubApi();
@@ -420,6 +430,89 @@ describe('painting', () => {
 
     await waitFor(() => expect(instance.getLayer('state-lines')).toBeDefined());
     expect(instance.layer('state-lines')?.before).toBe('cg-points');
+  });
+});
+
+describe('the selected region"s boundary', () => {
+  const utah = {
+    type: 'Feature',
+    properties: { name: 'Utah' },
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [-114.05, 37],
+          [-109.04, 37],
+          [-109.04, 42],
+          [-114.05, 42],
+          [-114.05, 37],
+        ],
+      ],
+    },
+  };
+
+  test('draws once a region with geometry is selected', async () => {
+    statesResponse = { type: 'FeatureCollection', features: [utah] };
+    await renderMap();
+
+    await act(async () => {
+      useMapStore.getState().selectRegion({ placeName: 'Utah, United States' });
+    });
+
+    await waitFor(() => expect(instance.getLayer('region-boundary-fill')).toBeDefined());
+    expect(instance.layer('region-boundary-line')?.before).toBe('cg-points');
+    expect(instance.sources.get('region-boundary')?.data).toMatchObject({
+      geometry: utah.geometry,
+    });
+  });
+
+  test('draws nothing for a region the app has no geometry for', async () => {
+    // The common case today: no park boundaries are ingested. The camera has
+    // already framed the extent, so silence here is the right behaviour.
+    statesResponse = { type: 'FeatureCollection', features: [utah] };
+    await renderMap();
+
+    await act(async () => {
+      useMapStore.getState().selectRegion({ placeName: 'Zion National Park, Utah' });
+    });
+
+    expect(instance.getLayer('region-boundary-fill')).toBeUndefined();
+  });
+
+  test('comes down when the region is cleared', async () => {
+    statesResponse = { type: 'FeatureCollection', features: [utah] };
+    await renderMap();
+
+    await act(async () => {
+      useMapStore.getState().selectRegion({ placeName: 'Utah, United States' });
+    });
+    await waitFor(() => expect(instance.getLayer('region-boundary-fill')).toBeDefined());
+
+    await act(async () => {
+      useMapStore.getState().clearSelectedRegion();
+    });
+
+    expect(instance.getLayer('region-boundary-fill')).toBeUndefined();
+    expect(instance.sources.has('region-boundary')).toBe(false);
+  });
+
+  test('survives a basemap change, like every other app layer', async () => {
+    statesResponse = { type: 'FeatureCollection', features: [utah] };
+    await renderMap();
+    await act(async () => {
+      useMapStore.getState().selectRegion({ placeName: 'Utah, United States' });
+    });
+    await waitFor(() => expect(instance.getLayer('region-boundary-fill')).toBeDefined());
+
+    await act(async () => {
+      await userEvent.click(screen.getByRole('radio', { name: 'Terrain' }));
+    });
+    instance.wipeAppLayers();
+    await act(async () => {
+      instance.fire('style.load');
+    });
+
+    expect(instance.getLayer('region-boundary-fill')).toBeDefined();
   });
 });
 

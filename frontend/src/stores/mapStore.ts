@@ -13,6 +13,18 @@ export interface Viewport {
   zoom: number;
 }
 
+/**
+ * The region a search resolved to.
+ *
+ * `placeName` is the geocoder's fully-qualified name ("Utah, United States");
+ * `map/regions.ts` narrows it to the region's own name when it looks the
+ * geometry up. Stored rather than derived because the boundary must survive a
+ * basemap change, which reinstalls every layer from state.
+ */
+export interface RegionSelection {
+  placeName: string;
+}
+
 export interface UserLocation {
   lng: number;
   lat: number;
@@ -41,6 +53,14 @@ export interface MapState {
   hiddenAgencies: string[];
   /** The POI whose drawer is open, or null when the drawer is closed. */
   selectedPoiId: string | number | null;
+  /**
+   * The region whose boundary is drawn, or null when none is.
+   *
+   * Separate from `selectedPoiId` because the two are different selections that
+   * can coexist: picking a campground inside a framed region should not erase
+   * the region under it.
+   */
+  selectedRegion: RegionSelection | null;
 
   setViewport: (viewport: Viewport | null) => void;
   setUserLocation: (userLocation: UserLocation | null) => void;
@@ -51,6 +71,9 @@ export interface MapState {
   selectPoi: (id: string | number) => void;
   /** Close the drawer. */
   clearSelectedPoi: () => void;
+  /** Frame a region: its boundary draws where geometry for it exists. */
+  selectRegion: (region: RegionSelection) => void;
+  clearSelectedRegion: () => void;
   reset: () => void;
 }
 
@@ -60,6 +83,7 @@ const INITIAL_MAP = {
   hiddenOverlays: [],
   hiddenAgencies: [],
   selectedPoiId: null,
+  selectedRegion: null,
 } satisfies Omit<
   MapState,
   | 'setViewport'
@@ -69,6 +93,8 @@ const INITIAL_MAP = {
   | 'setAgencyHidden'
   | 'selectPoi'
   | 'clearSelectedPoi'
+  | 'selectRegion'
+  | 'clearSelectedRegion'
   | 'reset'
 >;
 
@@ -101,6 +127,9 @@ export const useMapStore = create<MapState>()((set) => ({
 
   selectPoi: (selectedPoiId) => set({ selectedPoiId }),
   clearSelectedPoi: () => set({ selectedPoiId: null }),
+
+  selectRegion: (selectedRegion) => set({ selectedRegion }),
+  clearSelectedRegion: () => set({ selectedRegion: null }),
   reset: () => set({ ...INITIAL_MAP }),
 }));
 

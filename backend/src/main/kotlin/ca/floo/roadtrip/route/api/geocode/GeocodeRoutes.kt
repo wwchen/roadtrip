@@ -33,7 +33,12 @@ private val geocodeLimitRange = MIN_GEOCODE_LIMIT..MAX_GEOCODE_LIMIT
  * debounces input then hits this endpoint for autofill suggestions.
  *
  * Response shape (also documented for swagger):
- *   { "results": [ { id, place_name, place_type, lng, lat }, ... ] }
+ *   { "results": [ { id, place_name, place_type, lng, lat, bbox? }, ... ] }
+ *
+ * `bbox` is `[west, south, east, north]` and is present only for a feature the
+ * upstream reports an extent for — a country, a region, a district, a place, a
+ * park with a footprint. It is what lets the client frame a searched-for REGION
+ * as an area instead of flying to an arbitrary point inside it.
  */
 fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
     route("/api") {
@@ -80,6 +85,7 @@ internal fun geocodeResponseDto(results: List<GeocodeResult>): GeocodeResponseDt
                     placeType = result.placeType,
                     lng = result.lng,
                     lat = result.lat,
+                    bbox = result.bbox?.let { listOf(it.west, it.south, it.east, it.north) },
                 )
             },
     )
