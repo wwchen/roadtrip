@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { NightsTable, nightCells, type NightCell, type NightsTableNight } from './NightsTable';
+import { AvailabilityTable, nightCells, type AvailabilityCell, type AvailabilityNight } from './AvailabilityTable';
 
 // The block that justifies the routed page.
 //
@@ -7,8 +7,8 @@ import { NightsTable, nightCells, type NightCell, type NightsTableNight } from '
 // lets a park page, a state page and the national-parks group page all fill the
 // same `availability` slot from three different sources.
 const meta = {
-  title: 'POI/Nights table',
-  component: NightsTable,
+  title: 'POI/Availability table',
+  component: AvailabilityTable,
   parameters: {
     layout: 'padded',
     docs: {
@@ -20,7 +20,7 @@ const meta = {
       },
     },
   },
-} satisfies Meta<typeof NightsTable>;
+} satisfies Meta<typeof AvailabilityTable>;
 
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -28,7 +28,7 @@ type Story = StoryObj<typeof meta>;
 const DAYS = ['Fri', 'Sat', 'Sun', 'Mon', 'Tue', 'Wed', 'Thu'] as const;
 
 /** Twelve nights from the 3rd, so the story shows the overflow the block is built for. */
-const nights: NightsTableNight[] = Array.from({ length: 12 }, (_, i) => ({
+const nights: AvailabilityNight[] = Array.from({ length: 12 }, (_, i) => ({
   date: `2026-07-${String(3 + i).padStart(2, '0')}`,
   label: DAYS[(i + 5) % DAYS.length],
   sublabel: `Jul ${3 + i}`,
@@ -38,7 +38,7 @@ const row = (
   id: string,
   name: string,
   note: string | undefined,
-  states: readonly NightCell[],
+  states: readonly AvailabilityCell[],
 ) => ({
   id,
   name,
@@ -47,12 +47,12 @@ const row = (
   cells: nightCells(states.map((state, i) => [nights[i].date, state] as const)),
 });
 
-const open = (n?: number): NightCell => (n == null ? { status: 'available' } : { status: 'available', open: n });
-const reserved: NightCell = { status: 'reserved' };
-const firstCome: NightCell = { status: 'first_come' };
-const closed: NightCell = { status: 'closed' };
-const unknown: NightCell = { status: 'unknown' };
-const past: NightCell = { status: 'past' };
+const open = (n?: number): AvailabilityCell => (n == null ? { status: 'available' } : { status: 'available', open: n });
+const reserved: AvailabilityCell = { status: 'reserved' };
+const firstCome: AvailabilityCell = { status: 'first_come' };
+const closed: AvailabilityCell = { status: 'closed' };
+const unknown: AvailabilityCell = { status: 'unknown' };
+const past: AvailabilityCell = { status: 'past' };
 
 export const ParkCampgrounds: Story = {
   args: {

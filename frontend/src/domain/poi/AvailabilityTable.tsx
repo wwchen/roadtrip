@@ -1,4 +1,4 @@
-// The nights table — "which nights are open", one row per place.
+// The availability table — "which nights are open", one row per place.
 //
 // This is the block that justifies the routed page. A 520px drawer can show one
 // campground's week; it cannot show a park's twelve campgrounds against the same
@@ -27,12 +27,12 @@ import './poi-page.css';
  * — a status added upstream arrives here without an edit, and cannot arrive
  * carrying a count it has no meaning for.
  */
-export type NightCell =
+export type AvailabilityCell =
   | { readonly status: 'available'; readonly open?: number }
   | { readonly status: Exclude<AvailabilityStatus, 'available'> };
 
 /** One column: the night itself, and how its header reads. */
-export interface NightsTableNight {
+export interface AvailabilityNight {
   /** Stable key and the key cells are looked up by — an ISO date in practice. */
   readonly date: string;
   /** The header's first line, e.g. `Fri`. */
@@ -42,7 +42,7 @@ export interface NightsTableNight {
 }
 
 /** One row: a place, and its cell for each night. */
-export interface NightsTablePlace {
+export interface AvailabilityPlace {
   readonly id: string;
   readonly name: string;
   /** A second line under the name — loop, agency, distance, whatever the page has. */
@@ -55,60 +55,60 @@ export interface NightsTablePlace {
    * with no entry renders as `unknown` rather than as a blank, so a partial row
    * reads as "we do not know" instead of as "nothing there".
    */
-  readonly cells: ReadonlyMap<string, NightCell>;
+  readonly cells: ReadonlyMap<string, AvailabilityCell>;
 }
 
-export interface NightsTableProps {
+export interface AvailabilityTableProps {
   /** The block heading. */
   heading?: string;
   /** One line under the heading — what the window is, or where the numbers came from. */
   caption?: string;
-  readonly nights: readonly NightsTableNight[];
-  readonly places: readonly NightsTablePlace[];
+  readonly nights: readonly AvailabilityNight[];
+  readonly places: readonly AvailabilityPlace[];
   /** Shown instead of the table when there is nothing to compare yet. */
   emptyLabel?: string;
 }
 
 const DEFAULT_HEADING = 'Open nights';
 const DEFAULT_EMPTY_LABEL = 'No nights to show yet.';
-const UNKNOWN_CELL: NightCell = { status: 'unknown' };
+const UNKNOWN_CELL: AvailabilityCell = { status: 'unknown' };
 
 /** The column header for the row names — a `<th>` needs a word, not a blank. */
 const PLACE_COLUMN_LABEL = 'Place';
 
-export function NightsTable({
+export function AvailabilityTable({
   heading = DEFAULT_HEADING,
   caption,
   nights,
   places,
   emptyLabel = DEFAULT_EMPTY_LABEL,
-}: NightsTableProps) {
+}: AvailabilityTableProps) {
   const empty = nights.length === 0 || places.length === 0;
 
   return (
-    <section className="rt-poi-nights">
+    <section className="rt-poi-avail">
       <PoiBlockHeading>{heading}</PoiBlockHeading>
-      {caption ? <p className="rt-poi-nights-caption">{caption}</p> : null}
+      {caption ? <p className="rt-poi-avail-caption">{caption}</p> : null}
 
       {empty ? (
-        <p className="rt-poi-nights-empty">{emptyLabel}</p>
+        <p className="rt-poi-avail-empty">{emptyLabel}</p>
       ) : (
         <>
           {/* The scroll lives here and nowhere else: twelve nights overflow 520px,
               and a table that widens its own page makes the whole body scroll
               sideways. */}
-          <div className="rt-poi-nights-scroll">
-            <table className="rt-poi-nights-table">
+          <div className="rt-poi-avail-scroll">
+            <table className="rt-poi-avail-table">
               <thead>
                 <tr>
-                  <th scope="col" className="rt-poi-nights-place-head">
+                  <th scope="col" className="rt-poi-avail-place-head">
                     {PLACE_COLUMN_LABEL}
                   </th>
                   {nights.map((night) => (
-                    <th scope="col" key={night.date} className="rt-poi-nights-night-head">
-                      <span className="rt-poi-nights-night-label">{night.label}</span>
+                    <th scope="col" key={night.date} className="rt-poi-avail-night-head">
+                      <span className="rt-poi-avail-night-label">{night.label}</span>
                       {night.sublabel ? (
-                        <span className="rt-poi-nights-night-sublabel">{night.sublabel}</span>
+                        <span className="rt-poi-avail-night-sublabel">{night.sublabel}</span>
                       ) : null}
                     </th>
                   ))}
@@ -117,18 +117,18 @@ export function NightsTable({
               <tbody>
                 {places.map((place) => (
                   <tr key={place.id}>
-                    <th scope="row" className="rt-poi-nights-place">
+                    <th scope="row" className="rt-poi-avail-place">
                       {place.href ? (
                         <a href={place.href}>{place.name}</a>
                       ) : (
                         <span>{place.name}</span>
                       )}
                       {place.note ? (
-                        <span className="rt-poi-nights-place-note">{place.note}</span>
+                        <span className="rt-poi-avail-place-note">{place.note}</span>
                       ) : null}
                     </th>
                     {nights.map((night) => (
-                      <NightCellView
+                      <AvailabilityCellView
                         key={night.date}
                         night={night}
                         place={place}
@@ -141,21 +141,21 @@ export function NightsTable({
             </table>
           </div>
 
-          <NightsLegend places={places} nights={nights} />
+          <AvailabilityLegend places={places} nights={nights} />
         </>
       )}
     </section>
   );
 }
 
-function NightCellView({
+function AvailabilityCellView({
   night,
   place,
   cell,
 }: {
-  night: NightsTableNight;
-  place: NightsTablePlace;
-  cell: NightCell;
+  night: AvailabilityNight;
+  place: AvailabilityPlace;
+  cell: AvailabilityCell;
 }) {
   const meta = availabilityStatusMeta(cell.status);
   const open = cell.status === 'available' ? cell.open : undefined;
@@ -166,14 +166,14 @@ function NightCellView({
       : `${place.name}, ${nightName}: ${meta.aria}, ${open} ${open === 1 ? 'site' : 'sites'}`;
 
   return (
-    <td className={`rt-poi-nights-cell rt-poi-nights-cell--${meta.kind}`} aria-label={spoken}>
+    <td className={`rt-poi-avail-cell rt-poi-avail-cell--${meta.kind}`} aria-label={spoken}>
       {/* Glyph first, colour second. The glyph is the state; the colour only makes
           it faster to scan. */}
-      <span aria-hidden="true" className="rt-poi-nights-glyph">
+      <span aria-hidden="true" className="rt-poi-avail-glyph">
         {meta.label}
       </span>
       {open == null ? null : (
-        <span aria-hidden="true" className="rt-poi-nights-count">
+        <span aria-hidden="true" className="rt-poi-avail-count">
           {open}
         </span>
       )}
@@ -187,12 +187,12 @@ function NightCellView({
  * A fixed six-entry legend would explain "past" on a table with no past nights,
  * which trains the reader to stop reading it.
  */
-function NightsLegend({
+function AvailabilityLegend({
   places,
   nights,
 }: {
-  places: readonly NightsTablePlace[];
-  nights: readonly NightsTableNight[];
+  places: readonly AvailabilityPlace[];
+  nights: readonly AvailabilityNight[];
 }) {
   const present = new Set<AvailabilityStatus>();
   for (const place of places) {
@@ -203,10 +203,10 @@ function NightsLegend({
   const shown = [...present].map((status) => availabilityStatusMeta(status));
 
   return (
-    <ul className="rt-poi-nights-legend">
+    <ul className="rt-poi-avail-legend">
       {shown.map((meta) => (
-        <li key={meta.value} className={`rt-poi-nights-key rt-poi-nights-key--${meta.kind}`}>
-          <span aria-hidden="true" className="rt-poi-nights-glyph">
+        <li key={meta.value} className={`rt-poi-avail-key rt-poi-avail-key--${meta.kind}`}>
+          <span aria-hidden="true" className="rt-poi-avail-glyph">
             {meta.label}
           </span>
           <span>{meta.text}</span>
@@ -217,6 +217,6 @@ function NightsLegend({
 }
 
 /** Build a row's cells from plain pairs, so callers do not construct a `Map` by hand. */
-export function nightCells(entries: readonly (readonly [string, NightCell])[]): ReadonlyMap<string, NightCell> {
+export function nightCells(entries: readonly (readonly [string, AvailabilityCell])[]): ReadonlyMap<string, AvailabilityCell> {
   return new Map(entries);
 }

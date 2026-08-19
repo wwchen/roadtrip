@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { NightsTable, nightCells, type NightsTableNight, type NightsTablePlace } from './NightsTable';
+import { AvailabilityTable, nightCells, type AvailabilityNight, type AvailabilityPlace } from './AvailabilityTable';
 
-const nights: NightsTableNight[] = [
+const nights: AvailabilityNight[] = [
   { date: '2026-07-03', label: 'Fri', sublabel: 'Jul 3' },
   { date: '2026-07-04', label: 'Sat', sublabel: 'Jul 4' },
   { date: '2026-07-05', label: 'Sun', sublabel: 'Jul 5' },
 ];
 
-const places: NightsTablePlace[] = [
+const places: AvailabilityPlace[] = [
   {
     id: 'upper-pines',
     name: 'Upper Pines',
@@ -34,9 +34,9 @@ const places: NightsTablePlace[] = [
 const cellFor = (place: string, night: string, state: string) =>
   screen.getByLabelText(new RegExp(`^${place}, ${night}: ${state}`));
 
-describe('the nights table', () => {
+describe('the availability table', () => {
   test('renders a row per place and a column per night', () => {
-    render(<NightsTable nights={nights} places={places} />);
+    render(<AvailabilityTable nights={nights} places={places} />);
 
     // Two body rows plus the header row.
     expect(screen.getAllByRole('row')).toHaveLength(3);
@@ -49,7 +49,7 @@ describe('the nights table', () => {
   // only difference between "open" and "reserved" were a background, the table
   // would be unreadable in greyscale — so the text content is asserted, not the class.
   test('every state is legible without colour', () => {
-    render(<NightsTable nights={nights} places={places} />);
+    render(<AvailabilityTable nights={nights} places={places} />);
 
     expect(cellFor('Upper Pines', 'Fri Jul 3', 'available').textContent).toBe('A4');
     expect(cellFor('Upper Pines', 'Sat Jul 4', 'reserved').textContent).toBe('R');
@@ -62,7 +62,7 @@ describe('the nights table', () => {
   // A missing entry is "we do not know", not "nothing there" — the difference
   // between an unanswered question and a bookable night is the point of the block.
   test('a night with no entry reads as unknown', () => {
-    render(<NightsTable nights={nights} places={places} />);
+    render(<AvailabilityTable nights={nights} places={places} />);
 
     expect(cellFor('Upper Pines', 'Sun Jul 5', 'unknown').textContent).toBe('?');
   });
@@ -70,7 +70,7 @@ describe('the nights table', () => {
   // The count is a fact about the open case only, and the union is what enforces
   // that: a reserved cell has nowhere to put a number.
   test('the site count rides along with the open state, and is optional', () => {
-    render(<NightsTable nights={nights} places={places} />);
+    render(<AvailabilityTable nights={nights} places={places} />);
 
     expect(cellFor('Upper Pines', 'Fri Jul 3', 'available').getAttribute('aria-label')).toContain(
       '4 sites',
@@ -81,7 +81,7 @@ describe('the nights table', () => {
   });
 
   test('the key lists only the states on screen', () => {
-    render(<NightsTable nights={nights} places={places} />);
+    render(<AvailabilityTable nights={nights} places={places} />);
 
     const keys = screen.getAllByRole('listitem').map((item) => item.textContent);
     expect(keys).toContain('AAvailable');
@@ -91,7 +91,7 @@ describe('the nights table', () => {
   });
 
   test('a place with a page links; one without renders as text', () => {
-    render(<NightsTable nights={nights} places={places} />);
+    render(<AvailabilityTable nights={nights} places={places} />);
 
     expect(screen.getByRole('link', { name: 'Upper Pines' }).getAttribute('href')).toBe(
       '?poi=upper-pines',
@@ -100,16 +100,16 @@ describe('the nights table', () => {
   });
 
   test('no nights or no places renders the empty line, not an empty grid', () => {
-    const { rerender } = render(<NightsTable nights={[]} places={places} emptyLabel="Nothing yet." />);
+    const { rerender } = render(<AvailabilityTable nights={[]} places={places} emptyLabel="Nothing yet." />);
     expect(screen.queryByRole('table')).toBeNull();
     expect(screen.getByText('Nothing yet.')).toBeTruthy();
 
-    rerender(<NightsTable nights={nights} places={[]} emptyLabel="Nothing yet." />);
+    rerender(<AvailabilityTable nights={nights} places={[]} emptyLabel="Nothing yet." />);
     expect(screen.queryByRole('table')).toBeNull();
   });
 
   test('the heading and caption are the block’s own, and both are optional', () => {
-    render(<NightsTable heading="Open nights" caption="Next three nights." nights={nights} places={places} />);
+    render(<AvailabilityTable heading="Open nights" caption="Next three nights." nights={nights} places={places} />);
 
     expect(screen.getByRole('heading', { name: 'Open nights' })).toBeTruthy();
     expect(screen.getByText('Next three nights.')).toBeTruthy();
