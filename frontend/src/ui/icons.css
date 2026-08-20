@@ -27,3 +27,18 @@ button .lds-icon,
 a .lds-icon {
   --icon: currentColor;
 }
+
+/* LDS sizes an `EmptyState`'s own icon with `.lds-empty .lds-icon` — a bare
+   descendant selector, not scoped to the icon that sits directly in the card
+   (`.lds-empty__media`). That rule also matches any `Button`'s `iconStart`
+   glyph nested inside `.lds-empty__actions`, and at equal specificity it wins
+   on source order: the button shrinks its icon to `1.15em` via `.lds-btn__icon
+   svg`, then the empty-state rule re-expands it to a flat 28px (48px in the
+   `expressive` case), blowing the icon past its slot and into the label.
+   Three classes beats LDS's two regardless of which one it ships next, so
+   this restores the button's own sizing without touching the vendored CSS. */
+.lds-empty__actions .lds-btn__icon .lds-icon {
+  width: 100%;
+  height: 100%;
+  margin-bottom: 0;
+}

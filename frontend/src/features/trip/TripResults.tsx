@@ -3,7 +3,7 @@
 // Collapse state stays local and defaults closed on phones so results do not cover
 // the route immediately after it is computed.
 import { useState } from 'react';
-import { Icon } from '@ui';
+import { Button, EmptyState, Icon } from '@ui';
 import { token } from '@tokens';
 import { useMapContext } from '@/map/context';
 import { useMapStore } from '@/stores/mapStore';
@@ -33,6 +33,7 @@ export function TripResults({
   const { map } = useMapContext();
   const hiddenAgencies = useMapStore((s) => s.hiddenAgencies);
   const campgroundsHidden = useMapStore((s) => s.hiddenOverlays.includes('cg'));
+  const setOverlayHidden = useMapStore((s) => s.setOverlayHidden);
   const selectPoi = useMapStore((s) => s.selectPoi);
 
   // Collapsed on a phone, expanded where there is room. `shouldAutoFocus` answers the
@@ -84,13 +85,24 @@ export function TripResults({
 
         <div className="tb-results-cards" id="tb-results-cards">
           {visible.length === 0 ? (
-            <div className="tb-card-empty">
-              {loading
-                ? 'Looking for campgrounds along the route…'
-                : total === 0
-                  ? 'Pan the map or widen the corridor to find campgrounds.'
-                  : 'All campgrounds hidden — re-enable a category in the legend.'}
-            </div>
+            loading ? (
+              <div className="tb-card-empty">Looking for campgrounds along the route…</div>
+            ) : total === 0 ? (
+              <div className="tb-card-empty">Pan the map or widen the corridor to find campgrounds.</div>
+            ) : campgroundsHidden ? (
+              <EmptyState
+                icon="eye-off"
+                title="Campgrounds are switched off"
+                body={`There are ${total} in view — the Campgrounds layer is turned off, so none are drawn.`}
+                actions={
+                  <Button variant="primary" size="sm" onClick={() => setOverlayHidden('cg', false)}>
+                    Turn campgrounds back on
+                  </Button>
+                }
+              />
+            ) : (
+              <div className="tb-card-empty">All campgrounds hidden — re-enable a category in the legend.</div>
+            )
           ) : (
             visible.map((card) => (
               <button

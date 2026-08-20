@@ -1,7 +1,7 @@
 // Both locate controls write the store; the puck and proximity-biased search
 // subscribe to that shared location.
 import { useCallback, useEffect, useRef } from 'react';
-import { useToast } from '@ui';
+import { Button, useToast } from '@ui';
 import { installMapControls, type MapControls } from '@/map/controls';
 import {
   createUserLocationRegistry,
@@ -15,8 +15,15 @@ import { useMapContext } from './MapProvider';
 const PERMISSION_DENIED = 1;
 
 export const GEOLOCATION_DENIED_MESSAGE =
-  'Turn on location access to see distances and nearer search results.';
+  "Your browser blocked the request, so we can't centre the map on you. Searching for a place works just as well.";
 export const GEOLOCATION_UNAVAILABLE_MESSAGE = 'Try again, or type a place name instead.';
+const GEOLOCATION_ALLOW_INSTRUCTIONS =
+  "Look for the location icon in your browser's address bar, allow access for this site, then reload the page.";
+
+/** Focuses the trip planner's first stop input, for the location toast's "Search a place" action. */
+function focusFirstStopInput(): void {
+  document.querySelector<HTMLInputElement>('.tb-input[data-i="0"]')?.focus();
+}
 
 export interface UseUserLocationApi {
   /** Ask for a fresh fix, the way MapLibre's own (now-hidden) button did.
@@ -77,8 +84,29 @@ export function useUserLocation(): UseUserLocationApi {
       const denied = (event as GeolocationPositionError | undefined)?.code === PERMISSION_DENIED;
       toastRef.current({
         status: 'warning',
-        title: denied ? 'Location permission denied' : "Couldn't get your location",
+        icon: 'location',
+        title: denied ? "We can't use your location" : "Couldn't get your location",
         children: denied ? GEOLOCATION_DENIED_MESSAGE : GEOLOCATION_UNAVAILABLE_MESSAGE,
+        actions: denied ? (
+          <>
+            <Button variant="primary" size="sm" iconStart="search" onClick={focusFirstStopInput}>
+              Search a place
+            </Button>
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={() =>
+                toastRef.current({
+                  status: 'warning',
+                  title: 'How to allow it',
+                  children: GEOLOCATION_ALLOW_INSTRUCTIONS,
+                })
+              }
+            >
+              How to allow it
+            </Button>
+          </>
+        ) : undefined,
       });
     };
 

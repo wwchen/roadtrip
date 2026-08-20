@@ -30,6 +30,7 @@ function renderTable(watches: Watch[], overrides: Partial<Parameters<typeof Watc
       onEdit={noop}
       onSetStatus={noop}
       onDelete={noop}
+      onNewWatch={noop}
       {...overrides}
     />,
   );
