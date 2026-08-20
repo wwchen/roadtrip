@@ -23,5 +23,23 @@
     "frontend-design@claude-plugins-official": true,
     "superpowers@claude-plugins-official": true,
     "ecc@ecc": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(actionlint *)",
+      "Bash(actionlint)",
+      "Bash(shellcheck *)",
+      "Bash(./gradlew :backend:ktlintCheck *)",
+      "Bash(./gradlew :backend:ktlintCheck)",
+      "Bash(npm run typecheck *)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run lint *)",
+      "Bash(npm run lint)",
+      "mcp__plugin_ecc_chrome-devtools__list_console_messages",
+      "mcp__plugin_ecc_chrome-devtools__take_screenshot",
+      "mcp__plugin_ecc_chrome-devtools__take_snapshot",
+      "mcp__Claude_Browser__read_console_messages",
+      "mcp__notion__notion-fetch"
+    ]
   }
 }
