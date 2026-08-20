@@ -15,6 +15,10 @@ MIN_FREE_DISK_GB="${MIN_FREE_DISK_GB:-20}"
 # considers live is never killed; anything older is provably abandoned.
 STALE_DEPLOY_SECONDS="${STALE_DEPLOY_SECONDS:-2400}"
 
+# Which processes count as a deploy. Overridable so tests can scope the kill to
+# their own fixture instead of every deploy running on the machine.
+STALE_DEPLOY_PATTERN="${STALE_DEPLOY_PATTERN:-deploy\.sh (prod|sandbox-up|sandbox-down)}"
+
 _require_sha() {
     local label="$1"
     local value="$2"
@@ -63,6 +67,7 @@ _require_free_disk() {
 # the ones older than the workflow's own timeout: they cannot still be live.
 _clear_stale_deploys() {
     local max_age="${ROADTRIP_STALE_DEPLOY_SECONDS:-${STALE_DEPLOY_SECONDS}}"
+    local pattern="${ROADTRIP_STALE_DEPLOY_PATTERN:-${STALE_DEPLOY_PATTERN}}"
     local self="$$"
     local pid
     local age
@@ -73,7 +78,7 @@ _clear_stale_deploys() {
         (( pid == self )) && continue
         (( age > max_age )) && stale+=("${pid}")
     done < <(
-        pgrep -f 'deploy\.sh (prod|sandbox-up|sandbox-down)' 2>/dev/null \
+        pgrep -f "${pattern}" 2>/dev/null \
             | while read -r pid; do
                   # macOS ps has no etimes, so convert [[dd-]hh:]mm:ss by hand.
                   age="$(ps -o etime= -p "${pid}" 2>/dev/null | tr -d ' ' | awk '
@@ -91,9 +96,30 @@ _clear_stale_deploys() {
     fi
     echo "==> clearing ${#stale[@]} stale deploy process tree(s) older than ${max_age}s: ${stale[*]}"
     for pid in "${stale[@]}"; do
-        pkill -9 -P "${pid}" 2>/dev/null || true
-        kill -9 "${pid}" 2>/dev/null || true
+        _kill_process_tree "${pid}"
     done
+}
+
+# pkill -P reaches only direct children, leaving the docker CLI and its plugins
+# alive and still holding the daemon. Walk the whole tree instead. Children are
+# snapshotted before the parent dies so they cannot be reparented out of reach;
+# a live parent can still fork after the snapshot, which this does not prevent.
+_kill_process_tree() {
+    local root="$1"
+    local child
+    local -a children=()
+
+    while read -r child; do
+        [[ "${child}" =~ ^[0-9]+$ ]] || continue
+        (( child == $$ )) && continue
+        children+=("${child}")
+    done < <(pgrep -P "${root}" 2>/dev/null || true)
+    if (( ${#children[@]} > 0 )); then
+        for child in "${children[@]}"; do
+            _kill_process_tree "${child}"
+        done
+    fi
+    kill -9 "${root}" 2>/dev/null || true
 }
 
 _ensure_data_volume() {
@@ -607,6 +633,9 @@ _sandbox_down() {
 }
 
 if [[ "${DEPLOY_ENV}" == "sandbox-down" ]]; then
+    # Teardown skips the disk check because it frees space, but a pile of hung
+    # deploys blocks it just as surely as a full disk does.
+    _clear_stale_deploys
     _sandbox_down "${REF}"
     exit 0
 fi
