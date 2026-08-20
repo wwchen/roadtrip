@@ -1,14 +1,8 @@
-import { Checkbox, Select } from '@ui';
-import { AUTO_BASEMAP_VALUE, BASEMAPS } from './basemaps';
+import { Toggle } from '@ui';
+import { BASEMAPS, type Basemap } from './basemaps';
 import { useMapContext } from './MapProvider';
 
-/** The picker's "follow the theme" option, always first. */
-const AUTO_OPTION = { value: AUTO_BASEMAP_VALUE, label: 'Auto (match theme)' };
-
-const BASEMAP_OPTIONS = [
-  AUTO_OPTION,
-  ...Object.entries(BASEMAPS).map(([value, basemap]) => ({ value, label: basemap.name })),
-];
+const checkedOf = (e: Event): boolean => (e.target as HTMLInputElement).checked;
 
 /**
  * Basemap choice and the satellite underlay.
@@ -19,11 +13,10 @@ const BASEMAP_OPTIONS = [
  * map lifecycle they drive lives in `MapProvider` — this component only renders
  * the choice.
  *
- * `value` rather than `defaultValue` on the select: the provider is the single
- * source of truth (it also seeds from `localStorage`), and LDS re-renders the
- * control from props, so passing the live value keeps the two from drifting. That
- * is safe here in a way it is not for a text field — there is no caret to lose,
- * which is the trap `docs/frontend-components.md` warns about.
+ * A swatch grid rather than a `<select>`: the picker's job is "what will this
+ * look like", which a dropdown of names can't answer. `isAutoBasemap` has no tile
+ * of its own — there being no user pick maps to whichever swatch the current
+ * `basemapKey` resolves to, same as the map itself falls back to it.
  */
 export function BasemapPicker() {
   const { basemapKey, setBasemap, isAutoBasemap, resetBasemap, satellite, setSatellite } =
@@ -31,25 +24,63 @@ export function BasemapPicker() {
 
   return (
     <>
-      <div className="rt-legend__basemap">
-        <Select
-          id="rt-basemap"
-          aria-label="Basemap"
-          options={BASEMAP_OPTIONS}
-          value={isAutoBasemap ? AUTO_BASEMAP_VALUE : basemapKey}
-          onChange={(e) => {
-            const next = (e.target as HTMLSelectElement).value;
-            if (next === AUTO_BASEMAP_VALUE) resetBasemap();
-            else setBasemap(next);
-          }}
+      <div className="rt-legend__basemap-grid" role="radiogroup" aria-label="Basemap">
+        {Object.entries(BASEMAPS).map(([key, basemap]) => (
+          <BasemapTile
+            key={key}
+            basemap={basemap}
+            selected={key === basemapKey}
+            onSelect={() => setBasemap(key)}
+          />
+        ))}
+      </div>
+      {!isAutoBasemap && (
+        <button type="button" className="rt-legend__basemap-reset" onClick={resetBasemap}>
+          Match theme automatically
+        </button>
+      )}
+      <div className="rt-legend__satellite">
+        <div className="rt-legend__satellite-copy">
+          <span className="rt-legend__row-title">Satellite overlay</span>
+          <span className="rt-legend__row-subtitle">Imagery drawn over the basemap above.</span>
+        </div>
+        <Toggle
+          id="rt-satellite"
+          aria-label="Satellite overlay"
+          checked={satellite}
+          onChange={(e) => setSatellite(checkedOf(e))}
         />
       </div>
-      <Checkbox
-        id="rt-satellite"
-        label="Satellite overlay"
-        checked={satellite}
-        onChange={(e) => setSatellite((e.target as HTMLInputElement).checked)}
-      />
     </>
+  );
+}
+
+function BasemapTile({
+  basemap,
+  selected,
+  onSelect,
+}: {
+  basemap: Basemap;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      className="rt-legend__basemap-tile"
+      onClick={onSelect}
+    >
+      <span
+        className={`rt-legend__basemap-swatch${selected ? ' rt-legend__basemap-swatch--selected' : ''}`}
+        style={{ background: basemap.swatch }}
+      />
+      <span
+        className={`rt-legend__basemap-label${selected ? ' rt-legend__basemap-label--selected' : ''}`}
+      >
+        {basemap.name}
+      </span>
+    </button>
   );
 }

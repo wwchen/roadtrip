@@ -191,11 +191,20 @@ async function renderMap({ bounds = CALIFORNIA, zoom = 5 } = {}) {
 /** Let queued microtasks — a queryFn and its state update — run. */
 const settle = () => act(async () => {});
 
-const panel = () => screen.getByText('Roadtrip Map').parentElement!;
+const panel = () => screen.getByText('Layers').parentElement!;
 
-/** The accessible name of every legend checkbox, in DOM order. */
+/**
+ * The accessible name of every legend checkbox, in DOM order.
+ *
+ * Agency rows are LDS `Checkbox`, whose visible label sits inside the same
+ * `<label>` as the input, so `textContent` reads it. Overlay rows are `Toggle`,
+ * whose label/count are rendered outside the control's own `<label>` — that
+ * text reaches assistive tech (and this helper) through `aria-label` instead.
+ */
 const checkboxLabels = () =>
-  screen.getAllByRole('checkbox').map((el) => el.closest('label')?.textContent?.trim() ?? '');
+  screen
+    .getAllByRole('checkbox')
+    .map((el) => el.closest('label')?.textContent?.trim() || el.getAttribute('aria-label') || '');
 
 /** Move the map and let the debounced read settle. */
 async function panTo(bounds: [number, number, number, number], zoom = 7) {
@@ -387,7 +396,7 @@ describe('painting', () => {
     await waitFor(() => expect(pinIdsIn('sc')).toEqual([1]));
 
     await act(async () => {
-      await userEvent.selectOptions(screen.getByLabelText('Basemap'), 'osm');
+      await userEvent.click(screen.getByRole('radio', { name: 'Transit' }));
     });
     instance.wipeAppLayers();
     await act(async () => {
@@ -438,23 +447,16 @@ describe('the legend', () => {
     await renderMap({ zoom: 8 });
 
     await waitFor(() => expect(screen.getByLabelText(/BC Parks \(2\)/)).toBeInTheDocument());
+    // DOM order: agencies (under "Places to sleep") come before the "Stops along
+    // the way" overlays now, since the legend groups by purpose rather than
+    // listing Superchargers first.
     expect(checkboxLabels().filter((label) => label.includes('('))).toEqual([
-      'Superchargers (0)',
       'BC Parks (2)',
       `${UNCATEGORIZED_AGENCY} (1)`,
       'US Forest Service (1)',
+      'Superchargers (0)',
       'Planet Fitness (0)',
     ]);
-  });
-
-  test('hints to zoom in until campgrounds are being requested', async () => {
-    await renderMap();
-
-    expect(screen.getByText('(zoom in to load)')).toBeInTheDocument();
-
-    await panTo(BAY_AREA, 6);
-
-    await waitFor(() => expect(screen.queryByText('(zoom in to load)')).toBeNull());
   });
 
   test('unticking an overlay hides its pin and hit layers', async () => {
@@ -599,9 +601,8 @@ describe('route mode', () => {
     expect(pinIdsIn('cg')).toEqual([9]);
   });
 
-  test('the zoom hint is gone while a route supplies campgrounds', async () => {
+  test('a route supplies campgrounds regardless of zoom', async () => {
     await renderMap();
-    expect(screen.getByText('(zoom in to load)')).toBeInTheDocument();
 
     onRouteResponse = collection([pin(9, 'campground', 'BC Parks')]);
     act(() => {
@@ -614,8 +615,6 @@ describe('route mode', () => {
       trip.setRoute({ type: 'FeatureCollection', features: [] });
     });
 
-    // The hint goes as soon as a route is active, so that assertion is immediate.
-    await waitFor(() => expect(screen.queryByText('(zoom in to load)')).toBeNull());
     // The agency row waits on the corridor's own request: a 250ms debounce, a round
     // trip and a re-render, which is past the default 1s budget on a loaded machine.
     await waitFor(() => expect(screen.getByLabelText(/BC Parks \(1\)/)).toBeInTheDocument(), {
@@ -703,7 +702,7 @@ describe('the trip overlay', () => {
     expect(instance.fitBoundsCalls).toHaveLength(1);
 
     await act(async () => {
-      await userEvent.selectOptions(screen.getByLabelText('Basemap'), 'osm');
+      await userEvent.click(screen.getByRole('radio', { name: 'Transit' }));
     });
     instance.wipeAppLayers();
     await act(async () => {
@@ -726,7 +725,7 @@ describe('the trip overlay', () => {
     expect(draggedFill).not.toContain('"role"');
 
     await act(async () => {
-      await userEvent.selectOptions(screen.getByLabelText('Basemap'), 'osm');
+      await userEvent.click(screen.getByRole('radio', { name: 'Transit' }));
     });
     instance.wipeAppLayers();
     await act(async () => {

@@ -225,6 +225,17 @@
   --rt-layer-np:            var(--rt-c-green-600);
   --rt-layer-sp:            var(--rt-c-brown-400);
 
+  /* Basemap picker swatches — a preview thumbnail per tile in BasemapPicker,
+     not the map's actual paint. Not composed from the channel primitives above:
+     each is a two-stop miniature of what its tile provider's own imagery looks
+     like, so the swatch is illustrative rather than a themed UI surface. */
+  --rt-basemap-streets:  linear-gradient(150deg, #efeae2, #d9d3c8);
+  --rt-basemap-outdoors: linear-gradient(150deg, #e4ebdd, #c4cfb4);
+  --rt-basemap-terrain:  linear-gradient(150deg, #ede3d4, #cbb394);
+  --rt-basemap-light:    #fafbfc;
+  --rt-basemap-dark:     #232a33;
+  --rt-basemap-transit:  linear-gradient(150deg, #deeefe, #b9d8f6);
+
   /* Map geometry — polygon fills, strokes, route lines */
   --rt-map-np-fill:     var(--rt-c-green-600);
   --rt-map-np-stroke:   var(--rt-c-green-900);
