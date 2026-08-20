@@ -9,7 +9,7 @@ inputs:
     description: >
       Sandbox owner slug, e.g. pr532. Names the marker consumed by teardown and
       sweep. The deploy script maps it to one of the fixed public slots
-      roadtrip-sb-1 through roadtrip-sb-5.
+      roadtrip-sb-1 and roadtrip-sb-2.
     required: true
   branch:
     description: Branch name for the build-info banner; falls back to the slug (start only)

@@ -167,6 +167,17 @@ _prune_roadtrip_images() {
         --filter "until=${retention}" >/dev/null
 }
 
+# One roadtrip-data-<sha> volume per data tree SHA, which the image prune never
+# touched. Label-scoped because the host is shared, --all because these are
+# named. Rollback depth is the image retention's job: _ensure_data_volume
+# repopulates a missing volume, so these are a cache, not the record.
+_prune_data_volumes() {
+    echo "==> pruning unused Roadtrip data volumes"
+    docker volume prune --force --all \
+        --filter "label=ca.floo.roadtrip.managed=true" \
+        | tail -1
+}
+
 _deploy_prod() {
     if [[ $# -lt 3 ]]; then
         echo "usage: deploy.sh prod <app-sha> <data-tree-sha> <companion-tree-sha> [branch]" >&2
@@ -220,6 +231,7 @@ _deploy_prod() {
         exit 1
     fi
     _prune_roadtrip_images
+    _prune_data_volumes
     echo "==> production deployed: ${app_sha}"
 }
 
@@ -289,7 +301,7 @@ POSTGRES_HEALTH_RETRIES="${POSTGRES_HEALTH_RETRIES:-30}"
 
 SANDBOX_SECRETS_ENV="local"
 SANDBOX_TEARDOWN_COMPOSE_SHA="0000000000000000000000000000000000000000"
-SANDBOX_SLOT_IDS=(1 2 3 4 5)
+SANDBOX_SLOT_IDS=(1 2)
 
 _require_sandbox_owner_name() {
     local value="$1"
@@ -389,24 +401,96 @@ _allocate_port() {
 _sandbox_lock_dir=""
 _sandbox_lock_release() {
     if [[ -n "${_sandbox_lock_dir}" ]]; then
-        rmdir "${_sandbox_lock_dir}" 2>/dev/null || true
+        # Ours may have been reclaimed while we held it.
+        if [[ "$(sed -n '1p' "${_sandbox_lock_dir}/pid" 2>/dev/null)" == "$$" ]]; then
+            rm -f "${_sandbox_lock_dir}/pid"
+            rmdir "${_sandbox_lock_dir}" 2>/dev/null || true
+        fi
         _sandbox_lock_dir=""
     fi
 }
 
+# GNU stat first because BSD stat rejects -c outright, while GNU stat *accepts*
+# -f and prints filesystem junk with a zero exit -- so validate the output, not
+# the exit status. Prints nothing when neither form works: the caller must not
+# guess an age in either direction.
+_lock_mtime_epoch() {
+    local value
+
+    value="$(stat -c %Y "$1" 2>/dev/null || true)"
+    if ! [[ "${value}" =~ ^[0-9]+$ ]]; then
+        value="$(stat -f %m "$1" 2>/dev/null || true)"
+    fi
+    [[ "${value}" =~ ^[0-9]+$ ]] || return 0
+    printf '%s\n' "${value}"
+}
+
+# Rename is atomic: exactly one racer wins, the rest go back to waiting.
+_sandbox_lock_steal() {
+    local lock="$1"
+    local aside="${lock}.stale.$$"
+
+    if mv "${lock}" "${aside}" 2>/dev/null; then
+        rm -rf "${aside}"
+    fi
+}
+
+# A holder killed mid-flight used to leak this lock permanently, blocking every
+# teardown and the sweep for two days on 2026-08-18. Record an owner so the next
+# caller can reclaim it.
 _sandbox_lock_acquire() {
     local lock="${SANDBOX_STATE_DIR}/.slot-lock"
+    local max_wait="${ROADTRIP_SANDBOX_LOCK_WAIT_SECONDS:-60}"
+    local grace="${ROADTRIP_SANDBOX_LOCK_OWNER_GRACE_SECONDS:-5}"
+    local poll=1
     local waited=0
+    local owner_pid
+    local lock_age
+    local lock_mtime
+    local warned=0
 
     mkdir -p "${SANDBOX_STATE_DIR}"
     until mkdir "${lock}" 2>/dev/null; do
-        waited=$(( waited + 1 ))
-        if [[ ${waited} -ge 60 ]]; then
+        # Age gates every reclaim: it belongs to the directory, so unlike the
+        # PID we just read it cannot be stale and name a lock someone else has
+        # since taken. Costs up to `grace` before recovery.
+        owner_pid="$(sed -n '1p' "${lock}/pid" 2>/dev/null || true)"
+        lock_mtime="$(_lock_mtime_epoch "${lock}")"
+        if [[ "${lock_mtime}" =~ ^[0-9]+$ ]]; then
+            lock_age=$(( $(date +%s) - lock_mtime ))
+        else
+            # Unknown age means we cannot tell an abandoned lock from a fresh
+            # one, so refuse to reclaim and say so, rather than silently never
+            # recovering (or, worse, stealing a live lock).
+            if (( warned == 0 )); then
+                echo "warning: cannot read mtime of ${lock}; lock recovery disabled" >&2
+                warned=1
+            fi
+            lock_age=0
+        fi
+        if (( lock_age >= grace )); then
+            if [[ "${owner_pid}" =~ ^[0-9]+$ ]]; then
+                if ! kill -0 "${owner_pid}" 2>/dev/null; then
+                    echo "==> reclaiming sandbox slot lock abandoned by PID ${owner_pid}"
+                    _sandbox_lock_steal "${lock}"
+                fi
+            else
+                # Died before writing a marker, or predates this recovery.
+                echo "==> reclaiming ownerless sandbox slot lock (${lock_age}s old)"
+                _sandbox_lock_steal "${lock}"
+            fi
+        fi
+
+        # Every path advances `waited`, so max_wait stays a real bound.
+        if (( waited >= max_wait )); then
             echo "error: timed out waiting for sandbox slot lock: ${lock}" >&2
             exit 1
         fi
-        sleep 1
+        sleep "${poll}"
+        waited=$(( waited + poll ))
     done
+    # Before the trap: a failed write leaves a lock the grace path recovers.
+    printf '%s\n' "$$" > "${lock}/pid"
     _sandbox_lock_dir="${lock}"
     trap _sandbox_lock_release EXIT
 }
@@ -518,6 +602,7 @@ _sandbox_down() {
     rm -f "${marker}"
     _sandbox_lock_release
     _prune_roadtrip_images
+    _prune_data_volumes
     echo "==> sandbox ${sandbox_owner} is down"
 }
 
@@ -813,5 +898,6 @@ _write_sandbox_marker "live"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 _prune_roadtrip_images
+_prune_data_volumes
 echo ""
 echo "Sandbox is live: ${SANDBOX_URL}"
