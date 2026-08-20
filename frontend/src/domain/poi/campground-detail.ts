@@ -92,16 +92,36 @@ const NEGATIVE_AMENITY_LABELS = new Map<string, string>([
  * ("Vault toilets" rather than "Toilets" + "Vault").
  */
 export function amenityList(p: Props): string[] {
+  return amenityTags(p).map((tag) => tag.label);
+}
+
+/** An amenity, and whether the label states its absence ("No showers"). */
+export interface AmenityTag {
+  label: string;
+  absent: boolean;
+}
+
+/**
+ * The same labels as `amenityList`, with the absences still identifiable.
+ *
+ * The at-a-glance block gives an absence a hue and leaves every other tag neutral,
+ * and by the time a label reads "No showers" that distinction has been flattened
+ * into prose. Both functions come off this one so the two can never disagree about
+ * which amenities are worth naming.
+ */
+export function amenityTags(p: Props): AmenityTag[] {
   const value = p.amenities;
-  if (Array.isArray(value)) return stringList(value);
+  // The legacy array shape carries labels only — nothing says whether one is an
+  // absence, so none of them are.
+  if (Array.isArray(value)) return stringList(value).map((label) => ({ label, absent: false }));
   if (!value || typeof value !== 'object') return [];
 
   const record = value as Record<string, unknown>;
-  const out: string[] = [];
+  const out: AmenityTag[] = [];
   for (const [key, raw] of Object.entries(record)) {
     if (key === 'toilets' && record.toilet_kind) continue;
     const label = amenityLabel(key, raw);
-    if (label) out.push(label);
+    if (label) out.push({ label, absent: raw === false });
   }
   return out;
 }
@@ -231,9 +251,32 @@ export function verified(p: Props, now: Date = new Date()): Verified | null {
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return null;
   return {
-    date: raw,
+    date: verifiedLabel(parsed, now),
     stale: (now.getTime() - parsed.getTime()) / MS_PER_DAY > STALE_AFTER_DAYS,
   };
+}
+
+/**
+ * "23 May", or "23 May 2024" once the year stops being obvious.
+ *
+ * The field arrives as whatever the provider stored — a bare `2026-08-01` from
+ * one, a full `2026-05-06T23:47:29Z` from another — and this used to render that
+ * string verbatim. A second of a timestamp is not freshness, and the two shapes
+ * side by side read as two different kinds of fact; the stamp is one line in the
+ * footer, so it says the day and stops.
+ *
+ * The year is dropped only for the current one. A date from two years ago shown
+ * as "6 May" reads as this spring, which is exactly the wrong impression for a
+ * value whose whole job is to say how much to trust the page.
+ */
+function verifiedLabel(parsed: Date, now: Date): string {
+  const sameYear = parsed.getUTCFullYear() === now.getUTCFullYear();
+  return parsed.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    ...(sameYear ? null : { year: 'numeric' }),
+    timeZone: 'UTC',
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -501,8 +544,11 @@ function regionalParkSearch(p: Props): { url: string; label: string } | null {
 const PARENT_PARK_TITLE =
   /\b(park|preserve|forest|recreation area|recreation site|conservation area|wilderness|monument|seashore|lakeshore|reserve)\b/i;
 const GENERIC_TITLE = /^(official\s+(page|site|website)|website|home|homepage|map|directions?)$/i;
+// Whoever runs the place is not the place. "Forest Service Concessionaire" links to
+// camprrm.com and matches `forest` below, so without this it was inferred as Tuff
+// Campground's containing park — an operator's trade name presented as a location.
 const NON_PARENT_TITLE =
-  /\b(reservations?|booking|fees?|passes?|permits?|map|directions?|calendar|alerts?|brochure|guide)\b/i;
+  /\b(reservations?|booking|fees?|passes?|permits?|map|directions?|calendar|alerts?|brochure|guide|concessionaires?|conditions?|tourism|weather)\b/i;
 
 /**
  * The containing park, inferred from official-link titles.
@@ -577,6 +623,15 @@ export interface StructuredDetails {
 }
 
 /**
+ * The group titles, as constants: the POI page maps each of these onto one of its
+ * blocks (stay details, contact, provenance), so the strings are a contract
+ * between this module and `types/campground.tsx` rather than three labels.
+ */
+export const STAY_DETAILS_GROUP = 'Stay details';
+export const CONTACT_GROUP = 'Contact';
+export const SOURCE_GROUP = 'Source metadata';
+
+/**
  * The "More details" body, as groups of rows.
  *
  * Empty rows and empty groups drop out, so a sparse pin renders a short section
@@ -618,9 +673,9 @@ export function structuredDetails(p: Props): StructuredDetails {
 
   return {
     groups: [
-      { title: 'Stay details', rows: stay },
-      { title: 'Contact', rows: contact },
-      { title: 'Source metadata', rows: source },
+      { title: STAY_DETAILS_GROUP, rows: stay },
+      { title: CONTACT_GROUP, rows: contact },
+      { title: SOURCE_GROUP, rows: source },
     ].filter((group) => group.rows.length > 0),
     links: campgroundLinks(p.links),
     alerts: campgroundAlerts(p.alerts),

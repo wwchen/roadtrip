@@ -29,7 +29,7 @@ import java.io.File
  * by Ktor's scoring any more, and nothing under `staticDir` is reachable except
  * through a mount named here.
  */
-private val pages = listOf("watches.html", "availability.html", INDEX_FILE)
+private val pages = listOf("watches.html", "availability.html", "poi.html", INDEX_FILE)
 
 private const val HTML_SUFFIX = ".html"
 private const val DATA_DIR = "data"

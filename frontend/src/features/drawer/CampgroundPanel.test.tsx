@@ -86,17 +86,17 @@ beforeEach(() => {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe('the campground drawer', () => {
+describe('the campground page, at panel width', () => {
   test('leads with the name, its park and its agency', async () => {
     await openCampground();
 
-    // Scoped to the header: the parent park also appears as a link in the accordion,
-    // which is what the pin's `links` entry is.
-    const header = within(panel().querySelector('header')!);
+    // Scoped to the identity block: the parent park also appears as a link in the
+    // links block, which is what the pin's `links` entry is.
+    const header = within(panel().querySelector('.rt-poi-identity')!);
     expect(header.getByRole('heading', { level: 2 })).toHaveTextContent('Bowman Bay');
-    expect(header.getByText('Deception Pass State Park')).toBeInTheDocument();
-    expect(header.getByText('Washington State Parks')).toBeInTheDocument();
-    expect(header.getByText('WA')).toBeInTheDocument();
+    expect(header.getByText('Campground · Washington State Parks')).toBeInTheDocument();
+    // Parent and region share the subtitle line, in that order.
+    expect(header.getByText('Deception Pass State Park · WA')).toBeInTheDocument();
   });
 
   test('renders the season verdict', async () => {
@@ -139,7 +139,7 @@ describe('the campground drawer', () => {
     ).toBe(false);
   });
 
-  test('shows the details a booker reads, inside the accordion', async () => {
+  test('shows the details a booker reads, below the rule', async () => {
     await openCampground({
       price: { minimum: 25, maximum: 40 },
       schedule: { check_in_time: '14:00' },
@@ -148,24 +148,28 @@ describe('the campground drawer', () => {
       booking_system: 'recreation.gov',
     });
 
+    // No accordion any more: the blocks below the rule are the page, and a camper
+    // who scrolls finds them without opening anything.
     const details = within(panel());
-    expect(details.getByText('More details')).toBeInTheDocument();
+    expect(details.queryByText('More details')).toBeNull();
+    expect(details.getByText('Stay details')).toBeInTheDocument();
     expect(details.getByText('$25-$40')).toBeInTheDocument();
     expect(details.getByText('2:00 PM')).toBeInTheDocument();
     expect(details.getByText('Verizon')).toBeInTheDocument();
-    expect(details.getByText('4.3')).toBeInTheDocument();
-    expect(details.getByText('20 sites')).toBeInTheDocument();
-    expect(details.getByText('Booking via recreation.gov')).toBeInTheDocument();
+    expect(details.getByText(/4\.3/)).toBeInTheDocument();
+    expect(details.getByText('20')).toBeInTheDocument();
+    expect(details.getByText('recreation.gov')).toBeInTheDocument();
   });
 
-  test('renders amenities and activities as pills', async () => {
+  test('renders amenities and activities as tags, and marks the absences', async () => {
     await openCampground({
       amenities: { showers: true, water: false },
       activities: ['Hiking'],
     });
 
-    expect(screen.getByText('Showers')).toBeInTheDocument();
-    expect(screen.getByText('No water')).toBeInTheDocument();
+    expect(screen.getByText('Showers')).toHaveClass('rt-poi-tag');
+    // An absence is the one tag that takes a hue.
+    expect(screen.getByText('No water')).toHaveClass('rt-poi-tag--absent');
     expect(screen.getByText('Hiking')).toBeInTheDocument();
   });
 
@@ -187,7 +191,7 @@ describe('the campground drawer', () => {
     // every raw field as text, so the unsanitised string is legitimately *visible*
     // there as `&lt;p onclick="x()"&gt;…`. Asserting over `panel().innerHTML` would
     // read that escaped text as a live attribute and fail on inert markup.
-    const injected = panel().querySelectorAll('.rt-drawer-html');
+    const injected = panel().querySelectorAll('.rt-poi-html');
     expect(injected.length).toBeGreaterThan(0);
     for (const region of injected) {
       expect(region.innerHTML).not.toContain('<script');
@@ -196,8 +200,36 @@ describe('the campground drawer', () => {
     // Nothing anywhere in the panel is a real handler, escaped text included.
     expect(panel().querySelectorAll('[onclick], script')).toHaveLength(0);
     expect(screen.getByText('$25 per night')).toBeInTheDocument();
-    // Scoped past the upstream table, which shows the same field again verbatim.
-    expect(within(panel().querySelector('.rt-cg-upstream-meta')!).getByText(/14 days/)).toBeInTheDocument();
+    // Scoped to the stay-details block, since the upstream table shows the same
+    // field again verbatim inside the provenance disclosure.
+    expect(
+      within(panel().querySelector('.rt-poi-slot--specs')!).getByText('14 days'),
+    ).toBeInTheDocument();
+  });
+
+  // Pins the shape the Playwright smoke suite reaches into, in a place that runs on
+  // every frontend CI job: promoted source fields and the verbatim upstream record
+  // share the provenance disclosure, and only the first half is sourced from the DTO.
+  test('separates promoted source metadata from the verbatim upstream record', async () => {
+    await openCampground({
+      source: 'reservecalifornia',
+      source_id: 'rc-629',
+      upstream: { description: 'Raw-only description', media: 'raw-only.jpg' },
+    });
+
+    const provenance = panel().querySelector('.rt-poi-provenance')!;
+    expect(provenance).not.toBeNull();
+
+    const promoted = provenance.querySelector('section.rt-poi-block')!;
+    expect(promoted.querySelector(':scope > h3')).toHaveTextContent('Source metadata');
+    expect(promoted.textContent).toContain('rc-629');
+    // The raw record is legitimately visible in the disclosure — that is what a
+    // provenance surface is for — but never as the source of a promoted field.
+    expect(promoted.textContent).not.toContain('Raw-only description');
+    expect(promoted.textContent).not.toContain('raw-only.jpg');
+    expect(provenance.querySelector('.rt-poi-upstream-table')!.textContent).toContain(
+      'Raw-only description',
+    );
   });
 
   test('a stale verification date warns', async () => {
@@ -233,6 +265,9 @@ describe('the campground drawer', () => {
     });
 
     expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('Bowman Bay');
-    expect(screen.queryByText('More details')).toBeNull();
+    // No at-a-glance row, no links, no nearby — the omitted blocks leave no empty
+    // headings and no stray hairlines behind them.
+    expect(screen.queryByText('At a glance')).toBeNull();
+    expect(screen.queryByText('Links')).toBeNull();
   });
 });

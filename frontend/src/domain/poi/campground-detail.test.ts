@@ -119,14 +119,54 @@ describe('rating', () => {
   });
 });
 
+describe('parentParkName', () => {
+  const linked = (...titles: string[]) => ({
+    name: 'Tuff Campground',
+    links: titles.map((title) => ({ title, url: 'https://example.test' })),
+  });
+
+  test('infers the containing park from an official link title', () => {
+    expect(parentParkName(linked('Inyo National Forest'))).toBe('Inyo National Forest');
+  });
+
+  // "Forest Service Concessionaire" matches `forest`, and camprrm.com is an operator
+  // rather than a place — this was showing up as Tuff Campground's parent park.
+  test('an operator is not a parent, however park-shaped its name', () => {
+    expect(parentParkName(linked('Forest Service Concessionaire'))).toBe('');
+  });
+
+  test('state services that mention a place are not the place', () => {
+    expect(parentParkName(linked('California State Road Conditions'))).toBe('');
+    expect(parentParkName(linked('California State Tourism'))).toBe('');
+  });
+
+  test('the real parent still wins when both kinds of link are present', () => {
+    expect(parentParkName(linked('Forest Service Concessionaire', 'Inyo National Forest'))).toBe(
+      'Inyo National Forest',
+    );
+  });
+});
+
 describe('verified', () => {
   const NOW = new Date('2026-08-09T00:00:00Z');
 
-  test('fresh data is not flagged', () => {
+  test('fresh data is not flagged, and reads as a date', () => {
     expect(verified({ last_verified: '2026-08-01' }, NOW)).toEqual({
-      date: '2026-08-01',
+      date: '1 Aug',
       stale: false,
     });
+  });
+
+  // Providers disagree about the shape of this field — a bare day from one, a
+  // full timestamp from another — and the stamp is one line in a footer.
+  test('a provider timestamp reads the same as a provider date', () => {
+    expect(verified({ last_verified: '2026-05-06T23:47:29Z' }, NOW)?.date).toBe('6 May');
+  });
+
+  // "6 May" for a date two years old reads as this spring, which is the wrong
+  // impression for the one value that says how much to trust the page.
+  test('an older year is named', () => {
+    expect(verified({ last_verified: '2024-05-06' }, NOW)?.date).toBe('6 May 2024');
   });
 
   test('data older than the threshold is stale', () => {

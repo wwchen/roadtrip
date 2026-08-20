@@ -173,7 +173,7 @@ class SmokeTest {
 
             // The CTAs are LDS buttons rendered as anchors, in the actions row —
             // `a.cg-btn-primary` was the vanilla's hand-built equivalent.
-            val reserveBtn = drawer.locator(".rt-drawer-actions a[href]").first()
+            val reserveBtn = drawer.locator(".rt-poi-actions a[href]").first()
             assertThat(reserveBtn).isVisible()
             val href = reserveBtn.getAttribute("href") ?: ""
             assertTrue(
@@ -606,32 +606,41 @@ class SmokeTest {
                     .setTimeout(15_000.0),
             )
             assertThat(drawer.locator("h2")).containsText("Clear Lake SP Cabins")
-            // The agency sits above the name in the header, which is `DrawerHeader`'s
-            // `above` slot — the vanilla's `h2 + .cg-agency-subtitle` was the same line
-            // below it.
-            assertThat(drawer.locator(".rt-cg-agency")).containsText("California State Parks")
-            val about = drawer.locator("section:has(> h3:text-is('About'))")
+            // The agency shares the eyebrow with the type — "Campground · <agency>" —
+            // which is what identifies the place before its name locates it.
+            assertThat(drawer.locator(".rt-poi-eyebrow")).containsText("California State Parks")
+            // The provider description is prose, so it reads in "Good to know" rather
+            // than in a section named after the field it came from.
+            val about = drawer.locator(".rt-poi-slot--goodToKnow")
             assertThat(about).containsText("Clear Lake State Park offers rental cabins")
             assertFalse(
                 about.textContent().contains("Raw-only description"),
-                "drawer About should render DTO description, not raw upstream description",
+                "drawer prose should render DTO description, not raw upstream description",
             )
-            val details = drawer.locator(".rt-cg-details")
+            // Provenance is what is left once everything that is trip content has been
+            // promoted into a block above it — collapsed, and the last thing on the page.
+            val provenance = drawer.locator(".rt-poi-provenance")
+            assertThat(provenance).hasCount(1)
+            // Scoped to the PROMOTED half of the disclosure. The raw upstream table
+            // sits in here too and shows every field the provider sent, verbatim and
+            // as text — "Raw-only description" is legitimately visible there, which is
+            // the whole point of a provenance surface. What must not happen is a
+            // promoted field being sourced from raw, so that is what this asserts.
+            val details = provenance.locator("section.rt-poi-block:has(> h3:text-is('Source metadata'))")
             assertThat(details).hasCount(1)
-            assertThat(details).containsText("Source metadata")
             assertThat(details).containsText("rc-629")
             assertFalse(
                 details.textContent().contains("Raw-only description"),
-                "drawer details should not render raw upstream description",
+                "source metadata should not render raw upstream description",
             )
             assertFalse(
                 details.textContent().contains("raw-only.jpg"),
-                "drawer details should not render raw upstream media",
+                "source metadata should not render raw upstream media",
             )
             val heroImage =
                 page.evaluate(
                     """
-                    () => getComputedStyle(document.querySelector('.rt-drawer-hero')).backgroundImage
+                    () => getComputedStyle(document.querySelector('.rt-poi-hero')).backgroundImage
                     """.trimIndent(),
                 ) as String
             assertTrue(heroImage.contains("/Place/629.jpg"), "drawer should use DTO photo_url as hero image")

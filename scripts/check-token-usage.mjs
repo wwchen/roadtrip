@@ -77,6 +77,15 @@ const COMPONENT_LOCAL = new Set([
   // Declared and consumed entirely inside drawer.css.
   '--rt-drawer-clearance',
   '--rt-drawer-clearance-gap',
+  // The POI page's own rhythm: declared in domain/poi/poi-page.css, which is the
+  // one stylesheet for both the drawer panel and the routed page. drawer.css reads
+  // the gutter so its loading and error states line up with the page that replaces
+  // them. Geometry the page owns, not colour or a scale step.
+  '--rt-poi-gutter',
+  '--rt-poi-block-gap',
+  '--rt-poi-hero-height',
+  '--rt-poi-measure',
+  '--rt-poi-card-width',
   // Declared and consumed entirely inside shell.css — page padding, nothing hands
   // it anywhere. Listed here only because it is not a design token.
   '--rt-shell-pad',
