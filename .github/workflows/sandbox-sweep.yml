@@ -60,12 +60,63 @@ jobs:
       - name: Reclaim disk on the deploy host
         env:
           RECLAIM_FREE_TARGET_GB: ${{ vars.RECLAIM_FREE_TARGET_GB || 20 }}
+          ROADTRIP_HOST_DOCKER_LOCK_WAIT_SECONDS: ${{ vars.ROADTRIP_HOST_DOCKER_LOCK_WAIT_SECONDS || 300 }}
         run: |
           set -euo pipefail
           ssh -o BatchMode=yes "$SANDBOX_HOST" \
-            "bash -s -- '$RECLAIM_FREE_TARGET_GB'" <<'REMOTE'
+            "bash -s -- '$RECLAIM_FREE_TARGET_GB' '$ROADTRIP_HOST_DOCKER_LOCK_WAIT_SECONDS'" <<'REMOTE'
           set -euo pipefail
           target_gb="$1"
+          lock_wait_seconds="$2"
+          lock_dir="$HOME/.roadtrip/locks/docker-operation"
+          lock_poll_seconds=1
+          lock_owner_grace_seconds=5
+          waited=0
+          owner_missing_for=0
+          lock_owned="false"
+
+          release_lock() {
+            if [ "$lock_owned" = "true" ]; then
+              rm -f "$lock_dir/pid"
+              rmdir "$lock_dir" 2>/dev/null || true
+              lock_owned="false"
+            fi
+          }
+          trap release_lock EXIT
+
+          mkdir -p "$(dirname "$lock_dir")"
+          until mkdir "$lock_dir" 2>/dev/null; do
+            owner_pid="$(sed -n '1p' "$lock_dir/pid" 2>/dev/null || true)"
+            if [[ "$owner_pid" =~ ^[0-9]+$ ]]; then
+              owner_missing_for=0
+              if ! kill -0 "$owner_pid" 2>/dev/null; then
+                echo "==> reclaiming abandoned Docker operation lock from PID $owner_pid"
+                rm -f "$lock_dir/pid"
+                rmdir "$lock_dir" 2>/dev/null || true
+                continue
+              fi
+            else
+              owner_missing_for=$(( owner_missing_for + lock_poll_seconds ))
+              if [ "$owner_missing_for" -ge "$lock_owner_grace_seconds" ]; then
+                echo "==> reclaiming ownerless Docker operation lock"
+                rm -f "$lock_dir/pid"
+                rmdir "$lock_dir" 2>/dev/null || true
+                owner_missing_for=0
+                continue
+              fi
+            fi
+
+            if [ "$waited" -ge "$lock_wait_seconds" ]; then
+              echo "error: timed out waiting for Docker operation lock $lock_dir" >&2
+              exit 1
+            fi
+            sleep "$lock_poll_seconds"
+            waited=$(( waited + lock_poll_seconds ))
+          done
+          lock_owned="true"
+          printf '%s\n' "$$" > "$lock_dir/pid"
+          echo "==> acquired Docker operation lock: $lock_dir"
+
           free_gb() { df -Pk "$HOME" | awk 'NR==2 {print int($4 / 1024 / 1024)}'; }
 
           before="$(free_gb)"

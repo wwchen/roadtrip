@@ -231,6 +231,12 @@ Volumes are deliberately never pruned. A stopped stack's named volume looks
 dangling to `docker volume prune` but holds real state, so reclamation is
 limited to data that can be rebuilt.
 
+Reclamation and every `deploy.sh` start or teardown share a host-side Docker
+operation lock, so the scheduled prune cannot race a Compose transition. The
+wait limit can be overridden with `ROADTRIP_HOST_DOCKER_LOCK_WAIT_SECONDS`; an
+abandoned lock is recovered from its PID marker after a stale deploy is
+terminated.
+
 This matters because a full disk does not make Docker return an error, it
 deadlocks the daemon: Docker Desktop wedges on its own `ENOSPC` and every later
 `docker` call blocks forever on a socket that accepts connections but never

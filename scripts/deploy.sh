@@ -15,6 +15,68 @@ MIN_FREE_DISK_GB="${MIN_FREE_DISK_GB:-20}"
 # considers live is never killed; anything older is provably abandoned.
 STALE_DEPLOY_SECONDS="${STALE_DEPLOY_SECONDS:-2400}"
 
+# Every deploy path and the scheduled reclaim job mutate the same Docker daemon.
+# A host-side lock serialises them across otherwise-independent Actions
+# concurrency groups. The PID marker lets the next operation recover a lock
+# abandoned when a stale deploy is killed with SIGKILL.
+HOST_DOCKER_LOCK_DIR="${HOME}/.roadtrip/locks/docker-operation"
+HOST_DOCKER_LOCK_WAIT_SECONDS="${HOST_DOCKER_LOCK_WAIT_SECONDS:-300}"
+HOST_DOCKER_LOCK_POLL_SECONDS=1
+HOST_DOCKER_LOCK_OWNER_GRACE_SECONDS=5
+
+_host_docker_lock_owned=""
+
+_host_docker_lock_release() {
+    if [[ -n "${_host_docker_lock_owned}" ]]; then
+        rm -f "${_host_docker_lock_owned}/pid"
+        rmdir "${_host_docker_lock_owned}" 2>/dev/null || true
+        _host_docker_lock_owned=""
+    fi
+}
+
+_host_docker_lock_acquire() {
+    local lock="${HOST_DOCKER_LOCK_DIR}"
+    local max_wait="${ROADTRIP_HOST_DOCKER_LOCK_WAIT_SECONDS:-${HOST_DOCKER_LOCK_WAIT_SECONDS}}"
+    local waited=0
+    local owner_missing_for=0
+    local owner_pid
+
+    mkdir -p "$(dirname "${lock}")"
+    until mkdir "${lock}" 2>/dev/null; do
+        owner_pid="$(sed -n '1p' "${lock}/pid" 2>/dev/null || true)"
+        if [[ "${owner_pid}" =~ ^[0-9]+$ ]]; then
+            owner_missing_for=0
+            if ! kill -0 "${owner_pid}" 2>/dev/null; then
+                echo "==> reclaiming abandoned Docker operation lock from PID ${owner_pid}"
+                rm -f "${lock}/pid"
+                rmdir "${lock}" 2>/dev/null || true
+                continue
+            fi
+        else
+            owner_missing_for=$(( owner_missing_for + HOST_DOCKER_LOCK_POLL_SECONDS ))
+            if (( owner_missing_for >= HOST_DOCKER_LOCK_OWNER_GRACE_SECONDS )); then
+                echo "==> reclaiming ownerless Docker operation lock"
+                rm -f "${lock}/pid"
+                rmdir "${lock}" 2>/dev/null || true
+                owner_missing_for=0
+                continue
+            fi
+        fi
+
+        if (( waited >= max_wait )); then
+            echo "error: timed out waiting for Docker operation lock ${lock}" >&2
+            exit 1
+        fi
+        sleep "${HOST_DOCKER_LOCK_POLL_SECONDS}"
+        waited=$(( waited + HOST_DOCKER_LOCK_POLL_SECONDS ))
+    done
+
+    _host_docker_lock_owned="${lock}"
+    printf '%s\n' "$$" > "${lock}/pid"
+    trap _host_docker_lock_release EXIT
+    echo "==> acquired Docker operation lock: ${lock}"
+}
+
 _require_sha() {
     local label="$1"
     local value="$2"
@@ -91,9 +153,27 @@ _clear_stale_deploys() {
     fi
     echo "==> clearing ${#stale[@]} stale deploy process tree(s) older than ${max_age}s: ${stale[*]}"
     for pid in "${stale[@]}"; do
-        pkill -9 -P "${pid}" 2>/dev/null || true
-        kill -9 "${pid}" 2>/dev/null || true
+        _kill_process_tree "${pid}"
     done
+}
+
+_kill_process_tree() {
+    local root="$1"
+    local child
+    local -a children=()
+
+    # Snapshot children before killing the parent so descendants cannot be
+    # reparented out of reach. Recurse post-order to include CLI plugins and
+    # helpers rather than stopping at the deploy script's immediate child.
+    while read -r child; do
+        [[ "${child}" =~ ^[0-9]+$ ]] && children+=("${child}")
+    done < <(pgrep -P "${root}" 2>/dev/null || true)
+    if (( ${#children[@]} > 0 )); then
+        for child in "${children[@]}"; do
+            _kill_process_tree "${child}"
+        done
+    fi
+    kill -9 "${root}" 2>/dev/null || true
 }
 
 _ensure_data_volume() {
@@ -187,6 +267,7 @@ _deploy_prod() {
     _require_sha "companion tree SHA" "${companion_sha}"
 
     _clear_stale_deploys
+    _host_docker_lock_acquire
     _require_free_disk "prod deploy"
 
     export ROADTRIP_BACKEND_IMAGE="ghcr.io/wwchen/roadtrip/backend:${app_sha}"
@@ -408,7 +489,7 @@ _sandbox_lock_acquire() {
         sleep 1
     done
     _sandbox_lock_dir="${lock}"
-    trap _sandbox_lock_release EXIT
+    trap '_sandbox_lock_release; _host_docker_lock_release' EXIT
 }
 
 _resolve_sandbox_marker() {
@@ -522,6 +603,8 @@ _sandbox_down() {
 }
 
 if [[ "${DEPLOY_ENV}" == "sandbox-down" ]]; then
+    _clear_stale_deploys
+    _host_docker_lock_acquire
     _sandbox_down "${REF}"
     exit 0
 fi
@@ -544,6 +627,7 @@ esac
 # Sandboxes share the deploy host with prod, so a sandbox that fills the disk
 # deadlocks the daemon for prod too. Teardown is exempt: it frees space.
 _clear_stale_deploys
+_host_docker_lock_acquire
 _require_free_disk "sandbox deploy"
 
 # ── Derive logical sandbox owner ──────────────────────────────────────────────
