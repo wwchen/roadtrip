@@ -410,6 +410,12 @@ _sandbox_lock_release() {
     fi
 }
 
+# BSD stat on the deploy host, GNU stat everywhere else. Prints nothing rather
+# than a wrong number when neither works: the caller must not guess an age.
+_lock_mtime_epoch() {
+    stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || true
+}
+
 # Rename is atomic: exactly one racer wins, the rest go back to waiting.
 _sandbox_lock_steal() {
     local lock="$1"
@@ -431,6 +437,8 @@ _sandbox_lock_acquire() {
     local waited=0
     local owner_pid
     local lock_age
+    local lock_mtime
+    local warned=0
 
     mkdir -p "${SANDBOX_STATE_DIR}"
     until mkdir "${lock}" 2>/dev/null; do
@@ -438,7 +446,19 @@ _sandbox_lock_acquire() {
         # PID we just read it cannot be stale and name a lock someone else has
         # since taken. Costs up to `grace` before recovery.
         owner_pid="$(sed -n '1p' "${lock}/pid" 2>/dev/null || true)"
-        lock_age=$(( $(date +%s) - $(stat -f %m "${lock}" 2>/dev/null || date +%s) ))
+        lock_mtime="$(_lock_mtime_epoch "${lock}")"
+        if [[ "${lock_mtime}" =~ ^[0-9]+$ ]]; then
+            lock_age=$(( $(date +%s) - lock_mtime ))
+        else
+            # Unknown age means we cannot tell an abandoned lock from a fresh
+            # one, so refuse to reclaim and say so, rather than silently never
+            # recovering (or, worse, stealing a live lock).
+            if (( warned == 0 )); then
+                echo "warning: cannot read mtime of ${lock}; lock recovery disabled" >&2
+                warned=1
+            fi
+            lock_age=0
+        fi
         if (( lock_age >= grace )); then
             if [[ "${owner_pid}" =~ ^[0-9]+$ ]]; then
                 if ! kill -0 "${owner_pid}" 2>/dev/null; then
