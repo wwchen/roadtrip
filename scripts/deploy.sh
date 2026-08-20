@@ -4,6 +4,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# Host-health guardrails. Defined here rather than in the tunables block below
+# because the `prod` subcommand dispatches before that block is reached.
+# A prod deploy pulls the backend, companion, and data images at once; 20GB
+# clears that with room to spare while still tripping long before the volume
+# fills. Override per-host with ROADTRIP_MIN_FREE_DISK_GB.
+MIN_FREE_DISK_GB="${MIN_FREE_DISK_GB:-20}"
+
+# Longer than deploy.yml's 30m timeout-minutes, so a deploy that GitHub still
+# considers live is never killed; anything older is provably abandoned.
+STALE_DEPLOY_SECONDS="${STALE_DEPLOY_SECONDS:-2400}"
+
 _require_sha() {
     local label="$1"
     local value="$2"
@@ -19,6 +30,70 @@ _require_sandbox_name() {
         echo "error: sandbox name must be 1-63 lowercase letters, digits, or hyphens" >&2
         exit 2
     fi
+}
+
+# A full disk does not fail a Docker call, it deadlocks the daemon: Docker
+# Desktop wedges on its own ENOSPC and every later `docker` invocation blocks
+# forever on a socket that accepts connections but never answers. That took
+# prod down for 14h once. Refuse to start a deploy without room for the pulls.
+_require_free_disk() {
+    local label="$1"
+    local min_gb="${ROADTRIP_MIN_FREE_DISK_GB:-${MIN_FREE_DISK_GB}}"
+    local target="${HOME}"
+    local free_kb
+    local free_gb
+
+    free_kb="$(df -Pk "${target}" | awk 'NR==2 {print $4}')"
+    if [[ -z "${free_kb}" ]]; then
+        echo "warning: could not read free space on ${target}; skipping ${label} disk check" >&2
+        return 0
+    fi
+    free_gb=$(( free_kb / 1024 / 1024 ))
+    if (( free_gb < min_gb )); then
+        echo "error: ${label} needs ${min_gb}GB free on ${target}, found ${free_gb}GB" >&2
+        echo "       a full disk deadlocks the Docker daemon; reclaim space before deploying" >&2
+        echo "       (run the sandbox-sweep reclaim job, or 'docker image prune -f' on the host)" >&2
+        exit 1
+    fi
+    echo "==> disk check: ${free_gb}GB free on ${target} (minimum ${min_gb}GB)"
+}
+
+# Deploys that ran while the daemon was wedged never return, so they pile up
+# invisibly, each holding an SSH session and a half-applied Compose state. Clear
+# the ones older than the workflow's own timeout: they cannot still be live.
+_clear_stale_deploys() {
+    local max_age="${ROADTRIP_STALE_DEPLOY_SECONDS:-${STALE_DEPLOY_SECONDS}}"
+    local self="$$"
+    local pid
+    local age
+    local -a stale=()
+
+    while read -r pid age; do
+        [[ -n "${pid}" ]] || continue
+        (( pid == self )) && continue
+        (( age > max_age )) && stale+=("${pid}")
+    done < <(
+        pgrep -f 'deploy\.sh (prod|sandbox-up|sandbox-down)' 2>/dev/null \
+            | while read -r pid; do
+                  # macOS ps has no etimes, so convert [[dd-]hh:]mm:ss by hand.
+                  age="$(ps -o etime= -p "${pid}" 2>/dev/null | tr -d ' ' | awk '
+                      { days = 0; rest = $0
+                        if (rest ~ /-/) { split(rest, d, "-"); days = d[1]; rest = d[2] }
+                        n = split(rest, p, ":")
+                        secs = (n == 3) ? p[1]*3600 + p[2]*60 + p[3] : p[1]*60 + p[2]
+                        print days*86400 + secs }')"
+                  [[ -n "${age}" ]] && printf '%s %s\n' "${pid}" "${age}"
+              done
+    )
+
+    if (( ${#stale[@]} == 0 )); then
+        return 0
+    fi
+    echo "==> clearing ${#stale[@]} stale deploy process tree(s) older than ${max_age}s: ${stale[*]}"
+    for pid in "${stale[@]}"; do
+        pkill -9 -P "${pid}" 2>/dev/null || true
+        kill -9 "${pid}" 2>/dev/null || true
+    done
 }
 
 _ensure_data_volume() {
@@ -110,6 +185,9 @@ _deploy_prod() {
     _require_sha "app SHA" "${app_sha}"
     _require_sha "data tree SHA" "${data_sha}"
     _require_sha "companion tree SHA" "${companion_sha}"
+
+    _clear_stale_deploys
+    _require_free_disk "prod deploy"
 
     export ROADTRIP_BACKEND_IMAGE="ghcr.io/wwchen/roadtrip/backend:${app_sha}"
     export ROADTRIP_COMPANION_IMAGE="ghcr.io/wwchen/roadtrip/recgov-companion:${companion_sha}"
@@ -461,6 +539,12 @@ case "${DEPLOY_ENV}" in
         exit 1
         ;;
 esac
+
+# ── Host health ───────────────────────────────────────────────────────────────
+# Sandboxes share the deploy host with prod, so a sandbox that fills the disk
+# deadlocks the daemon for prod too. Teardown is exempt: it frees space.
+_clear_stale_deploys
+_require_free_disk "sandbox deploy"
 
 # ── Derive logical sandbox owner ──────────────────────────────────────────────
 if [[ -n "${NAME_OVERRIDE}" ]]; then
