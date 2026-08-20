@@ -227,9 +227,41 @@ run out of disk with no sandbox due for reaping, and `stop` runs only when there
 are targets. It warns when the host is left under `RECLAIM_FREE_TARGET_GB`
 (repo variable, default **20**).
 
-Volumes are deliberately never pruned. A stopped stack's named volume looks
-dangling to `docker volume prune` but holds real state, so reclamation is
-limited to data that can be rebuilt.
+Every prune is scoped to the `ca.floo.roadtrip.managed=true` label, which the
+three Dockerfiles set and which `deploy.sh` puts on the volumes it creates. That
+scoping is the whole safety model: the deploy host is shared, and a prune that
+can only see resources we own cannot collect someone else's stopped container or
+named volume. There is no list of things to spare, so nothing rots when another
+stack lands on the host.
+
+Prune also never removes a resource still referenced by a container, so "unused"
+is Docker's judgement rather than ours. Images are pruned dangling-only in the
+sweep so the backstop cannot fight the tag retention `deploy.sh` applies.
+
+The second safety property is `--all`. Without it, `docker volume prune` reaches
+only *anonymous* volumes and cannot remove a named one however long its stack has
+been down — so the sweep runs it unflagged to collect orphaned anonymous volumes,
+which is where the reclaimable space on this host actually sits. `tesla_teslamate-db`
+is unused most of the time and is still never a candidate, because it has a name.
+Only the label-scoped pass uses `--all`, and that one sees nothing but our own.
+
+Dataset volumes are collected the same way. Every data tree SHA gets its own
+`roadtrip-data-<sha>`, and the image prune only drops the `data:<sha>` tags — the
+volumes those images were unpacked into used to outlive them, one full dataset
+copy each, forever. How far back a rollback reaches is set by the image
+retention, not by a separate volume policy: `_ensure_data_volume` repopulates a
+missing volume from its data image, so an old volume is a cache, not the record.
+
+**Build cache is not pruned on a schedule.** The daemon enforces its own cap, so
+`daemon.json` on the deploy host needs:
+
+```json
+{ "builder": { "gc": { "enabled": true, "defaultKeepStorage": "20GB" } } }
+```
+
+A continuously enforced budget beats a periodic job: there is no window in which
+cache grows unchecked, and nothing competes with an in-flight deploy for the
+daemon.
 
 This matters because a full disk does not make Docker return an error, it
 deadlocks the daemon: Docker Desktop wedges on its own `ENOSPC` and every later

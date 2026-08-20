@@ -167,6 +167,19 @@ _prune_roadtrip_images() {
         --filter "until=${retention}" >/dev/null
 }
 
+# Each data tree SHA materialises its own roadtrip-data-<sha> volume, which the
+# image prune above never touched. Scoped to our own label because the host is
+# shared, and --all because these volumes are named rather than anonymous. How
+# far back a rollback reaches is set by the image retention, not here:
+# _ensure_data_volume repopulates a missing volume from its data image, so an
+# old volume is a cache, not the record.
+_prune_data_volumes() {
+    echo "==> pruning unused Roadtrip data volumes"
+    docker volume prune --force --all \
+        --filter "label=ca.floo.roadtrip.managed=true" \
+        | tail -1
+}
+
 _deploy_prod() {
     if [[ $# -lt 3 ]]; then
         echo "usage: deploy.sh prod <app-sha> <data-tree-sha> <companion-tree-sha> [branch]" >&2
@@ -220,6 +233,7 @@ _deploy_prod() {
         exit 1
     fi
     _prune_roadtrip_images
+    _prune_data_volumes
     echo "==> production deployed: ${app_sha}"
 }
 
@@ -389,24 +403,75 @@ _allocate_port() {
 _sandbox_lock_dir=""
 _sandbox_lock_release() {
     if [[ -n "${_sandbox_lock_dir}" ]]; then
-        rmdir "${_sandbox_lock_dir}" 2>/dev/null || true
+        # Only tear down a lock we still own: if ours was reclaimed while we
+        # held it, the directory now belongs to someone else.
+        if [[ "$(sed -n '1p' "${_sandbox_lock_dir}/pid" 2>/dev/null)" == "$$" ]]; then
+            rm -f "${_sandbox_lock_dir}/pid"
+            rmdir "${_sandbox_lock_dir}" 2>/dev/null || true
+        fi
         _sandbox_lock_dir=""
     fi
 }
 
+# Rename is atomic, so exactly one racer wins the steal and the losers fall back
+# to waiting rather than deleting a lock somebody else just took.
+_sandbox_lock_steal() {
+    local lock="$1"
+    local aside="${lock}.stale.$$"
+
+    if mv "${lock}" "${aside}" 2>/dev/null; then
+        rm -rf "${aside}"
+    fi
+}
+
+# A deploy killed while holding this lock used to leak it permanently: the
+# directory recorded no owner and nothing could reclaim it, so every later
+# teardown died on the timeout. That happened on 2026-08-18, when the wedged
+# daemon stranded a teardown mid-flight, and it blocked the sweep for two days.
+# The full disk was only the trigger; any SIGKILL of the holder does it.
 _sandbox_lock_acquire() {
     local lock="${SANDBOX_STATE_DIR}/.slot-lock"
+    local max_wait="${ROADTRIP_SANDBOX_LOCK_WAIT_SECONDS:-60}"
+    local grace="${ROADTRIP_SANDBOX_LOCK_OWNER_GRACE_SECONDS:-5}"
+    local poll=1
     local waited=0
+    local owner_pid
+    local lock_age
 
     mkdir -p "${SANDBOX_STATE_DIR}"
     until mkdir "${lock}" 2>/dev/null; do
-        waited=$(( waited + 1 ))
-        if [[ ${waited} -ge 60 ]]; then
+        # Age gates every reclaim. It is a property of the directory itself, so
+        # unlike a decision made from a PID we read moments ago it cannot be
+        # stale: a lock somebody just acquired is never old enough to steal,
+        # whatever we last saw in it. Costs up to `grace` before recovery.
+        owner_pid="$(sed -n '1p' "${lock}/pid" 2>/dev/null || true)"
+        lock_age=$(( $(date +%s) - $(stat -f %m "${lock}" 2>/dev/null || date +%s) ))
+        if (( lock_age >= grace )); then
+            if [[ "${owner_pid}" =~ ^[0-9]+$ ]]; then
+                if ! kill -0 "${owner_pid}" 2>/dev/null; then
+                    echo "==> reclaiming sandbox slot lock abandoned by PID ${owner_pid}"
+                    _sandbox_lock_steal "${lock}"
+                fi
+            else
+                # No marker at all: the owner died before writing one, or the
+                # lock predates this recovery. Either way nobody is coming back.
+                echo "==> reclaiming ownerless sandbox slot lock (${lock_age}s old)"
+                _sandbox_lock_steal "${lock}"
+            fi
+        fi
+
+        # No `continue` around the steal on purpose: every path through the loop
+        # advances `waited`, so max_wait stays a real bound.
+        if (( waited >= max_wait )); then
             echo "error: timed out waiting for sandbox slot lock: ${lock}" >&2
             exit 1
         fi
-        sleep 1
+        sleep "${poll}"
+        waited=$(( waited + poll ))
     done
+    # Written before the trap is armed: we exclusively own the directory here,
+    # and a failed write leaves an ownerless lock the grace path above recovers.
+    printf '%s\n' "$$" > "${lock}/pid"
     _sandbox_lock_dir="${lock}"
     trap _sandbox_lock_release EXIT
 }
@@ -518,6 +583,7 @@ _sandbox_down() {
     rm -f "${marker}"
     _sandbox_lock_release
     _prune_roadtrip_images
+    _prune_data_volumes
     echo "==> sandbox ${sandbox_owner} is down"
 }
 
@@ -813,5 +879,6 @@ _write_sandbox_marker "live"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 _prune_roadtrip_images
+_prune_data_volumes
 echo ""
 echo "Sandbox is live: ${SANDBOX_URL}"
