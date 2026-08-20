@@ -21,6 +21,16 @@ storage:
 # Tempo 3.x has no top-level `compactor:` — compaction lives here. Check any
 # change against `curl localhost:3200/status/config`; an unknown field is a hard
 # startup failure. 168h matches Loki, since traces and logs are read together.
+#
+# This value alone does NOT expire anything. Retention is applied per tenant and
+# the retention provider reads the tenant limit, not this block, so setting only
+# this left `tempo_limits_defaults{limit_name="block_retention"}` at 0 and
+# nothing was ever deleted: blocks piled up to 16 days and 25GB, half of all
+# Docker data on the host, until the disk filled and deadlocked the daemon. The
+# `overrides.defaults.compaction` entry below is what actually expires blocks;
+# keep the two in sync. Verify the limit is live, not just configured:
+#   curl -s localhost:3200/metrics | grep 'limit_name="block_retention"'
+# 168h reads as 6.048e+14 (nanoseconds); 0 means retention is off.
 backend_scheduler:
   provider:
     compaction:
@@ -43,6 +53,10 @@ metrics_generator:
 # Generators are opt-in per tenant; this is how single-tenant Tempo turns them on.
 overrides:
   defaults:
+    # The limit the retention provider actually enforces (see backend_scheduler
+    # above). Without it the effective limit is 0 and blocks are never deleted.
+    compaction:
+      block_retention: 168h
     metrics_generator:
       processors:
         - service-graphs
