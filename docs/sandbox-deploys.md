@@ -2,8 +2,8 @@
 
 A sandbox is a throwaway live environment for a PR or branch: backend +
 Postgres only, no observability, no companion, no Cloudflare tunnel of its
-own. It is reachable through one of five fixed public slots:
-`https://roadtrip-sb-1.floo.ca` through `https://roadtrip-sb-5.floo.ca`.
+own. It is reachable through one of two fixed public slots:
+`https://roadtrip-sb-1.floo.ca` and `https://roadtrip-sb-2.floo.ca`.
 
 The zone is `floo.ca` (one label under the apex) on purpose: the free
 Cloudflare Universal SSL cert `*.floo.ca` covers sandbox hostnames. A deeper
@@ -68,14 +68,11 @@ HTTPS root URL, but wraps Compose in `secrets/manage.py exec local --` so auth
 uses the dev provider app credentials. Each sandbox sets
 `roadtrip.web.root-url` to its public URL, so the OIDC callback is
 `https://roadtrip-sb-<slot>.floo.ca/auth/callback`. The dev Clerk OAuth app
-must allow all five exact callback URLs:
+must allow one exact callback URL per slot:
 
 ```
 https://roadtrip-sb-1.floo.ca/auth/callback
 https://roadtrip-sb-2.floo.ca/auth/callback
-https://roadtrip-sb-3.floo.ca/auth/callback
-https://roadtrip-sb-4.floo.ca/auth/callback
-https://roadtrip-sb-5.floo.ca/auth/callback
 ```
 
 The build-info banner visible in the UI (`/api/build-info`) shows the
@@ -106,7 +103,7 @@ application and Git-tree-addressed data images to appear in GHCR, SSHes to
 checkout), and runs `scripts/deploy.sh sandbox-up pr<N> pr<N>` (with
 `SANDBOX_SHA` set) or `scripts/deploy.sh sandbox-down pr<N>`. `sandbox-up`
 reuses that PR's existing slot when it has one, or claims the first empty slot
-from 1-5. On success it posts the allocated sandbox URL as a PR comment:
+from 1-2. On success it posts the allocated sandbox URL as a PR comment:
 
 ```
 ### ✅ Sandbox live
@@ -118,6 +115,23 @@ from 1-5. On success it posts the allocated sandbox URL as a PR comment:
 
 The sandbox marker is named `pr<N>` (e.g. `pr532`) and records its `SLOT`. Re-runs
 of the same PR keep the same slot until the sandbox is torn down.
+
+Slot assignment is serialised by a lock directory at
+`$SANDBOX_STATE_DIR/.slot-lock`, so two sandboxes cannot claim the same slot.
+The lock records its owner's PID, and a later caller reclaims one whose owner is
+gone — by renaming it aside, which has exactly one winner, so two waiters cannot
+both take it. Every reclaim is gated on the lock directory's age
+(`ROADTRIP_SANDBOX_LOCK_OWNER_GRACE_SECONDS`, default **5**): age belongs to the
+directory, so unlike a PID read a moment earlier it cannot be stale and name a
+lock somebody has since acquired. Waiting is bounded by
+`ROADTRIP_SANDBOX_LOCK_WAIT_SECONDS` (default **60**).
+
+This exists because a holder killed mid-flight used to leak the lock forever.
+On 2026-08-18 the wedged daemon stranded a `roadtrip-sb-2` teardown while it held
+the lock; recovery SIGKILLed the process and the directory survived with nothing
+able to reclaim it, so every teardown — and the sweep, every 30 minutes — failed
+for two days. The full disk was only the trigger: any SIGKILL of the holder does
+it, including the stale-deploy clearing that runs on the way in.
 
 After a PR has a sandbox status comment that has not been torn down or started
 teardown, pushing a new commit to that PR automatically reruns the sandbox
@@ -304,7 +318,7 @@ SANDBOX_SHA=<sha> SANDBOX_BRANCH=<branch> scripts/deploy.sh sandbox-up <ref> [na
 where `<sha>` defaults to the current `git rev-parse HEAD` if `SHA` is
 not set, and `<ref>` defaults to the current branch if `REF` is not set. The
 chosen name is a logical owner; `deploy.sh` assigns it the first empty slot from
-1-5 unless it already has a slot marker.
+1-2 unless it already has a slot marker.
 
 `make sandbox-stop` calls `scripts/deploy.sh sandbox-down <name>` directly;
 `NAME` is required. `sandbox-down` also accepts a numeric slot and resolves it
@@ -496,7 +510,7 @@ Checklist for a host that has not previously run sandboxes:
 - [ ] **CF API token + config.** Place a token with **`Zone:DNS:Edit`** and **`Access: Apps: Read`** for `floo.ca`/the account at `/var/lib/roadtrip-sandboxes/cloudflare_api_token` (chmod 600), and write `/var/lib/roadtrip-sandboxes/cloudflare.env` with `CF_TUNNEL_ID` (main tunnel). Per-slot DNS is then created/deleted automatically; `cf_sandbox_up` uses the Access read to verify the gate before publishing DNS. No wildcard DNS record is needed — each occupied slot gets its own explicit CNAME.
 - [ ] **One-time Access app.** In Zero Trust → Access → Applications, create ONE self-hosted app with domain `roadtrip-sb-*.floo.ca` and a policy that **allows only your identity providers** (Google/GitHub) — e.g. an Allow policy including your email(s) or a Groups/IdP selector. This one wildcard app gates every sandbox; automation never touches it. NOTE: an app with `allowed_idps` but an empty `policies` array does not admit anyone — you must add at least one Allow policy.
 - [ ] **Identity provider.** A Google and/or GitHub IdP configured in Zero Trust → Settings → Authentication, referenced by the Access app above.
-- [ ] **App auth callbacks.** Configure the Roadtrip dev Clerk OAuth app to allow all five exact callback URLs: `https://roadtrip-sb-1.floo.ca/auth/callback`, `https://roadtrip-sb-2.floo.ca/auth/callback`, `https://roadtrip-sb-3.floo.ca/auth/callback`, `https://roadtrip-sb-4.floo.ca/auth/callback`, and `https://roadtrip-sb-5.floo.ca/auth/callback`.
+- [ ] **App auth callbacks.** Configure the Roadtrip dev Clerk OAuth app to allow one exact callback URL per slot: `https://roadtrip-sb-1.floo.ca/auth/callback` and `https://roadtrip-sb-2.floo.ca/auth/callback`. Add the matching URL when adding a slot to `SANDBOX_SLOT_IDS`.
 - [ ] **GHCR login.** Run `docker login ghcr.io` on the host with credentials that can pull from `ghcr.io/wwchen/roadtrip/backend`. A GitHub PAT with `read:packages` scope works; store it so `docker pull` runs unattended (e.g. `~/.docker/config.json`).
 - [ ] **State and snapshot directories.** Create `SANDBOX_STATE_DIR` (`/var/lib/roadtrip-sandboxes` by default) and ensure it is writable by the user running the sandbox scripts.
 - [ ] **Cron entries.** Add the snapshot (nightly) cron entry from the Scheduled jobs section above, pointing to the script in the repo checkout. No reaper entry is needed — `sandbox-sweep.yml` enforces the TTL from GitHub Actions.

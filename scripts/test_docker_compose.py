@@ -1,3 +1,4 @@
+import re
 import unittest
 from pathlib import Path
 
@@ -119,7 +120,10 @@ class SandboxAuthConfigTest(unittest.TestCase):
         sandbox_action = (ROOT / ".github" / "actions" / "sandbox" / "action.yml").read_text()
         sandbox_docs = (ROOT / "docs" / "sandbox-deploys.md").read_text()
 
-        self.assertIn("SANDBOX_SLOT_IDS=(1 2 3 4 5)", deploy_script)
+        slots = re.search(r"SANDBOX_SLOT_IDS=\(([^)]*)\)", deploy_script)
+        self.assertIsNotNone(slots, "deploy.sh must define SANDBOX_SLOT_IDS")
+        slot_ids = slots.group(1).split()
+        self.assertTrue(slot_ids, "at least one sandbox slot must be configured")
         self.assertIn("SLOT=%s", deploy_script)
         self.assertIn("_require_sandbox_owner_name", deploy_script)
         self.assertIn("reserved for public slot teardown", deploy_script)
@@ -131,7 +135,9 @@ class SandboxAuthConfigTest(unittest.TestCase):
             "SANDBOX_SHA=<sha> SANDBOX_BRANCH=<branch> scripts/deploy.sh sandbox-up",
             sandbox_docs,
         )
-        for slot in range(1, 6):
+        # Derived from the script, not a fixed count: every configured slot must
+        # have a documented callback URL, whatever the slot count becomes.
+        for slot in slot_ids:
             self.assertIn(f"https://roadtrip-sb-{slot}.floo.ca/auth/callback", sandbox_docs)
 
 

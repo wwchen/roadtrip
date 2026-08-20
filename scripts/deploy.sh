@@ -167,12 +167,10 @@ _prune_roadtrip_images() {
         --filter "until=${retention}" >/dev/null
 }
 
-# Each data tree SHA materialises its own roadtrip-data-<sha> volume, which the
-# image prune above never touched. Scoped to our own label because the host is
-# shared, and --all because these volumes are named rather than anonymous. How
-# far back a rollback reaches is set by the image retention, not here:
-# _ensure_data_volume repopulates a missing volume from its data image, so an
-# old volume is a cache, not the record.
+# One roadtrip-data-<sha> volume per data tree SHA, which the image prune never
+# touched. Label-scoped because the host is shared, --all because these are
+# named. Rollback depth is the image retention's job: _ensure_data_volume
+# repopulates a missing volume, so these are a cache, not the record.
 _prune_data_volumes() {
     echo "==> pruning unused Roadtrip data volumes"
     docker volume prune --force --all \
@@ -303,7 +301,7 @@ POSTGRES_HEALTH_RETRIES="${POSTGRES_HEALTH_RETRIES:-30}"
 
 SANDBOX_SECRETS_ENV="local"
 SANDBOX_TEARDOWN_COMPOSE_SHA="0000000000000000000000000000000000000000"
-SANDBOX_SLOT_IDS=(1 2 3 4 5)
+SANDBOX_SLOT_IDS=(1 2)
 
 _require_sandbox_owner_name() {
     local value="$1"
@@ -403,8 +401,7 @@ _allocate_port() {
 _sandbox_lock_dir=""
 _sandbox_lock_release() {
     if [[ -n "${_sandbox_lock_dir}" ]]; then
-        # Only tear down a lock we still own: if ours was reclaimed while we
-        # held it, the directory now belongs to someone else.
+        # Ours may have been reclaimed while we held it.
         if [[ "$(sed -n '1p' "${_sandbox_lock_dir}/pid" 2>/dev/null)" == "$$" ]]; then
             rm -f "${_sandbox_lock_dir}/pid"
             rmdir "${_sandbox_lock_dir}" 2>/dev/null || true
@@ -413,8 +410,7 @@ _sandbox_lock_release() {
     fi
 }
 
-# Rename is atomic, so exactly one racer wins the steal and the losers fall back
-# to waiting rather than deleting a lock somebody else just took.
+# Rename is atomic: exactly one racer wins, the rest go back to waiting.
 _sandbox_lock_steal() {
     local lock="$1"
     local aside="${lock}.stale.$$"
@@ -424,11 +420,9 @@ _sandbox_lock_steal() {
     fi
 }
 
-# A deploy killed while holding this lock used to leak it permanently: the
-# directory recorded no owner and nothing could reclaim it, so every later
-# teardown died on the timeout. That happened on 2026-08-18, when the wedged
-# daemon stranded a teardown mid-flight, and it blocked the sweep for two days.
-# The full disk was only the trigger; any SIGKILL of the holder does it.
+# A holder killed mid-flight used to leak this lock permanently, blocking every
+# teardown and the sweep for two days on 2026-08-18. Record an owner so the next
+# caller can reclaim it.
 _sandbox_lock_acquire() {
     local lock="${SANDBOX_STATE_DIR}/.slot-lock"
     local max_wait="${ROADTRIP_SANDBOX_LOCK_WAIT_SECONDS:-60}"
@@ -440,10 +434,9 @@ _sandbox_lock_acquire() {
 
     mkdir -p "${SANDBOX_STATE_DIR}"
     until mkdir "${lock}" 2>/dev/null; do
-        # Age gates every reclaim. It is a property of the directory itself, so
-        # unlike a decision made from a PID we read moments ago it cannot be
-        # stale: a lock somebody just acquired is never old enough to steal,
-        # whatever we last saw in it. Costs up to `grace` before recovery.
+        # Age gates every reclaim: it belongs to the directory, so unlike the
+        # PID we just read it cannot be stale and name a lock someone else has
+        # since taken. Costs up to `grace` before recovery.
         owner_pid="$(sed -n '1p' "${lock}/pid" 2>/dev/null || true)"
         lock_age=$(( $(date +%s) - $(stat -f %m "${lock}" 2>/dev/null || date +%s) ))
         if (( lock_age >= grace )); then
@@ -453,15 +446,13 @@ _sandbox_lock_acquire() {
                     _sandbox_lock_steal "${lock}"
                 fi
             else
-                # No marker at all: the owner died before writing one, or the
-                # lock predates this recovery. Either way nobody is coming back.
+                # Died before writing a marker, or predates this recovery.
                 echo "==> reclaiming ownerless sandbox slot lock (${lock_age}s old)"
                 _sandbox_lock_steal "${lock}"
             fi
         fi
 
-        # No `continue` around the steal on purpose: every path through the loop
-        # advances `waited`, so max_wait stays a real bound.
+        # Every path advances `waited`, so max_wait stays a real bound.
         if (( waited >= max_wait )); then
             echo "error: timed out waiting for sandbox slot lock: ${lock}" >&2
             exit 1
@@ -469,8 +460,7 @@ _sandbox_lock_acquire() {
         sleep "${poll}"
         waited=$(( waited + poll ))
     done
-    # Written before the trap is armed: we exclusively own the directory here,
-    # and a failed write leaves an ownerless lock the grace path above recovers.
+    # Before the trap: a failed write leaves a lock the grace path recovers.
     printf '%s\n' "$$" > "${lock}/pid"
     _sandbox_lock_dir="${lock}"
     trap _sandbox_lock_release EXIT

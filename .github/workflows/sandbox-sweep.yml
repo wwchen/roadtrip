@@ -52,11 +52,8 @@ jobs:
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      # Build cache, stopped containers, and dangling images are derived data,
-      # so they go unconditionally. Volumes are deliberately NOT pruned: a
-      # stopped stack's named volume reads as dangling but holds real state
-      # (teslamate's database did), and `docker volume prune` would delete it.
-      # Only reclaim what can be rebuilt.
+      # Reclaims only what we own or what Docker calls anonymous, so nothing
+      # here depends on knowing what else shares the host.
       - name: Reclaim disk on the deploy host
         env:
           RECLAIM_FREE_TARGET_GB: ${{ vars.RECLAIM_FREE_TARGET_GB || 20 }}
@@ -71,22 +68,17 @@ jobs:
           before="$(free_gb)"
           echo "==> free before: ${before}GB (target ${target_gb}GB)"
 
-          # Every filter is scoped to our own label: this host is shared, and a
-          # bare prune collects whatever else happens to be stopped or dangling
-          # on it. Images stay dangling-only (no --all) so this cannot fight the
-          # tag retention deploy.sh applies. Build cache is absent on purpose:
-          # the daemon enforces its own cap through builder.gc in daemon.json,
-          # so there is nothing periodic to run and nothing to race a deploy.
+          # Label-scoped because the host is shared. Images stay dangling-only
+          # so this cannot fight deploy.sh's tag retention. No build cache pass:
+          # builder.gc in daemon.json caps it without racing a deploy.
           docker container prune --force \
             --filter "label=ca.floo.roadtrip.managed=true" | tail -1
           docker image prune --force \
             --filter "label=ca.floo.roadtrip.managed=true" | tail -1
           docker volume prune --force --all \
             --filter "label=ca.floo.roadtrip.managed=true" | tail -1
-          # Without --all this reaches only anonymous volumes, so it cannot
-          # touch a named one however long its stack has been down. That is a
-          # property of the command, not a list we maintain: tesla_teslamate-db
-          # is unused most of the time and is never a candidate.
+          # Without --all this reaches only anonymous volumes, so no named one
+          # is ever a candidate however long its stack has been down.
           docker volume prune --force | tail -1
 
           after="$(free_gb)"
