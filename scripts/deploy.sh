@@ -410,10 +410,19 @@ _sandbox_lock_release() {
     fi
 }
 
-# BSD stat on the deploy host, GNU stat everywhere else. Prints nothing rather
-# than a wrong number when neither works: the caller must not guess an age.
+# GNU stat first because BSD stat rejects -c outright, while GNU stat *accepts*
+# -f and prints filesystem junk with a zero exit -- so validate the output, not
+# the exit status. Prints nothing when neither form works: the caller must not
+# guess an age in either direction.
 _lock_mtime_epoch() {
-    stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || true
+    local value
+
+    value="$(stat -c %Y "$1" 2>/dev/null || true)"
+    if ! [[ "${value}" =~ ^[0-9]+$ ]]; then
+        value="$(stat -f %m "$1" 2>/dev/null || true)"
+    fi
+    [[ "${value}" =~ ^[0-9]+$ ]] || return 0
+    printf '%s\n' "${value}"
 }
 
 # Rename is atomic: exactly one racer wins, the rest go back to waiting.

@@ -83,6 +83,27 @@ class SandboxSlotLockTest(unittest.TestCase):
         done = subprocess.run(["/bin/bash", "-c", "echo $$"], capture_output=True, text=True)
         return int(done.stdout.strip())
 
+    def test_mtime_helper_returns_an_epoch_on_this_platform(self) -> None:
+        """Guards the reclaim gate against a stat that is not portable.
+
+        GNU stat accepts `-f` and prints filesystem junk with a zero exit, so an
+        implementation that trusts the exit status silently reports no mtime —
+        which disables recovery entirely and lets the leak back in.
+        """
+        self.lock.mkdir(parents=True)
+
+        result = subprocess.run(
+            ["/bin/bash", "-c",
+             'set -euo pipefail; source "$LIB"; _lock_mtime_epoch "$SANDBOX_STATE_DIR/.slot-lock"'],
+            env=self.env(), capture_output=True, text=True, check=False,
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertRegex(result.stdout.strip(), r"^\d+$")
+        self.assertAlmostEqual(
+            int(self.lock.stat().st_mtime), int(result.stdout.strip()), delta=2
+        )
+
     def test_reclaims_a_lock_left_behind_with_no_owner(self) -> None:
         """The 2026-08-18 case: killed before it could record an owner."""
         self.lock.mkdir(parents=True)
