@@ -150,7 +150,15 @@ class AspiraAvailabilityProvider(
     ): String? {
         val aspiraRef = parentRef as? BookingProviderRef.Aspira ?: return null
         val tenant = tenants[aspiraRef.tenant] ?: return null
-        return AspiraBookingUrl.templateFor(tenant.host, aspiraRef.mapId, aspiraRef.resourceLocationId, parentRef)
+        // A park's sites are split across sibling loop maps, so the site's own
+        // map is the grid its "Book" link belongs on; the parent fills the gaps.
+        val campsiteRef = campsite.aspiraBookingRef(aspiraRef.tenant)
+        return AspiraBookingUrl.templateFor(
+            tenant.host,
+            campsiteRef?.mapId,
+            campsiteRef?.resourceLocationId,
+            parentRef,
+        )
     }
 
     private suspend fun fetchAvailability(

@@ -354,7 +354,86 @@ class AspiraAvailabilityProviderTest {
         assertTrue(url.contains("endDate=2026-07-11"), url)
         assertTrue(url.contains("nights=1"), url)
     }
+
+    @Test
+    fun `booking url uses the campsite's own loop map, not the park's`() {
+        val adapter = bcAdapter()
+        val bench =
+            campsiteFixture(
+                id = 1,
+                vendor = "aspira",
+                vendorId = "-2147475967",
+                name = "B1",
+                loopName = null,
+                kind = null,
+                bookingProvider = "aspira",
+                bookingProviderRef = "bc:-2147483505:-2147483418:-2147483539",
+                sourcePayload = null,
+            )
+        // The park container, which holds no resources of its own.
+        val parentRef =
+            BookingProviderRef.Aspira(
+                tenant = "bc",
+                transactionLocationId = -2147483505,
+                mapId = -2147483420,
+                resourceLocationId = -2147483539,
+            )
+
+        val url =
+            adapter.reservationUrl(
+                campsite = bench,
+                parentRef = parentRef,
+                date = LocalDate.parse("2026-08-22"),
+            )!!
+
+        assertTrue(url.contains("mapId=-2147483418"), url)
+        assertTrue(url.contains("transactionLocationId=-2147483505"), url)
+        assertTrue(url.contains("resourceLocationId=-2147483539"), url)
+    }
+
+    @Test
+    fun `booking url falls back to the park map when the campsite has no ref`() {
+        val adapter = bcAdapter()
+        val orphan =
+            campsiteFixture(
+                id = 2,
+                vendor = "aspira",
+                vendorId = "-100",
+                name = "X",
+                loopName = null,
+                kind = null,
+                bookingProvider = null,
+                bookingProviderRef = null,
+                sourcePayload = null,
+            )
+        val parentRef =
+            BookingProviderRef.Aspira(
+                tenant = "bc",
+                transactionLocationId = -2147483505,
+                mapId = -2147483420,
+                resourceLocationId = -2147483539,
+            )
+
+        val url =
+            adapter.reservationUrl(
+                campsite = orphan,
+                parentRef = parentRef,
+                date = LocalDate.parse("2026-08-22"),
+            )!!
+
+        assertTrue(url.contains("mapId=-2147483420"), url)
+    }
 }
+
+private fun bcAdapter(): AspiraAvailabilityProvider =
+    AspiraAvailabilityProvider(
+        tenants =
+            mapOf(
+                "bc" to AspiraTenant(host = "camping.bcparks.ca", vendorCode = "aspira_bc", bookingHorizonDays = 365),
+            ),
+        availabilityClient = fakeAspiraClient(),
+        enabled = true,
+    )
 
 private fun fakeAspiraClient(
     onFetch: (suspend (String, Int, LocalDate, LocalDate) -> AspiraAvailability)? = null,
