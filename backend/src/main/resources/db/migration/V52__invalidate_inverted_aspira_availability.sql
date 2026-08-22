@@ -1,7 +1,8 @@
--- BC Parks rows were classified with the code sense inverted, and store the
--- interpreted status rather than the upstream code, so they cannot be fixed in
--- place. Scoped to BC: PC and WA already used the correct classifier, and
--- deleting their rows would make the next poll re-alert on every open cell.
+-- BC rows recorded the inverse of the truth. Other readers survive that on their
+-- own: loadOrFetch refetches anything past the 2h TTL. WatchAlertDispatcher's
+-- dispatchInitial does not -- it reads persisted rows ungated, so a new watch
+-- would fire a false "already available" off them and could close immediately.
+-- Scoped to BC: PC and WA rows were already correct.
 
 DELETE FROM availability a
 USING campsites c
