@@ -17,7 +17,6 @@ object AspiraTenants {
                 host = "camping.bcparks.ca",
                 vendorCode = "aspira_bc",
                 bookingHorizonDays = DEFAULT_HORIZON_DAYS,
-                mapResourceCodeFamily = AspiraMapResourceCodeFamily.MAP,
                 bookingSystemLabel = "Aspira NextGen (BC Parks)",
                 ctaLabel = "Book on BC Parks",
             ),

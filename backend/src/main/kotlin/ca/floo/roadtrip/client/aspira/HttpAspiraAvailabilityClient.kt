@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.client.aspira
 
 import ca.floo.roadtrip.client.DateStringFormatter
-import ca.floo.roadtrip.model.metadata.aspira.AspiraResourceAvailability
 import ca.floo.roadtrip.model.metadata.aspira.AspiraStatus
 import ca.floo.roadtrip.support.AspiraException
 import kotlinx.coroutines.future.await
@@ -187,10 +186,10 @@ class HttpAspiraAvailabilityClient(
         val map =
             root["mapAvailabilities"]
                 ?.jsonArray
-                ?.map { it.jsonPrimitive.intOrNull ?: AspiraStatus.NO_DATA } ?: emptyList()
+                ?.map { it.jsonPrimitive.intOrNull ?: AspiraStatus.UNKNOWN } ?: emptyList()
         val sub =
             root["mapLinkAvailabilities"]?.jsonObject?.mapValues { (_, v) ->
-                v.jsonArray.map { it.jsonPrimitive.intOrNull ?: AspiraStatus.NO_DATA }
+                v.jsonArray.map { it.jsonPrimitive.intOrNull ?: AspiraStatus.UNKNOWN }
             } ?: emptyMap()
         val resources =
             root["resourceAvailabilities"]?.jsonObject?.mapValues { (_, v) ->
@@ -199,7 +198,7 @@ class HttpAspiraAvailabilityClient(
                         ?.get("availability")
                         ?.jsonPrimitive
                         ?.intOrNull
-                        ?: AspiraResourceAvailability.UNKNOWN
+                        ?: AspiraStatus.UNKNOWN
                 }
             } ?: emptyMap()
         return AspiraAvailability(

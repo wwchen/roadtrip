@@ -1,0 +1,205 @@
+{
+  "_capture": {
+    "host": "camping.bcparks.ca",
+    "endpoint": "/api/availability/map",
+    "mapId": -2147483647,
+    "park": "Alice Lake \u2014 A (Sites 1-55)",
+    "startDate": "2026-08-22",
+    "endDate": "2026-09-10",
+    "capturedOn": "2026-08-21",
+    "groundTruth": "The vendor's own booking calendar for this window shows sites 38 and 39 bookable on 2026-08-31 only, and not bookable on every other day.",
+    "siteNames": {
+      "-2147483633": "38",
+      "-2147483606": "39"
+    }
+  },
+  "mapId": -2147483647,
+  "mapAvailabilities": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    0,
+    1,
+    0,
+    0
+  ],
+  "resourceAvailabilities": {
+    "-2147483633": [
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 0,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 0,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      }
+    ],
+    "-2147483606": [
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 0,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 0,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      },
+      {
+        "availability": 1,
+        "remainingQuota": null
+      }
+    ]
+  }
+}

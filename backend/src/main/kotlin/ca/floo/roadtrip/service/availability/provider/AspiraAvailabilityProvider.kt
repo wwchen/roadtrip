@@ -14,7 +14,6 @@ import ca.floo.roadtrip.model.domain.Campsite
 import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.model.domain.provider.BookingProviderRef
 import ca.floo.roadtrip.model.domain.provider.DataProviderRef
-import ca.floo.roadtrip.model.metadata.aspira.AspiraResourceAvailability
 import ca.floo.roadtrip.model.metadata.aspira.AspiraStatus
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.support.AspiraException
@@ -70,7 +69,6 @@ class AspiraAvailabilityProvider(
                 startDate = startDate,
                 endDate = endDate,
                 campsiteVendor = tenant.vendorCode,
-                mapResourceCodeFamily = tenant.mapResourceCodeFamily,
             )
         }
     }
@@ -87,10 +85,17 @@ class AspiraAvailabilityProvider(
         val targets =
             campsites.map { campsite ->
                 val ref = campsite.dataProviderRef
+                // A campground's own ref names one map node, but a park's sites
+                // are spread across sibling maps (Alice Lake: 55 in "A", 41 in
+                // "B", 12 walk-in, 2 group). Only the campsite's ref knows which
+                // one holds it, and a parent node answers with no resource rows
+                // at all — so pinning every site to the parent's map left every
+                // site outside it with no availability data.
+                val campsiteRef = campsite.aspiraBookingRef()
                 AspiraCatalogCampsite(
                     campsiteId = campsite.id,
                     resourceId = campsite.aspiraResourceId(),
-                    mapId = aspiraRef.mapId?.let(::mapIdOrThrow),
+                    mapId = mapIdOrThrow(campsiteRef?.mapId ?: aspiraRef.mapId),
                     resourceLocationId =
                         when (ref) {
                             is DataProviderRef.AspiraCampsite -> ref.resourceLocationId.toInt()
@@ -119,7 +124,6 @@ class AspiraAvailabilityProvider(
                     campsites = targets,
                     startDate = startDate,
                     endDate = endDate,
-                    mapResourceCodeFamily = tenant.mapResourceCodeFamily,
                 )
             }
         }
@@ -142,7 +146,6 @@ class AspiraAvailabilityProvider(
         startDate: LocalDate,
         endDate: LocalDate,
         campsiteVendor: String? = null,
-        mapResourceCodeFamily: AspiraMapResourceCodeFamily = AspiraMapResourceCodeFamily.RESOURCE,
     ): AvailabilityObservationBatch {
         val days = daysBetween(startDate, endDate)
         val observedAt = Instant.now()
@@ -151,7 +154,7 @@ class AspiraAvailabilityProvider(
             provider = "aspira",
             startDate = startDate,
             endDate = endDate,
-            observations = observationsFromAvailability(data, startDate, days, observedAt, campsiteVendor, mapResourceCodeFamily),
+            observations = observationsFromAvailability(data, startDate, days, observedAt, campsiteVendor),
             cacheBlock = directFetchCacheBlock(),
             host = host,
             mapId = mapId.toString(),
@@ -164,13 +167,11 @@ class AspiraAvailabilityProvider(
         campsites: List<AspiraCatalogCampsite>,
         startDate: LocalDate,
         endDate: LocalDate,
-        mapResourceCodeFamily: AspiraMapResourceCodeFamily = AspiraMapResourceCodeFamily.RESOURCE,
     ): AvailabilityObservationBatch {
         val days = daysBetween(startDate, endDate)
         val targets =
             campsites
                 .distinctBy { it.campsiteId }
-                .map { it.copy(mapId = it.mapId ?: parentMapId) }
         if (targets.isEmpty()) {
             return fetchAvailability(
                 host = host,
@@ -182,7 +183,7 @@ class AspiraAvailabilityProvider(
 
         val observedAt = Instant.now()
         val dataByMap = mutableMapOf<Int, AspiraAvailability>()
-        for (mapId in targets.map { it.mapId!! }.distinct()) {
+        for (mapId in targets.map { it.mapId }.distinct()) {
             dataByMap[mapId] = availabilityClient.fetch(host, mapId, startDate, endDate.minusDays(1))
         }
 
@@ -198,7 +199,7 @@ class AspiraAvailabilityProvider(
             provider = "aspira",
             startDate = startDate,
             endDate = endDate,
-            observations = observationsFromLinkedResourceCatalog(resourceRows, startDate, days, mapResourceCodeFamily),
+            observations = observationsFromLinkedResourceCatalog(resourceRows, startDate, days),
             cacheBlock = directFetchCacheBlock(),
             host = host,
             mapId = parentMapId.toString(),
@@ -216,7 +217,6 @@ class AspiraAvailabilityProvider(
         val targets =
             campsites
                 .distinctBy { it.campsiteId }
-                .map { it.copy(mapId = it.mapId ?: parentMapId) }
         if (targets.isEmpty()) {
             return AvailabilityObservationBatch(
                 provider = "aspira",
@@ -310,6 +310,11 @@ internal fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, Av
     }
 }
 
+private fun Campsite.aspiraBookingRef(): BookingProviderRef.Aspira? {
+    val provider = bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return null
+    return bookingProviderRef?.let { BookingProviderRef.parse(provider, it) } as? BookingProviderRef.Aspira
+}
+
 private fun Campsite.aspiraResourceId(): String =
     when (val ref = dataProviderRef) {
         is DataProviderRef.AspiraCampsite -> ref.resourceLocationId.toString()
@@ -323,10 +328,9 @@ private fun observationsFromAvailability(
     days: Int,
     observedAt: Instant,
     campsiteVendor: String? = null,
-    mapResourceCodeFamily: AspiraMapResourceCodeFamily = AspiraMapResourceCodeFamily.RESOURCE,
 ): List<CampsiteDayObservation> {
     if (campsiteVendor != null && avail.byResource.isNotEmpty()) {
-        return observationsFromResourceCatalog(avail.byResource, start, days, observedAt, mapResourceCodeFamily)
+        return observationsFromResourceCatalog(avail.byResource, start, days, observedAt)
     }
     val sub = avail.byMapLink.values.toList()
     val rollup = avail.parkRollup
@@ -350,14 +354,13 @@ private fun observationsFromResourceDays(
     days: Int,
     campsiteId: Long?,
     observedAt: Instant,
-    mapResourceCodeFamily: AspiraMapResourceCodeFamily,
 ): List<CampsiteDayObservation> =
     (0 until days).map { d ->
         CampsiteDayObservation(
             campsiteId = campsiteId,
             date = start.plusDays(d.toLong()),
             observedAt = observedAt,
-            status = resourceStatusAt(resourceDays, d, mapResourceCodeFamily),
+            status = statusAt(resourceDays, d),
         )
     }
 
@@ -366,7 +369,6 @@ private fun observationsFromResourceCatalog(
     start: LocalDate,
     days: Int,
     observedAt: Instant,
-    mapResourceCodeFamily: AspiraMapResourceCodeFamily,
 ): List<CampsiteDayObservation> =
     byResource.flatMap { (_, resourceDays) ->
         observationsFromResourceDays(
@@ -375,7 +377,6 @@ private fun observationsFromResourceCatalog(
             days = days,
             campsiteId = null,
             observedAt = observedAt,
-            mapResourceCodeFamily = mapResourceCodeFamily,
         )
     }
 
@@ -383,7 +384,6 @@ private fun observationsFromLinkedResourceCatalog(
     resources: List<CatalogResourceDays>,
     start: LocalDate,
     days: Int,
-    mapResourceCodeFamily: AspiraMapResourceCodeFamily,
 ): List<CampsiteDayObservation> =
     resources.flatMap { resource ->
         (0 until days).map { d ->
@@ -391,7 +391,7 @@ private fun observationsFromLinkedResourceCatalog(
                 campsiteId = resource.campsiteId,
                 date = start.plusDays(d.toLong()),
                 observedAt = resource.observedAt,
-                status = resource.days?.let { resourceStatusAt(it, d, mapResourceCodeFamily) } ?: AvailabilityStatus.UNKNOWN,
+                status = resource.days?.let { statusAt(it, d) } ?: AvailabilityStatus.UNKNOWN,
             )
         }
     }
@@ -409,7 +409,7 @@ private fun observationsFromOccupancyCatalogArrivalDay(
             when {
                 occupancy == null -> AvailabilityStatus.UNKNOWN
                 occupancy.filtered -> AvailabilityStatus.RESERVED
-                else -> AspiraResourceAvailability.classify(occupancy.availability)
+                else -> AspiraStatus.classifyOccupancy(occupancy.availability)
             }
         CampsiteDayObservation(
             campsiteId = resource.campsiteId,
@@ -449,20 +449,6 @@ private fun statusAt(
 ): AvailabilityStatus =
     if (offset < statuses.size) {
         AspiraStatus.classify(statuses[offset])
-    } else {
-        AvailabilityStatus.UNKNOWN
-    }
-
-private fun resourceStatusAt(
-    statuses: List<Int>,
-    offset: Int,
-    mapResourceCodeFamily: AspiraMapResourceCodeFamily,
-): AvailabilityStatus =
-    if (offset < statuses.size) {
-        when (mapResourceCodeFamily) {
-            AspiraMapResourceCodeFamily.RESOURCE -> AspiraResourceAvailability.classify(statuses[offset])
-            AspiraMapResourceCodeFamily.MAP -> AspiraStatus.classify(statuses[offset])
-        }
     } else {
         AvailabilityStatus.UNKNOWN
     }

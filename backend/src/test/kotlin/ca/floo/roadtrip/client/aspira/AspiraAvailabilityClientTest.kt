@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.client.aspira
 
-import ca.floo.roadtrip.model.metadata.aspira.AspiraResourceAvailability
+import ca.floo.roadtrip.model.metadata.aspira.AspiraStatus
 import ca.floo.roadtrip.support.AspiraException
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
@@ -63,6 +63,6 @@ class AspiraAvailabilityClientTest {
 
         assertEquals(listOf(1, 6), parsed.parkRollup)
         assertEquals(listOf(1, 5), parsed.byMapLink["-2147483515"])
-        assertEquals(listOf(0, 1, AspiraResourceAvailability.UNKNOWN), parsed.byResource["-2147478966"])
+        assertEquals(listOf(0, 1, AspiraStatus.UNKNOWN), parsed.byResource["-2147478966"])
     }
 }
