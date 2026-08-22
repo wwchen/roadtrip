@@ -28,6 +28,15 @@ private const val BC_PARKS_TEST_MAP_ID = -2147483460L
 private const val BC_PARKS_TEST_CAMPSITE_ID = 415777L
 private const val BC_PARKS_TEST_RESOURCE_ID = "-2147477118"
 
+// Alice Lake as the BC Parks ETL stores it: one campground ref pinned to the
+// "A (Sites 1-55)" map, and campsites spread across four sibling maps.
+private const val ALICE_LAKE_PARENT_MAP_ID = -2147483647L
+private const val ALICE_LAKE_WALK_IN_MAP_ID = -2147483645
+private const val ALICE_LAKE_LOOP_A_SITE = "-2147483633"
+private const val ALICE_LAKE_WALK_IN_SITE = "-2147483572"
+private const val ALICE_LAKE_LOOP_A_CAMPSITE_ID = 422900L
+private const val ALICE_LAKE_WALK_IN_CAMPSITE_ID = 422830L
+
 private const val PC_HOST = "reservation.pc.gc.ca"
 private const val WA_HOST = "washington.goingtocamp.com"
 
@@ -36,13 +45,7 @@ class AspiraObservationsTest {
         mapOf(
             "pc" to AspiraTenant(host = PC_HOST, vendorCode = "aspira_pc", bookingHorizonDays = 365),
             "wa" to AspiraTenant(host = WA_HOST, vendorCode = "aspira_wa", bookingHorizonDays = 365),
-            "bc" to
-                AspiraTenant(
-                    host = BC_PARKS_HOST,
-                    vendorCode = "aspira_bc",
-                    bookingHorizonDays = 365,
-                    mapResourceCodeFamily = AspiraMapResourceCodeFamily.MAP,
-                ),
+            "bc" to AspiraTenant(host = BC_PARKS_HOST, vendorCode = "aspira_bc", bookingHorizonDays = 365),
         )
 
     @Test
@@ -182,8 +185,12 @@ class AspiraObservationsTest {
         }
 
     @Test
-    fun `bc parks catalog availability uses map code family for resource rows`() =
+    fun `bc parks resource rows use the same zero-is-bookable code family as parks canada`() =
         runBlocking {
+            // Alice Lake site 39 as camping.bcparks.ca served it on 2026-08-21:
+            // booked on 08-22 and 08-23, open on 08-31, closed beyond the
+            // booking window. Before this mapping was corrected every one of
+            // these rendered as available.
             val client =
                 fakeAspiraClient(
                     onFetch = { _, mapId, _, _ ->
@@ -193,7 +200,7 @@ class AspiraObservationsTest {
                             byMapLink = emptyMap(),
                             byResource =
                                 mapOf(
-                                    BC_PARKS_TEST_RESOURCE_ID to listOf(3, 5, 0),
+                                    BC_PARKS_TEST_RESOURCE_ID to listOf(1, 1, 0, 2),
                                 ),
                         )
                     },
@@ -217,14 +224,78 @@ class AspiraObservationsTest {
                     provider.catalogAvailability(
                         campground = aspiraCampground("bc", BC_PARKS_TEST_MAP_ID),
                         campsites = campsites,
-                        startDate = LocalDate.parse("2026-07-20"),
-                        endDate = LocalDate.parse("2026-07-23"),
+                        startDate = LocalDate.parse("2026-08-22"),
+                        endDate = LocalDate.parse("2026-08-26"),
                     ),
                 )
 
-            assertEquals(listOf(BC_PARKS_TEST_CAMPSITE_ID), dto.availability[0].availableCampsiteIds)
-            assertEquals(AvailabilityStatus.CLOSED, dto.availability[1].status)
-            assertEquals(AvailabilityStatus.UNKNOWN, dto.availability[2].status)
+            assertEquals(emptyList(), dto.availability[0].availableCampsiteIds)
+            assertEquals(AvailabilityStatus.RESERVED, dto.availability[0].status)
+            assertEquals(AvailabilityStatus.RESERVED, dto.availability[1].status)
+            assertEquals(listOf(BC_PARKS_TEST_CAMPSITE_ID), dto.availability[2].availableCampsiteIds)
+            assertEquals(AvailabilityStatus.CLOSED, dto.availability[3].status)
+        }
+
+    @Test
+    fun `catalog availability reads each campsite's own child map`() =
+        runBlocking {
+            val fetchedMaps = mutableListOf<Int>()
+            val client =
+                fakeAspiraClient(
+                    onFetch = { _, mapId, _, _ ->
+                        fetchedMaps += mapId
+                        AspiraAvailability(
+                            mapId = mapId,
+                            parkRollup = emptyList(),
+                            byMapLink = emptyMap(),
+                            byResource =
+                                when (mapId) {
+                                    ALICE_LAKE_WALK_IN_MAP_ID -> mapOf(ALICE_LAKE_WALK_IN_SITE to listOf(0))
+                                    else -> mapOf(ALICE_LAKE_LOOP_A_SITE to listOf(1))
+                                },
+                        )
+                    },
+                )
+
+            val provider = AspiraAvailabilityProvider(tenants, client, enabled = true)
+            val campsites =
+                listOf(
+                    aspiraCampsite(
+                        ALICE_LAKE_LOOP_A_CAMPSITE_ID,
+                        ALICE_LAKE_LOOP_A_SITE,
+                        dataProviderRef =
+                            DataProviderRef.BcParksCampsite(tenant = "bc", resourceLocationId = ALICE_LAKE_LOOP_A_SITE.toLong()),
+                        bookingProviderRef = "bc:$ALICE_LAKE_PARENT_MAP_ID:$ALICE_LAKE_PARENT_MAP_ID:$ALICE_LAKE_PARENT_MAP_ID",
+                    ),
+                    aspiraCampsite(
+                        ALICE_LAKE_WALK_IN_CAMPSITE_ID,
+                        ALICE_LAKE_WALK_IN_SITE,
+                        dataProviderRef =
+                            DataProviderRef.BcParksCampsite(tenant = "bc", resourceLocationId = ALICE_LAKE_WALK_IN_SITE.toLong()),
+                        bookingProviderRef = "bc:$ALICE_LAKE_PARENT_MAP_ID:$ALICE_LAKE_WALK_IN_MAP_ID:$ALICE_LAKE_PARENT_MAP_ID",
+                    ),
+                )
+            val dto =
+                availabilityResponseFromObservations(
+                    provider.catalogAvailability(
+                        campground = aspiraCampground("bc", ALICE_LAKE_PARENT_MAP_ID),
+                        campsites = campsites,
+                        startDate = LocalDate.parse("2026-08-22"),
+                        endDate = LocalDate.parse("2026-08-23"),
+                    ),
+                )
+
+            assertEquals(
+                listOf(ALICE_LAKE_PARENT_MAP_ID.toInt(), ALICE_LAKE_WALK_IN_MAP_ID),
+                fetchedMaps.sorted(),
+            )
+            assertEquals(
+                mapOf(
+                    ALICE_LAKE_LOOP_A_CAMPSITE_ID to AvailabilityStatus.RESERVED,
+                    ALICE_LAKE_WALK_IN_CAMPSITE_ID to AvailabilityStatus.AVAILABLE,
+                ),
+                dto.availability.single().campsiteStatuses,
+            )
         }
 
     @Test
@@ -360,6 +431,7 @@ private fun aspiraCampsite(
     id: Long,
     resourceId: String,
     dataProviderRef: DataProviderRef = DataProviderRef.AspiraCampsite(tenant = "pc", resourceLocationId = resourceId.toLongOrNull() ?: id),
+    bookingProviderRef: String = resourceId,
 ): Campsite =
     campsiteFixture(
         id = id,
@@ -367,7 +439,7 @@ private fun aspiraCampsite(
         vendorId = resourceId,
         dataProviderRef = dataProviderRef,
         bookingProvider = "aspira",
-        bookingProviderRef = resourceId,
+        bookingProviderRef = bookingProviderRef,
     )
 
 private fun fakeAspiraClient(

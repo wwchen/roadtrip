@@ -1,5 +1,5 @@
 package ca.floo.roadtrip.client.aspira
-import ca.floo.roadtrip.model.metadata.aspira.AspiraResourceAvailability
+
 import ca.floo.roadtrip.model.metadata.aspira.AspiraStatus
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -27,17 +27,20 @@ import java.time.LocalDate
  *
  *   Response:
  *     { "mapId": -2147483630,
- *       "mapAvailabilities": [6,6,0,0,0],         // park-level rollup, one per day
- *       "resourceAvailabilities": {},              // unused for park-level queries
+ *       "mapAvailabilities": [1,0,0,1,2],          // park-level rollup, one per day
+ *       "resourceAvailabilities": {                // each site, per-day
+ *         "-2147483633": [{"availability":1}, {"availability":0}, ...],
+ *         ...
+ *       },
  *       "mapLinkAvailabilities": {                 // each sub-area ("loop"), per-day
- *         "-2147483629": [1,1,0,1,0],
+ *         "-2147483629": [1,0,0,1,2],
  *         ...
  *       }
  *     }
  *
- * Map status codes (observed across multiple parks; documented in [AspiraStatus]):
- *   1=available, 3=partial, 5=closed, 6=mostly-booked, 7=mixed/some-avail, 0=no-data
- * Resource rows use a separate code family, documented in [AspiraResourceAvailability].
+ * Status codes are one family across map, map-link, and resource rows,
+ * documented in [AspiraStatus]: 0=bookable, 2=closed/outside booking window,
+ * any other nonzero=not bookable.
  *
  * Azure WAF gates aggressive use — a 30-day query for one park is fine, but
  * looping 50 parks back-to-back triggers a CAPTCHA challenge. The mutex below

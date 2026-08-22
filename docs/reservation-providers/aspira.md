@@ -167,24 +167,87 @@ GET https://{host}/api/availability/map
 }
 ```
 
-Map and map-link status codes (see `AspiraStatus.kt`):
+Status codes are **one family** across `mapAvailabilities`,
+`mapLinkAvailabilities`, and `resourceAvailabilities` — and across tenants.
+**Zero is the bookable code** (see `AspiraStatus.kt`):
 
 | Code | Meaning |
 |---|---|
-| 0 | unknown / no data |
-| 1 | available |
-| 2 | available |
-| 3 | available |
-| 5 | closed |
-| 6 | available |
-| 7 | available |
-| unknown | unknown |
+| 0 | available / bookable |
+| 1 | not bookable for the requested date + equipment search |
+| 2 | closed — outside the operating season or the booking window |
+| 5 | not bookable under the requested equipment/booking category (WA yurts, group sites, picnic shelters answer this in every window) |
+| other nonzero | not bookable (unrecognized reason) |
+| missing | unknown (internal `Int.MIN_VALUE` sentinel) |
 
-Resource rows are tenant-specific. Parks Canada resource rows use
-`AspiraResourceAvailability.kt`: `0` is bookable, nonzero codes are not
-bookable for the requested date/equipment search, and a missing availability
-field is stored as an internal unknown sentinel. BC Parks resource rows use
-the same code family as map rows; this is configured on `AspiraTenant`.
+Verified live on 2026-08-21 against both tenants:
+
+- `camping.bcparks.ca` Alice Lake (mapId `-2147483647`). The vendor's booking
+  calendar was read for 2026-08-22..09-04; over that window resources `38` and
+  `39` answer `0` on 08-31 and `1` on every other day, matching the calendar's
+  single open cell for each. Both answer `0` again on 09-07, beyond what the
+  calendar was read for, so that day evidences nothing either way. In the full
+  54-resource capture `mapAvailabilities` is `0` on exactly the four days some
+  resource is `0`; the committed fixture is trimmed to these two resources and
+  so does not show that on its own.
+- `reservation.pc.gc.ca` Tunnel Mountain Village 1 loop A (mapId
+  `-2147483621`), same window: `1` on the three Saturdays and the Labour Day
+  Sunday, `0` on every other day.
+- `washington.goingtocamp.com` Seaquest (mapId `-2147483498`), 2026-08-24..09-13:
+  a mean of 37.2 of 69 sites answer `0` on weekdays versus 7.3 on Fri/Sat, and
+  none at all on Fri 08-28 or Sat 09-05.
+- Seasonal parks (BC, PC) answer `2` for every row on winter (2027-01) and
+  beyond-horizon (2028-07) dates; year-round WA parks mix `2` with `0` there,
+  so `2` is per-resource "not open for booking", not "the park is shut".
+
+**How this was verified (not by re-reading the codes).** Diffing our output
+against the raw codes only proves the plumbing — it reuses our own mapping to
+compute the expected value, so an inverted mapping would still match. Two
+independent checks establish that `0` means bookable:
+
+1. *Vendor-rendered calendar (BC).* camping.bcparks.ca's own booking calendar
+   for Alice Lake shows sites 38 and 39 open on 2026-08-31 and closed every
+   other day of the window; those two resources answer `0` on 08-31 and `1`
+   elsewhere. Captured as a fixture and asserted by
+   `AspiraStatusGroundTruthTest`.
+2. *Cross-endpoint equipment constraint (PC, WA).* `allowedEquipment` on
+   `/api/resourcelocation/resources` is independent catalog metadata. Narrowing
+   `subEquipmentCategoryId` to a large RV collapses the set of `0` cells and
+   leaves it entirely inside the catalog-eligible set — WA Seaquest 61 sites →
+   6, inside 7 eligible; PC Elk Island 30 → 3, inside 4 eligible; zero
+   violations in both. Nothing but "0 == bookable for this search" explains a
+   *booking* constraint gating the code that way.
+
+**Open question — `2` and `closed_for_season`.** A window where every row is
+`2` maps to all-`CLOSED`, and `AvailabilityResponseMapper.classifyWindowState`
+renders that as `closed_for_season`. That is right for a winter or
+beyond-horizon window, which is all this was verified against. It would be
+wrong if Aspira also answers `2` for dates that are inside the booking horizon
+but not yet released (Parks Canada releases inventory in waves), because the
+drawer would tell users the campground is shut. To settle it, find a PC park
+with a known release date and compare the day before and after: if unreleased
+dates answer `2`, that code needs splitting from seasonal closure. Until then
+`2` stays `CLOSED` — never `AVAILABLE` either way.
+
+`partySize` is ignored by this endpoint, so it is useless as a constraint
+probe. BC's parks allow most equipment at most sites (87-96 of 110 at Alice
+Lake), so check 2 cannot discriminate there — which is why check 1 matters.
+
+There is no per-tenant code-family configuration. An earlier revision read
+these codes with the sense inverted (`1` as available, `0` as no-data), which
+rendered every BC Parks site green; `AspiraStatus.classify` is now the single
+source of truth for all three row shapes.
+
+**One call per map node, not per park.** A park's sites are split across
+sibling map nodes and each node reports only its own resources — Alice Lake
+(`resourceLocationId` `-2147483647`) has 110 sites spread over `A (Sites
+1-55)`, `B (Sites 56-96)`, `Walk-In`, and `Group Sites`, and its *parent* node
+`-2147483648` answers with `mapLinkAvailabilities` for the four children and
+an empty `resourceAvailabilities`. So per-site availability means fetching
+every child map the campsites point at. `AspiraAvailabilityProvider` takes the
+map id from each campsite's own `booking_provider_ref` (falling back to the
+campground's) and fetches each distinct map once; reading the campground's map
+id alone left 56 of Alice Lake's 110 sites with no data at all.
 
 Used for: drawer week grid, bulk score endpoint, alert poller. Called
 at request time by `AspiraAvailabilityClient`; not captured by an
@@ -218,13 +281,19 @@ GET https://{host}/api/occupancy
   "startDate": "2026-07-18T00:00:00",
   "endDate": "2026-07-21T00:00:00",
   "resourceOccupancy": [
-    {"resourceId": -2147477470, "occupancy": 0, "filtered": false, "availability": 1}
+    {"resourceId": -2147477470, "occupancy": 0, "filtered": false, "availability": 0}
   ],
   "mapOccupancy": [
     {"mapId": -2147483358, "availability": 2}
   ]
 }
 ```
+
+`availability` uses the same zero-is-bookable family as the map endpoint, but
+carries less information: it answers `2` for a booked site and a closed one
+alike (Alice Lake returned `2` on all 109 rows for a sold-out summer date and
+for a winter date), so `AspiraStatus.classifyOccupancy` maps everything
+nonzero to `reserved` rather than guessing `closed`.
 
 Used for: opt-in stay-level checks only. Normal catalog availability uses
 `/api/availability/map` so callers get independent per-day observations.
