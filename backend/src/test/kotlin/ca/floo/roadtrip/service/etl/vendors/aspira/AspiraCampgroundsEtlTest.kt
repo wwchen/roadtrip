@@ -227,7 +227,7 @@ class AspiraCampgroundsEtlTest {
     }
 
     @Test
-    fun `extras materialize canonical booking CTA ref from inventory child maps`() {
+    fun `extras materialize canonical booking CTA ref from the one inventory child map`() {
         val leaf =
             AspiraLeaf(
                 name = "Two Jack Lakeside",
@@ -240,7 +240,7 @@ class AspiraCampgroundsEtlTest {
             """
             {
               "c1":{"resourceLocationId":9002,"resourceCategoryId":100,"mapIds":[-2147483645]},
-              "d1":{"resourceLocationId":9002,"resourceCategoryId":100,"mapIds":[-2147483639]}
+              "d1":{"resourceLocationId":9002,"resourceCategoryId":100,"mapIds":[-2147483645]}
             }
             """.trimIndent()
 
@@ -250,6 +250,34 @@ class AspiraCampgroundsEtlTest {
         assertEquals("1005", bookingRef["transactionLocationId"]!!.jsonPrimitive.content)
         assertEquals("-2147483645", bookingRef["mapId"]!!.jsonPrimitive.content)
         assertEquals("9002", bookingRef["resourceLocationId"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `booking CTA ref keeps the leaf map when sites span several child maps`() {
+        val leaf =
+            AspiraLeaf(
+                name = "Two Jack Lakeside",
+                transactionLocationId = 1005L,
+                mapId = -2147483026L,
+                resourceLocationId = 9002L,
+                parentName = "Banff",
+            )
+        val inventory =
+            """
+            {
+              "h1":{"resourceLocationId":9002,"resourceCategoryId":100,"mapIds":[-2147483645]},
+              "b1":{"resourceLocationId":9002,"resourceCategoryId":100,"mapIds":[-2147483639]}
+            }
+            """.trimIndent()
+
+        val campground = campgrounds(dtoWith(leaf, inventory, categoryDict)).single()
+
+        val bookingRef = campground.metadata!!.jsonObject["booking_cta_provider_ref"]!!.jsonObject
+        assertEquals("-2147483026", bookingRef["mapId"]!!.jsonPrimitive.content)
+        assertEquals(
+            "pc:1005:-2147483026:9002",
+            campground.bookingProviderRef,
+        )
     }
 
     @Test
