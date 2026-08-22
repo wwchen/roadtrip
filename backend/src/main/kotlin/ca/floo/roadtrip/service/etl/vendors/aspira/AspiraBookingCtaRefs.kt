@@ -22,7 +22,11 @@ internal data class AspiraBookingCtaRef(
  * one `resourceLocationId` — no child covers the POI, so the container stays.
  */
 internal object AspiraBookingCtaRefs {
-    /** `resourceLocationId` → the distinct maps its bookable resources sit on. */
+    /**
+     * `resourceLocationId` → the distinct maps its bookable resources sit on.
+     * Never holds an empty set: a resource listed on no map contributes nothing,
+     * so a key present here always means real bookable inventory.
+     */
     fun bookableMapIdsByResourceLocationId(
         inventory: List<Envelope>,
         dictionaryPayload: JsonObject?,
@@ -35,7 +39,8 @@ internal object AspiraBookingCtaRefs {
                 val obj = raw as? JsonObject ?: continue
                 if (!AspiraInventoryCategories.isBookableResource(obj, bookableByCategoryId)) continue
                 val resourceLocationId = obj.longValue("resourceLocationId") ?: continue
-                mapIds.getOrPut(resourceLocationId) { mutableSetOf() } += obj.mapIds()
+                val ids = obj.mapIds().ifEmpty { continue }
+                mapIds.getOrPut(resourceLocationId) { mutableSetOf() } += ids
             }
         }
         return mapIds
@@ -47,7 +52,7 @@ internal object AspiraBookingCtaRefs {
         bookableMapIds: Map<Long, Set<Long>>,
     ): AspiraBookingCtaRef? {
         val resourceLocationId = leaf.resourceLocationId ?: return null
-        val mapIds = bookableMapIds[resourceLocationId]?.takeIf { it.isNotEmpty() } ?: return null
+        val mapIds = bookableMapIds[resourceLocationId] ?: return null
         return AspiraBookingCtaRef(
             mapId = mapIds.singleOrNull() ?: leaf.mapId,
             resourceLocationId = resourceLocationId,

@@ -78,6 +78,27 @@ class BcParksCampgroundsEtlTest {
         assertEquals("Rathtrevor Beach", output.single().name)
     }
 
+    @Test
+    fun `booking ref keeps the leaf map when sites span several loop maps`() {
+        val cg = terminalRecords(etl, bundleAcrossLoops(), ctx).single()
+
+        // -2147483548 is the leaf's own map; neither loop map covers the whole POI.
+        assertEquals("bc:4189:-2147483548:9001", cg.bookingProviderRef)
+        val ctaRef = cg.metadata!!.jsonObject["booking_cta_provider_ref"]!!.jsonObject
+        assertEquals("-2147483548", ctaRef["mapId"]!!.jsonPrimitive.content)
+    }
+
+    private fun bundleAcrossLoops(): InputBundle =
+        InputBundle(
+            rawCaptures =
+                linkedMapOf(
+                    "aspira-maps-bc" to listOf(mapsEnvelope()),
+                    "bcparks-strapi" to listOf(strapiEnvelope()),
+                    "aspira-inventory-bc" to listOf(inventoryEnvelopeAcrossLoops()),
+                    "aspira-dictionaries-bc" to listOf(dictionaryEnvelope()),
+                ),
+        )
+
     private fun bundle(): InputBundle =
         InputBundle(
             rawCaptures =
@@ -220,6 +241,45 @@ class BcParksCampgroundsEtlTest {
                         "mapIds": [-2147483548],
                         "localizedValues": [
                           {"cultureName": "en-CA", "name": "A12"}
+                        ]
+                      }
+                    }
+                    """.trimIndent(),
+                ),
+        )
+
+    /** Two bookable sites on sibling loop maps, neither of them the leaf's own map. */
+    private fun inventoryEnvelopeAcrossLoops(): Envelope =
+        Envelope(
+            fetcher = "fetch_aspira_inventory",
+            fetcherVersion = "1",
+            fetchedAt = "2026-07-01T00:00:00Z",
+            request =
+                RequestMeta(
+                    url = "https://camping.bcparks.ca/api/resourcelocation/resources",
+                    method = "GET",
+                ),
+            response = ResponseMeta(status = 200),
+            payload =
+                Json.parseToJsonElement(
+                    """
+                    {
+                      "res-201": {
+                        "resourceLocationId": 9001,
+                        "resourceCategoryId": 1,
+                        "maxCapacity": 6,
+                        "mapIds": [-2147483547],
+                        "localizedValues": [
+                          {"cultureName": "en-CA", "name": "A12"}
+                        ]
+                      },
+                      "res-202": {
+                        "resourceLocationId": 9001,
+                        "resourceCategoryId": 1,
+                        "maxCapacity": 6,
+                        "mapIds": [-2147483546],
+                        "localizedValues": [
+                          {"cultureName": "en-CA", "name": "B7"}
                         ]
                       }
                     }
