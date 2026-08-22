@@ -12,21 +12,14 @@ import kotlin.test.assertNotEquals
 private const val ALICE_LAKE_MAP_ID = -2147483647
 private val captureStart: LocalDate = LocalDate.parse("2026-08-22")
 
-/** The last day the vendor's rendered calendar was captured for. */
 private val groundTruthEnd: LocalDate = LocalDate.parse("2026-09-04")
 
-/** The one day the vendor's calendar showed sites 38 and 39 as bookable. */
 private val bookableDay: LocalDate = LocalDate.parse("2026-08-31")
 
 /**
- * Pins the availability code mapping to externally observed truth rather than
- * to our own reading of the codes.
- *
- * The fixture is a real `/api/availability/map` capture for Alice Lake, cut
- * down to the two sites whose vendor-rendered booking calendar we have: sites
- * 38 and 39 showed bookable on 2026-08-31 and not bookable on every other day
- * of the captured window. Any future edit that inverts [AspiraStatus] — the
- * bug this fixture exists to prevent — flips these assertions.
+ * Pins the code mapping to the vendor's own rendered calendar rather than to
+ * our reading of the codes: sites 38 and 39 showed bookable on 2026-08-31 only.
+ * Inverting [AspiraStatus] flips these assertions.
  */
 class AspiraStatusGroundTruthTest {
     private val parsed =

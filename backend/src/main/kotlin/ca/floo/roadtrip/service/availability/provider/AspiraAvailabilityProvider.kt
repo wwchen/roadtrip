@@ -85,17 +85,9 @@ class AspiraAvailabilityProvider(
         val aspiraRef = aspiraRefOrThrow(campground)
         val tenant = tenantForRef(aspiraRef)
         val parentMapId = mapIdOrThrow(aspiraRef.mapId)
-        // A campground's own ref names one map node, but a park's sites are
-        // spread across sibling maps (Alice Lake: 55 in "A", 41 in "B", 12
-        // walk-in, 2 group). Only the campsite's ref knows which one holds it,
-        // and a parent node answers with no resource rows at all — so pinning
-        // every site to the parent's map left every site outside it with no
-        // availability data.
-        //
-        // Falling back to the parent map is how that silent failure looked, so
-        // count the fallbacks and say so: a campsite ref that predates the
-        // four-part format (V45 wrote `tenant:id`, the ETL rewrites it in full)
-        // parses to null here and would quietly restore the bug.
+        // Sites sit on sibling maps, and a parent node returns no resource
+        // rows — so each campsite's own map id is the one to fetch. Falling
+        // back to the parent is what the bug looked like, hence the count.
         var fellBackToParentMap = 0
         val targets =
             campsites.map { campsite ->
@@ -331,18 +323,14 @@ internal fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, Av
     }
 }
 
-/**
- * The campsite's own Aspira ref, but only when it belongs to the same tenant as
- * the campground. A mis-tagged campsite would otherwise send its map id to a
- * different tenant's host, where the same integer names a different park.
- */
+/** Same-tenant only: the same map id names a different park on another host. */
 private fun Campsite.aspiraBookingRef(parentTenant: String?): BookingProviderRef.Aspira? {
     val provider = bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return null
     val ref = bookingProviderRef?.let { BookingProviderRef.parse(provider, it) } as? BookingProviderRef.Aspira
     return ref?.takeIf { it.tenant == parentTenant }
 }
 
-/** Narrow to Int without throwing: one odd campsite must not fail its campground. */
+/** Non-throwing: one odd campsite must not fail its campground. */
 private fun Long.toIntInRangeOrNull(): Int? = takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }?.toInt()
 
 private fun Campsite.aspiraResourceId(): String =
