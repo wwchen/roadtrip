@@ -21,8 +21,6 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 import java.time.Instant
@@ -116,7 +114,8 @@ class AspiraCampgroundsEtl(
                 inventory = dto.inventoryEnvelopes,
                 dictionaryPayload = dto.dictionaryPayload,
             )
-        val bookingCtaRefsByResourceLocationId = canonicalBookingCtaRefs(dto.inventoryEnvelopes, dto.dictionaryPayload)
+        val bookableMapIds =
+            AspiraBookingCtaRefs.bookableMapIdsByResourceLocationId(dto.inventoryEnvelopes, dto.dictionaryPayload)
 
         // Build one merged name index: normalized name → first (lat, lon).
         // Geometry entries are walked in declared order, so the YAML's
@@ -211,7 +210,7 @@ class AspiraCampgroundsEtl(
 
             val (lat, lon) = coords
             val dataRef = DataProviderRef.Aspira(transactionLocationId = leaf.transactionLocationId, mapId = leaf.mapId)
-            val bookingCtaRef = leaf.resourceLocationId?.let { bookingCtaRefsByResourceLocationId[it] }
+            val bookingCtaRef = AspiraBookingCtaRefs.forLeaf(leaf, bookableMapIds)
             campgrounds +=
                 CampgroundUpsertCandidate(
                     dataProviderRef = dataRef,
@@ -337,38 +336,6 @@ class AspiraCampgroundsEtl(
             ),
         )
 
-    private fun canonicalBookingCtaRefs(
-        inventory: List<ca.floo.roadtrip.model.metadata.Envelope>,
-        dictionaryPayload: JsonObject?,
-    ): Map<Long, AspiraBookingCtaRef> {
-        val bookableByCategoryId = AspiraInventoryCategories.bookableFlagByCategoryId(dictionaryPayload)
-        val refs = mutableMapOf<Long, AspiraBookingCtaRef>()
-        for (envelope in inventory) {
-            val payload = envelope.payload as? JsonObject ?: continue
-            for ((_, raw) in payload) {
-                val obj = raw as? JsonObject ?: continue
-                if (!AspiraInventoryCategories.isBookableResource(obj, bookableByCategoryId)) continue
-                val resourceLocationId = obj.longValue("resourceLocationId") ?: continue
-                val mapId = obj.mapIds().minOrNull() ?: continue
-                val current = refs[resourceLocationId]
-                if (current == null || mapId < current.mapId) {
-                    refs[resourceLocationId] = AspiraBookingCtaRef(mapId = mapId, resourceLocationId = resourceLocationId)
-                }
-            }
-        }
-        return refs
-    }
-
-    private fun JsonObject.longValue(key: String): Long? =
-        this[key]
-            ?.jsonPrimitive
-            ?.longOrNull
-
-    private fun JsonObject.mapIds(): List<Long> =
-        (this["mapIds"] as? kotlinx.serialization.json.JsonArray)
-            ?.mapNotNull { it.jsonPrimitive.longOrNull }
-            ?: emptyList()
-
     private fun detectGeometrySource(
         slug: String,
         envelopes: List<ca.floo.roadtrip.model.metadata.Envelope>,
@@ -413,11 +380,6 @@ private data class AspiraLeafExtrasDto(
 @Serializable
 private data class AspiraBookingCtaProviderRefDto(
     val transactionLocationId: Long,
-    val mapId: Long,
-    val resourceLocationId: Long,
-)
-
-internal data class AspiraBookingCtaRef(
     val mapId: Long,
     val resourceLocationId: Long,
 )

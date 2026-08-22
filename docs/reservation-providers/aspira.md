@@ -67,10 +67,19 @@ Three layers of identity:
 
 `pois.provider_ref` is the POI identity/join ref, not necessarily the best
 booking-grid deep link. Some Parks Canada campground POIs use a container
-`mapId`, while their sites live under child grid maps. `AspiraJoinByNameEtl`
-therefore stores `properties.upstream.booking_cta_provider_ref` when the
-inventory exposes child `mapIds[]`; the POI drawer uses that for the primary
-booking CTA and keeps `provider_ref` stable for joins and provider dispatch.
+`mapId`, while their sites live under child grid maps. `AspiraBookingCtaRefs`
+therefore resolves `properties.upstream.booking_cta_provider_ref` from the
+inventory's `mapIds[]`; the POI drawer uses that for the primary booking CTA
+and keeps `provider_ref` stable for joins and provider dispatch.
+
+**Only a lone child map substitutes for the container.** A park's sites often
+span several sibling grid maps under one `resourceLocationId` — Sasquatch's 179
+sites sit on Hicks (`-2147483419`), Bench (`-2147483418`), Lakeside
+(`-2147483417`) and Group (`-2147483416`), all under `resourceLocationId`
+`-2147483539`. No child covers the whole POI there, so the leaf's own container
+`mapId` stays. 55 of BC's 151 campground POIs are in this shape; picking one
+child (the ETL used to take the numerically smallest) sent every one of their
+"Book" links into a single arbitrary loop.
 
 ## Endpoint catalog
 

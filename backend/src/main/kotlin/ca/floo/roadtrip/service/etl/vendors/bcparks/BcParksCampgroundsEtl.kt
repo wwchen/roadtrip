@@ -11,6 +11,7 @@ import ca.floo.roadtrip.service.etl.framework.CampgroundEtl
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraBookingCtaRef
+import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraBookingCtaRefs
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraInventoryCategories
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeaf
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraLeavesWalk
@@ -24,7 +25,6 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 
@@ -99,8 +99,8 @@ class BcParksCampgroundsEtl(
                 inventory = dto.inventoryEnvelopes,
                 dictionaryPayload = dto.dictionaryPayload,
             )
-        val bookingCtaRefsByResourceLocationId =
-            canonicalBookingCtaRefs(dto.inventoryEnvelopes, dto.dictionaryPayload)
+        val bookableMapIds =
+            AspiraBookingCtaRefs.bookableMapIdsByResourceLocationId(dto.inventoryEnvelopes, dto.dictionaryPayload)
 
         val byName = LinkedHashMap<String, StrapiMatch>()
         for (row in dto.strapiRows) {
@@ -161,7 +161,7 @@ class BcParksCampgroundsEtl(
             }
 
             val dataRef = DataProviderRef.BcParks(transactionLocationId = leaf.transactionLocationId, mapId = leaf.mapId)
-            val bookingCtaRef = leaf.resourceLocationId.let { bookingCtaRefsByResourceLocationId[it] }
+            val bookingCtaRef = AspiraBookingCtaRefs.forLeaf(leaf, bookableMapIds)
             val strapiRow = match.strapiRow
 
             campgrounds +=
@@ -214,28 +214,6 @@ class BcParksCampgroundsEtl(
                 mapId = bookingCtaRef.mapId,
                 resourceLocationId = bookingCtaRef.resourceLocationId,
             ).serialize()
-
-    private fun canonicalBookingCtaRefs(
-        inventory: List<Envelope>,
-        dictionaryPayload: JsonObject?,
-    ): Map<Long, AspiraBookingCtaRef> {
-        val bookableByCategoryId = AspiraInventoryCategories.bookableFlagByCategoryId(dictionaryPayload)
-        val refs = mutableMapOf<Long, AspiraBookingCtaRef>()
-        for (envelope in inventory) {
-            val payload = envelope.payload as? JsonObject ?: continue
-            for ((_, raw) in payload) {
-                val obj = raw as? JsonObject ?: continue
-                if (!AspiraInventoryCategories.isBookableResource(obj, bookableByCategoryId)) continue
-                val resourceLocationId = obj["resourceLocationId"]?.jsonPrimitive?.longOrNull ?: continue
-                val mapId = mapIds(obj).minOrNull() ?: continue
-                val current = refs[resourceLocationId]
-                if (current == null || mapId < current.mapId) {
-                    refs[resourceLocationId] = AspiraBookingCtaRef(mapId = mapId, resourceLocationId = resourceLocationId)
-                }
-            }
-        }
-        return refs
-    }
 
     private fun locationPayload(
         latitude: Double,
@@ -381,9 +359,6 @@ class BcParksCampgroundsEtl(
             .firstOrNull()
             ?.first
     }
-
-    private fun mapIds(obj: JsonObject): List<Long> =
-        (obj["mapIds"] as? JsonArray)?.mapNotNull { it.jsonPrimitive.longOrNull } ?: emptyList()
 
     private companion object {
         const val FUZZY_THRESHOLD = 0.5
