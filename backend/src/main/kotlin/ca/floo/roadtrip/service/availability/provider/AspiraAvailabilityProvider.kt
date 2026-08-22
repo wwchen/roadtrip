@@ -18,6 +18,7 @@ import ca.floo.roadtrip.model.metadata.aspira.AspiraStatus
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.support.AspiraException
 import io.ktor.http.HttpStatusCode
+import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -37,6 +38,8 @@ class AspiraAvailabilityProvider(
     private val enabled: Boolean,
     private val occupancyEnabled: Boolean = false,
 ) : AvailabilityProvider {
+    private val log = LoggerFactory.getLogger(javaClass)
+
     override val id: BookingProvider = BookingProvider.ASPIRA
 
     override val capabilities: AvailabilityProviderCapabilities =
@@ -82,20 +85,27 @@ class AspiraAvailabilityProvider(
         val aspiraRef = aspiraRefOrThrow(campground)
         val tenant = tenantForRef(aspiraRef)
         val parentMapId = mapIdOrThrow(aspiraRef.mapId)
+        // A campground's own ref names one map node, but a park's sites are
+        // spread across sibling maps (Alice Lake: 55 in "A", 41 in "B", 12
+        // walk-in, 2 group). Only the campsite's ref knows which one holds it,
+        // and a parent node answers with no resource rows at all — so pinning
+        // every site to the parent's map left every site outside it with no
+        // availability data.
+        //
+        // Falling back to the parent map is how that silent failure looked, so
+        // count the fallbacks and say so: a campsite ref that predates the
+        // four-part format (V45 wrote `tenant:id`, the ETL rewrites it in full)
+        // parses to null here and would quietly restore the bug.
+        var fellBackToParentMap = 0
         val targets =
             campsites.map { campsite ->
                 val ref = campsite.dataProviderRef
-                // A campground's own ref names one map node, but a park's sites
-                // are spread across sibling maps (Alice Lake: 55 in "A", 41 in
-                // "B", 12 walk-in, 2 group). Only the campsite's ref knows which
-                // one holds it, and a parent node answers with no resource rows
-                // at all — so pinning every site to the parent's map left every
-                // site outside it with no availability data.
-                val campsiteRef = campsite.aspiraBookingRef()
+                val campsiteMapId = campsite.aspiraBookingRef(aspiraRef.tenant)?.mapId?.toIntInRangeOrNull()
+                if (campsiteMapId == null) fellBackToParentMap++
                 AspiraCatalogCampsite(
                     campsiteId = campsite.id,
                     resourceId = campsite.aspiraResourceId(),
-                    mapId = mapIdOrThrow(campsiteRef?.mapId ?: aspiraRef.mapId),
+                    mapId = campsiteMapId ?: parentMapId,
                     resourceLocationId =
                         when (ref) {
                             is DataProviderRef.AspiraCampsite -> ref.resourceLocationId.toInt()
@@ -104,6 +114,17 @@ class AspiraAvailabilityProvider(
                         },
                 )
             }
+        if (fellBackToParentMap > 0) {
+            log.warn(
+                "aspira campsites without a usable own map id, using parent map instead: " +
+                    "count={} of {} campground={} tenant={} parentMapId={}",
+                fellBackToParentMap,
+                campsites.size,
+                campground.id,
+                aspiraRef.tenant,
+                parentMapId,
+            )
+        }
         val resourceLocationId =
             aspiraRef.resourceLocationId?.let { intOrThrow("resourceLocationId", it) }
                 ?: targets.mapNotNull { it.resourceLocationId }.distinct().singleOrNull()
@@ -310,10 +331,19 @@ internal fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, Av
     }
 }
 
-private fun Campsite.aspiraBookingRef(): BookingProviderRef.Aspira? {
+/**
+ * The campsite's own Aspira ref, but only when it belongs to the same tenant as
+ * the campground. A mis-tagged campsite would otherwise send its map id to a
+ * different tenant's host, where the same integer names a different park.
+ */
+private fun Campsite.aspiraBookingRef(parentTenant: String?): BookingProviderRef.Aspira? {
     val provider = bookingProvider?.let(BookingProvider::fromIdOrNull) ?: return null
-    return bookingProviderRef?.let { BookingProviderRef.parse(provider, it) } as? BookingProviderRef.Aspira
+    val ref = bookingProviderRef?.let { BookingProviderRef.parse(provider, it) } as? BookingProviderRef.Aspira
+    return ref?.takeIf { it.tenant == parentTenant }
 }
+
+/** Narrow to Int without throwing: one odd campsite must not fail its campground. */
+private fun Long.toIntInRangeOrNull(): Int? = takeIf { it in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong() }?.toInt()
 
 private fun Campsite.aspiraResourceId(): String =
     when (val ref = dataProviderRef) {

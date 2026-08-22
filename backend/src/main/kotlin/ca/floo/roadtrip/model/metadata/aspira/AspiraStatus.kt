@@ -10,11 +10,13 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
  *
  * Verified live on 2026-08-21 against two tenants:
  *
- *   camping.bcparks.ca, Alice Lake mapId -2147483647, 2026-08-22..2026-09-10:
- *     resources 38 and 39 return 0 on 2026-08-31 only, and 1 on every other
- *     day — matching the vendor's own calendar, which shows those two sites
- *     open on the 31st and booked the rest of the window. `mapAvailabilities`
- *     is 0 on exactly the four days some resource is 0.
+ *   camping.bcparks.ca, Alice Lake mapId -2147483647. The vendor's own booking
+ *     calendar was read for 2026-08-22..2026-09-04; across that window
+ *     resources 38 and 39 answer 0 on 2026-08-31 and 1 on every other day,
+ *     matching the calendar's single open cell for each. (The capture runs to
+ *     09-10 and both answer 0 again on 09-07, past what the calendar was read
+ *     for — so that day is evidence of nothing either way, and
+ *     `AspiraStatusGroundTruthTest` asserts only through 09-04.)
  *
  *   reservation.pc.gc.ca, Tunnel Mountain Village 1 loop A mapId -2147483621,
  *     same window: 1 on Sat 08-22, Sat 08-29, Sat 09-05 and Sun 09-06, 0 on

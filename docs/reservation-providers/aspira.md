@@ -182,10 +182,14 @@ Status codes are **one family** across `mapAvailabilities`,
 
 Verified live on 2026-08-21 against both tenants:
 
-- `camping.bcparks.ca` Alice Lake (mapId `-2147483647`), 2026-08-22..09-10:
-  resources `38` and `39` return `0` on 08-31 only and `1` on every other
-  day, matching the vendor's own calendar. `mapAvailabilities` is `0` on
-  exactly the four days some resource is `0`.
+- `camping.bcparks.ca` Alice Lake (mapId `-2147483647`). The vendor's booking
+  calendar was read for 2026-08-22..09-04; over that window resources `38` and
+  `39` answer `0` on 08-31 and `1` on every other day, matching the calendar's
+  single open cell for each. Both answer `0` again on 09-07, beyond what the
+  calendar was read for, so that day evidences nothing either way. In the full
+  54-resource capture `mapAvailabilities` is `0` on exactly the four days some
+  resource is `0`; the committed fixture is trimmed to these two resources and
+  so does not show that on its own.
 - `reservation.pc.gc.ca` Tunnel Mountain Village 1 loop A (mapId
   `-2147483621`), same window: `1` on the three Saturdays and the Labour Day
   Sunday, `0` on every other day.
@@ -213,6 +217,17 @@ independent checks establish that `0` means bookable:
    6, inside 7 eligible; PC Elk Island 30 → 3, inside 4 eligible; zero
    violations in both. Nothing but "0 == bookable for this search" explains a
    *booking* constraint gating the code that way.
+
+**Open question — `2` and `closed_for_season`.** A window where every row is
+`2` maps to all-`CLOSED`, and `AvailabilityResponseMapper.classifyWindowState`
+renders that as `closed_for_season`. That is right for a winter or
+beyond-horizon window, which is all this was verified against. It would be
+wrong if Aspira also answers `2` for dates that are inside the booking horizon
+but not yet released (Parks Canada releases inventory in waves), because the
+drawer would tell users the campground is shut. To settle it, find a PC park
+with a known release date and compare the day before and after: if unreleased
+dates answer `2`, that code needs splitting from seasonal closure. Until then
+`2` stays `CLOSED` — never `AVAILABLE` either way.
 
 `partySize` is ignored by this endpoint, so it is useless as a constraint
 probe. BC's parks allow most equipment at most sites (87-96 of 110 at Alice

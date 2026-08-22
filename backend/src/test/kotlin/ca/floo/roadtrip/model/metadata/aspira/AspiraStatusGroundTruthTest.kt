@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 
@@ -58,7 +59,7 @@ class AspiraStatusGroundTruthTest {
 
     @Test
     fun `the park rollup agrees with the sites on the bookable day`() {
-        val index = captureStart.until(bookableDay).days
+        val index = ChronoUnit.DAYS.between(captureStart, bookableDay).toInt()
         assertEquals(AvailabilityStatus.AVAILABLE, AspiraStatus.classify(parsed.parkRollup[index]))
     }
 }
