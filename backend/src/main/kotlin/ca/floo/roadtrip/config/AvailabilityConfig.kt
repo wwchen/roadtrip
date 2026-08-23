@@ -6,6 +6,7 @@ data class AvailabilityConfig(
     val forcePullCooldown: Duration,
     val providerCooldown: Duration,
     val poller: AvailabilityPollerConfig,
+    val bulk: BulkAvailabilityConfig,
 ) {
     companion object {
         fun fromConfig(config: ConfigSection): AvailabilityConfig =
@@ -13,6 +14,7 @@ data class AvailabilityConfig(
                 forcePullCooldown = config.requiredDuration("force-pull-cooldown"),
                 providerCooldown = config.requiredDuration("provider-cooldown"),
                 poller = AvailabilityPollerConfig.fromConfig(config.section("poller")),
+                bulk = BulkAvailabilityConfig.fromConfig(config.section("bulk")),
             )
     }
 }

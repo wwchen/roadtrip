@@ -20,6 +20,14 @@ roadtrip:
       default-cadence: 300s
       idle-reschedule: 300s
       governor-starved-retry: 15s
+    bulk:
+      # A bulk scan is the one read that can turn one request into many
+      # upstream calls, so each bound is stated here rather than compiled in.
+      max-pois: 50
+      fan-out-concurrency: 8
+      per-poi-timeout: 20s
+      tolerance: 2h
+      ip-rate-limit-per-minute: 10
   booking:
     recgov-atc:
       companion-base-url:
