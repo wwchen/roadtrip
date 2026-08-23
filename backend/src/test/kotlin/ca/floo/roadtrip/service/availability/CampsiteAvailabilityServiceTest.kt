@@ -147,6 +147,10 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
 
     @Test
     fun `snapshot freshness TTL is selected for the dispatched provider`() {
+        // Fixed clock: effectiveTtlSeconds derives ttl from Duration.between(freshAtOrAfter,
+        // now), so a system clock makes this assertion depend on two Instant.now() calls
+        // landing in the same second.
+        val clock = Clock.fixed(Instant.parse("2020-01-01T00:00:00Z"), ZoneOffset.UTC)
         val recgov = FakeAvailabilityProvider(BookingProvider.RECGOV)
         val ttl = Duration.ofMinutes(5)
         var askedFor: AvailabilityProvider? = null
@@ -155,6 +159,7 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
             runBlocking {
                 service(
                     providers = listOf(recgov),
+                    clock = clock,
                     snapshotFreshnessTtl = { provider ->
                         askedFor = provider
                         ttl

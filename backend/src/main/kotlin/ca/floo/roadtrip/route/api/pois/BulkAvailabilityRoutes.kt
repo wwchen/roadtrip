@@ -83,6 +83,11 @@ private fun BulkAvailabilityRequestDto.validated(config: BulkAvailabilityConfig)
     require(poiIds.isNotEmpty()) { "bad_request" }
     require(poiIds.size <= config.maxPois) { "too_many_pois" }
     require(minNights >= 1) { "bad_min_nights" }
+    // Both dates are required: with either left null each POI would resolve its own
+    // default window from its own centroid timezone, so run lengths would no longer
+    // be comparable across POIs — defeating the endpoint's purpose (see spec Decision 5).
+    require(!startDate.isNullOrBlank()) { "bad_date_window" }
+    require(!endDate.isNullOrBlank()) { "bad_date_window" }
     return BulkAvailabilityRequest(
         poiIds = poiIds,
         startDate = parseDate(startDate),

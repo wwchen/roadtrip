@@ -10,7 +10,7 @@ class BulkAvailabilityConfigTest {
     fun `defaults are used when the section is absent`() {
         val config = BulkAvailabilityConfig.default
         assertEquals(50, config.maxPois)
-        assertEquals(8, config.fanOutConcurrency)
+        assertEquals(3, config.fanOutConcurrency)
         assertEquals(Duration.ofSeconds(20), config.perPoiTimeout)
         assertEquals(Duration.ofHours(2), config.tolerance)
         assertEquals(10, config.ipRateLimitPerMinute)

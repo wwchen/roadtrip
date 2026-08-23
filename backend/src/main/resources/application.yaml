@@ -24,7 +24,10 @@ roadtrip:
       # A bulk scan is the one read that can turn one request into many
       # upstream calls, so each bound is stated here rather than compiled in.
       max-pois: 50
-      fan-out-concurrency: 8
+      # Must stay below db.max-pool-size (currently 4, unset anywhere so it's
+      # the DbConfig default) — each concurrent POI can hold a pooled
+      # connection through AvailabilityRepo.recordObservations.
+      fan-out-concurrency: 3
       per-poi-timeout: 20s
       tolerance: 2h
       ip-rate-limit-per-minute: 10

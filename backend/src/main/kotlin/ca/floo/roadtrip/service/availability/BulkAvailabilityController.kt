@@ -5,6 +5,8 @@ import ca.floo.roadtrip.model.api.BulkAvailabilityResponseDto
 import ca.floo.roadtrip.model.api.BulkPoiAvailabilityDto
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
+import ca.floo.roadtrip.support.causeChain
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -12,9 +14,15 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeout
+import org.slf4j.LoggerFactory
 import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
+
+private val log = LoggerFactory.getLogger("BulkAvailabilityController")
+
+/** Wire code for a POI failure that doesn't match any known error vocabulary. */
+private const val INTERNAL_ERROR_CODE = "internal_error"
 
 internal data class BulkAvailabilityRequest(
     val poiIds: List<Long>,
@@ -88,10 +96,19 @@ internal class BulkAvailabilityController(
             }
         } catch (e: TimeoutCancellationException) {
             BulkPoiAvailabilityDto(poiId = poiId, error = "timeout")
+        } catch (e: CancellationException) {
+            // Coroutine cancellation (e.g. a sibling POI's failure, or the caller
+            // disconnecting) must propagate, not be reported as this POI's error.
+            throw e
         } catch (e: AvailabilityServiceError) {
             BulkPoiAvailabilityDto(poiId = poiId, error = e.error)
         } catch (e: AvailabilityProviderError) {
             BulkPoiAvailabilityDto(poiId = poiId, error = availabilityErrorCode(e))
+        } catch (e: Exception) {
+            // Anything unmapped (e.g. a DB connection-acquisition timeout) must not
+            // escape the fan-out and cancel every sibling POI. See spec Decision 6.
+            log.error("bulk availability poi={} failed: {}", poiId, causeChain(e), e)
+            BulkPoiAvailabilityDto(poiId = poiId, error = INTERNAL_ERROR_CODE)
         }
 
     private fun rank(

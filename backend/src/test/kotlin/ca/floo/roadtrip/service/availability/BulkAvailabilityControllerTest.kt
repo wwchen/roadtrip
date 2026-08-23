@@ -23,6 +23,7 @@ private const val RATE_LIMITED_POI_ID = 100L
 private const val UNKNOWN_POI_ID = 101L
 private const val SLOW_POI_ID = 102L
 private const val NO_SITES_POI_ID = 103L
+private const val CRASHING_POI_ID = 104L
 
 private const val TEST_MAX_POIS = 50
 private const val TEST_FAN_OUT_CONCURRENCY = 8
@@ -62,6 +63,18 @@ class BulkAvailabilityControllerTest {
             assertNotNull(response.pois[0].campsites)
             assertEquals("rate_limited", response.pois[1].error)
             assertNull(response.pois[1].campsites)
+        }
+    }
+
+    @Test
+    fun `a poi whose lookup throws an unmapped exception reports internal_error and does not fail its neighbours`() {
+        runBlocking {
+            val response =
+                bulkController().availabilityForPois(request(poiIds = listOf(1L, CRASHING_POI_ID, 2L)))
+            assertNotNull(response.pois[0].campsites)
+            assertEquals("internal_error", response.pois[1].error)
+            assertNull(response.pois[1].campsites)
+            assertNotNull(response.pois[2].campsites)
         }
     }
 
@@ -196,6 +209,7 @@ private class FakePoiAvailabilitySliceLookup(
         when (poiId) {
             RATE_LIMITED_POI_ID -> throw AvailabilityProviderError.RateLimited()
             UNKNOWN_POI_ID -> throw AvailabilityServiceError.NotFound
+            CRASHING_POI_ID -> throw RuntimeException("boom: unmapped failure")
             SLOW_POI_ID -> {
                 delay(SLOW_POI_DELAY_MS)
                 simpleSlice(poiId)

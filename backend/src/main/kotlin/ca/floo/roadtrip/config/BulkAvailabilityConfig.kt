@@ -28,7 +28,12 @@ data class BulkAvailabilityConfig(
 
     companion object {
         private const val DEFAULT_MAX_POIS = 50
-        private const val DEFAULT_FAN_OUT_CONCURRENCY = 8
+
+        // Must stay below db.max-pool-size (currently DbConfig.DEFAULT_MAX_POOL_SIZE = 4):
+        // each concurrent POI can hold a pooled connection through
+        // AvailabilityRepo.recordObservations, so fan-out at or above the pool size
+        // guarantees Hikari connection-acquisition timeouts.
+        private const val DEFAULT_FAN_OUT_CONCURRENCY = 3
         private const val DEFAULT_PER_POI_TIMEOUT_SEC = 20L
         private const val DEFAULT_TOLERANCE_HOURS = 2L
         private const val DEFAULT_IP_RATE_LIMIT_PER_MINUTE = 10

@@ -95,6 +95,38 @@ class BulkAvailabilityRoutesTest {
         }
 
     @Test
+    fun `rejects a request omitting both dates`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":[1]}""")
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("bad_date_window", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `rejects a request missing only the end date`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":[1],"start_date":"$windowStart"}""")
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("bad_date_window", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
     fun `rejects a non-positive min_nights`() =
         testApplication {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
@@ -166,7 +198,10 @@ class BulkAvailabilityRoutesTest {
             val resp =
                 client.post("/api/pois/availability/bulk") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"poi_ids":[1,$RATE_LIMITED_POI_ID]}""")
+                    setBody(
+                        """{"poi_ids":[1,$RATE_LIMITED_POI_ID],""" +
+                            """"start_date":"$windowStart","end_date":"$windowEnd"}""",
+                    )
                 }
 
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -188,14 +223,14 @@ class BulkAvailabilityRoutesTest {
             val first =
                 client.post("/api/pois/availability/bulk") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"poi_ids":[1]}""")
+                    setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}""")
                 }
             assertEquals(HttpStatusCode.OK, first.status)
 
             val second =
                 client.post("/api/pois/availability/bulk") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"poi_ids":[1]}""")
+                    setBody("""{"poi_ids":[1],"start_date":"$windowStart","end_date":"$windowEnd"}""")
                 }
             assertEquals(HttpStatusCode.ServiceUnavailable, second.status)
             val body = Json.parseToJsonElement(second.bodyAsText()).jsonObject
