@@ -13,6 +13,7 @@ import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
+import ca.floo.roadtrip.service.availability.availabilityErrorCode
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
 import ca.floo.roadtrip.support.UpstreamHttpException
 import io.ktor.http.ContentType
@@ -124,22 +125,20 @@ internal fun Route.campsiteRoutes(
 
 internal fun mapProviderError(e: AvailabilityProviderError): Pair<HttpStatusCode, AvailabilityErrorDto> {
     val upstream = upstreamHttpStatus(e)
-    return when (e) {
-        is AvailabilityProviderError.RateLimited ->
-            HttpStatusCode.ServiceUnavailable to availabilityErrorDto("rate_limited", upstreamStatus = upstream)
-        is AvailabilityProviderError.UpstreamBlocked ->
-            HttpStatusCode.ServiceUnavailable to availabilityErrorDto("upstream_blocked", upstreamStatus = upstream)
-        is AvailabilityProviderError.UpstreamUnavailable ->
-            HttpStatusCode.ServiceUnavailable to availabilityErrorDto("upstream_5xx", upstreamStatus = upstream)
-        is AvailabilityProviderError.UpstreamUnreachable ->
-            HttpStatusCode.ServiceUnavailable to availabilityErrorDto("upstream_unreachable", upstreamStatus = upstream)
-        is AvailabilityProviderError.Misconfigured ->
-            HttpStatusCode.InternalServerError to availabilityErrorDto("provider_misconfigured")
-        is AvailabilityProviderError.Unsupported ->
-            HttpStatusCode.NotImplemented to availabilityErrorDto("unsupported")
-        is AvailabilityProviderError.WrongRefType ->
-            HttpStatusCode.InternalServerError to availabilityErrorDto("provider_misconfigured")
-    }
+    val status =
+        when (e) {
+            is AvailabilityProviderError.RateLimited,
+            is AvailabilityProviderError.UpstreamBlocked,
+            is AvailabilityProviderError.UpstreamUnavailable,
+            is AvailabilityProviderError.UpstreamUnreachable,
+            -> HttpStatusCode.ServiceUnavailable
+            is AvailabilityProviderError.Unsupported -> HttpStatusCode.NotImplemented
+            is AvailabilityProviderError.Misconfigured,
+            is AvailabilityProviderError.WrongRefType,
+            -> HttpStatusCode.InternalServerError
+        }
+    val upstreamStatus = if (status == HttpStatusCode.ServiceUnavailable) upstream else null
+    return status to availabilityErrorDto(availabilityErrorCode(e), upstreamStatus = upstreamStatus)
 }
 
 /**
