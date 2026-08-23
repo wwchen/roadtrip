@@ -132,8 +132,18 @@ standard than one evaluated early. The bulk controller computes the cutoff once
 and every POI is measured against the same line. It also unifies the read path
 with the poller and with the SQL predicate that already takes `freshAtOrAfter`.
 
-No clamp or floor is built: callers are internal, trusted code, and vendor-load
-protection already lives in `VendorRateLimiter` and `ProviderCooldownTracker`.
+No clamp or floor is built: callers are internal, trusted code.
+
+> **Correction (post-implementation).** This section originally claimed
+> vendor-load protection "already lives in `VendorRateLimiter` and
+> `ProviderCooldownTracker`". That is false for this path. `VendorRateLimiter`
+> is wired only into `AvailabilityPollExecutor`; nothing on the read path
+> consults it. `ProviderCooldownTracker.sortHealthyFirst` only reorders
+> candidates and never excludes one, so with the common single-provider
+> campground it is a no-op. The real brakes on this endpoint are the snapshot
+> cache, `max-pois`, `fan-out-concurrency`, and `IpRateLimiter`. Do not size
+> this endpoint on the assumption that a vendor-side limiter will catch
+> overflow.
 
 ### Runs
 
@@ -224,8 +234,57 @@ override. Pure optimization: no contract change, no response-shape change.
   the accepted cost of a synchronous contract and the main thing to measure
   before considering the deferred design above.
 - **A cold scan of N POIs is up to N vendor calls.** Mitigated by the existing
-  snapshot cache, by `VendorRateLimiter` and `ProviderCooldownTracker`, by
-  `max-pois`, and — for Campflare — by P2. Worth watching in the
-  `availability_fetch_call` Grafana panels after launch.
+  snapshot cache, by `max-pois`, by `fan-out-concurrency`, by `IpRateLimiter`,
+  and — for Campflare — by P2. **Not** mitigated by `VendorRateLimiter` or
+  `ProviderCooldownTracker` — see the correction under Freshness. Worth
+  watching in the `availability_fetch_call` Grafana panels after launch.
+- **`fan-out-concurrency` must stay below `db.max-pool-size`.** Each cold POI
+  holds a pooled connection through a row-by-row write transaction in
+  `AvailabilityRepo.recordObservations`. The pool defaults to 4 and is set in no
+  config file, so the fan-out ships at 3. Raising one without the other
+  reproduces pool exhaustion and trips `/api/health/ready`. The invariant is
+  stated in comments at both sites but is not enforced in code.
 - **The `poiAvailabilitySlice` extraction touches the live detail endpoint.**
   Behavior parity via the existing tests is the gate.
+
+## Follow-ups from the P1 whole-branch review
+
+Raised by the final review of `feat/bulk-availability-p1`, judged non-blocking
+and deliberately deferred. Recorded here so the next person inherits them.
+
+1. **The shared-code goal is only half met.** Both endpoints share the *fetch*
+   via `poiAvailabilitySlice`, but the per-campsite envelope shaping is
+   duplicated verbatim between `CampsiteAvailabilityController` and
+   `BulkAvailabilityController`. A new envelope field must be added twice and
+   the compiler will not say so. Extract a shared mapper — this is the spec's
+   own central claim, and the duplication is still two identical blocks rather
+   than two drifted ones.
+2. **No overall request deadline.** `withTimeout` bounds one POI, not the
+   request. With `max-pois: 50` and `fan-out-concurrency: 3`, a fully cold scan
+   where every POI times out runs far past the per-POI budget. Add an overall
+   timeout and return `timeout` for POIs that do not finish inside it.
+3. **`"timeout"` is unreliable, and blames the vendor.**
+   `FailoverAvailabilityFetcher.attemptFetch` catches `Throwable`, so a
+   `TimeoutCancellationException` during a vendor call is recorded as
+   `FetchOutcome.OTHER` and surfaces as `upstream_5xx`. Narrow that catch to
+   re-throw `CancellationException`.
+4. **Blocking JDBC weakens the per-POI timeout.** The repo calls inside
+   `poiAvailabilitySlice` are blocking, not suspending, so cancellation cannot
+   interrupt a POI wedged on a slow query or a connection-acquisition wait.
+5. **Sizing was not revisited.** The review recommended `max-pois` 50 → 20 and
+   `ip-rate-limit-per-minute` 10 → 3. Left at 50/10 as a product decision. As
+   shipped, one caller can drive up to 500 cold vendor calls per minute. Note
+   also that no `ForwardedHeaders` plugin is installed, so behind a proxy the
+   IP bucket is shared by all traffic.
+6. **No integration test through the real controller.** Every bulk test injects
+   a fake `PoiAvailabilitySliceLookup`; the assembled production path is
+   untested. One test over the shared test DB with a few seeded POIs — including
+   an unknown id and one whose provider throws — would cover it deterministically.
+7. **`internal_error`** is a new wire code, absent from this spec's vocabulary
+   and from the route's OpenAPI description.
+8. **Minor cleanups:** the `rejects an unparseable date` test is now tautological
+   (the mandatory-`end_date` check fires first, leaving `parseDate`'s failure
+   path uncovered); `MAX_CAUSE_DEPTH` now exists in three files; a stale
+   "spec Decision 5" citation in `BulkAvailabilityRoutes.kt`; untested
+   `tolerance`/`ipRateLimitPerMinute` validation; `tolerance` permits zero,
+   which means "refetch every POI every request".
