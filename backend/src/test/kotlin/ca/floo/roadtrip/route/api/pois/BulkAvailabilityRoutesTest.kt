@@ -127,6 +127,38 @@ class BulkAvailabilityRoutesTest {
         }
 
     @Test
+    fun `rejects syntactically malformed json without leaking the parser's message`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":[1""")
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("bad_request", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `rejects a wrong-typed field without leaking the serializer's message`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":"x"}""")
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("bad_request", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
     fun `returns 200 with per-poi entries when one poi fails`() =
         testApplication {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }

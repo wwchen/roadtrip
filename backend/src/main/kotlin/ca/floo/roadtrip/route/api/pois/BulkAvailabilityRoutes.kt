@@ -24,6 +24,14 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import java.time.LocalDate
 
+/**
+ * Every wire code [validated] can throw via `require`/`error`. A
+ * [RouteBodyResult.Invalid] whose detail isn't one of these came from
+ * `receiveJsonBody` itself (malformed JSON, a wrong-typed field) and carries
+ * raw `kotlinx.serialization` exception text — never safe to put on the wire.
+ */
+private val bulkValidationErrorCodes = setOf("bad_request", "too_many_pois", "bad_min_nights", "bad_date_window")
+
 internal fun Route.bulkAvailabilityRoutes(
     controller: BulkAvailabilityController,
     config: BulkAvailabilityConfig,
@@ -45,7 +53,8 @@ internal fun Route.bulkAvailabilityRoutes(
                                 .mapCatching { it.validated(config) }
                     ) {
                         is RouteBodyResult.Invalid -> {
-                            call.respondBulkError(body.detail ?: "bad_request", HttpStatusCode.BadRequest)
+                            val code = body.detail?.takeIf { it in bulkValidationErrorCodes } ?: "bad_request"
+                            call.respondBulkError(code, HttpStatusCode.BadRequest)
                             return@post
                         }
                         is RouteBodyResult.Valid -> body.value
