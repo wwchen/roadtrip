@@ -22,10 +22,12 @@ import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.ZoneOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
@@ -61,12 +63,14 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
     private fun service(
         providers: List<AvailabilityProvider>,
         fetcher: FailoverAvailabilityFetcher = CapturingFetcher(),
+        clock: Clock = Clock.systemUTC(),
         snapshotFreshnessTtl: (AvailabilityProvider) -> Duration = { defaultSnapshotFreshnessTtl(it.id) },
     ) = CampsiteAvailabilityService(
         availabilityProviders = providers,
         dateResolver = AvailabilityDateResolver(PoiRepo(ctx)),
         failoverFetcher = fetcher,
         availabilityRepo = null,
+        clock = clock,
         snapshotFreshnessTtl = snapshotFreshnessTtl,
     )
 
@@ -165,6 +169,34 @@ class CampsiteAvailabilityServiceTest : SharedDbTest() {
             }
 
         assertSame(recgov, askedFor)
+        assertEquals(ttl.seconds, result.batch.cacheBlock.ttlSeconds)
+    }
+
+    @Test
+    fun `the service's injected clock is the same clock its loader measures ttl against`() {
+        // Fixed far from the real system clock: if the loader fell back to its own
+        // Clock.systemUTC() instead of the one threaded through from the service,
+        // ttlSeconds would come back as a multi-year duration, not exactly `ttl`.
+        val fixedNow = Instant.parse("2020-01-01T00:00:00Z")
+        val clock = Clock.fixed(fixedNow, ZoneOffset.UTC)
+        val recgov = FakeAvailabilityProvider(BookingProvider.RECGOV)
+        val ttl = Duration.ofMinutes(5)
+
+        val result =
+            runBlocking {
+                service(
+                    providers = listOf(recgov),
+                    clock = clock,
+                    snapshotFreshnessTtl = { ttl },
+                ).fetchAvailability(
+                    campground = campground,
+                    campsites = campsites,
+                    startDate = null,
+                    endDate = null,
+                    dateContext = dateContext(),
+                )
+            }
+
         assertEquals(ttl.seconds, result.batch.cacheBlock.ttlSeconds)
     }
 
