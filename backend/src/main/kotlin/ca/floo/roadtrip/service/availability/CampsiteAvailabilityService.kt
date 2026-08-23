@@ -11,7 +11,9 @@ import ca.floo.roadtrip.model.domain.provider.BookingProvider
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import java.time.Clock
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 
 private const val DEFAULT_AVAILABILITY_DAYS: Int = 7
@@ -27,6 +29,7 @@ internal class CampsiteAvailabilityService(
     private val dateResolver: AvailabilityDateResolver,
     private val failoverFetcher: FailoverAvailabilityFetcher,
     availabilityRepo: AvailabilityRepo? = null,
+    private val clock: Clock = Clock.systemUTC(),
     private val snapshotFreshnessTtl: (provider: AvailabilityProvider) -> Duration = { defaultSnapshotFreshnessTtl(it.id) },
 ) {
     private val availabilityLoader = AvailabilityLoader(availabilityRepo)
@@ -37,6 +40,7 @@ internal class CampsiteAvailabilityService(
         startDate: LocalDate?,
         endDate: LocalDate?,
         dateContext: PoiDateContext,
+        freshAtOrAfter: Instant? = null,
     ): CampsiteAvailabilityResult {
         val provider = providerFor(campground)
         val caps = provider.capabilities
@@ -67,7 +71,7 @@ internal class CampsiteAvailabilityService(
                     targets = campsites.map { AvailabilityLoader.CampsiteTarget(dbId = it.id) },
                     startDate = windows.target.startDate,
                     endDate = windows.target.endDate,
-                    ttl = snapshotFreshnessTtl(provider),
+                    freshAtOrAfter = freshAtOrAfter ?: Instant.now(clock).minus(snapshotFreshnessTtl(provider)),
                 ),
             ) {
                 val result =
