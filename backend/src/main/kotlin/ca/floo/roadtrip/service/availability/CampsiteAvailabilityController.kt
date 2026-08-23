@@ -5,6 +5,7 @@ import ca.floo.roadtrip.model.api.PoiCampsitesResponseSchema
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
+import java.time.Instant
 import java.time.LocalDate
 
 // The empty-campsite branch has no provider whose capabilities could bound the
@@ -34,20 +35,21 @@ internal class CampsiteAvailabilityController(
     ): PoiCampsitesResponseSchema = catalogService.campsitesForPoi(poiId = poiId, siteTypes = siteTypes)
 
     /**
-     * Per-campsite availability for one campground POI.
+     * One POI's resolved availability, shared by the detail endpoint and the
+     * bulk endpoint.
      *
      * @throws AvailabilityServiceError on unknown POI/campground or a bad date window.
      * @throws ca.floo.roadtrip.model.availability.AvailabilityProviderError on upstream failure.
      */
-    suspend fun availabilityForPoi(
+    suspend fun poiAvailabilitySlice(
         poiId: Long,
         siteTypes: List<String>,
         startDate: LocalDate?,
         endDate: LocalDate?,
-    ): PoiCampsitesAvailabilityResponseDto {
+        freshAtOrAfter: Instant? = null,
+    ): PoiAvailabilitySlice {
         val campground = campgroundRepo.findByPoi(poiId) ?: throw AvailabilityServiceError.NotFound
         val allCampsites = campsitesRepo.findByCampground(campground.id)
-        val watchCaps = watchCapabilityService.capabilitiesFor(allCampsites)
         val campsites = allCampsites.filterBySiteTypes(siteTypes)
         val dateContext = dateResolver.contextForPoi(poiId)
 
@@ -61,12 +63,13 @@ internal class CampsiteAvailabilityController(
                     maxDays = EMPTY_WINDOW_MAX_DAYS,
                     defaultDays = EMPTY_WINDOW_DEFAULT_DAYS,
                 )
-            return PoiCampsitesAvailabilityResponseDto(
+            return PoiAvailabilitySlice(
                 poiId = poiId,
-                startDate = window.startDate.toString(),
-                endDate = window.endDate.toString(),
-                watchCapabilities = watchCaps,
+                startDate = window.startDate,
+                endDate = window.endDate,
+                allCampsites = allCampsites,
                 campsites = emptyList(),
+                batch = null,
             )
         }
 
@@ -77,24 +80,55 @@ internal class CampsiteAvailabilityController(
                 startDate = startDate,
                 endDate = endDate,
                 dateContext = dateContext,
+                freshAtOrAfter = freshAtOrAfter,
             )
 
+        return PoiAvailabilitySlice(
+            poiId = poiId,
+            startDate = result.startDate,
+            endDate = result.endDate,
+            allCampsites = allCampsites,
+            campsites = campsites,
+            batch = result.batch,
+        )
+    }
+
+    /**
+     * Per-campsite availability for one campground POI.
+     *
+     * @throws AvailabilityServiceError on unknown POI/campground or a bad date window.
+     * @throws ca.floo.roadtrip.model.availability.AvailabilityProviderError on upstream failure.
+     */
+    suspend fun availabilityForPoi(
+        poiId: Long,
+        siteTypes: List<String>,
+        startDate: LocalDate?,
+        endDate: LocalDate?,
+    ): PoiCampsitesAvailabilityResponseDto {
+        val slice = poiAvailabilitySlice(poiId, siteTypes, startDate, endDate)
+        val watchCaps = watchCapabilityService.capabilitiesFor(slice.allCampsites)
+        val batch = slice.batch
+
         val perCampsite =
-            campsites.map { campsite ->
-                availabilityResponseFromObservations(
-                    result.batch.copy(
-                        observations = result.batch.observations.filter { it.campsiteId == campsite.id },
-                        campsiteId = campsite.id,
-                        startDate = result.startDate,
-                        endDate = result.endDate,
-                    ),
-                )
+            if (batch == null) {
+                emptyList()
+            } else {
+                slice.campsites.map { campsite ->
+                    availabilityResponseFromObservations(
+                        batch.copy(
+                            observations = batch.observations.filter { it.campsiteId == campsite.id },
+                            campsiteId = campsite.id,
+                            startDate = slice.startDate,
+                            endDate = slice.endDate,
+                        ),
+                    )
+                }
             }
 
         return PoiCampsitesAvailabilityResponseDto(
             poiId = poiId,
-            startDate = result.startDate.toString(),
-            endDate = result.endDate.toString(),
+            startDate = slice.startDate.toString(),
+            endDate = slice.endDate.toString(),
             watchCapabilities = watchCaps,
             campsites = perCampsite,
         )
