@@ -27,13 +27,31 @@ and are explicitly out of scope — see Deferred below.
   `hasFullCoverage` + `isFresh`, and only on a miss calls the fetch lambda,
   writes through via `recordObservations`, then re-reads. Nothing above it sees
   the distinction. **This design does not change that responsibility.**
-- **Windows are not silently clamped.** `AvailabilityDateResolver.resolveWindow`
-  *throws* `BadDateWindow.WindowTooLong` / `BeyondBookingHorizon` rather than
-  narrowing. With explicit dates, every POI that succeeds returns exactly the
-  requested window, so runs are directly comparable across POIs. The one
+- **Windows are not silently clamped, but the bounds are per provider.**
+  `AvailabilityDateResolver.resolveWindow` *throws*
+  `BadDateWindow.WindowTooLong` / `BeyondBookingHorizon` rather than narrowing,
+  so a POI that succeeds returns exactly the requested window. The thresholds it
+  throws against differ by provider:
+
+  | Provider | `maxPollWindowDays` | `bookingHorizonDays` |
+  | --- | --- | --- |
+  | rec.gov | 60 | 180 |
+  | Campflare | 60 | 365 |
+  | Aspira | 30 | 365 |
+  | ReserveAmerica | 30 | 270 |
+  | ReserveCalifornia | 30 | 183 |
+
+  So one request can succeed for some POIs and fail for others: 31 nights is
+  fine for rec.gov and Campflare and `window_too_long` for the rest; 200 days
+  out is fine for Aspira and `beyond_booking_horizon` for rec.gov. A second
   per-POI variance is `earliestDate`, derived from the POI centroid's timezone
   plus an 18:00 cutoff, which can make one POI reject a start date another
   accepts.
+
+  **This is by design, not a defect.** Ranking is *within* a POI (Decision 4);
+  nothing here ranks POIs against each other, so the windows need not agree. A
+  POI whose provider cannot serve the requested window reports a per-POI error
+  like any other failure.
 - **Two freshness vocabularies.** The poller uses
   `AvailabilityRepo.hasFreshCoverage(…, freshAtOrAfter: OffsetDateTime)` — an
   absolute instant in the SQL predicate. The read path uses
@@ -128,9 +146,14 @@ disappear — it becomes how a caller *derives* its instant.
 
 Why absolute rather than relative: with a duration, each POI's `Instant.now()`
 drifts across the fan-out, so a POI evaluated late is held to a stricter
-standard than one evaluated early. The bulk controller computes the cutoff once
-and every POI is measured against the same line. It also unifies the read path
-with the poller and with the SQL predicate that already takes `freshAtOrAfter`.
+*cache-freshness* standard than one evaluated early — the same stored snapshot
+could count as fresh for one POI and stale for another in the same request,
+purely from scheduling order. Computing the cutoff once removes that. It also
+unifies the read path with the poller and with the SQL predicate that already
+takes `freshAtOrAfter`.
+
+(This is about which POIs re-fetch, not about run lengths. Run lengths are never
+compared across POIs — see Decision 4.)
 
 No clamp or floor is built: callers are internal, trusted code.
 
@@ -223,8 +246,10 @@ override. Pure optimization: no contract change, no response-shape change.
   server policy is who can change tolerance without a deploy, and no current
   caller needs a different tolerance than another. Adding an optional field
   later is backward compatible; removing one clients depend on is not.
-- **Ranking POIs against each other.** The caller sorts. Runs are comparable
-  across POIs (see Current state), so this is a caller-side sort.
+- **Ranking POIs against each other.** Explicitly out of scope — Decision 4
+  sets ranking *within* a POI. A caller that wants to rank POIs must account for
+  the per-provider window bounds above: a POI absent from the results may have
+  been rejected by its provider's limits rather than have nothing available.
 - **Reporting every qualifying run window per site**, not just the longest.
   Additive to the DTO later if the planner needs specific stay windows.
 
