@@ -30,7 +30,8 @@ import java.time.LocalDate
  * `receiveJsonBody` itself (malformed JSON, a wrong-typed field) and carries
  * raw `kotlinx.serialization` exception text — never safe to put on the wire.
  */
-private val bulkValidationErrorCodes = setOf("bad_request", "too_many_pois", "bad_min_nights", "bad_date_window")
+private val bulkValidationErrorCodes =
+    setOf("bad_request", "too_many_pois", "bad_min_nights", "bad_date_window", "end_before_start")
 
 internal fun Route.bulkAvailabilityRoutes(
     controller: BulkAvailabilityController,
@@ -88,10 +89,15 @@ private fun BulkAvailabilityRequestDto.validated(config: BulkAvailabilityConfig)
     // be comparable across POIs — defeating the endpoint's purpose (see spec Decision 5).
     require(!startDate.isNullOrBlank()) { "bad_date_window" }
     require(!endDate.isNullOrBlank()) { "bad_date_window" }
+    val start = parseDate(startDate)
+    val end = parseDate(endDate)
+    // Checked here as well as per POI: an inverted window is wrong for every POI,
+    // so rejecting it up front avoids a whole fan-out that can only fail.
+    require(start == null || end == null || end.isAfter(start)) { "end_before_start" }
     return BulkAvailabilityRequest(
         poiIds = poiIds,
-        startDate = parseDate(startDate),
-        endDate = parseDate(endDate),
+        startDate = start,
+        endDate = end,
         minNights = minNights,
         siteTypes = siteTypes,
     )

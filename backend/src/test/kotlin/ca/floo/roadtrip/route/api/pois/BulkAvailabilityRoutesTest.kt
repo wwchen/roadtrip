@@ -126,6 +126,22 @@ class BulkAvailabilityRoutesTest {
         }
 
     @Test
+    fun `rejects an inverted window before fanning out`() =
+        testApplication {
+            application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
+
+            val resp =
+                client.post("/api/pois/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"poi_ids":[1,2],"start_date":"$windowEnd","end_date":"$windowStart"}""")
+                }
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("end_before_start", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
     fun `rejects a non-positive min_nights`() =
         testApplication {
             application { routeTestApplication { bulkAvailabilityRoutesUnderTest() } }
