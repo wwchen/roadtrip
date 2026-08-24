@@ -52,7 +52,6 @@ import kotlin.test.assertEquals
 
 private const val TEST_MAX_POIS = 5
 private const val TEST_FAN_OUT_CONCURRENCY = 4
-private const val TEST_PER_POI_TIMEOUT_SEC = 5L
 private const val TEST_IP_RATE_LIMIT_PER_MINUTE = 10
 private const val RATE_LIMITED_POI_ID = 100L
 private const val UNKNOWN_CAMPSITE_POI_ID = 999_999L
@@ -242,7 +241,6 @@ class BulkAvailabilityRoutesTest {
             BulkAvailabilityConfig(
                 maxPois = TEST_MAX_POIS,
                 fanOutConcurrency = TEST_FAN_OUT_CONCURRENCY,
-                perPoiTimeout = Duration.ofSeconds(TEST_PER_POI_TIMEOUT_SEC),
                 tolerance = Duration.ZERO,
                 ipRateLimitPerMinute = TEST_IP_RATE_LIMIT_PER_MINUTE,
             )

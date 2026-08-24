@@ -11,7 +11,6 @@ class BulkAvailabilityConfigTest {
         val config = BulkAvailabilityConfig.default
         assertEquals(50, config.maxPois)
         assertEquals(3, config.fanOutConcurrency)
-        assertEquals(Duration.ofSeconds(20), config.perPoiTimeout)
         assertEquals(Duration.ofHours(2), config.tolerance)
         assertEquals(10, config.ipRateLimitPerMinute)
     }
@@ -22,7 +21,6 @@ class BulkAvailabilityConfigTest {
             BulkAvailabilityConfig(
                 maxPois = 0,
                 fanOutConcurrency = 8,
-                perPoiTimeout = Duration.ofSeconds(20),
                 tolerance = Duration.ofHours(2),
                 ipRateLimitPerMinute = 10,
             )
@@ -35,20 +33,6 @@ class BulkAvailabilityConfigTest {
             BulkAvailabilityConfig(
                 maxPois = 50,
                 fanOutConcurrency = 0,
-                perPoiTimeout = Duration.ofSeconds(20),
-                tolerance = Duration.ofHours(2),
-                ipRateLimitPerMinute = 10,
-            )
-        }
-    }
-
-    @Test
-    fun `per poi timeout must be positive`() {
-        assertFailsWith<IllegalArgumentException> {
-            BulkAvailabilityConfig(
-                maxPois = 50,
-                fanOutConcurrency = 8,
-                perPoiTimeout = Duration.ZERO,
                 tolerance = Duration.ofHours(2),
                 ipRateLimitPerMinute = 10,
             )

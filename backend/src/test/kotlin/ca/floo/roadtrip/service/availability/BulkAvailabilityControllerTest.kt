@@ -21,15 +21,12 @@ import kotlin.test.assertNull
 private const val RANKED_POI_ID = 1L
 private const val RATE_LIMITED_POI_ID = 100L
 private const val UNKNOWN_POI_ID = 101L
-private const val SLOW_POI_ID = 102L
 private const val NO_SITES_POI_ID = 103L
 private const val CRASHING_POI_ID = 104L
 
 private const val TEST_MAX_POIS = 50
 private const val TEST_FAN_OUT_CONCURRENCY = 8
-private const val TEST_PER_POI_TIMEOUT_MS = 100L
 private const val TEST_IP_RATE_LIMIT_PER_MINUTE = 10
-private const val SLOW_POI_DELAY_MS = 1_000L
 private const val NORMAL_SLICE_DELAY_MS = 20L
 
 private val windowStart: LocalDate = LocalDate.of(2026, 9, 1)
@@ -87,14 +84,6 @@ class BulkAvailabilityControllerTest {
     }
 
     @Test
-    fun `a poi that exceeds the per poi timeout reports timeout`() {
-        runBlocking {
-            val response = bulkController().availabilityForPois(request(poiIds = listOf(SLOW_POI_ID)))
-            assertEquals("timeout", response.pois.single().error)
-        }
-    }
-
-    @Test
     fun `a poi with no matching campsites resolves with an empty list not an error`() {
         runBlocking {
             val response = bulkController().availabilityForPois(request(poiIds = listOf(NO_SITES_POI_ID)))
@@ -137,7 +126,6 @@ private fun bulkController(
             BulkAvailabilityConfig(
                 maxPois = TEST_MAX_POIS,
                 fanOutConcurrency = fanOutConcurrency,
-                perPoiTimeout = Duration.ofMillis(TEST_PER_POI_TIMEOUT_MS),
                 tolerance = Duration.ZERO,
                 ipRateLimitPerMinute = TEST_IP_RATE_LIMIT_PER_MINUTE,
             ),
@@ -210,10 +198,6 @@ private class FakePoiAvailabilitySliceLookup(
             RATE_LIMITED_POI_ID -> throw AvailabilityProviderError.RateLimited()
             UNKNOWN_POI_ID -> throw AvailabilityServiceError.NotFound
             CRASHING_POI_ID -> throw RuntimeException("boom: unmapped failure")
-            SLOW_POI_ID -> {
-                delay(SLOW_POI_DELAY_MS)
-                simpleSlice(poiId)
-            }
             NO_SITES_POI_ID -> noSitesSlice(poiId)
             RANKED_POI_ID -> {
                 delay(NORMAL_SLICE_DELAY_MS)

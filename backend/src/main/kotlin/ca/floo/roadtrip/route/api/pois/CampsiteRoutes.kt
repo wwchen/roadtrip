@@ -13,7 +13,6 @@ import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
-import ca.floo.roadtrip.service.availability.availabilityErrorCode
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
 import ca.floo.roadtrip.support.UpstreamHttpException
 import ca.floo.roadtrip.support.causeChain
@@ -139,7 +138,7 @@ internal fun mapProviderError(e: AvailabilityProviderError): Pair<HttpStatusCode
             -> HttpStatusCode.InternalServerError
         }
     val upstreamStatus = if (status == HttpStatusCode.ServiceUnavailable) upstream else null
-    return status to availabilityErrorDto(availabilityErrorCode(e), upstreamStatus = upstreamStatus)
+    return status to availabilityErrorDto(e.code, upstreamStatus = upstreamStatus)
 }
 
 /**

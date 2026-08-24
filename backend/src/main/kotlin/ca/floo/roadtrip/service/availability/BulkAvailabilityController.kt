@@ -7,13 +7,11 @@ import ca.floo.roadtrip.model.availability.AvailabilityProviderError
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.support.causeChain
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.withTimeout
 import org.slf4j.LoggerFactory
 import java.time.Clock
 import java.time.Instant
@@ -82,20 +80,16 @@ internal class BulkAvailabilityController(
         freshAtOrAfter: Instant,
     ): BulkPoiAvailabilityDto =
         try {
-            withTimeout(config.perPoiTimeout.toMillis()) {
-                rank(
-                    sliceLookup.poiAvailabilitySlice(
-                        poiId = poiId,
-                        siteTypes = request.siteTypes,
-                        startDate = request.startDate,
-                        endDate = request.endDate,
-                        freshAtOrAfter = freshAtOrAfter,
-                    ),
-                    request.minNights,
-                )
-            }
-        } catch (e: TimeoutCancellationException) {
-            BulkPoiAvailabilityDto(poiId = poiId, error = "timeout")
+            rank(
+                sliceLookup.poiAvailabilitySlice(
+                    poiId = poiId,
+                    siteTypes = request.siteTypes,
+                    startDate = request.startDate,
+                    endDate = request.endDate,
+                    freshAtOrAfter = freshAtOrAfter,
+                ),
+                request.minNights,
+            )
         } catch (e: CancellationException) {
             // Coroutine cancellation (e.g. a sibling POI's failure, or the caller
             // disconnecting) must propagate, not be reported as this POI's error.
@@ -103,7 +97,7 @@ internal class BulkAvailabilityController(
         } catch (e: AvailabilityServiceError) {
             BulkPoiAvailabilityDto(poiId = poiId, error = e.error)
         } catch (e: AvailabilityProviderError) {
-            BulkPoiAvailabilityDto(poiId = poiId, error = availabilityErrorCode(e))
+            BulkPoiAvailabilityDto(poiId = poiId, error = e.code)
         } catch (e: Exception) {
             // Anything unmapped (e.g. a DB connection-acquisition timeout) must not
             // escape the fan-out and cancel every sibling POI. See spec Decision 6.
