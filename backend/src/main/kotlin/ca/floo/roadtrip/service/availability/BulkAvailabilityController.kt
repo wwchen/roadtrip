@@ -4,7 +4,6 @@ import ca.floo.roadtrip.config.BulkAvailabilityConfig
 import ca.floo.roadtrip.model.api.BulkAvailabilityResponseDto
 import ca.floo.roadtrip.model.api.BulkPoiAvailabilityDto
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
-import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.support.causeChain
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
@@ -106,27 +105,12 @@ internal class BulkAvailabilityController(
         slice: PoiAvailabilitySlice,
         minNights: Int,
     ): BulkPoiAvailabilityDto {
-        val batch = slice.batch
         val campsites =
-            if (batch == null) {
-                emptyList()
-            } else {
-                slice.campsites
-                    .map { campsite ->
-                        val forCampsite = batch.observations.filter { it.campsiteId == campsite.id }
-                        val response =
-                            availabilityResponseFromObservations(
-                                batch.copy(
-                                    observations = forCampsite,
-                                    campsiteId = campsite.id,
-                                    startDate = slice.startDate,
-                                    endDate = slice.endDate,
-                                ),
-                            )
-                        response.copy(longestRunNights = longestRunNights(forCampsite))
-                    }.filter { (it.longestRunNights ?: 0) >= minNights }
-                    .sortedByDescending { it.longestRunNights ?: 0 }
-            }
+            slice
+                .perCampsiteEnvelopes()
+                .map { it.response.copy(longestRunNights = longestRunNights(it.observations)) }
+                .filter { (it.longestRunNights ?: 0) >= minNights }
+                .sortedByDescending { it.longestRunNights ?: 0 }
 
         return BulkPoiAvailabilityDto(
             poiId = slice.poiId,

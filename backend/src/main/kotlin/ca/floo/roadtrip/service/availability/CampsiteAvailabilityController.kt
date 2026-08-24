@@ -4,7 +4,6 @@ import ca.floo.roadtrip.model.api.PoiCampsitesAvailabilityResponseDto
 import ca.floo.roadtrip.model.api.PoiCampsitesResponseSchema
 import ca.floo.roadtrip.repo.CampgroundRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
-import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import java.time.Instant
 import java.time.LocalDate
 
@@ -107,23 +106,7 @@ internal class CampsiteAvailabilityController(
     ): PoiCampsitesAvailabilityResponseDto {
         val slice = poiAvailabilitySlice(poiId, siteTypes, startDate, endDate)
         val watchCaps = watchCapabilityService.capabilitiesFor(slice.allCampsites)
-        val batch = slice.batch
-
-        val perCampsite =
-            if (batch == null) {
-                emptyList()
-            } else {
-                slice.campsites.map { campsite ->
-                    availabilityResponseFromObservations(
-                        batch.copy(
-                            observations = batch.observations.filter { it.campsiteId == campsite.id },
-                            campsiteId = campsite.id,
-                            startDate = slice.startDate,
-                            endDate = slice.endDate,
-                        ),
-                    )
-                }
-            }
+        val perCampsite = slice.perCampsiteEnvelopes().map { it.response }
 
         return PoiCampsitesAvailabilityResponseDto(
             poiId = poiId,
