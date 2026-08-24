@@ -19,9 +19,6 @@ import java.time.LocalDate
 
 private val log = LoggerFactory.getLogger("BulkAvailabilityController")
 
-/** Wire code for a POI failure that doesn't match any known error vocabulary. */
-private const val INTERNAL_ERROR_CODE = "internal_error"
-
 internal data class BulkAvailabilityRequest(
     val poiIds: List<Long>,
     val startDate: LocalDate?,
@@ -102,7 +99,7 @@ internal class BulkAvailabilityController(
             // Anything unmapped (e.g. a DB connection-acquisition timeout) must not
             // escape the fan-out and cancel every sibling POI. See spec Decision 6.
             log.error("bulk availability poi={} failed: {}", poiId, causeChain(e), e)
-            BulkPoiAvailabilityDto(poiId = poiId, error = INTERNAL_ERROR_CODE)
+            BulkPoiAvailabilityDto(poiId = poiId, error = AvailabilityProviderError.Unknown(e).code)
         }
 
     private fun rank(

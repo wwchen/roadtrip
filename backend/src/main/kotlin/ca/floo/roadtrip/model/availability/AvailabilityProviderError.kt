@@ -74,4 +74,14 @@ sealed class AvailabilityProviderError(
             "provider_misconfigured",
             "$providerId received BookingProviderRef of type $gotType",
         )
+
+    /**
+     * Nothing that maps to a known case — a failure on our own side of the call
+     * (persistence, serialization, a bug) rather than from the provider. The
+     * cause is preserved for logging; callers get a 503 like any other
+     * transient failure.
+     */
+    class Unknown(
+        cause: Throwable,
+    ) : AvailabilityProviderError("unknown", cause = cause)
 }

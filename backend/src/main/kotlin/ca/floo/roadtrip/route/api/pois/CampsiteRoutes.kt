@@ -131,6 +131,7 @@ internal fun mapProviderError(e: AvailabilityProviderError): Pair<HttpStatusCode
             is AvailabilityProviderError.UpstreamBlocked,
             is AvailabilityProviderError.UpstreamUnavailable,
             is AvailabilityProviderError.UpstreamUnreachable,
+            is AvailabilityProviderError.Unknown,
             -> HttpStatusCode.ServiceUnavailable
             is AvailabilityProviderError.Unsupported -> HttpStatusCode.NotImplemented
             is AvailabilityProviderError.Misconfigured,

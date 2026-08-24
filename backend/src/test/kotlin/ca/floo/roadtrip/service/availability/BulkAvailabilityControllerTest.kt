@@ -64,12 +64,12 @@ class BulkAvailabilityControllerTest {
     }
 
     @Test
-    fun `a poi whose lookup throws an unmapped exception reports internal_error and does not fail its neighbours`() {
+    fun `a poi whose lookup throws an unmapped exception reports unknown and does not fail its neighbours`() {
         runBlocking {
             val response =
                 bulkController().availabilityForPois(request(poiIds = listOf(1L, CRASHING_POI_ID, 2L)))
             assertNotNull(response.pois[0].campsites)
-            assertEquals("internal_error", response.pois[1].error)
+            assertEquals("unknown", response.pois[1].error)
             assertNull(response.pois[1].campsites)
             assertNotNull(response.pois[2].campsites)
         }
