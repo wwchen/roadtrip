@@ -44,12 +44,16 @@ function stubApi() {
   );
 }
 
-const renderDrawer = () =>
-  render(
-    <AppProviders client={createTestQueryClient()}>
+let queryClient: ReturnType<typeof createTestQueryClient>;
+
+const renderDrawer = () => {
+  queryClient = createTestQueryClient();
+  return render(
+    <AppProviders client={queryClient}>
       <PoiDrawer />
     </AppProviders>,
   );
+};
 
 const select = (id: number | string) =>
   act(() => {
@@ -116,6 +120,25 @@ describe('opening', () => {
       release();
     });
     await waitFor(() => expect(screen.queryByText('Loading…')).toBeNull());
+  });
+
+  test('a failed refresh keeps the page and says only the refresh failed', async () => {
+    // The bug this covers: `isError` and `data` are true together after a
+    // refetch fails, and the drawer drew the dead-end card over a page that was
+    // still perfectly readable.
+    renderDrawer();
+    await select(PARK_ID);
+    await waitFor(() => expect(screen.getByRole('heading', { level: 2 })).toBeInTheDocument());
+
+    respond = () => json({ error: 'boom' }, 500);
+    await act(async () => {
+      await queryClient.refetchQueries();
+    });
+
+    await waitFor(() => expect(screen.getByText("Couldn't refresh this place")).toBeInTheDocument());
+    expect(screen.queryByText("This place didn't load")).toBeNull();
+    // The page is still there, which is the whole point of keeping the stale copy.
+    expect(screen.getByRole('heading', { level: 2 })).toBeInTheDocument();
   });
 
   test('a failed hydration is reported and retryable', async () => {

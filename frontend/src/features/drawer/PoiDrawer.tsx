@@ -41,6 +41,19 @@ export function PoiDrawer({ renderCampgroundAvailability }: PoiDrawerProps = {})
   const feature = query.data;
   const PoiPage = poiPageFor(feature?.properties);
 
+  // A failure with data behind it is a failed *refetch*, not a failed load:
+  // react-query keeps the last good value and only flips `status` to error, so
+  // `isError` and `data` are true together for the whole time the stale copy is
+  // on screen. Branching on `isError` alone therefore drew the "didn't load"
+  // card on top of a fully rendered, still-correct page — the two blocks below
+  // are siblings, not a switch, so both painted.
+  //
+  // The distinction the user cares about is whether there is anything to read:
+  // nothing to show is a dead end and takes over the panel; a stale copy is
+  // still useful and keeps the page, saying only that the refresh failed.
+  const loadFailed = query.isError && !feature;
+  const refreshFailed = query.isError && !!feature;
+
   return (
     <Drawer open={open} onClose={close}>
       {query.isPending ? (
@@ -50,7 +63,7 @@ export function PoiDrawer({ renderCampgroundAvailability }: PoiDrawerProps = {})
         <div className="rt-drawer-loading">Loading…</div>
       ) : null}
 
-      {query.isError ? (
+      {loadFailed ? (
         // The legacy path had no error branch at all: `openHydratedDrawer` had no
         // `.catch`, so a failed hydration left "Loading…" on screen indefinitely.
         <div className="rt-drawer-error">
@@ -69,6 +82,25 @@ export function PoiDrawer({ renderCampgroundAvailability }: PoiDrawerProps = {})
               </>
             }
           />
+        </div>
+      ) : null}
+
+      {refreshFailed ? (
+        // Deliberately a banner and not the card above: the page below it is
+        // real, so taking the panel over would hide working content to report a
+        // background failure.
+        <div className="rt-drawer-error">
+          <Banner
+            status="warning"
+            title="Couldn't refresh this place"
+            actions={
+              <Button variant="secondary" size="sm" iconStart="refresh" onClick={() => void query.refetch()}>
+                Try again
+              </Button>
+            }
+          >
+            <p>These are the details we loaded earlier. They may be out of date.</p>
+          </Banner>
         </div>
       ) : null}
 
