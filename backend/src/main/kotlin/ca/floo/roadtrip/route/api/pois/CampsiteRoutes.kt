@@ -15,6 +15,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.ratelimit.IpRateLimiter
 import ca.floo.roadtrip.support.UpstreamHttpException
+import ca.floo.roadtrip.support.causeChain
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -124,22 +125,21 @@ internal fun Route.campsiteRoutes(
 
 internal fun mapProviderError(e: AvailabilityProviderError): Pair<HttpStatusCode, AvailabilityErrorDto> {
     val upstream = upstreamHttpStatus(e)
-    return when (e) {
-        is AvailabilityProviderError.RateLimited ->
-            HttpStatusCode.ServiceUnavailable to availabilityErrorDto("rate_limited", upstreamStatus = upstream)
-        is AvailabilityProviderError.UpstreamBlocked ->
-            HttpStatusCode.ServiceUnavailable to availabilityErrorDto("upstream_blocked", upstreamStatus = upstream)
-        is AvailabilityProviderError.UpstreamUnavailable ->
-            HttpStatusCode.ServiceUnavailable to availabilityErrorDto("upstream_5xx", upstreamStatus = upstream)
-        is AvailabilityProviderError.UpstreamUnreachable ->
-            HttpStatusCode.ServiceUnavailable to availabilityErrorDto("upstream_unreachable", upstreamStatus = upstream)
-        is AvailabilityProviderError.Misconfigured ->
-            HttpStatusCode.InternalServerError to availabilityErrorDto("provider_misconfigured")
-        is AvailabilityProviderError.Unsupported ->
-            HttpStatusCode.NotImplemented to availabilityErrorDto("unsupported")
-        is AvailabilityProviderError.WrongRefType ->
-            HttpStatusCode.InternalServerError to availabilityErrorDto("provider_misconfigured")
-    }
+    val status =
+        when (e) {
+            is AvailabilityProviderError.RateLimited,
+            is AvailabilityProviderError.UpstreamBlocked,
+            is AvailabilityProviderError.UpstreamUnavailable,
+            is AvailabilityProviderError.UpstreamUnreachable,
+            is AvailabilityProviderError.Unknown,
+            -> HttpStatusCode.ServiceUnavailable
+            is AvailabilityProviderError.Unsupported -> HttpStatusCode.NotImplemented
+            is AvailabilityProviderError.Misconfigured,
+            is AvailabilityProviderError.WrongRefType,
+            -> HttpStatusCode.InternalServerError
+        }
+    val upstreamStatus = if (status == HttpStatusCode.ServiceUnavailable) upstream else null
+    return status to availabilityErrorDto(e.code, upstreamStatus = upstreamStatus)
 }
 
 /**
@@ -163,26 +163,6 @@ internal fun upstreamHttpStatus(e: AvailabilityProviderError): Int? {
 
 /** Depth cap so a self-referential cause chain can't spin or flood a log line. */
 private const val MAX_CAUSE_DEPTH = 8
-
-/**
- * Renders the cause chain into the log *message*.
- *
- * The throwable is also passed to SLF4J, but prod's log pipeline currently
- * drops the `stack_trace` field — so a message that says only the error code
- * (which is what `AvailabilityProviderError.message` is) leaves no trace of
- * the real fault. Inlining `type: message <- type: message` keeps the
- * diagnosis in the one field that always survives.
- */
-internal fun causeChain(e: Throwable): String {
-    val parts = mutableListOf<String>()
-    val seen = mutableSetOf<Throwable>()
-    var t: Throwable? = e
-    while (t != null && parts.size < MAX_CAUSE_DEPTH && seen.add(t)) {
-        parts += "${t.javaClass.name}: ${t.message}"
-        t = t.cause
-    }
-    return parts.joinToString(" <- ")
-}
 
 private suspend fun ApplicationCall.respondCampsiteError(
     error: String,

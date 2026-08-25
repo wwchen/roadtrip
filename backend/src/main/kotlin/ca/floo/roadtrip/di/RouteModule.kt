@@ -20,6 +20,7 @@ import ca.floo.roadtrip.route.api.buildInfoRoutes
 import ca.floo.roadtrip.route.api.docs.apiDocsRoutes
 import ca.floo.roadtrip.route.api.geocode.geocodeRoutes
 import ca.floo.roadtrip.route.api.health.healthRoutes
+import ca.floo.roadtrip.route.api.pois.bulkAvailabilityRoutes
 import ca.floo.roadtrip.route.api.pois.campsiteRoutes
 import ca.floo.roadtrip.route.api.pois.poiRoutes
 import ca.floo.roadtrip.route.api.pois.poisOnRouteRoutes
@@ -45,6 +46,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
 import ca.floo.roadtrip.service.availability.AvailabilityWatchController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
+import ca.floo.roadtrip.service.availability.BulkAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityController
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.CampsiteCatalogService
@@ -113,14 +115,18 @@ internal fun Application.registerKoinRoutes() {
         settingsRoutes(userSettings)
         poiRoutes(poiService)
         availabilityWatchRoutes(availabilityWatchController(ctx, watchService, watchCapabilities))
-        campsiteRoutes(
+        val campsiteController =
             campsiteAvailabilityController(
                 ctx = ctx,
                 availabilityProviders = availabilityProviders,
                 dateResolver = dateResolver,
                 failoverFetcher = failoverFetcher,
                 watchCapabilities = watchCapabilities,
-            ),
+            )
+        campsiteRoutes(campsiteController)
+        bulkAvailabilityRoutes(
+            BulkAvailabilityController(campsiteController, config.availability.bulk),
+            config.availability.bulk,
         )
         slackInteractivity?.let { wiring ->
             slackInteractivityRoute(wiring.verifier, wiring.handler, schedulerScope)

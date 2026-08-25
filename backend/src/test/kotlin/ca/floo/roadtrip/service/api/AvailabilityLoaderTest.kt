@@ -49,7 +49,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
             targets = targets.map { AvailabilityLoader.CampsiteTarget(dbId = it) },
             startDate = windowStart,
             endDate = windowEnd,
-            ttl = snapshotTtl,
+            freshAtOrAfter = fixedNow.minus(snapshotTtl),
         )
 
     private fun batch(observations: List<CampsiteDayObservation>) =

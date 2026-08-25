@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.route
 
 import ca.floo.roadtrip.model.availability.AvailabilityProviderError
-import ca.floo.roadtrip.route.api.pois.causeChain
 import ca.floo.roadtrip.route.api.pois.mapProviderError
 import ca.floo.roadtrip.route.api.pois.upstreamHttpStatus
 import ca.floo.roadtrip.service.availability.provider.upstreamAvailabilityError
@@ -9,6 +8,7 @@ import ca.floo.roadtrip.support.AspiraException
 import ca.floo.roadtrip.support.CampflareException
 import ca.floo.roadtrip.support.ReserveAmericaException
 import ca.floo.roadtrip.support.ReserveCaliforniaException
+import ca.floo.roadtrip.support.causeChain
 import io.ktor.http.HttpStatusCode
 import java.net.ConnectException
 import java.nio.channels.ClosedChannelException

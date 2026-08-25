@@ -23,4 +23,21 @@ class AvailabilityFreshnessTest {
         assertFalse(isFresh(listOf(now.minusSeconds(60), now.minusSeconds(3600)), now, ttl))
         assertEquals(true, isFresh(emptyList(), now, ttl))
     }
+
+    @Test
+    fun `isFreshAsOf accepts observations at or after the cutoff`() {
+        val cutoff = Instant.parse("2026-08-23T12:00:00Z")
+        assertTrue(isFreshAsOf(listOf(cutoff, cutoff.plusSeconds(1)), cutoff))
+    }
+
+    @Test
+    fun `isFreshAsOf rejects any observation before the cutoff`() {
+        val cutoff = Instant.parse("2026-08-23T12:00:00Z")
+        assertFalse(isFreshAsOf(listOf(cutoff, cutoff.minusSeconds(1)), cutoff))
+    }
+
+    @Test
+    fun `isFreshAsOf treats an empty list as fresh`() {
+        assertTrue(isFreshAsOf(emptyList(), Instant.parse("2026-08-23T12:00:00Z")))
+    }
 }

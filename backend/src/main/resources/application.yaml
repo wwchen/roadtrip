@@ -20,6 +20,16 @@ roadtrip:
       default-cadence: 300s
       idle-reschedule: 300s
       governor-starved-retry: 15s
+    bulk:
+      # A bulk scan is the one read that can turn one request into many
+      # upstream calls, so each bound is stated here rather than compiled in.
+      max-pois: 50
+      # Must stay below db.max-pool-size (currently 4, unset anywhere so it's
+      # the DbConfig default) — each concurrent POI can hold a pooled
+      # connection through AvailabilityRepo.recordObservations.
+      fan-out-concurrency: 3
+      tolerance: 2h
+      ip-rate-limit-per-minute: 10
   booking:
     recgov-atc:
       companion-base-url:

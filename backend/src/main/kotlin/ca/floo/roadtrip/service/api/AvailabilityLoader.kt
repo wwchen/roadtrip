@@ -7,7 +7,7 @@ import ca.floo.roadtrip.model.availability.AvailabilityStatus
 import ca.floo.roadtrip.model.availability.CampsiteDayObservation
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.availability.hasFullCoverage
-import ca.floo.roadtrip.service.availability.isFresh
+import ca.floo.roadtrip.service.availability.isFreshAsOf
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -39,7 +39,7 @@ class AvailabilityLoader(
         val targets: List<CampsiteTarget>,
         val startDate: LocalDate,
         val endDate: LocalDate,
-        val ttl: Duration,
+        val freshAtOrAfter: Instant,
         val runId: Long? = null,
     )
 
@@ -54,7 +54,7 @@ class AvailabilityLoader(
         val dbIds = request.targets.map { it.dbId }
         val cached = repo.readCurrent(dbIds, dates)
         if (hasFullCoverage(request.targets.size, dates.size, cached.size) &&
-            isFresh(cached.map { it.observedAt.toInstant() }, Instant.now(clock), request.ttl)
+            isFreshAsOf(cached.map { it.observedAt.toInstant() }, request.freshAtOrAfter)
         ) {
             return batchFromLatest(request, cached, hit = true)
         }
@@ -84,7 +84,12 @@ class AvailabilityLoader(
             startDate = request.startDate,
             endDate = request.endDate,
             observations = fetched.observations.filter { it.date in targetDates },
-            cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = request.ttl.seconds),
+            cacheBlock =
+                AvailabilityCacheBlock(
+                    hit = false,
+                    ageSeconds = 0,
+                    ttlSeconds = effectiveTtlSeconds(request),
+                ),
         )
     }
 
@@ -140,7 +145,12 @@ class AvailabilityLoader(
                         status = row.status,
                     )
                 },
-            cacheBlock = AvailabilityCacheBlock(hit = hit, ageSeconds = maxAgeSeconds(rows, now), ttlSeconds = request.ttl.seconds),
+            cacheBlock =
+                AvailabilityCacheBlock(
+                    hit = hit,
+                    ageSeconds = maxAgeSeconds(rows, now),
+                    ttlSeconds = effectiveTtlSeconds(request),
+                ),
             seasonBlock = seasonBlock,
             campgroundId = request.metadata.campgroundId,
             host = request.metadata.host,
@@ -165,6 +175,9 @@ class AvailabilityLoader(
         rows: List<AvailabilityRepo.CurrentCell>,
         now: Instant,
     ): Long = rows.maxOfOrNull { Duration.between(it.observedAt.toInstant(), now).seconds.coerceAtLeast(0) } ?: 0
+
+    private fun effectiveTtlSeconds(request: Request): Long =
+        Duration.between(request.freshAtOrAfter, Instant.now(clock)).seconds.coerceAtLeast(0)
 
     private fun datesInWindow(
         startDate: LocalDate,

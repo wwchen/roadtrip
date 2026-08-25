@@ -10,12 +10,15 @@ fun hasFullCoverage(
     rowCount: Int,
 ): Boolean = rowCount == targetCount * dateCount
 
+/** Fresh when every observation was seen at or after [freshAtOrAfter]. Empty = vacuously fresh. */
+fun isFreshAsOf(
+    observedAts: List<Instant>,
+    freshAtOrAfter: Instant,
+): Boolean = observedAts.all { !it.isBefore(freshAtOrAfter) }
+
 /** Fresh when every observation was seen within [ttl] of [now]. Empty = vacuously fresh. */
 fun isFresh(
     observedAts: List<Instant>,
     now: Instant,
     ttl: Duration,
-): Boolean {
-    val freshAfter = now.minus(ttl)
-    return observedAts.all { !it.isBefore(freshAfter) }
-}
+): Boolean = isFreshAsOf(observedAts, now.minus(ttl))

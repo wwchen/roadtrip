@@ -10,23 +10,29 @@ package ca.floo.roadtrip.model.availability
  * still produces a 503 with the original cause logged.
  */
 sealed class AvailabilityProviderError(
+    /**
+     * Wire error code for this failure. Lives on the variant so routes and
+     * services read one source of truth instead of each re-deriving it.
+     * [message] stays free-form — some variants carry diagnostic prose.
+     */
+    val code: String,
     message: String? = null,
     cause: Throwable? = null,
-) : Exception(message, cause) {
+) : Exception(message ?: code, cause) {
     /** Upstream told us we're sending too many requests. */
     class RateLimited(
         cause: Throwable? = null,
-    ) : AvailabilityProviderError("rate_limited", cause)
+    ) : AvailabilityProviderError("rate_limited", cause = cause)
 
     /** Upstream is up but blocking us (WAF, captcha, anti-bot). */
     class UpstreamBlocked(
         cause: Throwable? = null,
-    ) : AvailabilityProviderError("upstream_blocked", cause)
+    ) : AvailabilityProviderError("upstream_blocked", cause = cause)
 
     /** Upstream answered, with a 5xx or an unusable body. */
     class UpstreamUnavailable(
         cause: Throwable,
-    ) : AvailabilityProviderError("upstream_5xx", cause)
+    ) : AvailabilityProviderError("upstream_5xx", cause = cause)
 
     /**
      * We never got an answer: DNS, connect, TLS, or socket failure. Distinct
@@ -38,7 +44,7 @@ sealed class AvailabilityProviderError(
      */
     class UpstreamUnreachable(
         cause: Throwable,
-    ) : AvailabilityProviderError("upstream_unreachable", cause)
+    ) : AvailabilityProviderError("upstream_unreachable", cause = cause)
 
     /**
      * Our own config or catalog data is wrong for this provider — an
@@ -49,13 +55,13 @@ sealed class AvailabilityProviderError(
         providerId: String,
         reason: String,
         cause: Throwable,
-    ) : AvailabilityProviderError("$providerId misconfigured: $reason", cause)
+    ) : AvailabilityProviderError("provider_misconfigured", "$providerId misconfigured: $reason", cause)
 
     /** Adapter doesn't yet support the requested operation (capability stub). */
     class Unsupported(
         operation: String,
         providerId: String,
-    ) : AvailabilityProviderError("$providerId does not support $operation")
+    ) : AvailabilityProviderError("unsupported", "$providerId does not support $operation")
 
     /**
      * Registry handed an adapter a `BookingProviderRef` of the wrong shape.
@@ -64,5 +70,18 @@ sealed class AvailabilityProviderError(
     class WrongRefType(
         providerId: String,
         gotType: String,
-    ) : AvailabilityProviderError("$providerId received BookingProviderRef of type $gotType")
+    ) : AvailabilityProviderError(
+            "provider_misconfigured",
+            "$providerId received BookingProviderRef of type $gotType",
+        )
+
+    /**
+     * Nothing that maps to a known case — a failure on our own side of the call
+     * (persistence, serialization, a bug) rather than from the provider. The
+     * cause is preserved for logging; callers get a 503 like any other
+     * transient failure.
+     */
+    class Unknown(
+        cause: Throwable,
+    ) : AvailabilityProviderError("unknown", cause = cause)
 }
