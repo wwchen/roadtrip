@@ -38,4 +38,44 @@ class EmailContentAvailabilityRendererTest {
         assertFalse(content.html.contains("Site <100>"), content.html)
         assertFalse(content.html.contains("Kirk <Creek>"), content.html)
     }
+
+    @Test
+    fun `the manage link is the magic link when one was minted`() {
+        val content = openingsWith(manageUrl = "https://roadtrip.example/watches?action=modify&id=42&watch_token=abc")
+
+        assertTrue(content.text.contains("watch_token=abc"), content.text)
+        assertTrue(content.html.contains("watch_token=abc"), content.html)
+        assertTrue(content.html.contains("Manage or stop this alert"), content.html)
+    }
+
+    @Test
+    fun `the manage link falls back to the sign-in-gated form with no token`() {
+        val content = openingsWith(manageUrl = null)
+
+        // Still a link, still labelled the same — it just asks for a sign-in.
+        assertTrue(content.text.contains("https://roadtrip.example/watches?action=modify&id=42"), content.text)
+        assertFalse(content.text.contains("watch_token"), content.text)
+    }
+
+    private fun openingsWith(manageUrl: String?) =
+        EmailContentAvailabilityRenderer.openings(
+            watchId = 42L,
+            startDate = LocalDate.of(2026, 8, 1),
+            endDate = LocalDate.of(2026, 8, 3),
+            openings =
+                listOf(
+                    WatchOpening(
+                        label = "Site 100",
+                        loop = null,
+                        siteType = null,
+                        date = LocalDate.of(2026, 8, 1),
+                        campgroundId = 7L,
+                        campground = "Kirk Creek",
+                        bookingUrl = null,
+                        vendor = "recgov",
+                    ),
+                ),
+            appRootUrl = "https://roadtrip.example",
+            manageUrl = manageUrl,
+        )
 }

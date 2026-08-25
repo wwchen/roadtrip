@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.FAKE_WATCH_LINK_TOKEN
 import ca.floo.roadtrip.fixtures.campsiteFixture
+import ca.floo.roadtrip.fixtures.fakeWatchAccessTokens
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.availability.PoiDateContext
@@ -208,6 +210,8 @@ class TriggerActionHandlerTest {
                                 ),
                             userRepo = FakeUserRepo(),
                             cipher = testCipher,
+                            watchAccessTokenService = fakeWatchAccessTokens(),
+                            appRootUrl = "https://app.example",
                         ),
                     appRootUrl = "https://app.example",
                 )
@@ -248,7 +252,7 @@ class TriggerActionHandlerTest {
                 )
 
             assertTrue(delivered)
-            assertEquals(listOf(NotificationTarget.Email(listOf("owner@example.test"))), notifications.lastTargets)
+            assertEquals(listOf(emailTargetFor("owner@example.test")), notifications.lastTargets)
         }
 
     @Test
@@ -291,7 +295,7 @@ class TriggerActionHandlerTest {
 
             assertTrue(delivered)
             assertEquals(
-                listOf(NotificationTarget.Slack("#custom", "xoxb-owner-token"), NotificationTarget.Email(listOf("owner@example.test"))),
+                listOf(NotificationTarget.Slack("#custom", "xoxb-owner-token"), emailTargetFor("owner@example.test")),
                 notifications.lastTargets,
             )
             assertEquals(1, notifications.openingSends)
@@ -532,6 +536,8 @@ class TriggerActionHandlerTest {
             userSettingsRepo = FakeUserSettingsRepo(settings),
             userRepo = FakeUserRepo(),
             cipher = if (settings?.slackTokenCipher != null) testCipher else null,
+            watchAccessTokenService = fakeWatchAccessTokens(),
+            appRootUrl = "https://app.example",
         )
 
     private class FakeHandler(
@@ -601,6 +607,14 @@ class TriggerActionHandlerTest {
             return result
         }
     }
+
+    /** The email target the resolver now produces: recipient plus the magic link
+     *  it minted for that watch (all these watches are id 42). */
+    private fun emailTargetFor(recipient: String): NotificationTarget.Email =
+        NotificationTarget.Email(
+            recipients = listOf(recipient),
+            manageUrl = "https://app.example/watches?action=modify&id=42&watch_token=$FAKE_WATCH_LINK_TOKEN",
+        )
 
     private fun fakeWatch(
         id: Long,

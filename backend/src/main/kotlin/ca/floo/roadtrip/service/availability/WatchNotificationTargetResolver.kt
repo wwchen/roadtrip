@@ -4,7 +4,9 @@ import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
+import ca.floo.roadtrip.service.auth.WatchAccessTokenService
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
+import ca.floo.roadtrip.service.notification.common.WatchManageLink
 import ca.floo.roadtrip.service.security.SecretCipher
 import org.slf4j.LoggerFactory
 
@@ -12,6 +14,11 @@ import org.slf4j.LoggerFactory
  * Translates a watch's persisted trigger intent into concrete notification
  * targets. Email always resolves from the owner's current notification setting,
  * falling back to their login email; watch-level recipient overrides are ignored.
+ * An email target also carries a freshly minted magic link for that one watch,
+ * so the alert is actionable from the mailbox it lands in — see
+ * [resolveEmailTarget]. That the recipient is always the owner's own address is
+ * what makes mailing a capability token sound: the link goes only where the
+ * owner already receives the alert.
  * Slack resolves from **owner-controlled sources only**. This is the privacy
  * boundary for watch alert cards: a card carries
  * Pause/Resume/Delete buttons and the Slack interactivity port applies those
@@ -52,6 +59,8 @@ internal class WatchNotificationTargetResolver(
     private val userSettingsRepo: UserSettingsRepo,
     private val userRepo: UserRepo,
     private val cipher: SecretCipher?,
+    private val watchAccessTokenService: WatchAccessTokenService,
+    private val appRootUrl: String?,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -65,10 +74,26 @@ internal class WatchNotificationTargetResolver(
             }
         }
 
+    /**
+     * The owner's email plus a fresh magic link for this watch.
+     *
+     * The token is minted here, once per resolved email target, so every alert
+     * carries its own link and none is stored in plaintext anywhere. Minting is
+     * best-effort: a failure degrades that email to a plain (sign-in-gated) link
+     * rather than dropping the alert, because a broken link is a worse outcome
+     * than a link that asks the reader to sign in, and both beat silence.
+     */
     private fun resolveEmailTarget(watch: AvailabilityWatchRepo.Watch): NotificationTarget.Email? {
         val ownerId = UserId(watch.ownerUserId)
         val recipient = userSettingsRepo.find(ownerId)?.notificationEmail ?: userRepo.findById(ownerId)?.email ?: return null
-        return NotificationTarget.Email(recipients = listOf(recipient))
+        val token =
+            runCatching { watchAccessTokenService.issue(watch.id).token }
+                .onFailure { log.warn("Could not mint a magic link for watch #{}: {}", watch.id, it.message) }
+                .getOrNull()
+        return NotificationTarget.Email(
+            recipients = listOf(recipient),
+            manageUrl = WatchManageLink.url(appRootUrl, watch.id, token),
+        )
     }
 
     /**

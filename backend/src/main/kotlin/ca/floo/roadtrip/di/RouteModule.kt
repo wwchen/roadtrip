@@ -40,6 +40,7 @@ import ca.floo.roadtrip.service.auth.LoginFlowState
 import ca.floo.roadtrip.service.auth.OidcIdentityProvider
 import ca.floo.roadtrip.service.auth.SessionService
 import ca.floo.roadtrip.service.auth.UserProvisioningService
+import ca.floo.roadtrip.service.auth.WatchAccessTokenService
 import ca.floo.roadtrip.service.availability.AvailabilityDashboardController
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
@@ -89,6 +90,7 @@ internal fun Application.registerKoinRoutes() {
     val ingestController: IngestController by inject()
     val userSettings: UserSettingsService by inject()
     val userRepo: UserRepo by inject()
+    val watchAccessTokenService: WatchAccessTokenService by inject()
     val slackInteractivity: SlackInteractivityWiring? = getKoin().getOrNull()
     val readiness: ReadinessService by inject()
     val schedulerScope: CoroutineScope by inject()
@@ -112,7 +114,10 @@ internal fun Application.registerKoinRoutes() {
         authRoutes(wiring = authWiring, userRepo = userRepo)
         settingsRoutes(userSettings)
         poiRoutes(poiService)
-        availabilityWatchRoutes(availabilityWatchController(ctx, watchService, watchCapabilities))
+        availabilityWatchRoutes(
+            watches = availabilityWatchController(ctx, watchService, watchCapabilities),
+            watchAccessTokenService = watchAccessTokenService,
+        )
         campsiteRoutes(
             campsiteAvailabilityController(
                 ctx = ctx,

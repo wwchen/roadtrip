@@ -16,6 +16,7 @@ data class AppConfig(
     val slack: SlackConfig?,
     val grafana: GrafanaConfig?,
     val webApp: WebAppConfig?,
+    val watchLink: WatchLinkConfig,
     val vendorRateLimit: VendorRateLimitConfig,
 ) {
     companion object {
@@ -35,6 +36,7 @@ data class AppConfig(
                 slack = SlackConfig.fromConfig(roadtrip.section("slack")),
                 grafana = GrafanaConfig.fromConfig(roadtrip.section("grafana")),
                 webApp = WebAppConfig.fromConfig(roadtrip.section("web")),
+                watchLink = WatchLinkConfig.fromConfig(roadtrip.section("watch-link")),
                 vendorRateLimit = VendorRateLimitConfig.fromConfig(roadtrip.section("vendor-rate-limit")),
             )
         }

@@ -67,6 +67,10 @@ roadtrip:
   email:
     resend-api-key: "${RESEND_API_KEY:}"
     from: "${ROADTRIP_EMAIL_FROM:Campsite Alerts <alerts@roadtrip.floo.ca>}"
+  watch-link:
+    # How long the magic link in an alert email keeps working. Deliberately
+    # shorter than `auth.session-ttl`: a mailbox holds this link forever.
+    ttl: "${ROADTRIP_WATCH_LINK_TTL:30d}"
   build-info:
     env: "${ROADTRIP_BUILD_ENV:local}"
     sha: "${ROADTRIP_BUILD_SHA:unknown}"

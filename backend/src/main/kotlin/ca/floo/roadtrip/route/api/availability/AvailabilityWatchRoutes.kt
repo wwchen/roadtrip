@@ -4,6 +4,7 @@ import ca.floo.roadtrip.model.api.AvailabilityWatchCreateRequest
 import ca.floo.roadtrip.model.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
+import ca.floo.roadtrip.model.domain.auth.WatchCredential
 import ca.floo.roadtrip.route.common.RouteBodyResult
 import ca.floo.roadtrip.route.common.access
 import ca.floo.roadtrip.route.common.boundedIntQuery
@@ -16,9 +17,11 @@ import ca.floo.roadtrip.route.common.queryParam
 import ca.floo.roadtrip.route.common.receiveJsonBody
 import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
+import ca.floo.roadtrip.service.auth.WatchAccessTokenService
 import ca.floo.roadtrip.service.availability.AvailabilityWatchController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchControllerResult
 import ca.floo.roadtrip.service.availability.WatchStatus
+import ca.floo.roadtrip.service.notification.common.WATCH_TOKEN_PARAM
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
@@ -52,7 +55,28 @@ private suspend fun ApplicationCall.requireUser(): Principal.User? {
     return p
 }
 
-internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController) {
+/**
+ * The credential for a single-watch route: the session if there is one, else the
+ * magic-link token from the query string.
+ *
+ * Session first, so a signed-in owner following their own alert link keeps
+ * acting as themselves — a stale or foreign token in the URL can then only
+ * narrow what they could already do, never widen it. Answers `401` when neither
+ * is present, which is also what a dead or expired link gets: from the outside
+ * an expired link and no link are the same request.
+ */
+private suspend fun ApplicationCall.watchCredential(watchAccessTokenService: WatchAccessTokenService): WatchCredential? {
+    (principal() as? Principal.User)?.let { return WatchCredential.Session(it) }
+    val token = queryParam(WATCH_TOKEN_PARAM)
+    val credential = token?.let(watchAccessTokenService::resolve)
+    if (credential == null) respondApiError("unauthenticated", HttpStatusCode.Unauthorized)
+    return credential
+}
+
+internal fun Route.availabilityWatchRoutes(
+    watches: AvailabilityWatchController,
+    watchAccessTokenService: WatchAccessTokenService,
+) {
     route("/api") {
         route("/watches") {
             get {
@@ -97,19 +121,19 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
 
             route("/{id}") {
                 get {
-                    val user = call.requireUser() ?: return@get
+                    val credential = call.watchCredential(watchAccessTokenService) ?: return@get
                     val id =
                         call.longPath("id")
                             ?: return@get call.respondError("invalid_id", HttpStatusCode.BadRequest)
                     val watch =
-                        watches.get(user, id)
+                        watches.get(credential, id)
                             ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
                     call.respondJson(watch)
                 }.describeApi("watches", "Get one watch")
-                    .access(RouteAccess.User)
+                    .access(RouteAccess.UserOrCapability)
 
                 post("/modify") {
-                    val user = call.requireUser() ?: return@post
+                    val credential = call.watchCredential(watchAccessTokenService) ?: return@post
                     val id =
                         call.longPath("id")
                             ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
@@ -119,7 +143,7 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                                 return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, body.detail)
                             is RouteBodyResult.Valid -> body.value
                         }
-                    when (val result = watches.update(user, id, req)) {
+                    when (val result = watches.update(credential, id, req)) {
                         is AvailabilityWatchControllerResult.Invalid ->
                             call.respondError(result.error, HttpStatusCode.BadRequest, result.detail)
                         is AvailabilityWatchControllerResult.NotFound ->
@@ -128,20 +152,20 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                             call.respondJson(result.value)
                     }
                 }.describeApi("watches", "Modify a watch")
-                    .access(RouteAccess.User)
+                    .access(RouteAccess.UserOrCapability)
 
                 post("/delete") {
-                    val user = call.requireUser() ?: return@post
+                    val credential = call.watchCredential(watchAccessTokenService) ?: return@post
                     val id =
                         call.longPath("id")
                             ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
-                    if (watches.delete(user, id)) {
+                    if (watches.delete(credential, id)) {
                         call.respond(HttpStatusCode.NoContent)
                     } else {
                         call.respondError("not_found", HttpStatusCode.NotFound)
                     }
                 }.describeApi("watches", "Delete a watch")
-                    .access(RouteAccess.User)
+                    .access(RouteAccess.UserOrCapability)
             }
         }
     }

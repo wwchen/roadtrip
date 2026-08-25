@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.scheduler
 
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.service.auth.WatchAccessTokenService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -28,9 +29,16 @@ private val defaultReapInterval: Duration = Duration.ofMinutes(5)
  *
  * A lightweight periodic loop rather than a [framework.Scheduler]: the unit of
  * work is a single global sweep on an interval, not a per-row claim/lease.
+ *
+ * The same sweep retires expired alert-email magic-link tokens. It rides here
+ * rather than in a loop of its own because both are watch-scoped teardown on the
+ * same cadence, and neither is correctness-critical: an expired token is already
+ * refused by the resolving query the moment it expires, so the sweep only
+ * reclaims the rows.
  */
 internal class WatchReaper(
     private val pollerRepo: AvailabilityPollerRepo,
+    private val watchAccessTokenService: WatchAccessTokenService,
     private val interval: Duration = defaultReapInterval,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -66,6 +74,14 @@ internal class WatchReaper(
             }
         } catch (e: Exception) {
             log.error("watch reaper sweep failed: {}", e.message, e)
+        }
+        // Separate try: a failure retiring link tokens must not skip the watch
+        // teardown above, or vice versa.
+        try {
+            val retired = watchAccessTokenService.deleteExpired()
+            if (retired > 0) log.info("watch-reaper audit: retired {} expired watch link token(s)", retired)
+        } catch (e: Exception) {
+            log.error("watch link token sweep failed: {}", e.message, e)
         }
     }
 

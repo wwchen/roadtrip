@@ -28,6 +28,19 @@ sealed interface RouteAccess {
      * session gate does not apply.
      */
     data object Signed : RouteAccess
+
+    /**
+     * A signed-in user **or** the bearer of a capability token naming the exact
+     * resource in the path — the alert-email magic link.
+     *
+     * Like [Signed], this never refuses on the session principal, because the
+     * session is not the only way in. Unlike [Anonymous], it is not open: the
+     * handler must resolve a [WatchCredential] and answer `401` when neither a
+     * session nor a live token is present. Declaring it says "this route does
+     * its own two-source check", which is a claim the coverage check can see,
+     * rather than a route quietly labelled anonymous while it mutates data.
+     */
+    data object UserOrCapability : RouteAccess
 }
 
 /** The outcome of checking a [Principal] against a [RouteAccess] level. */
@@ -45,13 +58,15 @@ sealed interface AccessCheck {
  * Decides whether [principal] may reach a route declared at this access level.
  *
  * [Principal.System] holds every role (see [hasRole]), so internal work is never
- * refused. [RouteAccess.Anonymous] and [RouteAccess.Signed] never gate on the
- * session principal — `Anonymous` by definition, `Signed` because the route
- * proves the caller by signature itself.
+ * refused. [RouteAccess.Anonymous], [RouteAccess.Signed] and
+ * [RouteAccess.UserOrCapability] never gate on the session principal —
+ * `Anonymous` by definition, `Signed` because the route proves the caller by
+ * signature itself, and `UserOrCapability` because a session is only one of the
+ * two ways to satisfy it and the handler decides.
  */
 fun RouteAccess.check(principal: Principal): AccessCheck =
     when (this) {
-        RouteAccess.Anonymous, RouteAccess.Signed -> AccessCheck.Allow
+        RouteAccess.Anonymous, RouteAccess.Signed, RouteAccess.UserOrCapability -> AccessCheck.Allow
         RouteAccess.User ->
             when (principal) {
                 Principal.Anonymous -> AccessCheck.Unauthenticated

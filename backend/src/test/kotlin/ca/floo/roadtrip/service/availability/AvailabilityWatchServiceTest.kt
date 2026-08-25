@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.fakeWatchAccessTokens
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.model.booking.AddToCartRequest
@@ -184,6 +185,8 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 userSettingsRepo = UserSettingsRepo(ctx),
                 userRepo = UserRepo(ctx),
                 cipher = null,
+                watchAccessTokenService = fakeWatchAccessTokens(ctx = ctx),
+                appRootUrl = null,
             )
         val dispatcher =
             WatchAlertDispatcher(

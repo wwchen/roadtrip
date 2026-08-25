@@ -4,6 +4,7 @@ import { createTestQueryClient } from '@/test/query-client';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { Watch } from '@/api/watches-api';
+import { initWatchLink, resetWatchLink, stripWatchTokenFromUrl } from '@/api/watch-link';
 import { AppProviders } from '@/app/AppProviders';
 import { queryKeys } from '@/queries/keys';
 import { WatchesPage } from './WatchesPage';
@@ -147,6 +148,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   client.clear();
+  resetWatchLink();
 });
 
 describe('loading', () => {
@@ -620,5 +622,103 @@ describe('notice banner', () => {
     await waitFor(() => {
       expect(screen.queryByText('Watch created for POI 42.')).not.toBeInTheDocument();
     });
+  });
+});
+
+describe('alert-email magic link', () => {
+  const LINK_TOKEN = 'link-token-abc';
+  const GET_WATCH_7_LINKED = `${GET_WATCH_7}?watch_token=${LINK_TOKEN}`;
+  const DELETE_WATCH_7_LINKED = `${DELETE_WATCH_7}?watch_token=${LINK_TOKEN}`;
+  const MODIFY_WATCH_7_LINKED = `${MODIFY_WATCH_7}?watch_token=${LINK_TOKEN}`;
+
+  /** Open the page the way an alert email does: signed out, token in the URL. */
+  function openFromEmail(...overrides: Responder[]) {
+    window.history.replaceState(null, '', `/watches.html?action=modify&id=7&watch_token=${LINK_TOKEN}`);
+    initWatchLink(window.location.search);
+    stripWatchTokenFromUrl();
+    stubApi(...overrides, watchListFails(401, { error: 'unauthenticated' }));
+    return renderPage();
+  }
+
+  const linkedWatch = watch({ id: 7, status: 'active' });
+
+  test('the token never stays in the address bar', () => {
+    openFromEmail(route(GET_WATCH_7_LINKED, 'GET', () => json({ watch: linkedWatch })));
+
+    expect(window.location.search).not.toContain('watch_token');
+    // The rest of the deep link survives — the page still knows which watch.
+    expect(window.location.search).toContain('id=7');
+  });
+
+  test('loads the one watch the link names, with the token attached', async () => {
+    openFromEmail(route(GET_WATCH_7_LINKED, 'GET', () => json({ watch: linkedWatch })));
+
+    await screen.findByRole('button', { name: 'Stop this alert' });
+    expect(requests.some((r) => r.url === GET_WATCH_7_LINKED)).toBe(true);
+    // No sign-in wall, and no create form for a caller who cannot create.
+    expect(screen.queryByText('Sign in to manage your alerts')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument();
+  });
+
+  test('stopping the alert posts the delete with the token and confirms', async () => {
+    openFromEmail(
+      route(GET_WATCH_7_LINKED, 'GET', () => json({ watch: linkedWatch })),
+      route(DELETE_WATCH_7_LINKED, 'POST', () => noContent()),
+    );
+
+    const stop = await screen.findByRole('button', { name: 'Stop this alert' });
+    await userEvent.click(stop);
+    await userEvent.click(screen.getByRole('button', { name: 'Stop it?' }));
+
+    await screen.findByText('Alert stopped');
+    expect(postedTo(DELETE_WATCH_7_LINKED)).toBeDefined();
+  });
+
+  test('a failed stop leaves the alert on screen', async () => {
+    openFromEmail(
+      route(GET_WATCH_7_LINKED, 'GET', () => json({ watch: linkedWatch })),
+      route(DELETE_WATCH_7_LINKED, 'POST', () => json({ error: 'boom' }, 500)),
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Stop this alert' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Stop it?' }));
+
+    await screen.findByText('Could not delete watch.');
+    expect(screen.getByRole('button', { name: 'Stop this alert' })).toBeInTheDocument();
+    expect(screen.queryByText('Alert stopped')).not.toBeInTheDocument();
+  });
+
+  test('saving a change posts the modify with the token', async () => {
+    openFromEmail(
+      route(GET_WATCH_7_LINKED, 'GET', () => json({ watch: linkedWatch })),
+      route(MODIFY_WATCH_7_LINKED, 'POST', () => json({ watch: linkedWatch })),
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(postedTo(MODIFY_WATCH_7_LINKED)).toBeDefined());
+  });
+
+  test('a dead link says so instead of failing', async () => {
+    openFromEmail(route(GET_WATCH_7_LINKED, 'GET', () => json({ error: 'unauthenticated' }, 401)));
+
+    await screen.findByText('This link has expired');
+    expect(screen.queryByRole('button', { name: 'Stop this alert' })).not.toBeInTheDocument();
+  });
+
+  test('a signed-in reader gets the ordinary page, not the single-alert one', async () => {
+    window.history.replaceState(null, '', `/watches.html?action=modify&id=7&watch_token=${LINK_TOKEN}`);
+    initWatchLink(window.location.search);
+    stripWatchTokenFromUrl();
+    stubApi(
+      watchList(linkedWatch),
+      route(GET_WATCH_7_LINKED, 'GET', () => json({ watch: linkedWatch })),
+    );
+    renderPage();
+
+    // The session is the stronger credential: the list loads and the deep link
+    // opens the watch for editing, exactly as it did before magic links existed.
+    await screen.findByRole('button', { name: 'Cancel' });
+    expect(screen.queryByRole('button', { name: 'Stop this alert' })).not.toBeInTheDocument();
   });
 });

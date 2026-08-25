@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Banner, EmptyState, Link, Skeleton } from '@ui';
 import type { Watch, WatchStatus } from '@/api/watches-api';
 import { HttpError } from '@/api/http';
+import { watchLink } from '@/api/watch-link';
 import {
   isUnauthorized,
   useDeleteWatch,
@@ -12,6 +13,7 @@ import {
   useWatches,
 } from '@/features/watches/useWatches';
 import { WatchForm, type WatchFormPrefill, type WatchFormSubmit } from '@/features/watches/WatchForm';
+import { WatchLinkPanel } from '@/features/watches/WatchLinkPanel';
 import { WatchTable } from '@/features/watches/WatchTable';
 import {
   ACTION_CREATE,
@@ -48,6 +50,20 @@ function formKey(editor: Editor, seq: number): string {
 export function WatchesPage() {
   const { watches, isPending, isSignedOut, error: listError, refetch } = useWatches();
   const poiNames = usePoiNames(watches);
+
+  // Magic-link mode: the page was opened from an alert email by someone with no
+  // session. It replaces the list, not the page, because the token authorizes
+  // one watch and there is no list to show. A signed-in reader following the
+  // same link gets the ordinary page — the session is the stronger credential
+  // and the deep link below already lands them on the right watch.
+  //
+  // Which mode applies is not known until the list settles, so a link holds the
+  // page on a skeleton until then rather than flashing the signed-in layout at
+  // someone who is about to get the single-alert one.
+  const link = watchLink();
+  const resolvingLink = link != null && isPending;
+  const linkWatchId = link != null && !isPending && isSignedOut ? link.watchId : null;
+  const [linkStopped, setLinkStopped] = useState(false);
 
   const [editor, setEditor] = useState<Editor>(CREATE_EDITOR);
   // LDS form controls are uncontrolled (see WatchForm), so the form is reseeded
@@ -101,12 +117,26 @@ export function WatchesPage() {
           setFormSeq((n) => n + 1);
           return CREATE_EDITOR;
         });
+        return true;
       } catch (err) {
-        if (isUnauthorized(err) && !fromUrl) return;
+        if (isUnauthorized(err) && !fromUrl) return false;
         setNotice({ status: 'error', message: 'Could not delete watch.' });
+        return false;
       }
     },
     [deleteWatch],
+  );
+
+  /**
+   * Stop, from a magic link. The confirmation replaces the panel only when the
+   * delete actually landed — a failed stop must leave the alert on screen, still
+   * running and still stoppable, rather than telling the reader it is gone.
+   */
+  const stopLinkedWatch = useCallback(
+    async (id: number) => {
+      if (await removeWatch(id, { fromUrl: true })) setLinkStopped(true);
+    },
+    [removeWatch],
   );
 
   // Deep links run only once the list has SUCCESSFULLY loaded and the caller is
@@ -192,7 +222,22 @@ export function WatchesPage() {
         </Banner>
       )}
 
-      {isSignedOut ? (
+      {resolvingLink ? (
+        <Skeleton aria-label="Opening alert" />
+      ) : linkStopped && linkWatchId ? (
+        <EmptyState
+          title="Alert stopped"
+          body="You will not get any more emails about it. Sign in any time to set up a new one."
+        />
+      ) : linkWatchId ? (
+        <WatchLinkPanel
+          watchId={linkWatchId}
+          busy={saveWatch.isPending || deleteWatch.isPending}
+          error={formError}
+          onSubmit={handleSubmit}
+          onStop={stopLinkedWatch}
+        />
+      ) : isSignedOut ? (
         <EmptyState
           title="Sign in to manage your alerts"
           body="Sign in to create and manage your availability alerts."

@@ -24,7 +24,7 @@ class EmailNotificationService(
         target: NotificationTarget,
     ): Boolean {
         val emailTarget = target as? NotificationTarget.Email ?: return false
-        val content = EmailContentWatchStatusRenderer.render(notice)
+        val content = EmailContentWatchStatusRenderer.render(notice, emailTarget.manageUrl)
         return sendContent(content, emailTarget.recipients, failureContext = "watch #${notice.watchId} status")
     }
 
@@ -37,7 +37,8 @@ class EmailNotificationService(
         appRootUrl: String?,
     ): Boolean {
         val emailTarget = target as? NotificationTarget.Email ?: return false
-        val content = EmailContentAvailabilityRenderer.openings(watchId, startDate, endDate, openings, appRootUrl)
+        val content =
+            EmailContentAvailabilityRenderer.openings(watchId, startDate, endDate, openings, appRootUrl, emailTarget.manageUrl)
         return sendContent(content, emailTarget.recipients, failureContext = "watch #$watchId opening alert")
     }
 

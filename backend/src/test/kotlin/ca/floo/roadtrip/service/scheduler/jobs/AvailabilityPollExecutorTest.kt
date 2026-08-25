@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.slack.SlackAttachmentDto
 import ca.floo.roadtrip.client.slack.SlackBlockDto
 import ca.floo.roadtrip.config.AvailabilityPollerConfig
 import ca.floo.roadtrip.config.VendorRateLimitConfig
+import ca.floo.roadtrip.fixtures.fakeWatchAccessTokens
 import ca.floo.roadtrip.model.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.model.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.model.availability.AvailabilityProviderCapabilities
@@ -392,6 +393,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             userSettingsRepo = UserSettingsRepo(ctx),
             userRepo = UserRepo(ctx),
             cipher = testCipher,
+            watchAccessTokenService = fakeWatchAccessTokens(ctx = ctx),
+            appRootUrl = null,
         )
 
     /** Dispatcher with Slack disabled — a null-config service that no-ops and

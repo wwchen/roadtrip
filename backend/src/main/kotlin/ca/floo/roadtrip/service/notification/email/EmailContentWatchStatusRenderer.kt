@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.notification.email
 
+import ca.floo.roadtrip.service.notification.common.WATCH_MANAGE_LABEL
+import ca.floo.roadtrip.service.notification.common.WatchManageLink
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import kotlinx.html.a
 import kotlinx.html.br
@@ -16,12 +18,20 @@ import java.util.Locale
 private val statusDateFormatter = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)
 
 internal object EmailContentWatchStatusRenderer {
-    fun render(notice: WatchStatusNotice): EmailContent {
+    /**
+     * @param manageUrl the recipient's magic link for this watch, when one was
+     *   minted. Present, the "Resume"/"Manage" link works from the mailbox with
+     *   no session; absent, it falls back to the sign-in-gated form.
+     */
+    fun render(
+        notice: WatchStatusNotice,
+        manageUrl: String? = null,
+    ): EmailContent {
         val header = headerFor(notice.state)
         val scope = scopeFor(notice)
         val window = "${notice.startDate.format(statusDateFormatter)}-${notice.endDate.format(statusDateFormatter)}"
         val status = statusLine(notice.state)
-        val links = linksFor(notice)
+        val links = linksFor(notice, manageUrl)
         return EmailContent(
             subject = "Roadtrip watch #${notice.watchId}: $header",
             text = renderText(notice.watchId, header, scope, window, status, links),
@@ -102,14 +112,17 @@ internal object EmailContentWatchStatusRenderer {
             else -> "${notice.siteCount} ${"site".plural(notice.siteCount)}"
         }
 
-    private fun linksFor(notice: WatchStatusNotice): List<Link> =
+    private fun linksFor(
+        notice: WatchStatusNotice,
+        manageUrl: String?,
+    ): List<Link> =
         buildList {
-            notice.appRootUrl?.let { root ->
+            (manageUrl ?: WatchManageLink.url(notice.appRootUrl, notice.watchId))?.let { url ->
                 if (notice.state == WatchStatusNotice.State.PAUSED) {
-                    add(Link("Resume watch", "$root/watches?action=modify&id=${notice.watchId}"))
+                    add(Link("Resume watch", url))
                 }
                 if (notice.state != WatchStatusNotice.State.DONE && notice.state != WatchStatusNotice.State.STOPPED) {
-                    add(Link("Modify watch", "$root/watches?action=modify&id=${notice.watchId}"))
+                    add(Link(WATCH_MANAGE_LABEL, url))
                 }
             }
             notice.poiLinks.forEach { poi ->

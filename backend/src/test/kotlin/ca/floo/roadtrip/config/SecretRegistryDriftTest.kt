@@ -43,6 +43,7 @@ class SecretRegistryDriftTest {
             "ROADTRIP_BUILD_SHA",
             "ROADTRIP_BUILD_BRANCH",
             "ROADTRIP_WEB_ROOT_URL",
+            "ROADTRIP_WATCH_LINK_TTL",
         )
 
     @Test

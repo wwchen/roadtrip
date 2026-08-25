@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.api.AvailabilityWatchResponse
 import ca.floo.roadtrip.model.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.User
+import ca.floo.roadtrip.model.domain.auth.WatchCredential
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.UserRepo
 
@@ -51,13 +52,45 @@ internal class AvailabilityWatchController(
         return watchMapper.listResponse(rows, total, limit, offset)
     }
 
+    /**
+     * Whether [credential] may act on watch [id].
+     *
+     * The two ways in are deliberately asymmetric. A session is an identity, so
+     * it is checked against ownership (with admin as the usual override). A
+     * magic link is not an identity at all — it is a secret that names one
+     * watch, so the only question is whether it names *this* one. Everything
+     * else about the caller is unknown and must stay irrelevant.
+     */
+    private fun authorizes(
+        credential: WatchCredential,
+        id: Long,
+        watch: AvailabilityWatchRepo.Watch,
+    ): Boolean =
+        when (credential) {
+            is WatchCredential.MagicLink -> credential.watchId == id
+            is WatchCredential.Session -> {
+                val user = resolve(credential.principal)
+                user.isAdmin || watch.ownerUserId == user.id.value
+            }
+        }
+
+    /** The watch [credential] may act on, or null — indistinguishably absent or forbidden. */
+    private fun authorized(
+        credential: WatchCredential,
+        id: Long,
+    ): AvailabilityWatchRepo.Watch? {
+        val watch = watchRepo.findById(id) ?: return null
+        // 404 rather than 403 for a watch that exists but isn't yours: a
+        // distinguishable "forbidden" turns the id space into an oracle for
+        // which watches exist.
+        return watch.takeIf { authorizes(credential, id, it) }
+    }
+
     fun get(
-        principal: Principal.User,
+        credential: WatchCredential,
         id: Long,
     ): AvailabilityWatchResponse? {
-        val user = resolve(principal)
-        val watch = watchRepo.findById(id) ?: return null
-        if (!user.isAdmin && watch.ownerUserId != user.id.value) return null // 404, don't leak existence
+        val watch = authorized(credential, id) ?: return null
         return watchMapper.response(watch, includeCapabilities = true)
     }
 
@@ -92,13 +125,11 @@ internal class AvailabilityWatchController(
     }
 
     fun update(
-        principal: Principal.User,
+        credential: WatchCredential,
         id: Long,
         req: AvailabilityWatchUpdateRequest,
     ): AvailabilityWatchControllerResult<AvailabilityWatchResponse> {
-        val user = resolve(principal)
-        val existing = watchRepo.findById(id) ?: return AvailabilityWatchControllerResult.NotFound
-        if (!user.isAdmin && existing.ownerUserId != user.id.value) return AvailabilityWatchControllerResult.NotFound
+        authorized(credential, id) ?: return AvailabilityWatchControllerResult.NotFound
         val parsed =
             when (val mapped = AvailabilityWatchRequestMapper.parseUpdate(req)) {
                 is WatchRequestMapping.Invalid ->
@@ -126,12 +157,10 @@ internal class AvailabilityWatchController(
     }
 
     fun delete(
-        principal: Principal.User,
+        credential: WatchCredential,
         id: Long,
     ): Boolean {
-        val user = resolve(principal)
-        val existing = watchRepo.findById(id) ?: return false
-        if (!user.isAdmin && existing.ownerUserId != user.id.value) return false
+        authorized(credential, id) ?: return false
         return watchService.delete(id)
     }
 }

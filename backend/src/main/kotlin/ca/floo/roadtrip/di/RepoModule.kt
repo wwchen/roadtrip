@@ -18,6 +18,7 @@ import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
+import ca.floo.roadtrip.repo.WatchAccessTokenRepo
 import ca.floo.roadtrip.service.ref.DbRefResolver
 import ca.floo.roadtrip.service.ref.RefResolver
 import org.koin.dsl.module
@@ -42,5 +43,6 @@ val repoModule =
         single { AdminIngestReadRepo(get()) }
         single { UserRepo(get()) }
         single { UserSettingsRepo(get()) }
+        single { WatchAccessTokenRepo(get()) }
         single { DatabaseHealthRepo(get()) }
     }

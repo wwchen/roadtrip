@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.fixtures.FAKE_WATCH_LINK_TOKEN
+import ca.floo.roadtrip.fixtures.fakeWatchAccessTokens
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
@@ -23,6 +25,8 @@ import kotlin.test.assertTrue
  * [UserSettingsRepo]; the watch itself is an in-memory row carrying only the
  * fields the resolver reads (owner id, trigger config/kinds).
  */
+private const val APP_ROOT_URL = "https://app.example"
+
 class WatchNotificationTargetResolverTest : SharedDbTest() {
     private var userSeq = 0
     private val testCipher = SecretCipher(ByteArray(32) { it.toByte() })
@@ -32,11 +36,16 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
             .create(email = "wntr-owner-${userSeq++}@example.com", displayName = null, isEmailVerified = true)
             .id
 
-    private fun resolver(cipher: SecretCipher? = testCipher): WatchNotificationTargetResolver =
+    private fun resolver(
+        cipher: SecretCipher? = testCipher,
+        appRootUrl: String? = APP_ROOT_URL,
+    ): WatchNotificationTargetResolver =
         WatchNotificationTargetResolver(
             userSettingsRepo = UserSettingsRepo(ctx),
             userRepo = UserRepo(ctx),
             cipher = cipher,
+            watchAccessTokenService = fakeWatchAccessTokens(ctx = ctx),
+            appRootUrl = appRootUrl,
         )
 
     private fun watch(
@@ -61,6 +70,14 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
         )
 
     private fun slackTargets(targets: List<NotificationTarget>) = targets.filterIsInstance<NotificationTarget.Slack>()
+
+    /** The email target the resolver produces for [watch] (always id 1 here):
+     *  the recipient plus the magic link minted for that watch. */
+    private fun emailTargetFor(recipient: String): NotificationTarget.Email =
+        NotificationTarget.Email(
+            recipients = listOf(recipient),
+            manageUrl = "$APP_ROOT_URL/watches?action=modify&id=1&watch_token=$FAKE_WATCH_LINK_TOKEN",
+        )
 
     private fun ownerEmail(owner: UserId): String = UserRepo(ctx).findById(owner)!!.email
 
@@ -118,7 +135,7 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
         assertTrue(slackTargets(targets).isEmpty(), "no owner-controlled channel must yield no Slack target")
         // Email still fires when configured.
         assertEquals(
-            listOf(NotificationTarget.Email(listOf(ownerEmail(owner)))),
+            listOf(emailTargetFor(ownerEmail(owner))),
             targets.filterIsInstance<NotificationTarget.Email>(),
         )
     }
@@ -142,7 +159,7 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
 
         assertTrue(slackTargets(targets).isEmpty(), "email-only watch must not produce a Slack card")
         assertEquals(
-            listOf(NotificationTarget.Email(listOf(ownerEmail(owner)))),
+            listOf(emailTargetFor(ownerEmail(owner))),
             targets.filterIsInstance<NotificationTarget.Email>(),
         )
     }
@@ -211,7 +228,7 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
         assertTrue(slackTargets(targets).isEmpty(), "channel without token must yield no Slack target")
         // Email still fires when configured.
         assertEquals(
-            listOf(NotificationTarget.Email(listOf(ownerEmail(owner)))),
+            listOf(emailTargetFor(ownerEmail(owner))),
             targets.filterIsInstance<NotificationTarget.Email>(),
         )
     }
@@ -234,7 +251,22 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
                 ),
             )
 
-        assertEquals(listOf(NotificationTarget.Email(listOf("settings@example.test"))), targets)
+        assertEquals(listOf(emailTargetFor("settings@example.test")), targets)
+    }
+
+    @Test
+    fun `an unconfigured web app root leaves the email target with no manage link`() {
+        val owner = seedOwner()
+        UserSettingsRepo(ctx).upsertNotifications(owner, notificationEmail = "no-links@example.test", slackChannel = null)
+
+        val targets =
+            resolver(appRootUrl = null).resolve(
+                watch(owner, triggerKinds = listOf(AvailabilityTriggerKinds.EMAIL_NOTIFY)),
+            )
+
+        // The alert still sends; it just carries no deep link, which is the same
+        // first-class "no links" state POI links already have.
+        assertEquals(listOf(NotificationTarget.Email(listOf("no-links@example.test"))), targets)
     }
 
     @Test
@@ -245,14 +277,14 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
         settingsRepo.upsertNotifications(owner, notificationEmail = "first@example.test", slackChannel = null)
 
         assertEquals(
-            listOf(NotificationTarget.Email(listOf("first@example.test"))),
+            listOf(emailTargetFor("first@example.test")),
             resolver().resolve(existingWatch),
         )
 
         settingsRepo.upsertNotifications(owner, notificationEmail = "second@example.test", slackChannel = null)
 
         assertEquals(
-            listOf(NotificationTarget.Email(listOf("second@example.test"))),
+            listOf(emailTargetFor("second@example.test")),
             resolver().resolve(existingWatch),
         )
     }

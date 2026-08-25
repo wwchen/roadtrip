@@ -7,6 +7,7 @@
 // `{ watch, watch_capabilities? }`.
 import type { Campsite } from './campsite-api';
 import { HttpError, jsonGetOk, type RequestOptions } from './http';
+import { WATCH_TOKEN_PARAM, watchLinkToken } from './watch-link';
 
 const BASE = '/api/watches';
 const MODIFY_ACTION = 'modify';
@@ -111,9 +112,22 @@ export interface ListWatchesParams extends RequestOptions {
   offset?: number;
 }
 
+/**
+ * A single-watch URL, carrying the alert-email magic-link token when the page was
+ * opened with one.
+ *
+ * The token rides along the way the session cookie does — ambient, attached to
+ * every single-watch request rather than threaded through each call site —
+ * because it authorizes exactly the same three operations the cookie does for
+ * this one watch, and a caller that had to remember it would eventually forget.
+ * The list and create routes deliberately do not go through here: a token that
+ * names one watch has nothing to say about either.
+ */
 function watchUrl(id: number | string, action?: string): string {
   const base = `${BASE}/${encodeURIComponent(String(id))}`;
-  return action ? `${base}/${action}` : base;
+  const path = action ? `${base}/${action}` : base;
+  const token = watchLinkToken();
+  return token ? `${path}?${WATCH_TOKEN_PARAM}=${encodeURIComponent(token)}` : path;
 }
 
 export function listWatches({

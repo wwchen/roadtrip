@@ -269,6 +269,31 @@ recipient. The FE renders the Email and Add to cart toggles from this contract;
 create/update validation still uses the same capability service and
 trigger-config validator as the authoritative gate.
 
+### Alert-email magic links
+
+Every alert email carries a link that manages or stops **that one watch** with no
+sign-in: `"/watches?action=modify&id=<watch>&watch_token=<token>"`. The shape
+lives in `service/notification/common/WatchManageLink.kt`, the only place email,
+web app, and route agree on it.
+
+The token is a capability, not a session. `WatchAccessTokenService` (beside
+`SessionService`, which it deliberately mirrors) mints an opaque random token per
+email into `availability_watch_access_token`, storing only its SHA-256; resolving
+one yields a `WatchCredential.MagicLink(watchId)`, never a user. The three
+single-watch routes declare `RouteAccess.UserOrCapability` and accept either a
+session or a token; `/api/watches` list and create stay `RouteAccess.User`,
+because a token that names one watch has nothing to say about either. A token
+that names a different watch gets `404`, the same answer a non-owner's session
+gets.
+
+Mailing a bearer token is sound only because the recipient is always the owner's
+own address (see `WatchNotificationTargetResolver`, which mints the token as it
+resolves the email target). The blast radius of a leaked link is one watch, for
+`roadtrip.watch-link.ttl` (default 30 days, deliberately shorter than the session
+TTL); `WatchReaper` retires expired rows and deleting a watch cascades its
+tokens. The web app takes the token out of the address bar on load and keeps it
+in memory for the page's own API calls (`frontend/src/api/watch-link.ts`).
+
 ## Capabilities
 
 Every `AvailabilityProvider` serves availability. Capability flags only describe

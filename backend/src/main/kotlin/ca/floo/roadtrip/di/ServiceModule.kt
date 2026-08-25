@@ -23,7 +23,9 @@ import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
+import ca.floo.roadtrip.repo.WatchAccessTokenRepo
 import ca.floo.roadtrip.service.auth.ClaimsDialectRegistry
+import ca.floo.roadtrip.service.auth.WatchAccessTokenService
 import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
@@ -95,6 +97,15 @@ val serviceModule =
         single {
             val config: AppConfig = get()
             EmailNotificationService(config.email)
+        }
+        single {
+            // Mints and resolves the magic-link tokens alert emails carry. Always
+            // wired, independent of whether email or auth is configured: the routes
+            // that resolve a token must answer the same way in every deployment.
+            WatchAccessTokenService(
+                tokenRepo = get<WatchAccessTokenRepo>(),
+                ttl = get<AppConfig>().watchLink.ttl,
+            )
         }
         single {
             NotificationFanout(
@@ -211,6 +222,8 @@ val serviceModule =
                 userSettingsRepo = get<UserSettingsRepo>(),
                 userRepo = get<UserRepo>(),
                 cipher = cipher,
+                watchAccessTokenService = get<WatchAccessTokenService>(),
+                appRootUrl = config.webApp?.rootUrl,
             )
         }
         single(named("triggerActionHandlers")) {
@@ -303,7 +316,10 @@ val serviceModule =
             ).also { it.start(get<CoroutineScope>()) }
         }
         single(createdAtStart = true) {
-            WatchReaper(get<AvailabilityPollerRepo>()).also { it.start(get<CoroutineScope>()) }
+            WatchReaper(
+                pollerRepo = get<AvailabilityPollerRepo>(),
+                watchAccessTokenService = get<WatchAccessTokenService>(),
+            ).also { it.start(get<CoroutineScope>()) }
         }
         single(createdAtStart = true) {
             PollerBackfill(get<DSLContext>(), get<AvailabilityPollerMembership>()).also { it.run() }

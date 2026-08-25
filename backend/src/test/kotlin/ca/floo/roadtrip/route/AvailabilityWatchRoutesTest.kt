@@ -11,12 +11,14 @@ import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.UserRepo
+import ca.floo.roadtrip.repo.WatchAccessTokenRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.route.auth.SESSION_COOKIE
 import ca.floo.roadtrip.route.auth.roadtripAuthorization
+import ca.floo.roadtrip.service.auth.WatchAccessTokenService
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
@@ -32,6 +34,7 @@ import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.booking.BookingAdapterRegistry
+import ca.floo.roadtrip.service.notification.common.WATCH_TOKEN_PARAM
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -44,6 +47,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.application.install
 import io.ktor.server.routing.Route
+import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
@@ -55,6 +59,7 @@ import kotlinx.serialization.json.long
 import org.jooq.DSLContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.time.Duration
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import ca.floo.roadtrip.route.api.availability.availabilityWatchRoutes as installAvailabilityWatchRoutes
@@ -68,6 +73,8 @@ private fun watchPath(id: Long): String = "$WATCHES_PATH/$id"
 private fun modifyWatchPath(id: Long): String = "${watchPath(id)}/$MODIFY_ACTION"
 
 private fun deleteWatchPath(id: Long): String = "${watchPath(id)}/$DELETE_ACTION"
+
+private val watchLinkTtl: Duration = Duration.ofDays(30)
 
 private const val USER_TOKEN = "user-token"
 private const val OTHER_TOKEN = "other-token"
@@ -240,8 +247,15 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         watchService: AvailabilityWatchService,
         watchCapabilities: WatchCapabilityService? = null,
     ) {
-        installAvailabilityWatchRoutes(availabilityWatchController(ctx, watchService, watchCapabilities))
+        installAvailabilityWatchRoutes(
+            watches = availabilityWatchController(ctx, watchService, watchCapabilities),
+            watchAccessTokenService = watchAccessTokenService(),
+        )
     }
+
+    /** The real token service over the test database — a magic link in these
+     *  tests is minted and resolved exactly the way production does it. */
+    private fun watchAccessTokenService(): WatchAccessTokenService = WatchAccessTokenService(WatchAccessTokenRepo(ctx), watchLinkTtl)
 
     private fun availabilityWatchController(
         ctx: DSLContext,
@@ -1346,6 +1360,148 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             campsiteId,
         )
     }
+
+    // ---- Alert-email magic links -------------------------------------------
+    //
+    // The link in an alert email is the only credential these callers have: no
+    // cookie, no session, one token that names one watch. What follows pins both
+    // halves of that — what it opens, and what it must not.
+
+    /** Create a watch as the owner and mint a link token for it, the way an
+     *  alert email would. Returns the watch id and the token. */
+    private suspend fun ApplicationTestBuilder.watchWithLink(sourceId: String): Pair<Long, String> {
+        seedUsers()
+        val poiId = seedPoi(sourceId = sourceId, name = "Magic Link POI $sourceId")
+        val created =
+            client.post(WATCHES_PATH) {
+                asUser(USER_TOKEN)
+                contentType(ContentType.Application.Json)
+                setBody(createBody(poiId))
+            }
+        val id =
+            Json
+                .parseToJsonElement(created.bodyAsText())
+                .jsonObject["watch"]!!
+                .jsonObject["id"]!!
+                .jsonPrimitive.long
+        return id to watchAccessTokenService().issue(id).token
+    }
+
+    private fun watchAppWithLinks(): io.ktor.server.application.Application.() -> Unit =
+        {
+            install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+            routeTestApplication {
+                availabilityWatchRoutes(ctx, watchService())
+            }
+        }
+
+    private fun tokenQuery(token: String): String = "?$WATCH_TOKEN_PARAM=$token"
+
+    @Test
+    fun `GET one watch succeeds with a link token and no session`() =
+        testApplication {
+            application(watchAppWithLinks())
+            val (id, token) = watchWithLink("ml1")
+            val resp = client.get("${watchPath(id)}${tokenQuery(token)}")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
+            assertEquals(id, obj["id"]!!.jsonPrimitive.long)
+        }
+
+    @Test
+    fun `GET one watch is unauthenticated without a session or a link token`() =
+        testApplication {
+            application(watchAppWithLinks())
+            val (id, _) = watchWithLink("ml2")
+            assertEquals(HttpStatusCode.Unauthorized, client.get(watchPath(id)).status)
+        }
+
+    @Test
+    fun `a link token does not open a different watch`() =
+        testApplication {
+            application(watchAppWithLinks())
+            val (_, token) = watchWithLink("ml3")
+            val (otherId, _) = watchWithLink("ml4")
+            // Not 403: a distinguishable "forbidden" would turn the id space into
+            // an oracle for which watches exist.
+            assertEquals(HttpStatusCode.NotFound, client.get("${watchPath(otherId)}${tokenQuery(token)}").status)
+        }
+
+    @Test
+    fun `an unknown link token is unauthenticated`() =
+        testApplication {
+            application(watchAppWithLinks())
+            val (id, _) = watchWithLink("ml5")
+            assertEquals(
+                HttpStatusCode.Unauthorized,
+                client.get("${watchPath(id)}${tokenQuery("not-a-real-token")}").status,
+            )
+        }
+
+    @Test
+    fun `a revoked link token is unauthenticated`() =
+        testApplication {
+            application(watchAppWithLinks())
+            val (id, token) = watchWithLink("ml6")
+            watchAccessTokenService().revokeAllForWatch(id)
+            assertEquals(HttpStatusCode.Unauthorized, client.get("${watchPath(id)}${tokenQuery(token)}").status)
+        }
+
+    @Test
+    fun `modify pauses a watch with a link token and no session`() =
+        testApplication {
+            application(watchAppWithLinks())
+            val (id, token) = watchWithLink("ml7")
+            val resp =
+                client.post("${modifyWatchPath(id)}${tokenQuery(token)}") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"status": "paused"}""")
+                }
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
+            assertEquals("paused", obj["status"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `delete stops a watch with a link token and no session`() =
+        testApplication {
+            application(watchAppWithLinks())
+            val (id, token) = watchWithLink("ml8")
+            assertEquals(
+                HttpStatusCode.NoContent,
+                client.post("${deleteWatchPath(id)}${tokenQuery(token)}").status,
+            )
+            assertEquals(HttpStatusCode.Unauthorized, client.get("${watchPath(id)}${tokenQuery(token)}").status)
+        }
+
+    @Test
+    fun `a link token cannot list watches`() =
+        testApplication {
+            application(watchAppWithLinks())
+            val (_, token) = watchWithLink("ml9")
+            // The list is not scoped to a watch, so the token has nothing to say
+            // about it: the route stays session-only.
+            assertEquals(HttpStatusCode.Unauthorized, client.get("$WATCHES_PATH${tokenQuery(token)}").status)
+        }
+
+    @Test
+    fun `a session wins over a link token naming someone else's watch`() =
+        testApplication {
+            application(watchAppWithLinks())
+            val (id, _) = watchWithLink("ml10")
+            val (otherId, otherToken) = watchWithLink("ml11")
+            // Signed in as the owner of both; the token in the URL names a
+            // different watch and must not narrow (or widen) what the session
+            // already allows.
+            assertEquals(
+                HttpStatusCode.OK,
+                client.get("${watchPath(id)}${tokenQuery(otherToken)}") { asUser(USER_TOKEN) }.status,
+            )
+            assertEquals(
+                HttpStatusCode.NotFound,
+                client.get("${watchPath(otherId)}${tokenQuery(otherToken)}") { asUser(OTHER_TOKEN) }.status,
+            )
+        }
 }
 
 /**

@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.notification.email
 
+import ca.floo.roadtrip.service.notification.common.WATCH_MANAGE_LABEL
+import ca.floo.roadtrip.service.notification.common.WatchManageLink
 import ca.floo.roadtrip.service.notification.common.WatchOpening
 import kotlinx.html.a
 import kotlinx.html.br
@@ -19,12 +21,18 @@ private const val ELLIPSIS = "..."
 private val dateFormatter = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)
 
 internal object EmailContentAvailabilityRenderer {
+    /**
+     * @param manageUrl the recipient's magic link for this watch, when one was
+     *   minted. Present, it is a link that works from the mailbox with no
+     *   session; absent, the link falls back to the sign-in-gated form.
+     */
     fun openings(
         watchId: Long,
         startDate: LocalDate,
         endDate: LocalDate,
         openings: List<WatchOpening>,
         appRootUrl: String?,
+        manageUrl: String? = null,
     ): EmailContent {
         val countLabel = "${openings.size} ${"site".plural(openings.size)}"
         val campground = openings.mapNotNull { it.campground }.distinct().singleOrNull()
@@ -39,14 +47,14 @@ internal object EmailContentAvailabilityRenderer {
                 }
             }
         val watchUrl = appRootUrl?.let { "${it.trimEnd('/')}/availability?watch=$watchId" }
-        val modifyUrl = appRootUrl?.let { "${it.trimEnd('/')}/watches?action=modify&id=$watchId" }
+        val modifyUrl = manageUrl ?: WatchManageLink.url(appRootUrl, watchId)
         val window = "${startDate.format(dateFormatter)}-${endDate.format(dateFormatter)}"
         val text =
             buildString {
                 appendLine("Sites available for watch #$watchId")
                 appendLine("Window: $window")
                 watchUrl?.let { appendLine("Watch: $it") }
-                modifyUrl?.let { appendLine("Modify: $it") }
+                modifyUrl?.let { appendLine("$WATCH_MANAGE_LABEL: $it") }
                 appendLine()
                 openings.forEachIndexed { index, opening ->
                     appendLine("${index + 1}. ${opening.label}")
@@ -80,7 +88,7 @@ internal object EmailContentAvailabilityRenderer {
                 }
                 modifyUrl?.let {
                     +" · "
-                    a(href = it) { +"Modify watch" }
+                    a(href = it) { +WATCH_MANAGE_LABEL }
                 }
             }
             ol {

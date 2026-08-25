@@ -274,6 +274,7 @@ jooq {
                                 "availability_run",
                                 "availability_status",
                                 "availability_watch",
+                                "availability_watch_access_token",
                                 "availability_watch_poller",
                                 "availability_watch_target",
                                 "booking_provider",
