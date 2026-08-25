@@ -16,12 +16,16 @@ import java.util.Locale
 private val statusDateFormatter = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)
 
 internal object EmailContentWatchStatusRenderer {
-    fun render(notice: WatchStatusNotice): EmailContent {
+    /** [magicLinkUrl] is preferred over the session-gated page when present. */
+    fun render(
+        notice: WatchStatusNotice,
+        magicLinkUrl: String? = null,
+    ): EmailContent {
         val header = headerFor(notice.state)
         val scope = scopeFor(notice)
         val window = "${notice.startDate.format(statusDateFormatter)}-${notice.endDate.format(statusDateFormatter)}"
         val status = statusLine(notice.state)
-        val links = linksFor(notice)
+        val links = linksFor(notice, magicLinkUrl)
         return EmailContent(
             subject = "Roadtrip watch #${notice.watchId}: $header",
             text = renderText(notice.watchId, header, scope, window, status, links),
@@ -35,7 +39,7 @@ internal object EmailContentWatchStatusRenderer {
         scope: String,
         window: String,
         status: String,
-        links: List<Link>,
+        links: List<EmailLink>,
     ): String =
         buildString {
             appendLine("$header for watch #$watchId")
@@ -54,7 +58,7 @@ internal object EmailContentWatchStatusRenderer {
         scope: String,
         window: String,
         status: String,
-        links: List<Link>,
+        links: List<EmailLink>,
     ): String =
         createHTML().div {
             h2 { +"$header for watch #$watchId" }
@@ -102,26 +106,24 @@ internal object EmailContentWatchStatusRenderer {
             else -> "${notice.siteCount} ${"site".plural(notice.siteCount)}"
         }
 
-    private fun linksFor(notice: WatchStatusNotice): List<Link> =
+    /** DONE and STOPPED get no controls, but keep their POI links. */
+    private fun linksFor(
+        notice: WatchStatusNotice,
+        magicLinkUrl: String?,
+    ): List<EmailLink> =
         buildList {
-            notice.appRootUrl?.let { root ->
-                if (notice.state == WatchStatusNotice.State.PAUSED) {
-                    add(Link("Resume watch", "$root/watches?action=modify&id=${notice.watchId}"))
-                }
-                if (notice.state != WatchStatusNotice.State.DONE && notice.state != WatchStatusNotice.State.STOPPED) {
-                    add(Link("Modify watch", "$root/watches?action=modify&id=${notice.watchId}"))
-                }
+            if (notice.state.isActionable()) {
+                addAll(watchControlLinks(notice.appRootUrl, notice.watchId, magicLinkUrl))
             }
             notice.poiLinks.forEach { poi ->
-                poi.mapUrl?.let { add(Link("Map ${poi.poiId}", it)) }
-                poi.gridUrl?.let { add(Link("Availability grid ${poi.poiId}", it)) }
+                poi.mapUrl?.let { add(EmailLink("Map ${poi.poiId}", it)) }
+                poi.gridUrl?.let { add(EmailLink("Availability grid ${poi.poiId}", it)) }
             }
         }
 
-    private fun String.plural(count: Int): String = if (count == 1) this else "${this}s"
+    /** Whether the watch still exists in a state the recipient can change. */
+    private fun WatchStatusNotice.State.isActionable(): Boolean =
+        this != WatchStatusNotice.State.DONE && this != WatchStatusNotice.State.STOPPED
 
-    private data class Link(
-        val label: String,
-        val url: String,
-    )
+    private fun String.plural(count: Int): String = if (count == 1) this else "${this}s"
 }

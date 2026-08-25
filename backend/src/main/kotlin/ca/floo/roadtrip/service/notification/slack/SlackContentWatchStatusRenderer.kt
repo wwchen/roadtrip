@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.notification.slack
 import ca.floo.roadtrip.client.slack.SlackAttachmentDto
 import ca.floo.roadtrip.client.slack.SlackBlocks
 import ca.floo.roadtrip.client.slack.SlackButtonSpec
+import ca.floo.roadtrip.model.api.watchModifyUrl
 import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 
 /**
@@ -158,7 +159,7 @@ object SlackContentWatchStatusRenderer {
                     SlackButtonSpec(
                         label = "✏️ Modify",
                         actionId = SlackWatchCard.ACTION_OPEN_WATCHES,
-                        url = "$root/watches?action=modify&id=${notice.watchId}",
+                        url = watchModifyUrl(root, notice.watchId),
                         value = notice.watchId.toString(),
                     )
             }

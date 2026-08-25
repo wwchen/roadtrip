@@ -110,6 +110,51 @@ class AvailabilityWatchRepo(
             ?.let(::fromRecord)
             ?.let { withLatestRuns(listOf(it)).single() }
 
+    /**
+     * The watch, only if [token] is its magic-link token. Null otherwise —
+     * including when it has no token, since `= ?` never matches NULL.
+     *
+     * Matched by primary key AND token in one statement rather than looking the
+     * watch up by its token: the id is already in the request path, so a
+     * token-keyed lookup would be a second query whose result then had to be
+     * checked against that id anyway. It also keeps the secret in the database —
+     * nothing here reads it back, so there is no string compare in application
+     * code to get wrong.
+     */
+    fun findByIdMatchingMagicLinkToken(
+        id: Long,
+        token: String,
+    ): Watch? =
+        baseSelect()
+            .where(AVAILABILITY_WATCH.ID.eq(id))
+            .and(AVAILABILITY_WATCH.MAGIC_LINK_TOKEN.eq(token))
+            .fetchOne()
+            ?.let(::fromRecord)
+            ?.let { withLatestRuns(listOf(it)).single() }
+
+    /**
+     * The watch's token, minting [candidate] if it has none. Conditional UPDATE
+     * plus re-read so concurrent alerts agree; read-then-write would let a loser
+     * overwrite a token already sent.
+     */
+    fun ensureMagicLinkToken(
+        watchId: Long,
+        candidate: String,
+    ): String? {
+        ctx
+            .update(AVAILABILITY_WATCH)
+            .set(AVAILABILITY_WATCH.MAGIC_LINK_TOKEN, candidate)
+            .where(AVAILABILITY_WATCH.ID.eq(watchId))
+            .and(AVAILABILITY_WATCH.MAGIC_LINK_TOKEN.isNull)
+            .execute()
+        return ctx
+            .select(AVAILABILITY_WATCH.MAGIC_LINK_TOKEN)
+            .from(AVAILABILITY_WATCH)
+            .where(AVAILABILITY_WATCH.ID.eq(watchId))
+            .fetchOne()
+            ?.value1()
+    }
+
     fun list(
         status: WatchStatus? = null,
         poiId: Long? = null,

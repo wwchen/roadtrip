@@ -23,6 +23,7 @@ import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
+import ca.floo.roadtrip.service.auth.MagicLinkTokenService
 import ca.floo.roadtrip.service.availability.alert.AlertProvider
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
@@ -184,6 +185,8 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 userSettingsRepo = UserSettingsRepo(ctx),
                 userRepo = UserRepo(ctx),
                 cipher = null,
+                magicLinkTokenService = MagicLinkTokenService(AvailabilityWatchRepo(ctx)),
+                appRootUrl = null,
             )
         val dispatcher =
             WatchAlertDispatcher(

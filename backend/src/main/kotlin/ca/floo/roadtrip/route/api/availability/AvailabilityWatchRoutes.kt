@@ -2,6 +2,7 @@ package ca.floo.roadtrip.route.api.availability
 
 import ca.floo.roadtrip.model.api.AvailabilityWatchCreateRequest
 import ca.floo.roadtrip.model.api.AvailabilityWatchUpdateRequest
+import ca.floo.roadtrip.model.api.MAGIC_LINK_TOKEN_PARAM
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.RouteAccess
 import ca.floo.roadtrip.route.common.RouteBodyResult
@@ -84,32 +85,20 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                             return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, body.detail)
                         is RouteBodyResult.Valid -> body.value
                     }
-                when (val result = watches.create(user, req)) {
-                    is AvailabilityWatchControllerResult.Invalid ->
-                        call.respondError(result.error, HttpStatusCode.BadRequest, result.detail)
-                    is AvailabilityWatchControllerResult.NotFound ->
-                        call.respondError("not_found", HttpStatusCode.NotFound)
-                    is AvailabilityWatchControllerResult.Ok ->
-                        call.respondJson(result.value, HttpStatusCode.Created)
-                }
+                call.respondResult(watches.create(user, req), successStatus = HttpStatusCode.Created)
             }.describeApi("watches", "Create a watch")
                 .access(RouteAccess.User)
 
             route("/{id}") {
                 get {
-                    val user = call.requireUser() ?: return@get
                     val id =
                         call.longPath("id")
                             ?: return@get call.respondError("invalid_id", HttpStatusCode.BadRequest)
-                    val watch =
-                        watches.get(user, id)
-                            ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
-                    call.respondJson(watch)
+                    call.respondResult(watches.get(call.principal(), id, call.magicLinkToken()))
                 }.describeApi("watches", "Get one watch")
-                    .access(RouteAccess.User)
+                    .access(RouteAccess.UserOrCapability)
 
                 post("/modify") {
-                    val user = call.requireUser() ?: return@post
                     val id =
                         call.longPath("id")
                             ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
@@ -119,29 +108,20 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                                 return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, body.detail)
                             is RouteBodyResult.Valid -> body.value
                         }
-                    when (val result = watches.update(user, id, req)) {
-                        is AvailabilityWatchControllerResult.Invalid ->
-                            call.respondError(result.error, HttpStatusCode.BadRequest, result.detail)
-                        is AvailabilityWatchControllerResult.NotFound ->
-                            call.respondError("not_found", HttpStatusCode.NotFound)
-                        is AvailabilityWatchControllerResult.Ok ->
-                            call.respondJson(result.value)
-                    }
+                    call.respondResult(watches.update(call.principal(), id, req, call.magicLinkToken()))
                 }.describeApi("watches", "Modify a watch")
-                    .access(RouteAccess.User)
+                    .access(RouteAccess.UserOrCapability)
 
                 post("/delete") {
-                    val user = call.requireUser() ?: return@post
                     val id =
                         call.longPath("id")
                             ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
-                    if (watches.delete(user, id)) {
-                        call.respond(HttpStatusCode.NoContent)
-                    } else {
-                        call.respondError("not_found", HttpStatusCode.NotFound)
+                    when (val result = watches.delete(call.principal(), id, call.magicLinkToken())) {
+                        is AvailabilityWatchControllerResult.Ok -> call.respond(HttpStatusCode.NoContent)
+                        else -> call.respondFailure(result)
                     }
                 }.describeApi("watches", "Delete a watch")
-                    .access(RouteAccess.User)
+                    .access(RouteAccess.UserOrCapability)
             }
         }
     }
@@ -157,3 +137,40 @@ private suspend fun ApplicationCall.respondError(
     status: HttpStatusCode,
     detail: String? = null,
 ) = respondApiError(error = error, status = status, detail = detail)
+
+/**
+ * The magic-link token, when the caller presented one. A query parameter because
+ * a click from a mail client can send neither a header nor a body.
+ */
+private fun ApplicationCall.magicLinkToken(): String? = queryParam(MAGIC_LINK_TOKEN_PARAM)
+
+/** Renders a controller outcome that carries a body on success. */
+private suspend inline fun <reified T> ApplicationCall.respondResult(
+    result: AvailabilityWatchControllerResult<T>,
+    successStatus: HttpStatusCode = HttpStatusCode.OK,
+) {
+    when (result) {
+        is AvailabilityWatchControllerResult.Ok -> respondJson(result.value, successStatus)
+        else -> respondFailure(result)
+    }
+}
+
+/**
+ * The one place a controller refusal becomes a status code. `Ok` is unreachable
+ * but spelled out rather than left to an `else`, so a new result variant fails
+ * the compile instead of silently 500ing.
+ */
+private suspend fun ApplicationCall.respondFailure(result: AvailabilityWatchControllerResult<*>) {
+    when (result) {
+        is AvailabilityWatchControllerResult.Ok ->
+            respondError("unexpected_result", HttpStatusCode.InternalServerError)
+        is AvailabilityWatchControllerResult.Invalid ->
+            respondError(result.error, HttpStatusCode.BadRequest, result.detail)
+        is AvailabilityWatchControllerResult.Forbidden ->
+            respondError(result.error, HttpStatusCode.Forbidden, result.detail)
+        AvailabilityWatchControllerResult.Unauthenticated ->
+            respondError("unauthenticated", HttpStatusCode.Unauthorized)
+        AvailabilityWatchControllerResult.NotFound ->
+            respondError("not_found", HttpStatusCode.NotFound)
+    }
+}

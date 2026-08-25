@@ -17,5 +17,11 @@ sealed interface NotificationTarget {
 
     data class Email(
         val recipients: List<String> = emptyList(),
+        /**
+         * Magic link for this watch. On the target because it is email-only:
+         * Slack cards already have buttons, and handing a bearer token to a
+         * transport that does not need one only widens where it can leak.
+         */
+        val magicLinkUrl: String? = null,
     ) : NotificationTarget
 }

@@ -5,3 +5,9 @@ internal data class EmailContent(
     val text: String,
     val html: String,
 )
+
+/** A labelled link in an email body. */
+internal data class EmailLink(
+    val label: String,
+    val url: String,
+)

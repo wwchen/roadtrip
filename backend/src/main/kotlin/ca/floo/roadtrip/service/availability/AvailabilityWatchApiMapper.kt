@@ -6,6 +6,7 @@ import ca.floo.roadtrip.model.api.AvailabilityWatchSchema
 import ca.floo.roadtrip.model.api.AvailabilityWatchTargetSchema
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import kotlinx.serialization.json.JsonObject
 
 internal class AvailabilityWatchApiMapper(
     private val campsiteRepo: CampsiteRepo,
@@ -28,9 +29,10 @@ internal class AvailabilityWatchApiMapper(
     fun response(
         watch: AvailabilityWatchRepo.Watch,
         includeCapabilities: Boolean = false,
+        redactDelivery: Boolean = false,
     ): AvailabilityWatchResponse =
         AvailabilityWatchResponse(
-            watch = schema(watch),
+            watch = schema(watch).let { if (redactDelivery) it.withoutDelivery() else it },
             watchCapabilities =
                 if (includeCapabilities) {
                     watchCapabilityService?.capabilitiesFor(scopeResolver.resolve(watch))
@@ -71,3 +73,10 @@ internal class AvailabilityWatchApiMapper(
         )
     }
 }
+
+/**
+ * The watch without its delivery config. `trigger_config` carries the owner's
+ * Slack channel; a magic-link bearer is blocked from writing it, so they must
+ * not be able to read it either.
+ */
+private fun AvailabilityWatchSchema.withoutDelivery(): AvailabilityWatchSchema = copy(triggerConfig = JsonObject(emptyMap()))

@@ -11,6 +11,11 @@ import ca.floo.roadtrip.service.notification.common.WatchStatusNotice
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
+/**
+ * The email transport. Every watch message carries the target's magic link,
+ * because email is the one transport whose recipient has no other way in — a
+ * Slack card has buttons, a signed-in browser has the watches page.
+ */
 class EmailNotificationService(
     private val config: EmailConfig?,
     private val emailDeliveryClient: EmailDeliveryClient? = config?.let { ResendEmailClient(it) },
@@ -24,7 +29,7 @@ class EmailNotificationService(
         target: NotificationTarget,
     ): Boolean {
         val emailTarget = target as? NotificationTarget.Email ?: return false
-        val content = EmailContentWatchStatusRenderer.render(notice)
+        val content = EmailContentWatchStatusRenderer.render(notice, emailTarget.magicLinkUrl)
         return sendContent(content, emailTarget.recipients, failureContext = "watch #${notice.watchId} status")
     }
 
@@ -37,7 +42,15 @@ class EmailNotificationService(
         appRootUrl: String?,
     ): Boolean {
         val emailTarget = target as? NotificationTarget.Email ?: return false
-        val content = EmailContentAvailabilityRenderer.openings(watchId, startDate, endDate, openings, appRootUrl)
+        val content =
+            EmailContentAvailabilityRenderer.openings(
+                watchId = watchId,
+                startDate = startDate,
+                endDate = endDate,
+                openings = openings,
+                appRootUrl = appRootUrl,
+                magicLinkUrl = emailTarget.magicLinkUrl,
+            )
         return sendContent(content, emailTarget.recipients, failureContext = "watch #$watchId opening alert")
     }
 

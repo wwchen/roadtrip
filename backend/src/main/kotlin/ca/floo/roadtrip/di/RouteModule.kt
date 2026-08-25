@@ -41,6 +41,7 @@ import ca.floo.roadtrip.service.auth.LoginFlowState
 import ca.floo.roadtrip.service.auth.OidcIdentityProvider
 import ca.floo.roadtrip.service.auth.SessionService
 import ca.floo.roadtrip.service.auth.UserProvisioningService
+import ca.floo.roadtrip.service.auth.WatchAccessResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDashboardController
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityWatchApiMapper
@@ -216,8 +217,10 @@ private fun availabilityWatchController(
     watchCapabilities: WatchCapabilityService,
 ): AvailabilityWatchController {
     val campsitesRepo = CampsiteRepo(ctx)
+    val watchRepo = AvailabilityWatchRepo(ctx)
+    val userRepo = UserRepo(ctx)
     return AvailabilityWatchController(
-        watchRepo = AvailabilityWatchRepo(ctx),
+        watchRepo = watchRepo,
         watchService = watchService,
         watchMapper =
             AvailabilityWatchApiMapper(
@@ -225,7 +228,7 @@ private fun availabilityWatchController(
                 scopeResolver = WatchScopeResolver(campsitesRepo),
                 watchCapabilityService = watchCapabilities,
             ),
-        userRepo = UserRepo(ctx),
+        accessResolver = WatchAccessResolver(watchRepo = watchRepo, userRepo = userRepo),
     )
 }
 

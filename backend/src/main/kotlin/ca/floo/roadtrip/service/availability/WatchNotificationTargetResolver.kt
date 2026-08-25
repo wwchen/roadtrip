@@ -1,9 +1,11 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.model.api.magicLinkUrl
 import ca.floo.roadtrip.model.domain.auth.UserId
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
+import ca.floo.roadtrip.service.auth.MagicLinkTokenService
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.security.SecretCipher
 import org.slf4j.LoggerFactory
@@ -52,6 +54,9 @@ internal class WatchNotificationTargetResolver(
     private val userSettingsRepo: UserSettingsRepo,
     private val userRepo: UserRepo,
     private val cipher: SecretCipher?,
+    // Checked together in [magicLinkUrlFor]; either absent means no link.
+    private val magicLinkTokenService: MagicLinkTokenService? = null,
+    private val appRootUrl: String? = null,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -65,10 +70,20 @@ internal class WatchNotificationTargetResolver(
             }
         }
 
+    /**
+     * Minted here, not at render time, because this is where "the recipient is
+     * the owner" is decided — the reason mailing a bearer token is sound.
+     */
     private fun resolveEmailTarget(watch: AvailabilityWatchRepo.Watch): NotificationTarget.Email? {
         val ownerId = UserId(watch.ownerUserId)
         val recipient = userSettingsRepo.find(ownerId)?.notificationEmail ?: userRepo.findById(ownerId)?.email ?: return null
-        return NotificationTarget.Email(recipients = listOf(recipient))
+        return NotificationTarget.Email(recipients = listOf(recipient), magicLinkUrl = magicLinkUrlFor(watch.id))
+    }
+
+    private fun magicLinkUrlFor(watchId: Long): String? {
+        val root = appRootUrl ?: return null
+        val token = magicLinkTokenService?.issue(watchId) ?: return null
+        return magicLinkUrl(root, watchId, token)
     }
 
     /**

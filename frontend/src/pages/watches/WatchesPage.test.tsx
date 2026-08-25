@@ -622,3 +622,169 @@ describe('notice banner', () => {
     });
   });
 });
+
+/**
+ * The magic-link surface.
+ *
+ * These cases all render with a `?watch=&t=` URL and NO list responder, which is
+ * the point: a link visitor has no session, so if the page still fetched the
+ * three status lists the harness would throw on the unstubbed request.
+ */
+describe('magic link', () => {
+  const MANAGE_URL = '/watches.html?watch=7&t=tok';
+  const GET_WITH_TOKEN = '/api/watches/7?t=tok';
+  const MODIFY_WITH_TOKEN = '/api/watches/7/modify?t=tok';
+  const DELETE_WITH_TOKEN = '/api/watches/7/delete?t=tok';
+
+  const manageRoute = (respond: () => Response): Responder =>
+    route(GET_WITH_TOKEN, 'GET', respond);
+
+  function renderManagePage(...overrides: Responder[]) {
+    window.history.replaceState(null, '', MANAGE_URL);
+    stubApi(...overrides);
+    return renderPage();
+  }
+
+  test('renders the single-watch card instead of the list', async () => {
+    renderManagePage(manageRoute(() => json({ watch: watch({ id: 7 }) })));
+
+    await screen.findByRole('region', { name: 'Manage this alert' });
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    expect(screen.queryByText('Sign in to manage your alerts')).not.toBeInTheDocument();
+  });
+
+  test('never requests the status lists, which a link cannot read', async () => {
+    renderManagePage(manageRoute(() => json({ watch: watch({ id: 7 }) })));
+
+    await screen.findByRole('region', { name: 'Manage this alert' });
+    expect(requests.filter((r) => r.url.startsWith('/api/watches?'))).toHaveLength(0);
+  });
+
+  test('pauses through the token, without a session', async () => {
+    let current = watch({ id: 7, status: 'active' });
+    renderManagePage(
+      manageRoute(() => json({ watch: current })),
+      route(MODIFY_WITH_TOKEN, 'POST', () => {
+        current = { ...current, status: 'paused' };
+        return json({ watch: current });
+      }),
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Pause alerts' }));
+
+    await waitFor(() => expect(postedTo(MODIFY_WITH_TOKEN)).toBeDefined());
+    expect(postedTo(MODIFY_WITH_TOKEN)?.body).toEqual({ status: 'paused' });
+    expect(await screen.findByRole('button', { name: 'Resume alerts' })).toBeInTheDocument();
+  });
+
+  test('offers resume, not pause, for a watch that already finished', async () => {
+    // A stop-when-triggered watch fires and goes `done`; its own alert email
+    // still links here. Pausing a finished watch is not the action on offer —
+    // WatchTable resumes it, and this surface must agree.
+    let current = watch({ id: 7, status: 'done' });
+    renderManagePage(
+      manageRoute(() => json({ watch: current })),
+      route(MODIFY_WITH_TOKEN, 'POST', () => {
+        current = { ...current, status: 'active' };
+        return json({ watch: current });
+      }),
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Resume alerts' }));
+
+    await waitFor(() => expect(postedTo(MODIFY_WITH_TOKEN)).toBeDefined());
+    expect(postedTo(MODIFY_WITH_TOKEN)?.body).toEqual({ status: 'active' });
+  });
+
+  test('offers resume, not pause, for a watch that is already paused', async () => {
+    renderManagePage(manageRoute(() => json({ watch: watch({ id: 7, status: 'paused' }) })));
+
+    expect(await screen.findByRole('button', { name: 'Resume alerts' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pause alerts' })).not.toBeInTheDocument();
+  });
+
+  test('stops only on the second click, and banners the card when it has', async () => {
+    renderManagePage(
+      manageRoute(() => json({ watch: watch({ id: 7 }) })),
+      route(DELETE_WITH_TOKEN, 'POST', () => noContent()),
+    );
+
+    const stop = await screen.findByRole('button', { name: 'Stop watch' });
+    await userEvent.click(stop);
+    expect(postedTo(DELETE_WITH_TOKEN)).toBeUndefined();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm stop watch' }));
+    await waitFor(() => expect(postedTo(DELETE_WITH_TOKEN)).toBeDefined());
+    expect(await screen.findByText(/Watch stopped/)).toBeInTheDocument();
+    // The card stays so the reader can see what they stopped.
+    expect(screen.getByRole('region', { name: 'Manage this alert' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Stop watch' })).not.toBeInTheDocument();
+  });
+
+  test("the email's Stop watch link stops on arrival and banners the card", async () => {
+    window.history.replaceState(null, '', `${MANAGE_URL}&action=stop`);
+    stubApi(
+      manageRoute(() => json({ watch: watch({ id: 7 }) })),
+      route(DELETE_WITH_TOKEN, 'POST', () => noContent()),
+    );
+    renderPage();
+
+    await waitFor(() => expect(postedTo(DELETE_WITH_TOKEN)).toBeDefined());
+    expect(await screen.findByText(/Watch stopped/)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Manage this alert' })).toBeInTheDocument();
+  });
+
+  test('the stop happens as a POST, never on the GET that opened the page', async () => {
+    window.history.replaceState(null, '', `${MANAGE_URL}&action=stop`);
+    stubApi(
+      manageRoute(() => json({ watch: watch({ id: 7 }) })),
+      route(DELETE_WITH_TOKEN, 'POST', () => noContent()),
+    );
+    renderPage();
+
+    await waitFor(() => expect(postedTo(DELETE_WITH_TOKEN)).toBeDefined());
+    // A mail scanner that fetches the URL without running scripts issues only
+    // this GET, which must not mutate anything.
+    expect(requests.filter((r) => r.method === 'GET' && r.url.includes('/api/watches/7')))
+      .toHaveLength(1);
+    expect(requests.filter((r) => r.method === 'POST')).toHaveLength(1);
+  });
+
+  test('a plain manage link does not stop anything', async () => {
+    renderManagePage(
+      manageRoute(() => json({ watch: watch({ id: 7 }) })),
+      route(DELETE_WITH_TOKEN, 'POST', () => noContent()),
+    );
+
+    await screen.findByRole('region', { name: 'Manage this alert' });
+    expect(postedTo(DELETE_WITH_TOKEN)).toBeUndefined();
+    expect(screen.queryByText(/Watch stopped/)).not.toBeInTheDocument();
+  });
+
+  test('explains a dead link rather than showing an error', async () => {
+    renderManagePage(manageRoute(() => json({ error: 'unauthenticated' }, 401)));
+
+    expect(await screen.findByText('This alert has been stopped')).toBeInTheDocument();
+  });
+
+  test('treats a watch that is already gone the same way', async () => {
+    renderManagePage(manageRoute(() => json({ error: 'not_found' }, 404)));
+
+    expect(await screen.findByText('This alert has been stopped')).toBeInTheDocument();
+  });
+
+  test('offers a retry when the server fails for some other reason', async () => {
+    renderManagePage(manageRoute(() => json({ error: 'boom' }, 500)));
+
+    expect(await screen.findByText('Could not load this alert.')).toBeInTheDocument();
+  });
+
+  test('falls through to the normal page when the URL has an id but no token', async () => {
+    window.history.replaceState(null, '', '/watches.html?watch=7');
+    stubApi(watchList(watch({ id: 7 })));
+    renderPage();
+
+    await screen.findByRole('table');
+    expect(screen.queryByRole('region', { name: 'Manage this alert' })).not.toBeInTheDocument();
+  });
+});

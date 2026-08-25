@@ -25,6 +25,7 @@ internal object EmailContentAvailabilityRenderer {
         endDate: LocalDate,
         openings: List<WatchOpening>,
         appRootUrl: String?,
+        magicLinkUrl: String? = null,
     ): EmailContent {
         val countLabel = "${openings.size} ${"site".plural(openings.size)}"
         val campground = openings.mapNotNull { it.campground }.distinct().singleOrNull()
@@ -38,15 +39,13 @@ internal object EmailContentAvailabilityRenderer {
                     append(it.truncateSubjectPart())
                 }
             }
-        val watchUrl = appRootUrl?.let { "${it.trimEnd('/')}/availability?watch=$watchId" }
-        val modifyUrl = appRootUrl?.let { "${it.trimEnd('/')}/watches?action=modify&id=$watchId" }
+        val controls = watchControlLinks(appRootUrl, watchId, magicLinkUrl)
         val window = "${startDate.format(dateFormatter)}-${endDate.format(dateFormatter)}"
         val text =
             buildString {
                 appendLine("Sites available for watch #$watchId")
                 appendLine("Window: $window")
-                watchUrl?.let { appendLine("Watch: $it") }
-                modifyUrl?.let { appendLine("Modify: $it") }
+                controls.forEach { appendLine("${it.label}: ${it.url}") }
                 appendLine()
                 openings.forEachIndexed { index, opening ->
                     appendLine("${index + 1}. ${opening.label}")
@@ -58,15 +57,20 @@ internal object EmailContentAvailabilityRenderer {
                     appendLine()
                 }
             }.trimEnd()
-        val html = renderHtml(watchId = watchId, window = window, watchUrl = watchUrl, modifyUrl = modifyUrl, openings = openings)
+        val html =
+            renderHtml(
+                watchId = watchId,
+                window = window,
+                controls = controls,
+                openings = openings,
+            )
         return EmailContent(subject = subject, text = text, html = html)
     }
 
     private fun renderHtml(
         watchId: Long,
         window: String,
-        watchUrl: String?,
-        modifyUrl: String?,
+        controls: List<EmailLink>,
         openings: List<WatchOpening>,
     ): String =
         createHTML().div {
@@ -74,13 +78,9 @@ internal object EmailContentAvailabilityRenderer {
             p {
                 strong { +"Window:" }
                 +" $window"
-                watchUrl?.let {
-                    br()
-                    a(href = it) { +"Open watch" }
-                }
-                modifyUrl?.let {
-                    +" · "
-                    a(href = it) { +"Modify watch" }
+                controls.forEachIndexed { index, control ->
+                    if (index == 0) br() else +" · "
+                    a(href = control.url) { +control.label }
                 }
             }
             ol {

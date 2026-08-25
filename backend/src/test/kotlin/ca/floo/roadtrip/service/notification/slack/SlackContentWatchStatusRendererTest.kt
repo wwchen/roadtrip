@@ -251,4 +251,18 @@ class SlackContentWatchStatusRendererTest {
                 .first { it.text.contains("x") }
         assertTrue(field.text.length <= 2_000, "field was ${field.text.length} chars")
     }
+
+    @Test
+    fun `modify button deep-links the watches page editor`() {
+        // Pins the exact URL: a published contract the watches page's
+        // useUrlAction parses, now built by watchModifyUrl rather than inline.
+        val rendered =
+            SlackContentWatchStatusRenderer.render(
+                notice().copy(appRootUrl = "https://app.test"),
+            )
+        assertTrue(
+            allText(rendered).contains("https://app.test/watches?action=modify&id=42"),
+            allText(rendered),
+        )
+    }
 }
