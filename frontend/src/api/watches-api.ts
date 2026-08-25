@@ -134,11 +134,23 @@ export function listWatches({
   return jsonGetOk<WatchListResponse>(`${BASE}${suffix}`, { signal });
 }
 
+/** Options for the token-scoped (magic-link) watch endpoints. */
+export interface TokenRequestOptions extends RequestOptions {
+  /** The alert-email management token — scopes the call to exactly this watch, no session required. */
+  token?: string;
+}
+
+function withToken(url: string, token?: string): string {
+  if (!token) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}token=${encodeURIComponent(token)}`;
+}
+
 export function getWatch(
   id: number | string,
-  { signal }: RequestOptions = {},
+  { signal, token }: TokenRequestOptions = {},
 ): Promise<WatchResponse> {
-  return jsonGetOk<WatchResponse>(watchUrl(id), { signal });
+  return jsonGetOk<WatchResponse>(withToken(watchUrl(id), token), { signal });
 }
 
 /**
@@ -172,9 +184,9 @@ export async function createWatch(
 export async function updateWatch(
   id: number | string,
   body: UpdateWatchRequest,
-  { signal }: RequestOptions = {},
+  { signal, token }: TokenRequestOptions = {},
 ): Promise<WatchResponse> {
-  const url = watchUrl(id, MODIFY_ACTION);
+  const url = withToken(watchUrl(id, MODIFY_ACTION), token);
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -198,9 +210,9 @@ export async function updateWatch(
  */
 export async function deleteWatch(
   id: number | string,
-  { signal }: RequestOptions = {},
+  { signal, token }: TokenRequestOptions = {},
 ): Promise<void> {
-  const url = watchUrl(id, DELETE_ACTION);
+  const url = withToken(watchUrl(id, DELETE_ACTION), token);
   const r = await fetch(url, { method: 'POST', signal });
   if (!r.ok && r.status !== 404) {
     throw new HttpError(url, r.status);

@@ -11,6 +11,7 @@ import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.UserRepo
+import ca.floo.roadtrip.repo.WatchManagementTokenRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCampsite
@@ -27,6 +28,7 @@ import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
 import ca.floo.roadtrip.service.availability.WatchCapabilityValidator
 import ca.floo.roadtrip.service.availability.WatchLifecycleNotifications
+import ca.floo.roadtrip.service.availability.WatchManagementTokenService
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
@@ -240,7 +242,10 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         watchService: AvailabilityWatchService,
         watchCapabilities: WatchCapabilityService? = null,
     ) {
-        installAvailabilityWatchRoutes(availabilityWatchController(ctx, watchService, watchCapabilities))
+        installAvailabilityWatchRoutes(
+            availabilityWatchController(ctx, watchService, watchCapabilities),
+            WatchManagementTokenService(WatchManagementTokenRepo(ctx)),
+        )
     }
 
     private fun availabilityWatchController(

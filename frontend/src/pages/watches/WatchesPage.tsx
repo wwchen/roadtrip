@@ -12,6 +12,7 @@ import {
   useWatches,
 } from '@/features/watches/useWatches';
 import { WatchForm, type WatchFormPrefill, type WatchFormSubmit } from '@/features/watches/WatchForm';
+import { TokenWatchManager } from '@/features/watches/TokenWatchManager';
 import { WatchTable } from '@/features/watches/WatchTable';
 import {
   ACTION_CREATE,
@@ -45,7 +46,21 @@ function formKey(editor: Editor, seq: number): string {
   return `create:${poi_id}:${start_date}:${seq}`;
 }
 
+/**
+ * The alert-email magic-link params, read once from the raw URL rather than
+ * through `useUrlAction`: a `token` grants management of exactly one watch
+ * with no session, so it must not be gated behind (or consumed by) the
+ * signed-in deep-link flow below.
+ */
+function readTokenLink(): { id: string; token: string } | null {
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('id');
+  const token = params.get('token');
+  return id && token ? { id, token } : null;
+}
+
 export function WatchesPage() {
+  const [tokenLink] = useState(readTokenLink);
   const { watches, isPending, isSignedOut, error: listError, refetch } = useWatches();
   const poiNames = usePoiNames(watches);
 
@@ -192,7 +207,9 @@ export function WatchesPage() {
         </Banner>
       )}
 
-      {isSignedOut ? (
+      {tokenLink ? (
+        <TokenWatchManager id={tokenLink.id} token={tokenLink.token} />
+      ) : isSignedOut ? (
         <EmptyState
           title="Sign in to manage your alerts"
           body="Sign in to create and manage your availability alerts."

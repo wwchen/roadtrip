@@ -23,6 +23,7 @@ import ca.floo.roadtrip.repo.RouteCorridorRepo
 import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
+import ca.floo.roadtrip.repo.WatchManagementTokenRepo
 import ca.floo.roadtrip.service.auth.ClaimsDialectRegistry
 import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
@@ -41,6 +42,7 @@ import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
+import ca.floo.roadtrip.service.availability.WatchManagementTokenService
 import ca.floo.roadtrip.service.availability.WatchNotificationTargetResolver
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchTriggerCapabilityValidator
@@ -93,8 +95,11 @@ val serviceModule =
             SlackNotificationService(config.slack, SlackClient(config.slack))
         }
         single {
+            WatchManagementTokenService(WatchManagementTokenRepo(get<DSLContext>()))
+        }
+        single {
             val config: AppConfig = get()
-            EmailNotificationService(config.email)
+            EmailNotificationService(config.email, watchManagementTokens = get<WatchManagementTokenService>())
         }
         single {
             NotificationFanout(

@@ -13,6 +13,7 @@ import ca.floo.roadtrip.repo.PoiRepo
 import ca.floo.roadtrip.repo.RefLinkRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSessionRepo
+import ca.floo.roadtrip.repo.WatchManagementTokenRepo
 import ca.floo.roadtrip.route.api.admin.adminIngestRoutes
 import ca.floo.roadtrip.route.api.availability.availabilityDashboardRoutes
 import ca.floo.roadtrip.route.api.availability.availabilityWatchRoutes
@@ -51,6 +52,7 @@ import ca.floo.roadtrip.service.availability.CampsiteCatalogService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.WatchCapabilityService
+import ca.floo.roadtrip.service.availability.WatchManagementTokenService
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.etl.framework.IngestController
@@ -112,7 +114,10 @@ internal fun Application.registerKoinRoutes() {
         authRoutes(wiring = authWiring, userRepo = userRepo)
         settingsRoutes(userSettings)
         poiRoutes(poiService)
-        availabilityWatchRoutes(availabilityWatchController(ctx, watchService, watchCapabilities))
+        availabilityWatchRoutes(
+            availabilityWatchController(ctx, watchService, watchCapabilities),
+            WatchManagementTokenService(WatchManagementTokenRepo(ctx)),
+        )
         campsiteRoutes(
             campsiteAvailabilityController(
                 ctx = ctx,

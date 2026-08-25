@@ -25,6 +25,7 @@ internal object EmailContentAvailabilityRenderer {
         endDate: LocalDate,
         openings: List<WatchOpening>,
         appRootUrl: String?,
+        managementToken: String? = null,
     ): EmailContent {
         val countLabel = "${openings.size} ${"site".plural(openings.size)}"
         val campground = openings.mapNotNull { it.campground }.distinct().singleOrNull()
@@ -39,7 +40,7 @@ internal object EmailContentAvailabilityRenderer {
                 }
             }
         val watchUrl = appRootUrl?.let { "${it.trimEnd('/')}/availability?watch=$watchId" }
-        val modifyUrl = appRootUrl?.let { "${it.trimEnd('/')}/watches?action=modify&id=$watchId" }
+        val modifyUrl = appRootUrl?.let { it.modifyUrl(watchId, managementToken) }
         val window = "${startDate.format(dateFormatter)}-${endDate.format(dateFormatter)}"
         val text =
             buildString {

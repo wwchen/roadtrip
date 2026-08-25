@@ -134,4 +134,50 @@ internal class AvailabilityWatchController(
         if (!user.isAdmin && existing.ownerUserId != user.id.value) return false
         return watchService.delete(id)
     }
+
+    // The token-scoped variants below back the magic-link email flow. A
+    // resolved management token already proves scope over exactly this watch
+    // id (see WatchManagementTokenService), so there is no separate owner
+    // check to perform here — the token *is* the authorization.
+
+    fun getByToken(id: Long): AvailabilityWatchResponse? {
+        val watch = watchRepo.findById(id) ?: return null
+        return watchMapper.response(watch, includeCapabilities = true)
+    }
+
+    fun updateByToken(
+        id: Long,
+        req: AvailabilityWatchUpdateRequest,
+    ): AvailabilityWatchControllerResult<AvailabilityWatchResponse> {
+        watchRepo.findById(id) ?: return AvailabilityWatchControllerResult.NotFound
+        val parsed =
+            when (val mapped = AvailabilityWatchRequestMapper.parseUpdate(req)) {
+                is WatchRequestMapping.Invalid ->
+                    return AvailabilityWatchControllerResult.Invalid(mapped.error, mapped.detail)
+                is WatchRequestMapping.Valid -> mapped.value
+            }
+        val updated =
+            try {
+                watchService.update(
+                    id,
+                    targets = parsed.targets,
+                    campsiteFilters = req.campsiteFilters,
+                    startDate = parsed.dateWindow?.startDate,
+                    endDate = parsed.dateWindow?.endDate,
+                    cadenceSec = req.cadenceSec,
+                    triggerKinds = req.triggerKinds,
+                    triggerConfig = req.triggerConfig,
+                    stopWhenTriggered = req.stopWhenTriggered,
+                    status = parsed.status,
+                )
+            } catch (e: AvailabilityWatchValidationException) {
+                return AvailabilityWatchControllerResult.Invalid(e.error, e.message)
+            } ?: return AvailabilityWatchControllerResult.NotFound
+        return AvailabilityWatchControllerResult.Ok(watchMapper.response(updated))
+    }
+
+    fun deleteByToken(id: Long): Boolean {
+        watchRepo.findById(id) ?: return false
+        return watchService.delete(id)
+    }
 }

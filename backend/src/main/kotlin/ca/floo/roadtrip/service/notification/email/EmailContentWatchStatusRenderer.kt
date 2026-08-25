@@ -16,12 +16,15 @@ import java.util.Locale
 private val statusDateFormatter = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)
 
 internal object EmailContentWatchStatusRenderer {
-    fun render(notice: WatchStatusNotice): EmailContent {
+    fun render(
+        notice: WatchStatusNotice,
+        managementToken: String? = null,
+    ): EmailContent {
         val header = headerFor(notice.state)
         val scope = scopeFor(notice)
         val window = "${notice.startDate.format(statusDateFormatter)}-${notice.endDate.format(statusDateFormatter)}"
         val status = statusLine(notice.state)
-        val links = linksFor(notice)
+        val links = linksFor(notice, managementToken)
         return EmailContent(
             subject = "Roadtrip watch #${notice.watchId}: $header",
             text = renderText(notice.watchId, header, scope, window, status, links),
@@ -102,14 +105,18 @@ internal object EmailContentWatchStatusRenderer {
             else -> "${notice.siteCount} ${"site".plural(notice.siteCount)}"
         }
 
-    private fun linksFor(notice: WatchStatusNotice): List<Link> =
+    private fun linksFor(
+        notice: WatchStatusNotice,
+        managementToken: String?,
+    ): List<Link> =
         buildList {
             notice.appRootUrl?.let { root ->
+                val modifyUrl = root.modifyUrl(notice.watchId, managementToken)
                 if (notice.state == WatchStatusNotice.State.PAUSED) {
-                    add(Link("Resume watch", "$root/watches?action=modify&id=${notice.watchId}"))
+                    add(Link("Resume watch", modifyUrl))
                 }
                 if (notice.state != WatchStatusNotice.State.DONE && notice.state != WatchStatusNotice.State.STOPPED) {
-                    add(Link("Modify watch", "$root/watches?action=modify&id=${notice.watchId}"))
+                    add(Link("Modify watch", modifyUrl))
                 }
             }
             notice.poiLinks.forEach { poi ->

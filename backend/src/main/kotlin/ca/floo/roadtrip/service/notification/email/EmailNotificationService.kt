@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.resend.EmailDeliveryClient
 import ca.floo.roadtrip.client.resend.EmailDeliveryMessage
 import ca.floo.roadtrip.client.resend.ResendEmailClient
 import ca.floo.roadtrip.config.EmailConfig
+import ca.floo.roadtrip.service.availability.WatchManagementTokenService
 import ca.floo.roadtrip.service.notification.common.NotificationService
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.notification.common.WatchOpening
@@ -14,6 +15,7 @@ import java.time.LocalDate
 class EmailNotificationService(
     private val config: EmailConfig?,
     private val emailDeliveryClient: EmailDeliveryClient? = config?.let { ResendEmailClient(it) },
+    private val watchManagementTokens: WatchManagementTokenService? = null,
 ) : NotificationService {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -24,7 +26,11 @@ class EmailNotificationService(
         target: NotificationTarget,
     ): Boolean {
         val emailTarget = target as? NotificationTarget.Email ?: return false
-        val content = EmailContentWatchStatusRenderer.render(notice)
+        // Terminal states (done/stopped) have nothing left to manage, so no
+        // link needs a token that can outlive them.
+        val manageableState = notice.state != WatchStatusNotice.State.DONE && notice.state != WatchStatusNotice.State.STOPPED
+        val token = if (manageableState) mintManagementToken(notice.watchId) else null
+        val content = EmailContentWatchStatusRenderer.render(notice, token)
         return sendContent(content, emailTarget.recipients, failureContext = "watch #${notice.watchId} status")
     }
 
@@ -37,9 +43,13 @@ class EmailNotificationService(
         appRootUrl: String?,
     ): Boolean {
         val emailTarget = target as? NotificationTarget.Email ?: return false
-        val content = EmailContentAvailabilityRenderer.openings(watchId, startDate, endDate, openings, appRootUrl)
+        val token = mintManagementToken(watchId)
+        val content = EmailContentAvailabilityRenderer.openings(watchId, startDate, endDate, openings, appRootUrl, token)
         return sendContent(content, emailTarget.recipients, failureContext = "watch #$watchId opening alert")
     }
+
+    /** Null when token minting is unavailable (wiring gap) — the email still sends, just without a magic link. */
+    private fun mintManagementToken(watchId: Long): String? = watchManagementTokens?.issue(watchId)?.token
 
     suspend fun sendTestEmail(
         recipients: List<String>,

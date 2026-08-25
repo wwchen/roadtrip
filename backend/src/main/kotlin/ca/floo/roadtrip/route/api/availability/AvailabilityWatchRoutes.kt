@@ -18,6 +18,7 @@ import ca.floo.roadtrip.route.common.respondApiError
 import ca.floo.roadtrip.route.common.respondEncodedJson
 import ca.floo.roadtrip.service.availability.AvailabilityWatchController
 import ca.floo.roadtrip.service.availability.AvailabilityWatchControllerResult
+import ca.floo.roadtrip.service.availability.WatchManagementTokenService
 import ca.floo.roadtrip.service.availability.WatchStatus
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -52,7 +53,39 @@ private suspend fun ApplicationCall.requireUser(): Principal.User? {
     return p
 }
 
-internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController) {
+/** Who is acting on one watch id: a logged-in [Principal.User], or the holder of a valid magic-link token. */
+private sealed interface WatchActor {
+    data class User(
+        val principal: Principal.User,
+    ) : WatchActor
+
+    data object Token : WatchActor
+}
+
+/**
+ * Resolves the caller for a single-watch operation: a `?token=` query param
+ * scoped to this exact watch id takes precedence (the alert-email magic
+ * link), falling back to the session principal otherwise. Responds 401 and
+ * returns null when neither applies.
+ */
+private suspend fun ApplicationCall.resolveWatchActor(
+    id: Long,
+    managementTokens: WatchManagementTokenService,
+): WatchActor? {
+    val token = queryParam("token")
+    if (token != null) {
+        if (managementTokens.resolve(token) == id) return WatchActor.Token
+        respondApiError("invalid_token", HttpStatusCode.Unauthorized)
+        return null
+    }
+    val user = requireUser() ?: return null
+    return WatchActor.User(user)
+}
+
+internal fun Route.availabilityWatchRoutes(
+    watches: AvailabilityWatchController,
+    managementTokens: WatchManagementTokenService,
+) {
     route("/api") {
         route("/watches") {
             get {
@@ -96,30 +129,42 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                 .access(RouteAccess.User)
 
             route("/{id}") {
+                // GET/modify/delete accept either a session (RouteAccess.User semantics,
+                // enforced in resolveWatchActor) or a `?token=` magic-link query param
+                // scoped to this exact id — the alert-email "manage this watch" link. The
+                // route itself must be RouteAccess.Anonymous so the coverage check doesn't
+                // force a session for the token path; resolveWatchActor is the real gate.
                 get {
-                    val user = call.requireUser() ?: return@get
                     val id =
                         call.longPath("id")
                             ?: return@get call.respondError("invalid_id", HttpStatusCode.BadRequest)
+                    val actor = call.resolveWatchActor(id, managementTokens) ?: return@get
                     val watch =
-                        watches.get(user, id)
-                            ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
+                        when (actor) {
+                            is WatchActor.User -> watches.get(actor.principal, id)
+                            WatchActor.Token -> watches.getByToken(id)
+                        } ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
                     call.respondJson(watch)
                 }.describeApi("watches", "Get one watch")
-                    .access(RouteAccess.User)
+                    .access(RouteAccess.Anonymous)
 
                 post("/modify") {
-                    val user = call.requireUser() ?: return@post
                     val id =
                         call.longPath("id")
                             ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
+                    val actor = call.resolveWatchActor(id, managementTokens) ?: return@post
                     val req =
                         when (val body = call.receiveJsonBody<AvailabilityWatchUpdateRequest>()) {
                             is RouteBodyResult.Invalid ->
                                 return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, body.detail)
                             is RouteBodyResult.Valid -> body.value
                         }
-                    when (val result = watches.update(user, id, req)) {
+                    val result =
+                        when (actor) {
+                            is WatchActor.User -> watches.update(actor.principal, id, req)
+                            WatchActor.Token -> watches.updateByToken(id, req)
+                        }
+                    when (result) {
                         is AvailabilityWatchControllerResult.Invalid ->
                             call.respondError(result.error, HttpStatusCode.BadRequest, result.detail)
                         is AvailabilityWatchControllerResult.NotFound ->
@@ -128,20 +173,25 @@ internal fun Route.availabilityWatchRoutes(watches: AvailabilityWatchController)
                             call.respondJson(result.value)
                     }
                 }.describeApi("watches", "Modify a watch")
-                    .access(RouteAccess.User)
+                    .access(RouteAccess.Anonymous)
 
                 post("/delete") {
-                    val user = call.requireUser() ?: return@post
                     val id =
                         call.longPath("id")
                             ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
-                    if (watches.delete(user, id)) {
+                    val actor = call.resolveWatchActor(id, managementTokens) ?: return@post
+                    val deleted =
+                        when (actor) {
+                            is WatchActor.User -> watches.delete(actor.principal, id)
+                            WatchActor.Token -> watches.deleteByToken(id)
+                        }
+                    if (deleted) {
                         call.respond(HttpStatusCode.NoContent)
                     } else {
                         call.respondError("not_found", HttpStatusCode.NotFound)
                     }
                 }.describeApi("watches", "Delete a watch")
-                    .access(RouteAccess.User)
+                    .access(RouteAccess.Anonymous)
             }
         }
     }
