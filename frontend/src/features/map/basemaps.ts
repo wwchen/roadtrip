@@ -1,5 +1,6 @@
 // The basemap registry.
 import type { StyleSpecification } from 'maplibre-gl';
+import { cartoBasemapsApiKey } from '@/api/client-config-api';
 import type { ThemeMode } from '@/lib/theme';
 
 /** Where the chosen basemap is remembered. */
@@ -10,7 +11,14 @@ export const DEFAULT_BASEMAP = 'openfreemap-liberty';
 /** Retina raster tiles, so the Carto basemaps are not soft on a 2x display. */
 const CARTO_TILE_SUFFIX = '{z}/{x}/{y}@2x.png';
 const CARTO_SUBDOMAINS = ['a', 'b', 'c', 'd'] as const;
+const CARTO_API_KEY_QUERY_PARAM = 'key';
 const RASTER_TILE_SIZE = 256;
+
+const CARTO_VARIANTS = {
+  'carto-voyager': 'voyager',
+  'carto-positron': 'light_all',
+  'carto-dark': 'dark_all',
+} as const;
 
 const OSM_ATTRIBUTION = '&copy; OpenStreetMap contributors';
 const CARTO_ATTRIBUTION =
@@ -28,11 +36,18 @@ function rasterStyle(tiles: string[], attribution: string): StyleSpecification {
   };
 }
 
-const cartoStyle = (variant: string): StyleSpecification =>
+const cartoTileUrl = (
+  subdomain: (typeof CARTO_SUBDOMAINS)[number],
+  variant: string,
+  apiKey: string | null,
+): string => {
+  const base = `https://${subdomain}.basemaps.cartocdn.com/rastertiles/${variant}/${CARTO_TILE_SUFFIX}`;
+  return apiKey ? `${base}?${CARTO_API_KEY_QUERY_PARAM}=${encodeURIComponent(apiKey)}` : base;
+};
+
+const cartoStyle = (variant: string, apiKey: string | null = null): StyleSpecification =>
   rasterStyle(
-    CARTO_SUBDOMAINS.map(
-      (s) => `https://${s}.basemaps.cartocdn.com/rastertiles/${variant}/${CARTO_TILE_SUFFIX}`,
-    ),
+    CARTO_SUBDOMAINS.map((s) => cartoTileUrl(s, variant, apiKey)),
     CARTO_ATTRIBUTION,
   );
 
@@ -45,7 +60,7 @@ export interface Basemap {
   swatch: string;
 }
 
-/** Every basemap on offer. Free and key-less, named by visual category so the
+/** Every basemap on offer, named by visual category so the
  *  picker reads as "what will this look like" rather than "whose tiles are these". */
 export const BASEMAPS: Readonly<Record<string, Basemap>> = {
   'openfreemap-liberty': {
@@ -137,7 +152,10 @@ export function rememberBasemapKey(key: string): void {
 
 /** The style for a key, falling back to the default rather than returning undefined. */
 export function basemapStyle(key: string): string | StyleSpecification {
-  return (BASEMAPS[key] ?? BASEMAPS[DEFAULT_BASEMAP]).style;
+  const resolvedKey = key in BASEMAPS ? key : DEFAULT_BASEMAP;
+  const cartoVariant = CARTO_VARIANTS[resolvedKey as keyof typeof CARTO_VARIANTS];
+  if (cartoVariant) return cartoStyle(cartoVariant, cartoBasemapsApiKey());
+  return BASEMAPS[resolvedKey].style;
 }
 
 /**

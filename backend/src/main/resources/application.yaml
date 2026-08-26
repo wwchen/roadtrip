@@ -70,6 +70,8 @@ roadtrip:
   campflare:
     api-key: "${CAMPFLARE_API_KEY:}"
     api-base-url: "https://api.campflare.com/v2"
+  carto-basemaps:
+    api-key: "${CARTO_BASEMAPS_API_KEY:}"
   slack:
     bot-token: "${SLACK_BOT_TOKEN:}"
     default-channel: "${SLACK_ALERT_CHANNEL:}"

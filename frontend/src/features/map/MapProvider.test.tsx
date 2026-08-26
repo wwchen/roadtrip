@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { useThemeStore } from '@/stores/themeStore';
-import { BASEMAPS, BASEMAP_STORAGE_KEY, DARK_BASEMAP, DEFAULT_BASEMAP } from './basemaps';
+import { BASEMAPS, BASEMAP_STORAGE_KEY, DARK_BASEMAP, DEFAULT_BASEMAP, basemapStyle } from './basemaps';
 
 interface StyleLayer {
   id: string;
@@ -130,7 +130,9 @@ beforeEach(() => {
 // The theme store is a module singleton, never reset between test files: a test
 // that moves the mode off 'light' has to put it back.
 afterEach(() => {
-  useThemeStore.getState().setChoice('light');
+  act(() => {
+    useThemeStore.getState().setChoice('light');
+  });
 });
 
 describe('setup', () => {
@@ -194,7 +196,7 @@ describe('changing basemap', () => {
     });
 
     expect(instance.setStyleCalls).toHaveLength(1);
-    expect(instance.setStyleCalls[0].style).toBe(BASEMAPS['carto-dark'].style);
+    expect(instance.setStyleCalls[0].style).toEqual(basemapStyle('carto-dark'));
     // diff:false is load-bearing: the default merge keeps our sources but never
     // fires style.load, so the reinstall would never run.
     expect(instance.setStyleCalls[0].options).toEqual({ diff: false });
@@ -246,7 +248,7 @@ describe('following the theme', () => {
     useThemeStore.getState().setChoice('dark');
     renderMap();
     expect(ctx.basemapKey).toBe(DARK_BASEMAP);
-    expect(instance.options.style).toBe(BASEMAPS[DARK_BASEMAP].style);
+    expect(instance.options.style).toEqual(basemapStyle(DARK_BASEMAP));
   });
 
   test('reports auto until a basemap is explicitly picked', () => {
@@ -264,7 +266,7 @@ describe('following the theme', () => {
     });
 
     expect(instance.setStyleCalls).toHaveLength(1);
-    expect(instance.setStyleCalls[0].style).toBe(BASEMAPS[DARK_BASEMAP].style);
+    expect(instance.setStyleCalls[0].style).toEqual(basemapStyle(DARK_BASEMAP));
     expect(ctx.basemapKey).toBe(DARK_BASEMAP);
   });
 
@@ -406,7 +408,7 @@ describe('satellite underlay', () => {
     // No hand-fired style.load: the inline style already announced itself inside
     // setStyle. If the reinstall needs a nudge from the test, it is broken.
     expect(instance.setStyleCalls).toHaveLength(1);
-    expect(instance.setStyleCalls[0].style).toBe(BASEMAPS[DARK_BASEMAP].style);
+    expect(instance.setStyleCalls[0].style).toEqual(basemapStyle(DARK_BASEMAP));
     expect(instance.getLayer(SATELLITE_LAYER_ID)).toBeDefined();
   });
 });

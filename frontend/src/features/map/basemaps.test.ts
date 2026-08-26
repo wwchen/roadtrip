@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import type { RasterSourceSpecification, StyleSpecification } from 'maplibre-gl';
+import { applyClientConfig, resetClientConfig } from '@/api/client-config-api';
 import {
   BASEMAPS,
   BASEMAP_STORAGE_KEY,
@@ -20,6 +21,7 @@ function rasterSource(key: string): RasterSourceSpecification {
 
 afterEach(() => {
   window.localStorage.clear();
+  resetClientConfig();
   vi.restoreAllMocks();
 });
 
@@ -50,6 +52,20 @@ describe('the registry', () => {
   test('the Carto tiles request @2x', () => {
     for (const url of rasterSource('carto-voyager').tiles ?? []) {
       expect(url).toContain('@2x');
+    }
+  });
+
+  test('Carto tile URLs include the configured basemaps key', () => {
+    applyClientConfig({ carto_basemaps_api_key: 'carto key/1' });
+
+    for (const url of rasterSourceFromStyle(basemapStyle('carto-voyager')).tiles ?? []) {
+      expect(url).toContain('?key=carto%20key%2F1');
+    }
+  });
+
+  test('Carto tile URLs stay keyless when no basemaps key is configured', () => {
+    for (const url of rasterSourceFromStyle(basemapStyle('carto-dark')).tiles ?? []) {
+      expect(url).not.toContain('?key=');
     }
   });
 });
@@ -137,3 +153,8 @@ describe('basemapStyle', () => {
     expect(basemapStyle('nope')).toBe(BASEMAPS[DEFAULT_BASEMAP].style);
   });
 });
+
+function rasterSourceFromStyle(style: string | StyleSpecification): RasterSourceSpecification {
+  if (typeof style === 'string') throw new Error('expected inline raster style');
+  return style.sources.basemap as RasterSourceSpecification;
+}
