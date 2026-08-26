@@ -143,6 +143,9 @@ export const StatePark: Story = {
         State_Nm: 'Oregon',
         Mang_Name: 'Oregon Parks and Recreation Department',
         GIS_Acres: 9200,
+        description:
+          'Ten waterfalls on one 7.2-mile loop, four of them with a trail behind the ' +
+          'falls. The day-use area fills by mid-morning on summer weekends.',
       }}
     />
   ),

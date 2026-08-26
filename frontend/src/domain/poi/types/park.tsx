@@ -6,8 +6,11 @@
 // the same page the campground renders, which is the point of a fixed block order:
 // a park is not a different page, it is this page with different blocks present.
 import { Button } from '@ui';
+import { descriptionHtml } from '@/lib/upstream-html';
+import type { PoiFeature } from '@/lib/poi';
 import {
   DirectionsButton,
+  ProviderHtml,
   UpstreamTable,
   coordinatesOf,
   eyebrowFor,
@@ -17,15 +20,42 @@ import {
 } from '../fields';
 import {
   PoiActions,
+  PoiHero,
   PoiIdentity,
+  PoiProse,
   PoiProvenance,
   PoiSpecs,
 } from '../PoiBlocks';
 import { PoiPageShell, type PoiBlockSlots } from '../PoiPageShell';
+import type { PoiSpec } from '../model';
 import { presentSpecs, type PoiTypeProps } from './common';
 
 /** The heading the park's one spec block carries. */
 const ABOUT_HEADING = 'About the park';
+
+/** The prose block's heading — the same words the campground page uses. */
+const GOOD_TO_KNOW_HEADING = 'Good to know';
+
+const AREA_LABEL = 'Area';
+
+/**
+ * The row that says whether "inside the park" is answerable at all.
+ *
+ * The design wants a park page to tell what is *inside* the boundary from what is
+ * merely *near* it, and that distinction is only a fact when the record carries a
+ * boundary: PAD-US ships polygons and `/api/pois/{id}` hands the whole geometry
+ * back rather than a centroid, so a Polygon/MultiPolygon record can be asked
+ * "is this point in it" and a Point record can only ever answer "close by".
+ *
+ * So this states the relationship the page is entitled to make, and nothing more.
+ * The counts that belong beside it — how many campgrounds are inside, which
+ * neighbours are outside — need a query no endpoint answers yet; when one does,
+ * this is the row it lands next to. A record with no boundary prints nothing,
+ * because "not mapped" and "we did not look" are the same sentence to a reader.
+ */
+const BOUNDARY_LABEL = 'Boundary';
+const BOUNDARY_MAPPED = 'Mapped';
+const BOUNDARY_GEOMETRIES = new Set(['Polygon', 'MultiPolygon']);
 
 /**
  * The group page each kind of park is listed on, which is the step above it.
@@ -49,6 +79,11 @@ export function ParkPoiPage({ feature, variant, onClose }: PoiTypeProps) {
   const [lng, lat] = coordinatesOf(feature);
   const distance = useDistanceTo(lng, lat);
 
+  // Both promoted by the ETL onto every category's detail, so this is the same
+  // read the campground page makes — no park-specific field invented for it.
+  const photo = text(p.photo_url);
+  const about = descriptionHtml(p.description);
+
   const [url, host] = externalParkLink(national, name, stateName);
 
   // The step above this page, and the only one printed: a chain would restate the
@@ -64,11 +99,13 @@ export function ParkPoiPage({ feature, variant, onClose }: PoiTypeProps) {
 
   const specs = presentSpecs([
     Number.isFinite(acres) && acres > 0
-      ? { label: 'Area', value: `${Math.round(acres).toLocaleString()} acres` }
+      ? { label: AREA_LABEL, value: `${Math.round(acres).toLocaleString()} acres` }
       : null,
+    boundarySpec(feature),
   ]);
 
   const blocks: PoiBlockSlots = {
+    ...(photo ? { hero: <PoiHero url={photo} alt={name} /> } : null),
     identity: (
       <PoiIdentity
         // Almost every park's name ends in its own type, so this is usually empty
@@ -95,6 +132,15 @@ export function ParkPoiPage({ feature, variant, onClose }: PoiTypeProps) {
         </Button>
       </PoiActions>
     ),
+    ...(about
+      ? {
+          goodToKnow: (
+            <PoiProse heading={GOOD_TO_KNOW_HEADING}>
+              <ProviderHtml html={about} />
+            </PoiProse>
+          ),
+        }
+      : null),
     ...(specs.length > 0 ? { specs: <PoiSpecs list={{ heading: ABOUT_HEADING, rows: specs }} /> } : null),
     ...(p.upstream
       ? {
@@ -116,6 +162,19 @@ export function ParkPoiPage({ feature, variant, onClose }: PoiTypeProps) {
       blocks={blocks}
     />
   );
+}
+
+/**
+ * "Boundary · Mapped", when the record actually carries one.
+ *
+ * See `BOUNDARY_LABEL` above for why this is the honest half of inside-vs-outside:
+ * a polygon can be asked whether a point is inside it, a centroid cannot, and a
+ * record that arrived as a point says nothing rather than implying an answer.
+ */
+function boundarySpec(feature: PoiFeature): PoiSpec | null {
+  const kind = (feature.geometry as { type?: unknown } | undefined)?.type;
+  if (typeof kind !== 'string' || !BOUNDARY_GEOMETRIES.has(kind)) return null;
+  return { label: BOUNDARY_LABEL, value: BOUNDARY_MAPPED };
 }
 
 /**
