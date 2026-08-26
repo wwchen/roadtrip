@@ -202,6 +202,11 @@ export interface PoiNearbyProps {
  *
  * A grid would set the count; a scroller lets "10 closest" be however many there
  * are, and keeps the block one row tall on a phone.
+ *
+ * The scroller is focusable and labelled because it is the one block whose content
+ * can sit off-screen: a mouse wheel and a finger reach the overflow, and without a
+ * tab stop a keyboard never does. `items` is assumed non-empty — the type component
+ * decides whether there is anything to show, so this never renders "0 closest".
  */
 export function PoiNearby({ heading, items }: PoiNearbyProps) {
   return (
@@ -210,7 +215,7 @@ export function PoiNearby({ heading, items }: PoiNearbyProps) {
         <PoiBlockHeading>{heading}</PoiBlockHeading>
         <span className="rt-poi-block-meta">{items.length} closest · scroll</span>
       </div>
-      <ul className="rt-poi-carousel">
+      <ul className="rt-poi-carousel" tabIndex={0} aria-label={heading}>
         {items.map((item) => (
           <li className="rt-poi-card" key={item.id}>
             {item.href ? (

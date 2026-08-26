@@ -39,6 +39,7 @@ import {
   PoiHero,
   PoiIdentity,
   PoiLinks,
+  PoiNearby,
   PoiProse,
   PoiProvenance,
   PoiSpecs,
@@ -49,7 +50,10 @@ import { PoiPageShell, type PoiBlockSlots } from '../PoiPageShell';
 import { presentSpecs, specsFrom, type PoiTypeProps } from './common';
 import { CarrierSignals } from './CarrierSignals';
 
-export function CampgroundPoiPage({ feature, variant, onClose, availability }: PoiTypeProps) {
+/** What the neighbours of a campground are: other places to sleep, not other pins. */
+const NEARBY_HEADING = 'Campgrounds nearby';
+
+export function CampgroundPoiPage({ feature, variant, onClose, availability, nearby }: PoiTypeProps) {
   const p = feature.properties;
   const [lng, lat] = coordinatesOf(feature);
   const distance = useDistanceTo(lng, lat);
@@ -181,6 +185,13 @@ export function CampgroundPoiPage({ feature, variant, onClose, availability }: P
     ...(stay.length > 0 ? { specs: <PoiSpecs list={{ heading: STAY_DETAILS_GROUP, rows: stay }} /> } : null),
     ...(contact ? { contact: <PoiContact rows={contact} /> } : null),
     ...(links.length > 0 ? { links: <PoiLinks links={links} /> } : null),
+    // Only when a surface actually supplied neighbours. An empty list is the same
+    // answer as no list — a heading over "0 closest" is a promise the page cannot
+    // keep — and today nothing supplies either. See `nearby` in `types/common.tsx`
+    // for what the missing proximity source would have to be.
+    ...(nearby && nearby.length > 0
+      ? { nearby: <PoiNearby heading={NEARBY_HEADING} items={nearby} /> }
+      : null),
     ...(freshness ? { verified: <PoiVerifiedStamp verified={freshness} /> } : null),
     ...(source || p.upstream
       ? {
