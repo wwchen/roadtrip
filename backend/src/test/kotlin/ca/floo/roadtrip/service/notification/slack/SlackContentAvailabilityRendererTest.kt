@@ -122,6 +122,20 @@ class SlackContentAvailabilityRendererTest {
     }
 
     @Test
+    fun `modify button deep-links the watches page editor`() {
+        // Pins the exact URL: it is a published contract the watches page's
+        // useUrlAction parses, now built by watchModifyUrl rather than inline.
+        val rendered = SlackContentAvailabilityRenderer.openings(watchId, start, end, listOf(opening()), appRoot)
+        val modify =
+            actionsBlock(blocks(rendered))
+                .elements!!
+                .jsonArray
+                .map { it.jsonObject }
+                .single { it["action_id"]?.jsonPrimitive?.content == SlackWatchCard.ACTION_OPEN_WATCHES }
+        assertEquals("https://app.test/watches?action=modify&id=9", modify["url"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun `Availability grid button is dropped when the web app is unconfigured`() {
         val rendered = SlackContentAvailabilityRenderer.openings(watchId, start, end, listOf(opening()), appRootUrl = null)
         val ids =

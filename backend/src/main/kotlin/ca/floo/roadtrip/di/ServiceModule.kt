@@ -24,6 +24,7 @@ import ca.floo.roadtrip.repo.TeslaSuperchargerRepo
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.service.auth.ClaimsDialectRegistry
+import ca.floo.roadtrip.service.auth.MagicLinkTokenService
 import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
@@ -92,10 +93,8 @@ val serviceModule =
             // a global bot token. SlackClient(null) is a valid per-user-only client.
             SlackNotificationService(config.slack, SlackClient(config.slack))
         }
-        single {
-            val config: AppConfig = get()
-            EmailNotificationService(config.email)
-        }
+        single { MagicLinkTokenService(watchRepo = get<AvailabilityWatchRepo>()) }
+        single { EmailNotificationService(get<AppConfig>().email) }
         single {
             NotificationFanout(
                 listOf(get<SlackNotificationService>(), get<EmailNotificationService>()),
@@ -211,6 +210,8 @@ val serviceModule =
                 userSettingsRepo = get<UserSettingsRepo>(),
                 userRepo = get<UserRepo>(),
                 cipher = cipher,
+                magicLinkTokenService = get<MagicLinkTokenService>(),
+                appRootUrl = config.webApp?.rootUrl,
             )
         }
         single(named("triggerActionHandlers")) {

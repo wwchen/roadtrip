@@ -19,6 +19,8 @@ import {
   ACTION_MODIFY,
   useUrlAction,
 } from '@/features/watches/useUrlAction';
+import { ManageWatchCard } from '@/features/watches/ManageWatchCard';
+import { readMagicLink, type MagicLink } from '@/features/watches/magicLink';
 import '@/features/watches/watches.css';
 
 type Notice = { status: 'success' | 'error'; message: string };
@@ -46,6 +48,36 @@ function formKey(editor: Editor, seq: number): string {
 }
 
 export function WatchesPage() {
+  // Read once, at module-to-render time rather than in an effect: the whole page
+  // branches on it, and a link visit must not first flash the signed-out prompt.
+  const [magicLink] = useState(() => readMagicLink(window.location.search));
+  return magicLink ? <ManageWatchPage link={magicLink} /> : <WatchesListPage />;
+}
+
+/**
+ * The magic-link surface. Its own page rather than a mode of the list: the link
+ * is about one watch, and a visitor arriving on one may have no session at all,
+ * so the list, the create form, and the deep-link actions would 401. A signed-in
+ * owner lands here too, so nothing here may assume either way.
+ */
+function ManageWatchPage({ link }: { link: MagicLink }) {
+  return (
+    <main className="shell">
+      <header className="top">
+        <div>
+          <h1>Your alert</h1>
+          <div className="sub">Pause or stop this alert.</div>
+        </div>
+        <nav className="nav">
+          <Link href="/">Map</Link>
+        </nav>
+      </header>
+      <ManageWatchCard link={link} />
+    </main>
+  );
+}
+
+function WatchesListPage() {
   const { watches, isPending, isSignedOut, error: listError, refetch } = useWatches();
   const poiNames = usePoiNames(watches);
 

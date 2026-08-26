@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.route
 
+import ca.floo.roadtrip.model.api.MAGIC_LINK_TOKEN_PARAM
 import ca.floo.roadtrip.model.domain.Campground
 import ca.floo.roadtrip.model.domain.auth.Principal
 import ca.floo.roadtrip.model.domain.auth.UserId
@@ -17,6 +18,8 @@ import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.route.auth.SESSION_COOKIE
 import ca.floo.roadtrip.route.auth.roadtripAuthorization
+import ca.floo.roadtrip.service.auth.MagicLinkTokenService
+import ca.floo.roadtrip.service.auth.WatchAccessResolver
 import ca.floo.roadtrip.service.availability.AvailabilityBookingTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
@@ -56,6 +59,7 @@ import org.jooq.DSLContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import ca.floo.roadtrip.route.api.availability.availabilityWatchRoutes as installAvailabilityWatchRoutes
 
@@ -249,8 +253,10 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         watchCapabilities: WatchCapabilityService? = null,
     ): AvailabilityWatchController {
         val campsitesRepo = CampsiteRepo(ctx)
+        val watchRepo = AvailabilityWatchRepo(ctx)
+        val userRepo = UserRepo(ctx)
         return AvailabilityWatchController(
-            watchRepo = AvailabilityWatchRepo(ctx),
+            watchRepo = watchRepo,
             watchService = watchService,
             watchMapper =
                 AvailabilityWatchApiMapper(
@@ -258,9 +264,12 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     scopeResolver = WatchScopeResolver(campsitesRepo),
                     watchCapabilityService = watchCapabilities,
                 ),
-            userRepo = UserRepo(ctx),
+            accessResolver = WatchAccessResolver(watchRepo = watchRepo, userRepo = userRepo),
         )
     }
+
+    /** The real service over the test DB, so these exercise real minting. */
+    private fun magicLinkTokens(ctx: DSLContext): MagicLinkTokenService = MagicLinkTokenService(watchRepo = AvailabilityWatchRepo(ctx))
 
     @Test
     fun `POST creates a poi-scoped watch with filters`() =
@@ -1129,6 +1138,384 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             val resp = client.get(WATCHES_PATH) { asUser(USER_TOKEN) }
             val watches = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watches"]!!.jsonArray
             assertEquals(1, watches.size)
+        }
+
+    // ---- magic links: what the link unlocks, and what it must not ----------
+
+    /** Creates a watch owned by [owner] and returns its id. */
+    private suspend fun io.ktor.client.HttpClient.createWatchFor(
+        owner: String,
+        poiId: Long,
+    ): Long {
+        val created =
+            post(WATCHES_PATH) {
+                asUser(owner)
+                contentType(ContentType.Application.Json)
+                setBody(createBody(poiId))
+            }
+        assertEquals(HttpStatusCode.Created, created.status)
+        return Json
+            .parseToJsonElement(created.bodyAsText())
+            .jsonObject["watch"]!!
+            .jsonObject["id"]!!
+            .jsonPrimitive.long
+    }
+
+    private fun magicLinkTokenFor(watchId: Long): String = magicLinkTokens(ctx).issue(watchId)!!
+
+    private fun withToken(
+        path: String,
+        token: String,
+    ): String = "$path?$MAGIC_LINK_TOKEN_PARAM=$token"
+
+    @Test
+    fun `GET with a manage token reads the watch without a session`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "link-get", name = "Link Get")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+
+            val resp = client.get(withToken(watchPath(id), magicLinkTokenFor(id)))
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val watch = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
+            assertEquals(id, watch["id"]!!.jsonPrimitive.long)
+        }
+
+    @Test
+    fun `GET without a session or token is 401, not 404`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "link-anon", name = "Link Anon")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+
+            assertEquals(HttpStatusCode.Unauthorized, client.get(watchPath(id)).status)
+        }
+
+    @Test
+    fun `a manage token pauses its own watch`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "link-pause", name = "Link Pause")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+
+            val resp =
+                client.post(withToken(modifyWatchPath(id), magicLinkTokenFor(id))) {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"status":"paused"}""")
+                }
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val watch = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
+            assertEquals("paused", watch["status"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `a manage token stops its own watch`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "link-stop", name = "Link Stop")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+
+            val resp = client.post(withToken(deleteWatchPath(id), magicLinkTokenFor(id)))
+
+            assertEquals(HttpStatusCode.NoContent, resp.status)
+            assertEquals(HttpStatusCode.Unauthorized, client.get(watchPath(id)).status)
+        }
+
+    @Test
+    fun `stopping a watch retires its link`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "link-retire", name = "Link Retire")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+            val token = magicLinkTokenFor(id)
+
+            assertEquals(HttpStatusCode.NoContent, client.post(withToken(deleteWatchPath(id), token)).status)
+
+            // The token lived on the row, so deleting the watch is the only
+            // thing that makes copies of that email inert.
+            assertEquals(HttpStatusCode.Unauthorized, client.get(withToken(watchPath(id), token)).status)
+        }
+
+    @Test
+    fun `a manage token is scoped to one watch`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "link-scope", name = "Link Scope")
+            val mine = client.createWatchFor(USER_TOKEN, poiId)
+            val theirs = client.createWatchFor(OTHER_TOKEN, poiId)
+
+            val resp = client.get(withToken(watchPath(theirs), magicLinkTokenFor(mine)))
+
+            // Same answer a forged token gets. Matching on (id, token) together
+            // means "valid, but not for this watch" is not a distinguishable
+            // state, so a link holder cannot probe which watches their token
+            // does not open.
+            assertEquals(HttpStatusCode.Unauthorized, resp.status)
+        }
+
+    @Test
+    fun `a manage token cannot list watches`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "link-list", name = "Link List")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+
+            // Session-only: the list route never reads the parameter.
+            val resp = client.get("$WATCHES_PATH?$MAGIC_LINK_TOKEN_PARAM=${magicLinkTokenFor(id)}")
+
+            assertEquals(HttpStatusCode.Unauthorized, resp.status)
+        }
+
+    @Test
+    fun `a manage token cannot create a watch`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "link-create", name = "Link Create")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+
+            val resp =
+                client.post("$WATCHES_PATH?$MAGIC_LINK_TOKEN_PARAM=${magicLinkTokenFor(id)}") {
+                    contentType(ContentType.Application.Json)
+                    setBody(createBody(poiId))
+                }
+
+            assertEquals(HttpStatusCode.Unauthorized, resp.status)
+        }
+
+    @Test
+    fun `a manage token cannot read where the alerts go`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "link-read-delivery", name = "Link Read Delivery")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+            client.post(modifyWatchPath(id)) {
+                asUser(USER_TOKEN)
+                contentType(ContentType.Application.Json)
+                setBody("""{"trigger_config":{"slack_notify":{"channel":"#owner-private"}}}""")
+            }
+            val token = magicLinkTokenFor(id)
+
+            // Blocking the write is only half of it: the owner's channel must not
+            // come back on the read either, or a forwarded link discloses it.
+            val viaLink = client.get(withToken(watchPath(id), token)).bodyAsText()
+            assertFalse(viaLink.contains("owner-private"), viaLink)
+
+            // The owner still sees their own config.
+            val viaSession = client.get(watchPath(id)) { asUser(USER_TOKEN) }.bodyAsText()
+            assertTrue(viaSession.contains("owner-private"), viaSession)
+
+            // And it is redacted on the write response a link gets back too.
+            val afterPause =
+                client
+                    .post(withToken(modifyWatchPath(id), token)) {
+                        contentType(ContentType.Application.Json)
+                        setBody("""{"status":"paused"}""")
+                    }.bodyAsText()
+            assertFalse(afterPause.contains("owner-private"), afterPause)
+        }
+
+    @Test
+    fun `a manage token cannot redirect where the alerts go`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "link-redirect", name = "Link Redirect")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+            val token = magicLinkTokenFor(id)
+
+            val channel =
+                client.post(withToken(modifyWatchPath(id), token)) {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"trigger_config":{"slack_notify":{"channel":"#attacker"}}}""")
+                }
+            assertEquals(HttpStatusCode.Forbidden, channel.status)
+
+            val kinds =
+                client.post(withToken(modifyWatchPath(id), token)) {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"trigger_kinds":["slack_notify"]}""")
+                }
+            assertEquals(HttpStatusCode.Forbidden, kinds.status)
+        }
+
+    @Test
+    fun `the owner may still change delivery on their own watch`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "owner-delivery", name = "Owner Delivery")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+
+            val resp =
+                client.post(modifyWatchPath(id)) {
+                    asUser(USER_TOKEN)
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"trigger_config":{"slack_notify":{"channel":"#mine"}}}""")
+                }
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+        }
+
+    @Test
+    fun `an unknown token is refused`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "link-forged", name = "Link Forged")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+
+            assertEquals(HttpStatusCode.Unauthorized, client.get(withToken(watchPath(id), "not-a-token")).status)
+        }
+
+    @Test
+    fun `the watch API never returns the link token`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "link-no-leak", name = "Link No Leak")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+            val token = magicLinkTokenFor(id)
+
+            // `baseSelect` pulls every column, so the only thing keeping the
+            // token out of a response is that `Watch` has no field for it — an
+            // addition to the model would hand it to the list route.
+            val detail = client.get(watchPath(id)) { asUser(USER_TOKEN) }.bodyAsText()
+            val list = client.get(WATCHES_PATH) { asUser(USER_TOKEN) }.bodyAsText()
+
+            assertFalse(detail.contains(token), detail)
+            assertFalse(list.contains(token), list)
+            assertFalse(detail.contains("magic_link_token"), detail)
+        }
+
+    @Test
+    fun `every message for a watch carries the same link`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "link-stable", name = "Link Stable")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+
+            // If minting were not idempotent, the second alert would invalidate
+            // the link in the first.
+            assertEquals(magicLinkTokenFor(id), magicLinkTokenFor(id))
+        }
+
+    @Test
+    fun `a link keeps working after it has been used`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "link-reuse", name = "Link Reuse")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+            val token = magicLinkTokenFor(id)
+
+            // Not single-use: pause today, resume from the same email tomorrow.
+            assertEquals(HttpStatusCode.OK, client.get(withToken(watchPath(id), token)).status)
+            assertEquals(
+                HttpStatusCode.OK,
+                client
+                    .post(withToken(modifyWatchPath(id), token)) {
+                        contentType(ContentType.Application.Json)
+                        setBody("""{"status":"paused"}""")
+                    }.status,
+            )
+            assertEquals(HttpStatusCode.OK, client.get(withToken(watchPath(id), token)).status)
+        }
+
+    @Test
+    fun `a session for the owner wins over a token for someone else's watch`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "link-both", name = "Link Both")
+            val mine = client.createWatchFor(USER_TOKEN, poiId)
+
+            // Session grant wins, so delivery changes are still allowed.
+            val resp =
+                client.post(withToken(modifyWatchPath(mine), magicLinkTokenFor(mine))) {
+                    asUser(USER_TOKEN)
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"trigger_config":{"slack_notify":{"channel":"#mine"}}}""")
+                }
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+        }
+
+    @Test
+    fun `a link works for a visitor signed in as somebody else`() =
+        testApplication {
+            application {
+                install(roadtripAuthorization) { resolvePrincipal = ::resolvePrincipalFor }
+                routeTestApplication { availabilityWatchRoutes(ctx, watchService()) }
+            }
+            seedUsers()
+            val poiId = seedPoi(sourceId = "link-forwarded", name = "Link Forwarded")
+            val id = client.createWatchFor(USER_TOKEN, poiId)
+
+            // Possession is the credential; another account must not shadow it.
+            val resp =
+                client.get(withToken(watchPath(id), magicLinkTokenFor(id))) { asUser(OTHER_TOKEN) }
+
+            assertEquals(HttpStatusCode.OK, resp.status)
         }
 
     @Test

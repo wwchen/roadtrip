@@ -11,6 +11,11 @@ import { HttpError, jsonGetOk, type RequestOptions } from './http';
 const BASE = '/api/watches';
 const MODIFY_ACTION = 'modify';
 const DELETE_ACTION = 'delete';
+/** Pinned against WatchPageLinks.kt. The email builds the URL, this parses it. */
+export const MAGIC_LINK_TOKEN_PARAM = 't';
+export const MAGIC_LINK_WATCH_PARAM = 'watch';
+export const MAGIC_LINK_ACTION_PARAM = 'action';
+export const MAGIC_LINK_STOP_ACTION = 'stop';
 
 /** The three values WatchStatus.parse accepts. */
 export type WatchStatus = 'active' | 'paused' | 'done';
@@ -111,9 +116,16 @@ export interface ListWatchesParams extends RequestOptions {
   offset?: number;
 }
 
-function watchUrl(id: number | string, action?: string): string {
-  const base = `${BASE}/${encodeURIComponent(String(id))}`;
-  return action ? `${base}/${action}` : base;
+/** Single-watch calls, which may be authorized by a link rather than a session. */
+export interface WatchRequestOptions extends RequestOptions {
+  magicLinkToken?: string | null;
+}
+
+function watchUrl(id: number | string, action?: string, magicLinkToken?: string | null): string {
+  const path = `${BASE}/${encodeURIComponent(String(id))}`;
+  const base = action ? `${path}/${action}` : path;
+  if (!magicLinkToken) return base;
+  return `${base}?${MAGIC_LINK_TOKEN_PARAM}=${encodeURIComponent(magicLinkToken)}`;
 }
 
 export function listWatches({
@@ -136,9 +148,9 @@ export function listWatches({
 
 export function getWatch(
   id: number | string,
-  { signal }: RequestOptions = {},
+  { signal, magicLinkToken }: WatchRequestOptions = {},
 ): Promise<WatchResponse> {
-  return jsonGetOk<WatchResponse>(watchUrl(id), { signal });
+  return jsonGetOk<WatchResponse>(watchUrl(id, undefined, magicLinkToken), { signal });
 }
 
 /**
@@ -172,9 +184,9 @@ export async function createWatch(
 export async function updateWatch(
   id: number | string,
   body: UpdateWatchRequest,
-  { signal }: RequestOptions = {},
+  { signal, magicLinkToken }: WatchRequestOptions = {},
 ): Promise<WatchResponse> {
-  const url = watchUrl(id, MODIFY_ACTION);
+  const url = watchUrl(id, MODIFY_ACTION, magicLinkToken);
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -198,9 +210,9 @@ export async function updateWatch(
  */
 export async function deleteWatch(
   id: number | string,
-  { signal }: RequestOptions = {},
+  { signal, magicLinkToken }: WatchRequestOptions = {},
 ): Promise<void> {
-  const url = watchUrl(id, DELETE_ACTION);
+  const url = watchUrl(id, DELETE_ACTION, magicLinkToken);
   const r = await fetch(url, { method: 'POST', signal });
   if (!r.ok && r.status !== 404) {
     throw new HttpError(url, r.status);

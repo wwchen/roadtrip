@@ -96,6 +96,22 @@ URL: <https://roadtrip.floo.ca>
 - [ ] From the drawer or `/watches`, set a watch on an open date. It appears
       in the watches list with the right campground/date.
 
+### 6a. Alert email magic link
+
+Needs a real send, so it cannot be covered by the automated suites.
+
+- [ ] The alert email carries two links: "Manage watch" and "Stop watch".
+- [ ] Open "Manage watch" in a private window (no session). The page shows that
+      one watch with Pause and Stop — not the sign-in prompt, not the full list.
+- [ ] Press Pause, then Resume. Both take effect without signing in.
+- [ ] Press Stop once: it arms but does nothing. Press again: the watch stops,
+      and the card stays on screen under a "Watch stopped" banner.
+- [ ] On a fresh alert, open "Stop watch" instead. It stops on arrival and shows
+      the same card-plus-banner, with no button press.
+- [ ] Re-open either link afterwards. It reports the watch was stopped.
+- [ ] Set up a second alert and let it send twice. Both emails carry the same
+      link, and the older one still works.
+
 ## 7. Offline-tolerance rough check
 
 - [ ] Toggle Airplane Mode after the map fully loads. Pan a region you've

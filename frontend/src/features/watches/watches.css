@@ -112,3 +112,61 @@
   margin-left: 2px;
   vertical-align: -2px;
 }
+
+/* ---------------------------------------------------------------------------
+   The magic-link surface (ManageWatchCard).
+
+   One card, centred and narrow, because this page has exactly one subject and
+   is read on a phone more often than not. It borrows the form host's surface
+   tokens rather than introducing its own.
+   --------------------------------------------------------------------------- */
+
+.rt-manage-watch {
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: 20px;
+  border: 1px solid var(--rt-border);
+  border-radius: var(--rt-r-sm);
+  background: var(--rt-surface);
+}
+
+.rt-manage-watch-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rt-manage-watch-head h2 {
+  margin: 0;
+}
+
+.rt-manage-watch-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 16px 0;
+}
+
+.rt-manage-watch-facts dt {
+  color: var(--rt-muted);
+}
+
+.rt-manage-watch-facts dd {
+  margin: 0;
+}
+
+/* Wraps rather than scrolls: two buttons at touch size do not fit a narrow
+   phone in one row, and a cut-off Stop button is the one we least want hidden. */
+.rt-manage-watch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.rt-manage-watch-footnote {
+  margin: 16px 0 0;
+  color: var(--rt-muted);
+  font-size: 0.875rem;
+}

@@ -29,6 +29,7 @@ import ca.floo.roadtrip.repo.UserSettingsRepo
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
+import ca.floo.roadtrip.service.auth.MagicLinkTokenService
 import ca.floo.roadtrip.service.availability.AtcTriggerActionHandler
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
@@ -392,6 +393,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             userSettingsRepo = UserSettingsRepo(ctx),
             userRepo = UserRepo(ctx),
             cipher = testCipher,
+            magicLinkTokenService = MagicLinkTokenService(AvailabilityWatchRepo(ctx)),
+            appRootUrl = null,
         )
 
     /** Dispatcher with Slack disabled — a null-config service that no-ops and

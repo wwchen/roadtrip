@@ -6,6 +6,7 @@ import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.UserRepo
 import ca.floo.roadtrip.repo.UserSettingsRepo
+import ca.floo.roadtrip.service.auth.MagicLinkTokenService
 import ca.floo.roadtrip.service.notification.common.NotificationTarget
 import ca.floo.roadtrip.service.security.SecretCipher
 import kotlinx.serialization.json.JsonObject
@@ -37,6 +38,8 @@ class WatchNotificationTargetResolverTest : SharedDbTest() {
             userSettingsRepo = UserSettingsRepo(ctx),
             userRepo = UserRepo(ctx),
             cipher = cipher,
+            magicLinkTokenService = MagicLinkTokenService(AvailabilityWatchRepo(ctx)),
+            appRootUrl = null,
         )
 
     private fun watch(
