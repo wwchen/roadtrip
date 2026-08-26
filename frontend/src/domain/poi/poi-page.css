@@ -638,3 +638,181 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* --- the availability table ----------------------------------------------------
+   One row per place, one column per night. The comparison this block exists for
+   only fits at page width, so the table — and only the table — scrolls sideways
+   inside its own box. The page body never does.
+
+   Every cell prints a glyph as well as a colour. The colours here are the same
+   availability roles the site matrix uses, and none of them is load-bearing: cover
+   the colour and the table still reads. */
+
+.rt-poi-avail {
+  --rt-poi-avail-night-col: 44px;
+  --rt-poi-avail-place-col: 168px;
+}
+
+.rt-poi-avail-caption,
+.rt-poi-avail-empty {
+  margin: 4px 0 0;
+  color: var(--rt-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.rt-poi-avail-scroll {
+  margin-top: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.rt-poi-avail-table {
+  border-collapse: collapse;
+  font-size: 12px;
+  color: var(--rt-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.rt-poi-avail-table th,
+.rt-poi-avail-table td {
+  border-bottom: 1px solid var(--rt-border);
+  text-align: center;
+  vertical-align: middle;
+}
+
+/* The place column stays put while the nights scroll under it — a row whose name
+   has scrolled away is a row you cannot read. */
+.rt-poi-avail-place-head,
+.rt-poi-avail-place {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: var(--rt-poi-avail-place-col);
+  min-width: var(--rt-poi-avail-place-col);
+  padding: 8px 10px 8px 0;
+  background: var(--rt-surface);
+  text-align: left;
+  font-weight: 500;
+}
+
+.rt-poi-avail-place-head {
+  color: var(--rt-muted);
+  font-weight: 500;
+}
+
+.rt-poi-avail-place a {
+  color: var(--rt-link);
+  text-decoration: none;
+}
+
+.rt-poi-avail-place a:hover {
+  color: var(--rt-link-hover);
+  text-decoration: underline;
+}
+
+.rt-poi-avail-place-note {
+  display: block;
+  margin-top: 2px;
+  color: var(--rt-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.rt-poi-avail-night-head {
+  width: var(--rt-poi-avail-night-col);
+  min-width: var(--rt-poi-avail-night-col);
+  padding: 6px 4px;
+  color: var(--rt-muted);
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.rt-poi-avail-night-label {
+  display: block;
+}
+
+.rt-poi-avail-night-sublabel {
+  display: block;
+  font-size: 10px;
+  color: var(--rt-faint);
+}
+
+.rt-poi-avail-cell {
+  padding: 6px 4px;
+  border-left: 1px solid var(--rt-border);
+}
+
+.rt-poi-avail-glyph {
+  font-weight: 700;
+}
+
+.rt-poi-avail-count {
+  margin-left: 3px;
+  font-size: 11px;
+  color: var(--rt-muted);
+}
+
+/* --- the six states ------------------------------------------------------
+   Background is a tint, foreground is the role. `unknown` and `past` are
+   deliberately unpainted: an absent answer should not look like an answer. */
+
+.rt-poi-avail-cell--available {
+  background: var(--rt-avail-bg);
+  color: var(--rt-avail);
+}
+
+.rt-poi-avail-cell--first-come {
+  background: var(--rt-first-come-bg);
+  color: var(--rt-first-come);
+}
+
+.rt-poi-avail-cell--reserved {
+  color: var(--rt-reserved);
+}
+
+.rt-poi-avail-cell--closed {
+  color: var(--rt-faint);
+}
+
+.rt-poi-avail-cell--unknown,
+.rt-poi-avail-cell--past {
+  color: var(--rt-faint);
+}
+
+/* --- the key ------------------------------------------------------------- */
+
+.rt-poi-avail-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--rt-muted);
+  font-size: 11px;
+}
+
+.rt-poi-avail-key {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.rt-poi-avail-key--available .rt-poi-avail-glyph {
+  color: var(--rt-avail);
+}
+
+.rt-poi-avail-key--first-come .rt-poi-avail-glyph {
+  color: var(--rt-first-come);
+}
+
+.rt-poi-avail-key--reserved .rt-poi-avail-glyph {
+  color: var(--rt-reserved);
+}
+
+.rt-poi-avail-key--closed .rt-poi-avail-glyph,
+.rt-poi-avail-key--unknown .rt-poi-avail-glyph,
+.rt-poi-avail-key--past .rt-poi-avail-glyph {
+  color: var(--rt-faint);
+}
