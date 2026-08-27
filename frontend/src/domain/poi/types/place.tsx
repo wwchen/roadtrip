@@ -60,7 +60,12 @@ export interface PlaceTypeSpec {
   heading?: string;
   /** The fields that block shows, in order. Absent properties drop out. */
   fields?: readonly PlaceField[];
-  /** Label for the record's own `website`, when it has one. */
+  /**
+   * Label for the record's own `website`, when it has one.
+   *
+   * A fallback: the record's `brand` wins when it has one, so a chain names its
+   * own button ("Planet Fitness page") without the chain appearing here.
+   */
   websiteLabel?: string;
   /** A search URL to fall back to when it does not. */
   fallbackSearch?: (p: Props) => string;
@@ -99,6 +104,11 @@ export function PlacePoiPage({ feature, variant, onClose, spec }: PlacePoiPagePr
 
   const mapsUrl = googleMapsUrl(name, lng, lat);
   const website = text(p.website) || (spec.fallbackSearch ? spec.fallbackSearch(p) : '');
+  // The record's own chain names the button. Only when it carries none does the
+  // type's generic label apply, so no brand is spelled out in this file or in the
+  // registry row that configures it.
+  const brand = text(p.brand);
+  const websiteLabel = brand ? `${brand} page` : spec.websiteLabel;
   const photo = text(p.photo_url);
 
   const specs = presentSpecs(
@@ -130,9 +140,9 @@ export function PlacePoiPage({ feature, variant, onClose, spec }: PlacePoiPagePr
             Open in Google Maps
           </Button>
         ) : null}
-        {website && spec.websiteLabel ? (
+        {website && websiteLabel ? (
           <Button variant="secondary" href={website} target="_blank" rel="noreferrer">
-            {spec.websiteLabel}
+            {websiteLabel}
           </Button>
         ) : null}
         {spec.call ? <CallButtons phone={p.phone} /> : null}

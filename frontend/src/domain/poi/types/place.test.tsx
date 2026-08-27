@@ -19,6 +19,8 @@ const renderPoi = (properties: Record<string, unknown>) => {
 const gym = (extra: Record<string, unknown> = {}) => ({
   category: 'planet_fitness_location',
   name: 'Planet Fitness',
+  // Promoted from the OSM tag bag by `flattenHydratedPoi`; every real gym has it.
+  brand: 'Planet Fitness',
   street: '1205 SE 16th Ct',
   city: 'Ankeny',
   state: 'IA',
@@ -66,11 +68,24 @@ describe('the gym page', () => {
   });
 
   test('a record with no town falls back to the finder, not a search for nothing', () => {
-    renderPoi({ category: 'planet_fitness_location', name: 'Planet Fitness' });
+    renderPoi({ category: 'planet_fitness_location', name: 'Planet Fitness', brand: 'Planet Fitness' });
     expect(screen.getByRole('button', { name: 'Planet Fitness page' })).toHaveAttribute(
       'href',
       'https://www.planetfitness.com/gyms',
     );
+  });
+
+  test('names the button from the record, not from a constant in the page', () => {
+    // The chain arrives as data, so a differently-branded gym labels its own button
+    // without the page or its registry row knowing the chain exists.
+    renderPoi(gym({ brand: 'Anytime Fitness', website: 'https://www.anytimefitness.com/gyms/1234' }));
+    expect(screen.getByRole('button', { name: 'Anytime Fitness page' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Planet Fitness page' })).not.toBeInTheDocument();
+  });
+
+  test('a record with no brand still gets a usable label', () => {
+    renderPoi({ category: 'planet_fitness_location', website: 'https://example.test/gym' });
+    expect(screen.getByRole('button', { name: 'Gym page' })).toBeInTheDocument();
   });
 
   test("prefers the record's own page over the fallback search", () => {

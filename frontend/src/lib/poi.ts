@@ -162,6 +162,13 @@ export function flattenHydratedPoi(f: PoiFeature): FlatPoiFeature {
 function promotePlanetFitnessFields(flat: Props, raw: Props): void {
   const tags = objectValue(objectValue(raw.payload)?.tags) || {};
   flat.opening_hours = firstText(raw.opening_hours, tags.opening_hours);
+  // The row carries the location's own page in `info_url`, and OSM repeats it as a
+  // `website` tag. Promoting it is what stops the page synthesising a brand search
+  // URL while the record is holding the exact page — see `types/registry.ts`.
+  flat.website = firstText(flat.website, raw.info_url, tags.website);
+  // The chain, as data. The page prints it, so it must not be a constant in the
+  // page: a second chain is another ETL row, not another `const`.
+  flat.brand = firstText(flat.brand, tags.brand, tags.operator, raw.name);
   if (!objectValue(flat.upstream) && Object.keys(tags).length > 0) flat.upstream = tags;
 }
 
