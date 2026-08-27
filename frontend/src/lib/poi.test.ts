@@ -97,6 +97,7 @@ const FIXTURES: Readonly<Record<string, PoiFeature>> = {
         location_id: 'node-123',
         name: 'Planet Fitness',
         phone: '+1 515-555-0113',
+        info_url: 'https://www.planetfitness.com/gyms/ankeny-ia',
         payload: {
           type: 'node',
           id: 123,
@@ -268,10 +269,22 @@ describe('planet fitness promotion', () => {
     });
   });
 
+  test("promotes the row's own info_url, so the page stops inventing a search URL", () => {
+    // Verified against two live records: the row carries `info_url` and OSM repeats
+    // it as a `website` tag, while the page was synthesising a chain search instead.
+    expect(flatten('planetFitness').website).toBe('https://www.planetfitness.com/gyms/ankeny-ia');
+  });
+
+  test('promotes the chain as data, so no page has to name it', () => {
+    expect(flatten('planetFitness').brand).toBe('Planet Fitness');
+  });
+
   test('a record with no tags gets empty hours rather than undefined', () => {
     const p = flatten('planetFitnessBare');
     expect(p.opening_hours).toBe('');
     expect(p.upstream).toBeUndefined();
+    expect(p.website).toBe('');
+    expect(p.brand).toBe('');
   });
 });
 

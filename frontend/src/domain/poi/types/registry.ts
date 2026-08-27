@@ -17,33 +17,41 @@ import { PlacePoiPage, type PlaceTypeSpec } from './place';
  * omits the rest, so a category whose provider ships none of them still renders a
  * page — identity, one action, provenance — rather than an error.
  */
-/** Planet Fitness's own gym finder — where a record with no page of its own points. */
-const PLANET_FITNESS_GYM_FINDER = 'https://www.planetfitness.com/gyms';
+/**
+ * The chain finder a gym record with no page of its own falls back to.
+ *
+ * The one piece of chain knowledge still in this file, and it should not be here:
+ * it is a property of the chain, so it belongs beside the chain in the catalog and
+ * should arrive on the record like `brand` and `website` now do. Left as a constant
+ * only because giving it a home needs a backend field, which is a wider change than
+ * the gym page — see the follow-up issue. Everything else the page used to spell
+ * out is read off the record.
+ */
+const GYM_CHAIN_FINDER = 'https://www.planetfitness.com/gyms';
 
 const PLACE_TYPES: Record<string, PlaceTypeSpec> = {
-  // Only reached by the two Planet Fitness categories, and `fallbackSearch` sends
-  // people to planetfitness.com, so this row is the Planet Fitness row rather than
-  // a generic gym one. A second chain is another row here — not a component — but
-  // it would not share this one.
+  // A generic gym row. The chain is data on the record — `name`, `brand` and
+  // `website` all arrive from the ETL — so nothing here names one, and a second
+  // chain is a catalog row rather than a row here.
   //
   // No spec block: the record carries hours, phone, address and a website, and all
   // four are already shown above the rule (glance, call button, subtitle, action).
   // A gym is a shower on a long drive; "where, open when, route me, call it" is the
   // whole job, and the page is honest about having nothing more.
   gym: {
-    // Not 'Gym · Planet Fitness': the title is the record's `name`, which the ETL
-    // defaults to "Planet Fitness", so the brand was printed twice on every gym.
+    // Not 'Gym · <chain>': the title is the record's `name`, which the ETL already
+    // defaults to the chain, so the brand was printed twice on every gym.
     eyebrow: 'Gym',
-    fallbackName: 'Planet Fitness',
+    fallbackName: 'Gym',
     kind: 'PF',
-    websiteLabel: 'Planet Fitness page',
+    websiteLabel: 'Gym page',
     fallbackSearch: (p) => {
       const query = [p.city, p.state].filter((part) => typeof part === 'string' && part).join(' ');
       // A record with no city and no state used to produce a bare `?q=`, which is a
       // search for nothing. The finder itself is the better landing place.
       return query
-        ? `${PLANET_FITNESS_GYM_FINDER}?q=${encodeURIComponent(query)}`
-        : PLANET_FITNESS_GYM_FINDER;
+        ? `${GYM_CHAIN_FINDER}?q=${encodeURIComponent(query)}`
+        : GYM_CHAIN_FINDER;
     },
     call: true,
   },
