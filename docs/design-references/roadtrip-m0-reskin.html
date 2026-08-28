@@ -1291,12 +1291,23 @@ a.doc:hover{background:var(--surface-sunken);}
   </div>
 
   <div class="callout" style="margin-bottom:4px">
-    <p class="lead-in">Both design deliverables now exist in Claude Design.</p>
-    <ul class="bul">
-      <li><a class="jump" href="https://claude.ai/design/p/2be1318d-3b1f-4fbd-80fc-e8108cede2cb?file=Roadtrip+M0+Screens.dc.html"><b>Roadtrip M0 Screens</b></a> &mdash; mockups <b>1a</b> to <b>1f</b>, the six below.</li>
-      <li><a class="jump" href="https://claude.ai/design/p/2be1318d-3b1f-4fbd-80fc-e8108cede2cb?file=Roadtrip+M0+Token+Map.dc.html"><b>Roadtrip M0 Token Map</b></a> &mdash; the fifteen screens that get no mockup, expressed as substitutions an engineer can apply without a design decision.</li>
-      <li><b>Precedence:</b> where the two disagree, <b>the mockup wins</b> and the token map is wrong. Where this document disagrees with either, they win &mdash; it is the scoping wrapper, not the source.</li>
-    </ul>
+    <p><b>Most of this list has already landed.</b> Thirteen pull requests have merged against M0 as of 28 August, and
+    <b>no M0 pull request is currently open</b>. The token pass
+    (<a href="https://github.com/wwchen/roadtrip/pull/540" target="_blank" rel="noopener">#540</a>),
+    the Zion theme swap (<a href="https://github.com/wwchen/roadtrip/pull/601" target="_blank" rel="noopener">#601</a>),
+    the light/dark toggle (<a href="https://github.com/wwchen/roadtrip/pull/627" target="_blank" rel="noopener">#627</a>),
+    icons and radii (<a href="https://github.com/wwchen/roadtrip/pull/643" target="_blank" rel="noopener">#643</a>,
+    <a href="https://github.com/wwchen/roadtrip/pull/644" target="_blank" rel="noopener">#644</a>),
+    the sign-in pill (<a href="https://github.com/wwchen/roadtrip/pull/647" target="_blank" rel="noopener">#647</a>) and its layout fix
+    (<a href="https://github.com/wwchen/roadtrip/pull/642" target="_blank" rel="noopener">#642</a>),
+    the settings side rail (<a href="https://github.com/wwchen/roadtrip/pull/637" target="_blank" rel="noopener">#637</a>),
+    the layers panel (<a href="https://github.com/wwchen/roadtrip/pull/648" target="_blank" rel="noopener">#648</a>),
+    the error and empty family (<a href="https://github.com/wwchen/roadtrip/pull/649" target="_blank" rel="noopener">#649</a>),
+    every POI page (<a href="https://github.com/wwchen/roadtrip/pull/650" target="_blank" rel="noopener">#650</a>),
+    the LDS bump (<a href="https://github.com/wwchen/roadtrip/pull/664" target="_blank" rel="noopener">#664</a>) and the drawer error card
+    (<a href="https://github.com/wwchen/roadtrip/pull/673" target="_blank" rel="noopener">#673</a>) are all merged.
+    <b>What is left is design, not build:</b> the six drawings, the basemap retune, the phone-sheet safe area, and the two-theme sweep.
+    See the <a class="jump" href="#prs">PR table</a> for dates.</p>
   </div>
 
   <div class="grp" id="design-m0--draw-these-six"><h3>Draw these six</h3><span>They establish every pattern the others reuse</span></div>
@@ -2825,7 +2836,7 @@ a.doc:hover{background:var(--surface-sunken);}
           <td>Build</td>
           <td><span class="dri dri--lew"><i>L</i>Lew</span></td>
           <td>After the six</td>
-          <td>Search, results, permission denied &middot; sign-in pill shipped <a class="chip chip--pr-merged" href="https://github.com/wwchen/roadtrip/pull/647" target="_blank" rel="noopener">Merged &middot; #647</a> &middot; layers panel <a class="chip chip--pr-open" href="https://github.com/wwchen/roadtrip/pull/648" target="_blank" rel="noopener">In review &middot; #648</a></td>
+          <td>Search, results, permission denied &middot; sign-in pill shipped <a class="chip chip--pr-merged" href="https://github.com/wwchen/roadtrip/pull/647" target="_blank" rel="noopener">Merged &middot; #647</a> &middot; layers panel <a class="chip chip--pr-merged" href="https://github.com/wwchen/roadtrip/pull/648" target="_blank" rel="noopener">Merged &middot; #648</a></td>
         </tr>
         <tr data-id="m0t8" data-order="8" data-task="Apply tokens to the watches list and editor" data-type="1" data-owner="Lew" data-ms="2">
           <td class="c"><input type="checkbox" aria-label="Done: Apply tokens to the watches list and editor"></td>
@@ -2841,7 +2852,7 @@ a.doc:hover{background:var(--surface-sunken);}
           <td>Build</td>
           <td><span class="dri dri--lew"><i>L</i>Lew</span></td>
           <td>After the six</td>
-          <td><a class="chip chip--pr-open" href="https://github.com/wwchen/roadtrip/pull/637" target="_blank" rel="noopener">In review &middot; #637</a></td>
+          <td><a class="chip chip--pr-merged" href="https://github.com/wwchen/roadtrip/pull/637" target="_blank" rel="noopener">Merged &middot; #637</a></td>
         </tr>
         <tr data-id="m0t10" data-order="10" data-task="Apply tokens to the availability dashboard" data-type="1" data-owner="Lew" data-ms="2">
           <td class="c"><input type="checkbox" aria-label="Done: Apply tokens to the availability dashboard"></td>
@@ -2857,7 +2868,7 @@ a.doc:hover{background:var(--surface-sunken);}
           <td>Build</td>
           <td><span class="dri dri--lew"><i>L</i>Lew</span></td>
           <td>After the six</td>
-          <td><a class="chip chip--pr-open" href="https://github.com/wwchen/roadtrip/pull/649" target="_blank" rel="noopener">In review &middot; #649</a></td>
+          <td><a class="chip chip--pr-merged" href="https://github.com/wwchen/roadtrip/pull/649" target="_blank" rel="noopener">Merged &middot; #649</a></td>
         </tr>
         <tr data-id="m0t12" data-order="12" data-task="Fix the phone panel to a sheet with safe-area inset" data-type="1" data-owner="Lew" data-ms="2">
           <td class="c"><input type="checkbox" aria-label="Done: Fix the phone panel to a sheet with safe-area inset"></td>
@@ -2897,7 +2908,7 @@ a.doc:hover{background:var(--surface-sunken);}
     <p>
       Every pull request this document points to, in one place. Cross-referenced against
       <a class="jump" href="https://github.com/wwchen/roadtrip" target="_blank" rel="noopener">wwchen/roadtrip</a>
-      on 18 Aug 2026.
+      on 28 Aug 2026. Nothing here is open &mdash; every M0 pull request has merged.
     </p>
   </div>
   <div class="scroll">
@@ -2934,8 +2945,8 @@ a.doc:hover{background:var(--surface-sunken);}
         <tr>
           <td><a class="jump" href="https://github.com/wwchen/roadtrip/pull/637" target="_blank" rel="noopener">#637</a></td>
           <td><b>Settings modal &rarr; side rail</b> &mdash; with its own Appearance section</td>
-          <td><span class="chip chip--pr-open">In review</span></td>
-          <td>&mdash;</td>
+          <td><span class="chip chip--pr-merged">Merged</span></td>
+          <td>19 Aug 2026</td>
           <td><a class="jump" href="#tasks">Work list</a> &middot; &ldquo;Apply tokens to the settings modal&rdquo;</td>
         </tr>
         <tr>
@@ -2969,18 +2980,39 @@ a.doc:hover{background:var(--surface-sunken);}
         <tr>
           <td><a class="jump" href="https://github.com/wwchen/roadtrip/pull/648" target="_blank" rel="noopener">#648</a></td>
           <td><b>Regroup the layers panel by purpose</b> (M0-2)</td>
-          <td><span class="chip chip--pr-open">In review</span></td>
-          <td>&mdash;</td>
+          <td><span class="chip chip--pr-merged">Merged</span></td>
+          <td>20 Aug 2026</td>
           <td><a class="jump" href="#tasks">Work list</a> &middot; map shell row</td>
         </tr>
         <tr>
           <td><a class="jump" href="https://github.com/wwchen/roadtrip/pull/649" target="_blank" rel="noopener">#649</a></td>
           <td><b>Restyle the error &amp; empty state family</b> (M0-6)</td>
-          <td><span class="chip chip--pr-open">In review</span></td>
-          <td>&mdash;</td>
+          <td><span class="chip chip--pr-merged">Merged</span></td>
+          <td>20 Aug 2026</td>
           <td><a class="jump" href="#tasks">Work list</a> &middot; &ldquo;every error and empty state&rdquo;</td>
         </tr>
-      </tbody>
+              <tr>
+          <td><a class="jump" href="https://github.com/wwchen/roadtrip/pull/650" target="_blank" rel="noopener">#650</a></td>
+          <td><b>Give every POI type the same page</b> (M0 4a&ndash;4d)</td>
+          <td><span class="chip chip--pr-merged">Merged</span></td>
+          <td>20 Aug 2026</td>
+          <td><a class="jump" href="#tasks">Work list</a> &middot; the four POI drawer rows</td>
+        </tr>
+        <tr>
+          <td><a class="jump" href="https://github.com/wwchen/roadtrip/pull/664" target="_blank" rel="noopener">#664</a></td>
+          <td><b>Upgrade @lew-ds/lds to 1.1.1</b> &mdash; keeps the theme current</td>
+          <td><span class="chip chip--pr-merged">Merged</span></td>
+          <td>24 Aug 2026</td>
+          <td>Token map &middot; shipped-infra callout</td>
+        </tr>
+        <tr>
+          <td><a class="jump" href="https://github.com/wwchen/roadtrip/pull/673" target="_blank" rel="noopener">#673</a></td>
+          <td><b>Stop the drawer's error card covering a page that still works</b></td>
+          <td><span class="chip chip--pr-merged">Merged</span></td>
+          <td>26 Aug 2026</td>
+          <td>Error &amp; empty family (M0-6)</td>
+        </tr>
+</tbody>
     </table>
   </div>
   <p class="tnote">Eight landed, three are in review. The remaining rows in <a class="jump" href="#tasks">the work list</a> above are still unclaimed &mdash; no open PR was confidently matched to them.</p>
