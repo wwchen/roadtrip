@@ -59,20 +59,13 @@ describe('the gym page', () => {
     expect(screen.queryByText('This location')).not.toBeInTheDocument();
   });
 
-  test('falls back to a search for the town when the record has no page', () => {
+  test('offers no page button when the record carries no page', () => {
+    // The page used to synthesise a chain-wide search here, which meant this file
+    // had to know a chain URL. A button labelled "<chain> page" that lands on a
+    // store locator answers a different question than it promises, so a record
+    // with no page now simply has no button — as every other place type does.
     renderPoi(gym());
-    expect(screen.getByRole('button', { name: 'Planet Fitness page' })).toHaveAttribute(
-      'href',
-      'https://www.planetfitness.com/gyms?q=Ankeny%20IA',
-    );
-  });
-
-  test('a record with no town falls back to the finder, not a search for nothing', () => {
-    renderPoi({ category: 'planet_fitness_location', name: 'Planet Fitness', brand: 'Planet Fitness' });
-    expect(screen.getByRole('button', { name: 'Planet Fitness page' })).toHaveAttribute(
-      'href',
-      'https://www.planetfitness.com/gyms',
-    );
+    expect(screen.queryByRole('button', { name: /page$/ })).not.toBeInTheDocument();
   });
 
   test('names the button from the record, not from a constant in the page', () => {
@@ -88,7 +81,7 @@ describe('the gym page', () => {
     expect(screen.getByRole('button', { name: 'Gym page' })).toBeInTheDocument();
   });
 
-  test("prefers the record's own page over the fallback search", () => {
+  test("links the record's own page", () => {
     renderPoi(gym({ website: 'https://www.planetfitness.com/gyms/ankeny-ia' }));
     expect(screen.getByRole('button', { name: 'Planet Fitness page' })).toHaveAttribute(
       'href',

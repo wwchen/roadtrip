@@ -18,18 +18,6 @@ import { PlacePoiPage, type PlaceTypeSpec } from './place';
  * omits the rest, so a category whose provider ships none of them still renders a
  * page — identity, one action, provenance — rather than an error.
  */
-/**
- * The chain finder a gym record with no page of its own falls back to.
- *
- * The one piece of chain knowledge still in this file, and it should not be here:
- * it is a property of the chain, so it belongs beside the chain in the catalog and
- * should arrive on the record like `brand` and `website` now do. Left as a constant
- * only because giving it a home needs a backend field, which is a wider change than
- * the gym page — see the follow-up issue. Everything else the page used to spell
- * out is read off the record.
- */
-const GYM_CHAIN_FINDER = 'https://www.planetfitness.com/gyms';
-
 const PLACE_TYPES: Record<string, PlaceTypeSpec> = {
   // A generic gym row. The chain is data on the record — `name`, `brand` and
   // `website` all arrive from the ETL — so nothing here names one, and a second
@@ -46,14 +34,6 @@ const PLACE_TYPES: Record<string, PlaceTypeSpec> = {
     fallbackName: 'Gym',
     kind: 'PF',
     websiteLabel: 'Gym page',
-    fallbackSearch: (p) => {
-      const query = [p.city, p.state].filter((part) => typeof part === 'string' && part).join(' ');
-      // A record with no city and no state used to produce a bare `?q=`, which is a
-      // search for nothing. The finder itself is the better landing place.
-      return query
-        ? `${GYM_CHAIN_FINDER}?q=${encodeURIComponent(query)}`
-        : GYM_CHAIN_FINDER;
-    },
     call: true,
   },
   trailhead: {

@@ -33,8 +33,6 @@ import {
 import { PoiPageShell, type PoiBlockSlots } from '../PoiPageShell';
 import { presentSpecs, type PoiTypeProps } from './common';
 
-type Props = Record<string, unknown>;
-
 /** One labelled row of the type's spec block, and the flat property that fills it. */
 export interface PlaceField {
   label: string;
@@ -64,11 +62,9 @@ export interface PlaceTypeSpec {
    * Label for the record's own `website`, when it has one.
    *
    * A fallback: the record's `brand` wins when it has one, so a chain names its
-   * own button ("Planet Fitness page") without the chain appearing here.
+   * own button ("Anytime Fitness page") without any chain appearing here.
    */
   websiteLabel?: string;
-  /** A search URL to fall back to when it does not. */
-  fallbackSearch?: (p: Props) => string;
   /** Whether to offer `tel:` buttons for the record's phone numbers. */
   call?: boolean;
 }
@@ -103,7 +99,11 @@ export function PlacePoiPage({ feature, variant, onClose, spec }: PlacePoiPagePr
     .join(', ');
 
   const mapsUrl = googleMapsUrl(name, lng, lat);
-  const website = text(p.website) || (spec.fallbackSearch ? spec.fallbackSearch(p) : '');
+  // No fallback when the record carries no page. A synthesised chain-search URL
+  // would need this file to name a chain, and it answered a different question
+  // than the button promises — the button says "Gym page", so it appears only
+  // when there is one.
+  const website = text(p.website);
   // The record's own chain names the button. Only when it carries none does the
   // type's generic label apply, so no brand is spelled out in this file or in the
   // registry row that configures it.
