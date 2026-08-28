@@ -32,9 +32,10 @@ judgment calls, the hard constraints, the trust model. Read it whenever the task
 deciding *what* to build or *why*. Skip it only for narrow implementation work where the
 product question is already settled.
 
-`references/archive-2026-08-ev-thesis.md` is the superseded EV-charging thesis, kept as a
-record. **Do not apply it as guidance.** It is here so the reasoning behind dropping it
-stays legible and nobody re-derives it.
+There is deliberately no archived copy of the earlier EV-charging thesis in this
+directory. It was superseded on 27 August 2026, everything worth keeping was folded into
+`product-context.md` and the doc set, and git holds the rest:
+`git show b9d2b942:.claude/skills/roadtrip-product/references/user-research.md`.
 
 ## The filter — apply to every feature proposal
 

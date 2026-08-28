@@ -17,7 +17,10 @@ This is the surface that decides *what* to book. That is the whole category's st
 consensus, not a limitation: every competitor ends by handing the user to Recreation.gov.
 
 **Not vehicle-specific.** EV range and trailer routing are constraints a trip can carry,
-not the product. See `archive-2026-08-ev-thesis.md` for the thesis this replaced.
+not the product. This replaced an earlier thesis built on EV charging permission at
+campsites, dropped 27 August 2026 because EV-only caps the market before anything else is
+proven. Recoverable if it is ever needed:
+`git show b9d2b942:.claude/skills/roadtrip-product/references/user-research.md`.
 
 ## 2. Who it is for
 
